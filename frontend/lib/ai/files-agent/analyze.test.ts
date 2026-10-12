@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { analyzeFiles, FLAT_FOLDER_THRESHOLD, MAX_REASONABLE_DEPTH, describePattern, inferRootId, namePattern, type FileNode } from './analyze'
+import { analyzeFiles, FLAT_FOLDER_THRESHOLD, MAX_REASONABLE_DEPTH, describePattern, inferRootId, namePattern, folderNameKey, hasFolderNamed, detectMissingFolders, type FileNode } from './analyze'
 
 let seq = 0
 function file(fileName: string, parentId: string | null = 'root'): FileNode {
@@ -464,5 +464,112 @@ describe('thresholds shared with the Overview score', () => {
         const over = [folder('Bulk', 'b2', 'R')]
         for (let i = 0; i < FLAT_FOLDER_THRESHOLD + 1; i += 1) over.push(file(`g${i}.docx`, 'b2'))
         expect(kinds(over, 'R')).toContain('flat-folder')
+    })
+})
+
+describe('folderNameKey', () => {
+    it('treats the scaffold\'s own naming conventions as the same folder', () => {
+        // These are the three conventions the interview offers, so a review MUST see them as one
+        // folder — otherwise it proposes creating a folder that is already there, and the agent
+        // cannot delete the duplicate afterwards.
+        const same = ['Planning', '01_Planning', '01-Planning', '1. Planning', '02 - Planning']
+        const keys = new Set(same.map(folderNameKey))
+        expect(keys.size).toBe(1)
+        expect(Array.from(keys)[0]).toBe('planning')
+    })
+
+    it('folds case, separators and spacing', () => {
+        expect(folderNameKey('Working_Papers')).toBe(folderNameKey('working papers'))
+        expect(folderNameKey('In-Review')).toBe(folderNameKey('In  Review'))
+    })
+
+    it('keeps a number that is part of the name', () => {
+        // "2024 Returns" is not "Returns" with a prefix — stripping it would merge genuinely
+        // different folders.
+        expect(folderNameKey('2024 Returns')).toBe('2024 returns')
+        expect(folderNameKey('01_Returns')).toBe('returns')
+    })
+
+    it('distinguishes folders that really are different', () => {
+        expect(folderNameKey('Planning')).not.toBe(folderNameKey('Plans'))
+        expect(folderNameKey('Draft')).not.toBe(folderNameKey('Final'))
+    })
+})
+
+describe('detectMissingFolders', () => {
+    const folder = (id: string, name: string, parentId: string | null): FileNode =>
+        ({ externalId: id, fileName: name, isFolder: true, parentId })
+
+    const EXPECTED = [
+        { name: 'Planning', purpose: 'p' },
+        { name: 'Deliverables', purpose: 'd', children: [{ name: 'Draft', purpose: 'x' }, { name: 'Final', purpose: 'y' }] },
+    ]
+
+    it('does not propose a folder that exists under another convention', () => {
+        const nodes = [
+            folder('f1', '01__Planning', 'root'),
+            folder('f2', '02__Deliverables', 'root'),
+            folder('f3', 'Draft', 'f2'),
+            folder('f4', 'Final', 'f2'),
+        ]
+        expect(detectMissingFolders(nodes, EXPECTED, 'root')).toEqual([])
+    })
+
+    it('proposes only what is genuinely absent', () => {
+        const nodes = [folder('f1', '01-Planning', 'root')]
+        const found = detectMissingFolders(nodes, EXPECTED, 'root')
+        expect(found.map((f) => f.missing?.name)).toEqual(['Deliverables'])
+    })
+
+    it('reports a missing parent on its own, not its children too', () => {
+        // Proposing "Deliverables/Draft" beside a missing "Deliverables" asks the user to approve
+        // a folder whose home does not exist.
+        const nodes = [folder('f1', 'Planning', 'root')]
+        const found = detectMissingFolders(nodes, EXPECTED, 'root')
+        expect(found).toHaveLength(1)
+        expect(found[0].missing?.name).toBe('Deliverables')
+    })
+
+    it('proposes a missing child when its parent is there', () => {
+        const nodes = [
+            folder('f1', 'Planning', 'root'),
+            folder('f2', 'Deliverables', 'root'),
+            folder('f3', 'Draft', 'f2'),
+        ]
+        const found = detectMissingFolders(nodes, EXPECTED, 'root')
+        expect(found).toHaveLength(1)
+        expect(found[0].missing).toMatchObject({ name: 'Final', parentPath: 'Deliverables' })
+        expect(found[0].folderId).toBe('f2')
+    })
+
+    it('stays silent on an empty tree — that is a scaffold, not a review', () => {
+        expect(detectMissingFolders([], EXPECTED, 'root')).toEqual([])
+    })
+
+    it('does not match a folder of the right name under the wrong parent', () => {
+        const nodes = [
+            folder('f1', 'Planning', 'root'),
+            folder('f2', 'Deliverables', 'root'),
+            // A "Draft" nested elsewhere must not satisfy Deliverables/Draft.
+            folder('f3', 'Draft', 'f1'),
+            folder('f4', 'Final', 'f2'),
+        ]
+        const found = detectMissingFolders(nodes, EXPECTED, 'root')
+        expect(found.map((f) => f.missing?.name)).toEqual(['Draft'])
+    })
+})
+
+describe('hasFolderNamed', () => {
+    const folder = (id: string, name: string, parentId: string | null): FileNode =>
+        ({ externalId: id, fileName: name, isFolder: true, parentId })
+
+    it('scopes to a parent when one is given', () => {
+        const folders = [folder('a', 'Draft', 'p1'), folder('b', 'Other', 'p2')]
+        expect(hasFolderNamed('Draft', folders, 'p1')).toBe(true)
+        expect(hasFolderNamed('Draft', folders, 'p2')).toBe(false)
+    })
+
+    it('never proposes an unnamed folder', () => {
+        expect(hasFolderNamed('   ', [])).toBe(true)
     })
 })

@@ -125,6 +125,61 @@ export async function writeScaffoldFingerprint(
   })
 }
 
+/**
+ * What kind of engagement this is, as the user told us.
+ *
+ * A SEPARATE mark from the scaffold fingerprint, deliberately.
+ *
+ * `filesScaffold` means exactly one thing — Brio built this tree — and that is what the
+ * one-scaffold-per-engagement guard keys on. A review of a hand-built tree needs the engagement
+ * kind too (it is the one input no detector can measure), but writing it into the scaffold mark
+ * would record a scaffold that never ran. Harmless on the day, false for the next reader and for
+ * the next feature keyed on it.
+ *
+ * So the kind gets its own key. A scaffold writes both; a review writes only this one.
+ */
+export interface EngagementKindMark {
+    /** A `ScaffoldQuestionId` value for `engagementKind`, e.g. 'advisory'. */
+    value: string
+    /** ISO timestamp of when it was answered. */
+    at: string
+    /** Which flow asked, so a later reader can judge how much the value is worth. */
+    source: 'scaffold' | 'review'
+}
+
+const ENGAGEMENT_KIND_META_KEY = 'engagementKind'
+
+/** The engagement kind in a folder's `.meta`, or null if nobody has said. */
+export async function readEngagementKind(
+  adapter: IConnectorStorageAdapter,
+  connectionId: string,
+  rootFolderId: string
+): Promise<EngagementKindMark | null> {
+  const meta = await readMetaFromFolder(adapter, connectionId, rootFolderId)
+  const mark = meta?.[ENGAGEMENT_KIND_META_KEY]
+  if (!mark || typeof mark !== 'object') return null
+  const { value, at, source } = mark as Record<string, unknown>
+  if (typeof value !== 'string' || !value) return null
+  return {
+    value,
+    at: typeof at === 'string' ? at : new Date(0).toISOString(),
+    source: source === 'scaffold' || source === 'review' ? source : 'review',
+  }
+}
+
+export async function writeEngagementKind(
+  adapter: IConnectorStorageAdapter,
+  connectionId: string,
+  rootFolderId: string,
+  mark: EngagementKindMark
+): Promise<void> {
+  const existing = (await readMetaFromFolder(adapter, connectionId, rootFolderId)) ?? {}
+  await writeMetaInFolder(adapter, connectionId, rootFolderId, {
+    ...existing,
+    [ENGAGEMENT_KIND_META_KEY]: mark,
+  })
+}
+
 function restrictIfSupported(
   adapter: IConnectorStorageAdapter,
   connectionId: string,

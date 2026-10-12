@@ -141,7 +141,7 @@ describe('the scaffold cannot produce a reserved name', () => {
             for (const numbering of ['numbered-hyphen', 'numbered-underscore', 'plain']) {
                 const folders = flattenScaffold(buildScaffold({
                     engagementKind: kind, numbering,
-                    reviewStages: 'two-stage', workingPapers: 'yes',
+                    workingPapers: 'yes',
                 }))
                 for (const f of folders) expect(f.name.startsWith('.')).toBe(false)
             }

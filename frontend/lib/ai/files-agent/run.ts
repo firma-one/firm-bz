@@ -2,7 +2,8 @@ import 'server-only'
 import { AI_MODEL } from '@/lib/ai/client'
 import { getGuardedAnthropic, meterAiCall, type AiScope } from '@/lib/ai/guarded-client'
 import { logger } from '@/lib/logger'
-import { type AnalysisSummary, type FileNode, type Finding } from './analyze'
+import { detectMissingFolders, type AnalysisSummary, type FileNode, type Finding } from './analyze'
+import { buildScaffold } from './scaffold'
 import { assessOrganization, assessmentMarkdown, renderAssessment } from './assess'
 import { TOOLS, validateProposals, type Proposal } from './tools'
 import { RunBudget, MAX_AGENT_TURNS } from './budget'
@@ -64,8 +65,9 @@ Structure — a folder tree is a table of contents, not a filing cabinet.
   still not reach internal material.
 - Source data and working papers belong with the deliverable they support, or in one folder of
   their own — never scattered beside finished work.
-- Review stages ("Draft", "In Review", "Final") nest INSIDE the deliverable folder. At the top
-  level they say nothing about what is in draft.
+- Folders say what a file IS, never where it has got to. A deliverable's readiness, its review
+  and who can see it live on the Board, which is the one record of that state — so there are no
+  "Draft", "In Review", "Final" or "Approved" folders at any level. See rule 6a.
 - Depth of three to four levels. Deeper and people stop navigating and start searching.
 - A folder holding more than about twenty-five loose files wants subfolders.
 - No empty folder left behind, and no folder holding a single file for its whole life.
@@ -104,6 +106,13 @@ Rules:
 5. Propose nothing you are unsure about. A smaller set of obviously right changes is worth more
    than a complete set the lead has to audit line by line.
 6. Do not propose moving or renaming anything a finding did not raise.
+6a. NEVER propose a folder that tracks a deliverable's state — "Draft", "In Review", "Final",
+   "Approved", "Pending", "WIP", "Signed Off" or anything equivalent, at any level of the tree.
+   The Board owns a deliverable's readiness, its review and who can see it. A folder named for a
+   stage is a SECOND record of that state which nothing keeps in step, so a file sitting in
+   "Final" while the Board says in-review is a contradiction the product cannot resolve — and the
+   folder is the one that is wrong. Where a user asks for one, say that the Board already tracks
+   this and point them at it. Folders are for what a file IS, never for where it has got to.
 7. Reasons are one short clause, written for the lead: "matches 01-Scope-Note pattern", not
    "improves file organization and discoverability".
 8. QUOTE every name that came from the firm's own data — files, folders, deliverables, clients —
@@ -166,19 +175,56 @@ export async function runFilesReview(params: {
     nodes: FileNode[]
     rootId: string | null
     scope: AiScope
+    /**
+     * What kind of engagement this is, when known.
+     *
+     * The one input no detector can measure, and the one that decides which folders SHOULD
+     * exist. Absent, the review still runs — it just judges hygiene only, which is what it did
+     * before this existed.
+     */
+    engagementKind?: string | null
 }): Promise<RunResult | null> {
     // One assessment, shared with the Overview score — see assess.ts. The model is GIVEN it rather
     // than offered a tool to fetch it: there is nothing to decide about whether to assess a tree
     // the user just asked to have assessed.
     const assessment = assessOrganization(params.nodes, params.rootId)
-    const { findings, nodeCount, summary } = assessment.analysis
+    const { nodeCount, summary } = assessment.analysis
+
+    /**
+     * Folders this kind of engagement should have and does not.
+     *
+     * Computed, not asked of the model: the expected tree comes from `buildScaffold`, the same
+     * builder the scaffold flow uses, so what a review proposes and what a setup creates cannot
+     * drift apart. There is nothing here for a model to decide, so these become proposals
+     * directly and cost no turn.
+     */
+    const missing = params.engagementKind
+        ? detectMissingFolders(
+            params.nodes,
+            buildScaffold({ engagementKind: params.engagementKind }),
+            params.rootId,
+        )
+        : []
+    const missingProposals: Proposal[] = missing.map((f: Finding) => ({
+        kind: 'folder' as const,
+        name: f.missing!.name,
+        parentId: f.missing!.parentPath ?? null,
+        reason: f.missing!.purpose,
+        docId: null,
+        path: f.missing!.parentPath ?? '',
+    }))
+
+    const findings = [...assessment.analysis.findings, ...missing]
 
     // Nothing wrong: return before spending anything. A review that finds nothing should cost
     // nothing, or the feature teaches people not to run it.
-    if (findings.length === 0) {
+    // Nothing a MODEL can help with. Missing folders are already proposals, so a tree whose only
+    // gap is a missing folder returns them without spending a turn.
+    if (assessment.analysis.findings.length === 0) {
         return {
-            findings: [], proposals: [], dropped: 0, turnsUsed: 0, creditsSpent: 0,
-            truncated: false, summary, summaryMarkdown: assessmentMarkdown(assessment),
+            findings: missing, proposals: missingProposals, dropped: 0, turnsUsed: 0,
+            creditsSpent: 0, truncated: false, summary,
+            summaryMarkdown: assessmentMarkdown(assessment, missing.map((f) => f.missing!)),
         }
     }
 
@@ -186,7 +232,9 @@ export async function runFilesReview(params: {
     if (!client) return null
 
     const budget = new RunBudget(MAX_AGENT_TURNS)
-    const proposals: Proposal[] = []
+    // Seeded with the deterministic ones, so the model's proposals join them rather than
+    // replacing them.
+    const proposals: Proposal[] = [...missingProposals]
     let dropped = 0
 
     const messages: Array<{ role: 'user' | 'assistant'; content: any }> = [{
@@ -251,6 +299,6 @@ export async function runFilesReview(params: {
         creditsSpent: budget.creditsSpent,
         truncated: budget.exhausted,
         summary,
-        summaryMarkdown: assessmentMarkdown(assessment),
+        summaryMarkdown: assessmentMarkdown(assessment, missing.map((f) => f.missing!)),
     }
 }

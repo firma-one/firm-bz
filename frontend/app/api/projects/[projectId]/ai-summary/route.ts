@@ -46,7 +46,11 @@ export async function POST(
 
         const engagement = await prisma.engagement.findFirst({
             where: { id: projectId, isDeleted: false },
-            select: { settings: true, name: true, client: { select: { name: true } } },
+            // `rateOrValue` is deliberately NOT selected — see buildEngagementContext.
+            select: {
+                settings: true, name: true, description: true, tags: true, contractType: true,
+                client: { select: { name: true } },
+            },
         })
         if (!engagement) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
 
@@ -82,6 +86,13 @@ export async function POST(
                 content: `Engagement snapshot:\n${buildEngagementContext(insights, {
                     clientName: engagement.client.name,
                     engagementName: engagement.name,
+                    // The brief is prose about what this engagement IS, which is exactly what
+                    // the description says and no computed signal can.
+                    description: engagement.description,
+                    tags: Array.isArray(engagement.tags)
+                        ? engagement.tags.filter((t): t is string => typeof t === 'string')
+                        : undefined,
+                    contractType: engagement.contractType,
                 })}`,
             }],
             stream: true,

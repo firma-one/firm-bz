@@ -9,7 +9,7 @@ import { FilesScaffoldPanel, FilesScaffoldTrigger } from '@/components/projects/
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { CoffeeIcon, type CoffeeIconHandle } from "@/components/ui/coffee-icon"
-import { SquarePlus, Upload, FolderUp, X, Folder, File as FileIcon, ArrowUp, ArrowDown, ChevronRight, Search, List as ListIcon, LayoutGrid, Filter, ChevronDown, User, FileText, FileSpreadsheet, Presentation, ListChecks, PenTool, Map as MapIcon, LayoutTemplate, FileCode, AlertCircle, ShieldCheck, Maximize2, Minimize2, CheckCircle2, XCircle, Trash2, Layout, Code, Laptop, RefreshCw, Info, Share2, Layers, Building2, Users, Briefcase, Lock, FolderLock, Inbox, Sparkles, Link2, ExternalLink, MessagesSquare, CircleChevronLeft, Download, MoreVertical, Clock } from 'lucide-react'
+import { SquarePlus, Upload, FolderUp, X, Folder, File as FileIcon, ArrowUp, ArrowDown, ChevronRight, Search, List as ListIcon, LayoutGrid, Filter, ChevronDown, User, FileText, FileSpreadsheet, Presentation, ListChecks, PenTool, Map as MapIcon, LayoutTemplate, FileCode, AlertCircle, ShieldCheck, Maximize2, Minimize2, CheckCircle2, XCircle, Trash2, Layout, Code, Laptop, RefreshCw, Info, Share2, Layers, Building2, Users, Briefcase, Lock, FolderLock, Inbox, Sparkles, Link2, ExternalLink, MessagesSquare, CircleChevronLeft, Download, MoreVertical, Clock, Copy, FolderInput, Loader2, Pencil } from 'lucide-react'
 import Fuse from 'fuse.js'
 import { config } from "@/lib/config"
 import { DocumentIcon } from '@/components/ui/document-icon'
@@ -177,6 +177,59 @@ function isValidWebUrl(raw: string): boolean {
 
 
 const VIEW_AS_SHARED_ONLY_PERSONAS = ['eng_ext_collaborator', 'eng_viewer']
+
+/**
+ * Button label that keeps its footprint while busy: the text stays in the layout
+ * (made invisible) and a small spinner overlays it, so the button never resizes
+ * mid-request. The parent Button must be `relative`.
+ */
+function BusyLabel({ busy, children }: { busy: boolean; children: React.ReactNode }) {
+    return (
+        <>
+            <span className={cn(busy && 'invisible')}>{children}</span>
+            {busy && <Loader2 className="absolute h-3.5 w-3.5 animate-spin" />}
+        </>
+    )
+}
+
+/** Header strip shared by this file's themed dialogs (see components/ui/confirm-dialog.tsx). */
+function ThemedDialogHeader({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
+    return (
+        <div className="px-5 py-4 border-b border-[#e5e7eb] bg-white flex items-start gap-3">
+            <div className="mt-0.5 h-7 w-7 rounded flex items-center justify-center shrink-0 bg-primary/10 ring-1 ring-primary/20 text-primary">
+                {icon}
+            </div>
+            <DialogHeader className="space-y-0.5 text-left min-w-0">
+                <DialogTitle className="text-[11px] font-headline font-bold tracking-widest uppercase text-[#1b1b1d] leading-tight">
+                    {title}
+                </DialogTitle>
+                <DialogDescription className="text-xs text-[#45474c]">{children}</DialogDescription>
+            </DialogHeader>
+        </div>
+    )
+}
+
+const THEMED_DIALOG_CONTENT = 'sm:max-w-md border-[#e5e7eb] p-0 gap-0 rounded bg-[#f9f9fb]'
+const THEMED_CANCEL_BTN = 'rounded text-[10px] font-headline font-bold tracking-widest uppercase border-[#e5e7eb] text-[#45474c] hover:bg-[#f9f9fb]'
+const THEMED_PRIMARY_BTN = 'relative rounded text-[10px] font-headline font-bold tracking-widest uppercase bg-primary text-white hover:bg-primary hover:brightness-105 shadow-sm'
+
+/** Per-row submit button in the Copy/Move modal — fixed footprint while submitting. */
+function CopyMoveSubmitButton({ label, submitting, disabled, onClick }: { label: string; submitting: boolean; disabled: boolean; onClick: () => void }) {
+    return (
+        <Button
+            size="sm"
+            onClick={onClick}
+            disabled={disabled}
+            className={cn(
+                'relative h-7 px-3 flex-shrink-0 rounded text-[10px] font-headline font-bold tracking-widest uppercase shadow-none transition-colors',
+                'bg-white border border-[#e5e7eb] text-[#45474c] hover:bg-primary hover:border-primary hover:text-white',
+                submitting && 'bg-primary border-primary text-white disabled:opacity-100',
+            )}
+        >
+            <BusyLabel busy={submitting}>{label}</BusyLabel>
+        </Button>
+    )
+}
 
 export function EngagementFileList({ projectId, connectorRootFolderId, clientConnectorId, clientConnectorType, workspaceRootLocation, rootFolderName = 'Engagement Files', orgName, clientName, projectName, canEdit = false, canManage = false, isFirmAdmin = false, restrictToSharedOnly = false, firmId, groupSlug, orgSlug, firmSandboxOnly = false, navSlot, clientSlug, connectorAccountEmail, onFileCountChange }: EngagementFileListProps) {
     const isOneDriveClient = clientConnectorType === 'ONEDRIVE'
@@ -526,7 +579,12 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
     // Starts EMPTY, not undefined: `undefined` means "no override" to the chat, which then shows the
     // engagement-status chips until the fetch lands and swaps them for file ones. An empty array is
     // an override with nothing in it yet, so the row stays bare and fills once.
-    const [fileSuggestions, setFileSuggestions] = useState<string[]>([])
+    //
+    // Set to `undefined` once the fetch LANDS with nothing: a brand-new engagement has no files to
+    // build file prompts from, and holding an empty override there left the chip row permanently
+    // bare — no file prompts, and the engagement ones suppressed by an override that was never
+    // going to fill. "Not loaded yet" and "loaded, genuinely none" need to be different states.
+    const [fileSuggestions, setFileSuggestions] = useState<string[] | undefined>([])
 
     /**
      * Whether the page's own first load has finished.
@@ -560,6 +618,43 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
 
     /** Whether the folder-structure interview is open. */
     const [scaffoldOpen, setScaffoldOpen] = useState(false)
+
+    /**
+     * Whether this engagement has any folders at all, which decides WHICH chip is offered.
+     *
+     * Setting up and reviewing are one capability with two entry points: an empty engagement gets
+     * "Set up folder organization", a populated one gets "Review folder organization". Offering
+     * both let a user answer four setup questions and only then be refused by the server, which
+     * holds one scaffold per engagement.
+     *
+     * Counted across the whole engagement, not the current folder: `files` holds what is in the
+     * folder being viewed, so an empty subfolder would make a fully organized engagement look
+     * blank. `null` while unknown, so neither chip flickers into the wrong state on first paint.
+     */
+    const [hasFolders, setHasFolders] = useState<boolean | null>(null)
+    useEffect(() => {
+        // Bearer token, like every other call to this route group. Without it the request 401s,
+        // the response is discarded, and `hasFolders` stays null — which hides BOTH chips and
+        // leaves the row with nothing on it.
+        const token = session?.access_token
+        if (!token) return
+
+        let cancelled = false
+        fetch(`/api/projects/${projectId}/files-agent/scaffold`, {
+            headers: { Authorization: `Bearer ${token}` },
+            credentials: 'include',
+        })
+            .then((r) => (r.ok ? r.json() : null))
+            .then((json) => {
+                if (cancelled) return
+                // A failed or unreadable response must not leave both chips hidden. Falling back
+                // to "has folders" offers review, which is harmless on an empty engagement (it
+                // finds nothing) where setup on a populated one would propose a duplicate tree.
+                setHasFolders(json?.data ? (json.data.folderCount ?? 0) > 0 : true)
+            })
+            .catch(() => { if (!cancelled) setHasFolders(true) })
+        return () => { cancelled = true }
+    }, [projectId, session?.access_token])
 
     /**
      * The chat thread, so the agent panels can write their exchanges into it.
@@ -597,13 +692,24 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
         })
             .then((res) => (res.ok ? res.json() : null))
             .then((body) => {
-                if (!cancelled && body?.data?.suggestions?.length) {
-                    setFileSuggestions(body.data.suggestions)
+                if (cancelled) return
+                const next = body?.data?.suggestions
+                if (next?.length) {
+                    setFileSuggestions(next)
+                } else {
+                    // Keep the override EMPTY rather than handing the row back to the
+                    // engagement-level prompts.
+                    //
+                    // Those prompts ask about status, owners and dates — Overview's subject, not
+                    // this page's. Showing them here would answer the wrong question well. On an
+                    // engagement with no files the row is not bare anyway: the "Set up folder
+                    // organization" chip is what belongs there, and it renders beside these.
+                    setFileSuggestions([])
                 }
             })
-            // Silent: the panel falls back to its own prompts, and a failed aid is not worth a
-            // message the user can do nothing about.
-            .catch(() => {})
+            // Silent: a failed aid is not worth a message the user can do nothing about, and the
+            // setup/review chip beside it does not depend on this call.
+            .catch(() => { if (!cancelled) setFileSuggestions([]) })
         return () => { cancelled = true }
     }, [projectId, canManage, isFirmAdmin, session?.access_token])
     const [loading, setLoading] = useState(true) // Initial load
@@ -668,6 +774,33 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
 
     // Bulk selection state
     const [selectedFileIds, setSelectedFileIds] = useState<Set<string>>(new Set())
+
+    // Selection is scoped to the current folder: reset it when navigating away.
+    // Rows switch to "click toggles selection" mode whenever size > 0, so a stale
+    // selection would otherwise hijack clicks that should open the item.
+    useEffect(() => {
+        setSelectedFileIds(prev => (prev.size ? new Set() : prev))
+    }, [currentFolderId])
+
+    const deselectFile = useCallback((fileId: string) => {
+        setSelectedFileIds(prev => {
+            if (!prev.has(fileId)) return prev
+            const next = new Set(prev)
+            next.delete(fileId)
+            return next
+        })
+    }, [])
+
+    // Drop IDs that are no longer listed (trashed, moved or renamed away by a
+    // row action, drag-drop or refresh) so no invisible selection lingers.
+    useEffect(() => {
+        setSelectedFileIds(prev => {
+            if (!prev.size) return prev
+            const listed = new Set(files.map(f => f.id))
+            const next = new Set(Array.from(prev).filter(id => listed.has(id)))
+            return next.size === prev.size ? prev : next
+        })
+    }, [files])
 
     // Download queue (shown in bottom-right panel like upload queue)
     type DownloadQueueItem = { id: string; name: string; status: 'preparing' | 'done' | 'error'; error?: string }
@@ -1247,6 +1380,7 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
         startProcessing,
         stopProcessing,
         setFiles,
+        onItemRemoved: deselectFile,
     })
 
     const handleMarkAsDeliverable = useCallback(async (doc: any, dueDate?: string) => {
@@ -2901,157 +3035,162 @@ const handleRefresh = async () => {
 
                 {/* Copy / Move destination picker (within General) */}
                 <Dialog open={copyMoveModalOpen} onOpenChange={(open) => { setCopyMoveModalOpen(open); if (!open) setCopyMoveTarget(null) }}>
-                    <DialogContent className="max-w-md gap-4 p-5 border-slate-200">
-                        <DialogHeader>
-                            <DialogTitle className="text-slate-900">
-                                {copyMoveAction === 'copy' ? 'Copy to folder' : 'Move to folder'}
-                            </DialogTitle>
-                            <DialogDescription className="text-slate-600">
-                                {copyMoveTarget?.name} will be {copyMoveAction === 'copy' ? 'copied' : 'moved'} to the selected folder within {currentPath[0]?.name || 'the project'}.
-                            </DialogDescription>
-                        </DialogHeader>
-                        {(copyMoveAction === 'copy' || copyMoveAction === 'move') && (
-                            <div className="space-y-2 rounded-md border border-slate-200 bg-slate-50/50 p-3">
-                                <p className="text-sm font-medium text-slate-700">When the same file exists in the destination</p>
-                                <div className="flex rounded-lg border border-slate-200 p-0.5 bg-slate-100/80">
-                                    <button
-                                        type="button"
-                                        onClick={() => setCopyMoveKeepBoth(true)}
-                                        className={cn(
-                                            'flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors',
-                                            copyMoveKeepBoth ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'
-                                        )}
-                                    >
-                                        Keep both
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setCopyMoveKeepBoth(false)}
-                                        className={cn(
-                                            'flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors',
-                                            !copyMoveKeepBoth ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'
-                                        )}
-                                    >
-                                        Replace
-                                    </button>
-                                </div>
-                                <p className="text-xs text-slate-500">
-                                    {copyMoveKeepBoth ? 'A copy will be created with a unique name (suffix).' : 'The existing file in the destination will be replaced.'}
-                                </p>
-                            </div>
-                        )}
-                        {currentPath.length > 0 && (
-                            <div className="flex items-center text-xs font-medium text-slate-700 min-w-0 flex-wrap gap-0">
-                                {currentPath.map((seg, i) => (
-                                    <div key={seg.id} className="flex items-center flex-shrink-0 gap-2">
-                                        {i > 0 && <ChevronRight className="h-3.5 w-3.5 mx-1 text-slate-400 flex-shrink-0" />}
-                                        <button
-                                            type="button"
-                                            onClick={() => handleCopyMoveBreadcrumbClick(i)}
-                                            className={cn(
-                                                'flex items-center hover:bg-slate-100 px-2 py-1 rounded transition-colors max-w-[160px]',
-                                                i === currentPath.length - 1 ? 'text-slate-900 bg-slate-50' : 'text-slate-600 hover:text-slate-900'
-                                            )}
-                                            title={seg.name}
-                                        >
-                                            <Folder className="h-3.5 w-3.5 mr-1.5 text-slate-400 flex-shrink-0" />
-                                            <span className="truncate">{seg.name}</span>
-                                        </button>
-                                        {/* Move/Copy pill — only shown at the designated root (General/Confidential/Staging) level */}
-                                        {currentPath.length === 1 && i === 0 && (
-                                            <Button
-                                                size="sm"
-                                                className="bg-slate-900 text-white hover:bg-slate-800 rounded-full h-7 px-3 text-xs"
-                                                onClick={() => currentPath[0] && handleCopyMoveToFolder(currentPath[0].id)}
-                                                disabled={!!copyMoveSubmittingFolderId}
-                                            >
-                                                {copyMoveSubmittingFolderId === (currentPath[0]?.id)
-                                                    ? <LoadingSpinner className="h-4 w-4" />
-                                                    : (copyMoveAction === 'copy' ? 'Copy' : 'Move')}
-                                            </Button>
-                                        )}
-                                    </div>
-                                ))}
-                            </div>
-                        )}
+                    <DialogContent className={THEMED_DIALOG_CONTENT}>
+                        <ThemedDialogHeader
+                            icon={copyMoveAction === 'copy' ? <Copy className="h-3.5 w-3.5" /> : <FolderInput className="h-3.5 w-3.5" />}
+                            title={copyMoveAction === 'copy' ? 'Copy to folder' : 'Move to folder'}
+                        >
+                            <span className="font-medium text-[#1b1b1d]">{copyMoveTarget?.name}</span> will be {copyMoveAction === 'copy' ? 'copied' : 'moved'} to the folder you pick in {currentPath[0]?.name || 'the project'}.
+                        </ThemedDialogHeader>
 
-                        <div className="max-h-64 overflow-y-auto border border-slate-200 rounded-md p-2 space-y-0.5">
-                            {loadingDestinations ? (
-                                <div className="flex items-center justify-center py-8">
-                                    <LoadingSpinner className="h-6 w-6 text-slate-400" />
-                                </div>
-                            ) : destinationFolders.length === 0 ? (
-                                <p className="text-sm text-slate-500 py-6 px-3 text-center">
-                                    No subfolders here. Use the Copy/Move button on a folder to copy or move the file there, or use the breadcrumb to go back.
-                                </p>
-                            ) : (
-                                destinationFolders.map((f) => {
-                                    const isEmpty = emptyFolderIds.has(f.id)
-                                    const isChecking = checkingFolderId === f.id
-                                    return (
-                                        <div
-                                            key={f.id}
-                                            className="flex items-center justify-between gap-3 px-3 py-2 rounded-md hover:bg-slate-50 group"
+                        {/* Body */}
+                        <div className="p-5 space-y-4">
+                            <div className="space-y-2">
+                                <p className="text-[10px] font-headline font-bold tracking-widest uppercase text-[#45474c]">If the name already exists</p>
+                                <div className="flex rounded border border-[#e5e7eb] p-0.5 bg-white">
+                                    {([
+                                        { keepBoth: true, label: 'Keep both' },
+                                        { keepBoth: false, label: 'Replace' },
+                                    ] as const).map(opt => (
+                                        <button
+                                            key={opt.label}
+                                            type="button"
+                                            onClick={() => setCopyMoveKeepBoth(opt.keepBoth)}
+                                            className={cn(
+                                                'flex-1 rounded-sm px-3 py-1.5 text-xs font-medium transition-colors',
+                                                copyMoveKeepBoth === opt.keepBoth
+                                                    ? 'bg-primary/10 text-primary ring-1 ring-primary/20'
+                                                    : 'text-[#45474c] hover:text-[#1b1b1d] hover:bg-[#f9f9fb]'
+                                            )}
                                         >
-                                            <Tooltip>
-                                                <TooltipTrigger asChild>
+                                            {opt.label}
+                                        </button>
+                                    ))}
+                                </div>
+                                <p className="text-xs text-[#45474c]/80">
+                                    {copyMoveKeepBoth ? 'A copy is created with a unique name suffix.' : 'The existing item in the destination is replaced.'}
+                                </p>
+                            </div>
+
+                            <div className="space-y-2">
+                                {currentPath.length > 0 && (
+                                    <div className="flex items-center justify-between gap-2 min-h-7">
+                                        <div className="flex items-center text-xs font-medium min-w-0 flex-wrap">
+                                            {currentPath.map((seg, i) => (
+                                                <div key={seg.id} className="flex items-center flex-shrink-0">
+                                                    {i > 0 && <ChevronRight className="h-3.5 w-3.5 mx-0.5 text-[#45474c]/50 flex-shrink-0" />}
                                                     <button
                                                         type="button"
-                                                        onClick={() => !isEmpty && !isChecking && handleNavigateIntoFolder(f)}
+                                                        onClick={() => handleCopyMoveBreadcrumbClick(i)}
                                                         className={cn(
-                                                            'flex items-center gap-2 min-w-0 flex-1 text-left text-sm text-slate-700',
-                                                            isEmpty || isChecking ? 'cursor-default opacity-60' : 'hover:text-slate-900 cursor-pointer'
+                                                            'flex items-center px-1.5 py-1 rounded transition-colors max-w-[160px] hover:bg-white',
+                                                            i === currentPath.length - 1 ? 'text-[#1b1b1d]' : 'text-[#45474c] hover:text-[#1b1b1d]'
                                                         )}
-                                                        disabled={isChecking}
+                                                        title={seg.name}
                                                     >
-                                                        <Folder className="h-4 w-4 text-slate-500 flex-shrink-0" />
-                                                        <span className="truncate">{f.name}</span>
-                                                        {isChecking ? (
-                                                            <LoadingSpinner className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" />
-                                                        ) : !isEmpty ? (
-                                                            <ChevronRight className="h-4 w-4 text-slate-400 flex-shrink-0" />
-                                                        ) : null}
+                                                        <Folder className="h-3.5 w-3.5 mr-1.5 text-[#45474c]/60 flex-shrink-0" />
+                                                        <span className="truncate">{seg.name}</span>
                                                     </button>
-                                                </TooltipTrigger>
-                                                <TooltipContent side="top" className="text-xs">
-                                                    {isEmpty ? 'No subfolders' : 'See Contents'}
-                                                </TooltipContent>
-                                            </Tooltip>
-                                            <Button
-                                                size="sm"
-                                                className="bg-slate-900 text-white hover:bg-slate-800 flex-shrink-0 rounded-full h-7 px-3 text-xs"
-                                                onClick={() => handleCopyMoveToFolder(f.id)}
-                                                disabled={!!copyMoveSubmittingFolderId}
-                                            >
-                                                {copyMoveSubmittingFolderId === f.id ? <LoadingSpinner className="h-4 w-4" /> : (copyMoveAction === 'copy' ? 'Copy' : 'Move')}
-                                            </Button>
+                                                </div>
+                                            ))}
                                         </div>
-                                    );
-                                })
-                            )}
+                                        {/* Move/Copy into the root itself — only at the designated root (General/Confidential/Staging) level */}
+                                        {currentPath.length === 1 && (
+                                            <CopyMoveSubmitButton
+                                                label={copyMoveAction === 'copy' ? 'Copy here' : 'Move here'}
+                                                submitting={copyMoveSubmittingFolderId === currentPath[0]?.id}
+                                                disabled={!!copyMoveSubmittingFolderId}
+                                                onClick={() => currentPath[0] && handleCopyMoveToFolder(currentPath[0].id)}
+                                            />
+                                        )}
+                                    </div>
+                                )}
+
+                                <div className="max-h-64 overflow-y-auto rounded border border-[#e5e7eb] bg-white divide-y divide-[#e5e7eb]">
+                                    {loadingDestinations ? (
+                                        <div className="flex items-center justify-center py-8">
+                                            <Loader2 className="h-5 w-5 animate-spin text-[#45474c]/50" />
+                                        </div>
+                                    ) : destinationFolders.length === 0 ? (
+                                        <p className="text-xs text-[#45474c] py-6 px-4 text-center leading-relaxed">
+                                            No subfolders here. Use the breadcrumb to go back, or {copyMoveAction === 'copy' ? 'copy' : 'move'} into the current folder.
+                                        </p>
+                                    ) : (
+                                        destinationFolders.map((f) => {
+                                            const isEmpty = emptyFolderIds.has(f.id)
+                                            const isChecking = checkingFolderId === f.id
+                                            return (
+                                                <div
+                                                    key={f.id}
+                                                    className="flex items-center justify-between gap-3 pl-3 pr-2 h-10 hover:bg-[#f9f9fb] transition-colors"
+                                                >
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => !isEmpty && !isChecking && handleNavigateIntoFolder(f)}
+                                                                className={cn(
+                                                                    'flex items-center gap-2 min-w-0 flex-1 text-left text-[0.8125rem] text-[#1b1b1d]',
+                                                                    isEmpty || isChecking ? 'cursor-default' : 'cursor-pointer'
+                                                                )}
+                                                                disabled={isChecking}
+                                                            >
+                                                                <Folder className="h-4 w-4 text-[#45474c]/70 flex-shrink-0" />
+                                                                <span className={cn('truncate', isEmpty && 'text-[#45474c]/70')}>{f.name}</span>
+                                                                <span className="h-4 w-4 flex items-center justify-center flex-shrink-0">
+                                                                    {isChecking ? (
+                                                                        <Loader2 className="h-3.5 w-3.5 animate-spin text-[#45474c]/50" />
+                                                                    ) : !isEmpty ? (
+                                                                        <ChevronRight className="h-4 w-4 text-[#45474c]/50" />
+                                                                    ) : null}
+                                                                </span>
+                                                            </button>
+                                                        </TooltipTrigger>
+                                                        <TooltipContent side="top" className="text-xs">
+                                                            {isEmpty ? 'No subfolders' : 'See contents'}
+                                                        </TooltipContent>
+                                                    </Tooltip>
+                                                    <CopyMoveSubmitButton
+                                                        label={copyMoveAction === 'copy' ? 'Copy' : 'Move'}
+                                                        submitting={copyMoveSubmittingFolderId === f.id}
+                                                        disabled={!!copyMoveSubmittingFolderId}
+                                                        onClick={() => handleCopyMoveToFolder(f.id)}
+                                                    />
+                                                </div>
+                                            )
+                                        })
+                                    )}
+                                </div>
+                            </div>
                         </div>
-                        <div className="flex justify-end">
-                            <Button variant="outline" className="border-slate-200 text-slate-700 hover:bg-slate-50" onClick={() => setCopyMoveModalOpen(false)}>Cancel</Button>
+
+                        {/* Footer */}
+                        <div className="px-5 py-3 border-t border-[#e5e7eb] bg-white flex items-center justify-end">
+                            <Button
+                                variant="outline"
+                                onClick={() => setCopyMoveModalOpen(false)}
+                                className={THEMED_CANCEL_BTN}
+                            >
+                                Cancel
+                            </Button>
                         </div>
                     </DialogContent>
                 </Dialog>
 
                 {/* Cross-Engagement Copy Modal */}
                 <Dialog open={crossEngagementModalOpen} onOpenChange={(open) => { setCrossEngagementModalOpen(open); if (!open) { setCrossEngagementTarget(null); setCrossEngagementFirmName(null) } }}>
-                    <DialogContent className="max-w-md">
-                        <DialogHeader>
-                            <DialogTitle>Copy to another engagement</DialogTitle>
-                            <DialogDescription className="text-xs text-slate-500">
-                                Select the engagement to copy <strong>{crossEngagementTarget?.name}</strong> to. It will land in that engagement&apos;s General folder.
-                            </DialogDescription>
-                        </DialogHeader>
-                        <div className="max-h-64 overflow-y-auto border border-slate-200 rounded-md p-2">
+                    <DialogContent className={THEMED_DIALOG_CONTENT}>
+                        <ThemedDialogHeader icon={<Copy className="h-3.5 w-3.5" />} title="Copy to another engagement">
+                            Pick the engagement to copy <span className="font-medium text-[#1b1b1d]">{crossEngagementTarget?.name}</span> to. It lands in that engagement&apos;s General folder.
+                        </ThemedDialogHeader>
+                        <div className="p-5">
+                        <div className="max-h-64 overflow-y-auto rounded border border-[#e5e7eb] bg-white p-2">
                             {crossEngagementLoading ? (
                                 <div className="flex items-center justify-center py-8">
-                                    <LoadingSpinner className="h-6 w-6 text-slate-400" />
+                                    <Loader2 className="h-5 w-5 animate-spin text-[#45474c]/50" />
                                 </div>
                             ) : crossEngagementEngagements.length === 0 ? (
-                                <p className="text-sm text-slate-500 py-6 px-3 text-center">No other engagements available.</p>
+                                <p className="text-xs text-[#45474c] py-6 px-3 text-center">No other engagements available.</p>
                             ) : (() => {
                                 const groups = crossEngagementEngagements.reduce<Record<string, { clientName: string; engagements: typeof crossEngagementEngagements }>>((acc, e) => {
                                     if (!acc[e.clientId]) acc[e.clientId] = { clientName: e.clientName, engagements: [] }
@@ -3092,8 +3231,8 @@ const handleRefresh = async () => {
                                                                         className={cn(
                                                                             'w-full flex items-center gap-2 text-left pl-4 pr-3 py-1.5 rounded-md text-sm transition-colors',
                                                                             crossEngagementSelectedId === e.id
-                                                                                ? 'bg-slate-100 text-slate-900 font-medium'
-                                                                                : 'hover:bg-slate-50 text-slate-700'
+                                                                                ? 'bg-primary/10 text-primary font-medium'
+                                                                                : 'hover:bg-[#f9f9fb] text-[#1b1b1d]'
                                                                         )}
                                                                     >
                                                                         <Briefcase className="h-3.5 w-3.5 flex-shrink-0 text-slate-400" />
@@ -3110,14 +3249,15 @@ const handleRefresh = async () => {
                                 )
                             })()}
                         </div>
-                        <div className="flex justify-end gap-2">
-                            <Button variant="outline" onClick={() => setCrossEngagementModalOpen(false)}>Cancel</Button>
+                        </div>
+                        <div className="px-5 py-3 border-t border-[#e5e7eb] bg-white flex items-center justify-end gap-2">
+                            <Button variant="outline" className={THEMED_CANCEL_BTN} onClick={() => setCrossEngagementModalOpen(false)}>Cancel</Button>
                             <Button
-                                className="bg-slate-900 hover:bg-slate-800 text-white"
+                                className={THEMED_PRIMARY_BTN}
                                 disabled={!crossEngagementSelectedId || crossEngagementSubmitting}
                                 onClick={handleCrossEngagementSubmit}
                             >
-                                {crossEngagementSubmitting ? <LoadingSpinner className="h-4 w-4" /> : 'Copy'}
+                                <BusyLabel busy={crossEngagementSubmitting}>Copy</BusyLabel>
                             </Button>
                         </div>
                     </DialogContent>
@@ -3125,33 +3265,30 @@ const handleRefresh = async () => {
 
                 {/* Rename file/folder */}
                 <Dialog open={renameModalOpen} onOpenChange={(open) => { setRenameModalOpen(open); if (!open) setRenameTarget(null) }}>
-                    <DialogContent className="max-w-md gap-4 p-5 border-slate-200">
-                        <DialogHeader>
-                            <DialogTitle className="text-slate-900">Rename</DialogTitle>
-                            <DialogDescription className="text-slate-600">
-                                Enter a new name for {renameTarget?.name ?? 'this item'}.
-                            </DialogDescription>
-                        </DialogHeader>
-                        <div className="flex items-center gap-1">
+                    <DialogContent className={THEMED_DIALOG_CONTENT}>
+                        <ThemedDialogHeader icon={<Pencil className="h-3.5 w-3.5" />} title="Rename">
+                            Enter a new name for <span className="font-medium text-[#1b1b1d]">{renameTarget?.name ?? 'this item'}</span>.
+                        </ThemedDialogHeader>
+                        <div className="p-5 flex items-center gap-1.5">
                             <Input
                                 value={renameNewName}
                                 onChange={(e) => setRenameNewName(e.target.value)}
                                 placeholder="New name"
-                                className="border-slate-200"
+                                className="rounded border-[#e5e7eb] bg-white text-[0.8125rem]"
                                 onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleConfirmRename())}
                             />
                             {renameExtension && (
-                                <span className="shrink-0 text-slate-500 text-sm">{renameExtension}</span>
+                                <span className="shrink-0 text-[#45474c] text-xs">{renameExtension}</span>
                             )}
                         </div>
-                        <div className="flex justify-end gap-3">
-                            <Button variant="outline" className="border-slate-200 text-slate-700 hover:bg-slate-50" onClick={() => setRenameModalOpen(false)}>Cancel</Button>
+                        <div className="px-5 py-3 border-t border-[#e5e7eb] bg-white flex items-center justify-end gap-2">
+                            <Button variant="outline" className={THEMED_CANCEL_BTN} onClick={() => setRenameModalOpen(false)}>Cancel</Button>
                             <Button
-                                className="bg-slate-900 text-white hover:bg-slate-800"
+                                className={THEMED_PRIMARY_BTN}
                                 onClick={handleConfirmRename}
                                 disabled={!renameNewName.trim() || renameSubmitting}
                             >
-                                {renameSubmitting ? <LoadingSpinner className="h-4 w-4" /> : 'Save'}
+                                <BusyLabel busy={renameSubmitting}>Save</BusyLabel>
                             </Button>
                         </div>
                     </DialogContent>
@@ -3456,9 +3593,9 @@ const handleRefresh = async () => {
                             <Button
                                 onClick={() => unshareConfirmFile && handleUnshare(unshareConfirmFile)}
                                 disabled={unshareInProgress}
-                                className="rounded bg-red-600 hover:bg-red-700 text-white text-[10px] font-headline font-bold tracking-widest uppercase shadow-sm"
+                                className="relative rounded bg-red-600 hover:bg-red-700 text-white text-[10px] font-headline font-bold tracking-widest uppercase shadow-sm"
                             >
-                                {unshareInProgress ? <LoadingSpinner className="h-3.5 w-3.5" /> : 'Revoke Access'}
+                                <BusyLabel busy={unshareInProgress}>Revoke Access</BusyLabel>
                             </Button>
                         </div>
                     </DialogContent>
@@ -3529,23 +3666,29 @@ const handleRefresh = async () => {
                     }
                     suggestionActions={
                         <>
-                            <FilesAgentPanel
-                                render="trigger"
-                                projectId={projectId}
-                                review={agentReview}
-                                setReview={setAgentReview}
-                                answered={agentAnswered}
-                                onApplied={refreshCurrentFolder}
-                                // The TRIGGER instance is the one that runs the review, so it is
-                                // the one that must be able to post the report. The results
-                                // instance below does not exist until a review has returned, so
-                                // wiring it only there meant the report went nowhere.
-                                onThreadTurn={postToThread}
-                            />
-                            {/* Hidden only while the scaffold interview is actually open. It was
-                                also hidden whenever a review existed, which left no way back to
-                                folder setup short of reloading the page. */}
-                            {!scaffoldOpen && (
+                            {/* ONE of these, never both. Setting up and reviewing are the same
+                                capability from different starting points, so the engagement's
+                                state picks the entry point rather than the user guessing.
+
+                                Neither shows while the count is unknown: a chip that appears and
+                                then swaps to the other one is worse than a chip that arrives a
+                                moment late. */}
+                            {hasFolders === true && (
+                                <FilesAgentPanel
+                                    render="trigger"
+                                    projectId={projectId}
+                                    review={agentReview}
+                                    setReview={setAgentReview}
+                                    answered={agentAnswered}
+                                    onApplied={refreshCurrentFolder}
+                                    // The TRIGGER instance is the one that runs the review, so it
+                                    // is the one that must be able to post the report. The results
+                                    // instance below does not exist until a review has returned,
+                                    // so wiring it only there meant the report went nowhere.
+                                    onThreadTurn={postToThread}
+                                />
+                            )}
+                            {hasFolders === false && !scaffoldOpen && (
                                 <FilesScaffoldTrigger onClick={() => setScaffoldOpen(true)} />
                             )}
                         </>

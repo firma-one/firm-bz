@@ -9,10 +9,14 @@ import {
 } from '@/lib/connectors/pockett-structure.service'
 import { ensureFirmAgentUser } from '@/lib/ai/files-agent/agent-identity'
 import { agentApprovalMeta } from '@/lib/ai/files-agent/agent-audit'
-import { buildScaffold, flattenScaffold, scaffoldProposals, type ScaffoldAnswers } from '@/lib/ai/files-agent/scaffold'
+import {
+    buildScaffold, flattenScaffold, scaffoldProposals,
+    type ScaffoldAnswers, type ScaffoldEdits,
+} from '@/lib/ai/files-agent/scaffold'
 import { issueApprovalToken, verifyApprovalToken } from '@/lib/ai/files-agent/approval'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
-import { agentCreateFolder } from '@/lib/ai/files-agent/safe-ops'
+import { agentCreateFolderIndexed } from '@/lib/ai/files-agent/safe-ops'
+import { assignDocId } from '@/lib/doc-id'
 import { logger } from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
@@ -127,29 +131,64 @@ export async function GET(
             }
         }
 
-        const folders = flattenScaffold(buildScaffold(answers))
+        // The user's additions and removals, signed along with everything else: the token covers
+        // the EDITED tree, so an edit cannot widen the set any more than an answer can.
+        let edits: ScaffoldEdits = {}
+        const rawEdits = request.nextUrl.searchParams.get('edits')
+        if (rawEdits) {
+            try {
+                edits = JSON.parse(rawEdits) as ScaffoldEdits
+            } catch {
+                return NextResponse.json({ error: 'Could not read the changes' }, { status: 400 })
+            }
+        }
 
-        // Best effort: the preview must render even where the connector is unreachable, so a
-        // failure here costs the warning, not the feature.
-        let previousRun: ScaffoldFingerprint | null = null
-        const engagement = await prisma.engagement.findUnique({
-            where: { id: projectId },
-            select: { connectorRootFolderId: true },
+        const folders = flattenScaffold(buildScaffold(answers, edits))
+
+        // Counted FIRST, before anything that touches the provider.
+        //
+        // This number decides which chip the page offers, so it must survive an unreachable or
+        // unconfigured Drive. Computing it after the fingerprint read meant a single failing
+        // provider call lost the whole response — the page then had no count, assumed the
+        // engagement had folders, and offered "Review" on an engagement with none.
+        //
+        // Whether the engagement already has a folder structure, so the page can offer "set up"
+        // or "review" rather than both. Counted from EngagementDocument, which is the same tree
+        // the review reads — not the current folder's contents, which would call an engagement
+        // empty whenever the user happened to be standing in an empty subfolder.
+        const folderCount = await prisma.engagementDocument.count({
+            where: { engagementId: projectId, isFolder: true, status: { not: 'ARCHIVED' } },
         })
-        const connector = engagement?.connectorRootFolderId
-            ? await resolveEngagementConnector(projectId)
-            : null
-        if (connector && engagement?.connectorRootFolderId) {
-            previousRun = await previousScaffoldRun(
-                await getStorageAdapter(connector.type),
-                connector.id,
-                engagement.connectorRootFolderId,
-            )
+
+        // Best effort, and now actually best effort: the preview must render even where the
+        // connector is unreachable, so a failure here costs the re-run warning rather than the
+        // whole response. The comment said this before; nothing enforced it.
+        let previousRun: ScaffoldFingerprint | null = null
+        try {
+            const engagement = await prisma.engagement.findUnique({
+                where: { id: projectId },
+                select: { connectorRootFolderId: true },
+            })
+            const connector = engagement?.connectorRootFolderId
+                ? await resolveEngagementConnector(projectId)
+                : null
+            if (connector && engagement?.connectorRootFolderId) {
+                previousRun = await previousScaffoldRun(
+                    await getStorageAdapter(connector.id),
+                    connector.id,
+                    engagement.connectorRootFolderId,
+                )
+            }
+        } catch (error) {
+            logger.warn('[files-agent/scaffold] could not read the previous run', {
+                error: String(error),
+            })
         }
 
         return NextResponse.json({
             data: {
                 folders,
+                folderCount,
                 // So the panel can warn before a second run rather than after it.
                 previousRun,
                 token: issueApprovalToken({
@@ -179,11 +218,13 @@ export async function POST(
         const body = await request.json().catch(() => null) as {
             answers?: unknown
             token?: unknown
+            edits?: unknown
         } | null
         const answers = (body?.answers ?? {}) as ScaffoldAnswers
         const token = typeof body?.token === 'string' ? body.token : ''
+        const edits = (body?.edits ?? {}) as ScaffoldEdits
 
-        const tree = buildScaffold(answers)
+        const tree = buildScaffold(answers, edits)
         const folders = flattenScaffold(tree)
         if (folders.length === 0) {
             return NextResponse.json({ error: 'Nothing to create' }, { status: 400 })
@@ -210,7 +251,7 @@ export async function POST(
 
         const engagement = await prisma.engagement.findUnique({
             where: { id: projectId },
-            select: { connectorRootFolderId: true },
+            select: { connectorRootFolderId: true, name: true },
         })
         if (!engagement?.connectorRootFolderId) {
             return NextResponse.json(
@@ -222,7 +263,7 @@ export async function POST(
         if (!connector) {
             return NextResponse.json({ error: 'No storage connector for this engagement' }, { status: 404 })
         }
-        const adapter = await getStorageAdapter(connector.type)
+        const adapter = await getStorageAdapter(connector.id)
 
         // Refused outright if this engagement has been scaffolded before.
         //
@@ -273,22 +314,26 @@ export async function POST(
                     continue
                 }
 
-                // Through the agent wrapper, never the adapter directly — see safe-ops.ts.
-                const id = await agentCreateFolder(adapter, connector.id, parentId, folder.name)
+                // The whole capability — create, index, audit — not just the provider call.
+                // A folder made without its `EngagementDocument` row is invisible in the app,
+                // which is how this reported "created 9 folders" over an empty file list.
+                const id = await agentCreateFolderIndexed({
+                    adapter,
+                    connectionId: connector.id,
+                    parentFolderId: parentId,
+                    name: folder.name,
+                    engagementId: projectId,
+                    engagementName: engagement.name,
+                    firmId: ctx.orgId,
+                    clientId: ctx.clientId,
+                    actorId,
+                    agentMeta,
+                    auditMeta: { scaffold: true },
+                })
                 createdIds.set(folder.path, id)
                 created += 1
 
-                audit(AUDIT_EVENT.DOCUMENT_CREATED)
-                    .firm(ctx.orgId).client(ctx.clientId).engagement(projectId)
-                    .actor(actorId).scope(AUDIT_SCOPE.DOCUMENT)
-                    .meta({
-                        fileName: folder.name,
-                        parentId,
-                        folderId: id,
-                        scaffold: true,
-                        ...agentMeta,
-                    })
-                    .fireAndForget()
+
             } catch (error) {
                 logger.warn(`[files-agent/scaffold] ${folder.path} failed: ${(error as Error).message}`)
                 failed += 1

@@ -102,7 +102,11 @@ export async function POST(
 
         const names = await prisma.engagement.findUnique({
             where: { id: projectId },
-            select: { name: true, client: { select: { name: true } } },
+            // `rateOrValue` is deliberately NOT selected — see buildEngagementContext.
+            select: {
+                name: true, description: true, tags: true, contractType: true,
+                client: { select: { name: true } },
+            },
         })
 
         // Audit-derived activity, appended to the snapshot. Event names and counts only — the
@@ -124,6 +128,13 @@ export async function POST(
         const context = buildEngagementContext(insights, {
             clientName: names?.client?.name,
             engagementName: names?.name,
+            description: names?.description,
+            // Stored as Json, so narrowed rather than trusted: a hand-edited or older row must
+            // not put objects into a prompt.
+            tags: Array.isArray(names?.tags)
+                ? names.tags.filter((t): t is string => typeof t === 'string')
+                : undefined,
+            contractType: names?.contractType,
         }) + (activity ? `\n${activity}` : '') + (files ? `\n${files}` : '')
 
         // Gate and client in one call: over-budget throws before any tokens are spent.

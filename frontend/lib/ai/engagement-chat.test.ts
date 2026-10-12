@@ -481,3 +481,50 @@ describe('chat scope', () => {
         expect(chatScopeGuidance('overview')).not.toBe(chatScopeGuidance('files'))
     })
 })
+
+describe('buildEngagementContext — engagement metadata', () => {
+    it('includes the description, labelled as the firm\'s own words', () => {
+        const out = buildEngagementContext(data, {
+            engagementName: 'Q4 GTM',
+            description: 'Q2 GTM positioning for a Series B fintech entering the UK',
+        })
+        expect(out).toContain('Series B fintech entering the UK')
+        // Labelled, so the model reads it as a description of the work rather than as
+        // instructions addressed to it.
+        expect(out).toContain('What the firm says this engagement is:')
+    })
+
+    it('includes tags and contract type when present', () => {
+        const out = buildEngagementContext(data, {
+            engagementName: 'Q4 GTM',
+            tags: ['fintech', 'UK'],
+            contractType: 'Fixed fee',
+        })
+        expect(out).toContain('Tags: fintech, UK')
+        expect(out).toContain('Contract type: Fixed fee')
+    })
+
+    it('omits them entirely when absent or blank, rather than printing empty labels', () => {
+        const out = buildEngagementContext(data, {
+            engagementName: 'Q4 GTM',
+            description: '   ',
+            tags: [],
+            contractType: null,
+        })
+        expect(out).not.toContain('What the firm says')
+        expect(out).not.toContain('Tags:')
+        expect(out).not.toContain('Contract type:')
+    })
+
+    it('has no way to carry the fee or contract value', () => {
+        // rateOrValue is encrypted, commercially sensitive, and needed by nothing Brio answers.
+        // The builder takes no such parameter, so a caller cannot pass one by mistake — this test
+        // fails the moment somebody adds the field.
+        const out = buildEngagementContext(data, {
+            engagementName: 'Q4 GTM',
+            // @ts-expect-error — deliberately not part of the signature.
+            rateOrValue: '250000',
+        })
+        expect(out).not.toContain('250000')
+    })
+})

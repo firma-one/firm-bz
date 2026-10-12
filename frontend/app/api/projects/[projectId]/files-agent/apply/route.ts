@@ -12,7 +12,7 @@ import { DESTRUCTIVE_REFUSAL, isPermittedAgentOperation } from '@/lib/ai/agent-c
 import { disambiguate, isValidRenameTarget, proposalKey, type Proposal } from '@/lib/ai/files-agent/tools'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 import { safeInngestSend } from '@/lib/inngest/client'
-import { agentCreateFolder } from '@/lib/ai/files-agent/safe-ops'
+import { agentCreateFolderIndexed } from '@/lib/ai/files-agent/safe-ops'
 import { logger } from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
@@ -338,23 +338,34 @@ export async function POST(
 
                 if (proposal.kind === 'folder') {
                     const adapter = await getStorageAdapter(connector.id)
-                    const parentId = proposal.parentId ?? (await prisma.engagement.findUnique({
-                        where: { id: projectId }, select: { connectorRootFolderId: true },
-                    }))?.connectorRootFolderId
+                    // One lookup for both: the root folder to fall back to, and the name the
+                    // doc-id assignment needs.
+                    const eng = await prisma.engagement.findUnique({
+                        where: { id: projectId },
+                        select: { connectorRootFolderId: true, name: true },
+                    })
+                    const parentId = proposal.parentId ?? eng?.connectorRootFolderId
                     if (!parentId) throw new Error('No parent folder resolved')
 
-                    // findOrCreate rather than create: a batch applied twice, or a folder the user
-                    // made themselves in between, should not produce a duplicate.
-                    // Through the agent wrapper, never the adapter directly: see safe-ops.ts —
-                    // `findOrCreateFolder` deletes duplicate siblings for one reserved name, and
-                    // the agent must not be able to cause that even indirectly.
-                    const newId = await agentCreateFolder(adapter, connector.id, parentId, proposal.name)
-
-                    audit(AUDIT_EVENT.DOCUMENT_CREATED)
-                        .firm(ctx.orgId).client(ctx.clientId).engagement(projectId)
-                        .actor(actorId).scope(AUDIT_SCOPE.DOCUMENT)
-                        .meta({ fileName: proposal.name, parentId, folderId: newId, ...agentMeta })
-                        .fireAndForget()
+                    // The whole capability — create, index, audit. Creating without the
+                    // `EngagementDocument` row leaves a folder that exists in the Drive and
+                    // nowhere in the app, which is the same gap the scaffold had.
+                    //
+                    // findOrCreate underneath, so a batch applied twice or a folder the user made
+                    // in between does not produce a duplicate.
+                    await agentCreateFolderIndexed({
+                        adapter,
+                        connectionId: connector.id,
+                        parentFolderId: parentId,
+                        name: proposal.name,
+                        engagementId: projectId,
+                        engagementName: eng?.name ?? '',
+                        firmId: ctx.orgId,
+                        clientId: ctx.clientId,
+                        actorId,
+                        agentMeta,
+                        auditMeta: { reason: proposal.reason },
+                    })
                 }
 
                 outcomes.push({ proposal, ok: true, appliedAs })

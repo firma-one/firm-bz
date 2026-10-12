@@ -4,10 +4,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AlertCircle, Loader2, Check, X, FolderTree, ChevronRight } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
 import { AgentPromptCard } from '@/components/ui/agent-prompt-card'
+import { Checkbox } from '@/components/ui/checkbox'
 import { ElapsedTime } from '@/components/ui/elapsed-time'
 import {
     SCAFFOLD_QUESTIONS, buildScaffold, flattenScaffold, unusedAnswers,
-    type ScaffoldAnswers, type ScaffoldQuestion, type ScaffoldQuestionId,
+    type ScaffoldAnswers, type ScaffoldEdits, type ScaffoldQuestion, type ScaffoldQuestionId,
 } from '@/lib/ai/files-agent/scaffold'
 
 /**
@@ -56,10 +57,69 @@ export function FilesScaffoldPanel({
     const pendingIndex = SCAFFOLD_QUESTIONS.findIndex((q) => !(q.id in answers))
     const complete = pendingIndex === -1
 
-    const preview = useMemo(
+    /**
+     * The user's changes to the proposed tree.
+     *
+     * Applied by `buildScaffold`, not by editing the preview array, because the SERVER rebuilds
+     * the tree from these same inputs and signs the result. Anything expressed only in client
+     * state would be dropped at creation — the user would approve one list and get another.
+     *
+     * Removing here means "do not create", not "delete": none of these folders exist yet.
+     */
+    const [edits, setEdits] = useState<ScaffoldEdits>({})
+
+    /**
+     * Two lists, deliberately.
+     *
+     * `rows` is everything the answers produce, including folders the user has unchecked — they
+     * stay on screen, dimmed, so the count can change with a visible reason and so unchecking is
+     * reversible. `preview` is what will actually be created, which is what the button counts and
+     * what the server signs.
+     *
+     * Numbering differs between them: an unchecked folder still occupies its position in `rows`
+     * but is renumbered out of `preview`. That is intended — the list is a set of choices, the
+     * preview is the result.
+     */
+    const rows = useMemo(
+        // Built WITHOUT the removals, so an unchecked folder stays on screen to be re-checked.
         () => (complete ? flattenScaffold(buildScaffold(answers)) : []),
         [complete, answers],
     )
+    const preview = useMemo(
+        () => (complete ? flattenScaffold(buildScaffold(answers, edits)) : []),
+        [complete, answers, edits],
+    )
+
+    /** The builder's own name for a displayed folder: "01_Discovery" is "Discovery" to it. */
+    const bareName = useCallback(
+        (displayName: string) =>
+            displayName.replace(/^\d{1,2}[._\-)]*\s*/, '').replace(/[_\-]+/g, ' ').trim(),
+        [],
+    )
+
+    const isRemoved = useCallback(
+        (displayName: string) =>
+            (edits.removed ?? []).some(
+                (n) => n.toLowerCase() === bareName(displayName).toLowerCase(),
+            ),
+        [edits.removed, bareName],
+    )
+
+    /** Includes or excludes one top-level folder. Reversible, which an × was not. */
+    const toggleFolder = useCallback((displayName: string) => {
+        const bare = bareName(displayName)
+        setEdits((prev) => {
+            const removed = prev.removed ?? []
+            const has = removed.some((n) => n.toLowerCase() === bare.toLowerCase())
+            return {
+                ...prev,
+                removed: has
+                    ? removed.filter((n) => n.toLowerCase() !== bare.toLowerCase())
+                    : [...removed, bare],
+            }
+        })
+    }, [bareName])
+
 
     /**
      * The server's approval token for the tree being previewed.
@@ -80,7 +140,8 @@ export function FilesScaffoldPanel({
         if (!open || !token) { setApproval(null); return }
         let cancelled = false
         fetch(
-            `/api/projects/${projectId}/files-agent/scaffold?answers=${encodeURIComponent(JSON.stringify(answers))}`,
+            `/api/projects/${projectId}/files-agent/scaffold?answers=${encodeURIComponent(JSON.stringify(answers))}`
+            + `&edits=${encodeURIComponent(JSON.stringify(edits))}`,
             { headers: { Authorization: `Bearer ${token}` }, credentials: 'include' },
         )
             .then((res) => (res.ok ? res.json() : null))
@@ -91,7 +152,7 @@ export function FilesScaffoldPanel({
             })
             .catch(() => { if (!cancelled) setApproval(null) })
         return () => { cancelled = true }
-    }, [open, complete, answers, projectId, token])
+    }, [open, complete, answers, edits, projectId, token])
 
     /** Typed answers the tree builder could not act on — surfaced rather than dropped. */
     const unused = useMemo(() => (complete ? unusedAnswers(answers) : []), [complete, answers])
@@ -107,7 +168,7 @@ export function FilesScaffoldPanel({
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
                 credentials: 'include',
-                body: JSON.stringify({ answers, token: approval }),
+                body: JSON.stringify({ answers, edits, token: approval }),
             })
             const body = await res.json().catch(() => ({}))
             if (!res.ok) {
@@ -233,7 +294,7 @@ export function FilesScaffoldPanel({
                         <ElapsedTime className="shrink-0 text-[10px] text-gray-400" />
                     </div>
                     <ul className="space-y-0.5 pl-5">
-                        {preview.map((f) => (
+                        {rows.map((f) => (
                             <li key={f.path} className="truncate text-[10px] text-gray-400">
                                 {f.path}
                             </li>
@@ -262,7 +323,7 @@ export function FilesScaffoldPanel({
                         {preview.map((f) => (
                             <li
                                 key={f.path}
-                                className="flex items-start gap-1.5 border-t border-gray-100 px-3.5 py-1.5 first:border-t-0"
+                                className="group/row flex items-start gap-1.5 border-t border-gray-100 px-3.5 py-1.5 first:border-t-0"
                                 // Nesting shown by indent, which is how a folder tree is read
                                 // everywhere else the user has seen one.
                                 style={{ paddingLeft: f.parentPath ? '2.25rem' : undefined }}
@@ -270,10 +331,44 @@ export function FilesScaffoldPanel({
                                 {f.parentPath && (
                                     <ChevronRight className="mt-0.5 h-3 w-3 shrink-0 text-gray-300" aria-hidden />
                                 )}
-                                <span className="min-w-0">
+                                <span className={`min-w-0 flex-1 ${
+                                    // Unchecked rows stay legible but visibly out: a row that
+                                    // vanished would make the count change with nothing to
+                                    // explain it, and re-checking would be impossible.
+                                    isRemoved(f.name) ? 'opacity-40' : ''
+                                }`}>
                                     <span className="block truncate text-xs text-gray-800">{f.name}</span>
                                     <span className="block text-[10px] leading-snug text-gray-400">{f.purpose}</span>
                                 </span>
+                                {/* RIGHT-ALIGNED and quiet. Leading the row in primary green, a
+                                    column of ticks was the loudest thing on screen and read as
+                                    status rather than as a control — the folder names are what
+                                    the user is here to read.
+
+                                    Checked by default, since unchecking means "do not create
+                                    this one". Nothing here exists yet, so it is reversible, where
+                                    an × would read as destructive for an action that destroys
+                                    nothing — and unlike a hover-revealed control it shows what is
+                                    included without pointing at every row in turn.
+
+                                    Top-level only. A child goes with its parent — offering to
+                                    drop "Internal/Admin" while keeping "Internal" invites a
+                                    half-built branch for no gain. */}
+                                {!f.parentPath && (
+                                    <Checkbox
+                                        checked={!isRemoved(f.name)}
+                                        onCheckedChange={() => toggleFolder(f.name)}
+                                        disabled={creating}
+                                        aria-label={`Create "${f.name}"`}
+                                        // White box, dark tick, square corners. A FILLED box
+                                        // reads as a status badge — something the system is
+                                        // telling you — where an empty one with a mark in it
+                                        // reads as a control you set. `rounded-[3px]` because
+                                        // the default `rounded-sm` was round enough at 14px to
+                                        // look like a pill.
+                                        className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded-[3px] border-gray-300 bg-white shadow-none data-[state=checked]:border-gray-400 data-[state=checked]:bg-white data-[state=checked]:text-gray-700 [&_svg]:h-3 [&_svg]:w-3"
+                                    />
+                                )}
                             </li>
                         ))}
                     </ul>
@@ -319,7 +414,7 @@ export function FilesScaffoldPanel({
                             </button>
                             <button
                                 type="button"
-                                onClick={() => setAnswers({})}
+                                onClick={() => { setAnswers({}); setEdits({}) }}
                                 disabled={creating}
                                 className="rounded-lg border border-gray-200 px-3 py-1.5 text-[11px] text-gray-600 transition-colors hover:border-gray-300 hover:bg-gray-50 disabled:opacity-50"
                             >
@@ -331,7 +426,10 @@ export function FilesScaffoldPanel({
                             onClick={() => void create()}
                             // Until the token arrives there is nothing to confirm against, so the
                             // button does not pretend to be ready.
-                            disabled={creating || !approval}
+                            // Nothing left to create: removing every folder is a legitimate way
+                            // to decide against the structure, but the server rejects an empty
+                            // tree, so the button says so instead of failing on click.
+                            disabled={creating || !approval || preview.length === 0}
                             className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3.5 py-1.5 text-xs font-medium text-white transition-colors hover:brightness-105 disabled:bg-gray-200 disabled:text-gray-400"
                         >
                             {creating
@@ -356,7 +454,7 @@ export function FilesScaffoldTrigger({ onClick, disabled }: { onClick: () => voi
             className="inline-flex max-w-full shrink-0 items-center gap-1.5 truncate rounded-full border border-primary/30 bg-white px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/5 disabled:opacity-60"
         >
             <FolderTree className="h-3 w-3 shrink-0" />
-            Set up folders
+            Set up folder organization
         </button>
     )
 }

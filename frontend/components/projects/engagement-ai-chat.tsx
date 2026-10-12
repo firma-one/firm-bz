@@ -290,7 +290,7 @@ export function EngagementAiChat({
     /**
      * Rendered as the last chip in the suggestion row.
      *
-     * A caller-supplied ACTION, not a question — the Files page puts "Review file organization"
+     * A caller-supplied ACTION, not a question — the Files page puts "Review folder organization"
      * here so it reads as one of the things you can ask for, in the place the eye already goes for
      * them, rather than as a banner above the conversation.
      */
@@ -630,6 +630,22 @@ export function EngagementAiChat({
             your consent.
         </>
     )
+
+    /**
+     * What the blank panel suggests doing, which depends on whether there is anything to ask about.
+     *
+     * A fresh engagement has no files, no deliverables and no dates, so "ask about deliverables"
+     * is advice it cannot act on — the useful next step there is to put something in the
+     * engagement, and saying so is more honest than offering prompts that would return nothing.
+     */
+    const emptyStateHint = suggestions.length > 0
+        ? 'Pick one of the questions below, or type your own.'
+        : suggestionActions
+            // There are no QUESTIONS to offer, but there is an action — on Files with no files
+            // that is "Set up folder organization", which is the actual next step. Pointing at
+            // the composer instead would be advice the page cannot act on yet.
+            ? 'Start with the action below, or type a question.'
+            : 'Nothing has been added here yet. Once there are deliverables, dates or files, Brio can answer questions about them.'
 
     /**
      * Keeps the newest content in view as it arrives, and again once the turn settles.
@@ -1420,6 +1436,28 @@ export function EngagementAiChat({
                         : 'max-h-[480px] min-h-[180px]'
                 }`}
             >
+                {/* EMPTY STATE. Rendered only for a conversation with nothing in it — not while
+                    one is streaming its first answer, which would flash this between the question
+                    and the reply.
+
+                    Says what to DO, not what Brio is: the header's second line already carries
+                    the capability and the promise, and repeating it here would spend the one
+                    moment of attention a blank panel gets on something already on screen.
+
+                    `aboveThread` suppresses it too — an agent question is content, so a panel
+                    showing one is not empty. */}
+                {messages.length === 0 && !streaming && !aboveThread && (
+                    <div className="flex h-full flex-col items-center justify-center px-6 text-center">
+                        <Sparkles className="h-5 w-5 text-primary/30" aria-hidden />
+                        <p className="mt-2 text-xs font-medium text-gray-600">
+                            Ask <Brio noIcon /> about this engagement
+                        </p>
+                        <p className="mt-1 max-w-[16rem] text-[11px] leading-relaxed text-gray-400">
+                            {emptyStateHint}
+                        </p>
+                    </div>
+                )}
+
                 {messages.map((m, i) => (
                     <React.Fragment key={i}>
                     {/* Marks where the restored thread ends and this visit begins.

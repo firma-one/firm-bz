@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useEffect, useRef, useState } from 'react'
+import { Brio } from '@/components/ui/brio'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -276,6 +277,19 @@ export function AddEngagementModal({ groupSlug, firmSlug, clientSlug, trigger, o
                                         disabled={isDisabled}
                                         className="flex w-full rounded border border-[#e5e7eb] bg-white px-3 py-2 text-xs font-normal text-[#1b1b1d] placeholder:text-[#9a9ba0] focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
                                     />
+                                    {/* Says the field is READ, which is the only thing that
+                                        changes what someone writes here. "Q2 GTM" and "Q2 GTM
+                                        positioning for a Series B fintech entering the UK" are
+                                        both valid labels; only the second is useful context, and
+                                        nothing otherwise signals that the longer one is worth
+                                        typing.
+
+                                        The Brio component, not the word: one mark for the
+                                        assistant everywhere it is named. */}
+                                    <p className="mt-1 text-[10px] leading-snug text-[#6b6d73]">
+                                        <Brio className="text-[10px]" /> uses this for context when
+                                        answering questions about this engagement.
+                                    </p>
                                 </div>
                             </div>
 
