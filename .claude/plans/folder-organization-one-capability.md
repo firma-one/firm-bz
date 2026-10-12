@@ -210,57 +210,102 @@ Rejected:
   result and no dependency, but the creation call differs per provider and the
   template-content problem remains either way.
 
-### Templates are shells; the AI chooses which ones apply
+### Scope: the project-management layer, not the deliverable
 
-Two corrections, in order, and the second supersedes the first.
+Three corrections got here, each superseding the last. Worth keeping the
+sequence so it is not relitigated.
 
-**First:** asking which three or four templates to ship as a single fixed list
-was the same mistake as the four hard-coded engagement kinds. A GTM engagement,
-an audit and a product build do not want one shared set.
+**First:** a single fixed list of templates was the same mistake as the four
+hard-coded engagement kinds — a GTM engagement, an audit and a product build do
+not want one shared set.
 
 **Then:** generating document CONTENT from four answers and a one-line
-description is unrealistic. A model given that much input cannot write a real
-scope note — it writes plausible filler that a professional must delete before
-the document is usable, which is worse than an empty shell because it looks
-finished. Reviewing invented content costs more than filling in a blank.
+description is unrealistic. A model with that much input writes plausible
+filler a professional must delete before the document is usable, which is worse
+than an empty shell because it looks finished.
 
-So the split is:
+**Then:** a library of complete shells does not scale either. Accounting, legal,
+engineering and healthcare consulting want different documents, and nobody can
+maintain templates for domains they do not know.
+
+#### What resolves it
+
+Split the documents an engagement needs in two:
 
 | | |
 |---|---|
-| **Static, in the code** | The templates themselves — proper shells, in the spirit of a quality-management system. Headings, numbered sections, a revision history block, placeholder tables with real column headers, a footer. Old school and complete. |
-| **Chosen by the model** | WHICH templates a given engagement gets, and where each one goes in the tree. An audit gets a testing memo; a product build gets a PRD; a retainer gets a monthly report. |
-| **Filled from engagement data** | Only what is known and certain — engagement name, client, dates, document id. Not prose. |
+| **Management layer** | Scope note, status report, register, meeting record, checklist. How you RUN a project. Genuinely identical across every domain — which is exactly why quality-management templates exist and why they are generic. |
+| **Substantive deliverable** | The marketing plan, the audit findings report, the PRD. What the client is paying for. Domain-specific in its bones. |
 
-That keeps the AI doing the judgement it is good at (what this kind of work
-needs) and keeps it away from the thing it would do badly here (pretending to
-know the content of work that has not started).
+**Brio scaffolds the management layer only.** The substantive deliverable is the
+firm's expertise, and a correctly-named empty folder is the right thing to hand
+them for it.
 
-A library of shells is now a real artifact the product owns and maintains. That
-is a cost, but a legible one — a firm can read a template and tell whether it
-is right, which is not true of content generated per engagement.
+Tested against a six-month SaaS marketing engagement, which is well outside the
+professional-services shapes the kinds were written for: content calendar
+(register), campaign brief (scope note), monthly performance report (status),
+kickoff notes (meeting record) all fit. The marketing STRATEGY does not —
+positioning, segments, channel mix and messaging pillars are not Scope /
+Objectives / Timeline — and brand guidelines fit nothing, correctly, since the
+client supplies those. The two misses are both substantive documents, which is
+the boundary holding.
 
-Still true regardless: a document in every folder is clutter, and it would make
-the review's own "empty folder" and "single file for its whole life" findings
-fire on the scaffold's own output. A small number of documents a firm will
-actually fill in is the target.
+#### The shells
+
+Six or so archetypes, written once, static in the code:
+
+| Archetype | Covers |
+|---|---|
+| Scope / engagement note | scope notes, PRDs, terms of reference, audit plans, campaign briefs |
+| Status report | weekly updates, monthly retainer reports, progress memos |
+| Register (table) | risk register, deliverable register, issue log, content calendar |
+| Findings / recommendations | audit findings, review memos, assessment reports |
+| Checklist | readiness checks, sign-off lists, QC procedures |
+| Meeting record | kickoff notes, steering minutes |
+
+QMS-style and complete: headings, numbered sections, a revision history block,
+tables with real column headers, a footer.
+
+| | |
+|---|---|
+| **Static, in the code** | The archetype shells. |
+| **Chosen by the model** | Which archetypes this engagement gets, what each file is CALLED in this domain ("Requirements Traceability Matrix", not "Register"), and which folder it goes in. |
+| **From engagement data** | Only what is known and certain — engagement name, client, dates, document id. Never prose. |
+
+The model's judgement is small and checkable — closer to the `missing-folder`
+detector than to the file review — and it covers domains nobody wrote anything
+for, because the naming carries the domain and the shell does not have to.
+
+#### The honest limits
+
+- A domain with a genuinely unusual management document is not served. The firm
+  makes that one themselves, which is fine: the scaffold does not have to cover
+  everything to be worth running.
+- **Firms may already have house templates.** If they do, "use your firm's
+  templates" is a better feature than "use ours", and it would change this
+  considerably. Worth asking real users before investing in many shells.
+- A document in every folder is clutter, and would make the review's own "empty
+  folder" and "single file for its whole life" findings fire on the scaffold's
+  own output.
 
 ### Open for tomorrow
 
-- **Which shells to write, and in what format.** Each is real content the
-  product maintains. `.docx` via `docx`, `.xlsx` via `exceljs`, `.pptx` via
-  `pptxgenjs` — all write a Buffer, which `createFile` already takes on both
-  adapters.
-- **How a template declares where it belongs.** A testing memo goes in the
-  testing folder; the mapping has to survive the folder being renamed or
-  unchecked during setup.
-- **How much the model decides.** Picking from a catalogue of shells is a small,
-  checkable judgement — closer to the `missing-folder` detector than to the file
-  review. It may not need a model call at all: engagement kind plus a tag may
-  be enough, which would keep the scaffold free.
+- **Write the six shells.** `.docx` via `docx`, `.xlsx` via `exceljs`, `.pptx`
+  via `pptxgenjs` — all produce a Buffer, which `createFile` already takes on
+  both adapters. The register archetype is a spreadsheet; the rest are
+  documents.
+- **How a template declares where it belongs.** A status report goes in the
+  internal folder, a scope note in the first phase folder. The mapping has to
+  survive a folder being renamed or unchecked during setup.
+- **Whether this needs a model call at all.** Picking archetypes and naming
+  them for the domain may fall out of the engagement kind plus the description
+  without a round trip. If it does, the scaffold stays free, which is worth
+  something — it costs nothing today.
 - **The document cap.** `assertWithinDocumentCap` is enforced on creation
   elsewhere; a scaffold that creates files must respect it.
 - `PERMITTED_AGENT_OPERATIONS` is `rename`, `move`, `create-folder`. Creating
   files is a new capability and must be added there deliberately, with the
   reversibility argument made explicitly — a created file is not destructive,
   but it is not nothing either.
+- **Ask real users about house templates** before writing more than the first
+  two or three shells.
