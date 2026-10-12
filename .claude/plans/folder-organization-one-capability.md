@@ -207,15 +207,37 @@ Rejected:
   result and no dependency, but the creation call differs per provider and the
   template-content problem remains either way.
 
-### Open for tomorrow
+### The model picks the documents, not a fixed list
 
-- **Which documents.** A domain judgement, not a technical one. The suggestion
-  on the table is three or four high-value stubs — a scope note, a status log,
-  a deliverable register — NOT a document in every folder. Twenty empty
-  templates is clutter, and it would make the review's own "empty folder" and
-  "single file for its whole life" findings fire on the scaffold's output.
-- **Where templates live.** They become content the product maintains per
-  engagement kind, which is a new category of thing to own.
+Corrected: asking which three or four templates to ship is the same mistake as
+the four hard-coded engagement kinds. A GTM engagement, an audit and a platform
+build do not want one shared set of stubs, and no list written in advance is
+right for the next kind of work a firm takes on. **That judgement is the whole
+reason this is AI-driven.**
+
+So the model proposes the documents, from what it already knows about the
+engagement — the kind, and the description, tags and contract type that now
+reach it. The folder tree stays deterministic (`buildScaffold`); the documents
+are a proposal, approved the same way every other agent change is.
+
+That makes this a genuine agent capability rather than a template library, and
+it inherits the existing boundary: proposals are previewed, each is approved,
+and nothing is written without a signed token.
+
+Still true regardless of who chooses: a document in every folder is clutter,
+and it would make the review's own "empty folder" and "single file for its
+whole life" findings fire on the scaffold's own output. A small number of
+documents the firm will actually fill in is the target.
+
+### Open for tomorrow
+- **How much structure a generated document gets.** The model names the file
+  and its purpose; something has to turn that into real `.docx` / `.xlsx`
+  content. A heading skeleton from the model is one option; a generic shell
+  (title, date, engagement name, empty sections) is another and costs no
+  tokens. Worth deciding before picking the library's API surface.
+- **Credits.** The scaffold costs nothing today — the tree is computed, not
+  generated. Proposing documents is a model call, so the flow acquires a cost
+  it did not have, and the estimate shown before the run must say so.
 - **The document cap.** `assertWithinDocumentCap` is enforced on creation
   elsewhere; a scaffold that creates files must respect it.
 - `PERMITTED_AGENT_OPERATIONS` is `rename`, `move`, `create-folder`. Creating
