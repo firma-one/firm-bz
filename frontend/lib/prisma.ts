@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client'
 import { encrypt, decrypt } from './encryption'
+import { AGENT_EMAIL_DOMAIN } from './ai/agent-email'
 
 // PrismaClient is attached to the `global` object in development to prevent
 // exhausting your database connection limit.
@@ -124,12 +125,77 @@ export const basePrisma = globalForBasePrisma.basePrisma ?? new PrismaClient()
 
 if (process.env.NODE_ENV === 'development') globalForBasePrisma.basePrisma = basePrisma
 
+/**
+ * Agent user ids, resolved once per process.
+ *
+ * A cache rather than a lookup per notification: the set changes only when a firm is created, and
+ * a database round trip on every notification write would be a poor trade for a filter. Refreshed
+ * lazily on a miss so a firm created after boot is picked up.
+ */
+let agentIdCache: { ids: Set<string>; loadedAt: number } | null = null
+const AGENT_CACHE_TTL_MS = 5 * 60 * 1000
+
+async function agentUserIds(): Promise<Set<string>> {
+  const fresh = agentIdCache && Date.now() - agentIdCache.loadedAt < AGENT_CACHE_TTL_MS
+  if (fresh) return agentIdCache!.ids
+
+  try {
+    const rows = await basePrisma.$queryRawUnsafe<Array<{ id: string }>>(
+      `SELECT id::text FROM auth.users WHERE email LIKE $1`,
+      `%@${AGENT_EMAIL_DOMAIN}`,
+    )
+    agentIdCache = { ids: new Set(rows.map((r) => r.id)), loadedAt: Date.now() }
+  } catch {
+    // Keep whatever we had rather than failing the write: a missed filter costs an unread row.
+    agentIdCache = agentIdCache ?? { ids: new Set(), loadedAt: Date.now() }
+  }
+  return agentIdCache.ids
+}
+
+/**
+ * Removes agent recipients from a notification write, in place.
+ *
+ * Returns null when nothing is left to write, so the caller can skip the query entirely.
+ */
+async function stripAgentRecipients(anyArgs: any, operation: string): Promise<unknown> {
+  const agents = await agentUserIds()
+  if (agents.size === 0) return anyArgs
+
+  if (operation === 'create') {
+    return agents.has(anyArgs?.data?.userId) ? null : anyArgs
+  }
+
+  const data = anyArgs?.data
+  if (!Array.isArray(data)) {
+    return agents.has(data?.userId) ? null : anyArgs
+  }
+
+  anyArgs.data = data.filter((row: any) => !agents.has(row?.userId))
+  return anyArgs.data.length === 0 ? null : anyArgs
+}
+
 function createExtendedPrismaClient() {
   return basePrisma.$extends({
     query: {
       $allModels: {
         async $allOperations({ model, operation, args, query }) {
           const anyArgs = args as any
+
+          // 0. Drop notifications addressed to an agent.
+          //
+          // Brio is a firm member, so it lands in recipient lists computed from membership — and
+          // several of those apply no role filter at all. Nothing reads a notification addressed
+          // to it, so the rows would accumulate forever.
+          //
+          // Filtered here rather than at each writer because there are eleven of them, they do not
+          // share a helper, and a guard added per site is one a twelfth site will not have. This
+          // is the one place every write must pass through.
+          if (model === 'Notification' && ['create', 'createMany'].includes(operation)) {
+            const filtered = await stripAgentRecipients(anyArgs, operation)
+            // Every row was for an agent: skip the query rather than issue an empty createMany.
+            if (filtered === null) return operation === 'createMany' ? { count: 0 } : null
+          }
+
           // 1. Encryption on Write
           if (['create', 'update', 'upsert'].includes(operation)) {
             if (operation === 'upsert') {

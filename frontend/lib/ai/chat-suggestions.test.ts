@@ -23,7 +23,7 @@ function snapshot(overrides: Record<string, unknown> = {}): EngagementInsightsRe
 describe('buildChatSuggestions', () => {
     it('falls back to generic questions when nothing is wrong', () => {
         const out = buildChatSuggestions(snapshot())
-        expect(out).toContain('Summarise where this engagement stands')
+        expect(out).toContain('Summarize where this engagement stands')
         // The whole point: a clean engagement must not be asked what is overdue.
         expect(out.join(' ')).not.toMatch(/overdue/i)
     })
@@ -95,19 +95,19 @@ describe('buildChatSuggestions', () => {
 
     it('still returns something when the snapshot has not loaded', () => {
         expect(buildChatSuggestions(null).length).toBeGreaterThan(0)
-        expect(buildChatSuggestions(undefined)).toContain('Summarise where this engagement stands')
+        expect(buildChatSuggestions(undefined)).toContain('Summarize where this engagement stands')
     })
 })
 
 describe('suggestions stay on the right side of the judgment boundary', () => {
     /**
-     * Brio reports state; it does not decide. A suggested question that asks it to prioritise or
+     * Brio reports state; it does not decide. A suggested question that asks it to prioritize or
      * recommend gets handed back to the user, which makes the chip a dead end — the exact failure
      * seen when the model generated "Which of these four should be prioritized first?".
      *
      * This guards the static list against the same mistake as it grows.
      */
-    it('never asks Brio to prioritise, recommend, or decide ownership', () => {
+    it('never asks Brio to prioritize, recommend, or decide ownership', () => {
         const everySuggestion = buildChatSuggestions(snapshot({
             deliveryHealth: { overdueCount: 2, stalledInReview: 3 },
             commentThreads: { unanswered: 1, flaggedOpen: 2 },

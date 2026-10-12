@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withoutAgentIds } from '@/lib/ai/agent-email'
 import { createClient } from '@/utils/supabase/server'
 import { prisma } from '@/lib/prisma'
 import { buildSettingsForDb, parseSettingsFromDb, type ShareBlock } from '@/lib/sharing-settings'
@@ -192,13 +193,21 @@ export async function PUT(
         data: { settings, dueDate, updatedAt: new Date(), updatedBy: user.id },
       })
 
-      // Insert GRANTED rows for EL (eng_admin) and EM (eng_member) on the folder
-      const internalMembers = await prisma.engagementMember.findMany({
+      // Insert GRANTED rows for EL (eng_admin) and EM (eng_member) on the folder.
+      //
+      // Agents excluded: these rows exist to record who a document is shared WITH, and Brio
+      // reaches files through the firm-level grant rather than per-document sharing. Including it
+      // would write a row for every deliverable and every descendant — unbounded growth for an
+      // entry that grants nothing, since connectorPermissionId stays null and the revocation
+      // paths filter those out anyway.
+      const internalMembersRaw = await prisma.engagementMember.findMany({
         where: {
           engagementId: projectId,
           role: { in: [EngagementRole.eng_admin, EngagementRole.eng_member] },
         },
       })
+      const humanIds = new Set(await withoutAgentIds(internalMembersRaw.map((m) => m.userId)))
+      const internalMembers = internalMembersRaw.filter((m) => humanIds.has(m.userId))
       const internalUserIds = internalMembers.map((m) => m.userId)
       for (const member of internalMembers) {
         await prisma.engagementDocumentSharingUser.upsert({

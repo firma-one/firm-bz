@@ -40,7 +40,7 @@ export type BillingPlanUsage = {
     clientContacts: number | null
     aiCredits?: {
         used: number
-        byFeature: Record<'brief' | 'summary' | 'chat' | 'searchInterpret', number>
+        byFeature: Record<'brief' | 'summary' | 'chat' | 'searchInterpret' | 'filesAgent', number>
         periodStartIso: string
         /** Period allowance from `entitledAiCredits`; null when none resolved. */
         allowance: number | null

@@ -715,6 +715,36 @@
   animation: deeplink-icon-pulse 1.35s ease-in-out infinite;
 }
 
+/*
+ * A wavy horizontal rule, for the seam between a restored chat thread and the current one.
+ *
+ * A straight line reads as structure — a section break, something the layout imposed. A wave reads
+ * as a seam: the same content either side, interrupted. That is the right signal here, since
+ * nothing about the conversation changes across it, only when it happened.
+ *
+ * An SVG MASK over a solid block, not a row of gradients. The gradient version drew arcs so small
+ * that they rendered as a dotted line rather than a curve — at six pixels tall there is not enough
+ * room for the eye to resolve an arc from a dot. A mask carries the actual path, so the curve is a
+ * curve at any size, and `currentColor` still comes from the element beneath it.
+ *
+ * The data URI is inline rather than a `<pattern id>` in the markup because this divider can
+ * render more than once on a page, and duplicate SVG ids would have every instance referencing
+ * whichever definition the browser saw first.
+ */
+.fm-wave-rule {
+  --fm-wave-width: 12px;
+  --fm-wave-height: 8px;
+
+  height: var(--fm-wave-height);
+  background-color: currentColor;
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M0 4 Q 3 0.5, 6 4 T 12 4' fill='none' stroke='black' stroke-width='1.25'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M0 4 Q 3 0.5, 6 4 T 12 4' fill='none' stroke='black' stroke-width='1.25'/%3E%3C/svg%3E");
+  -webkit-mask-size: var(--fm-wave-width) var(--fm-wave-height);
+  mask-size: var(--fm-wave-width) var(--fm-wave-height);
+  -webkit-mask-repeat: repeat-x;
+  mask-repeat: repeat-x;
+}
+
 @keyframes migration-slide {
   0% { transform: translateX(-100%); }
   50% { transform: translateX(200%); }

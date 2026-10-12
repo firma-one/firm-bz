@@ -1379,7 +1379,7 @@ const OnboardingContent = () => {
                                                             <p className="font-bold text-[#1b1b1d]">Shared Drive</p>
                                                         </div>
                                                         <p className="text-xs text-[#45474c] leading-relaxed">
-                                                            A team drive under your Google Workspace account. Recommended for firms where files should be owned by the organisation, not an individual.
+                                                            A team drive under your Google Workspace account. Recommended for firms where files should be owned by the organization, not an individual.
                                                         </p>
                                                     </button>
                                                 </div>

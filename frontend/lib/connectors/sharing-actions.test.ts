@@ -3,7 +3,7 @@
  *
  * Covers:
  *  - Share: linking an existing connector to a second client (no new row)
- *  - Disconnect: affects all clients sharing the connector (intended behaviour)
+ *  - Disconnect: affects all clients sharing the connector (intended behavior)
  *  - Cross-firm share guard: connector must belong to the same firm as the client
  *
  * These test the logic that will live in lib/actions/client.ts server actions

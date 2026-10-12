@@ -1,20 +1,36 @@
 'use client'
 
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
-import { Send, Loader2, Sparkles, Copy, Check, RotateCcw, History, X, ThumbsUp, ThumbsDown, ClipboardList, Square } from 'lucide-react'
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import { Send, Loader2, Sparkles, Copy, Check, RotateCcw, History, ThumbsUp, ThumbsDown, ClipboardList, Square, Clock, GripVertical, ChevronDown, Trash2, PanelLeft, Pin, PinOff, SquarePen } from 'lucide-react'
 import { ASSISTANT } from '@/lib/ai/assistant'
 import { Brio } from '@/components/ui/brio'
 import { RelativeDateTime } from '@/components/ui/relative-date-time'
 import { fetchWithTimeout, AI_TIMEOUT_MS, AiTimeoutError, AiAbortedError } from '@/lib/ai/fetch-timeout'
 import { StreamingText } from '@/components/ui/streaming-text'
+import { ChatMarkdown } from '@/components/ui/chat-markdown'
+import {
+    listConversations, saveConversation, getConversation, deleteConversation,
+    setConversationPinned, clearConversations, MAX_PINNED, MAX_AGE_DAYS,
+    type Conversation,
+} from '@/lib/ai/chat-conversations'
+import { ElapsedTime } from '@/components/ui/elapsed-time'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { getChatHistory, recordChatQuestion, clearChatHistory, type ChatHistoryEntry } from '@/lib/ai/chat-history'
+// The same list the API narrows against, so the slider can never offer a scope the
+// server would silently reject.
+import { CHAT_SCOPES, type ChatScope } from '@/lib/ai/engagement-chat'
+import { formatRelativeTime, formatDateTimeWithTZ } from '@/lib/utils'
 import { reasonsFor, type FeedbackReason } from '@/lib/ai/feedback-reasons'
 import { useToast } from '@/components/ui/toast'
 import { buildChatTranscript } from '@/lib/ai/chat-transcript'
 import { buildChatSuggestions } from '@/lib/ai/chat-suggestions'
 import { isObviouslyOutOfScope, OUT_OF_SCOPE_REPLY, parseChatReply } from '@/lib/ai/engagement-chat'
 import type { EngagementInsightsResponse } from '@/lib/insights/engagement-insights'
+
+/** What a panel rendered inside the thread can do to it. */
+export interface ChatThreadApi {
+    /** Appends a turn. Persisted and rendered exactly like a typed question or a streamed answer. */
+    append: (role: 'user' | 'assistant', content: string) => void
+}
 
 interface Message {
     role: 'user' | 'assistant'
@@ -43,6 +59,8 @@ interface Message {
  * pasted paragraph cannot push the Action Center off the page.
  */
 const MAX_COMPOSER_HEIGHT_PX = 72
+/** One line of text at the composer's line-height. The box never shrinks below a usable row. */
+const MIN_COMPOSER_HEIGHT_PX = 24
 
 /**
  * How far from the bottom still counts as "following along".
@@ -224,12 +242,30 @@ function AnswerActions({
     )
 }
 
+/** The rail's side panes. See `railPane`. */
+type RailPane = 'recents' | 'pins' | null
+
 export function EngagementAiChat({
     projectId,
     data,
     engagementName,
     clientName,
     chrome = 'card',
+    suggestionsOverride,
+    suggestionActions,
+    aboveThread,
+    placeholder,
+    capabilityNote,
+    surface = 'overview',
+    scopeSwitchable = false,
+    threadRef,
+    onBusyChange,
+    onStartDrag,
+    dragging = false,
+    onCollapse,
+    scopeLabel,
+    onHistoryOpenChange,
+    dockSide = 'right',
 }: {
     projectId: string
     /** Insights payload the page already holds; drives data-aware suggestions. */
@@ -243,10 +279,199 @@ export function EngagementAiChat({
      * borders read as a box inside a box.
      */
     chrome?: 'card' | 'floating'
+    /**
+     * Starting prompts supplied by the host page, replacing the engagement-derived set.
+     *
+     * The Files page needs questions about files, and has no insights payload to derive the
+     * engagement ones from anyway. Passed in rather than branched on inside, so this component
+     * stays unaware of which page it is on.
+     */
+    suggestionsOverride?: string[]
+    /**
+     * Rendered as the last chip in the suggestion row.
+     *
+     * A caller-supplied ACTION, not a question — the Files page puts "Review file organization"
+     * here so it reads as one of the things you can ask for, in the place the eye already goes for
+     * them, rather than as a banner above the conversation.
+     */
+    suggestionActions?: React.ReactNode
+    /**
+     * Agent output, rendered INSIDE the thread at the top.
+     *
+     * Not above the panel: a review rendered outside the conversation appeared before the "Ask
+     * Brio" header that introduces it, so the panel read as output-then-title. Anything the
+     * assistant produces belongs in the message area, below that header and scrolling with the
+     * rest of the conversation.
+     */
+    aboveThread?: React.ReactNode
+    /**
+     * Overrides the composer's prompt text.
+     *
+     * The default names the engagement, which is right on Overview and wrong on Files — a panel
+     * that answers questions about folders and due dates should say so, since the placeholder is
+     * the one hint a user reads before typing anything.
+     */
+    placeholder?: string
+    /**
+     * One line in the header saying what this panel can do here.
+     *
+     * Page-specific, because the answer differs: on Overview Brio only answers questions, while on
+     * Files it can also reorganize and scaffold. A single hardcoded line would be wrong on one of
+     * them.
+     */
+    capabilityNote?: React.ReactNode
+    /**
+     * Which page this panel is on, for thread persistence.
+     *
+     * Overview and Files hold different conversations about the same engagement, so they keep
+     * separate conversation lists — see `lib/ai/chat-conversations.ts`.
+     */
+    surface?: ChatScope
+    /**
+     * Whether the reader may change the scope from this page.
+     *
+     * On Files the panel is scoped to the file tree and stays there — the page IS the scope.
+     * On Overview the reader may want the file detail without leaving, so the slider is offered.
+     */
+    scopeSwitchable?: boolean
+    /**
+     * Handed a way to post turns into this thread.
+     *
+     * An agent confirmation is a question the assistant asked and an answer the user gave, so it
+     * belongs in the conversation like any other exchange — visible in the record, scrollable, and
+     * persisted with everything else. Without this the answers lived as state inside the panel and
+     * vanished on reload, leaving a thread that showed the review happening but not what was
+     * decided.
+     */
+    threadRef?: React.MutableRefObject<ChatThreadApi | null>
+    /**
+     * Reports whether an answer is in flight.
+     *
+     * Lifted so the collapsed launcher can show that something is still running — the panel is
+     * kept mounted but hidden while collapsed, so the work continues where the user cannot see it.
+     */
+    onBusyChange?: (busy: boolean) => void
+    /**
+     * Window controls, when this panel is floating.
+     *
+     * Rendered INSIDE the header rather than in a strip above it. Two bars stacked meant a full
+     * row spent on a grip and a chevron, above a second row carrying the name — and the drag
+     * target was only that strip, when the whole header reads as the thing you would grab.
+     */
+    onStartDrag?: (event: React.PointerEvent<HTMLElement>) => void
+    dragging?: boolean
+    onCollapse?: () => void
+    /** What this panel is scoped to, matching the collapsed launcher's own label. */
+    scopeLabel?: string
+    /**
+     * Reports whether the recent-questions pane is open.
+     *
+     * The floating panel widens to fit it rather than letting it cover the thread: at 23rem a
+     * sheet over the conversation hides the answer you are deciding whether to re-ask.
+     */
+    onHistoryOpenChange?: (open: boolean) => void
+    /**
+     * Which edge the floating panel is docked against.
+     *
+     * The recents pane opens on the side the panel GROWS into, which is the docked edge: a
+     * right-docked panel grows leftward, so the pane belongs on the left. Put it on the wrong
+     * side and it is the conversation that slides out from under the reader while the pane sits
+     * still — and, worse, the pane's opaque background paints over the resize grip, which lives
+     * on the panel's inner (free) edge and is the only edge that can be dragged.
+     */
+    dockSide?: 'left' | 'right'
 }) {
+    /**
+     * The LIVE scope: what Brio is answering about, which is not always the page you are on.
+     *
+     * Starts as the page's own surface and, where the page allows it, follows the slider. Every
+     * piece of per-scope state keys off this rather than the `surface` prop — thread, history,
+     * pins and the `scope` sent to the API — so switching swaps the whole conversation rather
+     * than leaving a Files answer sitting in the Overview thread.
+     *
+     * Re-synced when the page changes beneath it, so navigating Overview → Files does not leave
+     * the panel answering about the page you just left.
+     */
+    const [scope, setScope] = useState(surface)
+    useEffect(() => { setScope(surface) }, [surface])
+
+    /** Whether the scope slider is expanded. Collapsed it is just the current scope's name. */
+    const [scopePickerOpen, setScopePickerOpen] = useState(false)
+    // Dismissed by Escape or a click anywhere else, like any popover. Without this the only way
+    // out is picking a scope, which makes opening it to look feel like a commitment.
+    useEffect(() => {
+        if (!scopePickerOpen) return
+        const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setScopePickerOpen(false) }
+        // `pointerdown` on the document, in the capture phase, so a click on the toggle itself
+        // still reaches its own handler and toggles rather than being closed from under it.
+        const onPointer = (e: PointerEvent) => {
+            const el = e.target as HTMLElement | null
+            if (!el?.closest('[data-scope-picker]')) setScopePickerOpen(false)
+        }
+        document.addEventListener('keydown', onKey)
+        document.addEventListener('pointerdown', onPointer)
+        return () => {
+            document.removeEventListener('keydown', onKey)
+            document.removeEventListener('pointerdown', onPointer)
+        }
+    }, [scopePickerOpen])
+
     const [messages, setMessages] = useState<Message[]>([])
+
+    /**
+     * Restores the thread on mount, so it survives navigation and reload within the session.
+     *
+     * In an effect rather than the initializer: this component renders on the server, where
+     * sessionStorage does not exist, and reading it during the first client render would mismatch
+     * the server's markup.
+     */
+    useEffect(() => {
+        const all = listConversations(projectId, scope)
+        setConversations(all)
+        // Resume the most recent conversation rather than opening a blank one: continuing where
+        // you left off is the common case, and a new thread is one click away.
+        const latest = all[0]
+        setActiveId(latest?.id ?? null)
+        setMessages(latest?.messages ?? [])
+        // Everything restored was produced before this page load, so the divider sits above it.
+        setRestoredCount(latest?.messages.length ?? 0)
+    }, [projectId, scope])
+
+    /** How many leading turns came from storage, so the divider knows where "now" begins. */
+    const [restoredCount, setRestoredCount] = useState(0)
+
+    // Published once, so a panel rendered in `aboveThread` can write into the conversation it sits
+    // in. A ref rather than a callback prop because the consumer is a sibling, not a child.
+    useEffect(() => {
+        if (!threadRef) return
+        threadRef.current = {
+            append: (role, content) =>
+                setMessages((prev) => [...prev, { role, content, at: Date.now() }]),
+        }
+        return () => { threadRef.current = null }
+    }, [threadRef])
+
     const [input, setInput] = useState('')
     const [streaming, setStreaming] = useState(false)
+    useEffect(() => { onBusyChange?.(streaming) }, [streaming, onBusyChange])
+
+
+    // Persisted on every settled change. Not while streaming: a half-written answer would be
+    // stored truncated and restored with no sign it was cut off.
+    useEffect(() => {
+        if (streaming) return
+        // Skip the empty pass that a fresh mount or a "new chat" produces, so an untouched panel
+        // does not delete the conversation it has not loaded yet.
+        if (messages.length === 0) return
+        const id = saveConversation(projectId, scope, activeId, messages)
+        // A first write mints the id, so adopt it — otherwise the next turn would start a second
+        // conversation instead of appending to this one.
+        if (id && id !== activeId) setActiveId(id)
+        setConversations(listConversations(projectId, scope))
+        // `activeId` is deliberately out of the deps: it is SET by this effect, and including it
+        // would run the whole save again on the render that adopts the new id.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [messages, streaming, projectId, scope])
     const [error, setError] = useState<string | null>(null)
     // Set when the API reports AI is unavailable (no key) — hides the panel entirely.
     const [unavailable, setUnavailable] = useState(false)
@@ -254,8 +479,36 @@ export function EngagementAiChat({
     const [asked, setAsked] = useState<Set<string>>(() => new Set())
     // Questions asked previously, surviving reload. Loaded in an effect rather than from a lazy
     // initialiser because localStorage is unavailable during server render.
-    const [history, setHistory] = useState<ChatHistoryEntry[]>([])
-    const [historyOpen, setHistoryOpen] = useState(false)
+    /**
+     * Every saved conversation for this engagement and scope, newest first.
+     *
+     * Replaces the old pair of a bare question list and a separate pin list: an entry here IS a
+     * conversation, so opening one restores what was actually said rather than re-asking the
+     * question and spending a credit to reproduce an answer the user already read.
+     */
+    const [conversations, setConversations] = useState<Conversation[]>([])
+    /** The conversation being added to, or `null` before the first turn of a new one. */
+    const [activeId, setActiveId] = useState<string | null>(null)
+    /**
+     * Which side pane the rail has open, or `null` for the rail alone.
+     *
+     * A union of one, deliberately: the rail is built to take a second stop, and a boolean here
+     * would have to be unpicked to add one. Widen the union, do not reintroduce a flag per pane.
+     *
+     * One slot, not a flag per pane: they occupy the same strip, so two booleans would admit a
+     * state — both open — that cannot be drawn.
+     */
+    const [railPane, setRailPane] = useState<RailPane>(null)
+    const historyOpen = railPane === 'recents'
+    const pinsOpen = railPane === 'pins'
+    /** Either pane being open widens the panel by the same amount. */
+    const sidePaneOpen = railPane !== null
+    /** Toggles a pane, closing it if it is already the open one. */
+    const toggleRailPane = useCallback((pane: Exclude<RailPane, null>) => {
+        setRailPane((p) => (p === pane ? null : pane))
+    }, [])
+    // The panel widens while a pane is open, so it costs the conversation nothing.
+    useEffect(() => { onHistoryOpenChange?.(sidePaneOpen) }, [sidePaneOpen, onHistoryOpenChange])
     const [copiedIndex, setCopiedIndex] = useState<number | null>(null)
     const [transcriptCopied, setTranscriptCopied] = useState(false)
     // Ratings by message index. Session-only: the thumbs are an affordance on an answer still on
@@ -287,7 +540,27 @@ export function EngagementAiChat({
         threadIdRef.current = { key: projectId, id: crypto.randomUUID() }
     }
 
-    useEffect(() => { setHistory(getChatHistory(projectId)) }, [projectId])
+    useEffect(() => {
+        setConversations(listConversations(projectId, scope))
+    }, [projectId])
+
+    /** Pinned conversations are listed on their own tab; recents shows the rest. */
+    const pinnedConversations = useMemo(() => conversations.filter((c) => c.pinned), [conversations])
+    /**
+     * ALL conversations, pinned ones first — not the unpinned remainder.
+     *
+     * Pinning used to move a conversation out of this list, which made pinning your only
+     * conversation empty the tab that lists conversations: it read as deletion. A pin is an
+     * attribute of a conversation, not a different kind of thing, so it stays where it was and
+     * the row's pin icon marks it. The pin tab is a filtered view for when there are many.
+     */
+    const allConversations = useMemo(
+        () => [...conversations].sort((a, b) => {
+            if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1
+            return b.updatedAt - a.updatedAt
+        }),
+        [conversations],
+    )
 
     // Grow the composer with its content, up to three lines.
     //
@@ -299,11 +572,20 @@ export function EngagementAiChat({
         const el = inputRef.current
         if (!el) return
         el.style.height = 'auto'
-        el.style.height = `${Math.min(el.scrollHeight, MAX_COMPOSER_HEIGHT_PX)}px`
+        // Clamped at BOTH ends. `scrollHeight` is measured after the height is reset to `auto`,
+        // and in a flex row that can come back as zero before layout settles — which set the
+        // height to 0px and left a composer with no clickable area, no caret and no room to paint
+        // its placeholder. It read as a disabled input with nothing disabling it.
+        const next = Math.min(
+            Math.max(el.scrollHeight, MIN_COMPOSER_HEIGHT_PX),
+            MAX_COMPOSER_HEIGHT_PX,
+        )
+        el.style.height = `${next}px`
     }, [input])
 
     const scrollRef = useRef<HTMLDivElement>(null)
     const inputRef = useRef<HTMLTextAreaElement>(null)
+
 
     // Two sources, in priority order.
     //
@@ -314,7 +596,17 @@ export function EngagementAiChat({
     // After an answer the model's own follow-ups win, because only it knows what it just said. They
     // arrive on a sentinel line in the same stream, so they cost no extra call. Falling back to the
     // data-driven list keeps the row populated if a reply omits the marker.
-    const dataSuggestions = useMemo(() => buildChatSuggestions(data, asked), [data, asked])
+    //
+    // `suggestionsOverride` is honoured even when EMPTY. A caller that supplies its own prompts
+    // asynchronously (Files fetches them server-side) passes `[]` while they load, and showing the
+    // engagement set in that gap made the chips visibly swap out from under the user. An absent
+    // override — Overview, which has no prompts of its own — still gets the engagement chips.
+    const dataSuggestions = useMemo(
+        () => suggestionsOverride
+            ? suggestionsOverride.filter((q) => !asked.has(q))
+            : buildChatSuggestions(data, asked),
+        [suggestionsOverride, data, asked],
+    )
 
     const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant')
     const modelFollowUps = useMemo(() => {
@@ -323,6 +615,21 @@ export function EngagementAiChat({
     }, [lastAssistant?.content, asked])
 
     const suggestions = modelFollowUps.length > 0 ? modelFollowUps : dataSuggestions
+
+    /**
+     * The header's second line.
+     *
+     * Falls back to the standing promise rather than to nothing: a surface that says nothing
+     * specific about what the assistant can do here should still say what it will not do. Overview
+     * passes no `capabilityNote`, and before this it carried the line inside the thread, where it
+     * disappeared the moment a question was asked.
+     */
+    const headerNote = capabilityNote ?? (
+        <>
+            <Brio /> answers from this engagement&apos;s data, and never changes anything without
+            your consent.
+        </>
+    )
 
     /**
      * Keeps the newest content in view as it arrives, and again once the turn settles.
@@ -334,6 +641,11 @@ export function EngagementAiChat({
      *
      * The settled scroll runs after paint rather than inside the effect body, because the action
      * bar has not been laid out yet at effect time and `scrollHeight` would still be the old value.
+     *
+     * `aboveThread` is a dependency too: an agent question renders there, not as a message, so a
+     * new one arriving changed neither `messages` nor `streaming` and the view stayed where it was
+     * — the question appeared below the fold and the user had to scroll to find what they were
+     * being asked.
      */
     useEffect(() => {
         const el = scrollRef.current
@@ -356,7 +668,7 @@ export function EngagementAiChat({
 
         const frame = requestAnimationFrame(() => toBottom('smooth'))
         return () => cancelAnimationFrame(frame)
-    }, [messages, streaming])
+    }, [messages, streaming, aboveThread])
 
     const ask = useCallback(async (question: string) => {
         const trimmed = question.trim()
@@ -365,8 +677,7 @@ export function EngagementAiChat({
         setError(null)
         setInput('')
         setAsked((prev) => new Set(prev).add(trimmed))
-        setHistory(recordChatQuestion(projectId, trimmed))
-        setHistoryOpen(false)
+        setRailPane(null)
 
         // Refuse the plainly off-topic without a round-trip: instant, and it costs no credit. This
         // is a convenience gate, not the boundary — the real one is the system prompt plus a
@@ -397,7 +708,10 @@ export function EngagementAiChat({
             const res = await fetchWithTimeout(`/api/projects/${projectId}/ai-chat`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ question: trimmed, history }),
+                // The page the reader is on. Shapes the prompt and trims the file listing
+                // server-side; the server narrows it, so an unknown value degrades to the
+                // broader scope rather than failing.
+                body: JSON.stringify({ question: trimmed, history, scope }),
             }, AI_TIMEOUT_MS.stream, controller.signal)
 
             if (!res.ok) {
@@ -508,16 +822,15 @@ export function EngagementAiChat({
      * `answerId`, so the server upserts and the second write corrects the first rather than adding a
      * row — which is what makes the rating editable without inflating the efficacy counts.
      *
-     * The question is sent so a negative rating is actionable; without it a thumbs-down says only
-     * that something was wrong, on an answer nobody can see. The answer itself is never sent.
+     * Neither the question nor the answer is sent. The rating and its chip are the whole payload:
+     * "Got facts wrong" on the chat feature is a signal that can be counted without holding what
+     * anyone typed, and the typed question never let a failure be reproduced anyway, since the
+     * answer is not stored either.
      */
     const rate = useCallback(async (assistantIndex: number, helpful: boolean, reason?: FeedbackReason) => {
         const previous = ratings[assistantIndex]
         setRatings((prev) => ({ ...prev, [assistantIndex]: { helpful, reason } }))
 
-        const question = messages[assistantIndex - 1]?.role === 'user'
-            ? messages[assistantIndex - 1].content
-            : undefined
 
         try {
             const res = await fetch(`/api/projects/${projectId}/ai-feedback`, {
@@ -526,7 +839,6 @@ export function EngagementAiChat({
                 body: JSON.stringify({
                     helpful,
                     reason,
-                    question,
                     answerId: messages[assistantIndex]?.answerId,
                     threadId: threadIdRef.current?.id,
                 }),
@@ -614,6 +926,354 @@ export function EngagementAiChat({
         )
     }
 
+    /** True once pinning another conversation would exceed the cap. */
+    const pinsFull = pinnedConversations.length >= MAX_PINNED
+
+    /** Opens a saved conversation, replacing what is on screen. */
+    const openConversation = useCallback((c: Conversation) => {
+        setActiveId(c.id)
+        setMessages(c.messages)
+        // All of it predates this moment, so the "earlier" divider sits above the whole thread.
+        setRestoredCount(c.messages.length)
+        setRailPane(null)
+    }, [])
+
+    /**
+     * Starts a fresh conversation.
+     *
+     * The current one is already saved — every settled change writes — so this only needs to
+     * clear the screen and drop the active id. The next question mints a new one.
+     */
+    const startNewConversation = useCallback(() => {
+        setActiveId(null)
+        setMessages([])
+        setRestoredCount(0)
+        setError(null)
+        setRailPane(null)
+    }, [])
+
+    /**
+     * One row of the conversations pane, shared by the pinned and recent sections.
+     *
+     * Shared rather than duplicated because the two differ only in their pin control, and two
+     * near-copies of this markup would drift the moment either changed.
+     */
+    const renderConversationRow = (c: Conversation) => (
+        <div key={c.id} className="group/item flex items-center gap-1">
+            <Tooltip>
+                <TooltipTrigger asChild>
+                    <button
+                        type="button"
+                        onClick={() => openConversation(c)}
+                        disabled={streaming}
+                        className={`flex min-w-0 flex-1 items-center gap-1.5 rounded-full border py-1.5 pl-2.5 pr-3 text-left text-xs transition-colors disabled:opacity-50 ${
+                            c.id === activeId
+                                // The one you are reading, marked. Without it, opening a
+                                // conversation and reopening the pane gives no clue which of ten
+                                // rows is on screen behind it.
+                                ? 'border-primary/40 bg-primary/5 text-primary'
+                                : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-primary/30 hover:bg-primary/5 hover:text-primary'
+                        }`}
+                    >
+                        {c.pinned
+                            ? <Pin className="h-3 w-3 shrink-0 text-primary/60" aria-hidden />
+                            : <Clock className="h-3 w-3 shrink-0 text-gray-400" aria-hidden />}
+                        <span className="shrink-0 text-[10px] tabular-nums text-gray-400">
+                            {formatRelativeTime(new Date(c.updatedAt))}
+                        </span>
+                        <span className="truncate">{c.title}</span>
+                    </button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-xs">
+                    {c.title}
+                    <span className="mt-0.5 block text-[10px] opacity-70">
+                        {c.messages.filter((m) => m.role === 'user').length} question
+                        {c.messages.filter((m) => m.role === 'user').length === 1 ? '' : 's'}
+                        {' · last active '}{formatDateTimeWithTZ(new Date(c.updatedAt))}
+                    </span>
+                    <span className="mt-0.5 block text-[10px] opacity-70">
+                        Opens this conversation — answers are shown as they were, with their date.
+                    </span>
+                </TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+                <TooltipTrigger asChild>
+                    <button
+                        type="button"
+                        onClick={() => setConversations(
+                            setConversationPinned(projectId, scope, c.id, !c.pinned),
+                        )}
+                        // Disabled at the cap rather than evicting the oldest pin: silently
+                        // dropping something deliberately kept is the failure pinning prevents.
+                        disabled={streaming || (!c.pinned && pinsFull)}
+                        className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-gray-300 opacity-0 transition-all hover:bg-primary/10 hover:text-primary focus-visible:opacity-100 group-hover/item:opacity-100 disabled:pointer-events-none disabled:opacity-0"
+                        aria-label={c.pinned ? `Unpin "${c.title}"` : `Pin "${c.title}"`}
+                    >
+                        {c.pinned ? <PinOff className="h-3 w-3" /> : <Pin className="h-3 w-3" />}
+                    </button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-xs">
+                    {c.pinned
+                        ? 'Unpin. It goes back to ageing out normally.'
+                        : pinsFull
+                            ? `All ${MAX_PINNED} pins are used. Unpin one to make room.`
+                            : 'Pin. Kept when recents are cleared, and never ages out.'}
+                </TooltipContent>
+            </Tooltip>
+
+            {!c.pinned && (
+                <button
+                    type="button"
+                    onClick={() => {
+                        setConversations(deleteConversation(projectId, scope, c.id))
+                        // Deleting what is on screen leaves the panel showing a conversation that
+                        // no longer exists, and the next turn would silently recreate it.
+                        if (c.id === activeId) startNewConversation()
+                    }}
+                    disabled={streaming}
+                    className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-gray-300 opacity-0 transition-all hover:bg-red-50 hover:text-red-600 focus-visible:opacity-100 group-hover/item:opacity-100 disabled:opacity-0"
+                    aria-label={`Delete "${c.title}"`}
+                    title="Delete"
+                >
+                    <Trash2 className="h-3 w-3" />
+                </button>
+            )}
+        </div>
+    )
+
+    /**
+     * The recent-questions pane: an inner column that widens from zero, not an overlay.
+     *
+     * Two things it must not do, both learned the hard way:
+     *
+     * 1. **Cover the thread.** The floating panel grows by this pane's own width when it opens
+     *    (see `onHistoryOpenChange`), so the conversation keeps its reading width and the answer
+     *    that prompted the re-ask stays visible.
+     * 2. **Cover the resize grip.** The grip lives on the panel's INNER edge — left when docked
+     *    right — and an opaque pane rendered on that side paints over it, taking away the only
+     *    edge the user can drag. So the pane sits on the DOCKED edge, which is the side the panel
+     *    grows into, and the caller orders the row accordingly.
+     *
+     * Width animates rather than the pane mounting and unmounting, so it slides open in step with
+     * the panel widening instead of appearing fully formed a frame early. The contents carry
+     * their own fixed `w-[17rem]`, so they do not reflow while the container is mid-animation.
+     */
+    /**
+     * The shell both side panes share: the animating container, the header and the footer note.
+     *
+     * Shared rather than written twice because the two differ only in their title, their header
+     * action and their list — and two copies of the width animation, the border-side logic and
+     * the collapse button would drift the moment either changed.
+     */
+    const renderSidePane = ({ open, title, action, children, footer }: {
+        open: boolean
+        title: string
+        action?: React.ReactNode
+        children: React.ReactNode
+        footer: string
+    }) => (
+        <div
+            aria-hidden={!open}
+            className={`flex shrink-0 flex-col overflow-hidden bg-white pt-2 transition-[width] duration-200 ease-out ${
+                open ? 'w-[17rem]' : 'w-0'
+            } ${
+                /* Lighter than the rail's border although both are 1px. The rail sits on a
+                   tinted background, so its edge is already softened by the fill beside it;
+                   this one divides two whites, where the same gray reads as a heavier rule. */
+                dockSide === 'right' ? 'border-r border-gray-100' : 'border-l border-gray-100'
+            }`}
+        >
+            <div className="mb-1.5 flex w-[17rem] shrink-0 items-center gap-2 px-3">
+                <span className="flex-1 text-[10px] font-semibold uppercase tracking-wider text-gray-500">
+                    {title}
+                </span>
+                {action}
+                {/* A PANEL-COLLAPSE icon, not an X. The pane does not go away when dismissed, it
+                    folds back into the edge it slid out of, and an X beside a bin read as
+                    "discard these" rather than "put this away".
+
+                    The plain panel glyph, not the chevron variant: it is symmetrical, so it does
+                    not have to flip with the dock, and at 14px the chevron was a smudge beside
+                    the bar it pointed at. */}
+                <button
+                    type="button"
+                    onClick={() => setRailPane(null)}
+                    className="flex h-5 w-5 items-center justify-center rounded text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700"
+                    aria-label={`Collapse ${title.toLowerCase()}`}
+                    title="Collapse"
+                >
+                    <PanelLeft className="h-3.5 w-3.5" />
+                </button>
+            </div>
+            <TooltipProvider delayDuration={150}>
+                <div className="hover-scrollbar flex w-[17rem] min-h-0 flex-1 flex-col gap-1 overflow-y-auto pl-3 pr-3.5">
+                    {children}
+                </div>
+            </TooltipProvider>
+            <p className="mt-1.5 w-[17rem] shrink-0 px-3 pb-2 text-[10px] text-gray-400">
+                {footer}
+            </p>
+        </div>
+    )
+
+    const historyPane = renderSidePane({
+        open: historyOpen,
+        title: 'Conversations',
+        action: (
+            /* "Clear recents", NOT "clear all": this spares pins, and a destructive control that
+               overstates its scope is exactly the kind of thing that erodes trust in a panel
+               which also moves files. */
+            <button
+                type="button"
+                onClick={() => {
+                    setConversations(clearConversations(projectId, scope))
+                    startNewConversation()
+                }}
+                // Clearing only removes the unpinned ones, so there is nothing to do when
+                // every conversation is pinned.
+                disabled={conversations.every((c) => c.pinned)}
+                className="flex h-5 w-5 items-center justify-center rounded text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:pointer-events-none disabled:opacity-30"
+                aria-label="Clear recent conversations. Pinned conversations are kept."
+                title="Clear recents (pins are kept)"
+            >
+                <Trash2 className="h-3.5 w-3.5" />
+            </button>
+        ),
+        // Says "unpinned" because pinned rows are in this list too and are exempt from the
+        // age-out — a flat "kept for 30 days" would be wrong about half of what is shown.
+        footer: `Unpinned conversations are kept on this browser for ${MAX_AGE_DAYS} days.`,
+        children: allConversations.length === 0 ? (
+            <p className="text-[11px] leading-snug text-gray-400">
+                Conversations you have here will show up in this list.
+            </p>
+        ) : (
+            <>{allConversations.map(renderConversationRow)}</>
+        ),
+    })
+
+    const pinsPane = renderSidePane({
+        open: pinsOpen,
+        title: 'Pinned conversations',
+        footer: `${pinnedConversations.length} of ${MAX_PINNED} pinned. Never cleared with recents, and never aged out.`,
+        children: pinnedConversations.length === 0 ? (
+            /* Says where pinning happens. Pins are made on a recents row, so an empty pin tab
+               with no pointer back is a dead end. */
+            <p className="text-[11px] leading-snug text-gray-400">
+                No pinned conversations yet. Hover one on the conversations tab and press the pin
+                to keep it here.
+            </p>
+        ) : (
+            <>{pinnedConversations.map(renderConversationRow)}</>
+        ),
+    })
+
+    /**
+     * The icon rail: always present, never collapsed away.
+     *
+     * The panes it opens used to be reachable only from a count button inside the suggestion chip
+     * row — which is hidden while an answer streams, so mid-answer there was no way to reach
+     * history at all. A fixed rail gives them a home that does not move or disappear.
+     *
+     * Its width is added to the panel rather than taken out of the conversation (see
+     * `RAIL_WIDTH_REM`), so the thread keeps the measure it was tuned for.
+     */
+    const rail = (
+        <TooltipProvider delayDuration={150}>
+            <div
+                className={`flex w-10 shrink-0 flex-col items-center gap-1 bg-gray-50/70 pt-2 ${
+                    dockSide === 'right'
+                        ? 'border-r border-gray-200 rounded-bl-lg'
+                        : 'border-l border-gray-200 rounded-br-lg'
+                }`}
+            >
+                {/* NEW CHAT, above the stops and separated from them.
+                    It is an action, not a place, and it is what makes the conversation list a
+                    list — without it every question would land in one endless thread. Disabled
+                    on an already-empty new conversation, so it cannot look like it did nothing. */}
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <button
+                            type="button"
+                            onClick={startNewConversation}
+                            disabled={streaming || (activeId === null && messages.length === 0)}
+                            className="flex h-8 w-8 items-center justify-center rounded-md text-gray-400 transition-colors hover:bg-gray-200/60 hover:text-gray-700 disabled:pointer-events-none disabled:opacity-30"
+                            aria-label="Start a new conversation"
+                        >
+                            <SquarePen className="h-4 w-4" />
+                        </button>
+                    </TooltipTrigger>
+                    <TooltipContent side={dockSide === 'right' ? 'right' : 'left'}>
+                        New conversation
+                    </TooltipContent>
+                </Tooltip>
+                <span aria-hidden className="my-1 h-px w-5 bg-gray-200" />
+
+                {/* Two stops. Suggested prompts are deliberately NOT one: they belong above the
+                    composer, where the eye already is when deciding what to ask, and a copy in
+                    here was simply the same four chips shown twice. */}
+                {([
+                    { id: 'recents', label: 'Conversations', icon: History, count: allConversations.length },
+                    { id: 'pins', label: 'Pinned conversations', icon: Pin, count: pinnedConversations.length },
+                ] as const).map(({ id, label, icon: Icon, count }) => (
+                    <Tooltip key={id}>
+                        <TooltipTrigger asChild>
+                            <button
+                                type="button"
+                                onClick={() => toggleRailPane(id)}
+                                aria-expanded={railPane === id}
+                                aria-label={railPane === id ? `Collapse ${label.toLowerCase()}` : label}
+                                className={`relative flex h-8 w-8 items-center justify-center rounded-md transition-colors ${
+                                    railPane === id
+                                        ? 'bg-primary/15 text-primary'
+                                        : 'text-gray-400 hover:bg-gray-200/60 hover:text-gray-700'
+                                }`}
+                            >
+                                <Icon className="h-4 w-4" />
+                                {/* The count as a corner dot, not a number beside the icon: at
+                                    rail width a digit and a glyph do not both fit legibly, and
+                                    whether there is anything in there is the part that decides
+                                    whether to open it. */}
+                                {count > 0 && railPane !== id && (
+                                    <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-primary/60" aria-hidden />
+                                )}
+                            </button>
+                        </TooltipTrigger>
+                        <TooltipContent side={dockSide === 'right' ? 'right' : 'left'}>
+                            {label}
+                            {count > 0 && <span className="ml-1 opacity-70">({count})</span>}
+                        </TooltipContent>
+                    </Tooltip>
+                ))}
+            </div>
+        </TooltipProvider>
+    )
+
+    /**
+     * Rail and whichever pane is open, as one unit.
+     *
+     * The rail is always on the OUTSIDE, against the docked edge, with the pane sliding out
+     * between it and the conversation — so the rail never moves when a pane opens, which is what
+     * makes it read as fixed furniture rather than part of the drawer.
+     */
+    const railGroup = dockSide === 'right' ? (
+        <>
+            {rail}
+            {historyPane}
+            {pinsPane}
+        </>
+    ) : (
+        /* Mirrored. The whole group sits AFTER the conversation when docked left, so to keep the
+           rail against the panel's outer edge it has to come last within the group too — rail
+           first here would put the pane outermost and shunt the rail inward every time one
+           opened. */
+        <>
+            {pinsPane}
+            {historyPane}
+            {rail}
+        </>
+    )
+
     // The primary accent and tinted header are deliberate: this panel sits in a column of
     // uniformly white cards, where it read as one more widget rather than the one thing on the
     // page that answers questions.
@@ -624,16 +1284,38 @@ export function EngagementAiChat({
         <div className={`relative bg-white flex flex-col overflow-hidden ${
             chrome === 'floating' ? 'min-h-0 flex-1 rounded-b-lg' : 'border border-primary/25 rounded shadow-sm'
         }`}>
-            <div className="flex items-center gap-2 border-b border-primary/15 bg-primary/5 px-4 py-3">
-                {/* No separate sparkle: the Brio mark already carries one, and two side by side
-                    read as two different things rather than one brand. */}
-                <span className="text-sm font-semibold text-gray-900">Ask</span>
-                <Brio className="text-sm text-primary" />
-                <span className="ml-auto text-[10px] uppercase tracking-wider text-primary/70">
-                    This engagement
+            <div
+                // The WHOLE header is the drag target, not a strip above it. A grip icon says
+                // where to grab; a header that moves when dragged says it better, and buys back
+                // the row the old strip spent on an icon and a chevron.
+                //
+                // `onPointerDown` on the container rather than a handle: the buttons inside stop
+                // propagation themselves, so a click on collapse never starts a drag.
+                onPointerDown={onStartDrag}
+                className={`border-b border-primary/15 bg-primary/5 px-4 py-3 ${
+                    onStartDrag ? 'cursor-grab active:cursor-grabbing' : ''
+                } ${dragging ? 'bg-primary/10' : ''}`}
+            >
+            <div className="flex items-start gap-2">
+                <div className="flex min-w-0 flex-1 items-center gap-2">
+                    {onStartDrag && (
+                        <GripVertical className="h-4 w-4 shrink-0 text-gray-400" aria-hidden />
+                    )}
+                    {/* No separate sparkle: the Brio mark already carries one, and two side by
+                        side read as two different things rather than one brand. */}
+                    <span className="text-sm font-semibold text-gray-900">Ask</span>
+                    <Brio className="text-sm text-primary" />
+                </div>
+                {/* The same words the collapsed pill uses. It said "Files" collapsed and "This
+                    engagement" open, which read as two different scopes for one panel.
+
+                    Follows the LIVE scope once the slider has moved it, not the page: the
+                    caller's label describes where you are, and after a switch that is no longer
+                    what Brio is answering about. This label is the only thing on screen that
+                    says which, so it has to be the thing that changed. */}
+                <span className="shrink-0 pt-0.5 text-[10px] uppercase tracking-wider text-primary/70">
+                    {scope === surface ? (scopeLabel ?? 'This engagement') : (scope === 'files' ? 'Files' : 'This engagement')}
                 </span>
-                {/* Only offered once there is something to recall. Questions survive reload;
-                    answers deliberately do not — see lib/ai/chat-history.ts. */}
                 {/* Only once there is a conversation to export, and only on this panel — which
                     internal roles alone can see, so a transcript cannot reach an external
                     collaborator who never had access to Brio in the first place. */}
@@ -661,86 +1343,76 @@ export function EngagementAiChat({
                     </TooltipProvider>
                 )}
 
-                {history.length > 0 && (
-                    // The count alone did not say what it counted — a clock and a number could as
-                    // easily have meant elapsed time or unread items.
-                    <TooltipProvider delayDuration={150}>
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <button
-                                    type="button"
-                                    onClick={() => setHistoryOpen((o) => !o)}
-                                    aria-expanded={historyOpen}
-                                    aria-label={historyOpen
-                                        ? 'Hide recent questions'
-                                        : `Show ${history.length} recent question${history.length === 1 ? '' : 's'}`}
-                                    className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] transition-colors ${
-                                        historyOpen ? 'bg-primary/15 text-primary' : 'text-primary/70 hover:bg-primary/10'
-                                    }`}
-                                >
-                                    {historyOpen ? <X className="h-3 w-3" /> : <History className="h-3 w-3" />}
-                                    {history.length}
-                                </button>
-                            </TooltipTrigger>
-                            <TooltipContent side="bottom" className="max-w-xs">
-                                {historyOpen
-                                    ? 'Hide recent questions'
-                                    : `${history.length} question${history.length === 1 ? '' : 's'} you have asked here before. Answers are not saved — picking one asks it again against current data.`}
-                            </TooltipContent>
-                        </Tooltip>
-                    </TooltipProvider>
+                {/* Collapse, not close: the conversation is kept and the panel returns to its
+                    launcher. An X claims the thread is being discarded, which would make people
+                    hesitate to put it away.
+
+                    `stopPropagation` because the header is now the drag surface — without it a
+                    click here would also begin a drag. */}
+                {onCollapse && (
+                    <button
+                        type="button"
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onClick={onCollapse}
+                        className="-mr-1 flex h-5 w-5 shrink-0 items-center justify-center rounded text-gray-400 transition-colors hover:bg-white hover:text-gray-700"
+                        aria-label="Collapse the assistant"
+                        title="Collapse"
+                    >
+                        <ChevronDown className="h-4 w-4" />
+                    </button>
                 )}
             </div>
 
-            {/* Overlays the conversation rather than displacing it. In normal flow this pushed the
-                thread down by its own height, so opening history scrolled the answer you were
-                reading off screen — and closing it jumped you back. */}
-            {historyOpen && (
-                /* `bottom-0` as well as `top`: anchored only from the top, the overlay had no
-                   height of its own and the panel's overflow-hidden clipped the list mid-line
-                   instead of letting it scroll. Bounding it to the panel gives the inner list a
-                   real height to scroll within. `min-h-0` lets that child actually shrink — a flex
-                   item defaults to min-content and would otherwise refuse to. */
-                <div className="absolute inset-x-0 bottom-0 top-[2.75rem] z-20 flex flex-col border-b border-gray-200 bg-white px-4 py-2 shadow-md">
-                    <div className="mb-1.5 flex shrink-0 items-center justify-between">
-                        <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">
-                            Recent questions
-                        </span>
-                        <button
-                            type="button"
-                            onClick={() => { clearChatHistory(projectId); setHistory([]); setHistoryOpen(false) }}
-                            className="text-[10px] text-gray-400 transition-colors hover:text-gray-700"
-                        >
-                            Clear
-                        </button>
-                    </div>
-                    {/* Takes the space the overlay has rather than a fixed ceiling, so a tall
-                        panel shows more of the ten entries and a short one still scrolls. */}
-                    <div className="hover-scrollbar flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto">
-                        {history.map((h) => (
-                            <button
-                                key={`${h.question}-${h.askedAt}`}
-                                type="button"
-                                onClick={() => ask(h.question)}
-                                disabled={streaming}
-                                className="truncate rounded px-1.5 py-1 text-left text-xs text-gray-600 transition-colors hover:bg-white hover:text-primary disabled:opacity-50"
-                            >
-                                {h.question}
-                            </button>
-                        ))}
-                    </div>
-                    <p className="mt-1.5 shrink-0 text-[10px] text-gray-400">
-                        Answers are not stored — picking one asks it again against current data.
-                    </p>
-                </div>
-            )}
+            {/* A SECOND ROW spanning the full header width, not a subtitle tucked under the name.
+                Beside the title it was squeezed into whatever space the scope label and history
+                button left over, wrapping a one-line sentence across three. Across the full width
+                it reads as one line, and the row sets expectations before the first question
+                rather than from inside the thread, where it was the first thing pushed out of
+                view. */}
+            {/* A FIXED two-line box, not one that grows with its text.
 
+                The header is above the row that the recents pane widens, so anything that changes
+                its height when the pane opens shifts the whole conversation down — reflowing the
+                answer the reader is in the middle of. `line-clamp-2` on a reserved two lines keeps
+                the box the same height whichever note is showing and whatever the panel's width,
+                so opening recents moves nothing above the thread. */}
+            <p className="mt-1.5 line-clamp-2 h-[2.1rem] text-[11px] leading-snug text-gray-500">
+                {headerNote}
+            </p>
+            </div>
+
+            {/* Below the header, the panel is a ROW: the recents pane, then the conversation.
+                In flow rather than overlaid, because the panel widens by exactly this pane's width
+                when it opens — so the thread keeps its reading width instead of being covered by
+                a sheet. */}
+            <div className="flex min-h-0 flex-1">
+            {dockSide === 'right' && railGroup}
+
+            {/* The conversation: thread, suggestions, composer. `min-w-0` so a long unbroken
+                answer cannot push the row wider than the panel. */}
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
             <div
                 ref={scrollRef}
                 /* Floating gets the taller window and no minimum: the overlay should hug an empty
                    thread rather than reserve a blank 180px above the composer. In-column keeps the
                    minimum, where a collapsing card would make the rail jump. */
-                className={`hover-scrollbar px-4 py-4 space-y-3 overflow-y-auto ${
+                /* `overflow-x-hidden` and `break-words` below are a pair. Answers are full of
+                   long unbreakable tokens — `01_ICP_Firmographics_&_Persona_Data.xlsx` is one
+                   word to the line breaker — and a column narrow enough to not fit one would
+                   otherwise scroll sideways, clipping the text and putting a scrollbar under the
+                   thread. Wrapping mid-token is the lesser evil: a wrapped filename is readable,
+                   a clipped one is not. */
+                /* RECESSED, so the header, rail and composer read as the frame around it and
+                   the conversation as the surface inside.
+
+                   A tint as well as the shadow, not shadow alone: a white recess on white has
+                   nothing to shade against and stays flat however the shadow is tuned. The
+                   inset is strongest at the top, where a well would catch the least light, and
+                   fades at the sides — an even inset ring looks like a border, not depth.
+
+                   Written as an arbitrary value because Tailwind's `shadow-inner` is a single
+                   faint token that disappears entirely against this background. */
+                className={`hover-scrollbar bg-gray-50/60 px-4 py-4 space-y-3 overflow-y-auto overflow-x-hidden shadow-[inset_0_6px_8px_-6px_rgba(16,24,40,0.10),inset_0_-4px_6px_-5px_rgba(16,24,40,0.06)] ${
                     chrome === 'floating'
                         // Fills the frame's fixed height and scrolls inside it, rather than
                         // setting the panel's height by growing.
@@ -748,14 +1420,26 @@ export function EngagementAiChat({
                         : 'max-h-[480px] min-h-[180px]'
                 }`}
             >
-                {messages.length === 0 && (
-                    <p className="text-sm text-gray-500">
-                        <Brio /> answers only from this engagement&apos;s data, and can&apos;t change anything.
-                    </p>
-                )}
-
                 {messages.map((m, i) => (
-                    <div key={i} className={m.role === 'user' ? 'flex justify-end' : 'flex justify-start'}>
+                    <React.Fragment key={i}>
+                    {/* Marks where the restored thread ends and this visit begins.
+                        Restored answers were true when produced and may not be now — "3
+                        deliverables are overdue" was right an hour ago. Dropping them on reload
+                        loses the conversation; restoring them silently presents a stale figure as
+                        current. The time each turn was produced is shown, so the reader can judge
+                        rather than be told. */}
+                    {restoredCount > 0 && i === restoredCount && (
+                        // A wave rather than a straight rule — see `.fm-wave-rule` in
+                        // globals.css for why, and why it is CSS rather than an inline SVG.
+                        <div className="flex items-center gap-2 py-1 text-gray-300">
+                            <div className="fm-wave-rule flex-1" aria-hidden />
+                            <span className="shrink-0 text-[10px] text-gray-400">
+                                Earlier · figures were current when asked
+                            </span>
+                            <div className="fm-wave-rule flex-1" aria-hidden />
+                        </div>
+                    )}
+                    <div className={m.role === 'user' ? 'flex justify-end' : 'flex justify-start'}>
                         <div
                             className={
                                 m.role === 'user'
@@ -764,8 +1448,21 @@ export function EngagementAiChat({
                                     // instead of the answer. Kept light enough that black text
                                     // clears the 4.5:1 contrast minimum — a genuinely dark grey
                                     // would sit near 1.6:1 and be unreadable.
-                                    ? 'bg-gray-200 text-gray-900 text-sm rounded-lg rounded-br-sm px-3 py-2 max-w-[85%]'
-                                    : 'bg-gray-50 border border-gray-100 text-gray-800 text-sm rounded-lg rounded-bl-sm px-3 py-2 max-w-[85%] whitespace-pre-line leading-relaxed'
+                                    // An absolute ceiling as well as the percentage: 85% of a
+                                    // resized panel is still 85%, so without it a widened panel
+                                    // produces bubbles of 150-character lines. The percentage keeps
+                                    // bubbles off the opposite edge at narrow widths; the rem value
+                                    // keeps the line readable at wide ones.
+                                    ? 'bg-gray-200 text-gray-900 text-sm rounded-lg rounded-br-sm px-3 py-2 max-w-[85%] sm:max-w-[38rem]'
+                                    // The ASSISTANT bubble takes the full width, and the cap moves
+                                    // inside it (see ChatMarkdown): its prose is capped at the same
+                                    // measure, but a table must be free to use the width the user
+                                    // widened the panel for. Capping the bubble would make the
+                                    // table scroll inside a 38rem box in a 56rem panel.
+                                    // White on the recessed thread, not gray: the surface is
+                                    // tinted now, and a gray bubble on it has nothing to
+                                    // separate it from the background it sits in.
+                                    : 'bg-white border border-gray-200/70 text-gray-800 text-sm rounded-lg rounded-bl-sm px-3 py-2 w-full whitespace-pre-line break-words leading-relaxed'
                             }
                         >
                             {m.content ? (
@@ -775,14 +1472,29 @@ export function EngagementAiChat({
                                 // Assistant text is parsed rather than shown raw: the reply carries
                                 // its follow-up questions after a sentinel, and parseChatReply also
                                 // hides a half-streamed marker so "<<FOLL" never flashes mid-answer.
-                                <StreamingText
-                                    text={m.role === 'assistant' ? parseChatReply(m.content).answer : m.content}
-                                    animate={m.role === 'assistant' && streaming && i === messages.length - 1}
-                                />
+                                m.role === 'assistant' && !(streaming && i === messages.length - 1) ? (
+                                    // Settled assistant turns render as Markdown, so an answer can
+                                    // carry a table or a list instead of needing a purpose-built
+                                    // card per kind of structured output.
+                                    <ChatMarkdown content={parseChatReply(m.content).answer} />
+                                ) : (
+                                    // Still streaming, or a user turn. Markdown is not rendered
+                                    // mid-stream: a half-written table is a wall of pipes, and the
+                                    // word animation needs plain text to tokenise.
+                                    <StreamingText
+                                        text={m.role === 'assistant' ? parseChatReply(m.content).answer : m.content}
+                                        animate={m.role === 'assistant' && streaming && i === messages.length - 1}
+                                    />
+                                )
                             ) : (
+                                // Elapsed time but no commentary: an answer is one model call, so
+                                // there are no steps to narrate — listing them would be inventing
+                                // detail. The timer still earns its place, since it is what tells a
+                                // waiting user whether a slow answer is slow or stuck.
                                 <span className="inline-flex items-center gap-1.5 text-gray-400">
                                     <Loader2 className="w-3 h-3 animate-spin" />
                                     <Brio /> is thinking
+                                    <ElapsedTime className="text-[10px] text-gray-400" />
                                 </span>
                             )}
                             {/* Says plainly that the answer is incomplete. Without this a stopped
@@ -814,7 +1526,15 @@ export function EngagementAiChat({
                             )}
                         </div>
                     </div>
+                    </React.Fragment>
                 ))}
+
+                {/* Agent questions render LAST, after the messages.
+                    A conversation runs top to bottom with the newest turn at the bottom, and an
+                    open question is the newest thing in it — the agent has just asked and is
+                    waiting. Rendered first, the question sat above the report that prompted it,
+                    so the exchange read backwards. */}
+                {aboveThread}
 
                 {error && <p className="text-xs text-red-600">{error}</p>}
             </div>
@@ -824,12 +1544,21 @@ export function EngagementAiChat({
                 meant clicking one destroyed the other three with no way back short of a reload —
                 turning a discovery aid into a single use. Each chip disappears once asked, so the
                 row stays useful rather than repeating what is already answered above. */}
-            {suggestions.length > 0 && !streaming && (
+            {(suggestions.length > 0 || suggestionActions) && !streaming && (
                 // Wraps rather than scrolling horizontally. A scroll row clipped the second chip
                 // mid-word with no scrollbar and no affordance, so the options simply looked
                 // broken; at this column width two per line is the honest layout.
                 <TooltipProvider delayDuration={150}>
-                    <div className="flex min-w-0 flex-wrap gap-1.5 px-4 pb-2.5 pt-0.5">
+                    {/* A rule above the chips, marking where the conversation ends and the
+                        controls begin. Without it the row sat flush against the scrolling thread
+                        and read as the tail of the last answer rather than a set of actions.
+                        Hairline, not a heavy divider: it separates two things that belong to the
+                        same panel. */}
+                    <div className="flex min-w-0 flex-wrap items-center gap-1.5 border-t border-gray-100 bg-white px-4 pb-2.5 pt-2.5">
+                        {/* The recents control used to live here, as a count beside the chips.
+                            It now lives on the rail: this row is hidden while an answer streams,
+                            which left no way to reach history mid-answer, and two buttons for one
+                            pane made the rail look like it did something else. */}
                         {suggestions.map((s) => (
                             // The shared Radix tooltip, not `title=`: the native one is slow to
                             // appear, unstyled, and sits outside the product's visual language.
@@ -837,9 +1566,28 @@ export function EngagementAiChat({
                                 <TooltipTrigger asChild>
                                     <button
                                         onClick={() => ask(s)}
-                                        className="max-w-full truncate rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-left text-xs text-gray-600 transition-colors hover:border-primary/30 hover:bg-primary/5 hover:text-primary"
+                                        /* `inline-flex` with the label in its own span, so
+                                           `truncate` shortens the TEXT and leaves the icon alone.
+                                           On the button it would have truncated the whole row,
+                                           clipping the icon off the end of a long chip. */
+                                        className="group/chip inline-flex max-w-full items-center gap-1.5 rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-left text-xs text-gray-600 transition-colors hover:border-primary/30 hover:bg-primary/5 hover:text-primary"
                                     >
-                                        {s}
+                                        <span className="truncate">{s}</span>
+                                        {/* Says the chip SENDS rather than filling the composer —
+                                            a pill otherwise reads as a filter or a tag, and this
+                                            one spends a credit. The composer's own send arrow,
+                                            not a return key: these are clicked, not reached by
+                                            Enter, so a ↵ would promise a keystroke that does not
+                                            apply here.
+
+                                            Hidden until hover or focus: four arrows at rest turn
+                                            a row of questions into a row of buttons, and the
+                                            signal is only needed at the moment of deciding to
+                                            click. `shrink-0` so it survives a truncated label. */}
+                                        <Send
+                                            className="h-3 w-3 shrink-0 text-primary/70 opacity-0 transition-opacity group-hover/chip:opacity-100 group-focus-visible/chip:opacity-100"
+                                            aria-hidden
+                                        />
                                     </button>
                                 </TooltipTrigger>
                                 <TooltipContent side="top" className="max-w-xs">
@@ -847,15 +1595,18 @@ export function EngagementAiChat({
                                 </TooltipContent>
                             </Tooltip>
                         ))}
+                        {suggestionActions}
                     </div>
                 </TooltipProvider>
             )}
 
             <form
                 onSubmit={(e) => { e.preventDefault(); ask(input) }}
-                // A tinted strip behind the composer separates it from the thread without a rule.
-                // The border alone was ambiguous where a message bubble ended near it.
-                className="border-t border-gray-100 bg-gray-50/60 px-3 pb-3 pt-2.5"
+                // White, and raised. The tint used to live here to separate the composer from
+                // the thread; now the THREAD is the recessed surface, so the same tint on both
+                // would flatten the very distinction the inset shadow draws. White puts the
+                // composer on the frame, with the thread sunk behind it.
+                className="border-t border-gray-100 bg-white px-3 pb-3 pt-2.5"
             >
                 {/* The composer is its own surface — a bordered, rounded box inset from the card —
                     rather than a hairline rule with text beneath it. At the bottom of a long thread
@@ -876,7 +1627,7 @@ export function EngagementAiChat({
                             void ask(input)
                         }
                     }}
-                    placeholder={`Ask ${ASSISTANT.name} about this engagement…`}
+                    placeholder={placeholder ?? `Ask ${ASSISTANT.name} about this engagement…`}
                     disabled={streaming}
                     maxLength={1000}
                     rows={1}
@@ -920,7 +1671,111 @@ export function EngagementAiChat({
                         </button>
                     )}
                 </div>
+
+                {/* SCOPE CONTROL, below the composer: collapsed to the current scope's name,
+                    expanding to the slider on click.
+
+                    Most people never change scope, so the resting state is a single quiet word
+                    — the control is there to be FOUND, not to occupy the panel. Expanded it is
+                    a track with a tick per stop and a knob that travels, which has a position
+                    legible at a glance and still reads as one control when Board and Members are
+                    added; a segmented pill would become four cramped text boxes. */}
+                {scopeSwitchable && (
+                    <div data-scope-picker className="relative mt-2 flex justify-center">
+                        <button
+                            type="button"
+                            onClick={() => setScopePickerOpen((o) => !o)}
+                            disabled={streaming}
+                            aria-expanded={scopePickerOpen}
+                            aria-label={`Brio is answering about ${scope}. Change scope.`}
+                            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] transition-colors disabled:opacity-50 ${
+                                scopePickerOpen
+                                    ? 'bg-gray-100 text-gray-700'
+                                    : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600'
+                            }`}
+                        >
+                            <span>Answering about</span>
+                            <span className="font-medium capitalize text-gray-600">{scope}</span>
+                            <ChevronDown
+                                className={`h-3 w-3 transition-transform ${scopePickerOpen ? 'rotate-180' : ''}`}
+                                aria-hidden
+                            />
+                        </button>
+
+                        {scopePickerOpen && (
+                            /* Opens UPWARD: the control sits at the bottom of the panel, so a
+                               downward popover would fall outside it. */
+                            <div
+                                role="radiogroup"
+                                aria-label="What Brio answers about"
+                                className="absolute bottom-full z-20 mb-1.5 flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 shadow-lg"
+                            >
+                                <span
+                                    className={`text-[10px] capitalize transition-colors ${
+                                        scope === CHAT_SCOPES[0] ? 'text-gray-700' : 'text-gray-400'
+                                    }`}
+                                >
+                                    {CHAT_SCOPES[0]}
+                                </span>
+
+                                <div className="relative h-3.5 w-20 shrink-0 select-none">
+                                    <div className="absolute inset-x-0 top-1/2 h-3 -translate-y-1/2 rounded-full bg-gray-100" />
+
+                                    {/* Ticks say the control is discrete — a bare track reads as
+                                        continuous, and a scope is not. */}
+                                    {CHAT_SCOPES.map((s, i) => (
+                                        <span
+                                            key={`tick-${s}`}
+                                            aria-hidden
+                                            className="absolute top-1/2 h-0.5 w-0.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-gray-300"
+                                            style={{ left: `${((i + 0.5) / CHAT_SCOPES.length) * 100}%` }}
+                                        />
+                                    ))}
+
+                                    {/* Positioned by percentage, so adding a stop needs no
+                                        arithmetic here. */}
+                                    <span
+                                        aria-hidden
+                                        className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-gray-300 bg-white shadow-sm transition-[left] duration-200 ease-out"
+                                        style={{
+                                            left: `${((CHAT_SCOPES.indexOf(scope) + 0.5) / CHAT_SCOPES.length) * 100}%`,
+                                        }}
+                                    />
+
+                                    {/* Invisible hit areas, each a full stop wide: the knob is
+                                        12px, too small to ask anyone to hit. */}
+                                    {CHAT_SCOPES.map((s, i) => (
+                                        <button
+                                            key={s}
+                                            type="button"
+                                            role="radio"
+                                            aria-checked={scope === s}
+                                            aria-label={`Answer about ${s}`}
+                                            onClick={() => { setScope(s); setScopePickerOpen(false) }}
+                                            className="absolute -inset-y-1.5 rounded-full focus-visible:outline focus-visible:outline-1 focus-visible:outline-primary/40"
+                                            style={{
+                                                left: `${(i / CHAT_SCOPES.length) * 100}%`,
+                                                width: `${100 / CHAT_SCOPES.length}%`,
+                                            }}
+                                        />
+                                    ))}
+                                </div>
+
+                                <span
+                                    className={`text-[10px] capitalize transition-colors ${
+                                        scope === CHAT_SCOPES[CHAT_SCOPES.length - 1] ? 'text-gray-700' : 'text-gray-400'
+                                    }`}
+                                >
+                                    {CHAT_SCOPES[CHAT_SCOPES.length - 1]}
+                                </span>
+                            </div>
+                        )}
+                    </div>
+                )}
             </form>
+            </div>
+            {dockSide === 'left' && railGroup}
+            </div>
         </div>
     )
 }

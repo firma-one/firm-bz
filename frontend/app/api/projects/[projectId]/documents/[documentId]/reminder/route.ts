@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { isAgentUserIdAsync } from '@/lib/ai/agent-email'
 import { createClient } from '@/utils/supabase/server'
 import { prisma } from '@/lib/prisma'
 import { resolveProjectContext } from '@/lib/resolve-project-context'
@@ -37,6 +38,12 @@ export async function POST(
       where: { engagementId: projectId, userId: recipientId },
     })
     if (!member) return NextResponse.json({ error: 'Recipient is not a member of this engagement' }, { status: 400 })
+    // Membership alone is not enough: Brio is a member of every engagement but will never read a
+    // reminder. Refused rather than silently dropped by upsertFollowUpReminder, so the caller is
+    // not told a reminder was set that was not.
+    if (await isAgentUserIdAsync(recipientId)) {
+      return NextResponse.json({ error: 'Reminders cannot be assigned to an assistant' }, { status: 400 })
+    }
 
     const doc = await prisma.engagementDocument.findFirst({
       where: { id: documentId, engagementId: projectId },

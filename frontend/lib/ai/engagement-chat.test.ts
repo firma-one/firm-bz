@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { buildEngagementContext, isObviouslyOutOfScope, PLATFORM_DATA_MODEL, CHAT_SYSTEM_PROMPT, parseChatReply, FOLLOWUP_MARKER, MAX_FOLLOWUPS } from './engagement-chat'
+import { buildEngagementContext, isObviouslyOutOfScope, PLATFORM_DATA_MODEL, CHAT_SYSTEM_PROMPT, parseChatReply, FOLLOWUP_MARKER, MAX_FOLLOWUPS, parseChatScope, chatScopeGuidance,
+} from './engagement-chat'
 import { SUMMARY_SYSTEM_PROMPT } from './engagement-summary'
 import type { EngagementInsightsResponse } from '@/lib/insights/engagement-insights'
 
@@ -99,7 +100,7 @@ describe('isObviouslyOutOfScope', () => {
         for (const q of [
             "What's overdue right now?",
             'Which deliverables are at risk?',
-            'Summarise where this engagement stands',
+            'Summarize where this engagement stands',
             'Can you explain the health score?',
             'Why is the health score 85?',
             'What needs my attention this week?',
@@ -448,5 +449,35 @@ describe('parseChatReply — malformed follow-up lines', () => {
     it('still accepts ordinary questions', () => {
         const r = parseChatReply(`A.\n${FOLLOWUP_MARKER}\nWho owns these?\nWhat else is unplanned?`)
         expect(r.followUps).toEqual(['Who owns these?', 'What else is unplanned?'])
+    })
+})
+
+describe('chat scope', () => {
+    it('narrows an untrusted value to a known scope', () => {
+        expect(parseChatScope('files')).toBe('files')
+        expect(parseChatScope('overview')).toBe('overview')
+        // Anything else falls back to the broader scope rather than reaching the cached prompt.
+        expect(parseChatScope('board')).toBe('overview')
+        expect(parseChatScope(undefined)).toBe('overview')
+        expect(parseChatScope(null)).toBe('overview')
+        expect(parseChatScope(42)).toBe('overview')
+    })
+
+    it('tells the files scope not to redirect people to the page they are on', () => {
+        const guidance = chatScopeGuidance('files')
+        expect(guidance).toContain('FILES tab')
+        expect(guidance.toLowerCase()).toContain('do not')
+    })
+
+    it('tells the overview scope not to invent file names it was not given', () => {
+        const guidance = chatScopeGuidance('overview')
+        expect(guidance).toContain('OVERVIEW tab')
+        // Collapsed, since the guidance is hard-wrapped and the phrase spans a line break.
+        expect(guidance.replace(/\s+/g, ' ')).toContain('Never invent a file name')
+    })
+
+    it('produces a stable string per scope, so the cached prefix stays byte-identical', () => {
+        expect(chatScopeGuidance('files')).toBe(chatScopeGuidance('files'))
+        expect(chatScopeGuidance('overview')).not.toBe(chatScopeGuidance('files'))
     })
 })

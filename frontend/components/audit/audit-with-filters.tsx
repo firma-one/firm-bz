@@ -254,9 +254,27 @@ function eventAction(eventType: string): string {
   return EVENT_TYPE_OPTIONS.find((o) => o.value === eventType)?.label ?? eventType.replace(/_/g, ' ').toLowerCase()
 }
 
-function eventDetails(ev: AuditEventRow): string {
+/**
+ * Who authorized an agent-performed change, as a trailing clause.
+ *
+ * An event whose actor is the Brio agent was still authorized by a person — the agent proposes,
+ * a lead approves, the agent acts. Without this the Details column reads as though a machine
+ * changed a client's files unprompted, which is the one reading an audit trail must never allow.
+ */
+function approvalSuffix(m: Record<string, unknown>): string {
+  if (!m.viaAgent) return ''
+  const by = typeof m.approvedByLabel === 'string' ? m.approvedByLabel
+    : typeof m.approvedBy === 'string' ? m.approvedBy
+    : null
+  // Older rows predate the approver being recorded. Saying "approved by unknown" would be worse
+  // than saying only that the agent acted, so those keep the plain agent marker.
+  return by ? ` · approved by ${by}` : ' · via agent'
+}
+
+export function eventDetails(ev: AuditEventRow): string {
   const m = ev.metadata as Record<string, unknown> | undefined
   if (!m || typeof m !== 'object') return ''
+  const approval = approvalSuffix(m)
   const fileName = m.fileName as string | undefined
   const description = m.description as string | undefined
   const name = m.name as string | undefined
@@ -265,15 +283,23 @@ function eventDetails(ev: AuditEventRow): string {
   const contactName = m.contactName as string | undefined
   const role = m.newRole as string | undefined
   const invitedEmail = m.invitedEmail as string | undefined
-  if (fileName) return fileName
-  if (description) return description
-  if (name) return name
-  if (action) return action
-  if (contactName) return contactName
-  if (invitedEmail) return invitedEmail
-  if (role) return `→ ${role}`
-  if (changedFields?.length) return `Changed: ${changedFields.join(', ')}`
-  if (m.newStatus) return `Status: ${m.oldStatus ?? '—'} → ${m.newStatus}`
+  // A rename is the one case where the old value is as important as the new one: "Report.docx"
+  // alone does not say what it used to be called, which is what a reviewer is checking.
+  const previousName = m.previousName as string | undefined
+  if (fileName) {
+    return (previousName && previousName !== fileName
+      ? `${previousName} → ${fileName}`
+      : fileName) + approval
+  }
+  if (description) return description + approval
+  if (name) return name + approval
+  if (action) return action + approval
+  if (contactName) return contactName + approval
+  if (invitedEmail) return invitedEmail + approval
+  if (role) return `→ ${role}${approval}`
+  if (changedFields?.length) return `Changed: ${changedFields.join(', ')}${approval}`
+  if (m.newStatus) return `Status: ${m.oldStatus ?? '—'} → ${m.newStatus}${approval}`
+  if (approval) return approval.replace(/^ · /, '')
   return Object.keys(m).length ? JSON.stringify(m) : ''
 }
 

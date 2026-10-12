@@ -4,6 +4,7 @@ import { createClient } from '@/utils/supabase/server'
 import { createClient as createSupabaseAdmin } from '@supabase/supabase-js'
 import { revalidatePath } from 'next/cache'
 import { prisma } from '@/lib/prisma'
+import { isAgentUser } from '@/lib/ai/files-agent/agent-identity'
 import { InvitationStatus } from '@prisma/client'
 import { sendEmail } from '@/lib/email'
 import { logger } from '@/lib/logger'
@@ -53,6 +54,9 @@ export async function getFirmMembers(firmId: string) {
                 return {
                     ...m,
                     ownsConnector: connectorUserIds.has(m.userId),
+                    // Flagged, not filtered: Brio belongs in the Firm Members list, but not in
+                    // pickers choosing a person to own something.
+                    isAgent: isAgentUser(dbUser),
                     user: {
                         email: dbUser?.email,
                         name: dbUser?.user_metadata?.full_name || dbUser?.user_metadata?.name || dbUser?.email?.split('@')[0],

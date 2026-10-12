@@ -138,7 +138,7 @@ function AiCreditsRow({ usage }: { usage: BillingPlanUsage | null | undefined })
     // Ordered firm-scoped first, then engagement-scoped, so the two halves of the product read
     // as groups rather than an arbitrary list. Labels name the surface the credit was spent on.
     //
-    // Colours are four steps of the brand green rather than a categorical palette: these segments
+    // Colors are four steps of the brand green rather than a categorical palette: these segments
     // are parts of ONE measure (credits against one allowance), so varying lightness reads as a
     // single bar divided up, where four unrelated hues would read as four competing series.
     // Descending lightness also keeps the order legible at the 6px height this bar renders at.
@@ -147,6 +147,7 @@ function AiCreditsRow({ usage }: { usage: BillingPlanUsage | null | undefined })
         { key: 'searchInterpret', label: 'Firm Doc Search', fill: 'hsl(161 70% 45%)' },
         { key: 'summary', label: 'Engagement summaries', fill: 'hsl(161 55% 62%)' },
         { key: 'chat', label: 'Engagement assistant chat', fill: 'hsl(161 45% 78%)' },
+        { key: 'filesAgent', label: 'Files agent', fill: 'hsl(161 35% 88%)' },
     ]
     const fmt = (n: number) => (n % 1 === 0 ? String(n) : n.toFixed(1))
     const since = new Date(ai.periodStartIso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })

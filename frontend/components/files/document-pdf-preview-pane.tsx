@@ -412,7 +412,7 @@ export function DocumentPdfPreviewPane({ document, projectId, alternateView }: D
     const [fallback, setFallback] = useState(false)
     const [containerWidth, setContainerWidth] = useState(0)
     const [containerHeight, setContainerHeight] = useState(0)
-    /** 'width' reproduces the original behaviour and stays the default. */
+    /** 'width' reproduces the original behavior and stays the default. */
     const [fitMode, setFitMode] = useState<'width' | 'page'>('width')
     /** User rotation in degrees, composed on top of each page's intrinsic /Rotate. */
     const [rotation, setRotation] = useState(0)
@@ -509,7 +509,7 @@ export function DocumentPdfPreviewPane({ document, projectId, alternateView }: D
                         console.info(
                             `[preview] pdf.js declined ${documentId}: status ${res.status}, content-type "${contentType}" — handing to the iframe pane`,
                         )
-                        // Images and the unsupported-type HTML page keep the legacy behaviour.
+                        // Images and the unsupported-type HTML page keep the legacy behavior.
                         // Only a successful verdict is remembered — a transient 502 must not
                         // pin this document to the fallback pane for the rest of the session.
                         if (cacheKey && res.ok) cacheWrite(cacheKey, { contentType, bytes: null })
@@ -686,7 +686,7 @@ export function DocumentPdfPreviewPane({ document, projectId, alternateView }: D
             y += h + PAGE_GAP
         }
         // Above 100% the pages are wider than the pane. The stack has to claim that width
-        // or the overflow is unreachable: pages are centred, so the left half would sit at
+        // or the overflow is unreachable: pages are centerd, so the left half would sit at
         // a negative offset that horizontal scrolling cannot get to.
         const totalWidth = Math.max(containerWidth, widest + PAGE_INSET * 2)
         return { offsets, sizes, totalHeight: y, totalWidth }

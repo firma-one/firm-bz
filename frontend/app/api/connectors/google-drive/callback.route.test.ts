@@ -1,6 +1,6 @@
 /**
  * Tests for the replace-connector flow in the Google Drive OAuth callback.
- * Focuses on the new replaceConnectorId behaviour introduced in Phase 1a.
+ * Focuses on the new replaceConnectorId behavior introduced in Phase 1a.
  *
  * Integration-style: constructs a real NextRequest with a crafted state param,
  * mocks Prisma and downstream GDrive methods, asserts DB writes and redirects.

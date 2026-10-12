@@ -2,6 +2,7 @@
 
 import { createClient } from "@/utils/supabase/server"
 import { prisma } from "@/lib/prisma"
+import { isAgentUser } from "@/lib/ai/files-agent/agent-identity"
 import { createClient as createSupabaseAdmin } from '@supabase/supabase-js'
 import { revalidatePath } from "next/cache"
 import { InvitationStatus, DocumentSharingPermissionStatus } from '@prisma/client'
@@ -113,6 +114,11 @@ export async function getProjectMemberSummaries(projectIds: string[]): Promise<R
     for (const m of members) {
         const displayPersonaName = roleToDisplayName[m.role] ?? ''
         const dbUser = userDataMap.get(m.userId) ?? null
+
+        // Brio is a member of every engagement, so listing it here would put the same agent on
+        // every project card as a lead. These summaries answer "who is working on this" — a
+        // question about people.
+        if (isAgentUser(dbUser)) continue
         const userData: ProjectMemberSummaryUser = dbUser ? {
             name: dbUser.user_metadata?.full_name || dbUser.user_metadata?.name || dbUser.email?.split('@')[0] || 'Unknown',
             email: dbUser.email || '',

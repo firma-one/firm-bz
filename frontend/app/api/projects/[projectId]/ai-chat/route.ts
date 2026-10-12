@@ -10,12 +10,15 @@ import { getGuardedAnthropic, meterAiCall, aiLimitResponse } from '@/lib/ai/guar
 import {
     CHAT_SYSTEM_PROMPT,
     buildEngagementContext,
+    chatScopeGuidance,
+    parseChatScope,
     sanitizeHistory,
     MAX_QUESTION_LENGTH,
     isObviouslyOutOfScope,
     OUT_OF_SCOPE_REPLY,
 } from '@/lib/ai/engagement-chat'
 import { buildEngagementActivity } from '@/lib/ai/engagement-activity'
+import { buildFilesContext, loadEngagementFiles } from '@/lib/ai/files-context'
 import type { EngagementInsightsResponse } from '../insights/route'
 
 /**
@@ -73,6 +76,9 @@ export async function POST(
         }
         const question = body.question.trim().slice(0, MAX_QUESTION_LENGTH)
         const history = sanitizeHistory(body.history)
+        // Narrowed, not trusted: it joins the CACHED prompt prefix, so an arbitrary
+        // string would fragment the cache rather than fail loudly.
+        const scope = parseChatScope(body.scope)
 
         // The same gate the panel applies, repeated here because the panel's copy is bypassable —
         // anything can POST to this route. Returned as a normal text stream so the client renders
@@ -104,14 +110,25 @@ export async function POST(
         // emails written by users.
         const activity = await buildEngagementActivity(projectId)
 
+        // File names reach the model here, which `buildEngagementContext` deliberately omits.
+        // The boundary moved when the Files agent appeared beside this chat: the assistant would
+        // report "2 duplicates exist" and be unable to name them while the button above it could.
+        // Still names and structure only — no document content, no comment bodies, no emails.
+        // Trimmed on Overview, where forty file names are noise in the answer and the
+        // biggest block in a prompt paid for on every turn of the conversation.
+        const files = buildFilesContext(
+            await loadEngagementFiles(projectId),
+            scope === 'files' ? 'full' : 'summary',
+        )
+
         const context = buildEngagementContext(insights, {
             clientName: names?.client?.name,
             engagementName: names?.name,
-        }) + (activity ? `\n${activity}` : '')
+        }) + (activity ? `\n${activity}` : '') + (files ? `\n${files}` : '')
 
         // Gate and client in one call: over-budget throws before any tokens are spent.
-        const scope = { firmId: ctx.firmId, userId: user.id, feature: 'chat' as const }
-        const client = await getGuardedAnthropic(scope)
+        const meterScope = { firmId: ctx.firmId, userId: user.id, feature: 'chat' as const }
+        const client = await getGuardedAnthropic(meterScope)
         if (!client) return NextResponse.json({ error: 'AI is not configured' }, { status: 503 })
 
         const stream = await client.messages.create({
@@ -128,10 +145,14 @@ export async function POST(
             // session — do NOT add a timestamp of finer granularity to it, or every request will
             // miss. The 5-minute default TTL refreshes on each hit, so an active conversation
             // keeps the entry warm.
+            //
+            // The FILES listing is ordered deterministically for the same reason, so repeated
+            // turns render byte-identically. Uploading a file mid-conversation invalidates the
+            // entry once, which is correct: the next answer should see the new file.
             system: [
                 {
                     type: 'text' as const,
-                    text: `${CHAT_SYSTEM_PROMPT}\n\n--- ENGAGEMENT SNAPSHOT ---\n${context}`,
+                    text: `${CHAT_SYSTEM_PROMPT}\n\n${chatScopeGuidance(scope)}\n\n--- ENGAGEMENT SNAPSHOT ---\n${context}`,
                     cache_control: { type: 'ephemeral' as const },
                 },
             ],
@@ -166,7 +187,7 @@ export async function POST(
                             controller.enqueue(encoder.encode(event.delta.text))
                         }
                     }
-                    await meterAiCall(scope, { inputTokens, outputTokens })
+                    await meterAiCall(meterScope, { inputTokens, outputTokens })
                 } catch (error) {
                     // A client disconnect — the user pressed Stop, or closed the tab — surfaces
                     // here when enqueue throws on a cancelled response. Those tokens were really
@@ -178,7 +199,7 @@ export async function POST(
                     // Input is charged in full regardless, since the request was already
                     // processed; output is whatever had been generated when the stream ended.
                     if (isClientDisconnect(error)) {
-                        await meterAiCall(scope, { inputTokens, outputTokens })
+                        await meterAiCall(meterScope, { inputTokens, outputTokens })
                         return
                     }
                     logger.error('AI chat stream error:', error as Error)

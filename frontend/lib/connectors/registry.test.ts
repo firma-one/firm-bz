@@ -213,7 +213,7 @@ describe('connector registry', () => {
   })
 
   // -------------------------------------------------------------------------
-  // getStorageAdapter — existing behaviour, guarded against regression
+  // getStorageAdapter — existing behavior, guarded against regression
   // -------------------------------------------------------------------------
   describe('getStorageAdapter', () => {
     it('throws when connector is not found', async () => {

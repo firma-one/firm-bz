@@ -10,7 +10,7 @@ export interface ConfirmDialogProps {
   onOpenChange: (open: boolean) => void
   /** Icon element rendered inside the icon pill */
   icon: React.ReactNode
-  /** Icon pill colour variant */
+  /** Icon pill color variant */
   iconVariant?: 'red' | 'amber' | 'primary'
   /** Title shown in the white header strip (rendered uppercase via CSS) */
   title: string
@@ -22,7 +22,7 @@ export interface ConfirmDialogProps {
   extra?: React.ReactNode
   cancelLabel?: string
   confirmLabel?: string
-  /** Confirm button colour variant */
+  /** Confirm button color variant */
   confirmVariant?: 'red' | 'primary' | 'amber'
   onCancel: () => void
   onConfirm: () => void

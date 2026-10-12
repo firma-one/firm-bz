@@ -14,7 +14,7 @@ import { Tip } from '@/components/ui/tip'
  * nowhere near it.
  *
  * Ambient by design. A number permanently inside the chat panel makes people ration the feature;
- * here it is there when looked for and silent otherwise, with colour carrying the only signal that
+ * here it is there when looked for and silent otherwise, with color carrying the only signal that
  * needs to arrive unprompted.
  *
  * Renders nothing for anyone the API refuses — external collaborators cannot use AI, so they are

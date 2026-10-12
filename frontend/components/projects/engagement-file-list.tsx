@@ -2,6 +2,10 @@
 
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
+import { FloatingAiChat } from '@/components/projects/floating-ai-chat'
+import { FilesAgentPanel, type FilesAgentReview } from '@/components/projects/files-agent-panel'
+import type { ChatThreadApi } from '@/components/projects/engagement-ai-chat'
+import { FilesScaffoldPanel, FilesScaffoldTrigger } from '@/components/projects/files-scaffold-panel'
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { CoffeeIcon, type CoffeeIconHandle } from "@/components/ui/coffee-icon"
@@ -509,7 +513,103 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
 
     // Data State
     const [files, setFiles] = useState<DriveFile[]>([])
+
+    /**
+     * Starting prompts for the assistant, derived server-side from the whole engagement's files.
+     *
+     * Fetched rather than computed here because the component only holds the CURRENT folder's
+     * listing, and "which files are duplicated" is a question about the whole tree. Free — the
+     * endpoint runs the deterministic analysis and makes no model call. Gated to the same roles
+     * as the panel, so a non-lead never issues it.
+     */
+    //
+    // Starts EMPTY, not undefined: `undefined` means "no override" to the chat, which then shows the
+    // engagement-status chips until the fetch lands and swaps them for file ones. An empty array is
+    // an override with nothing in it yet, so the row stays bare and fills once.
+    const [fileSuggestions, setFileSuggestions] = useState<string[]>([])
+
+    /**
+     * Whether the page's own first load has finished.
+     *
+     * The assistant mounts only after it has. It is contextual to what is on the page — its
+     * starting prompts are built from this engagement's files — so appearing while the list behind
+     * it is still empty makes it the first thing on screen, offering questions about content the
+     * user cannot see yet.
+     *
+     * Latched rather than tracking `loading`: that flag goes true again on every folder navigation,
+     * and a panel that vanished and returned each time a user opened a folder would be far worse
+     * than one that arrives a moment late.
+     */
+    const [pageReady, setPageReady] = useState(false)
+
+    /** Shared by the agent panel's trigger chip and its results block, which render apart. */
+    const [agentReview, setAgentReview] = useState<FilesAgentReview | null>(null)
+
+    /**
+     * Whether the current review's questions are all answered.
+     *
+     * Here rather than inside the panel because BOTH instances need it: the results block knows
+     * the answers, the trigger needs to know whether to offer a fresh review. Each instance has
+     * its own `decisions`, so the trigger could never work this out for itself.
+     */
+    const [agentAnswered, setAgentAnswered] = useState(false)
+    // A new review starts with nothing answered. Reset here rather than relying on the results
+    // block to report it: that block mounts only once `agentReview` is set, so on the first run it
+    // does not exist yet to say so.
+    useEffect(() => { setAgentAnswered(false) }, [agentReview])
+
+    /** Whether the folder-structure interview is open. */
+    const [scaffoldOpen, setScaffoldOpen] = useState(false)
+
+    /**
+     * The chat thread, so the agent panels can write their exchanges into it.
+     *
+     * Published by the chat and consumed by its siblings in `aboveThread`, which is why it is a
+     * ref rather than a prop: they are not children of the chat, they render inside it.
+     */
+    const chatThread = useRef<ChatThreadApi | null>(null)
+    const postToThread = useCallback(
+        (role: 'user' | 'assistant', content: string) => chatThread.current?.append(role, content),
+        [],
+    )
+
+    /**
+     * Refreshes the folder the user is looking at, so applied renames and moves appear without a
+     * manual reload. No-ops before a folder has resolved, which cannot happen while the panel is
+     * reachable.
+     */
+    const refreshCurrentFolder = useCallback(() => {
+        const folderId = currentFolderIdRef.current
+        if (folderId) void fetchFilesRef.current?.(folderId)
+    }, [])
+    useEffect(() => {
+        if (!(canManage || isFirmAdmin)) return
+        // The route authenticates via `getAuthUser`, which reads a Bearer token and returns null
+        // without one — a cookie-only fetch 401s and the chips silently fall back to the
+        // engagement set. Wait for the session rather than firing early and failing quietly.
+        const token = session?.access_token
+        if (!token) return
+
+        let cancelled = false
+        fetch(`/api/projects/${projectId}/files-agent`, {
+            headers: { Authorization: `Bearer ${token}` },
+            credentials: 'include',
+        })
+            .then((res) => (res.ok ? res.json() : null))
+            .then((body) => {
+                if (!cancelled && body?.data?.suggestions?.length) {
+                    setFileSuggestions(body.data.suggestions)
+                }
+            })
+            // Silent: the panel falls back to its own prompts, and a failed aid is not worth a
+            // message the user can do nothing about.
+            .catch(() => {})
+        return () => { cancelled = true }
+    }, [projectId, canManage, isFirmAdmin, session?.access_token])
     const [loading, setLoading] = useState(true) // Initial load
+    useEffect(() => {
+        if (!loading) setPageReady(true)
+    }, [loading])
     const [error, setError] = useState<string | null>(null)
 
     // (deeplink handler effect is declared below, after navigateToItem is defined)
@@ -1040,6 +1140,13 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
             if (!silent) setLoading(false)
         }
     }, [projectId, viewAsPersonaSlug, refreshFileCount])
+
+    // Stable ref to fetchFiles, for callbacks declared ABOVE it (the agent panel's refresh) that
+    // would otherwise capture it before it exists.
+    const fetchFilesRef = useRef<typeof fetchFiles | null>(null)
+    useEffect(() => {
+        fetchFilesRef.current = fetchFiles
+    }, [fetchFiles])
 
     // Stable ref to currentFolderId — used by hooks to avoid stale closures
     const currentFolderIdRef = useRef<string | null>(null)
@@ -3371,6 +3478,80 @@ const handleRefresh = async () => {
                     error={regrantError}
                 />
             </div>
+
+            {/* The agent panel is for the Engagement Lead and firm admins only: `canManage` maps to
+                `project:can_manage`, which is eng_admin-exclusive with a firm_admin fallback. The
+                route enforces the same boundary — this only decides whether to show the entry
+                point, and a hidden button is not an access control.
+
+                Collapsed by default, unlike Overview: on Files the assistant is secondary to the
+                file tree it is commenting on. */}
+            {pageReady && (canManage || isFirmAdmin) && (
+                <FloatingAiChat
+                    projectId={projectId}
+                    engagementName={projectName}
+                    clientName={clientName}
+                    title="Files"
+                    placeholder="Ask Brio about the deliverables, folders & files…"
+                    suggestionsOverride={fileSuggestions}
+                    capabilityNote={
+                        <>Ask about these files, review how they are organized, or set up a folder
+                        structure for the engagement.</>
+                    }
+                    // Two halves, one state. The trigger is a chip in the suggestion row; the
+                    // review's report and its questions render IN THE THREAD, where any other
+                    // answer would — not in a band above the panel, which put output above the
+                    // header that introduces it.
+                    surface="files"
+                    threadRef={chatThread}
+                    aboveThread={
+                        agentReview || scaffoldOpen ? (
+                            <>
+                                {agentReview && (
+                                    <FilesAgentPanel
+                                        render="results"
+                                        projectId={projectId}
+                                        review={agentReview}
+                                        setReview={setAgentReview}
+                                        onApplied={refreshCurrentFolder}
+                                        onThreadTurn={postToThread}
+                                        onAnsweredChange={setAgentAnswered}
+                                    />
+                                )}
+                                <FilesScaffoldPanel
+                                    projectId={projectId}
+                                    open={scaffoldOpen}
+                                    onClose={() => setScaffoldOpen(false)}
+                                    onCreated={refreshCurrentFolder}
+                                />
+                            </>
+                        ) : null
+                    }
+                    suggestionActions={
+                        <>
+                            <FilesAgentPanel
+                                render="trigger"
+                                projectId={projectId}
+                                review={agentReview}
+                                setReview={setAgentReview}
+                                answered={agentAnswered}
+                                onApplied={refreshCurrentFolder}
+                                // The TRIGGER instance is the one that runs the review, so it is
+                                // the one that must be able to post the report. The results
+                                // instance below does not exist until a review has returned, so
+                                // wiring it only there meant the report went nowhere.
+                                onThreadTurn={postToThread}
+                            />
+                            {/* Hidden only while the scaffold interview is actually open. It was
+                                also hidden whenever a review existed, which left no way back to
+                                folder setup short of reloading the page. */}
+                            {!scaffoldOpen && (
+                                <FilesScaffoldTrigger onClick={() => setScaffoldOpen(true)} />
+                            )}
+                        </>
+                    }
+                />
+            )}
 
         </div>
     )

@@ -191,7 +191,11 @@ export function ClientSettingsForm({
     useEffect(() => {
         if (!firmId) return
         getFirmMembers(firmId)
-            .then((res) => setMemberOptions(res.members.map((m) => ({ userId: m.userId, label: m.user?.name || m.user?.email || m.userId }))))
+            // Agents excluded: a client owner is a person who is accountable for the
+            // relationship, which is not something Brio can be.
+            .then((res) => setMemberOptions(res.members
+                .filter((m) => !(m as { isAgent?: boolean }).isAgent)
+                .map((m) => ({ userId: m.userId, label: m.user?.name || m.user?.email || m.userId }))))
             .catch(() => setMemberOptions([]))
     }, [firmId])
 

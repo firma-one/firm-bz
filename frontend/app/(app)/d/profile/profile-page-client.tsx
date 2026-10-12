@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Copy, Mail, User } from 'lucide-react'
+import { DataPrivacyCard } from '@/components/account/data-privacy-card'
 import { ProfileBubblePopupContent } from '@/components/ui/profile-bubble-popup'
 import { profileCopy } from '@/lib/profile-copy'
 import { updateProfileNames } from '@/lib/actions/profile'
@@ -216,6 +217,12 @@ export function ProfilePageClient({
                         {saving ? 'Saving…' : 'Save'}
                     </Button>
                 </div>
+
+                {/* Export and deletion. In BOTH branches, not only the standalone one: the
+                    Personalization page renders this component with `hideChrome`, which returns
+                    here — so a card added below the other return was unreachable from the only
+                    route that renders the page. */}
+                <DataPrivacyCard />
             </div>
         )
     }
@@ -249,6 +256,11 @@ export function ProfilePageClient({
                     footer={accountForm}
                 />
             </div>
+
+            {/* Export and deletion. Below the profile rather than inside it: these act on the
+                account as a whole, not on the fields above them, and the privacy policy points
+                users here by name. */}
+            <DataPrivacyCard />
         </div>
     )
 }

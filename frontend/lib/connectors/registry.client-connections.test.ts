@@ -75,7 +75,7 @@ function makeConnector(overrides: Partial<{
 
 import { getConnections } from './registry'
 
-describe('registry.getConnections — legacy firm-level (existing behaviour, must not regress)', () => {
+describe('registry.getConnections — legacy firm-level (existing behavior, must not regress)', () => {
   beforeEach(() => {
     mockFirmFindUnique.mockReset()
     mockClientFindUnique.mockReset()

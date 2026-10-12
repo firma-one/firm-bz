@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { logger } from '@/lib/logger'
 import { AI_MODEL } from './client'
 
-export type AiFeature = 'brief' | 'summary' | 'chat' | 'searchInterpret'
+export type AiFeature = 'brief' | 'summary' | 'chat' | 'searchInterpret' | 'filesAgent'
 
 /**
  * Credits charged per action.
@@ -20,6 +20,11 @@ export const CREDIT_WEIGHTS: Record<AiFeature, number> = {
     summary: 1,
     chat: 1,
     searchInterpret: 0.5,
+    // The first feature whose cost is NOT one row per user action: an agent run records one row
+    // per model turn, so a single review may write several. Weighted at 1 so the unit stays "a
+    // credit is an answer" rather than introducing a second pricing concept — the run's total is
+    // bounded by MAX_AGENT_TURNS and shown to the user before it starts.
+    filesAgent: 1,
 }
 
 /**
@@ -137,7 +142,7 @@ export async function aiCreditUsageForGroup(
         _sum: { credits: true },
     })
 
-    const byFeature: Record<AiFeature, number> = { brief: 0, summary: 0, chat: 0, searchInterpret: 0 }
+    const byFeature: Record<AiFeature, number> = { brief: 0, summary: 0, chat: 0, searchInterpret: 0, filesAgent: 0 }
     let used = 0
     for (const r of rows) {
         const feature = r.feature as AiFeature

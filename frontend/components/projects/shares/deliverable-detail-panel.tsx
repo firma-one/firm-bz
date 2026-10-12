@@ -65,6 +65,8 @@ interface EngagementMember {
   email: string | null
   avatarUrl: string | null
   role: string
+  /** True for Brio. A member, but not someone work can be assigned to. */
+  isAgent?: boolean
 }
 
 export interface DeliverableDetailPanelProps {
@@ -448,7 +450,10 @@ function SubtaskRow({
                       </DropdownMenuTrigger>
                     </TooltipTrigger>
                     <DropdownMenuContent align="start" className="w-52 text-xs">
-                      {members.map((m) => (
+                      {/* Agents are excluded: Brio is a member and belongs in the Members list,
+                          but assigning it a subtask would park the work with something that will
+                          never pick it up. */}
+                      {members.filter((m) => !m.isAgent).map((m) => (
                         <DropdownMenuItem
                           key={m.userId}
                           onClick={() => handleAssigneeSelect(m)}

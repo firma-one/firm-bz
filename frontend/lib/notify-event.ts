@@ -1,6 +1,8 @@
 import { prisma } from '@/lib/prisma'
 import { logger } from '@/lib/logger'
 import { sendPushToUser } from '@/lib/push'
+import { isAgentUserId } from '@/lib/ai/files-agent/agent-identity'
+import { isAgentEmail } from '@/lib/ai/agent-email'
 
 /**
  * Shared dispatch helpers for the per-event notification toggles in Firm Settings
@@ -53,9 +55,13 @@ export async function createEventNotifications(rows: EventNotificationRow[]): Pr
     logger.error('createEventNotifications failed', e as Error, 'Notifications', { type: rows[0]?.type })
   }
 
-  await Promise.all(rows.map((row) =>
-    sendPushToUser(row.userId, { title: row.title, body: row.body ?? undefined, ctaUrl: row.ctaUrl ?? null })
-  ))
+  // In-app rows are filtered by the Prisma extension, which covers every writer. Push is not —
+  // it never touches the Notification table — so agents are dropped here.
+  await Promise.all(rows
+    .filter((row) => !isAgentUserId(row.userId))
+    .map((row) =>
+      sendPushToUser(row.userId, { title: row.title, body: row.body ?? undefined, ctaUrl: row.ctaUrl ?? null })
+    ))
 }
 
 /** Sends a rendered email to a single user by id. Never throws — logs and swallows. */
@@ -70,6 +76,10 @@ export async function sendEventEmailToUser(
     const { data } = await admin.auth.admin.getUserById(userId)
     const email = data?.user?.email
     if (!email) return
+    // Checked on the resolved address rather than the id: an agent's mailbox does not exist, so
+    // this would bounce or vanish. Reliable here because the user is already loaded — no cache to
+    // be cold and no extra lookup to pay for.
+    if (isAgentEmail(email)) return
     const { subject, html } = render()
     await sendEmail(email, subject, html)
   } catch (e) {

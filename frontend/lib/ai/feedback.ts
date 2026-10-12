@@ -21,10 +21,17 @@ import type { FeedbackReason } from './feedback-reasons'
  *
  * ## What it stores
  *
- * The question, never the answer. The question is text the user typed knowing it went to the
- * assistant; the answer is derived from engagement data, so storing it would copy client data into
- * a second table for no gain — the question plus timestamp reproduces it. This mirrors the boundary
- * the AI context itself holds.
+ * The rating, the chip, and ids. Neither the question nor the answer.
+ *
+ * The question used to be stored, so a negative rating could be diagnosed. It never achieved that:
+ * the answer is not stored either, so the question alone narrows a search without answering it,
+ * against engagement data that has since changed. That was a poor trade for text a user typed,
+ * which can name a client.
+ *
+ * The chips carry the signal instead — "Got facts wrong" on the chat feature, counted over time,
+ * says what the assistant is unreliable at while holding nobody's words. If that proves too coarse,
+ * collect more then and update the privacy policy to match. Collecting first and justifying later
+ * is the wrong order.
  */
 
 // Re-exported so server callers have one import for the whole feedback surface. The definitions
@@ -38,8 +45,6 @@ export {
     type FeedbackReason,
 } from './feedback-reasons'
 
-/** Questions are truncated rather than rejected: a long one is still a usable signal. */
-const MAX_QUESTION_CHARS = 500
 
 export interface RecordFeedbackParams {
     firmId: string
@@ -48,7 +53,11 @@ export interface RecordFeedbackParams {
     feature: AiFeature
     helpful: boolean
     reason?: FeedbackReason | null
-    question?: string | null
+    /**
+     * @deprecated Always null. Kept so the column and any rows written before this change still
+     * read back, and so a caller passing it fails the typecheck rather than silently storing text.
+     */
+    question?: null
     /** Client-minted id of the answer, so a corrected rating replaces rather than duplicates. */
     answerId?: string | null
     /** Client-minted id of the conversation, for reading a thread's ratings together. */
@@ -87,7 +96,10 @@ export async function recordAiFeedback(params: RecordFeedbackParams): Promise<vo
             // good"), which is what tells us which capability to protect when a prompt is edited —
             // a bare thumbs-up cannot.
             reason: params.reason ?? null,
-            question: params.question?.trim().slice(0, MAX_QUESTION_CHARS) || null,
+            // Always null — see the note at the top of this file. Written explicitly rather than
+            // omitted so the column is set rather than left to a default, and so this line is
+            // where anyone looking for the question storage lands.
+            question: null,
             answerId: params.answerId ?? null,
             threadId: params.threadId ?? null,
         }

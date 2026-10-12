@@ -32,7 +32,7 @@ const MAX_SUGGESTIONS = 4
  * data-driven suggestion so they fill remaining slots rather than displacing a real signal.
  */
 const FALLBACKS: ChatSuggestion[] = [
-    { text: 'Summarise where this engagement stands', score: 5 },
+    { text: 'Summarize where this engagement stands', score: 5 },
     { text: 'What needs my attention this week?', score: 4 },
 ]
 

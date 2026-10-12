@@ -2147,7 +2147,7 @@ function FolderHealthBody({ storageHealth, folderHealth, hiddenRings = [] }: {
                         <p className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
                             <FolderOpen className="h-4 w-4 text-gray-400" />
                             Overall Score
-                            <InfoTip ariaLabel="About Folder Health Score" text="File organization quality (0–100). Penalizes badly named files, duplicates, stale files, large files, deeply nested folders, empty folders, and orphaned files." />
+                            <InfoTip ariaLabel="About Folder Health Score" text="File organization quality (0–100). Penalizes badly named files, duplicates, stale files, large files, folders nested more than 5 deep, crowded folders, empty folders, and files left outside any folder. Uses the same rules as Review file organization on the Files tab." />
                         </p>
                         <Donut
                             total={100}
@@ -3483,7 +3483,6 @@ export function EngagementInsightsDashboard({
                 data={data}
                 engagementName={engagementName}
                 clientName={clientName}
-                defaultOpen
             />
         )}
         </TooltipProvider>
