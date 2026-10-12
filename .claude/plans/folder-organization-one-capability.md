@@ -195,10 +195,13 @@ them by hand in two minutes. The structure and the naming convention are real
 value (the review enforces them afterwards), but as a one-time return it does
 not justify the flow.
 
-**Decision: Option B — real `.docx` / `.xlsx` / `.pptx`**, generated with a
+**Decision: Option B — real `.docx` / `.xlsx` / `.pptx`**, produced with a
 library (`docx`, `exceljs`, `pptxgenjs`) and written through the existing
 `createFile(connectionId, folderId, fileName, content: Buffer, mimeType)`,
 which both adapters already implement. No new provider surface.
+
+"Produced", not "generated": the shells are written by us and live in the code.
+See below — the model chooses which ones apply, it does not author them.
 
 Rejected:
 - **Markdown stubs** — trivial to produce, but a professional-services firm
@@ -207,64 +210,54 @@ Rejected:
   result and no dependency, but the creation call differs per provider and the
   template-content problem remains either way.
 
-### The model picks the documents, not a fixed list
+### Templates are shells; the AI chooses which ones apply
 
-Corrected: asking which three or four templates to ship is the same mistake as
-the four hard-coded engagement kinds. A GTM engagement, an audit and a platform
-build do not want one shared set of stubs, and no list written in advance is
-right for the next kind of work a firm takes on. **That judgement is the whole
-reason this is AI-driven.**
+Two corrections, in order, and the second supersedes the first.
 
-So the model decides WHICH documents exist and what they are called, and writes
-their contents, from what it already knows about the engagement — the kind, and
-the description, tags and contract type that now reach it. **Nothing is a
-static template in the repo.**
+**First:** asking which three or four templates to ship as a single fixed list
+was the same mistake as the four hard-coded engagement kinds. A GTM engagement,
+an audit and a product build do not want one shared set.
 
-What varies is the SET, not the shape of each document. An audit gets a testing
-memo; a product build gets a PRD; a retainer gets a monthly report. That is the
-judgement no fixed list can make, and the reason this is AI-driven.
+**Then:** generating document CONTENT from four answers and a one-line
+description is unrealistic. A model given that much input cannot write a real
+scope note — it writes plausible filler that a professional must delete before
+the document is usable, which is worse than an empty shell because it looks
+finished. Reviewing invented content costs more than filling in a blank.
 
-Within a document, conventional structure is CORRECT structure. A scope note
-wants Scope / Objectives / Timeline because that is what a scope note contains
-— for a product build as much as anything else. The goal is not to make
-documents look unusual; a firm opening one should recognise it immediately.
-Standard professional polish, not elaborate, and not novelty for its own sake.
+So the split is:
 
-The folder tree stays deterministic (`buildScaffold`); the documents are a
-proposal, approved the same way every other agent change is.
+| | |
+|---|---|
+| **Static, in the code** | The templates themselves — proper shells, in the spirit of a quality-management system. Headings, numbered sections, a revision history block, placeholder tables with real column headers, a footer. Old school and complete. |
+| **Chosen by the model** | WHICH templates a given engagement gets, and where each one goes in the tree. An audit gets a testing memo; a product build gets a PRD; a retainer gets a monthly report. |
+| **Filled from engagement data** | Only what is known and certain — engagement name, client, dates, document id. Not prose. |
 
-That makes this a genuine agent capability rather than a template library, and
-it inherits the existing boundary: proposals are previewed, each is approved,
-and nothing is written without a signed token.
+That keeps the AI doing the judgement it is good at (what this kind of work
+needs) and keeps it away from the thing it would do badly here (pretending to
+know the content of work that has not started).
 
-Still true regardless of who chooses: a document in every folder is clutter,
-and it would make the review's own "empty folder" and "single file for its
-whole life" findings fire on the scaffold's own output. A small number of
-documents the firm will actually fill in is the target.
+A library of shells is now a real artifact the product owns and maintains. That
+is a cost, but a legible one — a firm can read a template and tell whether it
+is right, which is not true of content generated per engagement.
+
+Still true regardless: a document in every folder is clutter, and it would make
+the review's own "empty folder" and "single file for its whole life" findings
+fire on the scaffold's own output. A small number of documents a firm will
+actually fill in is the target.
 
 ### Open for tomorrow
-- **How the generated content is represented.** The model emits a document's
-  sections — headings, table columns, a line of guidance under each heading —
-  and the generator turns that into `.docx` / `.xlsx` / `.pptx`. So there is an
-  intermediate shape to design: rich enough to carry a heading hierarchy and a
-  table, narrow enough that a model fills it reliably and a generator renders
-  it without interpretation. That shape is the real design work here, not the
-  library call.
 
-  Note this is a SMALL surface on purpose. Most documents of a given type share
-  a conventional structure, so the model is choosing a well-known shape and
-  filling in the engagement's specifics, not inventing a layout each time.
-  A format that permits arbitrary structure invites arbitrary structure.
-- **Credits.** The scaffold costs nothing today — the tree is computed, not
-  generated. Writing document CONTENT is a substantially bigger call than
-  naming files, and it scales with how many documents are proposed, so the
-  flow acquires a real cost it did not have. The estimate shown before the run
-  must say so, and `canAffordRun` should cover it the way it covers a review.
-- **When the content is generated.** Writing every document up front and then
-  having the user approve a subset spends tokens on documents nobody takes.
-  Proposing names first and generating only what is approved costs a second
-  round trip but no wasted generation. The second is probably right, and it
-  changes the shape of the approval step.
+- **Which shells to write, and in what format.** Each is real content the
+  product maintains. `.docx` via `docx`, `.xlsx` via `exceljs`, `.pptx` via
+  `pptxgenjs` — all write a Buffer, which `createFile` already takes on both
+  adapters.
+- **How a template declares where it belongs.** A testing memo goes in the
+  testing folder; the mapping has to survive the folder being renamed or
+  unchecked during setup.
+- **How much the model decides.** Picking from a catalogue of shells is a small,
+  checkable judgement — closer to the `missing-folder` detector than to the file
+  review. It may not need a model call at all: engagement kind plus a tag may
+  be enough, which would keep the scaffold free.
 - **The document cap.** `assertWithinDocumentCap` is enforced on creation
   elsewhere; a scaffold that creates files must respect it.
 - `PERMITTED_AGENT_OPERATIONS` is `rename`, `move`, `create-folder`. Creating
