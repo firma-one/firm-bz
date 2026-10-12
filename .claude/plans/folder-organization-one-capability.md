@@ -215,10 +215,20 @@ build do not want one shared set of stubs, and no list written in advance is
 right for the next kind of work a firm takes on. **That judgement is the whole
 reason this is AI-driven.**
 
-So the model proposes the documents, from what it already knows about the
-engagement — the kind, and the description, tags and contract type that now
-reach it. The folder tree stays deterministic (`buildScaffold`); the documents
-are a proposal, approved the same way every other agent change is.
+So the model proposes the documents AND writes their contents, from what it
+already knows about the engagement — the kind, and the description, tags and
+contract type that now reach it. **Nothing is a static template in the repo.**
+A scope note for a DPDP platform build should have the headings that work
+needs, not a generic "Scope / Objectives / Timeline" shell with the engagement
+name dropped in; a firm that opens a document which could have been for any
+engagement has been handed a form, not a starting point.
+
+Not elaborate — standard professional polish is the bar. A document that is
+clearly structured, correctly titled and obviously the right shape for the
+work, which the firm then fills in.
+
+The folder tree stays deterministic (`buildScaffold`); the documents are a
+proposal, approved the same way every other agent change is.
 
 That makes this a genuine agent capability rather than a template library, and
 it inherits the existing boundary: proposals are previewed, each is approved,
@@ -230,14 +240,23 @@ whole life" findings fire on the scaffold's own output. A small number of
 documents the firm will actually fill in is the target.
 
 ### Open for tomorrow
-- **How much structure a generated document gets.** The model names the file
-  and its purpose; something has to turn that into real `.docx` / `.xlsx`
-  content. A heading skeleton from the model is one option; a generic shell
-  (title, date, engagement name, empty sections) is another and costs no
-  tokens. Worth deciding before picking the library's API surface.
+- **How the generated content is represented.** The model writes the document's
+  structure — headings, section order, table columns, a line of guidance under
+  each heading — and the generator turns that into `.docx` / `.xlsx` / `.pptx`.
+  So there is an intermediate shape to design: rich enough to carry a heading
+  hierarchy and a table, narrow enough that a model fills it reliably and a
+  generator renders it without interpretation. That shape is the real design
+  work here, not the library call.
 - **Credits.** The scaffold costs nothing today — the tree is computed, not
-  generated. Proposing documents is a model call, so the flow acquires a cost
-  it did not have, and the estimate shown before the run must say so.
+  generated. Writing document CONTENT is a substantially bigger call than
+  naming files, and it scales with how many documents are proposed, so the
+  flow acquires a real cost it did not have. The estimate shown before the run
+  must say so, and `canAffordRun` should cover it the way it covers a review.
+- **When the content is generated.** Writing every document up front and then
+  having the user approve a subset spends tokens on documents nobody takes.
+  Proposing names first and generating only what is approved costs a second
+  round trip but no wasted generation. The second is probably right, and it
+  changes the shape of the approval step.
 - **The document cap.** `assertWithinDocumentCap` is enforced on creation
   elsewhere; a scaffold that creates files must respect it.
 - `PERMITTED_AGENT_OPERATIONS` is `rename`, `move`, `create-folder`. Creating
