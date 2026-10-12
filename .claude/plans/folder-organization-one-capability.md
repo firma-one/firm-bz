@@ -215,17 +215,20 @@ build do not want one shared set of stubs, and no list written in advance is
 right for the next kind of work a firm takes on. **That judgement is the whole
 reason this is AI-driven.**
 
-So the model proposes the documents AND writes their contents, from what it
-already knows about the engagement — the kind, and the description, tags and
-contract type that now reach it. **Nothing is a static template in the repo.**
-A scope note for a DPDP platform build should have the headings that work
-needs, not a generic "Scope / Objectives / Timeline" shell with the engagement
-name dropped in; a firm that opens a document which could have been for any
-engagement has been handed a form, not a starting point.
+So the model decides WHICH documents exist and what they are called, and writes
+their contents, from what it already knows about the engagement — the kind, and
+the description, tags and contract type that now reach it. **Nothing is a
+static template in the repo.**
 
-Not elaborate — standard professional polish is the bar. A document that is
-clearly structured, correctly titled and obviously the right shape for the
-work, which the firm then fills in.
+What varies is the SET, not the shape of each document. An audit gets a testing
+memo; a product build gets a PRD; a retainer gets a monthly report. That is the
+judgement no fixed list can make, and the reason this is AI-driven.
+
+Within a document, conventional structure is CORRECT structure. A scope note
+wants Scope / Objectives / Timeline because that is what a scope note contains
+— for a product build as much as anything else. The goal is not to make
+documents look unusual; a firm opening one should recognise it immediately.
+Standard professional polish, not elaborate, and not novelty for its own sake.
 
 The folder tree stays deterministic (`buildScaffold`); the documents are a
 proposal, approved the same way every other agent change is.
@@ -240,13 +243,18 @@ whole life" findings fire on the scaffold's own output. A small number of
 documents the firm will actually fill in is the target.
 
 ### Open for tomorrow
-- **How the generated content is represented.** The model writes the document's
-  structure — headings, section order, table columns, a line of guidance under
-  each heading — and the generator turns that into `.docx` / `.xlsx` / `.pptx`.
-  So there is an intermediate shape to design: rich enough to carry a heading
-  hierarchy and a table, narrow enough that a model fills it reliably and a
-  generator renders it without interpretation. That shape is the real design
-  work here, not the library call.
+- **How the generated content is represented.** The model emits a document's
+  sections — headings, table columns, a line of guidance under each heading —
+  and the generator turns that into `.docx` / `.xlsx` / `.pptx`. So there is an
+  intermediate shape to design: rich enough to carry a heading hierarchy and a
+  table, narrow enough that a model fills it reliably and a generator renders
+  it without interpretation. That shape is the real design work here, not the
+  library call.
+
+  Note this is a SMALL surface on purpose. Most documents of a given type share
+  a conventional structure, so the model is choosing a well-known shape and
+  filling in the engagement's specifics, not inventing a layout each time.
+  A format that permits arbitrary structure invites arbitrary structure.
 - **Credits.** The scaffold costs nothing today — the tree is computed, not
   generated. Writing document CONTENT is a substantially bigger call than
   naming files, and it scales with how many documents are proposed, so the
