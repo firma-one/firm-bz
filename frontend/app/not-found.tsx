@@ -1,7 +1,9 @@
 "use client"
 
 import Link from 'next/link'
+import { useState } from 'react'
 import { usePathname } from 'next/navigation'
+import { refreshAccessAndNavigate } from '@/lib/navigation/refresh-access-and-navigate'
 import { KINETIC_COLORS } from '@/config/kinetic-institution'
 
 function resolveHomeHref(pathname: string | null): { href: string; label: string } {
@@ -13,6 +15,10 @@ function resolveHomeHref(pathname: string | null): { href: string; label: string
 export default function RootNotFound() {
     const pathname = usePathname()
     const { href, label } = resolveHomeHref(pathname)
+    // A /d 404 can be a stale permission cache/JWT rather than a missing page —
+    // refresh both on the way back to the dashboard (same effect as re-signing in).
+    const refreshOnLeave = pathname?.startsWith('/d') ?? false
+    const [refreshing, setRefreshing] = useState(false)
 
     return (
         <div
@@ -49,13 +55,21 @@ export default function RootNotFound() {
 
                 <Link
                     href={href}
+                    aria-disabled={refreshing}
+                    onClick={(e) => {
+                        if (!refreshOnLeave) return
+                        e.preventDefault()
+                        if (refreshing) return
+                        setRefreshing(true)
+                        void refreshAccessAndNavigate(href)
+                    }}
                     className="inline-flex items-center justify-center gap-2 rounded-full px-6 py-2.5 text-sm font-medium transition-opacity hover:opacity-80"
                     style={{
                         backgroundColor: KINETIC_COLORS.onSurface,
                         color: KINETIC_COLORS.surface,
                     }}
                 >
-                    {label}
+                    {refreshing ? 'Refreshing access…' : label}
                 </Link>
             </div>
         </div>

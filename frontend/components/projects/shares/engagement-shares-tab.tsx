@@ -372,7 +372,7 @@ function DraggableCard({
     >
       {isSaving && (
         <div className="absolute inset-0 z-20 flex items-center justify-center bg-white/60 backdrop-blur-[1px] rounded">
-          <LoadingSpinner className="h-4 w-4 text-primary" />
+          <LoadingSpinner size="sm" className="text-primary" />
         </div>
       )}
       <ShareCardContent

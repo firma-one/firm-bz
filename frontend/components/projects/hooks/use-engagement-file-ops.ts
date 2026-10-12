@@ -21,6 +21,8 @@ interface UseEngagementFileOpsOptions {
     startProcessing: (id: string) => void
     stopProcessing: (id: string) => void
     setFiles: React.Dispatch<React.SetStateAction<DriveFile[]>>
+    /** Called when an item leaves the current listing (e.g. moved elsewhere). */
+    onItemRemoved?: (fileId: string) => void
 }
 
 export function useEngagementFileOps({
@@ -36,6 +38,7 @@ export function useEngagementFileOps({
     startProcessing,
     stopProcessing,
     setFiles,
+    onItemRemoved,
 }: UseEngagementFileOpsOptions) {
     const { addToast } = useToast()
 
@@ -288,6 +291,7 @@ export function useEngagementFileOps({
             addToast({ type: 'success', title: action === 'copy' ? 'Copied' : 'Moved', message: `${target.name} ${action === 'copy' ? 'copied' : 'moved'} successfully` })
             setCopyMoveModalOpen(false)
             setCopyMoveTarget(null)
+            if (action === 'move') onItemRemoved?.(target.id)
             const currentFolderId = currentFolderIdRef.current
             if (currentFolderId) fetchFiles(currentFolderId, true)
         } catch (e: any) {
@@ -296,7 +300,7 @@ export function useEngagementFileOps({
             setCopyMoveSubmittingFolderId(null)
             stopProcessing(target.id)
         }
-    }, [copyMoveTarget, copyMoveAction, copyMoveKeepBoth, projectId, currentFolderIdRef, fetchFiles, addToast, startProcessing, stopProcessing])
+    }, [copyMoveTarget, copyMoveAction, copyMoveKeepBoth, projectId, currentFolderIdRef, fetchFiles, addToast, startProcessing, stopProcessing, onItemRemoved])
 
     const handleMoveTree = useCallback(async (doc: DriveFile, targetRoot: 'general' | 'confidential' | 'staging') => {
         if (!sessionRef.current?.access_token) return
@@ -322,6 +326,7 @@ export function useEngagementFileOps({
             }
             const label = targetRoot === 'general' ? 'Restored to General' : targetRoot === 'confidential' ? 'Restricted to Confidential' : 'Promoted to General'
             addToast({ type: 'success', title: label, message: `${doc.name} moved successfully` })
+            onItemRemoved?.(doc.id)
             const currentFolderId = currentFolderIdRef.current
             if (currentFolderId) fetchFiles(currentFolderId, true)
         } catch (e: any) {
@@ -329,7 +334,7 @@ export function useEngagementFileOps({
         } finally {
             stopProcessing(doc.id)
         }
-    }, [projectId, currentFolderIdRef, fetchFiles, addToast, startProcessing, stopProcessing])
+    }, [projectId, currentFolderIdRef, fetchFiles, addToast, startProcessing, stopProcessing, onItemRemoved])
 
     const openRenameModal = useCallback((doc: DriveFile) => {
         const hasNoExtension = doc.mimeType === 'application/vnd.google-apps.folder' || doc.documentType === 'LINK'
