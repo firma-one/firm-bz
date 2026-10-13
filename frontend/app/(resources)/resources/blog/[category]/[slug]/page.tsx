@@ -9,6 +9,7 @@ import remarkGfm from 'remark-gfm'
 import { Header } from '@/components/layout/Header'
 import { Footer } from '@/components/layout/Footer'
 import { MarketingBreadcrumb } from '@/components/marketing/marketing-breadcrumb'
+import { ArticleSignOff } from '@/components/blog/article-sign-off'
 import { RecentPostCard } from '@/components/blog/recent-post-card'
 import { TextToSpeech } from '@/components/blog/text-to-speech'
 import { BRAND_NAME, BRAND_NAME_TEAM } from '@/config/brand'
@@ -291,6 +292,8 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
                   {post.content || ''}
                 </ReactMarkdown>
               </div>
+
+              <ArticleSignOff />
 
               {post.tags.length > 0 ? (
                 <div className="mt-14 flex flex-col gap-6 border-t border-[#c6c6cc]/25 pt-10 md:mt-20 md:pt-12">
