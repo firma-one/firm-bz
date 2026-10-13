@@ -357,12 +357,44 @@ function daysBetween(from: Date, to: Date): number | null {
  */
 export function buildEngagementContext(
     data: EngagementInsightsResponse,
-    meta: { clientName?: string; engagementName?: string },
+    meta: {
+        clientName?: string
+        engagementName?: string
+        /**
+         * What the firm wrote about this engagement when they set it up.
+         *
+         * The richest human-written context there is — "Q2 GTM positioning for a Series B fintech
+         * entering the UK" says more about what the work IS than every date and count combined,
+         * and none of the computed signals can replace it.
+         *
+         * Safe for the prompt CACHE: a description is written once and edited rarely, so it does
+         * not churn the prefix. Do not add volatile fields beside it for the same reason.
+         */
+        description?: string | null
+        /** Practice area, jurisdiction, risk level — whatever the firm files by. */
+        tags?: string[]
+        /** Fixed fee, time and materials, and so on. Bears on how the work is structured. */
+        contractType?: string | null
+    },
 ): string {
     const lines: string[] = []
 
     lines.push(`Engagement: ${meta.engagementName ?? 'unnamed'}${meta.clientName ? ` (client: ${meta.clientName})` : ''}`)
     lines.push(`Today: ${new Date().toISOString().slice(0, 10)}`)
+
+    // DELIBERATELY ABSENT: rateOrValue, the engagement's fee or contract value.
+    //
+    // It is encrypted at rest, it is commercially sensitive, and nothing Brio is asked to answer
+    // needs it — status, ownership, dates and file structure are all answerable without knowing
+    // what the work is worth. Putting fee data into a model prompt is easy to avoid now and hard
+    // to justify later. Do not add it.
+    if (meta.description?.trim()) {
+        // Labelled as the firm's own words, so the model treats it as a description of the work
+        // rather than as instructions about how to behave.
+        lines.push(`What the firm says this engagement is: ${meta.description.trim()}`)
+    }
+    if (meta.tags?.length) lines.push(`Tags: ${meta.tags.join(', ')}`)
+    if (meta.contractType?.trim()) lines.push(`Contract type: ${meta.contractType.trim()}`)
 
     // Elapsed time since kickoff is stated, not left to be derived from two dates. A model given
     // "Today: 2026-10-05" and "Kickoff: 2026-10-01" will happily describe the kickoff as upcoming:

@@ -30,6 +30,27 @@ export async function buildUserSettingsPlus(): Promise<{ success: boolean; error
 }
 
 /**
+ * Drop and rebuild the current user's UserSettingsPlus cache.
+ * Used for self-healing a stale permission cache (e.g. an engagement 404ing
+ * until sign-out/sign-in) — scoped to the caller, so it can't touch other users.
+ */
+export async function refreshMyUserSettingsPlus(): Promise<{ success: boolean }> {
+  try {
+    const supabase = await createClient()
+    const { data: { user }, error } = await supabase.auth.getUser()
+    if (error || !user) return { success: false }
+
+    userSettingsPlus.invalidateUser(user.id)
+    await userSettingsPlus.getUserSettingsPlus(user.id)
+    logger.info('Refreshed UserSettingsPlus cache on request', 'UserSettingsPlus', { userId: user.id })
+    return { success: true }
+  } catch (error) {
+    logger.error('Failed to refresh UserSettingsPlus', error instanceof Error ? error : new Error(String(error)))
+    return { success: false }
+  }
+}
+
+/**
  * Invalidate UserSettingsPlus cache
  * Call after permission/settings mutations
  */

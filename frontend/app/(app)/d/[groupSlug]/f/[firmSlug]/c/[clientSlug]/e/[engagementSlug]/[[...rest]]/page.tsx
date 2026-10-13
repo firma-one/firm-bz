@@ -15,6 +15,7 @@ import { ErrorBoundary } from "@/components/error-boundary"
 import type { ProjectPathSegments } from "@/components/projects/engagement-workspace"
 import { getAccessibleFileCountForPersona } from "@/lib/engagement-sharing-ids"
 import { engagementPath } from "@/lib/navigation/firm-paths"
+import { logger } from "@/lib/logger"
 
 const VALID_TABS = new Set(['files', 'shares', 'comments', 'members', 'analytics', 'sources', 'audit', 'settings', 'wiki'])
 
@@ -41,7 +42,12 @@ export default async function EngagementPage({ params }: PageProps) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
+  // Each 404 branch logs its reason — notFound() is otherwise silent, which makes
+  // "why is this engagement 404ing" undiagnosable from the server log.
+  const notFoundCtx = { firmSlug, clientSlug, engagementSlug }
+
   if (!user) {
+    logger.warn('[EngagementPage] 404: no authenticated user', notFoundCtx)
     notFound()
   }
 
@@ -49,17 +55,20 @@ export default async function EngagementPage({ params }: PageProps) {
   try {
     clients = await getFirmHierarchy(firmSlug)
   } catch (e) {
+    logger.warn('[EngagementPage] 404: getFirmHierarchy threw', { ...notFoundCtx, error: e instanceof Error ? e.message : String(e) })
     notFound()
   }
   const orgName = await getFirmName(firmSlug)
 
   const client = clients.find(c => c.slug === clientSlug)
   if (!client) {
+    logger.warn('[EngagementPage] 404: client not in hierarchy', { ...notFoundCtx, clientSlugs: clients.map(c => c.slug) })
     notFound()
   }
 
   const project = client.engagements.find(p => p.slug === engagementSlug)
   if (!project) {
+    logger.warn('[EngagementPage] 404: engagement not in hierarchy', { ...notFoundCtx, engagementSlugs: client.engagements.map(p => p.slug) })
     notFound()
   }
 
@@ -68,11 +77,13 @@ export default async function EngagementPage({ params }: PageProps) {
     select: { id: true, sandboxOnly: true, settings: true }
   })
   if (!org) {
+    logger.warn('[EngagementPage] 404: firm not found', notFoundCtx)
     notFound()
   }
 
   const canView = await canViewProject(org.id, client.id, project.id)
   if (!canView) {
+    logger.warn('[EngagementPage] 404: canViewProject denied', { ...notFoundCtx, userId: user.id, projectId: project.id })
     notFound()
   }
 

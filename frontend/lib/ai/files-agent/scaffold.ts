@@ -25,7 +25,6 @@ import type { FolderProposal } from './tools'
 
 export type ScaffoldQuestionId =
     | 'engagementKind'
-    | 'reviewStages'
     | 'workingPapers'
     | 'numbering'
 
@@ -54,18 +53,7 @@ export const SCAFFOLD_QUESTIONS: ScaffoldQuestion[] = [
             { value: 'audit', label: 'Audit or assurance', description: 'Testing, evidence, a signed opinion' },
             { value: 'implementation', label: 'Implementation or delivery', description: 'Build, migrate, roll out' },
             { value: 'retainer', label: 'Ongoing retainer', description: 'Recurring work with no fixed end' },
-        ],
-    },
-    {
-        id: 'reviewStages',
-        // Recommended: a draft/final split is the lightest structure that still says which version
-        // went to the client. Two-stage is better where a partner signs off, but that is a fact
-        // about the firm, not something to assume.
-        question: 'How do deliverables get reviewed?',
-        options: [
-            { value: 'two-stage', label: 'Draft, then partner review', description: 'A folder for each stage' },
-            { value: 'single', label: 'One review before it goes out', recommended: true },
-            { value: 'none', label: 'No formal review stage' },
+            { value: 'product', label: 'Product or platform build', description: 'Research, specify, build, hand over' },
         ],
     },
     {
@@ -73,10 +61,17 @@ export const SCAFFOLD_QUESTIONS: ScaffoldQuestion[] = [
         // Recommended: keeping workings out of the deliverable folder is what stops a spreadsheet
         // of calculations being shared alongside the report it supports.
         options: [
-            { value: 'yes', label: 'Yes — they need their own place', recommended: true },
-            { value: 'no', label: 'No — everything lives with its deliverable' },
+            {
+                value: 'yes',
+                label: 'Yes — a separate Working Papers folder',
+                description: 'Keeps calculations out of the folder you share',
+                recommended: true,
+            },
+            { value: 'no', label: 'No — keep them with their deliverable' },
         ],
-        question: 'Do you keep working papers or source data?',
+        // Also phrased as a folder question. "Do you keep working papers?" asked about the firm's
+        // practice, which is not what the answer changes — it decides whether one folder is made.
+        question: 'Should source data and workings have their own folder?',
     },
     {
         id: 'numbering',
@@ -128,7 +123,32 @@ const BASE_SECTIONS: Record<string, Array<{ name: string; purpose: string }>> = 
         { name: 'Monthly', purpose: 'Work organized by period' },
         { name: 'Deliverables', purpose: 'What the client receives' },
     ],
+    // A build that starts with discovery — the shape where research, a specification and
+    // construction are phases of ONE engagement rather than two engagements running together.
+    //
+    // Added because the four kinds above forced that work to be filed as either advisory or
+    // implementation, losing half the structure each way. Merging the two trees instead was
+    // considered and rejected: a union is eight flat top-level folders in no defensible order,
+    // which the review's own crowding and ordering rules would then complain about. One ordered
+    // tree beats two glued together.
+    product: [
+        { name: 'Discovery', purpose: 'Research and validation before anything is specified' },
+        { name: 'Requirements', purpose: 'What is being built, as agreed' },
+        { name: 'Design', purpose: 'Flows, wireframes and visual design' },
+        { name: 'Build', purpose: 'Work in progress' },
+        { name: 'Testing', purpose: 'Acceptance and sign-off evidence' },
+        { name: 'Handover', purpose: 'What the client takes ownership of' },
+    ],
 }
+
+/**
+ * The engagement kinds the builder knows, derived from the branches it actually has.
+ *
+ * Exported so the review route can validate a supplied kind against the same list, rather than
+ * letting an arbitrary string reach `buildScaffold` and silently take the 'advisory' fallback —
+ * which would propose the wrong folders while looking like it had worked.
+ */
+export const ENGAGEMENT_KINDS: readonly string[] = Object.keys(BASE_SECTIONS)
 
 /** The naming conventions this can actually produce. Anything else falls back to plain. */
 const KNOWN_CONVENTIONS = new Set(['numbered-hyphen', 'numbered-underscore', 'plain'])
@@ -161,7 +181,31 @@ export function unusedAnswers(answers: ScaffoldAnswers): Array<{ id: ScaffoldQue
  * Unanswered questions fall back to the safest structure rather than failing: a skipped question
  * should cost the user a folder they did not need, not the whole scaffold.
  */
-export function buildScaffold(answers: ScaffoldAnswers): ScaffoldFolder[] {
+/**
+ * The user's edits to a proposed tree, applied after it is built.
+ *
+ * Kept OUT of `ScaffoldAnswers` and applied deterministically here, because the server rebuilds
+ * the tree from the request and signs the result: anything the client cannot express as input to
+ * this function is a folder it could create without approval. Both sides run the same build, so
+ * the preview and the signed set are the same list by construction.
+ *
+ * `removed` holds top-level folder NAMES as the builder produced them, so a removal cannot
+ * accidentally match a folder the answers would not have made.
+ */
+export interface ScaffoldEdits {
+    /**
+     * Names to leave out of the built tree.
+     *
+     * Removal only — there is deliberately no way to ADD a folder here. The scaffold's job is to
+     * propose a structure and a naming convention; a folder the user invents has neither, and in
+     * practice it arrived numbered twice ("08-06-Handover"), positioned after "Internal", and
+     * described as "Added during setup" because there was nothing better to say. Making one
+     * folder by hand afterwards is trivial; getting the suggested structure right is not.
+     */
+    removed?: string[]
+}
+
+export function buildScaffold(answers: ScaffoldAnswers, edits?: ScaffoldEdits): ScaffoldFolder[] {
     // Every question also accepts a typed answer, which will not be one of the known values. An
     // unrecognised answer takes the same path as an unanswered one — the safe default — rather than
     // producing an empty or wrong tree. The text is not lost: it is shown on the preview, where the
@@ -172,24 +216,16 @@ export function buildScaffold(answers: ScaffoldAnswers): ScaffoldFolder[] {
     const sections = BASE_SECTIONS[kind]
     const tree: ScaffoldFolder[] = sections.map((s) => ({ ...s }))
 
-    // Review stages live INSIDE the folder holding what gets reviewed, not as siblings of it:
-    // "Draft" at the top level says nothing about what is in draft.
-    const deliverableFolder = tree.find((f) =>
-        ['Deliverables', 'Reporting', 'Handover'].includes(f.name))
-    if (deliverableFolder) {
-        if (answers.reviewStages === 'two-stage') {
-            deliverableFolder.children = [
-                { name: 'Draft', purpose: 'In progress, not yet reviewed' },
-                { name: 'In Review', purpose: 'With the partner for review' },
-                { name: 'Final', purpose: 'Approved and issued' },
-            ]
-        } else if (answers.reviewStages === 'single') {
-            deliverableFolder.children = [
-                { name: 'Draft', purpose: 'In progress' },
-                { name: 'Final', purpose: 'Reviewed and issued' },
-            ]
-        }
-    }
+    // NO Draft / In Review / Final FOLDERS, deliberately.
+    //
+    // The Board owns a deliverable's readiness, its review and who can see it. Stage folders are
+    // not a lighter version of that — they are a SECOND, fake record of the same state, one that
+    // nothing keeps in step. A file sitting in "Final" while the Board says in-review is a
+    // contradiction the product cannot resolve, and the folder is the one that is wrong.
+    //
+    // This used to be a question ("How do deliverables get reviewed?"), which read as though it
+    // configured the real workflow. Removed rather than reworded: the honest version of the
+    // question has no good answer, because the structure it offers should not exist.
 
     if (answers.workingPapers === 'yes') {
         tree.push({ name: 'Working Papers', purpose: 'Source data and workings, kept out of the deliverables' })
@@ -215,7 +251,14 @@ export function buildScaffold(answers: ScaffoldAnswers): ScaffoldFolder[] {
         ],
     })
 
-    return tree.map((folder, i) => ({
+    // REMOVALS APPLY BEFORE NUMBERING, so dropping the third folder renumbers the rest rather
+    // than leaving a gap at 03.
+    const removed = new Set((edits?.removed ?? []).map((n) => n.trim().toLowerCase()))
+    const edited = removed.size > 0
+        ? tree.filter((f) => !removed.has(f.name.trim().toLowerCase()))
+        : tree
+
+    return edited.map((folder, i) => ({
         ...folder,
         name: applyNaming(folder.name, i, answers.numbering),
     }))

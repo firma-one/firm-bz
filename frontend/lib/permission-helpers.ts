@@ -179,12 +179,19 @@ export async function checkProjectPermission(
 
   const project = findProjectInPermissions(settings.permissions, firmId, clientId, projectId)
 
+  // Every engagement role grants project:can_view, so a cached *denial* of it can only
+  // come from a stale cache (the in-memory UserSettingsPlus lives 30 min per process).
+  // Let that one case fall through to the DB check below instead of 404ing the
+  // engagement page until the user signs out and back in.
+  const isStaleViewDenialCandidate = scope === 'project' && privilege === 'can_view'
+
   if (project) {
     // project:can_edit is a distinct capability; check it directly
     if (scope === 'project' && privilege === 'can_edit') {
       return project.scopes['project']?.includes('can_edit') ?? false
     }
-    return project.scopes[scope]?.includes(privilege) ?? false
+    const allowed = project.scopes[scope]?.includes(privilege) ?? false
+    if (allowed || !isStaleViewDenialCandidate) return allowed
   }
 
   // Fallback: firm_admin has broad access within their firm (intentional).

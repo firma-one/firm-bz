@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useRef } from 'react'
+import { Brio } from '@/components/ui/brio'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Input } from '@/components/ui/input'
@@ -243,6 +244,13 @@ export function EngagementSettingsForm({
                             disabled={disabled}
                             className={textareaCls}
                         />
+                        {/* Same note as the New Engagement form. This is where a description
+                            actually gets improved — after someone has seen a vague answer and
+                            come looking for the reason. */}
+                        <p className="mt-1 text-[10px] leading-snug text-[#6b6d73]">
+                            <Brio className="text-[10px]" /> uses this for context when answering
+                            questions about this engagement.
+                        </p>
                     </div>
                 </div>
 

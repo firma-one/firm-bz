@@ -28,9 +28,12 @@ describe('the capability boundary', () => {
         }
     })
 
-    it('permits exactly rename, move and create-folder', () => {
+    it('permits exactly rename, move, create-folder and create-file', () => {
+        // Widening this list is a deliberate act, which is why the assertion is exhaustive
+        // rather than a `toContain`. `create-file` was added for the scaffold's firm templates:
+        // a file the user did not want is deleted in one click, and nothing existing is touched.
         expect([...PERMITTED_AGENT_OPERATIONS].sort())
-            .toEqual(['create-folder', 'move', 'rename'])
+            .toEqual(['create-file', 'create-folder', 'move', 'rename'])
     })
 
     /** Nothing destructive may creep onto the permitted list. */
@@ -141,7 +144,7 @@ describe('the scaffold cannot produce a reserved name', () => {
             for (const numbering of ['numbered-hyphen', 'numbered-underscore', 'plain']) {
                 const folders = flattenScaffold(buildScaffold({
                     engagementKind: kind, numbering,
-                    reviewStages: 'two-stage', workingPapers: 'yes',
+                    workingPapers: 'yes',
                 }))
                 for (const f of folders) expect(f.name.startsWith('.')).toBe(false)
             }

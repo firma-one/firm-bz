@@ -35,6 +35,18 @@ const PENALTY: Record<FindingKind, { per: number; cap: number }> = {
     'flat-folder': { per: 6, cap: 12 },
     // Often deliberate — a firm may genuinely file by year, client and phase.
     'deep-nesting': { per: 2, cap: 10 },
+    /**
+     * Costs NOTHING, deliberately.
+     *
+     * This score is the Folder Health ring on Overview, and it measures hygiene: things that are
+     * wrong with the tree as it stands. A folder that a given kind of engagement usually has is
+     * advice, not a defect — a firm may have good reason not to keep one, and docking their score
+     * for declining a suggestion would make the number an opinion rather than a measurement.
+     *
+     * It still SURFACES (see KIND_WEIGHT) and is still proposable. It just does not move a score
+     * that every engagement already has.
+     */
+    'missing-folder': { per: 0, cap: 0 },
 }
 
 export interface OrganizationIssue {
@@ -77,6 +89,8 @@ function labelFor(kind: FindingKind, count: number): string {
             return `${count} file${s} named differently from the rest of their folder`
         case 'loose-at-root':
             return `${count} file${s} sitting outside any folder`
+        case 'missing-folder':
+            return `${count} folder${s} this kind of engagement usually has`
         case 'flat-folder':
             return `${count} file${s} crowded into one folder (more than ${FLAT_FOLDER_THRESHOLD})`
         case 'deep-nesting':
@@ -177,7 +191,18 @@ export function renderAssessment(assessment: OrganizationAssessment): string {
  * works for any later answer that reports the same few fields across several rows, and does not
  * require a new component each time the agent has something structured to say.
  */
-export function assessmentMarkdown(a: OrganizationAssessment): string {
+/**
+ * The summary line, optionally naming folders the engagement is missing.
+ *
+ * `missing` is passed in rather than read off the assessment because it is not part of the
+ * hygiene score — it costs nothing (see PENALTY) and is computed from the engagement kind, which
+ * the assessment never sees. Without it a tree whose only gap is a missing folder would say
+ * "Nothing to fix" while simultaneously proposing folders to create.
+ */
+export function assessmentMarkdown(
+    a: OrganizationAssessment,
+    missing: readonly { name: string; purpose: string; parentPath?: string }[] = [],
+): string {
     const lines = [
         `Reviewed **${a.fileCount} files** in **${a.folderCount} folders**.`,
         '',
@@ -196,7 +221,19 @@ export function assessmentMarkdown(a: OrganizationAssessment): string {
     if (a.issues.length > 0) {
         lines.push('', 'Worth fixing:')
         for (const issue of a.issues) lines.push(`- ${issue.label}`)
-    } else {
+    }
+
+    // Listed apart from the issues above, because they are a different kind of statement: those
+    // are defects in the tree, these are folders this kind of work usually keeps. A firm may have
+    // good reason to decline one, which is not true of a duplicate.
+    if (missing.length > 0) {
+        lines.push('', 'Folders this kind of engagement usually has:')
+        for (const m of missing) {
+            lines.push(`- "${m.parentPath ? `${m.parentPath}/${m.name}` : m.name}" — ${m.purpose}`)
+        }
+    }
+
+    if (a.issues.length === 0 && missing.length === 0) {
         lines.push('', 'Nothing to fix.')
     }
     return lines.join('\n')

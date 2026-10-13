@@ -8,7 +8,11 @@ import { resolveGroupId } from '@/lib/billing/billing-group'
 import { runFilesReview } from '@/lib/ai/files-agent/run'
 import { canAffordRun, estimateRunCredits } from '@/lib/ai/files-agent/budget'
 import { buildFilesSuggestions } from '@/lib/ai/files-suggestions'
+import { ENGAGEMENT_KINDS } from '@/lib/ai/files-agent/scaffold'
 import { issueApprovalToken } from '@/lib/ai/files-agent/approval'
+import { resolveEngagementConnector } from '@/lib/connectors/resolve-client-connector'
+import { getStorageAdapter } from '@/lib/connectors/registry'
+import { readScaffoldFingerprint, readEngagementKind, writeEngagementKind } from '@/lib/connectors/pockett-structure.service'
 import type { FileNode } from '@/lib/ai/files-agent/analyze'
 import { logger } from '@/lib/logger'
 
@@ -147,9 +151,55 @@ export async function POST(
             select: { connectorRootFolderId: true },
         })
 
+        // A kind the user has just told us, from the question the panel asks when none is
+        // stored. Validated against the interview's own options so an arbitrary string cannot
+        // reach `buildScaffold` and silently fall back to 'advisory'.
+        const supplied = await request.json().catch(() => null) as { engagementKind?: unknown } | null
+        const suppliedKind = typeof supplied?.engagementKind === 'string'
+            && ENGAGEMENT_KINDS.includes(supplied.engagementKind)
+            ? supplied.engagementKind
+            : null
+
+        // What kind of engagement this is, so the review can judge COMPLETENESS and not only
+        // hygiene. Read from the scaffold's own answers first — a scaffolded engagement already
+        // said — then from the standalone mark a previous review wrote.
+        //
+        // Best effort: an unreachable connector costs the missing-folder findings, not the review.
+        let engagementKind: string | null = null
+        if (engagement?.connectorRootFolderId) {
+            try {
+                const connector = await resolveEngagementConnector(projectId)
+                if (connector) {
+                    const adapter = await getStorageAdapter(connector.id)
+                    const scaffold = await readScaffoldFingerprint(
+                        adapter, connector.id, engagement.connectorRootFolderId,
+                    )
+                    engagementKind = scaffold?.answers?.engagementKind
+                        ?? (await readEngagementKind(
+                            adapter, connector.id, engagement.connectorRootFolderId,
+                        ))?.value
+                        ?? null
+
+                    // Just answered: record it so the next review does not ask again. Written
+                    // under its own key, never into the scaffold mark — that one means "Brio
+                    // built this tree" and is what the one-scaffold guard reads.
+                    if (!engagementKind && suppliedKind) {
+                        engagementKind = suppliedKind
+                        await writeEngagementKind(
+                            adapter, connector.id, engagement.connectorRootFolderId,
+                            { value: suppliedKind, at: new Date().toISOString(), source: 'review' },
+                        )
+                    }
+                }
+            } catch (error) {
+                logger.warn('[files-agent] could not read engagement kind', { error: String(error) })
+            }
+        }
+
         const result = await runFilesReview({
             nodes,
             rootId: engagement?.connectorRootFolderId ?? null,
+            engagementKind,
             scope: { firmId: ctx.orgId, userId: user.id, feature: 'filesAgent' as const },
         })
 
@@ -175,6 +225,9 @@ export async function POST(
                 proposals: result.proposals,
                 token,
                 nodeCount: nodes.length,
+                // So the panel can ask once, and only when asking would change the answer. A
+                // review still runs without it — it just judges hygiene and not completeness.
+                needsEngagementKind: !engagementKind,
                 // Computed from the same tree the review ran on, so the chips offer questions the
                 // assistant can actually answer about these files rather than generic engagement
                 // prompts. Free: the analysis is already done.

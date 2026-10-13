@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-    SCAFFOLD_QUESTIONS, buildScaffold, flattenScaffold, applyNaming, unusedAnswers, scaffoldProposals,
-} from './scaffold'
+    SCAFFOLD_QUESTIONS, buildScaffold, flattenScaffold, applyNaming, unusedAnswers, scaffoldProposals, ENGAGEMENT_KINDS, type ScaffoldEdits, type ScaffoldAnswers} from './scaffold'
 
 describe('SCAFFOLD_QUESTIONS', () => {
     /** Past five, people stop reading and click the first option. */
@@ -51,23 +50,26 @@ describe('buildScaffold', () => {
         expect(names({})).toContain('Deliverables')
     })
 
-    /** "Draft" at the top level says nothing about what is in draft. */
-    it('nests review stages inside the deliverable folder', () => {
-        const tree = buildScaffold({ engagementKind: 'advisory', reviewStages: 'two-stage' })
-        expect(tree.map((f) => f.name)).not.toContain('Draft')
-        const deliverables = tree.find((f) => f.name === 'Deliverables')
-        expect(deliverables?.children?.map((c) => c.name)).toEqual(['Draft', 'In Review', 'Final'])
+    /**
+     * The Board owns a deliverable's readiness, review and access. Stage folders would be a
+     * second, unsynchronised record of the same state — a file in "Final" while the Board says
+     * in-review is a contradiction nothing resolves.
+     */
+    it('never creates Draft, In Review or Final folders, whatever is asked for', () => {
+        for (const kind of ENGAGEMENT_KINDS) {
+            const all = flattenScaffold(buildScaffold({ engagementKind: kind }))
+                .map((f) => f.name.toLowerCase())
+            expect(all).not.toContain('draft')
+            expect(all).not.toContain('in review')
+            expect(all).not.toContain('final')
+        }
     })
 
-    it('nests review stages under Reporting for an audit', () => {
-        const tree = buildScaffold({ engagementKind: 'audit', reviewStages: 'single' })
-        expect(tree.find((f) => f.name === 'Reporting')?.children?.map((c) => c.name))
-            .toEqual(['Draft', 'Final'])
-    })
-
-    it('adds no review folders when there is no review stage', () => {
-        const tree = buildScaffold({ engagementKind: 'advisory', reviewStages: 'none' })
+    it('leaves the deliverable folder with no stage children', () => {
+        const tree = buildScaffold({ engagementKind: 'advisory' })
         expect(tree.find((f) => f.name === 'Deliverables')?.children).toBeUndefined()
+        expect(buildScaffold({ engagementKind: 'audit' })
+            .find((f) => f.name === 'Reporting')?.children).toBeUndefined()
     })
 
     it('adds Working Papers only when asked for', () => {
@@ -99,17 +101,17 @@ describe('buildScaffold', () => {
 describe('flattenScaffold', () => {
     /** Children must never be created before the parent they go in. */
     it('lists parents before their children', () => {
-        const flat = flattenScaffold(buildScaffold({ reviewStages: 'two-stage' }))
-        const parent = flat.findIndex((f) => f.path === 'Deliverables')
-        const child = flat.findIndex((f) => f.path === 'Deliverables/Draft')
+        const flat = flattenScaffold(buildScaffold({}))
+        const parent = flat.findIndex((f) => f.path === 'Internal')
+        const child = flat.findIndex((f) => f.path === 'Internal/Admin')
         expect(parent).toBeGreaterThanOrEqual(0)
         expect(child).toBeGreaterThan(parent)
     })
 
     it('records the parent path, null at the top', () => {
-        const flat = flattenScaffold(buildScaffold({ reviewStages: 'single' }))
-        expect(flat.find((f) => f.path === 'Deliverables')?.parentPath).toBeNull()
-        expect(flat.find((f) => f.path === 'Deliverables/Draft')?.parentPath).toBe('Deliverables')
+        const flat = flattenScaffold(buildScaffold({}))
+        expect(flat.find((f) => f.path === 'Internal')?.parentPath).toBeNull()
+        expect(flat.find((f) => f.path === 'Internal/Admin')?.parentPath).toBe('Internal')
     })
 
     it('gives every folder a purpose to show in the preview', () => {
@@ -142,7 +144,7 @@ describe('typed answers', () => {
 
     it('builds a usable tree when every answer is typed', () => {
         const tree = buildScaffold({
-            engagementKind: 'a', reviewStages: 'c', workingPapers: 'd', numbering: 'e',
+            engagementKind: 'a', workingPapers: 'd', numbering: 'e',
         })
         expect(tree.length).toBeGreaterThan(0)
         expect(flattenScaffold(tree).length).toBeGreaterThan(0)
@@ -161,7 +163,7 @@ describe('unusedAnswers', () => {
 
     it('reports nothing when every answer is a known option', () => {
         expect(unusedAnswers({
-            engagementKind: 'audit', reviewStages: 'single',
+            engagementKind: 'audit',
             workingPapers: 'yes', numbering: 'plain',
         })).toEqual([])
     })
@@ -186,10 +188,10 @@ describe('scaffoldProposals', () => {
     /** The folders do not exist yet, so the path is what fixes where each one lands. */
     it('signs the parent path, since there are no ids yet', () => {
         const folders = flattenScaffold(buildScaffold({
-            engagementKind: 'advisory', reviewStages: 'two-stage',
+            engagementKind: 'advisory',
         }))
-        const draft = scaffoldProposals(folders).find((p) => p.name === 'Draft')
-        expect(draft?.parentId).toBe('Deliverables')
+        const nested = scaffoldProposals(folders).find((p) => p.name === 'Admin')
+        expect(nested?.parentId).toBe('Internal')
     })
 
     /** A different answer set must not verify against a token signed for another. */
@@ -197,5 +199,75 @@ describe('scaffoldProposals', () => {
         const a = scaffoldProposals(flattenScaffold(buildScaffold({ engagementKind: 'advisory' })))
         const b = scaffoldProposals(flattenScaffold(buildScaffold({ engagementKind: 'audit' })))
         expect(a.map((p) => p.name)).not.toEqual(b.map((p) => p.name))
+    })
+})
+
+describe('product or platform build', () => {
+    it('produces one ordered tree of phases, not two trees glued together', () => {
+        const names = flattenScaffold(buildScaffold({ engagementKind: 'product' }))
+            .filter((f) => !f.parentPath)
+            .map((f) => f.name)
+        // Research, specify, build, hand over — the sequence the work actually follows. This is
+        // the case the four original kinds forced into either advisory or implementation,
+        // losing half the structure each way.
+        expect(names).toEqual([
+            'Discovery', 'Requirements', 'Design', 'Build', 'Testing', 'Handover', 'Internal',
+        ])
+    })
+
+    it('puts no stage folders under Handover', () => {
+        const all = flattenScaffold(buildScaffold({ engagementKind: 'product' }))
+        expect(all.filter((f) => f.parentPath === 'Handover')).toEqual([])
+    })
+
+    it('is a kind the review route will accept', () => {
+        // ENGAGEMENT_KINDS derives from the builder's own branches, so a kind that builds a tree
+        // can never be rejected as invalid by the route that validates against it.
+        expect(ENGAGEMENT_KINDS).toContain('product')
+    })
+})
+
+describe('scaffold edits', () => {
+    const names = (a: ScaffoldAnswers, e?: ScaffoldEdits) =>
+        buildScaffold(a, e).map((f) => f.name)
+
+    it('leaves out a removed folder and renumbers the rest', () => {
+        const before = names({ engagementKind: 'product', numbering: 'numbered-underscore' })
+        expect(before).toContain('03_Design')
+
+        const after = names(
+            { engagementKind: 'product', numbering: 'numbered-underscore' },
+            { removed: ['Design'] },
+        )
+        expect(after).not.toContain('03_Design')
+        // Renumbered, not left with a gap at 03.
+        expect(after).toContain('03_Build')
+        expect(after.length).toBe(before.length - 1)
+    })
+
+    it('ignores an unknown edit rather than acting on it', () => {
+        // Removal only, deliberately. An invented folder has neither the structure nor the naming
+        // convention the scaffold exists to supply — in practice it came out numbered twice
+        // ("08-06-Handover") and described as "Added during setup". One folder made by hand
+        // afterwards is trivial; a good suggested structure is not.
+        //
+        // This guards the SERVER: the route parses edits from a request, so a stale client
+        // sending `added` must change nothing rather than create an unsigned folder.
+        const stale = JSON.parse('{"added":["Legal Review"]}') as ScaffoldEdits
+        expect(names({ engagementKind: 'advisory' }, stale))
+            .toEqual(names({ engagementKind: 'advisory' }))
+    })
+
+    it('matches a removal whatever naming convention is in play', () => {
+        for (const numbering of ['numbered-hyphen', 'numbered-underscore', 'plain']) {
+            const after = names({ engagementKind: 'advisory', numbering }, { removed: ['Research'] })
+            expect(after.some((n) => n.toLowerCase().includes('research'))).toBe(false)
+        }
+    })
+
+    it('can empty the tree, which the caller is expected to catch', () => {
+        const all = buildScaffold({ engagementKind: 'retainer' }).map((f) =>
+            f.name.replace(/^\d{1,2}[._\-)]*\s*/, ''))
+        expect(buildScaffold({ engagementKind: 'retainer' }, { removed: all })).toEqual([])
     })
 })

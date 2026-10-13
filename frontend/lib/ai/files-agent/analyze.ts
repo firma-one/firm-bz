@@ -40,11 +40,27 @@ export type FindingKind =
     | 'flat-folder'
     | 'deep-nesting'
     | 'loose-at-root'
+    /**
+     * A folder this kind of engagement should have, which is not there.
+     *
+     * The only finding that is not about hygiene. The others judge the tree against ITSELF —
+     * are these names consistent, is anything duplicated — which cannot see that a GTM
+     * engagement has no legal review folder. This one judges it against what the work needs,
+     * which is why it is the only finding that requires knowing the engagement kind.
+     */
+    | 'missing-folder'
 
 export interface Finding {
     kind: FindingKind
-    /** Files this finding is about. Always non-empty. */
+    /**
+     * Files this finding is about.
+     *
+     * Empty ONLY for `missing-folder`, whose subject is a folder that does not exist and
+     * therefore has no node. Every other finding names real files.
+     */
     nodes: FileNode[]
+    /** For `missing-folder`: the folder to create, and why. */
+    missing?: { name: string; purpose: string; parentPath?: string }
     /** Folder the finding sits in, when it is folder-scoped. */
     folderId?: string | null
     /**
@@ -330,6 +346,99 @@ function detectDeepNesting(nodes: FileNode[]): Finding[] {
  * is how it starts, not a problem.
  */
 /**
+ * A folder name reduced to the words in it, for comparing "the same folder" across conventions.
+ *
+ * `01_Planning`, `01-Planning`, `1. Planning` and `Planning` are one folder under four naming
+ * schemes, and the scheme is a user choice the scaffold itself offers. Comparing raw names would
+ * make every one of those look like a folder that does not exist yet — and since the only thing
+ * this feeds is "should we create it", a false negative creates a DUPLICATE folder that the agent
+ * is forbidden to clean up afterwards.
+ *
+ * So: drop a leading number and its separator, fold separators to single spaces, and lowercase.
+ * What remains is the words, which is the part a human means when they say two folders are the
+ * same one.
+ */
+export function folderNameKey(name: string): string {
+    return name
+        .trim()
+        // A leading "01_", "1.", "02 - " and so on.
+        //
+        // The digits must be FOLLOWED by a real separator, which is what keeps a folder genuinely
+        // called "2024 Returns" intact: bounding to two digits is not enough on its own, since
+        // that alone turns "2024 Returns" into "24 Returns" and makes two different folders look
+        // like neither. Either a punctuation separator (with any spaces around it) or whitespace
+        // before more text.
+        .replace(/^\d{1,2}\s*[._\-)]+\s*|^\d{1,2}\s+(?=\S)/, '')
+        .replace(/[_\-]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toLowerCase()
+}
+
+/** Whether any existing folder is the one `expected` describes, whatever convention it uses. */
+export function hasFolderNamed(
+    expected: string,
+    folders: readonly FileNode[],
+    parentId?: string | null,
+): boolean {
+    const want = folderNameKey(expected)
+    if (!want) return true // An empty expectation is satisfied by anything; never propose it.
+    return folders.some((f) =>
+        (parentId === undefined || f.parentId === parentId)
+        && folderNameKey(f.fileName) === want)
+}
+
+/**
+ * Folders the engagement should have and does not.
+ *
+ * Takes the EXPECTED tree rather than deriving it, so the shape a review proposes and the shape a
+ * scaffold creates come from one builder (`buildScaffold`) and cannot drift apart.
+ *
+ * Only top-level folders and the children of folders that exist. A missing parent is reported on
+ * its own: proposing "Deliverables/Draft" beside a missing "Deliverables" asks the user to approve
+ * a folder whose home does not exist yet, and creating the parent may be all they wanted.
+ */
+export function detectMissingFolders(
+    nodes: readonly FileNode[],
+    expected: readonly { name: string; purpose: string; children?: readonly { name: string; purpose: string }[] }[],
+    rootId: string | null,
+): Finding[] {
+    const folders = nodes.filter((n) => n.isFolder)
+    // Nothing at all: this is a scaffold, not a review. Reporting twenty missing folders as
+    // twenty findings would bury the one thing worth saying, which the empty-tree path says
+    // better.
+    if (folders.length === 0) return []
+
+    const findings: Finding[] = []
+    for (const want of expected) {
+        const match = folders.find((f) =>
+            f.parentId === rootId && folderNameKey(f.fileName) === folderNameKey(want.name))
+        if (!match) {
+            findings.push({
+                kind: 'missing-folder',
+                nodes: [],
+                folderId: rootId,
+                missing: { name: want.name, purpose: want.purpose },
+                score: 0,
+            })
+            continue
+        }
+        for (const child of want.children ?? []) {
+            if (!hasFolderNamed(child.name, folders, match.externalId)) {
+                findings.push({
+                    kind: 'missing-folder',
+                    nodes: [],
+                    folderId: match.externalId,
+                    missing: { name: child.name, purpose: child.purpose, parentPath: match.fileName },
+                    score: 0,
+                })
+            }
+        }
+    }
+    return findings
+}
+
+/**
  * The top of the tree AS THE DATA ACTUALLY HAS IT.
  *
  * `connectorRootFolderId` is the engagement's root in the PROVIDER's numbering, and on real data it
@@ -391,6 +500,10 @@ function detectLooseAtRoot(nodes: FileNode[], rootId: string | null): Finding[] 
 const KIND_WEIGHT: Record<FindingKind, number> = {
     'duplicate-name': 100,
     'naming-inconsistent': 80,
+    // Above the cosmetic findings: a folder that should exist and does not is a gap in how the
+    // work is filed, not an untidy name. Below duplicates and naming, which are certain — this
+    // one is advice about the engagement, and advice can be wrong where a duplicate cannot.
+    'missing-folder': 70,
     'loose-at-root': 60,
     'flat-folder': 40,
     'deep-nesting': 20,

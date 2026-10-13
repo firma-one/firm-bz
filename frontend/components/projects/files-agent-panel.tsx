@@ -5,6 +5,7 @@ import { AlertCircle, Check, Loader2, Sparkles } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
 import { proposalKey, type Proposal } from '@/lib/ai/files-agent/tools'
 import { AgentPromptCard, type AgentPromptOption } from '@/components/ui/agent-prompt-card'
+import { SCAFFOLD_QUESTIONS } from '@/lib/ai/files-agent/scaffold'
 import { ChatMarkdown } from '@/components/ui/chat-markdown'
 import { ElapsedTime } from '@/components/ui/elapsed-time'
 import type { AnalysisSummary } from '@/lib/ai/files-agent/analyze'
@@ -29,6 +30,15 @@ interface Finding {
     files: Array<{ externalId: string; fileName: string; docId: string | null }>
 }
 
+/**
+ * The engagement-kind question, taken from the setup interview rather than written again.
+ *
+ * Setting up and reviewing are one capability from two starting points, so they must ask this the
+ * same way and accept the same answers — a second copy would drift from the builder's own
+ * branches and start offering kinds that produce no folders.
+ */
+const ENGAGEMENT_KIND_QUESTION = SCAFFOLD_QUESTIONS.find((q) => q.id === 'engagementKind')!
+
 export interface ReviewData {
     findings: Finding[]
     proposals: Proposal[]
@@ -41,6 +51,14 @@ export interface ReviewData {
     dropped: number
     truncated: boolean
     estimate: number
+    /**
+     * True when nobody has told us what kind of engagement this is.
+     *
+     * It is the one input no detector can measure, and the one that decides which folders SHOULD
+     * exist. The review still ran without it — on hygiene alone — so this is an offer to look
+     * deeper, not an error.
+     */
+    needsEngagementKind?: boolean
 }
 
 
@@ -335,7 +353,7 @@ export function FilesAgentPanel({
     const [outcome, setOutcome] = useState<{ ok: boolean; message: string } | null>(null)
     const [error, setError] = useState<string | null>(null)
 
-    const runReview = useCallback(async () => {
+    const runReview = useCallback(async (engagementKind?: string) => {
         if (!token) {
             setError('Your session has expired. Reload the page and try again.')
             return
@@ -349,8 +367,14 @@ export function FilesAgentPanel({
         try {
             const res = await fetch(`/api/projects/${projectId}/files-agent`, {
                 method: 'POST',
-                headers: { Authorization: `Bearer ${token}` },
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
                 credentials: 'include',
+                // Sent only when the user has just answered. The server persists it, so this
+                // happens once per engagement rather than on every review.
+                body: JSON.stringify(engagementKind ? { engagementKind } : {}),
             })
             const body = await res.json().catch(() => ({}))
             if (!res.ok) {
@@ -537,12 +561,12 @@ export function FilesAgentPanel({
                     type="button"
                     onClick={() => void runReview()}
                     disabled={state === 'reviewing' || !token}
-                    title="Check this engagement's files for inconsistent naming, duplicates and files in the wrong place — then propose fixes for you to approve."
+                    title="Check this engagement's folders and files — inconsistent naming, duplicates, files in the wrong place, and folders this kind of work usually has — then propose fixes for you to approve."
                     className="inline-flex max-w-full shrink-0 items-center gap-1.5 truncate rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-white transition-all hover:brightness-105 disabled:opacity-60"
                 >
                     {state === 'reviewing'
                         ? <><Loader2 className="h-3 w-3 shrink-0 animate-spin" /> Reviewing…</>
-                        : <><Sparkles className="h-3 w-3 shrink-0" /> Review file organization</>}
+                        : <><Sparkles className="h-3 w-3 shrink-0" /> Review folder organization</>}
                 </button>
                 {error && <p className="w-full px-0.5 text-xs text-red-600">{error}</p>}
             </>
@@ -566,6 +590,33 @@ export function FilesAgentPanel({
                 answer — and has no close button, because a turn in a conversation is not something
                 you dismiss. Only the questions and the result of acting on them live in this
                 panel, which is the part that is a control rather than a record. */}
+
+            {/* THE ONE THING NO DETECTOR CAN MEASURE.
+                Every other finding compares the tree against itself — are these names
+                consistent, is anything duplicated. Whether a folder is MISSING depends on what
+                kind of work this is, and nothing in a file tree says that.
+
+                Asked after the review rather than before it, and only when nobody has said:
+                hygiene is worth reporting on its own, so a user who ignores this still gets the
+                review they asked for. Answering re-runs it, and the server remembers, so this
+                appears once per engagement. */}
+            {review.needsEngagementKind && !outcome && (
+                <AgentPromptCard
+                    question="What kind of engagement is this?"
+                    options={ENGAGEMENT_KIND_QUESTION.options}
+                    answer={undefined}
+                    disabled={state === 'reviewing'}
+                    onAnswer={(value) => void runReview(value)}
+                    dismissLabel="Not now"
+                    onDismiss={() => setReview({ ...review, needsEngagementKind: false })}
+                />
+            )}
+            {review.needsEngagementKind && !outcome && (
+                <p className="text-[10px] leading-relaxed text-gray-400">
+                    Brio will check for folders this kind of work usually keeps. Nothing is created
+                    without your approval.
+                </p>
+            )}
 
             {/* Stated BEFORE the first question, not after the last.
                 Answering is now what commits the change, so the consequence has to be on screen

@@ -1,6 +1,8 @@
 "use client"
 
 import Link from 'next/link'
+import { useState } from 'react'
+import { refreshAccessAndNavigate } from '@/lib/navigation/refresh-access-and-navigate'
 import { usePathname } from 'next/navigation'
 import { MapPinOff, Home, ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -14,6 +16,7 @@ export default function NotFound() {
     const groupSlug = match?.[1]
     const firmSlug = match?.[2]
     const dashboardHref = groupSlug && firmSlug ? `/d/${groupSlug}/f/${firmSlug}` : '/d'
+    const [refreshing, setRefreshing] = useState(false)
 
     return (
         <div className="flex h-[80vh] flex-col items-center justify-center text-center px-4 w-full">
@@ -47,9 +50,21 @@ export default function NotFound() {
                 </Button>
 
                 <Button asChild variant="blackCta">
-                    <Link href={dashboardHref} className="flex items-center">
+                    <Link
+                        href={dashboardHref}
+                        aria-disabled={refreshing}
+                        onClick={(e) => {
+                            // Refresh the JWT + permission cache first: a stale cache can 404
+                            // a page the user does have access to (same fix as re-signing in).
+                            e.preventDefault()
+                            if (refreshing) return
+                            setRefreshing(true)
+                            void refreshAccessAndNavigate(dashboardHref)
+                        }}
+                        className="flex items-center"
+                    >
                         <Home className="mr-2 h-4 w-4" />
-                        Go to Dashboard
+                        {refreshing ? 'Refreshing access…' : 'Go to Dashboard'}
                     </Link>
                 </Button>
             </div>

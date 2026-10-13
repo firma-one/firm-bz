@@ -28,8 +28,16 @@
  * Pure and dependency-free: imported by the tool definitions, the apply route and their tests.
  */
 
-/** Every operation the agent may perform. Adding one is a deliberate change to this list. */
-export const PERMITTED_AGENT_OPERATIONS = ['rename', 'move', 'create-folder'] as const
+/**
+ * Every operation the agent may perform. Adding one is a deliberate change to this list.
+ *
+ * `create-file` was added for the scaffold's project-management templates, and it meets the
+ * reversibility test the same way `create-folder` does: a file the user did not want is deleted
+ * in one click, and nothing that existed before is touched. It is NOT a licence to write over
+ * anything — `overwrite` and `replace` remain forbidden below, and the safe-op refuses a name
+ * that is already taken rather than replacing its contents.
+ */
+export const PERMITTED_AGENT_OPERATIONS = ['rename', 'move', 'create-folder', 'create-file'] as const
 
 export type PermittedAgentOperation = typeof PERMITTED_AGENT_OPERATIONS[number]
 
