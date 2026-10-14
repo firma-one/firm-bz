@@ -74,6 +74,7 @@ export function AgentPromptCard({
     onDismiss,
     dismissLabel,
     onSkip,
+    skipHint,
     freeTextLabel = 'Something else',
     freeTextPlaceholder = 'Type your answer',
 }: {
@@ -107,6 +108,17 @@ export function AgentPromptCard({
      */
     dismissLabel?: string
     onSkip?: () => void
+    /**
+     * What skipping does, shown on hover.
+     *
+     * Supplied by the caller because Skip means opposite things in the two sequences: the file
+     * review DECLINES the change, while the scaffold interview takes the RECOMMENDED answer. One
+     * hardcoded sentence would be wrong in one of them.
+     *
+     * Worth saying at all because a sequence moves forward only — there is no way back to a
+     * question once it is answered — and "Skip" sounds deferrable rather than final.
+     */
+    skipHint?: string
     freeTextLabel?: string
     freeTextPlaceholder?: string
 }) {
@@ -332,6 +344,11 @@ export function AgentPromptCard({
                                     type="button"
                                     onClick={onSkip}
                                     disabled={disabled}
+                                    // The consequence stated BEFORE the click, not recovered from
+                                    // afterwards. A sequence only moves forward, so skipping is
+                                    // final — and "Skip" reads as deferrable, which is the gap
+                                    // this closes.
+                                    title={skipHint}
                                     className="rounded-lg border border-gray-200 px-3.5 py-1.5 text-[11px] text-gray-600 transition-colors hover:border-gray-300 hover:bg-gray-50 hover:text-gray-900 disabled:opacity-50"
                                 >
                                     Skip
