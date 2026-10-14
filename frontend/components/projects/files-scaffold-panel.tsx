@@ -252,6 +252,10 @@ export function FilesScaffoldPanel({
                         // the exit vanish after question one left the only way out as answering
                         // every remaining question.
                         onSkip={() => answer(q.id, recommendedValue(q))}
+                        // NOT "leaves it unanswered": skipping takes the recommended option, so
+                        // the tree is still buildable. Saying so is the difference between a user
+                        // thinking they declined and knowing they delegated.
+                        skipHint="Uses the recommended answer. You cannot return to this question."
                         onDismiss={onClose}
                         // Worded as a decision, not as closing a window: "Not now" answers the
                         // question the user is actually asking themselves at this point.

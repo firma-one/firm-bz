@@ -394,10 +394,6 @@ export function FilesAgentPanel({
         }
     }, [projectId, token, onThreadTurn])
 
-    const decide = useCallback((key: string, value: string) => {
-        setDecisions((prev) => ({ ...prev, [key]: value }))
-    }, [])
-
 
     const apply = useCallback(async (finalDecisions: Record<string, string>) => {
         if (!review?.token || !token) return
@@ -652,7 +648,14 @@ export function FilesAgentPanel({
                         answer={decisions[key] ?? undefined}
                         disabled={state === 'applying'}
                         onAnswer={(value) => answerProposal(p, value)}
-                        onSkip={() => decide(key, DECLINE)}
+                        // Through `answerProposal`, NOT `decide`. Declining is an answer, and
+                        // routing it around the normal path cost two things: the exchange never
+                        // reached the thread, so a skipped file left no trace and the next
+                        // question's answer read as though it belonged to the skipped one; and
+                        // `apply()` is triggered from there, so skipping the LAST proposal left
+                        // the whole batch silently unapplied.
+                        onSkip={() => answerProposal(p, DECLINE)}
+                        skipHint="Leaves this file as it is. You cannot return to it."
                         // A way out of the whole run, not just this file. Skip declines ONE
                         // change; someone who has seen enough should not have to decline each
                         // remaining file individually to get their panel back.
