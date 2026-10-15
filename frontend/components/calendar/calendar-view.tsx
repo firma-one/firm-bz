@@ -9,9 +9,11 @@ import type { EventClickArg, EventContentArg, EventInput } from '@fullcalendar/c
 import { CalendarSidebar } from './calendar-sidebar'
 import { CalendarEventDetailModal } from './calendar-event-detail-modal'
 import { getFirmCalendarData, type CalendarData, type CalendarEvent, type CalendarEventType } from '@/lib/actions/calendar'
-import { getEngagementColorHex } from '@/lib/calendar/engagement-color'
-import { Loader2, Briefcase, Layers, FileText } from 'lucide-react'
+import { getEngagementTagColor } from '@/lib/calendar/engagement-color'
+import { Briefcase, ChevronLeft, ChevronRight, FileText, Layers, RefreshCw } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { Button } from '@/components/ui/button'
+import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { cn } from '@/lib/utils'
 import './calendar-view.css'
 
@@ -43,6 +45,14 @@ const EVENT_TYPE_SORT_ORDER: Record<CalendarEventType, number> = {
   followUp: 2,
 }
 
+/** The view switcher, Notion Calendar style. "Agenda" is FullCalendar's list-week view. */
+const VIEWS = [
+  { type: 'dayGridMonth', label: 'Month' },
+  { type: 'timeGridWeek', label: 'Week' },
+  { type: 'timeGridDay', label: 'Day' },
+  { type: 'listWeek', label: 'Agenda' },
+] as const
+
 function eventFullName(event: CalendarEvent): string {
   return event.documentName ?? event.engagementName
 }
@@ -63,11 +73,11 @@ function renderEventContent(arg: EventContentArg, eventsById: Map<string, Calend
         </div>
       </TooltipTrigger>
       <TooltipContent variant="light" side="top" className="max-w-[240px]">
-        <div className="flex items-center gap-1.5 text-[#8a8d94]">
+        <div className="flex items-center gap-1.5 text-fg-subtle">
           <Icon className="h-3.5 w-3.5 shrink-0" />
-          <span className="text-xs font-medium uppercase tracking-wide">{label}</span>
+          <span className="text-caption">{label}</span>
         </div>
-        <div className="mt-1 font-medium text-[#1b1b1d]">{name}</div>
+        <div className="mt-1 font-medium text-fg">{name}</div>
       </TooltipContent>
     </Tooltip>
   )
@@ -85,6 +95,10 @@ export function CalendarView({ firmSlug }: CalendarViewProps) {
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null)
   const hasLoadedOnce = useRef(false)
   const calendarRef = useRef<FullCalendar>(null)
+  // Mirrors FullCalendar's current range for the React toolbar (headerToolbar is off).
+  const [title, setTitle] = useState('')
+  const [viewType, setViewType] = useState<string>('dayGridMonth')
+  const calendarApi = () => calendarRef.current?.getApi()
 
   const loadData = useCallback(async () => {
     if (hasLoadedOnce.current) setIsRefreshing(true)
@@ -128,15 +142,16 @@ export function CalendarView({ firmSlug }: CalendarViewProps) {
     return data.events
       .filter((e) => visibleEngagementIds.has(e.engagementId))
       .map((e) => {
-        const color = getEngagementColorHex(e.engagementId)
+        const color = getEngagementTagColor(e.engagementId)
         return {
           id: e.id,
           title: e.title,
           start: e.date,
           allDay: true,
-          backgroundColor: color.bg,
-          borderColor: color.border,
-          textColor: color.text,
+          // Tag tokens: tinted chip, darker text. The border color only shows as the list view's dot.
+          backgroundColor: `var(--ui-tag-${color}-bg)`,
+          borderColor: `var(--ui-tag-${color}-fg)`,
+          textColor: `var(--ui-tag-${color}-fg)`,
           extendedProps: { type: e.type, sortOrder: EVENT_TYPE_SORT_ORDER[e.type] },
         }
       })
@@ -166,9 +181,8 @@ export function CalendarView({ firmSlug }: CalendarViewProps) {
   // "Agenda" (list-week) is meant to answer "what's due across the firm this
   // week" at a glance, so opening it always shows every engagement and jumps
   // back to the current week — the user can still narrow via the sidebar or
-  // navigate to other weeks afterward. Wrapped around FullCalendar's own
-  // listWeek button (via buttonText override below) rather than a fully
-  // custom button, so it keeps native active-state segmented-control styling.
+  // navigate to other weeks afterward. Fires for the toolbar's Agenda button
+  // too, since changeView() mounts the list view the same way.
   const currentViewType = useRef<string | null>(null)
   const handleViewDidMount = (viewType: string) => {
     if (viewType === 'listWeek' && currentViewType.current !== 'listWeek' && data) {
@@ -180,15 +194,15 @@ export function CalendarView({ firmSlug }: CalendarViewProps) {
 
   if (isLoading || !data) {
     return (
-      <div className="flex items-center justify-center py-24 text-[#45474c]">
-        <Loader2 className="h-5 w-5 animate-spin mr-2" />
+      <div className="flex items-center justify-center gap-2 py-24 text-small text-fg-muted" role="status">
+        <LoadingSpinner size="sm" />
         Loading calendar…
       </div>
     )
   }
 
   return (
-    <div className="flex gap-4">
+    <div className="flex gap-6">
       <CalendarSidebar
         engagements={data.engagements}
         visibleEngagementIds={visibleEngagementIds}
@@ -196,25 +210,46 @@ export function CalendarView({ firmSlug }: CalendarViewProps) {
         onSelectAll={handleSelectAll}
         onSelectNone={handleSelectNone}
       />
-      <div className={cn('firm-calendar flex-1 min-w-0 bg-white border border-[#e5e7eb] rounded p-3', isRefreshing && 'firm-calendar--refreshing')}>
+      <div className="firm-calendar firm-calendar--notion min-w-0 flex-1">
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <h2 className="mr-auto text-h3 text-fg">{title}</h2>
+          <div className="flex items-center gap-0.5">
+            <Button variant="outline" size="sm" onClick={() => calendarApi()?.today()}>Today</Button>
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => calendarApi()?.prev()} aria-label="Previous" title="Previous">
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => calendarApi()?.next()} aria-label="Next" title="Next">
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={loadData} disabled={isRefreshing} aria-label="Refresh calendar" title="Refresh">
+            <RefreshCw className={cn('h-3.5 w-3.5', isRefreshing && 'animate-spin')} />
+          </Button>
+          <div className="inline-flex items-center rounded-control border border-line bg-surface-subtle p-0.5" role="group" aria-label="Calendar view">
+            {VIEWS.map((v) => (
+              <button
+                key={v.type}
+                type="button"
+                aria-pressed={viewType === v.type}
+                onClick={() => calendarApi()?.changeView(v.type)}
+                className={cn(
+                  'rounded-[4px] px-2.5 py-1 text-small transition-colors outline-none focus-visible:ring-2 focus-visible:ring-action/30',
+                  viewType === v.type ? 'bg-surface text-fg shadow-sm' : 'text-fg-muted hover:text-fg'
+                )}
+              >
+                {v.label}
+              </button>
+            ))}
+          </div>
+        </div>
         <TooltipProvider delayDuration={300}>
         <FullCalendar
           ref={calendarRef}
           plugins={[dayGridPlugin, timeGridPlugin, listPlugin]}
           initialView="dayGridMonth"
-          headerToolbar={{
-            left: 'prev,next today',
-            center: 'title',
-            right: 'refreshButton dayGridMonth,timeGridWeek,timeGridDay,listWeek',
-          }}
-          buttonText={{ listWeek: 'Agenda' }}
-          customButtons={{
-            refreshButton: {
-              text: '',
-              hint: 'Refresh calendar',
-              click: loadData,
-            },
-          }}
+          headerToolbar={false}
+          dayHeaderFormat={{ weekday: 'short' }}
+          datesSet={(arg) => { setTitle(arg.view.title); setViewType(arg.view.type) }}
           height="auto"
           eventOrder="extendedProps.sortOrder"
           events={events}

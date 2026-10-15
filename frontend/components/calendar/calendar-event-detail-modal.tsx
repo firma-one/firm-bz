@@ -9,7 +9,8 @@ import {
 import { UserAvatarWithTooltip } from '@/components/ui/user-avatar-with-tooltip'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatFullDate, cn } from '@/lib/utils'
-import { getEngagementColor } from '@/lib/calendar/engagement-color'
+import { getEngagementTagColor } from '@/lib/calendar/engagement-color'
+import { TAG_DOT_CLASSES } from '@/lib/ui/status-colors'
 import { useAuth } from '@/lib/auth-context'
 import type { CalendarEvent } from '@/lib/actions/calendar'
 import type { ActivityStatus } from '@/lib/sharing-settings'
@@ -89,7 +90,7 @@ function DueDate({ date }: { date: string | null }) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <span className={cn('inline-flex items-center gap-1 text-xs whitespace-nowrap shrink-0', date ? 'text-[#45474c]' : 'italic text-[#c1c4cb]')}>
+        <span className={cn('inline-flex items-center gap-1 text-xs whitespace-nowrap shrink-0', date ? 'text-fg-muted' : 'italic text-fg-subtle')}>
           <CalendarDays className="h-3 w-3" />
           {date ? formatFullDate(date) : 'Not Set'}
         </span>
@@ -104,7 +105,7 @@ function AssigneeIcon() {
     <Tooltip>
       <TooltipTrigger asChild>
         <span className="inline-flex items-center justify-center shrink-0">
-          <User className="h-3 w-3 shrink-0 text-[#c1c4cb]" />
+          <User className="h-3 w-3 shrink-0 text-fg-subtle" />
         </span>
       </TooltipTrigger>
       <TooltipContent variant="light" side="top">Assignee</TooltipContent>
@@ -118,7 +119,7 @@ function Assignee({ name, email, avatarUrl }: { name: string | null; email: stri
     return (
       <span className="inline-flex items-center gap-1 text-xs shrink-0">
         <AssigneeIcon />
-        <span className="italic text-[#c1c4cb]">Unassigned</span>
+        <span className="italic text-fg-subtle">Unassigned</span>
       </span>
     )
   }
@@ -192,7 +193,7 @@ function NavArrow({ href, label }: { href: string; label: string }) {
           target="_blank"
           rel="noopener noreferrer"
           aria-label={label}
-          className="inline-flex items-center justify-center h-5 w-5 rounded text-[#8a8d94] hover:text-primary hover:bg-primary/10 shrink-0 transition-colors"
+          className="inline-flex items-center justify-center h-5 w-5 rounded text-fg-subtle hover:text-fg hover:bg-surface-hover shrink-0 transition-colors"
         >
           <ArrowUpRight className="h-3.5 w-3.5" />
         </a>
@@ -242,7 +243,7 @@ export function CalendarEventDetailModal({ event, onClose }: CalendarEventDetail
   }, [deliverableDocId, event?.engagementId, session?.access_token])
 
   if (!event) return null
-  const color = getEngagementColor(event.engagementId)
+  const color = getEngagementTagColor(event.engagementId)
   const hasDeliverable = event.type === 'deliverable' || event.type === 'document'
   const isEngagementLevelEvent = event.type === 'kickoff' || event.type === 'due' || event.type === 'followUp'
 
@@ -268,7 +269,7 @@ export function CalendarEventDetailModal({ event, onClose }: CalendarEventDetail
         <TooltipProvider delayDuration={300}>
         <DialogHeader>
           <div className="flex items-center gap-2">
-            <span className={cn('h-2.5 w-2.5 rounded-full shrink-0', color.dot)} />
+            <span className={cn('h-2.5 w-2.5 rounded-full shrink-0', TAG_DOT_CLASSES[color])} />
             <DialogTitle className="text-base">Event Details</DialogTitle>
           </div>
         </DialogHeader>
@@ -277,26 +278,26 @@ export function CalendarEventDetailModal({ event, onClose }: CalendarEventDetail
           {/* Client */}
           <div className="py-1.5">
             <div className="flex items-center gap-2">
-              <Building2 className="h-4 w-4 text-[#45474c] shrink-0" />
-              <span className="font-mono text-[9px] font-bold uppercase tracking-widest text-[#45474c]">Client</span>
+              <Building2 className="h-4 w-4 text-fg-muted shrink-0" />
+              <span className="text-caption text-fg-subtle">Client</span>
             </div>
-            <span className="text-xs font-medium text-[#45474c] truncate block mt-1 pl-6">{event.clientName}</span>
+            <span className="text-xs font-medium text-fg-muted truncate block mt-1 pl-6">{event.clientName}</span>
           </div>
 
           {/* Engagement */}
-          <div className="pl-4 border-l-2 border-[#e5e7eb] ml-2 mt-12">
+          <div className="pl-4 border-l-2 border-line ml-2 mt-12">
             <div
               className={cn(
                 'py-1.5 rounded px-1.5 -mx-1.5',
-                isEngagementLevelEvent && 'bg-primary/5 ring-1 ring-primary/20',
+                isEngagementLevelEvent && 'bg-surface-selected',
               )}
             >
               <div className="flex items-center gap-2">
-                <Briefcase className="h-4 w-4 text-[#45474c] shrink-0" />
-                <span className="font-mono text-[9px] font-bold uppercase tracking-widest text-[#45474c]">Engagement</span>
+                <Briefcase className="h-4 w-4 text-fg-muted shrink-0" />
+                <span className="text-caption text-fg-subtle">Engagement</span>
               </div>
               <div className="flex items-center gap-2 mt-1 pl-6">
-                <span className="text-xs font-medium text-[#45474c] truncate flex-1 min-w-0">{event.engagementName}</span>
+                <span className="text-xs font-medium text-fg-muted truncate flex-1 min-w-0">{event.engagementName}</span>
                 <div className="flex items-center gap-2 ml-auto shrink-0">
                   {isEngagementLevelEvent && event.hasReminder && <ReminderIndicator />}
                   <DueDate date={event.engagementDueDate} />
@@ -308,16 +309,16 @@ export function CalendarEventDetailModal({ event, onClose }: CalendarEventDetail
 
             {/* Deliverable */}
             {hasDeliverable && (
-              <div className="pl-4 border-l-2 border-[#e5e7eb] ml-2 mt-3">
+              <div className="pl-4 border-l-2 border-line ml-2 mt-3">
                 <div
                   className={cn(
                     'py-1.5 rounded px-1.5 -mx-1.5',
-                    event.type === 'deliverable' && 'bg-primary/5 ring-1 ring-primary/20',
+                    event.type === 'deliverable' && 'bg-surface-selected',
                   )}
                 >
                   <div className="flex items-center gap-2">
-                    <Layers className="h-4 w-4 text-[#45474c] shrink-0" />
-                    <span className="font-mono text-[9px] font-bold uppercase tracking-widest text-[#45474c]">Deliverable</span>
+                    <Layers className="h-4 w-4 text-fg-muted shrink-0" />
+                    <span className="text-caption text-fg-subtle">Deliverable</span>
                   </div>
                   {isLoadingSiblings && !deliverableName ? (
                     <div className="flex items-center gap-2 mt-1 pl-6">
@@ -333,7 +334,7 @@ export function CalendarEventDetailModal({ event, onClose }: CalendarEventDetail
                     <div className="flex items-center gap-2 mt-1 pl-6 animate-in fade-in duration-200">
                       <span className="flex items-center gap-2 flex-1 min-w-0">
                         <DocId docId={deliverableDocIdLabel} />
-                        <span className="text-xs font-medium text-[#45474c] truncate">{deliverableName ?? '—'}</span>
+                        <span className="text-xs font-medium text-fg-muted truncate">{deliverableName ?? '—'}</span>
                       </span>
                       <div className="flex items-center gap-2 ml-auto shrink-0">
                         {event.type === 'deliverable' && event.hasReminder && <ReminderIndicator />}
@@ -348,8 +349,8 @@ export function CalendarEventDetailModal({ event, onClose }: CalendarEventDetail
                 </div>
 
                 {/* Documents under this deliverable */}
-                <div className="pl-4 border-l-2 border-[#e5e7eb] ml-2 mt-3">
-                  <p className="font-mono text-[9px] font-bold uppercase tracking-widest text-[#45474c] py-1.5">Documents</p>
+                <div className="pl-4 border-l-2 border-line ml-2 mt-3">
+                  <p className="text-caption text-fg-subtle py-1.5">Documents</p>
                   {isLoadingSiblings && (
                     <div className="space-y-1">
                       <DocumentRowSkeleton />
@@ -358,7 +359,7 @@ export function CalendarEventDetailModal({ event, onClose }: CalendarEventDetail
                     </div>
                   )}
                   {!isLoadingSiblings && siblings && siblings.length === 0 && (
-                    <p className="text-xs text-[#8a8d94] italic py-1">No documents in this deliverable.</p>
+                    <p className="text-xs text-fg-subtle italic py-1">No documents in this deliverable.</p>
                   )}
                   {!isLoadingSiblings && siblings && siblings.length > 0 && (
                     <div className="space-y-1 animate-in fade-in duration-200">
@@ -369,13 +370,13 @@ export function CalendarEventDetailModal({ event, onClose }: CalendarEventDetail
                             key={doc.documentId}
                             className={cn(
                               'flex items-center gap-2 py-1.5 rounded px-1.5 -mx-1.5',
-                              isClicked && 'bg-primary/5 ring-1 ring-primary/20',
+                              isClicked && 'bg-surface-selected',
                             )}
                           >
-                            <FileText className="h-3.5 w-3.5 text-[#45474c] shrink-0" />
+                            <FileText className="h-3.5 w-3.5 text-fg-muted shrink-0" />
                             <span className="flex items-center gap-2 flex-1 min-w-0">
                               <DocId docId={doc.docId} />
-                              <span className={cn('text-xs truncate', isClicked ? 'font-semibold text-[#1b1b1d]' : 'font-medium text-[#45474c]')}>
+                              <span className={cn('text-xs truncate', isClicked ? 'font-semibold text-fg' : 'font-medium text-fg-muted')}>
                                 {doc.fileName}
                               </span>
                             </span>

@@ -1,11 +1,11 @@
 'use client'
 
 import { useMemo } from 'react'
-import { Building2, Briefcase } from 'lucide-react'
+import { Building2 } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
-import { getEngagementColor } from '@/lib/calendar/engagement-color'
+import { getEngagementTagColor } from '@/lib/calendar/engagement-color'
 import type { CalendarEngagement } from '@/lib/actions/calendar'
 
 interface CalendarSidebarProps {
@@ -38,46 +38,44 @@ export function CalendarSidebar({
 
   return (
     <TooltipProvider delayDuration={300}>
-    <div className="w-64 shrink-0 border-r border-[#e5e7eb] pr-4">
-      <div className="flex items-center justify-between mb-3">
-        <span className="text-xs font-semibold uppercase tracking-wide text-[#45474c]">Calendars</span>
-        <div className="flex items-center gap-2 text-[11px]">
-          <button onClick={onSelectAll} className="text-primary hover:underline">All</button>
-          <span className="text-[#d1d5db]">|</span>
-          <button onClick={onSelectNone} className="text-primary hover:underline">None</button>
+    <div className="w-56 shrink-0 border-r border-line pr-4">
+      <div className="mb-2 flex h-7 items-center justify-between">
+        <span className="text-small font-medium text-fg-muted">Calendars</span>
+        <div className="flex items-center gap-0.5 text-small">
+          <button type="button" onClick={onSelectAll} className="rounded-control px-1.5 py-0.5 text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg">All</button>
+          <button type="button" onClick={onSelectNone} className="rounded-control px-1.5 py-0.5 text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg">None</button>
         </div>
       </div>
 
       {engagements.length === 0 && (
-        <p className="text-sm text-[#45474c] py-4">No engagements found.</p>
+        <p className="py-4 text-small text-fg-muted">No engagements yet.</p>
       )}
 
-      <div className="space-y-4 overflow-y-auto">
+      <div className="space-y-3 overflow-y-auto">
         {groupedByClient.map((group) => (
           <div key={group.clientName}>
-            <p className="flex items-center gap-1.5 text-xs font-medium text-[#1b1b1d] mb-1.5">
-              <Building2 className="h-3.5 w-3.5 text-[#8a8d94] shrink-0" />
-              {group.clientName}
+            <p className="mb-0.5 flex items-center gap-1.5 px-1.5 text-caption text-fg-subtle">
+              <Building2 className="h-3 w-3 shrink-0" />
+              <span className="truncate">{group.clientName}</span>
             </p>
-            <div className="space-y-1.5">
+            <div>
               {group.engagements.map((e) => {
-                const color = getEngagementColor(e.id)
+                const color = getEngagementTagColor(e.id)
                 const checked = visibleEngagementIds.has(e.id)
                 return (
                   <label
                     key={e.id}
-                    className="flex items-center gap-2 cursor-pointer group"
+                    className="group flex h-7 cursor-pointer items-center gap-2 rounded-control px-1.5 transition-colors hover:bg-surface-hover"
                   >
                     <Checkbox
                       checked={checked}
                       onCheckedChange={() => onToggle(e.id)}
-                      className={cn('border-slate-300 data-[state=checked]:text-white', checked && color.dot, checked && color.border)}
+                      className="border-line-strong"
+                      style={checked ? { backgroundColor: `var(--ui-tag-${color}-fg)`, borderColor: `var(--ui-tag-${color}-fg)`, color: '#fff' } : undefined}
                     />
-                    <span className={cn('h-2.5 w-2.5 rounded-full shrink-0', color.dot)} />
-                    <Briefcase className="h-3.5 w-3.5 text-[#8a8d94] shrink-0" />
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <span className="text-sm text-[#45474c] group-hover:text-[#1b1b1d] truncate">
+                        <span className={cn('truncate text-ui', checked ? 'text-fg' : 'text-fg-muted')}>
                           {e.name}
                         </span>
                       </TooltipTrigger>

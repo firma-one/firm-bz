@@ -27,6 +27,10 @@ import type { DriveAlertsResponse, EngagementDriveAlert } from '@/app/api/firms/
 import type { ReminderWithContext } from '@/lib/actions/user-reminders'
 import { markAllRemindersDone, markReminderDone } from '@/lib/actions/user-reminders'
 import { clientPath, engagementPath } from '@/lib/navigation/firm-paths'
+import { Button } from '@/components/ui/button'
+import { Tag } from '@/components/ui/tag'
+import { ShimmerBlock } from '@/components/ui/shimmer'
+import type { TagColor } from '@/lib/ui/status-colors'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -47,20 +51,20 @@ function formatDelta(days: number): string {
     return `In ${days}d`
 }
 
-function deltaColor(days: number): string {
-    if (days < 0) return 'bg-red-50 text-red-700 border-red-200'
-    if (days === 0) return 'bg-amber-50 text-amber-700 border-amber-200'
-    if (days <= 3) return 'bg-orange-50 text-orange-700 border-orange-200'
-    if (days <= 7) return 'bg-amber-50 text-amber-700 border-amber-200'
-    return 'bg-slate-50 text-slate-600 border-slate-200'
+function deltaColor(days: number): TagColor {
+    if (days < 0) return 'red'
+    if (days === 0) return 'yellow'
+    if (days <= 3) return 'orange'
+    if (days <= 7) return 'yellow'
+    return 'gray'
 }
 
-function reminderLabelColor(style: ReminderWithContext['labelStyle']): string {
+function reminderLabelColor(style: ReminderWithContext['labelStyle']): TagColor {
     switch (style) {
-        case 'red':    return 'bg-red-50 text-red-700 border-red-200'
-        case 'orange': return 'bg-orange-50 text-orange-700 border-orange-200'
-        case 'amber':  return 'bg-amber-50 text-amber-700 border-amber-200'
-        default:       return 'bg-slate-50 text-slate-600 border-slate-200'
+        case 'red':    return 'red'
+        case 'orange': return 'orange'
+        case 'amber':  return 'yellow'
+        default:       return 'gray'
     }
 }
 
@@ -68,17 +72,33 @@ function reminderLabelColor(style: ReminderWithContext['labelStyle']): string {
 
 function SectionBlock({ title, icon: Icon, children }: { title: string; icon: React.ElementType; children: React.ReactNode }) {
     return (
-        <div className="space-y-2">
-            <div className="flex items-center gap-2">
-                <Icon className="h-4 w-4 text-gray-400" />
-                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{title}</span>
+        <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-1.5 px-2">
+                <Icon className="h-3.5 w-3.5 text-fg-subtle" />
+                <span className="text-small font-medium text-fg-muted">{title}</span>
             </div>
             {children}
         </div>
     )
 }
 
+/** The calm "nothing here" line used in place of a green banner. */
+function AllClear({ children }: { children: React.ReactNode }) {
+    return (
+        <div className="flex items-center gap-2 rounded-control bg-surface-subtle px-3 py-2 text-small text-fg-muted">
+            <CheckCircle2 className="h-4 w-4 shrink-0 text-tag-green-fg" />
+            {children}
+        </div>
+    )
+}
+
 // ─── Row Items ────────────────────────────────────────────────────────────────
+
+const ROW_CLASS = 'group flex items-center justify-between gap-3 rounded-control px-2 py-1.5 transition-colors hover:bg-surface-hover'
+
+function RowArrow() {
+    return <ArrowUpRight className="h-3.5 w-3.5 text-fg-subtle opacity-0 transition-opacity group-hover:opacity-100" />
+}
 
 function reminderTypeBadge(entityKey: string, action: string): string {
     const table = entityKey.split('.').slice(0, 2).join('.')
@@ -88,34 +108,31 @@ function reminderTypeBadge(entityKey: string, action: string): string {
 }
 
 function ReminderRow({ reminder, onMarkDone, isMarkingDone }: { reminder: ReminderWithContext; onMarkDone?: () => void; isMarkingDone?: boolean }) {
-    const labelClass = reminderLabelColor(reminder.labelStyle)
     const typeBadge = reminderTypeBadge(reminder.entityKey, reminder.action)
     return (
-        <div className="flex items-start justify-between gap-3 px-4 py-3 hover:bg-[#f3f4f6] transition-colors rounded border border-[#d1d5db] bg-white shadow-sm">
+        <div className={`${ROW_CLASS} items-start`}>
             <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-gray-900 truncate">{reminder.entityName}</p>
-                <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                    <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-500 shrink-0">{typeBadge}</span>
-                    <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full border ${labelClass}`}>
-                        {reminder.label}
-                    </span>
-                    {reminder.note && (
-                        <span className="text-xs text-gray-400 truncate">{reminder.note}</span>
-                    )}
+                <p className="truncate text-ui text-fg">{reminder.entityName}</p>
+                <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+                    <Tag color="gray" className="shrink-0">{typeBadge}</Tag>
+                    <Tag color={reminderLabelColor(reminder.labelStyle)}>{reminder.label}</Tag>
+                    {reminder.note && <span className="truncate text-small text-fg-subtle">{reminder.note}</span>}
                 </div>
             </div>
-            <div className="flex items-center gap-1 shrink-0 mt-0.5">
+            <div className="mt-0.5 flex shrink-0 items-center gap-0.5">
                 {reminder.ctaUrl && (
-                    <Link href={reminder.ctaUrl} target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-gray-700 transition-colors p-1">
-                        <ArrowUpRight className="h-4 w-4" />
+                    <Link href={reminder.ctaUrl} target="_blank" rel="noopener noreferrer" className="rounded-control p-1 text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg" aria-label={`Open ${reminder.entityName}`}>
+                        <ArrowUpRight className="h-3.5 w-3.5" />
                     </Link>
                 )}
                 {onMarkDone && (
                     <button
-                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); onMarkDone(); }}
+                        type="button"
+                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); onMarkDone() }}
                         disabled={isMarkingDone}
-                        className="p-1 rounded-lg hover:bg-green-50 text-gray-300 hover:text-green-600 transition-colors disabled:opacity-50"
+                        className="rounded-control p-1 text-fg-subtle transition-colors hover:bg-surface-hover hover:text-tag-green-fg disabled:opacity-50"
                         title="Mark done"
+                        aria-label={`Mark ${reminder.entityName} done`}
                     >
                         <CheckCircle2 className="h-4 w-4" />
                     </button>
@@ -138,96 +155,73 @@ function ThreadRow({ item, groupSlug, firmSlug }: { item: UnansweredThreadItem; 
             href={engagementPath(groupSlug, firmSlug, item.clientSlug, item.engagementSlug)}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-[#f3f4f6] transition-colors rounded border border-[#d1d5db] bg-white shadow-sm"
+            className={ROW_CLASS}
         >
             <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                    <p className="text-sm font-semibold text-gray-900 truncate">{item.documentName}</p>
-                    <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-purple-50 text-purple-500 shrink-0">{item.engagementName}</span>
+                    <p className="truncate text-ui text-fg">{item.documentName}</p>
+                    <Tag color="gray" className="shrink-0">{item.engagementName}</Tag>
                 </div>
-                {item.lastMessage && (
-                    <p className="text-xs text-gray-400 truncate mt-0.5">{item.lastMessage}</p>
-                )}
+                {item.lastMessage && <p className="mt-0.5 truncate text-small text-fg-muted">{item.lastMessage}</p>}
             </div>
-            <div className="flex items-center gap-2 shrink-0">
-                <span className="text-[11px] font-medium px-2 py-0.5 rounded-full border bg-slate-50 text-slate-600 border-slate-200">{timeAgo}</span>
-                <ArrowUpRight className="h-4 w-4 text-gray-400" />
+            <div className="flex shrink-0 items-center gap-2">
+                <span className="text-small text-fg-subtle">{timeAgo}</span>
+                <RowArrow />
             </div>
         </Link>
     )
 }
 
 function ProspectRow({ item, groupSlug, firmSlug }: { item: ProspectItem; groupSlug: string; firmSlug: string }) {
-    const labelClass = deltaColor(item.daysUntil)
     return (
-        <Link
-            href={clientPath(groupSlug, firmSlug, item.clientSlug)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-[#f3f4f6] transition-colors rounded border border-[#d1d5db] bg-white shadow-sm"
-        >
+        <Link href={clientPath(groupSlug, firmSlug, item.clientSlug)} target="_blank" rel="noopener noreferrer" className={ROW_CLASS}>
             <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                    <p className="text-sm font-semibold text-gray-900 truncate">{item.clientName}</p>
-                    <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-indigo-50 text-indigo-500 shrink-0">Prospect Follow-up</span>
-                </div>
-                <p className="text-xs text-gray-400 truncate">
+                <p className="truncate text-ui text-fg">{item.clientName}</p>
+                <p className="truncate text-small text-fg-muted">
                     {item.expectedCloseDate
-                        ? `Expected close: ${new Date(item.expectedCloseDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
-                        : 'Follow-up due'}
+                        ? `Prospect · expected close ${new Date(item.expectedCloseDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+                        : 'Prospect · follow-up due'}
                 </p>
             </div>
-            <div className="flex items-center gap-2 shrink-0">
-                <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full border ${labelClass}`}>
-                    {formatDelta(item.daysUntil)}
-                </span>
-                <ArrowUpRight className="h-4 w-4 text-gray-400" />
+            <div className="flex shrink-0 items-center gap-2">
+                <Tag color={deltaColor(item.daysUntil)}>{formatDelta(item.daysUntil)}</Tag>
+                <RowArrow />
             </div>
         </Link>
     )
 }
 
 function InviteRow({ item, groupSlug, firmSlug }: { item: PendingInviteItem; groupSlug: string; firmSlug: string }) {
-    const labelClass = item.daysUntilExpiry <= 2 ? 'bg-red-50 text-red-700 border-red-200' : item.daysUntilExpiry <= 5 ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-slate-50 text-slate-600 border-slate-200'
+    const color: TagColor = item.daysUntilExpiry <= 2 ? 'red' : item.daysUntilExpiry <= 5 ? 'yellow' : 'gray'
     return (
         <Link
             href={engagementPath(groupSlug, firmSlug, item.clientSlug, item.engagementSlug, { tab: 'members' })}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-[#f3f4f6] transition-colors rounded border border-[#d1d5db] bg-white shadow-sm"
+            className={ROW_CLASS}
         >
             <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-gray-900 truncate">{item.email}</p>
-                <p className="text-xs text-gray-400 truncate">{item.engagementName}</p>
+                <p className="truncate text-ui text-fg">{item.email}</p>
+                <p className="truncate text-small text-fg-muted">{item.engagementName}</p>
             </div>
-            <div className="flex items-center gap-2 shrink-0">
-                <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full border ${labelClass}`}>
-                    {item.daysUntilExpiry <= 0 ? 'Expires today' : `Expires in ${item.daysUntilExpiry}d`}
-                </span>
-                <ArrowUpRight className="h-4 w-4 text-gray-400" />
+            <div className="flex shrink-0 items-center gap-2">
+                <Tag color={color}>{item.daysUntilExpiry <= 0 ? 'Expires today' : `Expires in ${item.daysUntilExpiry}d`}</Tag>
+                <RowArrow />
             </div>
         </Link>
     )
 }
 
 function EngagementDueRow({ item, groupSlug, firmSlug }: { item: EngagementDueSoonItem; groupSlug: string; firmSlug: string }) {
-    const labelClass = deltaColor(item.daysUntil)
     return (
-        <Link
-            href={engagementPath(groupSlug, firmSlug, item.clientSlug, item.engagementSlug)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-[#f3f4f6] transition-colors rounded border border-[#d1d5db] bg-white shadow-sm"
-        >
+        <Link href={engagementPath(groupSlug, firmSlug, item.clientSlug, item.engagementSlug)} target="_blank" rel="noopener noreferrer" className={ROW_CLASS}>
             <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-gray-900 truncate">{item.engagementName}</p>
-                <p className="text-xs text-gray-400 truncate">{item.clientName}</p>
+                <p className="truncate text-ui text-fg">{item.engagementName}</p>
+                <p className="truncate text-small text-fg-muted">{item.clientName}</p>
             </div>
-            <div className="flex items-center gap-2 shrink-0">
-                <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full border ${labelClass}`}>
-                    {formatDelta(item.daysUntil)}
-                </span>
-                <ArrowUpRight className="h-4 w-4 text-gray-400" />
+            <div className="flex shrink-0 items-center gap-2">
+                <Tag color={deltaColor(item.daysUntil)}>{formatDelta(item.daysUntil)}</Tag>
+                <RowArrow />
             </div>
         </Link>
     )
@@ -235,23 +229,43 @@ function EngagementDueRow({ item, groupSlug, firmSlug }: { item: EngagementDueSo
 
 function DriveAlertRow({ item, groupSlug, firmSlug }: { item: EngagementDriveAlert; groupSlug: string; firmSlug: string }) {
     return (
-        <Link
-            href={engagementPath(groupSlug, firmSlug, item.clientSlug, item.engagementSlug)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-[#f3f4f6] transition-colors rounded border border-[#d1d5db] bg-white shadow-sm"
-        >
+        <Link href={engagementPath(groupSlug, firmSlug, item.clientSlug, item.engagementSlug)} target="_blank" rel="noopener noreferrer" className={ROW_CLASS}>
             <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-gray-900 truncate">{item.engagementName}</p>
-                <p className="text-xs text-gray-400 truncate">{item.clientName}</p>
+                <p className="truncate text-ui text-fg">{item.engagementName}</p>
+                <p className="truncate text-small text-fg-muted">{item.clientName}</p>
             </div>
-            <div className="flex items-center gap-2 shrink-0">
-                <span className="text-[11px] font-medium px-2 py-0.5 rounded-full border bg-slate-50 text-slate-600 border-slate-200">
-                    {item.count} file{item.count !== 1 ? 's' : ''}
-                </span>
-                <ArrowUpRight className="h-4 w-4 text-gray-400" />
+            <div className="flex shrink-0 items-center gap-2">
+                <span className="text-small tabular-nums text-fg-muted">{item.count} file{item.count !== 1 ? 's' : ''}</span>
+                <RowArrow />
             </div>
         </Link>
+    )
+}
+
+/** A summary line that opens one of the drill-in lists. Neutral when there is nothing to act on. */
+function SummaryRow({ icon: Icon, color, title, subtitle, count, onClick }: {
+    icon: React.ElementType
+    color: TagColor | null
+    title: string
+    subtitle: string
+    count: number
+    onClick: () => void
+}) {
+    return (
+        <button type="button" onClick={onClick} className="group flex w-full items-center gap-3 rounded-control px-2 py-2 text-left transition-colors hover:bg-surface-hover">
+            <span
+                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-control ${color ? '' : 'bg-surface-muted text-fg-subtle'}`}
+                style={color ? { backgroundColor: `var(--ui-tag-${color}-bg)`, color: `var(--ui-tag-${color}-fg)` } : undefined}
+            >
+                <Icon className="h-4 w-4" />
+            </span>
+            <span className="min-w-0 flex-1">
+                <span className="block truncate text-ui text-fg">{title}</span>
+                <span className="block truncate text-small text-fg-muted">{subtitle}</span>
+            </span>
+            <span className={`text-ui font-medium tabular-nums ${color ? 'text-fg' : 'text-fg-subtle'}`}>{count}</span>
+            <ChevronRight className="h-4 w-4 shrink-0 text-fg-subtle" />
+        </button>
     )
 }
 
@@ -380,333 +394,200 @@ export function FirmActionCenter({ firmId, groupSlug, firmSlug }: FirmActionCent
     const sensitiveFileCount = driveAlerts?.sensitive?.reduce((s, e) => s + e.count, 0) ?? 0
     const storageFileCount = driveAlerts?.storage?.reduce((s, e) => s + e.count, 0) ?? 0
 
-    const driveViewLabel: Record<string, string> = { sharing: 'Sharing Alerts', sensitive: 'Sensitive Alerts', storage: 'Storage Alerts' }
+    const driveViewLabel: Record<string, string> = { sharing: 'Sharing alerts', sensitive: 'Sensitive files', storage: 'Storage alerts' }
     const driveViewCount: Record<string, number> = { sharing: sharingFileCount, sensitive: sensitiveFileCount, storage: storageFileCount }
-    const driveViewBadge: Record<string, string> = { sharing: 'bg-blue-100 text-blue-700', sensitive: 'bg-orange-100 text-orange-700', storage: 'bg-purple-100 text-purple-700' }
+    const driveViewColor: Record<string, TagColor> = { sharing: 'blue', sensitive: 'orange', storage: 'purple' }
     const isDriveView = acView === 'sharing' || acView === 'sensitive' || acView === 'storage'
     const scannedCount = driveAlerts?.scannedCount ?? 0
     const totalDriveCount = driveAlerts?.totalCount ?? 0
     const hasPartialScan = totalDriveCount > scannedCount && totalDriveCount > 0
 
+    const viewTitle = acView === 'overdue' ? 'Overdue' : acView === 'upcoming' ? 'Upcoming' : acView === 'threads' ? 'Unanswered threads' : driveViewLabel[acView]
+    const viewCount = acView === 'overdue' ? overdueCount : acView === 'upcoming' ? upcomingCount : acView === 'threads' ? threadsCount : driveViewCount[acView]
+    const viewColor: TagColor = acView === 'overdue' ? 'red' : acView === 'upcoming' ? 'yellow' : acView === 'threads' ? 'purple' : driveViewColor[acView] ?? 'gray'
+
     return (
-        <div
-            className="flex flex-col gap-3 border border-[#e5e7eb] rounded p-4 h-full print:h-auto"
-            style={{
-                backgroundColor: '#ffffff',
-                background: [
-                    'linear-gradient(135deg, rgba(243,244,246,0.3) 25%, transparent 25%) -10px 0 / 20px 20px',
-                    'linear-gradient(225deg, rgba(243,244,246,0.5) 25%, transparent 25%) -10px 0 / 20px 20px',
-                    'linear-gradient(315deg, rgba(243,244,246,0.3) 25%, transparent 25%) 0px 0 / 20px 20px',
-                    'linear-gradient(45deg, rgba(243,244,246,0.5) 25%, #ffffff 25%) 0px 0 / 20px 20px',
-                ].join(', '),
-            }}
-        >
+        <div className="flex h-full flex-col gap-3 rounded-card border border-line bg-surface p-4 print:h-auto">
             {/* Header */}
-            <div className="flex items-center justify-between">
+            <div className="flex h-7 items-center justify-between gap-2">
                 {acView === 'summary' ? (
-                    <h3 className="text-sm font-bold text-gray-900 animate-in fade-in duration-150">Action Center</h3>
+                    <h3 className="text-h3 text-fg">Action center</h3>
                 ) : (
-                    <div className="flex items-center gap-2 animate-in fade-in slide-in-from-left-2 duration-200">
-                        <button
-                            onClick={() => setAcView('summary')}
-                            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded bg-[#f3f4f6] hover:bg-[#e5e7eb] active:scale-95 transition-all duration-150 text-gray-700 font-medium text-xs"
-                        >
+                    <div className="flex min-w-0 flex-1 items-center gap-2 animate-in fade-in slide-in-from-left-2 duration-200">
+                        <Button variant="ghost" size="sm" onClick={() => setAcView('summary')} className="h-7 px-2">
                             <ArrowLeft className="h-3.5 w-3.5" />
                             Back
-                        </button>
-                        <span className="text-sm font-bold text-gray-900">
-                            {acView === 'overdue' ? 'Overdue' : acView === 'upcoming' ? 'Upcoming' : acView === 'threads' ? 'Unanswered Threads' : driveViewLabel[acView]}
-                        </span>
-                        <span className={`ml-auto text-xs font-bold px-2 py-0.5 rounded-full ${acView === 'overdue' ? 'bg-red-100 text-red-700' : acView === 'upcoming' ? 'bg-amber-100 text-amber-700' : acView === 'threads' ? 'bg-purple-100 text-purple-700' : driveViewBadge[acView]}`}>
-                            {acView === 'overdue' ? overdueCount : acView === 'upcoming' ? upcomingCount : acView === 'threads' ? threadsCount : driveViewCount[acView]}
-                        </span>
+                        </Button>
+                        <span className="truncate text-ui font-medium text-fg">{viewTitle}</span>
+                        <Tag color={viewColor} className="ml-auto tabular-nums">{viewCount}</Tag>
                     </div>
                 )}
                 {acView === 'summary' && (
-                    <button
-                        onClick={() => setRefreshTick((t) => t + 1)}
-                        className="p-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors"
-                        title="Refresh"
-                    >
-                        <RefreshCw className={`h-3.5 w-3.5 text-gray-600 ${loading ? 'animate-spin' : ''}`} />
-                    </button>
+                    <Button variant="ghost" size="icon" onClick={() => setRefreshTick((t) => t + 1)} className="h-7 w-7" title="Refresh" aria-label="Refresh action center">
+                        <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+                    </Button>
                 )}
             </div>
 
             {/* Content */}
             <div
                 key={acView}
-                className="flex flex-col gap-4 flex-1 min-h-0 overflow-y-auto px-0.5 py-0.5 animate-in fade-in slide-in-from-bottom-2 duration-200 [&::-webkit-scrollbar]:hidden [scrollbar-width:none] print:overflow-visible print:h-auto print:flex-none"
+                className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto animate-in fade-in slide-in-from-bottom-2 duration-200 [&::-webkit-scrollbar]:hidden [scrollbar-width:none] print:h-auto print:flex-none print:overflow-visible"
             >
                 {loading ? (
-                    [1, 2, 3].map((i) => <div key={i} className="h-14 rounded bg-gray-200 animate-pulse" />)
+                    <div className="flex flex-col gap-2" aria-busy="true">
+                        {[1, 2, 3].map((i) => <ShimmerBlock key={i} className="h-10 w-full" />)}
+                    </div>
                 ) : acView === 'summary' ? (
-                    <div className="flex flex-col gap-3">
+                    <div className="flex flex-col gap-1">
                         {overdueCount === 0 && upcomingCount === 0 ? (
-                            <div className="flex items-center gap-2 p-3 rounded bg-green-50 border border-green-100">
-                                <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
-                                <span className="text-xs text-green-700">All caught up — no pending actions</span>
-                            </div>
+                            <AllClear>All caught up — no pending actions</AllClear>
                         ) : (
                             <>
                                 {overdueCount > 0 && (
-                                    <button
-                                        onClick={() => setAcView('overdue')}
-                                        className="w-full flex items-center justify-between p-3 bg-white rounded border border-[#d1d5db] shadow-md hover:shadow-lg hover:bg-red-50 hover:scale-[1.01] active:scale-[0.99] transition-all duration-150"
-                                    >
-                                        <div className="flex items-center gap-3">
-                                            <div className="p-2 rounded-lg bg-red-50">
-                                                <AlertCircle className="h-4 w-4 text-red-600" />
-                                            </div>
-                                            <div className="text-left">
-                                                <p className="text-sm font-semibold text-red-700">Overdue</p>
-                                                <p className="text-xs text-gray-500">{overdueSubtitle()}</p>
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center gap-1.5">
-                                            <span className="text-lg font-bold text-red-600">{overdueCount}</span>
-                                            <ChevronRight className="h-4 w-4 text-red-400" />
-                                        </div>
-                                    </button>
+                                    <SummaryRow icon={AlertCircle} color="red" title="Overdue" subtitle={overdueSubtitle()} count={overdueCount} onClick={() => setAcView('overdue')} />
                                 )}
                                 {upcomingCount > 0 && (
-                                    <button
-                                        onClick={() => setAcView('upcoming')}
-                                        className="w-full flex items-center justify-between p-3 bg-white rounded border border-[#d1d5db] shadow-md hover:shadow-lg hover:bg-amber-50 hover:scale-[1.01] active:scale-[0.99] transition-all duration-150"
-                                    >
-                                        <div className="flex items-center gap-3">
-                                            <div className="p-2 rounded-lg bg-amber-50">
-                                                <Clock className="h-4 w-4 text-amber-600" />
-                                            </div>
-                                            <div className="text-left">
-                                                <p className="text-sm font-semibold text-amber-700">Upcoming</p>
-                                                <p className="text-xs text-gray-500">{upcomingSubtitle()}</p>
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center gap-1.5">
-                                            <span className="text-lg font-bold text-amber-600">{upcomingCount}</span>
-                                            <ChevronRight className="h-4 w-4 text-amber-400" />
-                                        </div>
-                                    </button>
+                                    <SummaryRow icon={Clock} color="yellow" title="Upcoming" subtitle={upcomingSubtitle()} count={upcomingCount} onClick={() => setAcView('upcoming')} />
                                 )}
                             </>
                         )}
 
-                        {/* Threads card */}
                         {threadsCount > 0 && (
-                            <button
-                                onClick={() => setAcView('threads')}
-                                className="w-full flex items-center justify-between p-3 bg-white rounded border border-[#d1d5db] shadow-md hover:shadow-lg hover:bg-purple-50 hover:scale-[1.01] active:scale-[0.99] transition-all duration-150"
-                            >
-                                <div className="flex items-center gap-3">
-                                    <div className="p-2 rounded-lg bg-purple-50">
-                                        <MessageSquare className="h-4 w-4 text-purple-600" />
-                                    </div>
-                                    <div className="text-left">
-                                        <p className="text-sm font-semibold text-purple-700">Unanswered Threads</p>
-                                        <p className="text-xs text-gray-500">Awaiting firm response</p>
-                                    </div>
-                                </div>
-                                <div className="flex items-center gap-1.5">
-                                    <span className="text-lg font-bold text-purple-600">{threadsCount}</span>
-                                    <ChevronRight className="h-4 w-4 text-purple-400" />
-                                </div>
-                            </button>
+                            <SummaryRow icon={MessageSquare} color="purple" title="Unanswered threads" subtitle="Awaiting a reply from the firm" count={threadsCount} onClick={() => setAcView('threads')} />
                         )}
 
-                        {/* Document Alerts — drill-in cards */}
+                        {/* Document alerts — drill-in rows */}
                         {driveLoading ? (
-                            <div className="h-10 rounded bg-gray-200 animate-pulse" />
+                            <ShimmerBlock className="mt-3 h-10 w-full" />
                         ) : (
-                            <div className="flex flex-col gap-2 pt-1">
-                                <div className="flex items-center justify-between gap-2">
-                                    <div className="flex items-center gap-2">
-                                        <FolderOpen className="h-4 w-4 text-gray-400" />
-                                        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Document Alerts</span>
-                                    </div>
+                            <div className="mt-3 flex flex-col gap-1">
+                                <div className="flex items-center justify-between gap-2 px-2">
+                                    <span className="flex items-center gap-1.5 text-small font-medium text-fg-muted">
+                                        <FolderOpen className="h-3.5 w-3.5 text-fg-subtle" />
+                                        Document alerts
+                                    </span>
                                     {driveAlerts?.lastScannedAt ? (
-                                        <span className="text-[10px] text-green-600 font-medium bg-green-50 px-2 py-0.5 rounded-full border border-green-100">
-                                            Full scan · last updated {timeAgo(driveAlerts.lastScannedAt)}
-                                        </span>
+                                        <span className="text-caption text-fg-subtle">Full scan · {timeAgo(driveAlerts.lastScannedAt)}</span>
                                     ) : hasPartialScan ? (
-                                        <div className="flex items-center gap-1.5">
-                                            <span className="text-[10px] text-amber-600 font-medium bg-amber-50 px-2 py-0.5 rounded-full border border-amber-100">
-                                                {scannedCount} of {totalDriveCount} engagements scanned
-                                            </span>
+                                        <span className="flex items-center gap-1.5">
+                                            <Tag color="orange">{scannedCount} of {totalDriveCount} scanned</Tag>
                                             <button
+                                                type="button"
                                                 onClick={handleScanAll}
                                                 disabled={isScanningAll}
-                                                className="text-[10px] font-medium text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded-full border border-blue-100 disabled:opacity-50 transition-colors flex items-center gap-1"
+                                                className="flex items-center gap-1 rounded-control px-1.5 py-0.5 text-caption text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg disabled:opacity-50"
                                             >
-                                                {isScanningAll ? <RefreshCw className="h-2.5 w-2.5 animate-spin" /> : null}
+                                                {isScanningAll ? <RefreshCw className="h-3 w-3 animate-spin" /> : null}
                                                 {isScanningAll ? 'Scanning…' : 'Scan all'}
                                             </button>
-                                        </div>
+                                        </span>
                                     ) : null}
                                 </div>
-                                <div className="flex flex-col gap-2">
-                                    {([
-                                        { key: 'sharing' as const, icon: Share2, label: 'Sharing', count: sharingFileCount, engCount: driveAlerts?.sharing?.length ?? 0, active: { border: 'border-[#d1d5db]', hover: 'hover:bg-blue-50', text: 'text-blue-700', iconBg: 'bg-blue-50', iconText: 'text-blue-600', chevron: 'text-blue-400', num: 'text-blue-600' } },
-                                        { key: 'sensitive' as const, icon: FileWarning, label: 'Sensitive', count: sensitiveFileCount, engCount: driveAlerts?.sensitive?.length ?? 0, active: { border: 'border-[#d1d5db]', hover: 'hover:bg-orange-50', text: 'text-orange-700', iconBg: 'bg-orange-50', iconText: 'text-orange-600', chevron: 'text-orange-400', num: 'text-orange-600' } },
-                                        { key: 'storage' as const, icon: HardDrive, label: 'Storage', count: storageFileCount, engCount: driveAlerts?.storage?.length ?? 0, active: { border: 'border-[#d1d5db]', hover: 'hover:bg-purple-50', text: 'text-purple-700', iconBg: 'bg-purple-50', iconText: 'text-purple-600', chevron: 'text-purple-400', num: 'text-purple-600' } },
-                                    ]).map(({ key, icon: Icon, label, count, engCount, active }) => {
-                                        const isAlert = count > 0
-                                        const border = isAlert ? active.border : 'border-[#d1d5db]'
-                                        const hover = isAlert ? active.hover : 'hover:bg-green-50'
-                                        const textColor = isAlert ? active.text : 'text-green-700'
-                                        const iconBg = isAlert ? active.iconBg : 'bg-green-50'
-                                        const iconText = isAlert ? active.iconText : 'text-green-600'
-                                        const chevronColor = isAlert ? active.chevron : 'text-green-400'
-                                        const numColor = isAlert ? active.num : 'text-green-600'
-                                        const subtitle = isAlert ? `${engCount} engagement${engCount !== 1 ? 's' : ''}` : 'No alerts'
-                                        return (
-                                            <button
-                                                key={key}
-                                                onClick={() => setAcView(key)}
-                                                className={`w-full flex items-center justify-between p-3 bg-white rounded border ${border} shadow-md hover:shadow-lg ${hover} hover:scale-[1.01] active:scale-[0.99] transition-all duration-150`}
-                                            >
-                                                <div className="flex items-center gap-3">
-                                                    <div className={`p-2 rounded-lg ${iconBg}`}>
-                                                        <Icon className={`h-4 w-4 ${iconText}`} />
-                                                    </div>
-                                                    <div className="text-left">
-                                                        <p className={`text-sm font-semibold ${textColor}`}>{label}</p>
-                                                        <p className="text-xs text-gray-500">{subtitle}</p>
-                                                    </div>
-                                                </div>
-                                                <div className="flex items-center gap-1.5">
-                                                    <span className={`text-lg font-bold ${numColor}`}>{count}</span>
-                                                    <ChevronRight className={`h-4 w-4 ${chevronColor}`} />
-                                                </div>
-                                            </button>
-                                        )
-                                    })}
-                                </div>
+                                {([
+                                    { key: 'sharing' as const, icon: Share2, label: 'Sharing', count: sharingFileCount, engCount: driveAlerts?.sharing?.length ?? 0, color: 'blue' as const },
+                                    { key: 'sensitive' as const, icon: FileWarning, label: 'Sensitive', count: sensitiveFileCount, engCount: driveAlerts?.sensitive?.length ?? 0, color: 'orange' as const },
+                                    { key: 'storage' as const, icon: HardDrive, label: 'Storage', count: storageFileCount, engCount: driveAlerts?.storage?.length ?? 0, color: 'purple' as const },
+                                ]).map(({ key, icon, label, count, engCount, color }) => (
+                                    <SummaryRow
+                                        key={key}
+                                        icon={icon}
+                                        color={count > 0 ? color : null}
+                                        title={label}
+                                        subtitle={count > 0 ? `${engCount} engagement${engCount !== 1 ? 's' : ''}` : 'No alerts'}
+                                        count={count}
+                                        onClick={() => setAcView(key)}
+                                    />
+                                ))}
                             </div>
                         )}
                     </div>
                 ) : acView === 'threads' ? (
-                    <div className="flex flex-col gap-4">
-                        <SectionBlock title="Unanswered Client Threads" icon={MessageSquare}>
-                            <div className="space-y-2">
-                                {unansweredThreads.length > 0 ? unansweredThreads.map((t) => (
-                                    <ThreadRow key={t.threadId} item={t} groupSlug={groupSlug} firmSlug={firmSlug} />
-                                )) : (
-                                    <div className="flex items-center gap-2 p-3 rounded bg-green-50 border border-green-100">
-                                        <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
-                                        <span className="text-xs text-green-700">No unanswered threads</span>
-                                    </div>
-                                )}
-                            </div>
-                        </SectionBlock>
-                    </div>
+                    <SectionBlock title="Unanswered client threads" icon={MessageSquare}>
+                        {unansweredThreads.length > 0 ? unansweredThreads.map((t) => (
+                            <ThreadRow key={t.threadId} item={t} groupSlug={groupSlug} firmSlug={firmSlug} />
+                        )) : (
+                            <AllClear>No unanswered threads</AllClear>
+                        )}
+                    </SectionBlock>
                 ) : !isDriveView && acView === 'overdue' ? (
                     <div className="flex flex-col gap-4">
                         {overdueReminders.length > 0 && (
-                            <SectionBlock title="Overdue Reminders" icon={Bell}>
-                                <div className="space-y-2">
-                                    {overdueReminders.slice(0, 5).map((r) => (
-                                        <ReminderRow key={r.id} reminder={r} onMarkDone={() => handleMarkOneDone(r.id)} isMarkingDone={markingDoneId === r.id} />
-                                    ))}
-                                </div>
-                                <button
-                                    onClick={() => handleMarkAllDone(overdueReminders)}
-                                    disabled={isMarkingDone}
-                                    className="w-full flex items-center justify-center gap-1.5 mt-1 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
-                                >
+                            <SectionBlock title="Overdue reminders" icon={Bell}>
+                                {overdueReminders.slice(0, 5).map((r) => (
+                                    <ReminderRow key={r.id} reminder={r} onMarkDone={() => handleMarkOneDone(r.id)} isMarkingDone={markingDoneId === r.id} />
+                                ))}
+                                <Button variant="ghost" size="sm" onClick={() => handleMarkAllDone(overdueReminders)} disabled={isMarkingDone} className="mt-1 w-full">
                                     <CheckCheck className="h-3.5 w-3.5" />
                                     Mark all done
-                                </button>
+                                </Button>
                             </SectionBlock>
                         )}
                         {overdueEngagements.length > 0 && (
-                            <SectionBlock title="Overdue Engagements" icon={Briefcase}>
-                                <div className="space-y-2">
-                                    {overdueEngagements.slice(0, 5).map((e) => (
-                                        <EngagementDueRow key={e.engagementId} item={e} groupSlug={groupSlug} firmSlug={firmSlug} />
-                                    ))}
-                                </div>
+                            <SectionBlock title="Overdue engagements" icon={Briefcase}>
+                                {overdueEngagements.slice(0, 5).map((e) => (
+                                    <EngagementDueRow key={e.engagementId} item={e} groupSlug={groupSlug} firmSlug={firmSlug} />
+                                ))}
                             </SectionBlock>
                         )}
                         {overdueProspects.length > 0 && (
-                            <SectionBlock title="Overdue Follow-ups" icon={TrendingUp}>
-                                <div className="space-y-2">
-                                    {overdueProspects.slice(0, 5).map((p) => (
-                                        <ProspectRow key={p.clientId} item={p} groupSlug={groupSlug} firmSlug={firmSlug} />
-                                    ))}
-                                </div>
+                            <SectionBlock title="Overdue follow-ups" icon={TrendingUp}>
+                                {overdueProspects.slice(0, 5).map((p) => (
+                                    <ProspectRow key={p.clientId} item={p} groupSlug={groupSlug} firmSlug={firmSlug} />
+                                ))}
                             </SectionBlock>
                         )}
                         {expiredInvites.length > 0 && (
-                            <SectionBlock title="Expired Invitations" icon={MailOpen}>
-                                <div className="space-y-2">
-                                    {expiredInvites.slice(0, 5).map((inv) => (
-                                        <InviteRow key={inv.invitationId} item={inv} groupSlug={groupSlug} firmSlug={firmSlug} />
-                                    ))}
-                                </div>
+                            <SectionBlock title="Expired invitations" icon={MailOpen}>
+                                {expiredInvites.slice(0, 5).map((inv) => (
+                                    <InviteRow key={inv.invitationId} item={inv} groupSlug={groupSlug} firmSlug={firmSlug} />
+                                ))}
                             </SectionBlock>
                         )}
                     </div>
                 ) : acView === 'upcoming' ? (
                     <div className="flex flex-col gap-4">
                         {upcomingReminders.length > 0 && (
-                            <SectionBlock title="Upcoming Reminders" icon={Bell}>
-                                <div className="space-y-2">
-                                    {upcomingReminders.slice(0, 5).map((r) => (
-                                        <ReminderRow key={r.id} reminder={r} />
-                                    ))}
-                                </div>
-                                <button
-                                    onClick={() => handleMarkAllDone(upcomingReminders)}
-                                    disabled={isMarkingDone}
-                                    className="w-full flex items-center justify-center gap-1.5 mt-1 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
-                                >
+                            <SectionBlock title="Upcoming reminders" icon={Bell}>
+                                {upcomingReminders.slice(0, 5).map((r) => (
+                                    <ReminderRow key={r.id} reminder={r} />
+                                ))}
+                                <Button variant="ghost" size="sm" onClick={() => handleMarkAllDone(upcomingReminders)} disabled={isMarkingDone} className="mt-1 w-full">
                                     <CheckCheck className="h-3.5 w-3.5" />
                                     Mark all done
-                                </button>
+                                </Button>
                             </SectionBlock>
                         )}
                         {upcomingEngagements.length > 0 && (
-                            <SectionBlock title="Engagement Due Dates" icon={Briefcase}>
-                                <div className="space-y-2">
-                                    {upcomingEngagements.slice(0, 6).map((e) => (
-                                        <EngagementDueRow key={e.engagementId} item={e} groupSlug={groupSlug} firmSlug={firmSlug} />
-                                    ))}
-                                </div>
+                            <SectionBlock title="Engagement due dates" icon={Briefcase}>
+                                {upcomingEngagements.slice(0, 6).map((e) => (
+                                    <EngagementDueRow key={e.engagementId} item={e} groupSlug={groupSlug} firmSlug={firmSlug} />
+                                ))}
                             </SectionBlock>
                         )}
                         {pendingInvites.length > 0 && (
-                            <SectionBlock title="Pending Invitations" icon={MailOpen}>
-                                <div className="space-y-2">
-                                    {pendingInvites.slice(0, 5).map((inv) => (
-                                        <InviteRow key={inv.invitationId} item={inv} groupSlug={groupSlug} firmSlug={firmSlug} />
-                                    ))}
-                                </div>
+                            <SectionBlock title="Pending invitations" icon={MailOpen}>
+                                {pendingInvites.slice(0, 5).map((inv) => (
+                                    <InviteRow key={inv.invitationId} item={inv} groupSlug={groupSlug} firmSlug={firmSlug} />
+                                ))}
                             </SectionBlock>
                         )}
                     </div>
                 ) : isDriveView ? (
-                    <div className="flex flex-col gap-4">
-                        {(() => {
-                            const items = acView === 'sharing' ? (driveAlerts?.sharing ?? []) : acView === 'sensitive' ? (driveAlerts?.sensitive ?? []) : (driveAlerts?.storage ?? [])
-                            const icon = acView === 'sharing' ? Share2 : acView === 'sensitive' ? FileWarning : HardDrive
-                            const title = acView === 'sharing' ? 'Engagements with Sharing Alerts' : acView === 'sensitive' ? 'Engagements with Sensitive Files' : 'Engagements with Large Files'
-                            return items.length > 0 ? (
-                                <SectionBlock title={title} icon={icon}>
-                                    <div className="space-y-2">
-                                        {items.map(item => (
-                                            <DriveAlertRow key={item.engagementId} item={item} groupSlug={groupSlug} firmSlug={firmSlug} />
-                                        ))}
-                                    </div>
-                                </SectionBlock>
-                            ) : (
-                                <div className="flex items-center gap-2 p-3 rounded bg-green-50 border border-green-100">
-                                    <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
-                                    <span className="text-xs text-green-700">No alerts — all engagements look good</span>
-                                </div>
-                            )
-                        })()}
-                    </div>
+                    (() => {
+                        const items = acView === 'sharing' ? (driveAlerts?.sharing ?? []) : acView === 'sensitive' ? (driveAlerts?.sensitive ?? []) : (driveAlerts?.storage ?? [])
+                        const icon = acView === 'sharing' ? Share2 : acView === 'sensitive' ? FileWarning : HardDrive
+                        const title = acView === 'sharing' ? 'Engagements with sharing alerts' : acView === 'sensitive' ? 'Engagements with sensitive files' : 'Engagements with large files'
+                        return items.length > 0 ? (
+                            <SectionBlock title={title} icon={icon}>
+                                {items.map((item) => (
+                                    <DriveAlertRow key={item.engagementId} item={item} groupSlug={groupSlug} firmSlug={firmSlug} />
+                                ))}
+                            </SectionBlock>
+                        ) : (
+                            <AllClear>No alerts — all engagements look good</AllClear>
+                        )
+                    })()
                 ) : null}
             </div>
         </div>

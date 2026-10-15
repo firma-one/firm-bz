@@ -6,6 +6,8 @@ import { useAuth } from '@/lib/auth-context'
 import { formatRelativeTime } from '@/lib/utils'
 import { ASSISTANT, ASSISTANT_POLICY } from '@/lib/ai/assistant'
 import { Brio } from '@/components/ui/brio'
+import { Button } from '@/components/ui/button'
+import { ShimmerBar } from '@/components/ui/shimmer'
 import { BrioSections } from '@/components/ui/brio-sections'
 import { fetchWithTimeout, AI_TIMEOUT_MS, AiTimeoutError } from '@/lib/ai/fetch-timeout'
 
@@ -82,16 +84,15 @@ export function AiFirmBrief({ firmId }: { firmId: string }) {
 
     if (loading) {
         return (
-            <div className="bg-white border border-[#e5e7eb] rounded p-6 shadow-sm mb-6">
-                <div className="flex items-center gap-2 mb-3">
-                    <span className="text-sm font-semibold text-gray-900">Today&apos;s brief</span>
-                    <span className="text-gray-300">·</span>
-                    <Brio className="text-sm text-primary" />
+            <div className="mb-6 rounded-card border border-line bg-surface p-5">
+                <div className="mb-3 flex items-center gap-1.5">
+                    <span className="text-small font-medium text-fg-muted">Today&apos;s brief</span>
+                    <Brio className="text-small" />
                 </div>
-                <div className="space-y-2 animate-pulse">
-                    <div className="h-3 bg-gray-100 rounded w-full" />
-                    <div className="h-3 bg-gray-100 rounded w-[92%]" />
-                    <div className="h-3 bg-gray-100 rounded w-[78%]" />
+                <div className="space-y-2" aria-busy="true">
+                    <ShimmerBar className="w-full" />
+                    <ShimmerBar className="w-[92%]" />
+                    <ShimmerBar className="w-[78%]" />
                 </div>
             </div>
         )
@@ -100,33 +101,34 @@ export function AiFirmBrief({ firmId }: { firmId: string }) {
     if (!brief) return null
 
     return (
-        <div className="bg-white border border-[#e5e7eb] rounded p-6 shadow-sm mb-6">
-            <div className="flex items-start justify-between gap-4 mb-3">
-                <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold text-gray-900">Today&apos;s brief</span>
-                    <span className="text-gray-300">·</span>
-                    <Brio className="text-sm text-primary" />
+        <div className="mb-6 rounded-card border border-line bg-surface p-5">
+            <div className="mb-3 flex items-start justify-between gap-4">
+                <div className="flex items-center gap-1.5">
+                    <span className="text-small font-medium text-fg-muted">Today&apos;s brief</span>
+                    <Brio className="text-small" />
                 </div>
-                <button
+                <Button
+                    variant="ghost"
+                    size="icon"
                     onClick={refresh}
                     disabled={refreshing}
-                    className="text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-50 shrink-0"
+                    className="h-7 w-7 shrink-0"
                     title={`Ask ${ASSISTANT.name} to rewrite this`}
                     aria-label={`Ask ${ASSISTANT.name} to rewrite this`}
                 >
-                    <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
-                </button>
+                    <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+                </Button>
             </div>
 
             {refreshError && (
-                <p role="status" className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2.5 py-1.5 mb-3">
+                <p role="status" className="mb-3 rounded-control bg-tag-yellow-bg px-2.5 py-1.5 text-small text-tag-yellow-fg">
                     {refreshError}
                 </p>
             )}
 
-            <BrioSections content={brief.content} className="text-gray-700" />
+            <BrioSections content={brief.content} className="text-fg-muted" />
 
-            <p className="text-xs text-gray-400 mt-3">
+            <p className="mt-3 text-caption text-fg-subtle">
                 Written by <Brio /> {formatRelativeTime(brief.generatedAt)} from your current data. {ASSISTANT_POLICY.short}
             </p>
         </div>
