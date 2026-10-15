@@ -5,7 +5,7 @@ import { createClient } from '@/utils/supabase/server'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { redirect } from 'next/navigation'
 import { parseSettingsFromDb, type ActivityStatus } from '@/lib/sharing-settings'
-import { getReminderKeysForUser } from '@/lib/actions/user-reminders'
+import { getReminderKeysForUser } from '@/lib/reminders/reminder-service'
 import { engagementPath } from '@/lib/navigation/firm-paths'
 import { isExternalEngagementRole } from '@/lib/engagement-access'
 import {

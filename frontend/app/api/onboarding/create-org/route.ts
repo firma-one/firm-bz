@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { logger } from '@/lib/logger'
 import { createClient } from '@supabase/supabase-js'
 import { FirmService } from '@/lib/firm-service'
-import { invalidateUserSettingsPlus } from '@/lib/actions/user-settings'
+import { invalidateUserSettingsPlus } from '@/lib/permissions/invalidate-user-settings'
 import { googleDriveConnector } from '@/lib/google-drive-connector'
 import { createAdminClient } from '@/utils/supabase/admin'
 import {

@@ -1425,7 +1425,7 @@ export const cleanupEngagementReminders = inngest.createFunction(
         })
 
         await step.run("remove-engagement-reminders", async () => {
-            const { removeRemindersByEntityForUsers } = await import('@/lib/actions/user-reminders')
+            const { removeRemindersByEntityForUsers } = await import('@/lib/reminders/reminder-service')
             const ENGAGEMENT_KEYS = [
                 'platform.engagements',
                 'platform.engagements.dueDate',
@@ -1440,7 +1440,7 @@ export const cleanupEngagementReminders = inngest.createFunction(
 
         await step.run("remove-document-reminders", async () => {
             if (docIds.length === 0) return
-            const { removeRemindersByEntityForUsers } = await import('@/lib/actions/user-reminders')
+            const { removeRemindersByEntityForUsers } = await import('@/lib/reminders/reminder-service')
             await Promise.allSettled(
                 docIds.map((docId: string) => removeRemindersByEntityForUsers(memberUserIds, 'platform.documents', docId))
             )
@@ -1448,7 +1448,7 @@ export const cleanupEngagementReminders = inngest.createFunction(
 
         await step.run("remove-comment-reminders", async () => {
             if (commentIds.length === 0) return
-            const { removeRemindersByEntityForUsers } = await import('@/lib/actions/user-reminders')
+            const { removeRemindersByEntityForUsers } = await import('@/lib/reminders/reminder-service')
             await Promise.allSettled(
                 commentIds.map((commentId: string) => removeRemindersByEntityForUsers(memberUserIds, 'platform.doc_comments', commentId))
             )
@@ -1489,7 +1489,7 @@ export const cleanupMemberReminders = inngest.createFunction(
         })
 
         await step.run("remove-reminders", async () => {
-            const { removeRemindersByEntity } = await import('@/lib/actions/user-reminders')
+            const { removeRemindersByEntity } = await import('@/lib/reminders/reminder-service')
             const ENGAGEMENT_KEYS = [
                 'platform.engagements',
                 'platform.engagements.dueDate',
@@ -1547,13 +1547,13 @@ export const cleanupDocumentReminders = inngest.createFunction(
         })
 
         await step.run("remove-document-reminders", async () => {
-            const { removeRemindersByEntityForUsers } = await import('@/lib/actions/user-reminders')
+            const { removeRemindersByEntityForUsers } = await import('@/lib/reminders/reminder-service')
             await removeRemindersByEntityForUsers(memberUserIds, 'platform.documents', documentId)
         })
 
         await step.run("remove-comment-reminders", async () => {
             if (commentIds.length === 0) return
-            const { removeRemindersByEntityForUsers } = await import('@/lib/actions/user-reminders')
+            const { removeRemindersByEntityForUsers } = await import('@/lib/reminders/reminder-service')
             await Promise.allSettled(
                 commentIds.map((commentId: string) => removeRemindersByEntityForUsers(memberUserIds, 'platform.doc_comments', commentId))
             )
@@ -1708,8 +1708,8 @@ export const sendDailyReminderDigest = inngest.createFunction(
         return step.run("digest-users-at-local-9am", async () => {
             const {
                 localDateFor, localHourFor, claimDailyDigest,
-            } = await import("@/lib/actions/user-notification-prefs")
-            const { computeDueReminders } = await import("@/lib/actions/user-reminders")
+            } = await import("@/lib/notification-prefs")
+            const { computeDueReminders } = await import("@/lib/reminders/reminder-service")
             const { remindersPushEnabled } = await import("@/lib/reminders/reminder-push")
             const { sendPushToUser } = await import("@/lib/push")
 

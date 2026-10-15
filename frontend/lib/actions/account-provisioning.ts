@@ -1,4 +1,12 @@
-'use server'
+import 'server-only'
+
+/*
+ * Creates a confirmed Supabase account for any email. Server-only rather than 'use server': as a
+ * server action it was registered as a callable endpoint that could create accounts for arbitrary
+ * addresses. Only invitation flows that have already authorized the inviter call it.
+ *
+ * Lives under lib/actions/ for history; it is not a server action.
+ */
 
 import { createAdminClient } from '@/utils/supabase/admin'
 import { logger } from '@/lib/logger'

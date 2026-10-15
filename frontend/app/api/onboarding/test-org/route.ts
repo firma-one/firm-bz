@@ -5,7 +5,7 @@ import { createGoogleDriveAdapter } from '@/lib/connectors/adapters/google-drive
 import { googleDriveConnector } from '@/lib/google-drive-connector'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { prisma } from '@/lib/prisma'
-import { invalidateUserSettingsPlus } from '@/lib/actions/user-settings'
+import { invalidateUserSettingsPlus } from '@/lib/permissions/invalidate-user-settings'
 import { ClientService } from '@/lib/services/client.service'
 import { projectService } from '@/lib/services/project.service'
 

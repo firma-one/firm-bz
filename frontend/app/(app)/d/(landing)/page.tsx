@@ -1,7 +1,8 @@
 import { redirect } from 'next/navigation'
 import { isRedirectError } from 'next/dist/client/components/redirect-error'
 import { FirmsView } from '@/components/projects/firms-view'
-import { getUserFirms, resolveDefaultFirmLandingPath, shouldShowSwitchWorkspace, type FirmOption } from '@/lib/actions/firms'
+import { getUserFirms, shouldShowSwitchWorkspace, type FirmOption } from '@/lib/actions/firms'
+import { resolveDefaultFirmLandingPath } from '@/lib/landing/default-landing-path'
 import { createClient } from '@/utils/supabase/server'
 import { GroupPicker } from './group-picker'
 

@@ -9,7 +9,7 @@ import { ensureAppFolderStructure, setupFirmFolder } from '@/lib/connectors/pock
 import { getStorageAdapter } from '@/lib/connectors/registry'
 import type { ClientStatus } from '@prisma/client'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
-import { upsertFollowUpReminder } from '@/lib/actions/user-reminders'
+import { upsertFollowUpReminder } from '@/lib/reminders/reminder-service'
 import { assertWithinClientCap, assertWithinClientContactCap } from '@/lib/billing/effective-billing-caps'
 import { ClientLinkedFolderFailedError } from '@/lib/actions/client-errors'
 import { clientPath, firmPath } from '@/lib/navigation/firm-paths'

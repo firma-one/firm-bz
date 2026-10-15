@@ -2,12 +2,12 @@
 
 import { prisma } from "@/lib/prisma"
 import { createClient } from "@/utils/supabase/server"
-import { upsertFollowUpReminder, removeRemindersByEntity } from '@/lib/actions/user-reminders'
+import { upsertFollowUpReminder, removeRemindersByEntity } from '@/lib/reminders/reminder-service'
 import { sendEmail } from '@/lib/email'
 import { logger } from '@/lib/logger'
 import { BRAND_NAME } from '@/config/brand'
 import { renderInviteEmail } from '@/lib/email-templates/invite'
-import { invalidateUserSettingsPlus } from '@/lib/actions/user-settings'
+import { invalidateUserSettingsPlus } from '@/lib/permissions/invalidate-user-settings'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { mergeLeanAppMetadata } from '@/lib/auth/supabase-jwt-metadata'
 import { maybeProvisionInviteeAccount } from '@/lib/actions/account-provisioning'

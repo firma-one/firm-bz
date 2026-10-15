@@ -3,7 +3,7 @@
 import { prisma } from '@/lib/prisma'
 import { createClient } from '@/utils/supabase/server'
 import { logger } from '@/lib/logger'
-import { computeDueReminders } from '@/lib/actions/user-reminders'
+import { computeDueReminders } from '@/lib/reminders/reminder-service'
 
 /**
  * Unread counts for the New UI Inbox badges (.claude/plans/ui-ux-overhaul.md, Phase 4): the

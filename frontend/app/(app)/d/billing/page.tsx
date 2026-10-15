@@ -1,7 +1,7 @@
 import { Suspense } from 'react'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
-import { resolveDefaultFirmLandingPath } from '@/lib/actions/firms'
+import { resolveDefaultFirmLandingPath } from '@/lib/landing/default-landing-path'
 import { BillingPageClient } from '@/components/billing/billing-page-client'
 
 type Props = {

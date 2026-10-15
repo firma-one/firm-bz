@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { isAgentUserIdAsync } from '@/lib/ai/agent-email'
-import type { ReminderItem } from '@/lib/actions/user-reminders'
+import type { ReminderItem } from '@/lib/reminders/reminder-types'
 
 /**
  * Storage and locking for a user's reminders array (UserPersonalization.reminders).

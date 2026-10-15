@@ -612,7 +612,7 @@ export async function PUT(
 
       if (ecJustEnabled || guestJustEnabled) {
         try {
-          const { upsertFollowUpReminder } = await import('@/lib/actions/user-reminders')
+          const { upsertFollowUpReminder } = await import('@/lib/reminders/reminder-service')
           const ecEvRoles: string[] = []
           if (ecJustEnabled) ecEvRoles.push('eng_ext_collaborator')
           if (guestJustEnabled) ecEvRoles.push('eng_viewer')

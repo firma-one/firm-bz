@@ -50,17 +50,5 @@ export async function refreshMyUserSettingsPlus(): Promise<{ success: boolean }>
   }
 }
 
-/**
- * Invalidate UserSettingsPlus cache
- * Call after permission/settings mutations
- */
-export async function invalidateUserSettingsPlus(userId: string): Promise<void> {
-  userSettingsPlus.invalidateUser(userId)
-}
-
-/**
- * Invalidate UserSettingsPlus cache for multiple users
- */
-export async function invalidateUsersSettingsPlus(userIds: string[]): Promise<void> {
-  userSettingsPlus.invalidateUsers(userIds)
-}
+// invalidateUserSettingsPlus / invalidateUsersSettingsPlus take arbitrary user ids, so they live in
+// lib/permissions/invalidate-user-settings.ts (server-only) rather than here as client-callable actions.

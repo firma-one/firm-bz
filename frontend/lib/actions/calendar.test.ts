@@ -18,7 +18,7 @@ vi.mock('@/utils/supabase/admin', () => ({
   createAdminClient: () => ({ auth: { admin: { getUserById: async () => ({ data: { user: null } }) } } }),
 }))
 vi.mock('next/navigation', () => ({ redirect: vi.fn() }))
-vi.mock('@/lib/actions/user-reminders', () => ({ getReminderKeysForUser: async () => new Set<string>() }))
+vi.mock('@/lib/reminders/reminder-service', () => ({ getReminderKeysForUser: async () => new Set<string>() }))
 vi.mock('@/lib/engagement-sharing-ids', async (importActual) => ({
   ...(await importActual<typeof import('@/lib/engagement-sharing-ids')>()),
   getSharedAndAncestorIdsForPersona: (...a: unknown[]) => getSharedAndAncestorIdsForPersona(...a),

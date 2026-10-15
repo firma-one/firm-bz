@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { logger } from '@/lib/logger'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { ClientService } from '@/lib/services/client.service'
-import { invalidateUserSettingsPlus } from '@/lib/actions/user-settings'
+import { invalidateUserSettingsPlus } from '@/lib/permissions/invalidate-user-settings'
 
 export async function POST(request: NextRequest) {
     try {

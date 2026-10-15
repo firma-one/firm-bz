@@ -12,7 +12,7 @@ import { renderInviteEmail } from '@/lib/email-templates/invite'
 import { maybeProvisionInviteeAccount } from '@/lib/actions/account-provisioning'
 import { canManageOrganization } from '@/lib/permission-helpers'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
-import { upsertFollowUpReminder, removeRemindersByEntity } from '@/lib/actions/user-reminders'
+import { upsertFollowUpReminder, removeRemindersByEntity } from '@/lib/reminders/reminder-service'
 import { getAvatarUrlFromSupabaseUser } from '@/lib/supabase-user-helpers'
 import { firmSettingsPath } from '@/lib/navigation/firm-paths'
 

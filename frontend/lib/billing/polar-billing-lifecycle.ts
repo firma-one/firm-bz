@@ -2,7 +2,7 @@ import { Polar } from '@polar-sh/sdk'
 import { prisma } from '@/lib/prisma'
 import { logger } from '@/lib/logger'
 import { ensureGroupFreePlan } from '@/lib/billing/polar-free-plan'
-import { upsertFollowUpReminder } from '@/lib/actions/user-reminders'
+import { upsertFollowUpReminder } from '@/lib/reminders/reminder-service'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { createPolarClient } from '@/lib/billing/polar-client'
 

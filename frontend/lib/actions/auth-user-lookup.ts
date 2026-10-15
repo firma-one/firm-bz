@@ -1,4 +1,12 @@
-'use server'
+import 'server-only'
+
+/*
+ * Looks up any account id by email, with no caller check. Server-only rather than 'use server':
+ * as a server action it was registered as a callable endpoint (account enumeration). Callers are
+ * invitation actions and the files agent, which have already authorized the caller.
+ *
+ * Lives under lib/actions/ for history; it is not a server action.
+ */
 
 import { prisma } from "@/lib/prisma"
 

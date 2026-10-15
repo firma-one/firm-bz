@@ -10,7 +10,7 @@ import { logger } from '@/lib/logger'
 import { googleDriveConnector } from '@/lib/google-drive-connector'
 import { safeInngestSend } from '@/lib/inngest/client'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
-import { removeRemindersByEntity } from '@/lib/actions/user-reminders'
+import { removeRemindersByEntity } from '@/lib/reminders/reminder-service'
 import { getAvatarUrlFromSupabaseUser } from '@/lib/supabase-user-helpers'
 
 // Admin Client for fetching user details
@@ -277,7 +277,7 @@ export async function removeMember(memberId: string) {
             .meta({ removedUserId: member.userId })
             .fireAndForget()
 
-        const { invalidateUserSettingsPlus } = await import('@/lib/actions/user-settings')
+        const { invalidateUserSettingsPlus } = await import('@/lib/permissions/invalidate-user-settings')
         await invalidateUserSettingsPlus(member.userId)
 
         // Async: reminder cleanup + session sign-out via Inngest (retried on failure)
@@ -397,7 +397,7 @@ export async function updateMemberPersona(memberId: string, personaId: string) {
             .meta({ memberId, userId: member.userId, oldRole: oldPersonaSlug, newRole: newPersonaSlug })
             .fireAndForget()
 
-        const { invalidateUserSettingsPlus } = await import('@/lib/actions/user-settings')
+        const { invalidateUserSettingsPlus } = await import('@/lib/permissions/invalidate-user-settings')
         await invalidateUserSettingsPlus(member.userId)
 
         return { success: true }

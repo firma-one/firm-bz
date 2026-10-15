@@ -10,10 +10,10 @@ vi.mock('@/lib/logger', () => ({ logger: { error: vi.fn() } }))
 vi.mock('@/utils/supabase/server', () => ({
     createClient: async () => ({ auth: { getUser: async () => ({ data: { user: auth.user } }) } }),
 }))
-vi.mock('@/lib/actions/user-reminders', () => ({ computeDueReminders: vi.fn(async () => reminders.list) }))
+vi.mock('@/lib/reminders/reminder-service', () => ({ computeDueReminders: vi.fn(async () => reminders.list) }))
 
 import { getInboxCounts } from './inbox'
-import { computeDueReminders } from '@/lib/actions/user-reminders'
+import { computeDueReminders } from '@/lib/reminders/reminder-service'
 
 beforeEach(() => {
     vi.clearAllMocks()

@@ -257,7 +257,7 @@ export async function POST(
     // Create reminder for tagged recipient
     if (isReminder && recipientId) {
       try {
-        const { upsertFollowUpReminder } = await import('@/lib/actions/user-reminders')
+        const { upsertFollowUpReminder } = await import('@/lib/reminders/reminder-service')
         const engDetails = await prisma.engagement.findUnique({
           where: { id: projectId },
           select: { slug: true, client: { select: { slug: true, firm: { select: { slug: true, group: { select: { slug: true } } } } } } },
@@ -355,7 +355,7 @@ export async function PATCH(
     if (!message) return NextResponse.json({ error: 'Comment not found' }, { status: 404 })
 
     try {
-      const { upsertFollowUpReminder } = await import('@/lib/actions/user-reminders')
+      const { upsertFollowUpReminder } = await import('@/lib/reminders/reminder-service')
       const engDetails = await prisma.engagement.findUnique({
         where: { id: projectId },
         select: { slug: true, client: { select: { slug: true, firm: { select: { slug: true, group: { select: { slug: true } } } } } } },
