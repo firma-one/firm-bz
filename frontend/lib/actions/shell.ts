@@ -3,7 +3,7 @@
 import { prisma } from '@/lib/prisma'
 import { createClient } from '@/utils/supabase/server'
 import { logger } from '@/lib/logger'
-import { engagementPath } from '@/lib/navigation/firm-paths'
+import { engagementDocFilePath, engagementPath } from '@/lib/navigation/firm-paths'
 
 /**
  * Data for the New UI sidebar (.claude/plans/ui-ux-overhaul.md, Phase 2): the firm's clients and
@@ -40,7 +40,7 @@ export type ShellFavorite = {
     kind: 'project' | 'document'
     label: string
     href: string
-    /** Engagement name, shown as secondary text for document favorites. */
+    /** Where it lives, shown as secondary text: the engagement for a document, the client for an engagement. */
     context: string | null
 }
 
@@ -107,7 +107,7 @@ export async function getShellSidebarData(firmSlug: string): Promise<ShellSideba
         if (!membership) return null
 
         const groupSlug = firm.group.slug
-        const engagementById = new Map<string, { name: string; href: string }>()
+        const engagementById = new Map<string, { name: string; href: string; slug: string; clientName: string; clientSlug: string }>()
         const roles: string[] = []
 
         const shellClients: ShellClient[] = clients.map((c) => ({
@@ -119,7 +119,7 @@ export async function getShellSidebarData(firmSlug: string): Promise<ShellSideba
                 const href = engagementPath(groupSlug, firm.slug, c.slug, e.slug)
                 const role = e.members[0]?.role ?? null
                 if (role) roles.push(role)
-                engagementById.set(e.id, { name: e.name, href })
+                engagementById.set(e.id, { name: e.name, href, slug: e.slug, clientName: c.name, clientSlug: c.slug })
                 return {
                     id: e.id,
                     name: e.name,
@@ -145,10 +145,16 @@ export async function getShellSidebarData(firmSlug: string): Promise<ShellSideba
                 id: String(b.id),
                 kind: b.kind,
                 label: (typeof b.label === 'string' && b.label) || (isDoc ? 'Document' : eng.name),
-                // Document bookmarks carry their own deeplink URL (resolved through /api/deeplink,
-                // which re-checks access); engagement bookmarks open the engagement.
-                href: isDoc && typeof b.url === 'string' && b.url ? b.url : eng.href,
-                context: isDoc ? eng.name : null,
+                // A document bookmark opens its saved URL when it has one, else the document itself
+                // (bookmarks with ids are stored without a URL, see /api/bookmarks); the page
+                // re-checks access. Engagement bookmarks open the engagement.
+                href: isDoc
+                    ? (typeof b.url === 'string' && b.url) ||
+                      (typeof b.documentId === 'string' && b.documentId
+                          ? engagementDocFilePath(groupSlug, firm.slug, eng.clientSlug, eng.slug, b.documentId)
+                          : eng.href)
+                    : eng.href,
+                context: isDoc ? eng.name : eng.clientName,
             })
         }
 

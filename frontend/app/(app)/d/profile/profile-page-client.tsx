@@ -13,9 +13,10 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useToast } from '@/components/ui/toast'
+import { initialsOf } from '@/lib/initials'
+import { PropertyList, PropertyRow, PROPERTY_FIELD_CLASS, PROPERTY_HINT_CLASS, SETTINGS_SECTION_HEADING_CLASS } from '@/components/ui/property-list'
+import { PushNotificationToggle } from '@/app/(app)/d/u/notifications/push-notification-toggle'
 
-const fieldLabel = 'font-mono text-[9px] font-bold uppercase tracking-widest text-[#45474c] block mb-1'
-const inputCls = 'border-[#e5e7eb] text-[#1b1b1d] text-sm placeholder:text-[#9a9ba0] rounded focus-visible:ring-1 focus-visible:ring-primary focus-visible:border-primary disabled:opacity-50'
 export function ProfilePageClient({
     displayName,
     firstName: initialFirstName,
@@ -118,105 +119,91 @@ export function ProfilePageClient({
         </div>
     )
     if (hideChrome) {
-        const initials = displayName
-            .split(' ')
-            .map((w) => w[0])
-            .join('')
-            .slice(0, 2)
-            .toUpperCase()
-
+        // The Profile tab (.claude/plans/ui-ux-overhaul.md, Phase 6): property rows like the
+        // settings forms, then notification preferences, then export and deletion.
+        const initials = initialsOf(displayName, '')
         return (
-            <div className="flex flex-col gap-3">
-                <div className="grid grid-cols-3 gap-3">
-
-                    {/* Identity — col-span-2 */}
-                    <div className="col-span-2 bg-white rounded border border-[#e5e7eb] p-4 space-y-3">
-                        <p className={fieldLabel}>Identity</p>
-                        <div className="grid grid-cols-2 gap-3">
-                            <div>
-                                <label htmlFor="profile-first-name" className={fieldLabel}>First name</label>
-                                <Input
-                                    id="profile-first-name"
-                                    autoComplete="given-name"
-                                    maxLength={80}
-                                    value={firstName}
-                                    onChange={(e) => { setFirstName(e.target.value); setFormError(null) }}
-                                    disabled={saving}
-                                    className={inputCls}
-                                />
-                            </div>
-                            <div>
-                                <label htmlFor="profile-last-name" className={fieldLabel}>Last name</label>
-                                <Input
-                                    id="profile-last-name"
-                                    autoComplete="family-name"
-                                    maxLength={80}
-                                    value={lastName}
-                                    onChange={(e) => { setLastName(e.target.value); setFormError(null) }}
-                                    disabled={saving}
-                                    className={inputCls}
-                                />
-                            </div>
-                        </div>
-                        <div>
-                            <label className={fieldLabel}>
-                                <span className="inline-flex items-center gap-1"><Mail className="h-3 w-3" /> Email</span>
-                            </label>
-                            <div className="flex items-center gap-2">
-                                <Input
-                                    value={email}
-                                    readOnly
-                                    disabled
-                                    className={`${inputCls} flex-1`}
-                                />
-                                <button
-                                    type="button"
-                                    title="Copy email"
-                                    onClick={() => navigator.clipboard.writeText(email)}
-                                    className="shrink-0 p-2 rounded border border-[#e5e7eb] bg-white text-[#45474c] hover:text-[#1b1b1d] hover:bg-[#f9f9fb] transition-colors"
-                                >
-                                    <Copy className="h-3.5 w-3.5" />
-                                </button>
-                            </div>
-                            <p className="mt-1 text-[10px] text-[#9a9ba0]">Email cannot be changed here.</p>
-                        </div>
-                        {formError && (
-                            <p className="text-xs text-red-600" role="alert">{formError}</p>
+            <div className="mx-auto flex w-full max-w-2xl flex-col gap-8 pb-10">
+                <section>
+                    <h3 className={SETTINGS_SECTION_HEADING_CLASS}>Profile</h3>
+                    <div className="flex items-center gap-3 px-1 py-2">
+                        {avatarUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={avatarUrl} alt="" className="h-10 w-10 shrink-0 rounded-full object-cover" />
+                        ) : (
+                            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-surface-muted text-small font-medium text-fg-muted">
+                                {initials || <User className="h-4 w-4" />}
+                            </span>
                         )}
-                    </div>
-
-                    {/* Account summary — col-span-1 */}
-                    <div className="bg-white rounded border border-[#e5e7eb] p-4 space-y-4">
-                        <p className={fieldLabel}>Account</p>
-                        <div className="flex flex-col items-center gap-3 py-2">
-                            {avatarUrl ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img src={avatarUrl} alt={displayName} className="h-14 w-14 rounded-full object-cover border border-[#e5e7eb]" />
-                            ) : (
-                                <div className="h-14 w-14 rounded-full bg-primary/10 border border-[#e5e7eb] flex items-center justify-center">
-                                    <span className="font-headline text-lg font-bold text-primary">{initials || <User className="h-6 w-6" />}</span>
-                                </div>
-                            )}
-                            <div className="text-center">
-                                <p className="text-[0.8125rem] font-semibold text-[#1b1b1d] leading-tight">{displayName}</p>
-                                <p className="text-xs text-[#45474c] truncate max-w-[160px]">{email}</p>
-                            </div>
+                        <div className="min-w-0">
+                            <p className="truncate text-ui font-medium text-fg">{displayName}</p>
+                            <p className="truncate text-small text-fg-muted">{email}</p>
                         </div>
                     </div>
-                </div>
+                    <PropertyList>
+                        <PropertyRow label={<label htmlFor="profile-first-name">First name</label>} icon={<User />}>
+                            <Input
+                                id="profile-first-name"
+                                autoComplete="given-name"
+                                maxLength={80}
+                                value={firstName}
+                                onChange={(e) => { setFirstName(e.target.value); setFormError(null) }}
+                                disabled={saving}
+                                placeholder="Empty"
+                                className={PROPERTY_FIELD_CLASS}
+                            />
+                        </PropertyRow>
+                        <PropertyRow label={<label htmlFor="profile-last-name">Last name</label>} icon={<User />}>
+                            <Input
+                                id="profile-last-name"
+                                autoComplete="family-name"
+                                maxLength={80}
+                                value={lastName}
+                                onChange={(e) => { setLastName(e.target.value); setFormError(null) }}
+                                disabled={saving}
+                                placeholder="Empty"
+                                className={PROPERTY_FIELD_CLASS}
+                            />
+                        </PropertyRow>
+                        <PropertyRow label="Email" icon={<Mail />}>
+                            <div className="flex w-full flex-col gap-1">
+                                <div className="flex h-8 items-center gap-1 px-2">
+                                    <span className="min-w-0 truncate text-ui text-fg">{email}</span>
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        title="Copy email"
+                                        aria-label="Copy email"
+                                        onClick={() => {
+                                            void navigator.clipboard.writeText(email)
+                                            addToast({ type: 'success', title: 'Copied', message: 'Email copied.' })
+                                        }}
+                                        className="h-6 w-6 shrink-0"
+                                    >
+                                        <Copy className="h-3.5 w-3.5" />
+                                    </Button>
+                                </div>
+                                <p className={PROPERTY_HINT_CLASS}>Your sign-in email can&apos;t be changed here.</p>
+                            </div>
+                        </PropertyRow>
+                    </PropertyList>
+                    {formError && <p className="mt-2 px-2 text-small text-danger" role="alert">{formError}</p>}
+                    <div className="mt-4 flex items-center gap-2">
+                        <Button type="button" variant="greenCta" onClick={handleSaveName} disabled={saving || !isDirty}>
+                            {saving ? 'Saving…' : 'Save changes'}
+                        </Button>
+                    </div>
+                </section>
 
-                {/* Actions bar */}
-                <div className="flex items-center gap-3">
-                    <Button
-                        type="button"
-                        onClick={handleSaveName}
-                        disabled={saving || !isDirty}
-                        variant="greenCta"
-                        className="rounded min-w-[8rem] text-[10px] font-headline font-bold tracking-widest uppercase"
-                    >
-                        {saving ? 'Saving…' : 'Save'}
-                    </Button>
-                </div>
+                <section>
+                    <h3 className={SETTINGS_SECTION_HEADING_CLASS}>Notifications</h3>
+                    <PushNotificationToggle />
+                    <p className="py-2 text-small text-fg-muted">
+                        Which events send email and in-app notifications is set for everyone by your firm&apos;s admins, in Firm settings › App settings.
+                        Your notifications and reminders are in your Inbox.
+                    </p>
+                </section>
 
                 {/* Export and deletion. In BOTH branches, not only the standalone one: the
                     Personalization page renders this component with `hideChrome`, which returns

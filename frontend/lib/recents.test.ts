@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const { prisma } = vi.hoisted(() => ({
     prisma: {
         userRecentVisit: { findMany: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn() },
-        firmMember: { findFirst: vi.fn() },
+        firmMember: { findMany: vi.fn() },
         engagement: { findMany: vi.fn() },
         client: { findMany: vi.fn() },
     },
@@ -50,14 +50,14 @@ const row = (over: Record<string, unknown>) => ({
 describe('getRecentVisits — re-checks access on read', () => {
     beforeEach(() => {
         vi.clearAllMocks()
-        prisma.firmMember.findFirst.mockResolvedValue({ id: 'm1' })
+        prisma.firmMember.findMany.mockResolvedValue([{ firmId: 'f1' }])
         prisma.engagement.findMany.mockResolvedValue([])
         prisma.client.findMany.mockResolvedValue([])
     })
 
     it('returns nothing once the caller is no longer a firm member', async () => {
         prisma.userRecentVisit.findMany.mockResolvedValue([row({})])
-        prisma.firmMember.findFirst.mockResolvedValue(null)
+        prisma.firmMember.findMany.mockResolvedValue([])
         expect(await getRecentVisits('u1', 'f1')).toEqual([])
     })
 
@@ -72,6 +72,28 @@ describe('getRecentVisits — re-checks access on read', () => {
         expect(out[0]).toMatchObject({ title: 'Renamed Engagement', context: 'Contoso', path: '/d/g/f/acme/c/c1/e/one/files' })
         const where = prisma.engagement.findMany.mock.calls[0][0].where
         expect(where).toMatchObject({ isDeleted: false, members: { some: { userId: 'u1' } } })
+    })
+
+    it('covers several firms, keeping only those the caller is still a member of', async () => {
+        prisma.firmMember.findMany.mockResolvedValue([{ firmId: 'f1' }, { firmId: 'f2' }])
+        prisma.userRecentVisit.findMany.mockResolvedValue([
+            row({ id: 'r1', firmId: 'f2', entityId: 'e2' }),
+            row({ id: 'r2', firmId: 'f3', entityId: 'e3' }),
+            row({ id: 'r3', firmId: 'f1', entityId: 'e1' }),
+        ])
+        prisma.engagement.findMany.mockResolvedValue([
+            { id: 'e1', name: 'One', client: { name: 'C1' } },
+            { id: 'e2', name: 'Two', client: { name: 'C2' } },
+            { id: 'e3', name: 'Three', client: { name: 'C3' } },
+        ])
+        const out = await getRecentVisits('u1', ['f1', 'f2', 'f3'])
+        expect(out.map((r) => [r.id, r.firmId])).toEqual([['r1', 'f2'], ['r3', 'f1']])
+        expect(prisma.userRecentVisit.findMany.mock.calls[0][0].where).toEqual({ userId: 'u1', firmId: { in: ['f1', 'f2', 'f3'] } })
+    })
+
+    it('reads nothing for an empty firm list', async () => {
+        expect(await getRecentVisits('u1', [])).toEqual([])
+        expect(prisma.userRecentVisit.findMany).not.toHaveBeenCalled()
     })
 
     it('skips firm-level rows — Continue never points back at Home', async () => {

@@ -6,18 +6,21 @@ import { engagementPath } from '@/lib/navigation/firm-paths'
 import { canViewDeliverable, type EngagementRoleSlug } from '@/lib/deliverable-stage-roles'
 import type { ActivityStatus } from '@/lib/sharing-settings'
 import type { ReminderWithContext } from '@/lib/actions/user-reminders'
+import type { HomeFirm } from '@/lib/home/home-firms'
 
 /**
- * Data for the New UI Firm Home (.claude/plans/ui-ux-overhaul.md, Phase 3).
+ * Data for the New UI Home (.claude/plans/ui-ux-overhaul.md, Phase 3), across the firms it is
+ * given (.claude/plans/cross-firm-home-inbox.md): the cross-firm Home passes every firm from
+ * getHomeFirms, the old per-firm Home passes one.
  *
- * Access rules — every query starts from the caller's own EngagementMember rows in this firm, the
+ * Access rules — every query starts from the caller's own EngagementMember rows in those firms, the
  * same basis as getFirmHierarchy, so a firm admin sees only engagements they belong to (firm-wide
  * views stay on the admin Overview):
  *  - approvals (deliverables in review, intake, AI summary drafts) only on engagements the caller
  *    leads (eng_admin) — the only role that can act on them;
  *  - due deliverables assigned to an external (EC/EV) member are shown only at stages their role
  *    may see (deliverable-stage-roles), so a hidden to-do never leaks its name;
- *  - reminders are the caller's own, filtered to this firm.
+ *  - reminders are the caller's own, filtered to those firms.
  * Nothing here is cached across users.
  */
 
@@ -28,6 +31,7 @@ export type HomeEngagement = {
     id: string
     name: string
     href: string
+    firmId: string
     clientName: string
     status: string
     dueDate: string | null
@@ -38,6 +42,8 @@ export type HomeEngagement = {
 export type NeedsYouItem = {
     id: string
     kind: 'deliverable_review' | 'intake' | 'ai_summary' | 'reminder'
+    /** The firm it belongs to, for the firm label and filter; null for a reminder without one. */
+    firmId: string | null
     title: string
     context: string
     href: string
@@ -48,6 +54,7 @@ export type NeedsYouItem = {
 export type DueItem = {
     id: string
     kind: 'deliverable' | 'engagement' | 'reminder'
+    firmId: string | null
     title: string
     context: string
     href: string
@@ -77,18 +84,20 @@ function startOfToday(): Date {
 
 export async function getMyWork(params: {
     userId: string
-    firmId: string
-    groupSlug: string
-    firmSlug: string
-    /** The caller's reminders (getUserReminders); filtered to this firm here. */
+    /** The firms to cover; callers pass only firms the user may open (getHomeFirms). */
+    firms: HomeFirm[]
+    /** The caller's reminders (getUserReminders); filtered to these firms here. */
     reminders: ReminderWithContext[]
 }): Promise<MyWork> {
-    const { userId, firmId, groupSlug, firmSlug } = params
+    const { userId, firms } = params
     const empty: MyWork = { engagements: [], needsYou: [], dueSoon: [] }
+    if (firms.length === 0) return empty
+    const firmById = new Map(firms.map((f) => [f.id, f]))
+    const firmIds = new Set(firmById.keys())
 
     try {
         const rows = await prisma.engagement.findMany({
-            where: { isDeleted: false, client: { firmId }, members: { some: { userId } } },
+            where: { isDeleted: false, client: { firmId: { in: Array.from(firmIds) } }, members: { some: { userId } } },
             select: {
                 id: true,
                 name: true,
@@ -96,17 +105,24 @@ export async function getMyWork(params: {
                 status: true,
                 dueDate: true,
                 updatedAt: true,
-                client: { select: { name: true, slug: true } },
+                client: { select: { name: true, slug: true, firmId: true } },
                 members: { where: { userId }, select: { role: true } },
             },
             orderBy: { updatedAt: 'desc' },
         })
-        if (rows.length === 0) return { ...empty, ...remindersOnly(params.reminders, firmId) }
+        if (rows.length === 0) return { ...empty, ...remindersOnly(params.reminders, firmIds) }
+
+        // Each engagement's links use its own firm's path.
+        const pathOf = (e: (typeof rows)[number], opts?: Parameters<typeof engagementPath>[4]) => {
+            const firm = firmById.get(e.client.firmId)!
+            return engagementPath(firm.groupSlug, firm.slug, e.client.slug, e.slug, opts)
+        }
 
         const engagements: HomeEngagement[] = rows.map((e) => ({
             id: e.id,
             name: e.name,
-            href: engagementPath(groupSlug, firmSlug, e.client.slug, e.slug),
+            href: pathOf(e),
+            firmId: e.client.firmId,
             clientName: e.client.name,
             status: e.status,
             dueDate: e.dueDate ? e.dueDate.toISOString() : null,
@@ -118,10 +134,8 @@ export async function getMyWork(params: {
             const e = byId.get(id)
             return e ? `${e.clientName} · ${e.name}` : ''
         }
-        const sharesBoard = (id: string) => {
-            const row = rows.find((r) => r.id === id)!
-            return engagementPath(groupSlug, firmSlug, row.client.slug, row.slug, { tab: 'shares', subpath: 'board' })
-        }
+        const firmOf = (id: string) => byId.get(id)?.firmId ?? null
+        const sharesBoard = (id: string) => pathOf(rows.find((r) => r.id === id)!, { tab: 'shares', subpath: 'board' })
 
         const allIds = engagements.map((e) => e.id)
         const leadIds = engagements.filter((e) => e.role === 'eng_admin').map((e) => e.id)
@@ -183,6 +197,7 @@ export async function getMyWork(params: {
             ...inReview.map((d) => ({
                 id: `review:${d.id}`,
                 kind: 'deliverable_review' as const,
+                firmId: firmOf(d.engagementId),
                 title: d.fileName,
                 context: contextOf(d.engagementId),
                 href: sharesBoard(d.engagementId),
@@ -192,6 +207,7 @@ export async function getMyWork(params: {
             ...intake.map((d) => ({
                 id: `intake:${d.id}`,
                 kind: 'intake' as const,
+                firmId: firmOf(d.engagementId),
                 title: d.fileName,
                 context: contextOf(d.engagementId),
                 href: sharesBoard(d.engagementId),
@@ -201,6 +217,7 @@ export async function getMyWork(params: {
             ...aiDrafts.map((e) => ({
                 id: `ai:${e.id}`,
                 kind: 'ai_summary' as const,
+                firmId: firmOf(e.id),
                 title: 'AI summary ready for review',
                 context: contextOf(e.id),
                 href: `${byId.get(e.id)!.href}/analytics`,
@@ -218,6 +235,7 @@ export async function getMyWork(params: {
             dueSoon.push({
                 id: `deliverable:${d.id}`,
                 kind: 'deliverable',
+                firmId: firmOf(d.engagementId),
                 title: d.fileName,
                 context: contextOf(d.engagementId),
                 href: sharesBoard(d.engagementId),
@@ -231,6 +249,7 @@ export async function getMyWork(params: {
             dueSoon.push({
                 id: `engagement:${e.id}`,
                 kind: 'engagement',
+                firmId: e.client.firmId,
                 title: e.name,
                 context: e.client.name,
                 href: byId.get(e.id)!.href,
@@ -240,28 +259,29 @@ export async function getMyWork(params: {
             })
         }
 
-        const fromReminders = remindersOnly(params.reminders, firmId)
+        const fromReminders = remindersOnly(params.reminders, firmIds)
         return {
             engagements,
             needsYou: [...needsYou, ...fromReminders.needsYou],
             dueSoon: [...dueSoon, ...fromReminders.dueSoon].sort((a, b) => a.dueDate.localeCompare(b.dueDate)),
         }
     } catch (e) {
-        logger.error('getMyWork failed', e as Error, 'Home', { userId, firmId })
+        logger.error('getMyWork failed', e as Error, 'Home', { userId, firmIds: Array.from(firmIds) })
         return empty
     }
 }
 
-/** The caller's own reminders in this firm: review requests → Needs you; dated ones → Due soon. */
-function remindersOnly(reminders: ReminderWithContext[], firmId: string): Pick<MyWork, 'needsYou' | 'dueSoon'> {
+/** The caller's own reminders in these firms: review requests → Needs you; dated ones → Due soon. */
+function remindersOnly(reminders: ReminderWithContext[], firmIds: Set<string>): Pick<MyWork, 'needsYou' | 'dueSoon'> {
     const needsYou: NeedsYouItem[] = []
     const dueSoon: DueItem[] = []
     for (const r of reminders) {
-        if (r.hiddenAt || r.firmId !== firmId) continue
+        if (r.hiddenAt || !r.firmId || !firmIds.has(r.firmId)) continue
         if (isReviewReminder(r)) {
             needsYou.push({
                 id: `reminder:${r.id}`,
                 kind: 'reminder',
+                firmId: r.firmId,
                 title: r.entityName,
                 context: r.action,
                 href: r.ctaUrl ?? '#',
@@ -272,6 +292,7 @@ function remindersOnly(reminders: ReminderWithContext[], firmId: string): Pick<M
             dueSoon.push({
                 id: `reminder:${r.id}`,
                 kind: 'reminder',
+                firmId: r.firmId,
                 title: r.entityName,
                 context: r.action,
                 href: r.ctaUrl ?? '#',

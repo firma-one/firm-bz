@@ -66,7 +66,7 @@ describe('useShellShortcuts', () => {
         render(<Shortcuts />)
         fireEvent.keyDown(window, { key: 'g' })
         fireEvent.keyDown(window, { key: 'i' })
-        expect(push).toHaveBeenCalledWith('/d/g/f/acme/inbox')
+        expect(push).toHaveBeenCalledWith('/d/u/inbox')
     })
 
     it('ignores keys typed into a field, and admin targets for members', () => {

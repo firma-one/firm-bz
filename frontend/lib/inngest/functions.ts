@@ -1756,7 +1756,7 @@ export const sendDailyReminderDigest = inngest.createFunction(
                     body: single
                         ? (single.label || 'Due today')
                         : (overdue > 0 ? `${overdue} overdue` : 'Due today'),
-                    ctaUrl: single ? (single.ctaUrl ?? '/d/u/reminders') : '/d/u/reminders',
+                    ctaUrl: single ? (single.ctaUrl ?? '/d/u/inbox?tab=reminders') : '/d/u/inbox?tab=reminders',
                     tag: 'reminder-digest',
                 })
                 notified++

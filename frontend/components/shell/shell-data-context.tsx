@@ -39,6 +39,8 @@ type ShellDataValue = {
     canManage: boolean
     /** Unread Inbox items per firm id (platform-wide notifications already added to each). */
     inboxCountFor: (firmId: string | null | undefined) => number
+    /** Unread items across all the user's firms plus platform-wide ones — the cross-firm Inbox's badge. */
+    inboxTotal: number
     refresh: () => void
 }
 
@@ -52,7 +54,13 @@ export function ShellDataProvider({ children }: { children: ReactNode }) {
     const { isViewAsActive, effectivePermissions } = useViewAs()
 
     const match = pathname.match(FIRM_PATH)
-    const fallbackFirm = firms.find((f) => f.isDefault) ?? firms[0] ?? null
+    // On firm-less pages (the cross-firm Home and Inbox, Profile) the sidebar stays on the firm the
+    // user was last in, not the default firm, so stepping back to Home doesn't swap the sidebar.
+    // Derived during render — React's pattern for state kept from earlier renders.
+    const [lastUrlFirm, setLastUrlFirm] = useState<string | null>(null)
+    if (match && match[2] !== lastUrlFirm) setLastUrlFirm(match[2])
+    const fallbackFirm =
+        firms.find((f) => f.slug === lastUrlFirm) ?? firms.find((f) => f.isDefault) ?? firms[0] ?? null
     const firmSlug = match?.[2] ?? fallbackFirm?.slug ?? null
     const groupSlug = match?.[1] ?? fallbackFirm?.groupSlug ?? null
 
@@ -126,6 +134,7 @@ export function ShellDataProvider({ children }: { children: ReactNode }) {
             loading,
             canManage,
             inboxCountFor: (firmId) => (firmId ? (inboxCounts.byFirm[firmId] ?? 0) + inboxCounts.platform : 0),
+            inboxTotal: firms.reduce((n, f) => n + (inboxCounts.byFirm[f.id] ?? 0), inboxCounts.platform),
             refresh: () => void load(),
         }),
         // eslint-disable-next-line react-hooks/exhaustive-deps

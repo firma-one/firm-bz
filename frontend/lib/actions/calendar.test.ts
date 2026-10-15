@@ -72,6 +72,7 @@ vi.mock('@/lib/prisma', () => ({
 function engagementWithRole(role: string) {
   return {
     id: 'eng-1',
+    firmId: 'firm-1',
     name: 'Audit',
     slug: 'audit',
     clientId: 'client-1',

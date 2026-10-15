@@ -5,29 +5,32 @@ import Link from "next/link"
 import { usePathname, useSearchParams } from "next/navigation"
 import {
     BarChart3,
-    Bookmark,
+    Briefcase,
+    Building2,
     CalendarDays,
     ChevronRight,
+    ClipboardList,
     CreditCard,
-    FileText,
     FolderOpen,
     Home,
     Inbox,
+    LayoutGrid,
     LifeBuoy,
     LogOut,
     MonitorCheck,
+    ExternalLink,
+    Info,
+    ScrollText,
     PanelLeftClose,
-    PanelsTopLeft,
     Search,
     Settings,
     UserCircle,
     Users,
 } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
-import { useUiShell } from "@/lib/ui-shell-context"
-import { setUiShell } from "@/lib/actions/user-ui-prefs"
 import { buildBillingPageHref } from "@/lib/billing/build-billing-page-href"
-import { firmPath, firmTabPath } from "@/lib/navigation/firm-paths"
+import { AccessLock } from "@/components/ui/access-lock"
+import { firmPath, firmTabPath, groupFirmListPath } from "@/lib/navigation/firm-paths"
 import { ENGAGEMENT_STATUS, TAG_DOT_CLASSES, type EngagementStatusValue } from "@/lib/ui/status-colors"
 import {
     DropdownMenu,
@@ -35,6 +38,9 @@ import {
     DropdownMenuItem,
     DropdownMenuLabel,
     DropdownMenuSeparator,
+    DropdownMenuSub,
+    DropdownMenuSubContent,
+    DropdownMenuSubTrigger,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Kbd } from "@/components/ui/kbd"
@@ -42,6 +48,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
 import { useShellData } from "./shell-data-context"
 import { WorkspaceSwitcher } from "./workspace-switcher"
+import { initialsOf } from '@/lib/initials'
 
 export function CountBadge({ count }: { count: number }) {
     return (
@@ -154,19 +161,10 @@ function ProfileMenu({ isSystemAdmin }: { isSystemAdmin: boolean }) {
     const { user, signOut } = useAuth()
     const pathname = usePathname()
     const { firmSlug, groupSlug, canManage } = useShellData()
-    const uiShell = useUiShell()
-    const [switchingUi, setSwitchingUi] = useState(false)
 
     const meta = (user?.user_metadata ?? {}) as { full_name?: string; name?: string; avatar_url?: string; picture?: string }
     const name = meta.full_name || meta.name || user?.email?.split("@")[0] || "Account"
     const avatar = meta.avatar_url || meta.picture || null
-
-    async function toggleUi() {
-        setSwitchingUi(true)
-        const { ok } = await setUiShell(uiShell === "v2" ? "v1" : "v2")
-        if (ok) window.location.reload()
-        else setSwitchingUi(false)
-    }
 
     return (
         <DropdownMenu>
@@ -179,8 +177,8 @@ function ProfileMenu({ isSystemAdmin }: { isSystemAdmin: boolean }) {
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={avatar} alt="" className="h-6 w-6 shrink-0 rounded-full object-cover" />
                     ) : (
-                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-surface-muted text-caption text-fg-muted">
-                            {name.charAt(0).toUpperCase()}
+                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-surface-muted text-[10px] font-medium text-fg-muted">
+                            {initialsOf(name)}
                         </span>
                     )}
                     <span className="min-w-0 flex-1 truncate">{name}</span>
@@ -195,41 +193,53 @@ function ProfileMenu({ isSystemAdmin }: { isSystemAdmin: boolean }) {
                 {canManage && (
                     <DropdownMenuItem asChild className="gap-2">
                         <Link href={buildBillingPageHref({ firmSlug, groupSlug, pathname })}>
-                            <CreditCard className="h-4 w-4 text-fg-muted" />Billing
+                            <CreditCard className="h-4 w-4 text-fg-muted" />Billing<AccessLock label="Firm admins only — hidden from other members" side="right" className="ml-auto" />
                         </Link>
                     </DropdownMenuItem>
                 )}
-                <DropdownMenuItem asChild className="gap-2">
-                    <Link href={firmSlug ? `/d/support?firmSlug=${firmSlug}` : "/d/support"}>
-                        <LifeBuoy className="h-4 w-4 text-fg-muted" />Support
-                    </Link>
-                </DropdownMenuItem>
+                {/* The Support page lets firm admins in only (it redirects everyone else), so like
+                    Billing it shows only for them, with the lock. */}
+                {canManage && (
+                    <DropdownMenuItem asChild className="gap-2">
+                        <Link href={firmSlug ? `/d/support?firmSlug=${firmSlug}` : "/d/support"}>
+                            <LifeBuoy className="h-4 w-4 text-fg-muted" />Support<AccessLock label="Firm admins only — hidden from other members" side="right" className="ml-auto" />
+                        </Link>
+                    </DropdownMenuItem>
+                )}
                 {isSystemAdmin && (
                     <DropdownMenuItem asChild className="gap-2">
-                        <Link href="/system"><MonitorCheck className="h-4 w-4 text-fg-muted" />Sys Admin</Link>
+                        <Link href="/system"><MonitorCheck className="h-4 w-4 text-fg-muted" />Sys Admin<AccessLock label="System admins only" side="right" className="ml-auto" /></Link>
                     </DropdownMenuItem>
                 )}
                 <DropdownMenuSeparator />
-                <DropdownMenuItem
-                    className="gap-2"
-                    disabled={switchingUi}
-                    onSelect={(e) => {
-                        e.preventDefault()
-                        void toggleUi()
-                    }}
-                >
-                    <PanelsTopLeft className="h-4 w-4 text-fg-muted" />
-                    <span className="flex-1">New UI</span>
-                    <span
-                        aria-hidden
-                        className={cn(
-                            "relative inline-flex h-4 w-7 shrink-0 items-center rounded-full transition-colors",
-                            uiShell === "v2" ? "bg-action" : "bg-fg-subtle"
-                        )}
-                    >
-                        <span className={cn("inline-block h-3 w-3 rounded-full bg-white transition-transform", uiShell === "v2" ? "translate-x-3.5" : "translate-x-0.5")} />
-                    </span>
+                {/* Public website pages: open in a new tab so the app stays where it was. */}
+                <DropdownMenuItem asChild className="gap-2">
+                    <a href="/resources/changelog" target="_blank" rel="noopener noreferrer">
+                        <ScrollText className="h-4 w-4 text-fg-muted" />
+                        <span className="flex-1">View changelog</span>
+                        <ExternalLink className="h-3.5 w-3.5 text-fg-subtle" aria-hidden />
+                    </a>
                 </DropdownMenuItem>
+                <DropdownMenuSub>
+                    <DropdownMenuSubTrigger className="gap-2">
+                        <Info className="h-4 w-4 text-fg-muted" />
+                        Learn more
+                    </DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent className="w-52">
+                        <DropdownMenuItem asChild className="gap-2">
+                            <a href="/privacy" target="_blank" rel="noopener noreferrer">
+                                <span className="flex-1">Privacy policy</span>
+                                <ExternalLink className="h-3.5 w-3.5 text-fg-subtle" aria-hidden />
+                            </a>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem asChild className="gap-2">
+                            <a href="/terms" target="_blank" rel="noopener noreferrer">
+                                <span className="flex-1">Terms of service</span>
+                                <ExternalLink className="h-3.5 w-3.5 text-fg-subtle" aria-hidden />
+                            </a>
+                        </DropdownMenuItem>
+                    </DropdownMenuSubContent>
+                </DropdownMenuSub>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem className="gap-2 text-danger focus:text-danger" onSelect={() => void signOut()}>
                     <LogOut className="h-4 w-4" />Sign out
@@ -240,6 +250,25 @@ function ProfileMenu({ isSystemAdmin }: { isSystemAdmin: boolean }) {
 }
 
 const MAX_CLIENTS = 8
+
+/**
+ * Home and Inbox span every firm (.claude/plans/cross-firm-home-inbox.md), so they don't follow the
+ * workspace switcher; the badge counts unread items across firms.
+ */
+function HomeAndInbox({ pathname, inboxCount }: { pathname: string; inboxCount: number }) {
+    return (
+        <>
+            <SidebarItem href="/d/u/home" icon={<Home />} label="Home" active={pathname === "/d/u/home"} />
+            <SidebarItem
+                href="/d/u/inbox"
+                icon={<Inbox />}
+                label="Inbox"
+                active={pathname.startsWith("/d/u/inbox")}
+                trailing={inboxCount > 0 ? <CountBadge count={inboxCount} /> : undefined}
+            />
+        </>
+    )
+}
 
 export function SidebarV2({
     isSystemAdmin = false,
@@ -255,12 +284,17 @@ export function SidebarV2({
     const pathname = usePathname() ?? ""
     const searchParams = useSearchParams()
     const tab = searchParams?.get("tab") ?? null
-    const { data, loading, firmSlug, groupSlug, canManage, firms, inboxCountFor } = useShellData()
-    const currentFirmId = data?.firm.id ?? firms.find((f) => f.slug === firmSlug)?.id ?? null
-    const inboxCount = inboxCountFor(currentFirmId)
+    const { data, loading, firmSlug, groupSlug, canManage, firms, inboxTotal } = useShellData()
 
     const base = firmSlug && groupSlug ? firmPath(groupSlug, firmSlug) : null
-    const isFirmRoot = base !== null && pathname === base
+
+    // The workspace pickers — /d (firm groups) and /d/{group}/f (firms) — sit above any firm, so the
+    // firm-scoped navigation (engagements, Firm) would point at a firm the user has just stepped out
+    // of. There the sidebar shows Home and Inbox (which span firms), the picker levels and a way back.
+    const pickerMatch = pathname.match(/^\/d\/?$|^\/d\/([^/]+)\/f\/?$/)
+    const aboveFirm = pickerMatch !== null
+    const pickerGroupSlug = pickerMatch?.[1] ?? groupSlug
+    const firmName = data?.firm.name ?? firms.find((f) => f.slug === firmSlug)?.name ?? null
     const isExternalOnly = data?.isExternalOnly ?? false
 
     // Clients with something live to work on, plus whichever client the current page is in.
@@ -300,6 +334,24 @@ export function SidebarV2({
                 )}
             </div>
 
+            {aboveFirm ? (
+                <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-2 pb-4 pt-1">
+                    <div className="flex flex-col gap-px">
+                        <HomeAndInbox pathname={pathname} inboxCount={inboxTotal} />
+                    </div>
+                    <SidebarSection id="workspaces" title="Workspaces">
+                        <SidebarItem href="/d" icon={<LayoutGrid />} label="Firm groups" active={!pickerMatch?.[1]} />
+                        {pickerGroupSlug && (
+                            <SidebarItem href={groupFirmListPath(pickerGroupSlug)} icon={<Building2 />} label="Firms" active={Boolean(pickerMatch?.[1])} />
+                        )}
+                    </SidebarSection>
+                    {base && (
+                        <div className="flex flex-col gap-px">
+                            <SidebarItem href={base} icon={<Home />} label={firmName ? `Back to ${firmName}` : "Back to your firm"} />
+                        </div>
+                    )}
+                </div>
+            ) : (<>
             {/* Primary */}
             <div className="flex flex-col gap-px px-2 pb-3">
                 <SidebarItem
@@ -308,33 +360,11 @@ export function SidebarV2({
                     label="Search"
                     trailing={<Kbd className="hidden h-[18px] border-0 bg-transparent px-0 text-fg-subtle group-hover:inline-flex">⌘K</Kbd>}
                 />
-                {base && <SidebarItem href={base} icon={<Home />} label="Home" active={isFirmRoot && !tab} />}
-                <SidebarItem
-                    href={base ? `${base}/inbox` : "/d/u/notifications"}
-                    icon={<Inbox />}
-                    label="Inbox"
-                    active={base ? pathname === `${base}/inbox` : pathname.startsWith("/d/u/notifications")}
-                    trailing={inboxCount > 0 ? <CountBadge count={inboxCount} /> : undefined}
-                />
+                <HomeAndInbox pathname={pathname} inboxCount={inboxTotal} />
             </div>
 
             <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-2 pb-4">
-                {/* Favorites */}
-                {data && data.favorites.length > 0 && (
-                    <SidebarSection id="favorites" title="Favorites">
-                        {data.favorites.map((f) => (
-                            <SidebarItem
-                                key={f.id}
-                                href={f.href}
-                                icon={f.kind === "document" ? <FileText /> : <Bookmark />}
-                                label={f.label}
-                                title={f.context ? `${f.label} · ${f.context}` : f.label}
-                                active={f.kind === "project" && pathname.startsWith(f.href)}
-                            />
-                        ))}
-                    </SidebarSection>
-                )}
-
+                {/* Bookmarks live on Home, which keeps this sidebar to navigation. */}
                 {/* Your engagements */}
                 <SidebarSection
                     id="engagements"
@@ -357,8 +387,20 @@ export function SidebarV2({
                                         <SidebarItem
                                             key={e.id}
                                             href={e.href}
-                                            className="pl-7"
-                                            icon={<span className={cn("h-1.5 w-1.5 rounded-full", TAG_DOT_CLASSES[style?.color ?? "gray"])} />}
+                                            className="pl-6"
+                                            // Notion-style page icon; the status rides on it as a small corner dot.
+                                            icon={
+                                                <span className="relative flex text-fg-subtle group-hover:text-fg-muted">
+                                                    <Briefcase />
+                                                    <span
+                                                        aria-hidden
+                                                        className={cn(
+                                                            "absolute -bottom-0.5 -right-0.5 h-1.5 w-1.5 rounded-full ring-2 ring-surface-sidebar",
+                                                            TAG_DOT_CLASSES[style?.color ?? "gray"]
+                                                        )}
+                                                    />
+                                                </span>
+                                            }
                                             label={e.name}
                                             title={`${e.name} · ${style?.label ?? e.status}`}
                                             active={pathname.startsWith(e.href)}
@@ -381,14 +423,17 @@ export function SidebarV2({
                 {/* Firm */}
                 {base && !isExternalOnly && (
                     <SidebarSection id="firm" title="Firm">
-                        {canManage && <SidebarItem href={firmTabPath(groupSlug!, firmSlug!, "analytics")} icon={<BarChart3 />} label="Overview" active={tab === "analytics"} />}
+                        {canManage && <SidebarItem href={firmTabPath(groupSlug!, firmSlug!, "analytics")} icon={<BarChart3 />} label="Overview" active={tab === "analytics"} trailing={<AccessLock label="Firm admins only — hidden from other members" side="right" />} />}
                         <SidebarItem href={firmTabPath(groupSlug!, firmSlug!, "calendar")} icon={<CalendarDays />} label="Calendar" active={tab === "calendar"} />
                         <SidebarItem href={firmTabPath(groupSlug!, firmSlug!, "doc-search")} icon={<Search />} label="Doc Search" active={tab === "doc-search"} />
-                        {canManage && <SidebarItem href={firmTabPath(groupSlug!, firmSlug!, "members")} icon={<Users />} label="Members" active={tab === "members"} />}
-                        {canManage && <SidebarItem href={firmTabPath(groupSlug!, firmSlug!, "settings")} icon={<Settings />} label="Settings" active={tab === "settings"} />}
+                        {canManage && <SidebarItem href={firmTabPath(groupSlug!, firmSlug!, "members")} icon={<Users />} label="Members" active={tab === "members"} trailing={<AccessLock label="Firm admins only — hidden from other members" side="right" />} />}
+                        {canManage && <SidebarItem href={firmTabPath(groupSlug!, firmSlug!, "audit")} icon={<ClipboardList />} label="Audit" active={tab === "audit"} trailing={<AccessLock label="Firm admins only — hidden from other members" side="right" />} />}
+                        {canManage && <SidebarItem href={firmTabPath(groupSlug!, firmSlug!, "settings")} icon={<Settings />} label="Settings" active={tab === "settings"} trailing={<AccessLock label="Firm admins only — hidden from other members" side="right" />} />}
                     </SidebarSection>
                 )}
             </div>
+
+            </>)}
 
             <div className="border-t border-line px-2 py-2">
                 <ProfileMenu isSystemAdmin={isSystemAdmin} />
@@ -427,9 +472,18 @@ function ClientGroup({ name, defaultOpen, storageId, children }: { name: string;
                 type="button"
                 onClick={toggle}
                 aria-expanded={open}
-                className="flex h-7 min-w-0 items-center gap-1.5 rounded-control px-2 text-left text-ui text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg"
+                className="group flex h-7 min-w-0 items-center gap-2 rounded-control px-2 text-left text-ui text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg"
             >
-                <ChevronRight className={cn("h-3.5 w-3.5 shrink-0 text-fg-subtle transition-transform", open && "rotate-90")} />
+                {/* Notion page tree: the client's icon, swapped for the expand chevron on hover. */}
+                <span className="relative flex h-4 w-4 shrink-0 items-center justify-center text-fg-subtle">
+                    <Users className="h-4 w-4 transition-opacity group-hover:opacity-0 group-focus-visible:opacity-0" />
+                    <ChevronRight
+                        className={cn(
+                            "absolute h-3.5 w-3.5 opacity-0 transition-[opacity,transform] group-hover:opacity-100 group-focus-visible:opacity-100",
+                            open && "rotate-90"
+                        )}
+                    />
+                </span>
                 <span className="min-w-0 flex-1 truncate">{name}</span>
             </button>
             {open && children}

@@ -7,6 +7,7 @@ import { BroadcastModal } from "./broadcast-modal"
 import { PushNotificationToggle } from "./push-notification-toggle"
 import { useTabRightSlot, useTabCount } from "../layout-context"
 import { Megaphone } from "lucide-react"
+import { MovedPage } from "../moved-page"
 
 type NotificationItem = {
   id: string
@@ -76,8 +77,10 @@ export default function NotificationsPage() {
 
   if (!mounted) return null
 
+  // Notifications live in the firm Inbox now (push opt-in is on the Profile tab); this forwards
+  // there, keeping the old list for firm-less users.
   return (
-    <>
+    <MovedPage to="notifications">
       <PushNotificationToggle />
       <NotificationsTable initialNotifications={notifications} onRefresh={load} />
       <BroadcastModal
@@ -86,6 +89,6 @@ export default function NotificationsPage() {
         broadcastScopes={broadcastScopes}
         onSent={load}
       />
-    </>
+    </MovedPage>
   )
 }

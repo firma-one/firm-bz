@@ -744,7 +744,314 @@ passes the firm from the URL.
   - Reactions are neutral pills, with yours tinted in the accent.
   - Mentioning you is shown as an accent left rule.
 
-**Next:** client pages and lists, then firm settings, Members and Audit (order item 2 onward).
+**Fixes from Deepak's review (2026-10-15, uncommitted):**
+- **Home:** "Continue where you left off" is an even grid of identical cards showing only full rows
+  (1–3, or 6), instead of a featured card beside small ones.
+- **Sidebar collapse:** `setSidebarCollapsed` moved out of the state updater. Calling it there
+  caused "Cannot update a component (Router) while rendering AppShellV2" and saved the setting
+  twice.
+- **Loading:**
+  - `components/ui/shimmer.tsx` adds skeletons with a sweep. The Files table loads as skeleton rows
+    on its own grid, and `Skeleton` sweeps in v2.
+  - `LoadingSpinner` is a small conic-gradient arc that inherits the text color.
+  - Breadcrumbs show a placeholder instead of humanized slugs while shell data loads.
+- **Second review round:**
+  - **Overview summary:** the AI summary draft and edit cards are flat `surface-subtle` blocks
+    with token fields and `Button`s; the header icons are neutral.
+  - **Sidebar:** it animates open and closed (width, 150 ms, inert when collapsed, no motion for
+    reduced-motion users).
+  - **Board:** the `100vh − 220px` min-height is gone, which caused a scrollbar beside the
+    detail pane.
+  - **Sidebar rows:** client rows show a building icon that swaps to the chevron on hover;
+    engagement rows show a briefcase icon with a status dot.
+  - **Brio chat:** the pane uses tokens. The header is plain, answers have no bubble (Notion
+    AI), and the chips and composer use the standard controls.
+  - **Status pill in selects:** it is wrapped in a `div`, because `SelectTrigger` clamps direct
+    `span` children (`[&>span]:line-clamp-1`), which misaligned "To do" and hid its dot.
+  - **Document action menu:** token pass; danger items are `text-danger`, approve is `text-action`.
+  - **Access locks:** `ui/access-lock.tsx` is one lock icon with a "who can see this" tooltip, used
+    on the engagement's internal tabs and the sidebar's admin-only items.
+
+**Progress (uncommitted, 2026-10-15) — client and firm pages:**
+- **Client page:**
+  - `projects/client-header.tsx` is a Linear-style header like the engagement's: name,
+    description, then a properties row with inline status for managers, industry, website,
+    client since (or expected close for a prospect), engagement count and tags.
+  - `ui/header-prop.tsx` is the tooltip-labeled property both headers share.
+  - Underline tabs, with locks on Contacts (firm admins) and Settings (client managers), and a
+    "New engagement" button.
+  - Engagements are a Notion table: name, status, lead, start, due (red when overdue), your role
+    and last update. A row click opens the engagement.
+- **Contacts:** a Notion table (name with a Primary tag, title, email link, phone, tags) with a
+  search box and "New contact". Managers edit by clicking a row; the dialog uses tokens.
+- **All clients:** the table is the default view, and the last view picked is remembered
+  (`fm-clients-view`). The gallery is flat cards with a brand-tinted logo tile and no corner
+  triangle. Follow-ups due within two days are tags.
+- **Firm views (v2):** the big firm header and boxed tab strip show in v1 only. The sidebar's
+  Firm section picks the view, and Audit is added there with a lock. Each view gets a heading
+  with its count, a lock and its action: Print, the table/gallery toggle, or New client. Doc
+  Search and Members keep their own headings.
+- **Firm members:** a Notion table (name, email, role tag, added) with an Invite button in the
+  heading. Invitations are rows with resend and cancel on hover. The client Members tab is
+  still switched off in code (`false &&`), so it was left alone.
+- **Settings forms:**
+  - **Client:** Details and Relationship are property rows. Expected close shows only for a
+    prospect and Client since only for a client; both are still saved. Storage, Branding and a
+    danger-zone row follow. Branding toggles between firm branding and custom.
+  - **Firm:** the five accordions are underline tabs: General, Branding, App settings and
+    Storage. `?section=` deep links still work; `danger` opens General and scrolls to the danger
+    zone. App settings is property rows plus Linear switch rows, and event notifications are a
+    Notion table. Storage stays mounted while hidden, so "no connector yet" still opens it.
+  - The field classes are shared from `ui/property-list.tsx` (`PROPERTY_FIELD_CLASS` and the
+    others) across the engagement, client and firm forms.
+- **Tests:** `client-list.test.tsx`.
+
+**Third review round (2026-10-15, uncommitted):**
+- **Doc Search:** a `PageHeading` with History as an outline button. The `ki-*` palette maps to
+  tokens, and the page background is the surface (not gray). The search box is a plain card
+  with a segmented Filters/Ask toggle and 28px filter buttons. Results are hairline rows, not
+  shadowed cards; the match type is a tag, and the empty states are `EmptyPanel`s. The history
+  pane is a flat card.
+- **Calendar:** a React toolbar replaces FullCalendar's (title, Today, previous and next,
+  refresh, and a Month/Week/Day/Agenda segmented control). The grid is Notion Calendar style
+  under `.firm-calendar--notion`: hairlines, sentence-case weekdays, today as a filled circle,
+  and events as tag-colored chips (`getEngagementTagColor`). The demo calendar keeps the old
+  rules. The sidebar is flat rows with tag-colored checkboxes, and the event dialog had a token
+  pass.
+- **Home agenda:** "Agenda" (`home/agenda-week.tsx`) replaces "Due soon".
+  - **Overdue row:** the viewer's past-due work from `getMyWork` (assigned deliverables,
+    engagements they lead, their own dated reminders), oldest first. Up to six chips, then
+    "+N more".
+  - **The week:** today and the next six days as day columns, with up to three event chips each
+    and a "+N more" link to the calendar. It reads `getFirmCalendarData`, so it follows the
+    calendar's access rules. Upcoming reminders join the week, since the calendar has none.
+    Upcoming deliverables and engagements already appear as calendar events, so they aren't
+    added twice.
+  - **Timezone:** days are bucketed in the viewer's timezone after mount, and Overdue is anything
+    before the viewer's today. On phones only days with events show.
+  - **What's lost:** items due 8–14 days out, which "Due soon" covered, now show only on the
+    calendar.
+  - **Cleanup:** `DueSoonSection` is kept but no longer rendered, until Deepak signs off on its
+    deletion.
+- **Firm Overview:** the brief, Business overview and Action center are single flat cards like
+  the engagement Overview. Stat tiles are neutral and the pipeline is a thin bar in tag colors.
+  Action center rows are Linear-style, without shadows or scaling; status chips are tags and the
+  all-clear states are calm instead of green banners.
+- **Workspace pickers:** `/d` and `/d/{group}/f` use a `PageHeading` and `projects/workspace-card.tsx`
+  (the All clients gallery card), with a "Current" tag and a role tag. The breadcrumb shows in
+  v1 only, and the switch dialog had a token pass. `FirmsView` (the `/d` fallback for a
+  single-group admin) is unchanged.
+- **Fix:** `text-fg-subtle/40` doesn't work; neutral tokens take no opacity modifier.
+- **Tests:** `agenda-week.test.tsx`.
+
+**Progress (uncommitted, 2026-10-15) — dialogs and storage sections (order item 4):**
+- **`ConfirmDialog`:** Linear-style. A tag-tinted icon tile, a visible sentence-case `DialogTitle`
+  (it was visually hidden and duplicated as uppercase text), the consequence in muted text, and
+  `sm` outline and destructive/default buttons bottom-right. No header strip and no tinted body.
+  Every confirm in the app inherits this.
+- **Remaining modals**, in a scripted pass from the scratchpad scripts (codemod `--palette`, then
+  typography, surface and palette passes). These are add client, engagement, firm and reminder;
+  invite member, firm and client; client details; engagement settings; firm switch; Drive import;
+  secure access; document share and edit; file review; support create and view; recent
+  sessions; what's new; broadcast; data privacy; account type; and switch account.
+  - Uppercase mono labels and uppercase button text are gone. Dialog titles are `text-ui
+    font-semibold`.
+  - Tinted header and footer strips are plain hairlines, and brand-tinted icon tiles are neutral.
+  - Focus rings use the accent. Create dialogs drop the gray body and the bordered tiles inside
+    it, so there's no card in a card.
+  - Error, success and warning banners use tag tokens, and green buttons use the accent.
+- **Storage sections:** `FirmDriveSection`, `ClientDriveSection`, the OneDrive and Google Drive
+  workspace roots, the connector tab and the Drive manager had the same pass.
+- **Left as is:** the file review and document edit sheets keep their gray canvas, since they
+  are full-screen work surfaces. The debug and system-admin modals were not touched.
+
+- **`FirmsView`** (the `/d` fallback) has a `PageHeading` with the gallery/list toggle and a "New
+  firm" button. `FirmList` cards keep their link and switch behavior with flat card styling.
+
+- **Billing** (`components/billing/*`):
+  - **Page:** a `PageHeading` ("Billing"; "Billing & plans" in onboarding) at `max-w-4xl`, with
+    the breadcrumb in v1 only. Sections run Current plan, then Plans, then Payments, and the
+    Payments trust cards are now a quiet section.
+  - **Current plan:** one flat card with property rows (entity, plan, valid until), a "Manage"
+    outline button, usage on thin bars, and AI-credit segments mixed from the accent.
+  - **Plan cards:** flat with a hairline. The current plan has a ring and an "Active" tag and the
+    recommended plan a blue tag; there are no corner triangles, lifts or dark pills.
+  - **Plan card details:**
+    - The Annual/Monthly toggle is a segmented control.
+    - Features show six, then "Show all N features".
+    - Each card has one CTA (accent on the recommended card, outline otherwise).
+  - **Tour and dialogs:** the Joyride tooltip reads the tokens. The upgrade dialog and the checkout
+    banner are restyled.
+  - **Copy:** "Manage subscription", "Secure checkout" and "Subscription canceled" are now sentence
+    case and American English. The "Scale as you grow" headline isn't shown anymore (the key
+    stays).
+- **Onboarding** (`app/(app)/d/onboarding/*`, `components/onboarding/*`):
+  - **Layout:** a centered column (`max-w-xl`, wider for the Drive and plans steps) with
+    `StepIntro` (caption, `text-h1` question, muted explanation).
+  - **Step parts:** Required/Optional tags, flat selectable drive cards, tag-token notices, a thin
+    progress bar on finalize, and `greenCta` primaries with ghost Back.
+  - **Sidebar:** a Linear checklist with step markers and an active row.
+  - **Exit guard:** a centered notice over the scrim.
+  - **Unchanged:** no handler, step or sign-out logic changed. Steps 3 and 4 still can't be
+    reached (nothing calls `setStep(3|4)`); that was already the case.
+  - **Frame:** in v2 the legacy frame (`d-layout-client.tsx`, now used only by onboarding) gets a
+    plain surface, token borders and no dot pattern.
+- **How it was built:** billing and onboarding were done by two background agents, each confined
+  to its own files. I reviewed their diffs for behavior changes: handlers, tour attributes,
+  checkout and portal calls, and sign-out all carry over unchanged.
+
+**Fourth review round (2026-10-15, uncommitted):**
+- **New UI toggle removed; the new UI is the only UI.**
+  - `normalizeUiShell` always returns `v2`, so a stored `v1` preference or cookie is ignored.
+  - The pre-paint script in `app/layout.tsx` always sets `data-ui="v2"` on `/d`.
+  - The toggle is gone from both profile menus (`sidebar-v2.tsx`, `ui/profile-section.tsx`).
+  - The `v1` code paths stay compiled but are unreachable until the Phase 7 cleanup.
+- **Billing** — the gray background and the icon buttons with no gap were the v1 shell (the
+  toggle was off), and both are gone now that v2 is forced. AI credits now read like a
+  context-usage breakdown:
+  - **Bar:** one segment per feature in its own tag color (blue, orange, green, yellow, purple),
+    with the unused allowance as the gray track.
+  - **Legend:** swatch, feature, credits and share in two columns. A "Remaining" row appears when
+    a cap is live, and shares are of the allowance, so the rows add up to 100%.
+
+- **Plan cards:** the name sits above its status tag, with the Annual/Monthly toggle fixed
+  top-right, so the longer "Active · date" tag no longer pushes the toggle to a second row.
+- **Segmented controls** (billing period, Doc Search mode, clients table/gallery, calendar views,
+  branding source, firm gallery/list): the browser's black focus outline on the clicked segment is
+  replaced by `outline-none focus-visible:ring-2 focus-visible:ring-action/30`, so the ring shows
+  for keyboard focus only.
+- **Chart palette:** `--ui-chart-{blue,orange,green,yellow,purple,pink,teal}` in `ui-tokens.css`,
+  vivid fills for bars, segments and legend swatches. The tag `fg` tones are text colors and read
+  dark and muddy as fills. AI credits and the firm Overview revenue pipeline use the new palette.
+
+**Fifth review round (2026-10-15, uncommitted):**
+- **Engagement loading — only the tab body shows a skeleton.**
+  - **Why it happened:** every tab switch `router.push`es to a new URL in the same catch-all
+    route, so `[[...rest]]/loading.tsx` replaced the whole page (an old v1 skeleton) while the
+    server re-ran every query. Board had no `loading.tsx` and fell back to the client-level list
+    skeleton.
+  - **The fix:** `EngagementWorkspace` records a snapshot (header props and its permission-resolved
+    tab config) in an in-memory client cache (`engagement-tabs.tsx`). `EngagementPageLoading`
+    redraws the real header and tab row from it, with the target tab selected and its pending bar
+    running, and only the body is a skeleton.
+  - **First visit:** the title and status come from the sidebar's shell data; the tab row is a
+    placeholder, so no tabs are shown before the viewer's permissions are known.
+  - **Shared pieces:** the tab row is now one component (`EngagementTabsList`) used by both. The
+    header caches its member list, so people show at once.
+  - **Outer loaders:** the client-level and firm-level `loading.tsx` (`ListPageSkeleton`) hand
+    engagement URLs to the same loading state, and give everything else a heading-and-rows
+    skeleton instead of the v1 card skeleton. Board has its own `loading.tsx`.
+  - **Safety:** the caches are written only in client effects, so on the server (where client
+    modules are shared across requests) they stay empty.
+- **Entity icons**, reusing the app's existing ones (firm `Building2`, client `Users`, engagement
+  `Briefcase`):
+  - **Page titles:** firm picker, firm Home, firm views (each with its sidebar icon), Members, Doc
+    Search, the client header (logo, else the client icon), the engagement header, and Home's "My
+    engagements".
+  - **Breadcrumbs:** firm, client and engagement crumbs plus firm and engagement tab crumbs.
+  - **Sidebar:** client rows now use `Users`; they had briefly used the firm icon.
+- **Avatars:** round everywhere, neutral (`surface-muted`/`fg-muted`), and the same initials from
+  `lib/initials.ts` (`initialsOf`: first and last word, an email's local part, one letter for a
+  single word). That covers `ProfileBubble` (the files Owner column and its card),
+  `UserAvatarWithTooltip`, `PersonAvatar`, the sidebar profile, members tables, Board updated-by,
+  support and doc comments, mentions, the profile page and the connected Drive account. Workspace
+  and firm marks stay rounded squares. Tests: `lib/initials.test.ts`.
+
+**Sixth review round (2026-10-15, uncommitted) — create dialogs:**
+- **What changed:** New firm, New client and New engagement now use the settings forms' layout:
+  `PropertyList`/`PropertyRow` with the borderless `PROPERTY_FIELD_CLASS` fields. So create and
+  edit look the same.
+  - **Status:** the `StatusProperty` chip picker, the same one Engagement Settings and the page
+    headers use. Its popover layer (`z-[130]`) sits above dialogs (`z-[121]`).
+  - **Required fields first:** Name and Status, plus Description for engagements.
+  - **The rest:** behind a Notion-style "More properties" disclosure. `OptionalFieldsSection` was
+    restyled; the uppercase mono "OPTIONAL FIELDS" box is gone.
+  - **New client:** shows Expected close for a prospect and Client since otherwise, as Client
+    Settings does.
+- **Shared frame (`components/ui/create-dialog.tsx`):** a visible sentence-case `DialogTitle` with
+  a description (no icon tile or header strip), tag-token notices for errors and plan limits (with
+  the Upgrade link), and a sticky footer with ghost Cancel and accent Create. The dialogs are 600px
+  wide, single column.
+- **Default triggers:** "New firm", "New client" and "New engagement", each with a plus icon.
+
+- **Profile menu (`sidebar-v2.tsx`):** adds "View changelog" (`/resources/changelog`) and a "Learn
+  more" submenu with "Privacy policy" (`/privacy`) and "Terms of service" (`/terms`). These are the
+  same pages the website header and footer link to. They open in a new tab with a trailing
+  external-link icon, so the app stays put.
+
+- **Workspace pickers open as a table, like All clients.**
+  - **Pages:** `/d` (groups: Name, Firms, Your role) and `/d/{group}/f` (firms: Name, Clients,
+    Your role; joinable firms get a "Join firm" action column).
+  - **Shared parts:** `projects/workspace-table.tsx`, built on `NotionTable`, with
+    `WorkspaceMark` (logo or tinted icon) shared with `WorkspaceCard`.
+  - **Toggle:** the table/gallery switch is now one shared component
+    (`ui/view-mode-toggle.tsx`), with `useViewMode(key)` remembering the choice per page
+    (`fm-workspaces-view`, `fm-firms-view`). All clients uses it too, and the `/d` fallback
+    `FirmsView` also opens as a list.
+- **Firm groups' icon:** `LayoutGrid`, the existing icon from the switcher's "All workspaces…" and
+  the old "Firm Groups" tab, on the `/d` title, the group cards and rows, and the "Workspaces"
+  breadcrumb.
+
+- **Sidebar above the firm:**
+  - **Picker pages** (`/d` and `/d/{group}/f`): these sit above any firm, so `SidebarV2` replaces
+    the firm-scoped navigation (Search, Home, Inbox, Your engagements, Firm) with a "Workspaces"
+    section ("Firm groups", "Firms") and "Back to {firm}". That matches the old sidebar, which
+    hid the firm section when no firm was in the URL.
+  - **Personal pages** (`/d/u/*`, Billing, Support) keep the default firm's navigation, so
+    there's always a way back. Tests in `shell-v2.test.tsx`.
+
+**Seventh review round (2026-10-15, uncommitted) — personal area:**
+- **Route question:** Home and Inbox stay under the firm (`/d/{group}/f/{firm}`) by design. Phase 3
+  ("Landing: per-firm Home") and Phase 4 (Unified Inbox, per firm) chose this because their
+  content — recents, agenda, needs-you, notifications, reminders — is scoped to one firm's data and
+  permissions. `/d/u/*` holds what doesn't depend on a firm (profile, preferences).
+- **Personalization (`/d/u` layout):** a `PageHeading` (`UserCircle`) with underline tabs Profile
+  and Bookmarks; the breadcrumb shows in v1 only. Recent, Reminders and Notifications left the
+  tabs:
+  - Recent is now Home's "Continue where you left off".
+  - Reminders and Notifications are now the firm's Inbox.
+  - Their old URLs forward through `d/u/moved-page.tsx` to Home or to `/inbox?tab=…` (the Inbox
+    now reads `?tab=`), keeping the old page only for someone with no firm. The old components
+    are unchanged.
+- **Profile tab:** property rows (avatar, first and last name, email read-only with copy), "Save
+  changes", then a Notifications section and "Your data".
+  - **Notifications section:** the push opt-in, moved from the old Notifications page, as a
+    switch row.
+  - **Your data** (`DataPrivacyCard`): Linear-style rows with outline buttons, not a card.
+- **Broadcast:** unused for now, so it isn't offered anywhere new; its code stays on the old page.
+
+**Eighth review round (2026-10-15, uncommitted) — bookmarks and Support:**
+- **Bookmarks move to Home**, so the sidebar stays navigation only:
+  - **Home:** a "Bookmarks" list group (`home/home-bookmarks.tsx`), last, under My engagements. Rows show a
+    `FileText` icon for documents and `Briefcase` for engagements, plus where each one lives. The
+    first eight show, then "Show N more". A hover ✕ beside each link removes the bookmark
+    (`DELETE /api/bookmarks`, then the `pockett-bookmarks-updated` event). The section always
+    shows. When empty, it says how to add a bookmark: Deepak couldn't find it when it hid itself.
+    Today only documents can be bookmarked (the document ⋯ menu). Nothing creates an engagement
+    bookmark, though the data supports one.
+  - **Data:** `getShellSidebarData(firmSlug).favorites`, so Home shows only bookmarks on
+    engagements the viewer can see in this firm. A document bookmark saved without a URL now
+    opens the document (`engagementDocFilePath`) instead of the engagement, and an engagement
+    bookmark's context is its client.
+  - **Sidebar:** the Favorites section is gone.
+  - **Personal area:** now Profile only, so the layout is a plain "Profile" heading with no tab
+    strip. `/d/u/bookmarks` forwards to Home through `MovedPage`; the table component is unchanged.
+- **Support stays in the profile menu**, the same place as Billing. It's an occasional,
+  account-level action, not daily navigation. The menu item now shows to firm admins only, with
+  the lock, because `/d/support` already redirects everyone else.
+
+**Ninth round (2026-10-15, uncommitted) — cross-firm Home and Inbox:** Home and Inbox moved to
+`/d/u/home` and `/d/u/inbox`, across every firm the user may open, with an "All firms" filter.
+The bare firm URL now opens All clients. Plan, decisions and as-built notes:
+`cross-firm-home-inbox.md`. This supersedes the seventh round's "Home and Inbox stay under the
+firm" answer. Also from this round: Tag takes an `icon` prop, so an icon no longer breaks
+onto its own line. That fixes the Doc Search match chips, the Primary contact tag, the client
+follow-up tags and the Your data request tag.
+
+**Next:** Phase 7 sign-off: visual review of everything above in a signed-in browser, then
+cleanup (delete the v1 shell, the `setUiShell` action and `uiPrefs.shell`, `DueSoonSection`, the
+old Bookmarks table and personal Recent/Reminders/Notifications pages, and the unused onboarding
+and billing leftovers).
 
 **Visual verification** still needs a signed-in session in the browser pane.
 

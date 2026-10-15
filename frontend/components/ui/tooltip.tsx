@@ -47,4 +47,28 @@ const TooltipContent = React.forwardRef<
 ))
 TooltipContent.displayName = TooltipPrimitive.Content.displayName
 
-export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider }
+/**
+ * A one-line hint on any element: the app's replacement for a native `title` tooltip, which
+ * looks and times differently in every browser. The child must accept a ref (an element or a
+ * forwardRef component).
+ */
+function Hint({
+    label,
+    children,
+    side = "top",
+}: {
+    label: React.ReactNode
+    children: React.ReactElement
+    side?: TooltipContentProps["side"]
+}) {
+    return (
+        <TooltipProvider delayDuration={300}>
+            <Tooltip>
+                <TooltipTrigger asChild>{children}</TooltipTrigger>
+                <TooltipContent side={side}>{label}</TooltipContent>
+            </Tooltip>
+        </TooltipProvider>
+    )
+}
+
+export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider, Hint }

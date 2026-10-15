@@ -26,24 +26,24 @@ export function PushNotificationToggle() {
     }
   }
 
+  // A Linear-style switch row (it sits in the Profile page's Notifications section).
   return (
-    <div className="mb-4 flex items-center justify-between gap-4 rounded border border-[#e5e7eb] bg-white p-4">
-      <div className="flex items-start gap-2.5">
-        {enabled ? (
-          <Bell className="h-4 w-4 text-[#45474c] mt-0.5 shrink-0" />
-        ) : (
-          <BellOff className="h-4 w-4 text-[#45474c] mt-0.5 shrink-0" />
-        )}
-        <div>
-          <div className="text-sm font-semibold text-[#1b1b1d]">Push notifications</div>
-          <p className="text-xs text-[#45474c] mt-0.5">
+    <div className="flex items-center justify-between gap-4 py-2.5">
+      <div className="flex min-w-0 items-start gap-2.5">
+        <span className="mt-0.5 flex shrink-0 text-fg-subtle [&_svg]:h-4 [&_svg]:w-4">
+          {enabled ? <Bell /> : <BellOff />}
+        </span>
+        <label htmlFor="push-notifications" className="min-w-0 cursor-pointer">
+          <span className="block text-ui text-fg">Push notifications on this device</span>
+          <span className="mt-0.5 block text-small text-fg-muted">
             {supportState === 'denied'
               ? 'Notifications are blocked in your browser settings for this site.'
-              : 'Get a native notification on this device when events you\'ve enabled in Firm Settings occur.'}
-          </p>
-        </div>
+              : 'Get a native notification here when events your firm has turned on happen.'}
+          </span>
+        </label>
       </div>
       <Switch
+        id="push-notifications"
         checked={enabled}
         onCheckedChange={handleToggle}
         disabled={subscribing || subscribed === null || supportState === 'denied'}

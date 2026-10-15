@@ -7,6 +7,7 @@ import { ListGroup, ListRow } from "@/components/ui/list-row"
 import { StatusPill } from "@/components/ui/tag"
 import { EmptyPanel } from "@/components/ui/empty-panel"
 import { cn } from "@/lib/utils"
+import { Hint } from "@/components/ui/tooltip"
 import type { HomeEngagement } from "@/lib/home/my-work"
 
 /** Greets in the viewer's own timezone — the server renders in UTC. */
@@ -21,21 +22,35 @@ export function Greeting({ firstName }: { firstName: string | null }) {
 
 export function RelativeTime({ iso, className }: { iso: string; className?: string }) {
     return (
-        <time dateTime={iso} title={format(new Date(iso), "PPpp")} className={className} suppressHydrationWarning>
-            {formatDistanceToNowStrict(new Date(iso), { addSuffix: true })}
-        </time>
+        <Hint label={format(new Date(iso), "PPpp")}>
+            <time dateTime={iso} className={className} suppressHydrationWarning>
+                {formatDistanceToNowStrict(new Date(iso), { addSuffix: true })}
+            </time>
+        </Hint>
     )
 }
 
-type Grouping = "client" | "status"
+type Grouping = "firm" | "client" | "status"
 
 const STATUS_ORDER = ["ACTIVE", "PLANNED", "PAUSED", "COMPLETED"]
 const STATUS_TITLES: Record<string, string> = { ACTIVE: "Active", PLANNED: "Planned", PAUSED: "Paused", COMPLETED: "Completed" }
 
-/** Linear-style "My engagements": open by default, grouped by client or status. */
-export function MyEngagementsList({ engagements }: { engagements: HomeEngagement[] }) {
+/**
+ * Linear-style "My engagements": open by default, grouped by client or status — and, on the
+ * cross-firm Home for someone in several firms, by firm (the default there).
+ */
+export function MyEngagementsList({
+    engagements,
+    firmNames,
+}: {
+    engagements: HomeEngagement[]
+    /** Firm id → name. Given only when the list spans several firms; adds "By firm". */
+    firmNames?: Record<string, string>
+}) {
+    const multiFirm = Boolean(firmNames)
     const [showAll, setShowAll] = useState(false)
-    const [grouping, setGrouping] = useState<Grouping>("client")
+    const [grouping, setGrouping] = useState<Grouping>(multiFirm ? "firm" : "client")
+    const firmOf = (e: HomeEngagement) => firmNames?.[e.firmId] ?? ""
 
     const visible = useMemo(
         () => (showAll ? engagements : engagements.filter((e) => e.status !== "COMPLETED")),
@@ -45,14 +60,19 @@ export function MyEngagementsList({ engagements }: { engagements: HomeEngagement
     const groups = useMemo(() => {
         const map = new Map<string, HomeEngagement[]>()
         for (const e of visible) {
-            const key = grouping === "client" ? e.clientName : e.status
+            // Client names can repeat across firms, so a multi-firm client group names its firm too.
+            const firm = firmNames?.[e.firmId] ?? ""
+            const key =
+                grouping === "firm" ? firm
+                : grouping === "client" ? (firmNames ? `${e.clientName} · ${firm}` : e.clientName)
+                : e.status
             map.set(key, [...(map.get(key) ?? []), e])
         }
         const entries = Array.from(map.entries())
         if (grouping === "status") entries.sort((a, b) => STATUS_ORDER.indexOf(a[0]) - STATUS_ORDER.indexOf(b[0]))
         else entries.sort((a, b) => a[0].localeCompare(b[0]))
         return entries
-    }, [visible, grouping])
+    }, [visible, grouping, firmNames])
 
     const toggle = (active: boolean) =>
         cn(
@@ -63,13 +83,19 @@ export function MyEngagementsList({ engagements }: { engagements: HomeEngagement
     return (
         <section className="flex flex-col gap-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
-                <h2 className="text-h3 text-fg">My engagements</h2>
+                <h2 className="flex items-center gap-2 text-h3 text-fg">
+                    <Briefcase className="h-5 w-5 text-fg-muted" aria-hidden />
+                    My engagements
+                </h2>
                 <div className="flex items-center gap-3">
                     <div className="flex items-center gap-0.5" role="group" aria-label="Show">
                         <button type="button" className={toggle(!showAll)} onClick={() => setShowAll(false)}>Open</button>
                         <button type="button" className={toggle(showAll)} onClick={() => setShowAll(true)}>All</button>
                     </div>
                     <div className="flex items-center gap-0.5" role="group" aria-label="Group by">
+                        {multiFirm && (
+                            <button type="button" className={toggle(grouping === "firm")} onClick={() => setGrouping("firm")}>By firm</button>
+                        )}
                         <button type="button" className={toggle(grouping === "client")} onClick={() => setGrouping("client")}>By client</button>
                         <button type="button" className={toggle(grouping === "status")} onClick={() => setGrouping("status")}>By status</button>
                     </div>
@@ -92,13 +118,19 @@ export function MyEngagementsList({ engagements }: { engagements: HomeEngagement
                                     key={e.id}
                                     href={e.href}
                                     title={e.name}
-                                    meta={grouping === "status" ? e.clientName : undefined}
+                                    meta={
+                                        grouping === "firm" ? e.clientName
+                                        : grouping === "status" ? (multiFirm ? `${e.clientName} · ${firmOf(e)}` : e.clientName)
+                                        : undefined
+                                    }
                                     trailing={
                                         <>
                                             {e.dueDate && (
-                                                <span className="hidden tabular-nums sm:inline" title="Due date">
-                                                    {format(new Date(e.dueDate), "MMM d")}
-                                                </span>
+                                                <Hint label="Due date">
+                                                    <span className="hidden tabular-nums sm:inline">
+                                                        {format(new Date(e.dueDate), "MMM d")}
+                                                    </span>
+                                                </Hint>
                                             )}
                                             <RelativeTime iso={e.updatedAt} className="hidden w-24 text-right md:inline" />
                                             <StatusPill kind="engagement" status={e.status} />

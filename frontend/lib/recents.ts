@@ -53,6 +53,8 @@ export type RecentVisit = {
     entityId: string
     /** Exactly where the user was — tab, query and hash included. */
     path: string
+    /** The firm the visit was in, for the cross-firm Home's labels and filter. */
+    firmId: string
     title: string
     /** Client name for engagement rows. */
     context: string | null
@@ -60,21 +62,25 @@ export type RecentVisit = {
 }
 
 /**
- * The caller's recent visits in one firm, newest first, limited to what they can still see —
- * engagements they still belong to (not deleted) and clients they still reach (the
- * getFirmHierarchy rule), and only while they remain a member of the firm.
+ * The caller's recent visits in one firm or several (the cross-firm Home), newest first, limited to
+ * what they can still see — engagements they still belong to (not deleted) and clients they still
+ * reach (the getFirmHierarchy rule), and only in firms they are still a member of.
  */
-export async function getRecentVisits(userId: string, firmId: string, limit = 8): Promise<RecentVisit[]> {
+export async function getRecentVisits(userId: string, firmIdOrIds: string | string[], limit = 8): Promise<RecentVisit[]> {
+    const firmIds = Array.isArray(firmIdOrIds) ? firmIdOrIds : [firmIdOrIds]
+    if (firmIds.length === 0) return []
     try {
-        const [rows, firmMember] = await Promise.all([
+        const [allRows, memberships] = await Promise.all([
             prisma.userRecentVisit.findMany({
-                where: { userId, firmId },
+                where: { userId, firmId: { in: firmIds } },
                 orderBy: { visitedAt: 'desc' },
                 take: Math.min(limit * 3, MAX_RECENTS_PER_USER),
             }),
-            prisma.firmMember.findFirst({ where: { userId, firmId }, select: { id: true } }),
+            prisma.firmMember.findMany({ where: { userId, firmId: { in: firmIds } }, select: { firmId: true } }),
         ])
-        if (!firmMember || rows.length === 0) return []
+        const memberOf = new Set(memberships.map((m) => m.firmId))
+        const rows = allRows.filter((r) => memberOf.has(r.firmId))
+        if (rows.length === 0) return []
 
         const engagementIds = rows.filter((r) => r.entityType === 'engagement').map((r) => r.entityId)
         const clientIds = rows.filter((r) => r.entityType === 'client').map((r) => r.entityId)
@@ -90,7 +96,7 @@ export async function getRecentVisits(userId: string, firmId: string, limit = 8)
                 ? prisma.client.findMany({
                       where: {
                           id: { in: clientIds },
-                          firmId,
+                          firmId: { in: Array.from(memberOf) },
                           OR: [
                               { members: { some: { userId } } },
                               { engagements: { some: { isDeleted: false, members: { some: { userId } } } } },
@@ -127,6 +133,7 @@ export async function getRecentVisits(userId: string, firmId: string, limit = 8)
                 entityType: r.entityType,
                 entityId: r.entityId,
                 path: r.path,
+                firmId: r.firmId,
                 title,
                 context,
                 visitedAt: r.visitedAt.toISOString(),
@@ -135,7 +142,7 @@ export async function getRecentVisits(userId: string, firmId: string, limit = 8)
         return out
     } catch (e) {
         // Also covers the window before the user_recent_visits migration is applied.
-        logger.error('getRecentVisits failed', e as Error, 'Recents', { userId, firmId })
+        logger.error('getRecentVisits failed', e as Error, 'Recents', { userId, firmIds })
         return []
     }
 }

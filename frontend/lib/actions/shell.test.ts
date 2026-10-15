@@ -84,6 +84,18 @@ describe('getShellSidebarData — access', () => {
         expect(data!.favorites[1]).toMatchObject({ href: '/api/deeplink?doc=9', context: 'E1' })
     })
 
+    it('opens a document bookmark saved without a URL at the document itself', async () => {
+        prisma.userPersonalization.findUnique.mockResolvedValue({
+            bookmarks: [
+                { id: 'b1', kind: 'document', projectId: 'e1', documentId: 'd9', label: 'Letter.pdf' },
+                { id: 'b2', kind: 'document', projectId: 'e1', label: 'No id' },
+            ],
+        })
+        const data = await getShellSidebarData('acme')
+        expect(data!.favorites[0].href).toMatch(/^\/d\/acme-group\/f\/acme\/c\/c1\/e\/e-one\/.*d9/)
+        expect(data!.favorites[1].href).toBe('/d/acme-group/f/acme/c/c1/e/e-one')
+    })
+
     it('flags an EC/EV-only member as the client-facing view', async () => {
         prisma.client.findMany.mockResolvedValue([
             client('c1', [{ id: 'e1', slug: 'a', role: 'eng_viewer' }, { id: 'e2', slug: 'b', role: 'eng_ext_collaborator' }]),

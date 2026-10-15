@@ -2,11 +2,87 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { getPrismaWithRls } from '@/lib/prisma'
 import { canManageClient, canManageProject } from '@/lib/permission-helpers'
+import { getHomeFirms } from '@/lib/home/home-firms'
 
 function daysAgoUtc(days: number) {
   const d = new Date()
   d.setUTCDate(d.getUTCDate() - days)
   return d
+}
+
+/**
+ * `?firms=all` — the cross-firm Inbox (.claude/plans/cross-firm-home-inbox.md): the caller's own
+ * notifications in every firm they may open right now (getHomeFirms, computed here, never taken
+ * from the request) plus platform-wide ones. Without it, the existing single-firm behavior.
+ */
+function wantsAllFirms(request: NextRequest): boolean {
+  return request.nextUrl.searchParams.get('firms') === 'all'
+}
+
+/** The caller's notifications across the firms they may open, plus platform-wide ones. */
+async function allFirmsWhere(userId: string) {
+  const { firms } = await getHomeFirms(userId)
+  return { userId, OR: [{ firmId: { in: firms.map((f) => f.id) } }, { scope: 'PLATFORM' }] }
+}
+
+const NOTIFICATION_SELECT = {
+  id: true,
+  createdAt: true,
+  firmId: true,
+  scope: true,
+  type: true,
+  priority: true,
+  title: true,
+  body: true,
+  ctaUrl: true,
+  metadata: true,
+  readAt: true,
+  clientId: true,
+  engagementId: true,
+  documentId: true,
+} as const
+
+/**
+ * Retention cleanup (best-effort, no cron) over the given rows:
+ * - read: 30 days  - unread: 180 days  - hard cap: 1000
+ */
+async function pruneNotifications(prisma: any, cleanupWhere: Record<string, unknown>) {
+  try {
+    await prisma.notification.deleteMany({
+      where: {
+        ...cleanupWhere,
+        OR: [
+          { readAt: { not: null }, createdAt: { lt: daysAgoUtc(30) } },
+          { readAt: null, createdAt: { lt: daysAgoUtc(180) } },
+        ],
+      },
+    })
+
+    const total = await prisma.notification.count({ where: cleanupWhere })
+    if (total > 1000) {
+      const overflow = total - 1000
+      const oldestRead = await prisma.notification.findMany({
+        where: { ...cleanupWhere, readAt: { not: null } },
+        orderBy: { createdAt: 'asc' },
+        take: overflow,
+        select: { id: true },
+      })
+      const ids = oldestRead.map((r: { id: string }) => r.id)
+      if (ids.length) {
+        await prisma.notification.deleteMany({ where: { id: { in: ids } } })
+      }
+    }
+  } catch {
+    // ignore cleanup failures
+  }
+}
+
+function serialize(notifications: { createdAt: Date; readAt: Date | null }[]) {
+  return notifications.map((n) => ({
+    ...n,
+    createdAt: n.createdAt.toISOString(),
+    readAt: n.readAt ? n.readAt.toISOString() : null,
+  }))
 }
 
 async function isFirmAdmin(prisma: any, firmId: string, userId: string): Promise<boolean> {
@@ -65,6 +141,17 @@ export async function GET(request: NextRequest) {
   const { data: { session } } = await supabase.auth.getSession()
   const prisma = getPrismaWithRls(bearer ?? session?.access_token)
 
+  if (wantsAllFirms(request)) {
+    // Cleanup covers every row the caller has; the list only the firms they may open now.
+    await pruneNotifications(prisma, { userId: user.id })
+    const where = await allFirmsWhere(user.id)
+    const [notifications, unreadCount] = await Promise.all([
+      prisma.notification.findMany({ where, orderBy: { createdAt: 'desc' }, take: 50, select: NOTIFICATION_SELECT }),
+      prisma.notification.count({ where: { ...where, readAt: null } }),
+    ])
+    return NextResponse.json({ unreadCount, canBroadcast: false, broadcastScopes: [], notifications: serialize(notifications) })
+  }
+
   const orgId =
     request.nextUrl.searchParams.get('firmId') ||
     (user.app_metadata?.active_firm_id as string | undefined) ||
@@ -72,38 +159,8 @@ export async function GET(request: NextRequest) {
 
   if (!orgId) return NextResponse.json({ notifications: [] })
 
-  // Retention cleanup (best-effort, no cron):
-  // - read: 30 days  - unread: 180 days  - hard cap: 1000 per user (across firm + platform)
-  const cleanupWhere = { userId: user.id, OR: [{ firmId: orgId }, { scope: 'PLATFORM' }] }
-  try {
-    await prisma.notification.deleteMany({
-      where: {
-        ...cleanupWhere,
-        OR: [
-          { readAt: { not: null }, createdAt: { lt: daysAgoUtc(30) } },
-          { readAt: null, createdAt: { lt: daysAgoUtc(180) } },
-        ],
-      },
-    })
-
-    const total = await prisma.notification.count({ where: cleanupWhere })
-    if (total > 1000) {
-      const overflow = total - 1000
-      const oldestRead = await prisma.notification.findMany({
-        where: { ...cleanupWhere, readAt: { not: null } },
-        orderBy: { createdAt: 'asc' },
-        take: overflow,
-        select: { id: true },
-      })
-      const ids = oldestRead.map((r) => r.id)
-      if (ids.length) {
-        await prisma.notification.deleteMany({ where: { id: { in: ids } } }
-        )
-      }
-    }
-  } catch {
-    // ignore cleanup failures
-  }
+  // Hard cap 1000 per user across firm + platform.
+  await pruneNotifications(prisma, { userId: user.id, OR: [{ firmId: orgId }, { scope: 'PLATFORM' }] })
 
   const { clientId, projectId } = await resolveClientAndProjectIds({
     prisma,
@@ -133,21 +190,7 @@ export async function GET(request: NextRequest) {
     where: notificationWhere,
     orderBy: { createdAt: 'desc' },
     take: 30,
-    select: {
-      id: true,
-      createdAt: true,
-      scope: true,
-      type: true,
-      priority: true,
-      title: true,
-      body: true,
-      ctaUrl: true,
-      metadata: true,
-      readAt: true,
-      clientId: true,
-      engagementId: true,
-      documentId: true,
-    },
+    select: NOTIFICATION_SELECT,
   })
 
   const unreadCount = await prisma.notification.count({
@@ -158,11 +201,7 @@ export async function GET(request: NextRequest) {
     unreadCount,
     canBroadcast,
     broadcastScopes,
-    notifications: notifications.map((n) => ({
-      ...n,
-      createdAt: n.createdAt.toISOString(),
-      readAt: n.readAt ? n.readAt.toISOString() : null,
-    })),
+    notifications: serialize(notifications),
   })
 }
 
@@ -178,6 +217,14 @@ export async function PATCH(request: NextRequest) {
 
   const body = await request.json().catch(() => ({}))
   const markAllRead = Boolean(body?.markAllRead)
+
+  if (markAllRead && wantsAllFirms(request)) {
+    await prisma.notification.updateMany({
+      where: { ...(await allFirmsWhere(user.id)), readAt: null },
+      data: { readAt: new Date() },
+    })
+    return NextResponse.json({ success: true })
+  }
 
   if (markAllRead) {
     const orgId =
@@ -213,6 +260,15 @@ export async function DELETE(request: NextRequest) {
   const { data: { session } } = await supabase.auth.getSession()
   const prisma = getPrismaWithRls(bearer ?? session?.access_token)
 
+  const body = await request.json().catch(() => ({}))
+  const ids = Array.isArray(body?.ids) ? (body.ids as string[]) : []
+
+  // Dismissing from the cross-firm Inbox: the caller's own rows, whichever firm they belong to.
+  if (wantsAllFirms(request)) {
+    if (ids.length > 0) await prisma.notification.deleteMany({ where: { id: { in: ids }, userId: user.id } })
+    return NextResponse.json({ success: true })
+  }
+
   const orgId =
     request.nextUrl.searchParams.get('firmId') ||
     (user.app_metadata?.active_firm_id as string | undefined) ||
@@ -220,8 +276,6 @@ export async function DELETE(request: NextRequest) {
 
   if (!orgId) return NextResponse.json({ success: true })
 
-  const body = await request.json().catch(() => ({}))
-  const ids = Array.isArray(body?.ids) ? (body.ids as string[]) : []
   if (ids.length > 0) {
     await prisma.notification.deleteMany({
       where: { id: { in: ids }, firmId: orgId, userId: user.id },

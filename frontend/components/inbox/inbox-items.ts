@@ -5,13 +5,16 @@ export const INBOX_CHANGED_EVENT = "firma:inbox-changed"
 
 /**
  * The New UI Inbox's one item shape, merged from two sources (.claude/plans/ui-ux-overhaul.md,
- * Phase 4): the caller's notifications for this firm (plus platform-wide ones) and their own
- * reminders in this firm (review requests, @mentions, due dates).
+ * Phase 4): the caller's notifications (plus platform-wide ones) and their own reminders (review
+ * requests, @mentions, due dates), in the firms the Inbox shows — every firm the caller may open,
+ * or one (.claude/plans/cross-firm-home-inbox.md).
  */
 
 export type ApiNotification = {
     id: string
     createdAt: string
+    /** Null for platform-wide notifications, which show in every firm. */
+    firmId?: string | null
     scope: string
     type: string
     priority: string
@@ -25,6 +28,8 @@ export type InboxItem = {
     key: string
     source: "notification" | "reminder"
     sourceId: string
+    /** The firm it belongs to, for the firm label; null for platform-wide notifications. */
+    firmId: string | null
     title: string
     body: string | null
     /** Reminder action ("Review comment", "Follow-up") or the notification's type, humanized. */
@@ -51,6 +56,7 @@ export function reminderToItem(r: ReminderWithContext): InboxItem {
         key: `r:${r.id}`,
         source: "reminder",
         sourceId: r.id,
+        firmId: r.firmId ?? null,
         title: r.entityName,
         body: r.note ?? null,
         label: r.action,
@@ -68,6 +74,7 @@ export function notificationToItem(n: ApiNotification): InboxItem {
         key: `n:${n.id}`,
         source: "notification",
         sourceId: n.id,
+        firmId: n.firmId ?? null,
         title: n.title,
         body: n.body,
         label: humanizeType(n.type),
@@ -90,10 +97,11 @@ export type ReminderGroups = {
     upcoming: InboxItem[]
 }
 
-/** Reminders in groups that need you first; within a group, soonest first. */
-export function groupReminders(firmId: string, reminders: ReminderWithContext[]): ReminderGroups {
+/** Reminders in the given firm(s), in groups that need you first; within a group, soonest first. */
+export function groupReminders(firms: string | ReadonlySet<string>, reminders: ReminderWithContext[]): ReminderGroups {
+    const inScope = (firmId: string | null | undefined) => !!firmId && (typeof firms === "string" ? firmId === firms : firms.has(firmId))
     const visible = reminders
-        .filter((r) => !r.hiddenAt && r.firmId === firmId)
+        .filter((r) => !r.hiddenAt && inScope(r.firmId))
         .sort((a, b) => (a.delta ?? Infinity) - (b.delta ?? Infinity))
     const groups: ReminderGroups = { overdue: [], today: [], undated: [], upcoming: [] }
     for (const r of visible) {

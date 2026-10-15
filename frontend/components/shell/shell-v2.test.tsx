@@ -66,6 +66,7 @@ function setShell(overrides: Partial<typeof shell> = {}, data: Partial<ShellSide
         loading: false,
         canManage: false,
         inboxCountFor: (firmId: string | null | undefined) => (firmId === 'f1' ? 3 : 0),
+        inboxTotal: 3,
         refresh: vi.fn(),
         ...overrides,
     }
@@ -120,17 +121,50 @@ describe('SidebarV2', () => {
         expect(screen.queryByText('Doc Search')).toBeNull()
     })
 
-    it('shows favorites with their deeplink', () => {
+    it('leaves bookmarks to Home, not the sidebar', () => {
         render(<SidebarV2 />)
-        const fav = screen.getByText('Engagement letter.pdf').closest('a')!
-        expect(fav.getAttribute('href')).toBe('/api/deeplink?doc=1')
+        expect(screen.queryByText('Engagement letter.pdf')).toBeNull()
     })
 
-    it('links Inbox to the firm inbox with its unread count', () => {
+    it('links Home and Inbox to the cross-firm pages, Inbox with the unread total', () => {
         render(<SidebarV2 />)
+        expect(screen.getByText('Home').closest('a')!.getAttribute('href')).toBe('/d/u/home')
         const inbox = screen.getByText('Inbox').closest('a')!
-        expect(inbox.getAttribute('href')).toBe('/d/acme-group/f/acme/inbox')
+        expect(inbox.getAttribute('href')).toBe('/d/u/inbox')
         expect(within(inbox).getByText('3')).toBeTruthy()
+    })
+
+    it('marks Home and Inbox active on their pages', () => {
+        pathname = '/d/u/home'
+        const { unmount } = render(<SidebarV2 />)
+        expect(screen.getByText('Home').closest('a')!.getAttribute('aria-current')).toBe('page')
+        unmount()
+        pathname = '/d/u/inbox'
+        render(<SidebarV2 />)
+        expect(screen.getByText('Inbox').closest('a')!.getAttribute('aria-current')).toBe('page')
+    })
+
+    it('shows the workspace levels, not the firm, on the firm-group and firm pickers', () => {
+        for (const path of ['/d', '/d/acme-group/f']) {
+            pathname = path
+            const { unmount } = render(<SidebarV2 />)
+            // Home and Inbox span firms, so they stay; the firm's own navigation goes.
+            expect(screen.getByText('Inbox').closest('a')!.getAttribute('href')).toBe('/d/u/inbox')
+            expect(screen.queryByText('Contoso')).toBeNull()
+            expect(screen.queryByText('Calendar')).toBeNull()
+            expect(screen.getByText('Firm groups').closest('a')!.getAttribute('href')).toBe('/d')
+            expect(screen.getByText('Firms').closest('a')!.getAttribute('href')).toBe('/d/acme-group/f/')
+            expect(screen.getByText('Back to Acme Advisory').closest('a')!.getAttribute('href')).toBe('/d/acme-group/f/acme')
+            unmount()
+        }
+    })
+
+    it('keeps the firm navigation on personal pages', () => {
+        pathname = '/d/u/profile'
+        render(<SidebarV2 />)
+        expect(screen.getByText('Inbox')).toBeTruthy()
+        expect(screen.getByText('Contoso')).toBeTruthy()
+        expect(screen.queryByText('Firm groups')).toBeNull()
     })
 
     it('offers the collapse control only when given a collapse handler', () => {
@@ -149,10 +183,11 @@ describe('HeaderBar breadcrumbs', () => {
     it('names firm, client, engagement and tab from the shell data', () => {
         header()
         const nav = screen.getByLabelText('Breadcrumb')
-        expect(within(nav).getByText('Acme Advisory').getAttribute('href')).toBe('/d/acme-group/f/acme')
-        expect(within(nav).getByText('Contoso').getAttribute('href')).toBe('/d/acme-group/f/acme/c/contoso')
-        expect(within(nav).getByText('FY26 Audit').getAttribute('href')).toBe('/d/acme-group/f/acme/c/contoso/e/fy26-audit')
-        expect(within(nav).getByText('Files').getAttribute('aria-current')).toBe('page')
+        // Each crumb's label sits beside its icon inside the link, so read the link around it.
+        expect(within(nav).getByText('Acme Advisory').closest('a')?.getAttribute('href')).toBe('/d/acme-group/f/acme')
+        expect(within(nav).getByText('Contoso').closest('a')?.getAttribute('href')).toBe('/d/acme-group/f/acme/c/contoso')
+        expect(within(nav).getByText('FY26 Audit').closest('a')?.getAttribute('href')).toBe('/d/acme-group/f/acme/c/contoso/e/fy26-audit')
+        expect(within(nav).getByText('Files').closest('[aria-current]')?.getAttribute('aria-current')).toBe('page')
     })
 
     it('labels firm tabs', () => {
@@ -169,15 +204,18 @@ describe('HeaderBar breadcrumbs', () => {
     })
 
     it('labels the inbox and points the header Inbox link at it', () => {
-        pathname = '/d/acme-group/f/acme/inbox'
+        pathname = '/d/u/inbox'
         header()
         expect(within(screen.getByLabelText('Breadcrumb')).getByText('Inbox')).toBeTruthy()
-        expect(screen.getByLabelText('Inbox, 3 unread').getAttribute('href')).toBe('/d/acme-group/f/acme/inbox')
+        expect(screen.getByLabelText('Inbox, 3 unread').getAttribute('href')).toBe('/d/u/inbox')
     })
 
-    it('names personal pages', () => {
-        pathname = '/d/u/reminders'
-        header()
-        expect(within(screen.getByLabelText('Breadcrumb')).getByText('Reminders')).toBeTruthy()
+    it('names firm-less pages', () => {
+        for (const [path, label] of [['/d/u/home', 'Home'], ['/d/u/profile', 'Profile']]) {
+            pathname = path
+            const { unmount } = header()
+            expect(within(screen.getByLabelText('Breadcrumb')).getByText(label)).toBeTruthy()
+            unmount()
+        }
     })
 })

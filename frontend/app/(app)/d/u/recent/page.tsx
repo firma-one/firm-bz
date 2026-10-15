@@ -5,6 +5,7 @@ import { Users, Briefcase, Clock, Filter, ChevronDown, RotateCw } from "lucide-r
 import Link from "next/link"
 import { useTabCount } from "../layout-context"
 import { Button } from "@/components/ui/button"
+import { MovedPage } from "../moved-page"
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -33,7 +34,7 @@ function toLabel(slug: string) {
 
 const COLS = '1fr 12% 18%'
 
-export default function RecentPage() {
+function RecentPageContent() {
   const [items, setItems] = useState<RecentItem[]>([])
   const [mounted, setMounted] = useState(false)
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all')
@@ -172,5 +173,14 @@ export default function RecentPage() {
         )}
       </div>
     </div>
+  )
+}
+
+/** Recent pages live on Home now ("Continue where you left off"); this forwards there. */
+export default function RecentPage() {
+  return (
+    <MovedPage to="home">
+      <RecentPageContent />
+    </MovedPage>
   )
 }

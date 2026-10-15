@@ -18,7 +18,7 @@ const past = new Date(Date.now() - 3 * 86_400_000)
 function eng(id: string, role: string, over: Record<string, unknown> = {}) {
     return {
         id, name: `Eng ${id}`, slug: id, status: 'ACTIVE', dueDate: null, updatedAt: new Date('2026-10-14T10:00:00Z'),
-        client: { name: 'Contoso', slug: 'contoso' }, members: [{ role }], ...over,
+        client: { name: 'Contoso', slug: 'contoso', firmId: 'f1' }, members: [{ role }], ...over,
     }
 }
 
@@ -30,7 +30,9 @@ function reminder(over: Partial<ReminderWithContext>): ReminderWithContext {
     }
 }
 
-const base = { userId: 'u1', firmId: 'f1', groupSlug: 'g', firmSlug: 'acme', reminders: [] as ReminderWithContext[] }
+const ACME = { id: 'f1', name: 'Acme', slug: 'acme', groupSlug: 'g' }
+const BETA = { id: 'f2', name: 'Beta', slug: 'beta', groupSlug: 'h' }
+const base = { userId: 'u1', firms: [ACME], reminders: [] as ReminderWithContext[] }
 
 /** $queryRaw is a tagged template: identify which query ran by its SQL text. */
 function routeRaw(results: { review?: unknown[]; intake?: unknown[]; assigned?: unknown[] }) {
@@ -49,14 +51,33 @@ beforeEach(() => {
 })
 
 describe('getMyWork — scope', () => {
-    it('starts from the caller\'s own engagement memberships in this firm', async () => {
+    it('starts from the caller\'s own engagement memberships in the given firms', async () => {
         prisma.engagement.findMany.mockResolvedValueOnce([])
-        await getMyWork(base)
+        await getMyWork({ ...base, firms: [ACME, BETA] })
         expect(prisma.engagement.findMany.mock.calls[0][0].where).toEqual({
             isDeleted: false,
-            client: { firmId: 'f1' },
+            client: { firmId: { in: ['f1', 'f2'] } },
             members: { some: { userId: 'u1' } },
         })
+    })
+
+    it('queries nothing when there are no firms', async () => {
+        expect(await getMyWork({ ...base, firms: [] })).toEqual({ engagements: [], needsYou: [], dueSoon: [] })
+        expect(prisma.engagement.findMany).not.toHaveBeenCalled()
+    })
+
+    it('links each engagement under its own firm and tags its items with that firm', async () => {
+        prisma.engagement.findMany.mockResolvedValueOnce([
+            eng('a', 'eng_member'),
+            eng('b', 'eng_member', { client: { name: 'Globex', slug: 'globex', firmId: 'f2' } }),
+        ])
+        routeRaw({ assigned: [{ id: 'd1', engagementId: 'b', fileName: 'Return', dueDate: soon, status: 'to_do' }] })
+        const work = await getMyWork({ ...base, firms: [ACME, BETA] })
+        expect(work.engagements.map((e) => [e.href, e.firmId])).toEqual([
+            ['/d/g/f/acme/c/contoso/e/a', 'f1'],
+            ['/d/h/f/beta/c/globex/e/b', 'f2'],
+        ])
+        expect(work.dueSoon[0]).toMatchObject({ firmId: 'f2', href: '/d/h/f/beta/c/globex/e/b/shares/board' })
     })
 
     it('runs no approval queries for a user who leads nothing', async () => {
@@ -116,7 +137,7 @@ describe('getMyWork — due soon', () => {
 })
 
 describe('getMyWork — reminders', () => {
-    it('keeps only this firm\'s visible reminders: review requests to Needs you, dated ones to Due soon', async () => {
+    it('keeps only the given firms\' visible reminders: review requests to Needs you, dated ones to Due soon', async () => {
         prisma.engagement.findMany.mockResolvedValueOnce([])
         const work = await getMyWork({
             ...base,

@@ -1,23 +1,22 @@
-import { notFound } from "next/navigation"
-import { prisma } from "@/lib/prisma"
-import { createClient } from "@/utils/supabase/server"
-import { InboxView } from "@/components/inbox/inbox-view"
+import { redirect } from "next/navigation"
 
 /**
- * New UI unified Inbox for one firm (.claude/plans/ui-ux-overhaul.md, Phase 4). Shows only the
- * caller's own notifications and reminders; it still requires firm membership so the URL can't be
- * used to learn a firm's name.
+ * The Inbox moved to `/d/u/inbox`, across firms (.claude/plans/cross-firm-home-inbox.md). Old
+ * links to a firm's Inbox land there filtered to that firm; the Inbox ignores a slug the caller
+ * can't open. Other query params (the tab) carry over.
  */
-export default async function InboxPage({ params }: { params: Promise<{ groupSlug: string; firmSlug: string }> }) {
+export default async function FirmInboxRedirect({
+    params,
+    searchParams,
+}: {
+    params: Promise<{ groupSlug: string; firmSlug: string }>
+    searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
     const { firmSlug } = await params
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) notFound()
-
-    const firm = await prisma.firm.findUnique({ where: { slug: firmSlug }, select: { id: true, name: true } })
-    if (!firm) notFound()
-    const member = await prisma.firmMember.findFirst({ where: { userId: user.id, firmId: firm.id }, select: { id: true } })
-    if (!member) notFound()
-
-    return <InboxView firmId={firm.id} firmName={firm.name} />
+    const next = new URLSearchParams()
+    for (const [key, value] of Object.entries(await searchParams)) {
+        if (typeof value === "string") next.set(key, value)
+    }
+    next.set("firm", firmSlug)
+    redirect(`/d/u/inbox?${next.toString()}`)
 }

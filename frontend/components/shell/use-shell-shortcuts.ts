@@ -27,17 +27,18 @@ export function useShellShortcuts({ onShowShortcuts }: { onShowShortcuts: () => 
         const tab = (t: string) => firmTabPath(groupSlug!, firmSlug!, t)
         const external = data?.isExternalOnly ?? false
 
+        // Home and Inbox span every firm; the rest are the current firm's pages.
         const targets: Record<string, string | null> = base
             ? {
-                  h: base,
-                  i: `${base}/inbox`,
+                  h: "/d/u/home",
+                  i: "/d/u/inbox",
                   c: external ? null : tab("clients"),
                   l: external ? null : tab("calendar"),
                   d: external ? null : tab("doc-search"),
                   o: canManage ? tab("analytics") : null,
                   s: canManage ? tab("settings") : null,
               }
-            : {}
+            : { h: "/d/u/home", i: "/d/u/inbox" }
 
         const onKey = (e: KeyboardEvent) => {
             if (e.metaKey || e.ctrlKey || e.altKey || isTypingTarget(e.target)) return

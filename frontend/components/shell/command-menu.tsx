@@ -126,11 +126,12 @@ export function CommandMenu({ onToggleSidebar, onShowShortcuts }: { onToggleSide
         const items: Item[] = []
         const base = firmSlug && groupSlug ? firmPath(groupSlug, firmSlug) : null
         const tab = (t: string) => firmTabPath(groupSlug!, firmSlug!, t)
+        // Home and Inbox span every firm (.claude/plans/cross-firm-home-inbox.md).
+        items.push(
+            { id: "go-home", section: "Go to", icon: <Home />, label: "Home", hint: <><Kbd>G</Kbd><Kbd>H</Kbd></>, run: () => go("/d/u/home") },
+            { id: "go-inbox", section: "Go to", icon: <Inbox />, label: "Inbox", keywords: "notifications reminders mentions", hint: <><Kbd>G</Kbd><Kbd>I</Kbd></>, run: () => go("/d/u/inbox") }
+        )
         if (base) {
-            items.push(
-                { id: "go-home", section: "Go to", icon: <Home />, label: "Home", hint: <><Kbd>G</Kbd><Kbd>H</Kbd></>, run: () => go(base) },
-                { id: "go-inbox", section: "Go to", icon: <Inbox />, label: "Inbox", keywords: "notifications reminders mentions", hint: <><Kbd>G</Kbd><Kbd>I</Kbd></>, run: () => go(`${base}/inbox`) }
-            )
             if (!data?.isExternalOnly) {
                 items.push(
                     { id: "go-clients", section: "Go to", icon: <FolderOpen />, label: "Clients", hint: <><Kbd>G</Kbd><Kbd>C</Kbd></>, run: () => go(tab("clients")) },
