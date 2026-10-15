@@ -290,6 +290,28 @@ export async function getDefaultFirmWithOnboardingStatus(): Promise<{
  *
  * Returns `null` only if the resolved firm/group has no slug (malformed data).
  */
+/**
+ * v2 landing (.claude/plans/ui-ux-overhaul.md, Phase 3): last-visited firm from server-side recents,
+ * else the FirmMember.isDefault firm (which the v2 workspace switcher keeps current), else the only
+ * firm. Null — fall through to the v1 pickers — for v1 users and for multi-firm users with neither.
+ */
+async function resolveV2LandingPath(userId: string, firms: Awaited<ReturnType<typeof FirmService.getUserFirms>>): Promise<string | null> {
+    const { getUserUiPrefs } = await import('@/lib/ui-prefs')
+    const { shell } = await getUserUiPrefs(userId)
+    if (shell !== 'v2') return null
+
+    const landable = firms.filter((f) => f.slug && f.groupSlug)
+    if (landable.length === 0) return null
+
+    const { getLastVisitedFirmId } = await import('@/lib/recents')
+    const lastId = await getLastVisitedFirmId(userId, landable.map((f) => f.id))
+    const target =
+        landable.find((f) => f.id === lastId) ??
+        landable.find((f) => f.members.some((m) => m.userId === userId && m.isDefault)) ??
+        (landable.length === 1 ? landable[0] : null)
+    return target ? firmPath(target.groupSlug!, target.slug) : null
+}
+
 export async function resolveDefaultFirmLandingPath(userId: string): Promise<string | null> {
     const allFirms = await FirmService.getUserFirms(userId)
 
@@ -317,6 +339,11 @@ export async function resolveDefaultFirmLandingPath(userId: string): Promise<str
             return '/d/onboarding'
         }
     }
+
+    // New UI (v2): a returning user lands on the Home of the firm they last worked in — no group
+    // or firm picker — falling back to their default firm. v1 keeps the rules below unchanged.
+    const v2Path = await resolveV2LandingPath(userId, allFirms)
+    if (v2Path) return v2Path
 
     const distinctGroupSlugs = Array.from(new Set(allFirms.map((f) => f.groupSlug).filter((s): s is string => Boolean(s))))
     if (distinctGroupSlugs.length === 0) return null

@@ -43,3 +43,26 @@ export async function setUiShell(shell: UiShell): Promise<{ ok: boolean }> {
         return { ok: false }
     }
 }
+
+/** Remembers whether the New UI sidebar is collapsed. Same atomic merge as setUiShell. */
+export async function setSidebarCollapsed(collapsed: boolean): Promise<{ ok: boolean }> {
+    try {
+        const supabase = await createClient()
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) return { ok: false }
+
+        const value = collapsed === true
+        await prisma.$executeRaw`
+            INSERT INTO platform.user_personalizations ("userId", "uiPrefs", "createdAt", "updatedAt")
+            VALUES (${user.id}::uuid, jsonb_build_object('sidebarCollapsed', ${value}::boolean), now(), now())
+            ON CONFLICT ("userId") DO UPDATE
+            SET "uiPrefs" = COALESCE(platform.user_personalizations."uiPrefs", '{}'::jsonb)
+                            || jsonb_build_object('sidebarCollapsed', ${value}::boolean),
+                "updatedAt" = now()
+        `
+        return { ok: true }
+    } catch (e) {
+        logger.error('setSidebarCollapsed failed', e as Error, 'UiPrefs')
+        return { ok: false }
+    }
+}

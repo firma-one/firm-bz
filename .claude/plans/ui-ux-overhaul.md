@@ -1,6 +1,8 @@
 # Plan: UI/UX Overhaul — Notion's look, Linear's information architecture
 
-Branch: `feature/ui-ux-overhaul` (cut from `dev` @ `3aef4fa0`, 2026-10-15)
+Branch: **`dev`**, behind the per-user New UI toggle. Work started on `feature/ui-ux-overhaul` and
+moved to `dev` on 2026-10-15 at Deepak's request: Phase 0 was replayed as `2b9f5f03` and the
+branch deleted. See **Delivery** for the rules that make building on `dev` safe.
 
 ## Context
 
@@ -392,74 +394,271 @@ Each phase ends at a point where the work can be committed (with approval). Agen
 - **Codemod script**: moved to the start of Phase 1. It lives in `frontend/scripts/` as a real repo
   tool, not scratch code.
 
-### Phase 1 — Primitives v2
+### Phase 1 — Primitives v2 ✅ (uncommitted, 2026-10-15)
 
-- **Restyle in place on semantic tokens:**
-  - Button: variants `primary` (accent), `secondary` (bordered neutral), `ghost`, `danger`, `link`.
-    The default becomes `secondary`; the blue default goes away.
-  - Input, Textarea, Select, DropdownMenu, Dialog, Sheet.
-  - Tabs: Linear/Notion-style underline tabs.
-  - Tooltip: small, dark, 6px radius, 400ms delay.
-  - Toast, Avatar (round), Checkbox, Switch, Progress, Skeleton.
-- **New primitives:**
-  - `Tag`, `StatusPill` (backed by `status-colors.ts`)
-  - `PageHeader`, `SectionLabel`
-  - `PropertyList` (Notion-style key/value rows)
-  - `ListGroup` / `ListRow` (Linear-style lists)
-  - `EmptyState` v2, `Kbd`, `SidebarItem`
-- **Check:** screenshot key legacy screens before and after; they must be unchanged in v1.
+**How v2 styling layers on without touching v1:**
+- A `v2:` Tailwind variant (`[data-ui="v2"] &`, in `tailwind.config.js`) applies a class only when
+  the New UI is on.
+- Primitives keep every v1 class exactly as it was and add `v2:` classes alongside. The attribute
+  selector gives `v2:` classes the specificity to beat the v1 class for the same property.
+- `cnV2(classes, className)` in `lib/utils.ts` drops any `v2:` class whose property the caller's
+  `className` overrides, so caller overrides still win in v2.
+- `cn` now uses `extendTailwindMerge`, so `text-ui`/`text-caption` count as font sizes and
+  `rounded-control` and `shadow-popover` as radius and shadow.
+- Tests are in `lib/utils.test.ts`.
 
-### Phase 2 — Shell v2 and responsive
+**Restyled (v2 only):**
+- **Button:**
+  - Variants: `default` gets an emerald fill (the plan originally said "secondary"; most default
+    Buttons are primary CTAs). Outline and secondary become hairline neutrals; ghost becomes muted
+    text with a hover background.
+  - No shadows or press-scale.
+  - Sizes: 28, 32 and 36px.
+- **Fields:** Input, Textarea and the Select trigger are 32px, with a `line-strong` border and an
+  emerald focus ring.
+- **Menus:** Select content and DropdownMenu get `rounded-card` and `shadow-popover`, with no
+  border. Items are 14px with a warm hover; labels are 12px muted.
+- **Dialog / Sheet:**
+  - The scrim is `rgba(15,15,15,.6)` and the panel has `shadow-dialog`, with a 10px radius on
+    Dialog.
+  - One close icon (`X`) everywhere; v1 keeps `SquareX` via a `v2:hidden`/`hidden v2:block` pair.
+- **Tabs:** underline tabs.
+- **Tooltip:** light and dark variants, both with Notion styling.
+- **Smaller controls:** Avatar is round. Checkbox, Switch, Progress, Skeleton and Badge follow the
+  token colors and shapes. The custom Toast stack drops its colored accent bar and mono labels.
 
-- **New components in `components/shell/`:** `AppShellV2`, `SidebarV2`, `WorkspaceSwitcher`,
-  `HeaderBar` (breadcrumbs), `MobileNavDrawer`, `PageContextProvider`.
-- **Shell choice.** `d-layout-client.tsx` picks the legacy or v2 shell from the toggle. The legacy
-  shell is untouched.
-- **Sidebar data:** one server call, `getSidebarData(firmSlug)`. It combines `getFirmHierarchy`
-  (already membership-filtered), favorites (bookmarks), unread Inbox count and per-firm counts for
-  the switcher.
-- **Right pane:** restyled, and it restores the sidebar when it closes.
+**New v2-only primitives (token classes, no `v2:` prefix):**
+- `Tag` and `StatusPill` (`components/ui/tag.tsx`), backed by `lib/ui/status-colors.ts`, the one
+  status → color/label map.
+- `SectionLabel`, `Kbd`, `PropertyList`/`PropertyRow`, `ListGroup`/`ListRow`, `PageHeading`,
+  `EmptyPanel`.
 
-### Phase 3 — Server-side recents, landing and Firm Home
+**Codemod:** `frontend/scripts/ui-token-codemod.mjs` runs as a dry run by default; `--write`
+applies it.
+- A dry run finds 2,392 exact hex → token rewrites across 113 files.
+- It skips anything that can't map exactly: opacity suffixes, `#f3f4f6` under hover, and hexes
+  without a token.
+- It runs per screen in Phase 6. Before that run it needs one addition: a check that skips a
+  class sharing an element with another class of the same color utility. Such pairs exist where a
+  raw `className` isn't passed through `cn`, and renaming could change which class wins.
 
-- **`recordVisit`.** Called on route change, debounced. It upserts into `user_recent_visits`,
-  captures the engagement tab into `uiPrefs.lastTabByEngagement`, and keeps the last 50 rows per
-  user.
-- **`getRecentVisits(firmId)`.** Re-checks visibility through `getFirmHierarchy` and drops stale
-  rows, the same way `/api/nav/recents/resolve` does today.
-- **Migrating old recents.** On a user's first v2 load, the client posts their existing
-  localStorage recents. After that, v2 stops writing localStorage.
-- **Landing resolver v2** (rules above) and the `/d` redirect. Fix `switchFirm` so it is called
-  from the switcher.
-- **Firm Home** (a server component inside the firm layout, so the subscription and maintenance
-  gates already apply).
-  - A new service, `lib/home/my-work.ts`, with `getMyWork(firmId, userId)`.
-  - It starts from the user's `EngagementMember` rows in this firm and then runs bounded queries
-    for each "Needs you" and "Due soon" source, using only those engagement ids.
-  - EC/EV filtering goes through `deliverable-stage-roles` and the shared subtree.
-  - The agent user is excluded.
-- **Engagement default tab** (v2): last tab, else Files.
+**Verified:**
+- Typecheck is clean, and the suite's only failures are the 13 that already fail on `dev`.
+- `/demo` tabs keep their caller overrides in v2.
+- Rendering the primitives' exact class strings in both shells shows v1 unchanged and v2 restyled.
 
-### Phase 4 — Unified Inbox
+### Phase 2 — Shell v2 and responsive ✅ (uncommitted, 2026-10-15)
 
-- **Service:** `lib/inbox/get-inbox-items.ts`. It merges notifications (`firmId` from the URL),
-  reminders resolved to this firm, and mentions.
-- **`firmId` on reminders.** Add `firmId` to `ReminderItem` on new writes. For older items, resolve
-  it at read time through the entity registry.
-- **Inbox page** (two panes, keyboard support), plus the sidebar badge and the switcher counts.
-- **Header cleanup:** in v2, remove the bell, reminders and bookmarks dropdowns. Redirect the
-  `/d/u/*` pages.
-- **Migration B (if `EXPLAIN` shows it's needed):** indexes on
-  - `notifications(userId, firmId, createdAt)`
-  - `engagement_documents(engagementId, dueDate)`
-  - `engagement_document_sharing_users(engagementId, sharingPermissionStatus)`
+**New components in `components/shell/`:**
+- **`AppShellV2`:**
+  - 240px sidebar, collapsible with `[` or its button; the state persists in
+    `uiPrefs.sidebarCollapsed` via `setSidebarCollapsed`.
+  - A 44px header bar and the content column.
+  - The right pane docks at ≥1024px and overlays below that. It no longer collapses the sidebar.
+  - Below 1024px the sidebar is a left `Sheet` drawer (`SheetContent` gained an additive
+    `hideClose` prop).
+  - Mounts the existing `CommandPalette` until Phase 5.
+- **`SidebarV2`:**
+  - Top: workspace switcher, then Search (⌘K), Home (firm root until Phase 3), and Inbox
+    (`/d/u/notifications` until Phase 4).
+  - Favorites: bookmarked engagements and documents in this firm.
+  - "Your engagements": grouped by client, open engagements only, with a status dot and up to 8
+    clients, followed by "All clients".
+  - Firm section: Overview, Members and Settings only with `can_manage`; Calendar and Doc Search
+    for everyone else.
+  - A profile menu with the New UI switch.
+  - EC/EV-only users see "Shared with you" and no Firm section.
+- **`WorkspaceSwitcher`:**
+  - Firms grouped by Firm Group.
+  - Switching runs the same `switchFirm` → session refresh → permission rebuild →
+    hard-navigation sequence as `FirmSwitchDialog`, so `FirmMember.isDefault` and the JWT now
+    track the last firm chosen.
+- **`HeaderBar`:**
+  - Breadcrumbs built from the URL and named from the shell data; on phones only the last two show.
+  - AI credits.
+  - Interim `RemindersPanel` and a Notifications link (this keeps the daily-digest catch-up) until
+    Phase 4.
+- **`ShellDataProvider`:**
+  - Calls `getShellSidebarData(firmSlug)` (`lib/actions/shell.ts`). This is a light query using
+    the same membership rule as `getFirmHierarchy`, plus favorites filtered to engagements the
+    caller can see.
+  - Gets `can_manage` from `/api/permissions/firm` and applies View As.
+  - Falls back to the default firm on pages without a firm.
 
-### Phase 5 — ⌘K v2
+**Wiring:** `DLayoutClient` returns the v2 frame early when `uiShell === 'v2'` (except onboarding).
+It passes the same banners, right pane, progress panels and demo tour, so behavior is shared. The
+legacy JSX is untouched.
 
-- `GET /api/search/quick`, plus the palette UI built on Dialog, `ListRow` and `Kbd`.
-- Actions registry, keyboard shortcuts, and the `?` cheat sheet.
+**Verified:**
+- Typecheck is clean.
+- 11 component tests: sidebar role gating, completed-engagement hiding, active state,
+  external-user view, favorites, and breadcrumbs.
+- 7 access tests for `getShellSidebarData`: no data without a session or `FirmMember`; the
+  membership where-clause; favorites limited to visible engagements; the EC/EV-only flag.
 
-### Phase 6 — Restyle screens (v2 scope)
+**Not yet seen in the running app:** the server only picks v2 after the `uiPrefs` migration is
+applied (`npm run build`).
+
+### Phase 3 — Server-side recents, landing and Firm Home ✅ (uncommitted, 2026-10-15)
+
+**Recording visits:**
+- `recordVisit(path)` (`lib/actions/recents.ts`) is called by the v2 shell (`useRecordVisits`)
+  1.2s after the user settles on a page, including on hash changes.
+- It records the deepest visible entity (engagement > client > firm) with the full path. It
+  writes nothing unless the caller can see that entity right now, using the `getFirmHierarchy`
+  membership rule and a group-slug check.
+- `?landed=` is stripped from the stored path, and rows are pruned to the newest 50 per user.
+- `importLegacyRecents` brings in the old `fm_nav_recents_*` localStorage entries once per browser.
+  It accepts their epoch-millisecond `visitedAt` and never overwrites a newer row.
+
+**Reading recents** (`lib/recents.ts`, server-only):
+- `getRecentVisits` re-checks access on every read: firm membership, engagement membership (not
+  deleted) and client reach. It uses live names, skips firm-level rows (so Continue never points at
+  Home), and returns nothing until the migration exists.
+- `getLastVisitedFirmId` and `getLastEngagementTab` serve the landing and the default tab.
+- `parseAppPath` is the shared parser.
+
+**Landing:** `resolveDefaultFirmLandingPath` → `resolveV2LandingPath`, for v2 only. It picks the
+last-visited firm, then the `isDefault` firm (which the v2 switcher now maintains), then the only
+firm. With none of those it falls through to the v1 pickers.
+- No arrival overlay for v2.
+- A bare `/d` (no `entry=auth`) still shows the workspace list, which is the "All workspaces…"
+  target.
+- A deploy's forced `redirect=/d` already auto-resolves (`post-auth-target.ts`).
+
+**Engagement default tab (v2):** the last tab from recents, else Files. Existing tab-permission
+redirects still apply.
+
+**Firm Home** (`components/home/firm-home.tsx`): the bare firm URL in v2; any `?tab=` keeps the
+legacy firm view. Sections:
+- Greeting in the viewer's timezone.
+- **Continue:** one large card plus four smaller ones.
+- **Needs you:**
+  - Deliverables in review on engagements the user leads.
+  - Intake uploads pending.
+  - AI summary drafts pending review.
+  - Review / @mention reminders.
+- **Due soon (14 days):**
+  - Deliverables assigned to the user. EC/EV users see only stages their role may see.
+  - Engagements the user leads, never completed ones.
+  - Dated reminders, firm-scoped.
+- **My engagements:** a Linear-style list with an Open/All toggle and grouping by client or status.
+
+`getMyWork` (`lib/home/my-work.ts`) starts from the user's own `EngagementMember` rows, and runs
+the approval queries only for engagements they lead.
+
+**Not done yet:** "Unanswered client threads" in Needs you. Firm-wide it is the admin Insights scan
+of up to 2,000 messages, and a per-user version needs a thread model. Follow-up.
+
+**Verified:**
+- Typecheck is clean.
+- 23 new tests:
+  - Path parser.
+  - `recordVisit`: membership-gated writes, group-slug check, `landed` stripping, pruning.
+  - Legacy import: never overwrites newer rows.
+  - `getRecentVisits`: access re-check, firm-row skip, works before the migration.
+  - `getMyWork`: membership scope, lead-only approvals, EC/EV stage filter, firm-scoped reminders.
+- All three raw SQL queries ran read-only against local Postgres.
+
+### Phase 4 — Unified Inbox ✅ (uncommitted, 2026-10-15)
+
+**Route:** `/d/{g}/f/{f}/inbox` (`app/(app)/d/[groupSlug]/f/[firmSlug]/inbox/page.tsx`). It
+requires firm membership and shows only the caller's own items.
+
+**`InboxView`** (`components/inbox/inbox-view.tsx`) has two panes.
+- **List:**
+  - "To do" holds this firm's visible reminders: overdue first, then soonest, undated review and
+    @mention requests last.
+  - "Notifications" comes from `/api/notifications?firmId=` (this firm plus platform-wide; the API
+    keeps its RLS and retention cleanup), newest first.
+  - Unread items show a dot (red when overdue).
+- **Detail pane:** Open, Done or Dismiss, and Hide for reminders.
+- **Keyboard:** `j`/`k` or arrows, Enter, `e`, `h`.
+- **Read state:** selecting a notification marks it read; there's also "Mark all read".
+- **Mobile:** the list, then a full-screen detail view with a back button.
+- **Actions reuse existing endpoints:** notifications PATCH/DELETE, `markReminderDone`,
+  `hideReminder`.
+- **Merge logic:** pure, in `components/inbox/inbox-items.ts`.
+
+**Badges:** `getInboxCounts()` (`lib/actions/inbox.ts`) returns, per firm for the signed-in user:
+unread notifications, plus reminders that are due today, overdue or undated (the same set the
+digest counts). Platform notifications are added to every firm.
+- `ShellDataProvider` loads the counts on mount, on the `firma:inbox-changed` event, and every
+  60s.
+- They appear on the sidebar Inbox item, the header Inbox icon (with a dot), and next to other
+  firms in the workspace switcher.
+
+**Header:** the interim `RemindersPanel` and Notifications link are gone in v2. The daily-digest
+catch-up the panel used to do is now a once-a-day toast (`useDailyDigestToast`, same server-side
+claim).
+
+**Fixed along the way:** the bell no longer depends on the JWT's active firm. The Inbox always
+passes the firm from the URL.
+
+**Left as is:**
+- **`/d/u/{notifications,reminders,recent,bookmarks}` stay reachable.** Nothing in v2 links to
+  them, but the Profile page's tabs still do. Redirecting them was dropped to keep v1 identical.
+- **Platform-wide notifications can't be dismissed.** The existing DELETE only removes
+  firm-scoped ones, so a dismissed platform notification reappears on reload.
+
+**Verified:**
+- Typecheck is clean.
+- 13 new tests:
+  - Merge rules.
+  - Counts: user-scoped, due/overdue/undated only, signed-out.
+  - Inbox view: firm filtering, `e` → done, select → mark read, Dismiss → DELETE, Enter → open.
+  - Shell: Inbox link, badge and breadcrumb.
+
+### Phase 5 — ⌘K v2 ✅ (uncommitted, 2026-10-15)
+
+**`CommandMenu`** (`components/shell/command-menu.tsx`) replaces the legacy palette in the v2 shell.
+- **Opening:** ⌘K / Ctrl+K, or the sidebar's Search item.
+- **With an empty query:** Recent (the same access-checked recents Home uses), then Go to (Home,
+  Inbox, Clients, Calendar, Doc Search, and for admins Overview, Members and Settings), then
+  Switch workspace (when there are 6 firms or fewer), then Actions (Profile, Toggle sidebar,
+  Keyboard shortcuts).
+- **With a query:** `quickSearch` results first, then matching commands.
+- **Keyboard:** ↑↓, Enter, Esc. Searches are debounced at 180ms and stale responses are dropped.
+
+**`quickSearch(q, firmSlug)`** (`lib/actions/quick-search.ts`):
+- **Engagements:** the caller's own `EngagementMember` rows, not deleted, in firms they belong to,
+  across all of their firms.
+- **Clients:** the `getFirmHierarchy` rule.
+- **Files:** current firm only, for queries of 2+ characters, using the same scope as the existing
+  Doc Search: `computeGlobalSearchAccessScope`, the per-document grant check for EC/EV, and the
+  same exclusions for private- and intake-locked documents.
+- **Other details:** wildcards in the query are escaped. Results from other firms are labeled and
+  link under their own firm. Files open through the `#doc-file:` deep link.
+
+**Shortcuts** (`use-shell-shortcuts.ts`):
+- G then H / I / C / L / D, plus O and S for admins.
+- `?` opens a cheat sheet (`shortcuts-dialog.tsx`); `[` toggles the sidebar.
+- Ignored while typing or when a dialog is open.
+- The Inbox ignores a key that follows G, so G-then-H goes Home instead of hiding a reminder.
+
+**Shared code:** `useSwitchFirm` is extracted from the switcher and reused by ⌘K.
+
+**Verified:**
+- Typecheck is clean.
+- 14 new tests:
+  - Search scope: engagement and client where-clauses, cross-firm labeling, file scope and
+    wildcard escaping, no file search for non-members, single characters, users without
+    engagements, or no firm.
+  - Menu: recents, admin gating, type-to-search, Enter.
+  - Shortcuts: G-then-I, ignored while typing, admin-only targets.
+  - Inbox: the G-then-H conflict.
+- The file-search SQL ran against local Postgres (admin, empty scope and escaping cases).
+
+### Phase 6 — Restyle screens (v2 scope) ⏸ (not started; needs a checkpoint first)
+
+**Prerequisites:**
+1. The `uiPrefs` / `user_recent_visits` migration is applied (`npm run build`).
+2. The local app is signed in inside the browser pane.
+
+Without both, the v2 shell can't render on real `/d` pages, and screen restyling can't be compared
+v1 against v2. Before running the codemod per screen, it also needs the same-className conflict
+check described under Phase 1.
+
 
 Order follows traffic and how many hardcoded colors each screen has:
 
@@ -534,10 +733,21 @@ Not in scope: marketing, landing, blog, legal, `/demo`, and `/system` admin.
 
 ## Delivery
 
-- All work happens on `feature/ui-ux-overhaul`, committed per phase with explicit approval.
-- Don't open a PR to `dev` until a coherent set of phases is finished. Never open one mid-edit (the
-  PR #73 lesson).
-- After any merge to `main`, check `git diff --stat origin/main origin/dev`.
+- **All work happens directly on `dev`**, committed per phase only with explicit approval, and
+  pushed only when Deepak says. Unfinished v2 work ships to production switched off, so `dev → main`
+  releases can go out at any time.
+- **Rules that keep switched-off work harmless:**
+  1. **v1 stays pixel-identical.** Shared primitives change only through tokens whose `:root` value
+     equals the old literal, or through classes that apply only under `[data-ui="v2"]`. Before
+     every push, compare key v1 screens.
+  2. **Behavior changes are gated too, not just styling.** The landing resolver, `recordVisit`,
+     engagement default tab and any redirect apply only when the user's shell is `v2`.
+  3. **Migrations are additive only** until the Phase 7 cleanup. Code reading a new column
+     tolerates the migration not having run yet.
+  4. **The switch** is shown to system admins in production and to every account locally.
+- Shipping v2 code that is switched off is not "a PR cut mid-feature" in the PR #73 sense:
+  nothing users can see is half-shipped. Still check `git diff --stat origin/main origin/dev` after
+  every merge to `main`.
 
 ## Out of scope / follow-ups
 

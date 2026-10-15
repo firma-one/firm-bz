@@ -1,4 +1,4 @@
-import { cn } from "@/lib/utils"
+import { cnV2 } from "@/lib/utils"
 
 function Skeleton({
     className,
@@ -11,7 +11,8 @@ function Skeleton({
             // --muted (0 0% 96.1%) over a white background pulses #F5F5F5 -> ~#FAFAFA — about 2%
             // lightness, indistinguishable from a static block. #e5e7eb is the border grey used
             // across the app and gives a ~6% swing that actually reads as loading.
-            className={cn("animate-pulse rounded-md bg-[#e5e7eb] dark:bg-[#2a2a2e]", className)}
+            // v2: the 0.16-alpha warm line color gives the same ~6% pulse swing on white.
+            className={cnV2("animate-pulse rounded-md bg-[#e5e7eb] dark:bg-[#2a2a2e] v2:rounded-control v2:bg-line-strong", className)}
             {...props}
         />
     )

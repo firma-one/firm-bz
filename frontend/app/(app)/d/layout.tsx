@@ -24,7 +24,11 @@ export default async function DLayout({
     } = await supabase.auth.getUser()
 
     const isSystemAdmin = isSystemAdminEmail(user?.email)
-    const { shell: uiShell } = user ? await getUserUiPrefs(user.id) : { shell: 'v1' as const }
+    const uiPrefs = user ? await getUserUiPrefs(user.id) : { shell: 'v1' as const, sidebarCollapsed: false }
 
-    return <DLayoutClient initialFirms={firms} isSystemAdmin={isSystemAdmin} uiShell={uiShell}>{children}</DLayoutClient>
+    return (
+        <DLayoutClient initialFirms={firms} isSystemAdmin={isSystemAdmin} uiShell={uiPrefs.shell} sidebarCollapsed={uiPrefs.sidebarCollapsed}>
+            {children}
+        </DLayoutClient>
+    )
 }

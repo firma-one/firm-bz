@@ -14,13 +14,15 @@ import { normalizeUiShell, type UiShell } from '@/lib/ui-shell'
 
 export type UserUiPrefs = {
     shell: UiShell
+    /** New UI sidebar hidden on desktop (toggled with `[` or the sidebar button). */
+    sidebarCollapsed: boolean
 }
 
-const DEFAULTS: UserUiPrefs = { shell: 'v1' }
+const DEFAULTS: UserUiPrefs = { shell: 'v1', sidebarCollapsed: false }
 
 function normalize(raw: unknown): UserUiPrefs {
     const r = (raw ?? {}) as Record<string, unknown>
-    return { shell: normalizeUiShell(r.shell) }
+    return { shell: normalizeUiShell(r.shell), sidebarCollapsed: r.sidebarCollapsed === true }
 }
 
 /**
