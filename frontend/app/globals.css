@@ -56,7 +56,9 @@
   h4,
   h5,
   h6 {
-    @apply font-bold tracking-tight text-slate-800;
+    @apply font-bold tracking-tight;
+    /* slate-800 in v1, warm near-black in v2 — see app/ui-tokens.css */
+    color: var(--ui-heading);
   }
 
   h1 {

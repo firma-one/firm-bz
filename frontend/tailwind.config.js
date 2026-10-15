@@ -14,7 +14,26 @@ module.exports = {
 				lg: 'var(--radius)',
 				md: 'calc(var(--radius) - 2px)',
 				sm: 'calc(var(--radius) - 4px)',
-				DEFAULT: 'calc(var(--radius) - 4px)'
+				DEFAULT: 'calc(var(--radius) - 4px)',
+				/** UI token layer — app/ui-tokens.css */
+				control: 'var(--ui-radius-control)',
+				card: 'var(--ui-radius-card)',
+				dialog: 'var(--ui-radius-dialog)'
+			},
+			/** UI token layer type scale (app/ui-tokens.css). New keys only — Tailwind's own
+			 *  text-xs…text-9xl are untouched so the legacy UI does not shift. */
+			fontSize: {
+				caption: ['12px', { lineHeight: '16px', fontWeight: '500' }],
+				small: ['13px', { lineHeight: '18px' }],
+				ui: ['14px', { lineHeight: '20px' }],
+				body: ['15px', { lineHeight: '24px' }],
+				h3: ['16px', { lineHeight: '24px', fontWeight: '600' }],
+				h2: ['20px', { lineHeight: '28px', fontWeight: '600', letterSpacing: '-0.01em' }],
+				h1: ['28px', { lineHeight: '36px', fontWeight: '700', letterSpacing: '-0.02em' }]
+			},
+			boxShadow: {
+				popover: 'var(--ui-shadow-popover)',
+				dialog: 'var(--ui-shadow-dialog)'
 			},
 			fontFamily: {
 				headline: ['Space Grotesk', 'system-ui', 'sans-serif'],
@@ -98,7 +117,58 @@ module.exports = {
 				'ki-on-surface-variant': '#45474c',
 				'ki-outline': '#e5e7eb',
 				'ki-outline-variant': '#d1d5db',
-				'ki-primary-glow': 'rgba(6,150,104,0.15)'
+				'ki-primary-glow': 'rgba(6,150,104,0.15)',
+
+				/**
+				 * UI token layer — app/ui-tokens.css. Legacy values in :root (pixel-identical to the
+				 * literals they replace), Notion-style values under [data-ui="v2"].
+				 * Neutrals are full colors (some rgba), so they take no /opacity modifier;
+				 * action and danger are HSL channels and do (bg-action/10).
+				 */
+				surface: {
+					DEFAULT: 'var(--ui-surface)',
+					sidebar: 'var(--ui-surface-sidebar)',
+					subtle: 'var(--ui-surface-subtle)',
+					muted: 'var(--ui-surface-muted)',
+					hover: 'var(--ui-surface-hover)',
+					selected: 'var(--ui-surface-selected)'
+				},
+				fg: {
+					DEFAULT: 'var(--ui-fg)',
+					muted: 'var(--ui-fg-muted)',
+					subtle: 'var(--ui-fg-subtle)'
+				},
+				line: {
+					DEFAULT: 'var(--ui-line)',
+					strong: 'var(--ui-line-strong)'
+				},
+				action: {
+					DEFAULT: 'hsl(var(--ui-action) / <alpha-value>)',
+					hover: 'hsl(var(--ui-action-hover) / <alpha-value>)',
+					fg: 'hsl(var(--ui-action-fg) / <alpha-value>)'
+				},
+				danger: 'hsl(var(--ui-danger) / <alpha-value>)',
+				scrim: 'var(--ui-scrim)',
+				tag: {
+					'gray-bg': 'var(--ui-tag-gray-bg)',
+					'gray-fg': 'var(--ui-tag-gray-fg)',
+					'brown-bg': 'var(--ui-tag-brown-bg)',
+					'brown-fg': 'var(--ui-tag-brown-fg)',
+					'orange-bg': 'var(--ui-tag-orange-bg)',
+					'orange-fg': 'var(--ui-tag-orange-fg)',
+					'yellow-bg': 'var(--ui-tag-yellow-bg)',
+					'yellow-fg': 'var(--ui-tag-yellow-fg)',
+					'green-bg': 'var(--ui-tag-green-bg)',
+					'green-fg': 'var(--ui-tag-green-fg)',
+					'blue-bg': 'var(--ui-tag-blue-bg)',
+					'blue-fg': 'var(--ui-tag-blue-fg)',
+					'purple-bg': 'var(--ui-tag-purple-bg)',
+					'purple-fg': 'var(--ui-tag-purple-fg)',
+					'pink-bg': 'var(--ui-tag-pink-bg)',
+					'pink-fg': 'var(--ui-tag-pink-fg)',
+					'red-bg': 'var(--ui-tag-red-bg)',
+					'red-fg': 'var(--ui-tag-red-fg)'
+				}
 			}
 		}
 	},

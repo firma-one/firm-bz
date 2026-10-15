@@ -1,4 +1,5 @@
 import './globals.css'
+import './ui-tokens.css'
 import { Inter, Space_Grotesk, Work_Sans } from 'next/font/google'
 import type { Metadata } from 'next'
 import Script from 'next/script'
@@ -9,6 +10,7 @@ import { CookieConsent } from '@/components/ui/cookie-consent'
 import { ConsentAwareGoogleAnalytics } from '@/components/analytics/consent-aware-google-analytics'
 import { BRAND_NAME, BRAND_NAME_TEAM } from '@/config/brand'
 import { getPlatformSiteOrigin } from '@/config/platform-domain'
+import { UI_SHELL_COOKIE } from '@/lib/ui-shell'
 import { createClient } from '@/utils/supabase/server'
 import type { Session } from '@supabase/supabase-js'
 
@@ -118,9 +120,12 @@ export default async function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${inter.className} ${spaceGrotesk.variable} ${workSans.variable} bg-gray-50 text-gray-900`}
+        className={`${inter.className} ${inter.variable} ${spaceGrotesk.variable} ${workSans.variable} bg-gray-50 text-gray-900`}
         suppressHydrationWarning
       >
+        {/* New UI toggle: set <html data-ui="v2"> before first paint so /d never flashes the old tokens.
+            The cookie mirrors user_personalizations.uiPrefs.shell — see lib/ui-shell.ts. */}
+        <Script id="fm-ui-shell" strategy="beforeInteractive" dangerouslySetInnerHTML={{ __html: `try{if(/^\\/d(\\/|$)/.test(location.pathname)&&/(?:^|;\\s*)${UI_SHELL_COOKIE}=v2(?:;|$)/.test(document.cookie)){document.documentElement.dataset.ui='v2'}}catch(e){}` }} />
         {/* Inject firm brand CSS vars before first paint to prevent FOUC on dashboard routes */}
         <Script id="fm-brand-css-vars" strategy="beforeInteractive" dangerouslySetInnerHTML={{ __html: `try{var m=location.pathname.match(/^\\/d\\/[^/]+\\/f\\/([^/]+)/);if(m){var b=JSON.parse(sessionStorage.getItem('fm_firm_branding_'+m[1])||'null');if(b&&b.primaryHsl){document.documentElement.style.setProperty('--primary',b.primaryHsl);document.documentElement.style.setProperty('--primary-foreground',b.primaryFgHsl);if(b.primaryRgb)document.documentElement.style.setProperty('--primary-rgb',b.primaryRgb);}if(b&&b.accentHsl){document.documentElement.style.setProperty('--brand-accent',b.accentHsl);document.documentElement.style.setProperty('--brand-accent-foreground',b.accentFgHsl);}}}catch(e){}` }} />
         {/* GA is loaded client-side only when analytics consent is granted (see ConsentAwareGoogleAnalytics). */}

@@ -33,6 +33,8 @@ import { DemoTour } from '@/components/app/demo-tour'
 import { DemoTourIntroModal } from '@/components/app/demo-tour-intro-modal'
 import { DemoTourOutroModal } from '@/components/app/demo-tour-outro-modal'
 import { DemoTourButton } from '@/components/app/demo-tour-button'
+import { UiShellProvider } from '@/lib/ui-shell-context'
+import type { UiShell } from '@/lib/ui-shell'
 
 const TOP_BAR_HEIGHT = 64
 
@@ -295,12 +297,15 @@ export function DLayoutClient({
     children,
     initialFirms,
     isSystemAdmin,
+    uiShell,
 }: {
     children: React.ReactNode
     initialFirms: { id: string; name: string; slug: string; isDefault: boolean; createdAt: string; sandboxOnly?: boolean; groupSlug?: string | null }[]
     isSystemAdmin?: boolean
+    uiShell: UiShell
 }) {
     return (
+        <UiShellProvider shell={uiShell}>
         <DemoTourProvider>
         <OnboardingProvider>
             <SidebarFirmsProvider firms={initialFirms}>
@@ -324,5 +329,6 @@ export function DLayoutClient({
             </SidebarFirmsProvider>
         </OnboardingProvider>
         </DemoTourProvider>
+        </UiShellProvider>
     )
 }

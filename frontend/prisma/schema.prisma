@@ -271,6 +271,7 @@ model Firm {
   docCommentMessages DocCommentMessage[]
   platformAuditEvents PlatformAuditEvent[]
   workspaceMigrations FirmWorkspaceMigration[]
+  recentVisits      UserRecentVisit[]
 
   @@index([groupId])
   @@map("firms")
@@ -758,8 +759,45 @@ model UserPersonalization {
   /// { timezone: IANA string, remindersDigest: { lastNotifiedDate: "YYYY-MM-DD" } } — see
   /// .claude/plans/browser-push-reminders.md. One JSON column so future prefs need no migration.
   notificationPrefs Json     @default("{}")
+  /// { shell: 'v1' | 'v2', sidebarCollapsed, sidebarSections, lastTabByEngagement } — see
+  /// .claude/plans/ui-ux-overhaul.md. One JSON column so future UI prefs need no migration.
+  uiPrefs           Json     @default("{}")
 
   @@map("user_personalizations")
+  @@schema("platform")
+}
+
+enum RecentVisitEntityType {
+  firm
+  client
+  engagement
+  document
+
+  @@schema("platform")
+}
+
+/// Server-side "recently visited" — powers the Home "Continue where you left off" card and the
+/// sign-in landing on the last-visited firm (UI v2, see .claude/plans/ui-ux-overhaul.md).
+/// One row per (user, entity); a revisit bumps visitedAt and path. Pruned to the newest 50 rows
+/// per user on write. entityId is polymorphic (no FK), so readers must re-check access and drop
+/// rows whose entity is gone or no longer visible.
+model UserRecentVisit {
+  id         String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId     String                @db.Uuid
+  firmId     String                @db.Uuid
+  entityType RecentVisitEntityType
+  entityId   String                @db.Uuid
+  /// Full in-app path including tab, query and hash — exactly what "Continue" reopens.
+  path       String
+  /// Display snapshot taken at visit time; readers prefer the live name.
+  title      String?
+  visitedAt  DateTime              @default(now()) @db.Timestamptz(6)
+
+  firm Firm @relation(fields: [firmId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, entityType, entityId])
+  @@index([userId, firmId, visitedAt(sort: Desc)])
+  @@map("user_recent_visits")
   @@schema("platform")
 }
 

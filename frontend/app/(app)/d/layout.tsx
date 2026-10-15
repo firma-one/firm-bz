@@ -1,6 +1,7 @@
 import { getUserFirms } from '@/lib/actions/firms'
 import { createClient } from '@/utils/supabase/server'
 import { isSystemAdminEmail } from '@/lib/system/admin-check'
+import { getUserUiPrefs } from '@/lib/ui-prefs'
 import { DLayoutClient } from './d-layout-client'
 
 /**
@@ -23,6 +24,7 @@ export default async function DLayout({
     } = await supabase.auth.getUser()
 
     const isSystemAdmin = isSystemAdminEmail(user?.email)
+    const { shell: uiShell } = user ? await getUserUiPrefs(user.id) : { shell: 'v1' as const }
 
-    return <DLayoutClient initialFirms={firms} isSystemAdmin={isSystemAdmin}>{children}</DLayoutClient>
+    return <DLayoutClient initialFirms={firms} isSystemAdmin={isSystemAdmin} uiShell={uiShell}>{children}</DLayoutClient>
 }

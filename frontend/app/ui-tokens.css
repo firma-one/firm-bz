@@ -1,0 +1,175 @@
+/*
+ * UI token layer — .claude/plans/ui-ux-overhaul.md (Phase 0).
+ *
+ * Two scopes:
+ *   :root           Legacy (v1) values. Each one equals the literal it will replace in components
+ *                   (`#45474c` → fg-muted, `#e5e7eb` → line, …), so moving a class onto a token
+ *                   never changes the v1 UI.
+ *   [data-ui="v2"]  Notion-style values. Set on <html> by the per-user New UI toggle
+ *                   (lib/ui-shell.ts) — only ever on /d routes.
+ *
+ * Text tokens are solid colors picked to clear WCAG AA (4.5:1) on both the canvas and the sidebar;
+ * hover / selected / line use alpha so they read the same on any surface. Tag text is darkened
+ * from Notion's originals to clear 4.5:1 on its own tag background.
+ *
+ * Tailwind names (tailwind.config.js): bg-surface[-sidebar|-subtle|-muted|-hover|-selected],
+ * text-fg[-muted|-subtle], border-line[-strong], bg-action / text-action-fg, text-danger,
+ * bg-tag-{color}-bg / text-tag-{color}-fg, bg-scrim, rounded-control|card|dialog,
+ * shadow-popover|dialog, text-caption|small|ui|body|h3|h2|h1.
+ *
+ * Not a cascade layer on purpose: these rules load after globals.css and must beat the legacy
+ * `.d-app` font rules on specificity alone.
+ */
+
+:root {
+  /* Surfaces */
+  --ui-surface: #ffffff;
+  --ui-surface-sidebar: #ffffff;
+  --ui-surface-subtle: #f9f9fb;
+  --ui-surface-muted: #f3f4f6;
+  --ui-surface-hover: #f9f9fb;
+  --ui-surface-selected: #f3f4f6;
+
+  /* Text */
+  --ui-fg: #1b1b1d;
+  --ui-fg-muted: #45474c;
+  --ui-fg-subtle: #9a9ba0;
+  --ui-heading: #1e293b; /* slate-800 — the legacy h1–h6 base color */
+
+  /* Lines */
+  --ui-line: #e5e7eb;
+  --ui-line-strong: #d1d5db;
+
+  /* Action + danger: HSL channels so Tailwind opacity modifiers (bg-action/10) work.
+     Legacy action follows the per-firm --primary override, exactly as bg-primary does today. */
+  --ui-action: var(--primary);
+  --ui-action-hover: var(--primary);
+  --ui-action-fg: var(--primary-foreground);
+  --ui-danger: 0 72% 51%; /* red-600 */
+
+  /* Shape and depth (legacy: rounded = 6px, popovers shadow-md, dialogs shadow-lg, scrim black/80) */
+  --ui-radius-control: 6px;
+  --ui-radius-card: 6px;
+  --ui-radius-dialog: 6px;
+  --ui-shadow-popover: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --ui-shadow-dialog: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --ui-scrim: rgb(0 0 0 / 0.8);
+
+  /* Tags and status pills — new components only, so identical in both scopes */
+  --ui-tag-gray-bg: #e3e2e0;
+  --ui-tag-gray-fg: #656462;
+  --ui-tag-brown-bg: #eee0da;
+  --ui-tag-brown-fg: #855947;
+  --ui-tag-orange-bg: #fadec9;
+  --ui-tag-orange-fg: #9b520d;
+  --ui-tag-yellow-bg: #fdecc8;
+  --ui-tag-yellow-fg: #896222;
+  --ui-tag-green-bg: #dbeddb;
+  --ui-tag-green-fg: #3c7355;
+  --ui-tag-blue-bg: #d3e5ef;
+  --ui-tag-blue-fg: #2c698d;
+  --ui-tag-purple-bg: #e8deee;
+  --ui-tag-purple-fg: #785392;
+  --ui-tag-pink-bg: #f5e0e9;
+  --ui-tag-pink-fg: #a64276;
+  --ui-tag-red-bg: #ffe2dd;
+  --ui-tag-red-fg: #b1403b;
+}
+
+[data-ui='v2'] {
+  /* Surfaces */
+  --ui-surface: #ffffff;
+  --ui-surface-sidebar: #f7f7f5;
+  --ui-surface-subtle: #fbfbfa;
+  --ui-surface-muted: #f1f1ef;
+  --ui-surface-hover: rgba(55, 53, 47, 0.06);
+  --ui-surface-selected: rgba(55, 53, 47, 0.09);
+
+  /* Text — fg-muted is 5.1:1 on canvas, 4.8:1 on sidebar */
+  --ui-fg: #37352f;
+  --ui-fg-muted: #6f6e69;
+  --ui-fg-subtle: #a5a4a1; /* placeholders, disabled, decorative icons only — not body copy */
+  --ui-heading: #37352f;
+
+  /* Lines */
+  --ui-line: rgba(55, 53, 47, 0.09);
+  --ui-line-strong: rgba(55, 53, 47, 0.16);
+
+  /* Action: emerald-700 (#047857) — 5.5:1 against white either way round. Brand #069668 is
+     only 3.8:1, so it is kept for large marks, not text or button fills. */
+  --ui-action: 163 94% 24%;
+  --ui-action-hover: 163 88% 20%; /* #065f46 */
+  --ui-action-fg: 0 0% 100%;
+  --ui-danger: 3 53% 50%; /* #c2413b — 5.1:1 */
+
+  --ui-radius-control: 4px;
+  --ui-radius-card: 6px;
+  --ui-radius-dialog: 10px;
+  --ui-shadow-popover: 0 0 0 1px rgba(15, 15, 15, 0.05), 0 3px 6px rgba(15, 15, 15, 0.1),
+    0 9px 24px rgba(15, 15, 15, 0.2);
+  --ui-shadow-dialog: 0 0 0 1px rgba(15, 15, 15, 0.05), 0 5px 10px rgba(15, 15, 15, 0.1),
+    0 15px 40px rgba(15, 15, 15, 0.2);
+  --ui-scrim: rgba(15, 15, 15, 0.6);
+
+  /* shadcn base variables, retuned to the warm neutrals so existing token-based primitives
+     (Select, Tabs, Badge, Avatar, borders) pick up the v2 look straight away. */
+  --background: 0 0% 100%;
+  --foreground: 45 8% 20%;
+  --card: 0 0% 100%;
+  --card-foreground: 45 8% 20%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 45 8% 20%;
+  --muted: 60 7% 94%;
+  --muted-foreground: 50 3% 42%;
+  --accent: 60 4% 95%;
+  --accent-foreground: 45 8% 20%;
+  --destructive: 3 53% 50%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 60 3% 93%;
+  --input: 60 2% 87%;
+  /* rounded = rounded-sm = 4px, rounded-md = 6px, rounded-lg = 8px */
+  --radius: 0.5rem;
+
+  /* Fixed emerald chrome. !important beats the per-firm inline override that the root layout's
+     pre-paint script and AppTopbar write onto <html>; the firm brand stays on --brand-accent. */
+  --primary: 163 94% 24% !important;
+  --primary-foreground: 0 0% 100% !important;
+  --primary-rgb: 4, 120, 87 !important;
+  --ring: 163 94% 24% !important;
+}
+
+/* ── Typography (v2): Inter everywhere ─────────────────────────────────────────────────────────
+   Declared on body, not html: --font-inter is defined by next/font's class on <body>, and a custom
+   property resolves its var() references on the element that declares it. */
+[data-ui='v2'] body {
+  --font-ui: var(--font-inter), ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    Helvetica, Arial, sans-serif;
+  --font-mono-ui: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+  /* Every legacy headline reference (font-headline, d-title, arbitrary [font-family:var(...)])
+     resolves through this alias. */
+  --font-kinetic-headline: var(--font-ui);
+  font-family: var(--font-ui);
+  color: var(--ui-fg);
+}
+
+[data-ui='v2'] .d-app {
+  font-family: var(--font-ui);
+  color: var(--ui-fg);
+}
+
+[data-ui='v2'] .font-headline,
+[data-ui='v2'] .font-work-sans,
+[data-ui='v2'] .d-app .font-headline,
+[data-ui='v2'] .d-app .d-headline,
+[data-ui='v2'] .d-app .d-title,
+[data-ui='v2'] .d-app .d-section,
+[data-ui='v2'] .d-app .d-sidebar-section {
+  font-family: var(--font-ui);
+}
+
+/* Legacy forces JetBrains Mono with !important; v2 keeps monospace for code, IDs and sizes only,
+   using the platform face. */
+[data-ui='v2'] .d-app .font-mono,
+[data-ui='v2'] .d-app [class*='font-mono'] {
+  font-family: var(--font-mono-ui) !important;
+}
