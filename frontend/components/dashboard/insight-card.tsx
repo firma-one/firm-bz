@@ -1,6 +1,6 @@
 "use client"
 
-import { Zap, ArrowRight, LucideIcon } from "lucide-react"
+import { Zap, LucideIcon } from "lucide-react"
 
 export type InsightTheme = 'blue' | 'purple' | 'green' | 'amber' | 'red'
 
@@ -35,28 +35,18 @@ export function InsightCard({
     action,
     headerExtra
 }: InsightCardProps) {
-    const t = THEME_STYLES[theme]
+    // Notion section, not a card: a heading row and the content below it — no border, shadow or
+    // colored icon chip. `theme` is kept for callers but no longer colors anything.
+    void THEME_STYLES[theme]
 
     return (
-        <div className={`bg-white border border-[#e5e7eb] rounded shadow-md flex flex-col h-full ${className || ''}`}>
-
-            {/* Header */}
-            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between rounded-t">
-                <div className="flex items-center gap-3">
-                    <div className={`p-2 rounded-lg border border-gray-100 shadow-sm ${t.iconBg}`}>
-                        <Icon className={`h-4.5 w-4.5 ${t.iconColor}`} />
-                    </div>
-                    <div>
-                        <div className="flex items-center gap-1.5">
-                            <h3 className="text-sm font-bold text-gray-900">{title}</h3>
-                            {count !== undefined && (
-                                <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
-                                    {count}
-                                </span>
-                            )}
-                        </div>
-                        {subtext && <p className="text-xs text-gray-500 font-medium">{subtext}</p>}
-                    </div>
+        <section className={`flex flex-col h-full ${className || ''}`}>
+            <div className="flex items-center justify-between gap-3 pb-2">
+                <div className="flex min-w-0 items-center gap-2">
+                    <Icon className="h-4 w-4 shrink-0 text-fg-subtle" />
+                    <h3 className="truncate text-h3 text-fg">{title}</h3>
+                    {count !== undefined && <span className="text-small tabular-nums text-fg-subtle">{count}</span>}
+                    {subtext && <span className="truncate text-small text-fg-muted">· {subtext}</span>}
                 </div>
                 <div className="flex items-center gap-2">
                     {action}
@@ -64,33 +54,16 @@ export function InsightCard({
                 </div>
             </div>
 
-            {/* Body */}
-            <div className="flex-1 flex flex-col relative">
+            <div className="flex-1 flex flex-col relative border-t border-line">
                 {children ? (
-                    <div className="p-0 flex-1">
-                        {children}
-                    </div>
+                    <div className="flex-1">{children}</div>
                 ) : (
-                    <div className="flex-1 flex flex-col items-center justify-center p-6 text-center space-y-2">
-                        <div className="h-12 w-12 rounded-full bg-gray-50 flex items-center justify-center">
-                            <Zap className="h-5 w-5 text-gray-300" />
-                        </div>
-                        <span className="text-xs font-medium text-gray-400 block px-4">
-                            Analysis Pending...
-                        </span>
-                    </div>
-                )}
-
-                {/* Footer Action (Only if no children provided, usually) */}
-                {!children && (
-                    <div className="px-6 py-3 border-t border-gray-100 flex items-center justify-between group cursor-pointer hover:bg-[#f3f4f6] rounded-b transition-colors">
-                        <span className="text-xs font-medium text-gray-500 group-hover:text-gray-900 transition-colors flex items-center gap-1">
-                            View Details
-                        </span>
-                        <ArrowRight className="h-3 w-3 text-gray-400 group-hover:text-gray-900 group-hover:translate-x-1 transition-all" />
+                    <div className="flex flex-1 flex-col items-center justify-center gap-1 px-4 py-8 text-center">
+                        <Zap className="h-5 w-5 text-fg-subtle" />
+                        <span className="text-small text-fg-subtle">Analysis pending…</span>
                     </div>
                 )}
             </div>
-        </div>
+        </section>
     )
 }

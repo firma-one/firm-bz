@@ -18,12 +18,12 @@ export interface PropertyRowProps extends Omit<React.HTMLAttributes<HTMLDivEleme
 
 export function PropertyRow({ label, icon, children, className, ...props }: PropertyRowProps) {
     return (
-        <div className={cn("flex min-h-8 items-start gap-2", className)} {...props}>
-            <dt className="flex w-36 shrink-0 items-center gap-1.5 py-1.5 text-small text-fg-muted [&_svg]:h-4 [&_svg]:w-4 [&_svg]:shrink-0">
+        <div className={cn("flex min-h-8 items-start gap-2 py-0.5", className)} {...props}>
+            <dt className="flex h-8 w-28 shrink-0 items-center gap-1.5 text-small text-fg-muted sm:w-40 [&_svg]:h-4 [&_svg]:w-4 [&_svg]:shrink-0">
                 {icon}
                 <span className="truncate">{label}</span>
             </dt>
-            <dd className="flex min-w-0 flex-1 items-center gap-1.5 py-1.5 text-small text-fg">{children}</dd>
+            <dd className="flex min-h-8 min-w-0 flex-1 items-center gap-1.5 text-small text-fg">{children}</dd>
         </div>
     )
 }

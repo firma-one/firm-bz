@@ -4,7 +4,10 @@ import React, { useState } from 'react'
 import { Button } from "@/components/ui/button"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { MoreVertical, Mail, Clock, Trash2, SquarePlus, UserCog, User, UserCircle, Info, UserMinus } from 'lucide-react'
+import { AtSign, Clock3, Info, Mail, MoreHorizontal, Plus, Send, Shield, Trash2, Type, User, UserCircle, UserCog, UserMinus, X } from 'lucide-react'
+import { NotionTable, NotionTableActions, NotionTableBody, NotionTableCell, NotionTableHead, NotionTableHeader, NotionTableRow } from '@/components/ui/notion-table'
+import { Tag } from '@/components/ui/tag'
+import { EmptyPanel } from '@/components/ui/empty-panel'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import {
     DropdownMenu,
@@ -39,7 +42,6 @@ interface MemberListProps {
 
 const UI_ROLE_ORDER: PersonaUiRole[] = ['owner', 'contributor', 'reviewer']
 const UI_ROLE_DISPLAY_LABEL: Record<PersonaUiRole, string> = { owner: 'Owner', contributor: 'Contributor', reviewer: 'Reviewer' }
-const COLLAPSED_CARD_LIMIT = 4
 
 export function MemberList({ members, invitations, personas, onRefresh, canManage = false, onInviteWithRole }: MemberListProps) {
     const [actionLoading, setActionLoading] = useState<string | null>(null)
@@ -49,17 +51,7 @@ export function MemberList({ members, invitations, personas, onRefresh, canManag
     const [editSubRole, setEditSubRole] = useState<PersonaUiSubRole>('internal')
     const [memberIdToRemove, setMemberIdToRemove] = useState<string | null>(null)
     const [inviteIdToRevoke, setInviteIdToRevoke] = useState<string | null>(null)
-    const [expandedRoles, setExpandedRoles] = useState<Set<PersonaUiRole>>(new Set())
     const { addToast } = useToast()
-
-    const toggleRoleExpanded = (uiRole: PersonaUiRole) => {
-        setExpandedRoles((prev) => {
-            const next = new Set(prev)
-            if (next.has(uiRole)) next.delete(uiRole)
-            else next.add(uiRole)
-            return next
-        })
-    }
 
     const findPersonaId = (uiRoleValue: PersonaUiRole, subRoleValue?: PersonaUiSubRole) => {
         const slug = resolvePersonaSlug(uiRoleValue, subRoleValue)
@@ -171,18 +163,12 @@ export function MemberList({ members, invitations, personas, onRefresh, canManag
     const getUiRoleIcon = (uiRole: PersonaUiRole) => {
         switch (uiRole) {
             case 'owner':
-                return <UserCog className="h-5 w-5" />
+                return <UserCog />
             case 'contributor':
-                return <User className="h-5 w-5" />
+                return <User />
             case 'reviewer':
-                return <UserCircle className="h-5 w-5" />
+                return <UserCircle />
         }
-    }
-
-    const getUiRoleIconColor = (uiRole: PersonaUiRole) => {
-        if (uiRole === 'owner') return 'text-indigo-600'
-        if (uiRole === 'contributor') return 'text-indigo-600'
-        return 'text-teal-600'
     }
 
     // Group members/invitations by top-level UI role (Owner / Contributor / Reviewer),
@@ -208,372 +194,213 @@ export function MemberList({ members, invitations, personas, onRefresh, canManag
     const membersWithoutPersona = members.filter((m: any) => !personas.find((p: any) => p.slug === m.role))
     const invitationsWithoutPersona = invitations.filter((i: any) => !i.personaId || !personas.find((p: any) => p.id === i.personaId))
 
+    const memberActions = (member: any) => canManage && (
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-7 w-7" aria-label={`Actions for ${member.user.name}`}>
+                    <MoreHorizontal className="h-4 w-4" />
+                </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="min-w-[160px]">
+                <DropdownMenuItem onClick={() => handleOpenEdit(member)}>
+                    <UserCog className="h-4 w-4" /> Change role
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                    className="text-danger focus:text-danger"
+                    onClick={() => setMemberIdToRemove(member.id)}
+                    disabled={actionLoading === member.id}
+                >
+                    <Trash2 className="h-4 w-4" /> Remove member
+                </DropdownMenuItem>
+            </DropdownMenuContent>
+        </DropdownMenu>
+    )
+
+    const roleTag = (slug: string | undefined, description?: string) => {
+        const group = slug ? getPersonaUiGroup(slug) : undefined
+        if (!group) return <span className="text-fg-subtle">—</span>
+        const tag = (
+            <Tag color={group.uiRole === 'reviewer' ? 'blue' : group.uiRole === 'owner' ? 'purple' : 'gray'}>
+                {group.uiRole === 'contributor' ? `${group.label} · ${group.subLabel}` : group.label}
+            </Tag>
+        )
+        return description ? (
+            <Tooltip>
+                <TooltipTrigger asChild><span className="inline-flex cursor-default">{tag}</span></TooltipTrigger>
+                <TooltipContent side="top" className="max-w-[280px]">{description}</TooltipContent>
+            </Tooltip>
+        ) : tag
+    }
+
+    const memberRow = (member: any) => {
+        const description = personas.find((p: any) => p.slug === member.role)?.description
+        return (
+            <NotionTableRow key={member.id}>
+                <NotionTableCell>
+                    <div className="flex min-w-0 items-center gap-2">
+                        <Avatar className="h-5 w-5 shrink-0">
+                            <AvatarImage src={member.user.avatarUrl} />
+                            <AvatarFallback className="text-[9px]">{getInitials(member.user.name)}</AvatarFallback>
+                        </Avatar>
+                        <span className="truncate" title={member.user.name}>{member.user.name}</span>
+                    </div>
+                </NotionTableCell>
+                <NotionTableCell className="hidden max-w-[16rem] truncate text-fg-muted md:table-cell" title={member.user.email}>{member.user.email}</NotionTableCell>
+                <NotionTableCell>
+                    {canManage ? (
+                        <button type="button" onClick={() => handleOpenEdit(member)} className="-mx-1 rounded-control px-1 py-0.5 hover:bg-surface-selected" aria-label={`Change role for ${member.user.name}`}>
+                            {roleTag(member.role)}
+                        </button>
+                    ) : roleTag(member.role, description)}
+                </NotionTableCell>
+                <NotionTableCell className="hidden whitespace-nowrap text-small tabular-nums text-fg-muted sm:table-cell">{formatDate(member.createdAt)}</NotionTableCell>
+                <NotionTableActions>{memberActions(member)}</NotionTableActions>
+            </NotionTableRow>
+        )
+    }
+
+    const invitationRow = (invite: any) => {
+        const persona = personas.find((p: any) => p.id === invite.personaId)
+        return (
+            <NotionTableRow key={invite.id}>
+                <NotionTableCell>
+                    <div className="flex min-w-0 items-center gap-2">
+                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-dashed border-line-strong text-fg-subtle">
+                            <Mail className="h-3 w-3" />
+                        </span>
+                        <span className="truncate text-fg-muted" title={invite.email}>{invite.email}</span>
+                    </div>
+                </NotionTableCell>
+                <NotionTableCell className="hidden text-fg-subtle md:table-cell">—</NotionTableCell>
+                <NotionTableCell>{roleTag(persona?.slug, persona?.description)}</NotionTableCell>
+                <NotionTableCell className="hidden sm:table-cell">
+                    <Tag color={invite.status === 'PENDING' ? 'yellow' : 'gray'} dot>
+                        {invite.status === 'PENDING' ? 'Invited' : invite.status === 'ACCEPTED' ? 'Accepted' : invite.status.toLowerCase()}
+                    </Tag>
+                </NotionTableCell>
+                <NotionTableActions>
+                    {canManage && (
+                        <div className="flex items-center justify-end gap-0.5">
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleResendInvite(invite.id)} disabled={actionLoading === invite.id} title="Resend invitation" aria-label={`Resend invitation to ${invite.email}`}>
+                                <Send className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 hover:text-danger" onClick={() => setInviteIdToRevoke(invite.id)} disabled={actionLoading === invite.id} title="Cancel invitation" aria-label={`Cancel invitation to ${invite.email}`}>
+                                <X className="h-3.5 w-3.5" />
+                            </Button>
+                        </div>
+                    )}
+                </NotionTableActions>
+            </NotionTableRow>
+        )
+    }
+
+    /* Linear-style group header: role, count and description, with a quiet invite button at the end. */
+    const groupHeader = (key: string, label: string, count: number, description?: string, icon?: React.ReactNode, onInvite?: () => void) => (
+        <tr key={`${key}-header`} className="h-9 border-b border-line bg-surface-subtle">
+            <td colSpan={5} className="px-1">
+                <div className="flex items-center gap-2">
+                    {icon && <span className="text-fg-subtle [&_svg]:h-4 [&_svg]:w-4">{icon}</span>}
+                    <span className="text-small font-medium text-fg">{label}</span>
+                    <span className="text-small tabular-nums text-fg-subtle">{count}</span>
+                    {description && (
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Info className="h-3.5 w-3.5 shrink-0 cursor-help text-fg-subtle" />
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-[280px]">{description}</TooltipContent>
+                        </Tooltip>
+                    )}
+                    {onInvite && (
+                        <Button variant="ghost" size="sm" className="ml-auto h-7 px-2" onClick={onInvite}>
+                            <Plus className="h-3.5 w-3.5" />
+                            Invite {label.toLowerCase()}
+                        </Button>
+                    )}
+                </div>
+            </td>
+        </tr>
+    )
+
+    const tableHeader = (
+        <NotionTableHeader>
+            <NotionTableHead icon={<Type />}>Name</NotionTableHead>
+            <NotionTableHead icon={<AtSign />} className="hidden md:table-cell">Email</NotionTableHead>
+            <NotionTableHead icon={<Shield />}>Role</NotionTableHead>
+            <NotionTableHead icon={<Clock3 />} className="hidden sm:table-cell">Added</NotionTableHead>
+            <th className="w-px" aria-label="Actions" />
+        </NotionTableHeader>
+    )
+
     return (
-            <div>
-                {/* Sections flow in normal page layout; members render as compact cards in a wrapping grid */}
+            <TooltipProvider>
                 {personas.length > 0 ? (
-                    <div className="space-y-6">
+                    <NotionTable>
+                        {tableHeader}
                         {UI_ROLE_ORDER.map((uiRole) => {
                             const group = membersByUiRole[uiRole]
                             const roleMembers = group?.members || []
                             const roleInvitations = group?.invitations || []
                             const totalCount = roleMembers.length + roleInvitations.length
-                            const iconColorClass = getUiRoleIconColor(uiRole)
                             const displayLabel = UI_ROLE_DISPLAY_LABEL[uiRole]
-                            const description = personaDescriptionForUiRole(uiRole)
-
                             return (
-                                <div key={uiRole} className="rounded bg-[#fafafa] p-3">
-                                    {/* Section header: icon + title + count + tooltip + action */}
-                                    <div className="flex items-center gap-2 pb-2 border-b border-[#e5e7eb]">
-                                        <div className={`flex h-4 w-4 shrink-0 items-center justify-center ${iconColorClass}`}>
-                                            {getUiRoleIcon(uiRole)}
-                                        </div>
-                                        <h3 className="text-[12px] font-semibold uppercase tracking-wide flex items-center gap-1.5 flex-1 min-w-0">
-                                            <span className={`truncate ${iconColorClass}`}>{displayLabel}</span>
-                                            <TooltipProvider>
-                                                <Tooltip>
-                                                    <TooltipTrigger asChild>
-                                                        <Info className="h-3 w-3 text-slate-400 cursor-help shrink-0" />
-                                                    </TooltipTrigger>
-                                                    <TooltipContent side="top" className="max-w-[280px] normal-case font-normal">
-                                                        {description || 'No description'}
-                                                    </TooltipContent>
-                                                </Tooltip>
-                                            </TooltipProvider>
-                                            <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded bg-white text-[10px] font-medium normal-case text-slate-500 tabular-nums">{totalCount}</span>
-                                        </h3>
-                                        {canManage && onInviteWithRole && (
-                                            <Button
-                                                variant="ghost"
-                                                className="h-auto w-44 py-1.5 rounded bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:bg-primary hover:brightness-105 hover:text-white shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all border-0 shrink-0"
-                                                onClick={() => onInviteWithRole(uiRole)}
-                                            >
-                                                <SquarePlus className="h-3.5 w-3.5 mr-1.5" />
-                                                Invite {displayLabel}
-                                            </Button>
-                                        )}
-                                    </div>
-
-                                    {totalCount > 0 ? (() => {
-                                        const isExpanded = expandedRoles.has(uiRole)
-                                        const visibleMemberCount = isExpanded ? roleMembers.length : Math.max(0, Math.min(COLLAPSED_CARD_LIMIT, roleMembers.length))
-                                        const visibleInvitationCount = isExpanded ? roleInvitations.length : Math.max(0, COLLAPSED_CARD_LIMIT - visibleMemberCount)
-                                        const visibleMembers = roleMembers.slice(0, visibleMemberCount)
-                                        const visibleInvitations = roleInvitations.slice(0, visibleInvitationCount)
-                                        return (
-                                        <>
-                                        <div className="grid transition-[grid-template-rows] duration-300 ease-in-out" style={{ gridTemplateRows: '1fr' }}>
-                                        <div className="overflow-hidden min-h-0">
-                                        <div className="flex flex-wrap gap-3 mt-3">
-                                            {visibleMembers.map((member: any) => {
-                                                const memberGroup = getPersonaUiGroup(member.role)
-                                                const memberPersonaDescription = personas.find((p: any) => p.slug === member.role)?.description
-                                                return (
-                                                <div key={member.id} className="w-[300px] rounded border border-[#e5e7eb] bg-white px-4 py-3.5 shadow-sm hover:shadow-md hover:border-[#d1d5db] transition-all">
-                                                    <div className="flex items-start gap-3">
-                                                        <Avatar className="h-11 w-11 shrink-0 rounded bg-[#e2e5e0]">
-                                                            <AvatarImage src={member.user.avatarUrl} />
-                                                            <AvatarFallback className="bg-[#e2e5e0] rounded text-[15px] font-semibold text-slate-700">{getInitials(member.user.name)}</AvatarFallback>
-                                                        </Avatar>
-                                                        <div className="flex-1 min-w-0 pt-0.5">
-                                                            <TooltipProvider>
-                                                                <Tooltip>
-                                                                    <TooltipTrigger asChild>
-                                                                        <p className="text-[16px] font-semibold text-slate-900 truncate cursor-default">{member.user.name}</p>
-                                                                    </TooltipTrigger>
-                                                                    <TooltipContent side="top">{member.user.name}</TooltipContent>
-                                                                </Tooltip>
-                                                            </TooltipProvider>
-                                                            <TooltipProvider>
-                                                                <Tooltip>
-                                                                    <TooltipTrigger asChild>
-                                                                        <p className="text-[13px] text-slate-500 truncate mt-0.5 cursor-default">{member.user.email}</p>
-                                                                    </TooltipTrigger>
-                                                                    <TooltipContent side="top">{member.user.email}</TooltipContent>
-                                                                </Tooltip>
-                                                            </TooltipProvider>
-                                                        </div>
-                                                        {canManage && (
-                                                            <DropdownMenu>
-                                                                <DropdownMenuTrigger asChild>
-                                                                    <Button variant="ghost" size="icon" className="h-6 w-6 text-slate-400 hover:text-slate-600 hover:bg-slate-100 shrink-0">
-                                                                        <MoreVertical className="h-4 w-4" />
-                                                                    </Button>
-                                                                </DropdownMenuTrigger>
-                                                                <DropdownMenuContent align="end" className="min-w-[140px]">
-                                                                    <DropdownMenuItem onClick={() => handleOpenEdit(member)}>
-                                                                        <UserCog className="h-4 w-4 mr-2" />
-                                                                        Change role
-                                                                    </DropdownMenuItem>
-                                                                    <DropdownMenuItem
-                                                                        className="text-red-600 focus:text-red-600"
-                                                                        onClick={() => setMemberIdToRemove(member.id)}
-                                                                        disabled={actionLoading === member.id}
-                                                                    >
-                                                                        <Trash2 className="h-4 w-4 mr-2" />
-                                                                        Remove member
-                                                                    </DropdownMenuItem>
-                                                                </DropdownMenuContent>
-                                                            </DropdownMenu>
-                                                        )}
-                                                    </div>
-                                                    <div className="mt-3 pt-3 border-t border-[#f0f0f0] flex items-center justify-between gap-2">
-                                                        <span className="text-[13px] text-slate-400 tabular-nums truncate">Added {formatDate(member.createdAt)}</span>
-                                                        {memberGroup?.uiRole === 'contributor' && (
-                                                            <span className="inline-flex items-center gap-1.5 rounded bg-[#f3f4f6] border border-[#e5e7eb] px-3 py-1.5 text-[12px] font-semibold uppercase tracking-wide text-[#45474c] shrink-0">
-                                                                {memberGroup.subLabel}
-                                                                <TooltipProvider>
-                                                                    <Tooltip>
-                                                                        <TooltipTrigger asChild>
-                                                                            <Info className="h-3.5 w-3.5 text-[#8a8c91] cursor-help shrink-0" />
-                                                                        </TooltipTrigger>
-                                                                        <TooltipContent side="top" className="max-w-[280px] normal-case font-normal">
-                                                                            {memberPersonaDescription || 'No description'}
-                                                                        </TooltipContent>
-                                                                    </Tooltip>
-                                                                </TooltipProvider>
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                                )
-                                            })}
-
-                                            {visibleInvitations.map((invite: any) => {
-                                                const invitePersona = personas.find((p: any) => p.id === invite.personaId)
-                                                const inviteGroup = invitePersona ? getPersonaUiGroup(invitePersona.slug) : undefined
-                                                return (
-                                                <div key={invite.id} className="w-[300px] rounded border border-dashed border-[#e5e7eb] bg-white px-4 py-3.5 shadow-sm">
-                                                    <div className="flex items-start gap-3">
-                                                        <div className="h-11 w-11 shrink-0 rounded bg-[#f3f4f6] flex items-center justify-center text-slate-500">
-                                                            <Mail className="h-4 w-4" />
-                                                        </div>
-                                                        <div className="flex-1 min-w-0 pt-0.5">
-                                                            <TooltipProvider>
-                                                                <Tooltip>
-                                                                    <TooltipTrigger asChild>
-                                                                        <p className="text-[16px] font-semibold text-slate-900 truncate cursor-default">{invite.email}</p>
-                                                                    </TooltipTrigger>
-                                                                    <TooltipContent side="top">{invite.email}</TooltipContent>
-                                                                </Tooltip>
-                                                            </TooltipProvider>
-                                                            <p className="text-[13px] text-slate-500 flex items-center gap-1 mt-0.5">
-                                                                <Clock className="h-3 w-3 shrink-0" />
-                                                                {invite.status === 'PENDING' ? 'Pending' : invite.status === 'ACCEPTED' ? 'Accepted' : invite.status.toLowerCase()}
-                                                            </p>
-                                                        </div>
-                                                        <div className="flex items-center gap-0.5 shrink-0">
-                                                            <Button
-                                                                variant="ghost"
-                                                                size="icon"
-                                                                className="h-6 w-6 text-slate-400 hover:text-slate-700 hover:bg-slate-100"
-                                                                onClick={() => handleResendInvite(invite.id)}
-                                                                disabled={actionLoading === invite.id}
-                                                                title="Resend invitation"
-                                                            >
-                                                                <Mail className="h-3.5 w-3.5" />
-                                                            </Button>
-                                                            <Button
-                                                                variant="ghost"
-                                                                size="icon"
-                                                                className="h-6 w-6 text-slate-400 hover:text-red-600 hover:bg-red-50"
-                                                                onClick={() => setInviteIdToRevoke(invite.id)}
-                                                                disabled={actionLoading === invite.id}
-                                                                title="Cancel invitation"
-                                                            >
-                                                                <Trash2 className="h-3.5 w-3.5" />
-                                                            </Button>
-                                                        </div>
-                                                    </div>
-                                                    {inviteGroup?.uiRole === 'contributor' && (
-                                                        <div className="mt-3 pt-3 border-t border-[#f0f0f0] flex items-center justify-end">
-                                                            <span className="inline-flex items-center gap-1.5 rounded bg-[#f3f4f6] border border-[#e5e7eb] px-3 py-1.5 text-[12px] font-semibold uppercase tracking-wide text-[#45474c] shrink-0">
-                                                                {inviteGroup.subLabel}
-                                                                <TooltipProvider>
-                                                                    <Tooltip>
-                                                                        <TooltipTrigger asChild>
-                                                                            <Info className="h-3.5 w-3.5 text-[#8a8c91] cursor-help shrink-0" />
-                                                                        </TooltipTrigger>
-                                                                        <TooltipContent side="top" className="max-w-[280px] normal-case font-normal">
-                                                                            {invitePersona?.description || 'No description'}
-                                                                        </TooltipContent>
-                                                                    </Tooltip>
-                                                                </TooltipProvider>
-                                                            </span>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                                )
-                                            })}
-                                        </div>
-                                        </div>
-                                        </div>
-                                        {totalCount > COLLAPSED_CARD_LIMIT && (
-                                            <button
-                                                type="button"
-                                                onClick={() => toggleRoleExpanded(uiRole)}
-                                                className="mt-2 text-[12px] font-medium text-primary hover:underline"
-                                            >
-                                                {isExpanded ? 'Show less' : `Show all ${totalCount}`}
-                                            </button>
-                                        )}
-                                        </>
-                                        )
-                                    })() : (
-                                        <p className="mt-3 text-[12px] text-slate-400">No one in this role yet.</p>
+                                <NotionTableBody key={uiRole}>
+                                    {groupHeader(
+                                        uiRole,
+                                        displayLabel,
+                                        totalCount,
+                                        personaDescriptionForUiRole(uiRole),
+                                        getUiRoleIcon(uiRole),
+                                        canManage && onInviteWithRole ? () => onInviteWithRole(uiRole) : undefined,
                                     )}
-                                </div>
+                                    {roleMembers.map(memberRow)}
+                                    {roleInvitations.map(invitationRow)}
+                                    {totalCount === 0 && (
+                                        <tr className="h-9 border-b border-line">
+                                            <td colSpan={5} className="px-1 text-small text-fg-subtle">No one in this role yet.</td>
+                                        </tr>
+                                    )}
+                                </NotionTableBody>
                             )
                         })}
-                    </div>
-                ) : (
-                    /* Fallback when no personas exist */
-                    <div className="rounded border border-[#e5e7eb] bg-white overflow-hidden">
-                        <div className="flex items-center justify-between px-3 py-2.5 border-b border-[#e5e7eb]">
-                            <h3 className="text-[13px] font-medium text-slate-900">Members</h3>
-                            <span className="text-[11px] text-slate-500">Joined</span>
-                        </div>
-                        {members.length > 0 ? (
-                            <div className="divide-y divide-[#e5e7eb]">
-                                {members.map((member) => (
-                                    <div key={member.id} className="flex items-center gap-2 px-3 py-2 hover:bg-[#f3f4f6] transition-colors">
-                                        <Avatar className="h-7 w-7 shrink-0 border border-[#e5e7eb]">
-                                            <AvatarImage src={member.user.avatarUrl} />
-                                            <AvatarFallback className="bg-slate-100 text-[11px] font-medium text-slate-600">{getInitials(member.user.name)}</AvatarFallback>
-                                        </Avatar>
-                                        <div className="flex-1 min-w-0">
-                                            <TooltipProvider>
-                                                <Tooltip>
-                                                    <TooltipTrigger asChild>
-                                                        <p className="text-[13px] font-medium text-slate-900 truncate cursor-default">{member.user.name}</p>
-                                                    </TooltipTrigger>
-                                                    <TooltipContent side="top">{member.user.name}</TooltipContent>
-                                                </Tooltip>
-                                            </TooltipProvider>
-                                            <TooltipProvider>
-                                                <Tooltip>
-                                                    <TooltipTrigger asChild>
-                                                        <p className="text-[11px] text-slate-500 truncate cursor-default">{member.user.email}</p>
-                                                    </TooltipTrigger>
-                                                    <TooltipContent side="top">{member.user.email}</TooltipContent>
-                                                </Tooltip>
-                                            </TooltipProvider>
-                                        </div>
-                                        <span className="text-[11px] text-slate-400 tabular-nums shrink-0">{formatDate(member.createdAt)}</span>
-                                        <DropdownMenu>
-                                            <DropdownMenuTrigger asChild>
-                                                <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-slate-600 hover:bg-slate-100 shrink-0">
-                                                    <MoreVertical className="h-3.5 w-3.5" />
-                                                </Button>
-                                            </DropdownMenuTrigger>
-                                            <DropdownMenuContent align="end" className="min-w-[140px]">
-                                                <DropdownMenuItem onClick={() => handleOpenEdit(member)}>
-                                                    <UserCog className="h-4 w-4 mr-2" /> Change role
-                                                </DropdownMenuItem>
-                                                <DropdownMenuItem className="text-red-600 focus:text-red-600" onClick={() => setMemberIdToRemove(member.id)} disabled={actionLoading === member.id}>
-                                                    <Trash2 className="h-4 w-4 mr-2" /> Remove member
-                                                </DropdownMenuItem>
-                                            </DropdownMenuContent>
-                                        </DropdownMenu>
-                                    </div>
-                                ))}
-                            </div>
-                        ) : (
-                            <div className="px-3 py-6 text-center">
-                                <p className="text-[13px] text-slate-500">No members yet.</p>
-                            </div>
+                        {(membersWithoutPersona.length > 0 || invitationsWithoutPersona.length > 0) && (
+                            <NotionTableBody>
+                                {groupHeader('other', 'Other members', membersWithoutPersona.length + invitationsWithoutPersona.length)}
+                                {membersWithoutPersona.map(memberRow)}
+                                {invitationsWithoutPersona.map(invitationRow)}
+                            </NotionTableBody>
                         )}
-                    </div>
-                )}
-
-                {/* Members / invitations without a persona */}
-                {(membersWithoutPersona.length > 0 || invitationsWithoutPersona.length > 0) && (
-                    <div className="mt-4 rounded border border-[#e5e7eb] bg-white overflow-hidden">
-                        <div className="flex items-center justify-between px-3 py-2.5 border-b border-[#e5e7eb]">
-                            <h3 className="text-[13px] font-medium text-slate-900">Other members</h3>
-                            <span className="text-[11px] text-slate-500">Joined</span>
-                        </div>
-                        <div className="divide-y divide-[#e5e7eb]">
-                            {membersWithoutPersona.map((member: any) => (
-                                <div key={member.id} className="flex items-center gap-2 px-3 py-2 hover:bg-[#f3f4f6] transition-colors">
-                                    <Avatar className="h-7 w-7 shrink-0 border border-[#e5e7eb]">
-                                        <AvatarImage src={member.user.avatarUrl} />
-                                        <AvatarFallback className="bg-slate-100 text-[11px] font-medium text-slate-600">{getInitials(member.user.name)}</AvatarFallback>
-                                    </Avatar>
-                                    <div className="flex-1 min-w-0">
-                                        <TooltipProvider>
-                                            <Tooltip>
-                                                <TooltipTrigger asChild>
-                                                    <p className="text-[13px] font-medium text-slate-900 truncate cursor-default">{member.user.name}</p>
-                                                </TooltipTrigger>
-                                                <TooltipContent side="top">{member.user.name}</TooltipContent>
-                                            </Tooltip>
-                                        </TooltipProvider>
-                                        <TooltipProvider>
-                                            <Tooltip>
-                                                <TooltipTrigger asChild>
-                                                    <p className="text-[11px] text-slate-500 truncate cursor-default">{member.user.email}</p>
-                                                </TooltipTrigger>
-                                                <TooltipContent side="top">{member.user.email}</TooltipContent>
-                                            </Tooltip>
-                                        </TooltipProvider>
-                                    </div>
-                                    <span className="text-[11px] text-slate-400 tabular-nums shrink-0">{formatDate(member.createdAt)}</span>
-                                    <DropdownMenu>
-                                        <DropdownMenuTrigger asChild>
-                                            <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-slate-600 hover:bg-slate-100 shrink-0">
-                                                <MoreVertical className="h-3.5 w-3.5" />
-                                            </Button>
-                                        </DropdownMenuTrigger>
-                                        <DropdownMenuContent align="end" className="min-w-[140px]">
-                                            <DropdownMenuItem onClick={() => handleOpenEdit(member)}>
-                                                <UserCog className="h-4 w-4 mr-2" /> Change role
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem className="text-red-600 focus:text-red-600" onClick={() => setMemberIdToRemove(member.id)}>
-                                                <Trash2 className="h-4 w-4 mr-2" /> Remove member
-                                            </DropdownMenuItem>
-                                        </DropdownMenuContent>
-                                    </DropdownMenu>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
+                    </NotionTable>
+                ) : members.length > 0 ? (
+                    /* Fallback when no personas exist: one flat table, no role grouping. */
+                    <NotionTable>
+                        {tableHeader}
+                        <NotionTableBody>{members.map(memberRow)}</NotionTableBody>
+                    </NotionTable>
+                ) : (
+                    <EmptyPanel compact title="No members yet" />
                 )}
 
                 {/* Change Role Dialog */}
                 <Dialog open={!!editingMember} onOpenChange={(open) => !open && setEditingMember(null)}>
-                    <DialogContent className="sm:max-w-[850px]">
+                    <DialogContent className="sm:max-w-[480px]">
                         <DialogHeader>
-                            <DialogTitle>Change Member Role</DialogTitle>
+                            <DialogTitle>Change role</DialogTitle>
                             <DialogDescription>
                                 Select a new role for {editingMember?.user.name}.
                             </DialogDescription>
                         </DialogHeader>
-                        <div className="py-4 space-y-4">
-                            <RadioGroup value={editUiRole} onValueChange={(v) => handleEditUiRoleChange(v as PersonaUiRole)} className="gap-4">
+                        <div className="space-y-3 py-2">
+                            <RadioGroup value={editUiRole} onValueChange={(v) => handleEditUiRoleChange(v as PersonaUiRole)} className="gap-2">
                                 {UI_ROLE_ORDER.map((uiRoleValue) => {
                                     const slug = uiRoleValue === 'contributor' ? resolvePersonaSlug('contributor', editSubRole) : resolvePersonaSlug(uiRoleValue)
                                     const persona = personas.find((p: any) => p.slug === slug)
                                     const label = UI_ROLE_DISPLAY_LABEL[uiRoleValue]
                                     return (
-                                        <div key={uiRoleValue} className="flex items-center space-x-2 border border-[#e5e7eb] p-3 rounded hover:bg-[#f3f4f6] cursor-pointer" onClick={() => handleEditUiRoleChange(uiRoleValue)}>
-                                            <RadioGroupItem value={uiRoleValue} id={`role-${uiRoleValue}`} />
+                                        <div key={uiRoleValue} className="flex cursor-pointer items-start gap-3 rounded-card border border-line p-3 transition-colors hover:bg-surface-hover has-[[data-state=checked]]:border-action/60 has-[[data-state=checked]]:bg-surface-subtle" onClick={() => handleEditUiRoleChange(uiRoleValue)}>
+                                            <RadioGroupItem value={uiRoleValue} id={`role-${uiRoleValue}`} className="mt-0.5" />
                                             <div className="flex-1 cursor-pointer">
-                                                <div className="flex items-center gap-1.5">
-                                                    <Label htmlFor={`role-${uiRoleValue}`} className="font-medium cursor-pointer">{label}</Label>
-                                                    <TooltipProvider>
-                                                        <Tooltip>
-                                                            <TooltipTrigger asChild onClick={(e) => e.stopPropagation()}>
-                                                                <Info className="h-3.5 w-3.5 text-slate-400 cursor-help shrink-0" />
-                                                            </TooltipTrigger>
-                                                            <TooltipContent side="top" className="max-w-[260px]">
-                                                                {persona?.description || 'No description'}
-                                                            </TooltipContent>
-                                                        </Tooltip>
-                                                    </TooltipProvider>
-                                                </div>
-                                                <p className="text-sm text-slate-500">{persona?.description || 'No description'}</p>
+                                                <Label htmlFor={`role-${uiRoleValue}`} className="cursor-pointer text-ui font-medium text-fg">{label}</Label>
+                                                <p className="text-small text-fg-muted">{persona?.description || 'No description'}</p>
                                             </div>
                                         </div>
                                     )
@@ -581,7 +408,7 @@ export function MemberList({ members, invitations, personas, onRefresh, canManag
                             </RadioGroup>
 
                             {editUiRole === 'contributor' && (
-                                <div className="ml-6 border border-[#e5e7eb] p-3 rounded bg-[#f9f9fb]">
+                                <div className="ml-7 rounded-card bg-surface-subtle p-3">
                                     <RadioGroup value={editSubRole} onValueChange={(v) => handleEditSubRoleChange(v as PersonaUiSubRole)} className="gap-2">
                                         {(['internal', 'external'] as const).map((sr) => {
                                             const persona = personas.find((p: any) => p.slug === resolvePersonaSlug('contributor', sr))
@@ -594,7 +421,7 @@ export function MemberList({ members, invitations, personas, onRefresh, canManag
                                                     <TooltipProvider>
                                                         <Tooltip>
                                                             <TooltipTrigger asChild onClick={(e) => e.stopPropagation()}>
-                                                                <Info className="h-3.5 w-3.5 text-slate-400 cursor-help shrink-0" />
+                                                                <Info className="h-3.5 w-3.5 text-fg-subtle cursor-help shrink-0" />
                                                             </TooltipTrigger>
                                                             <TooltipContent side="top" className="max-w-[260px]">
                                                                 {persona?.description || 'No description'}
@@ -609,13 +436,13 @@ export function MemberList({ members, invitations, personas, onRefresh, canManag
                             )}
                         </div>
                         <DialogFooter>
-                            <Button variant="outline" className="rounded" onClick={() => setEditingMember(null)}>Cancel</Button>
+                            <Button variant="ghost" onClick={() => setEditingMember(null)}>Cancel</Button>
                             <Button
                                 onClick={handleUpdateRole}
                                 disabled={actionLoading === "DIALOG_UPDATING"}
                                 variant="greenCta"
                             >
-                                {actionLoading === "DIALOG_UPDATING" ? 'Saving...' : 'Save'}
+                                {actionLoading === "DIALOG_UPDATING" ? 'Saving…' : 'Save'}
                             </Button>
                         </DialogFooter>
                     </DialogContent>
@@ -649,8 +476,7 @@ export function MemberList({ members, invitations, personas, onRefresh, canManag
                     onCancel={() => setInviteIdToRevoke(null)}
                     onConfirm={() => void executeRevokeInvite()}
                 />
-            </div>
-        
+            </TooltipProvider>
     )
 }
 

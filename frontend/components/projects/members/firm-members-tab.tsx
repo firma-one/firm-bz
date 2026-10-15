@@ -116,16 +116,16 @@ export function FirmMembersTab({ firmId, groupSlug, orgSlug, canManage = false }
     const adminCount = members.filter(m => m.role === 'firm_admin').length
 
     return (
-        <div className="flex flex-col h-full bg-white rounded border border-[#e5e7eb] overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-[#e5e7eb] bg-white">
+        <div className="flex flex-col h-full bg-white rounded border border-line overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-line bg-white">
                 <div className="flex items-start gap-3">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded bg-[#f3f4f6] text-[#45474c]">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded bg-surface-muted text-fg-muted">
                         <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
                         </svg>
                     </div>
                     <div>
-                        <h2 className="text-xl font-semibold tracking-tight text-slate-900 flex items-center gap-2">
+                        <h2 className="text-xl font-semibold tracking-tight text-fg flex items-center gap-2">
                             Firm Members
                             {!isLoading && (members.length > 0 || invitations.length > 0) && (
                                 <span className="font-mono text-[10px] font-bold bg-primary text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
@@ -133,7 +133,7 @@ export function FirmMembersTab({ firmId, groupSlug, orgSlug, canManage = false }
                                 </span>
                             )}
                         </h2>
-                        <p className="mt-0.5 text-sm text-slate-500">Firm administrators can manage settings and members.</p>
+                        <p className="mt-0.5 text-sm text-fg-muted">Firm administrators can manage settings and members.</p>
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -142,7 +142,7 @@ export function FirmMembersTab({ firmId, groupSlug, orgSlug, canManage = false }
                         size="icon"
                         onClick={refreshData}
                         disabled={isLoading}
-                        className="h-7 w-7 text-slate-400 hover:text-slate-600"
+                        className="h-7 w-7 text-fg-subtle hover:text-fg-muted"
                         title="Refresh"
                     >
                         <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
@@ -165,34 +165,34 @@ export function FirmMembersTab({ firmId, groupSlug, orgSlug, canManage = false }
                 {isLoading ? (
                     <div className="space-y-3">
                         {[1, 2, 3].map((i) => (
-                            <div key={i} className="rounded border border-[#e5e7eb] bg-white p-4 animate-pulse flex items-center gap-3">
-                                <div className="h-9 w-9 rounded bg-slate-200" />
+                            <div key={i} className="rounded border border-line bg-white p-4 animate-pulse flex items-center gap-3">
+                                <div className="h-9 w-9 rounded bg-surface-selected" />
                                 <div className="flex-1 space-y-2">
-                                    <div className="h-4 w-32 rounded bg-slate-200" />
-                                    <div className="h-3 w-48 rounded bg-slate-100" />
+                                    <div className="h-4 w-32 rounded bg-surface-selected" />
+                                    <div className="h-3 w-48 rounded bg-surface-muted" />
                                 </div>
                             </div>
                         ))}
                     </div>
                 ) : (
-                    <div className="rounded border border-[#e5e7eb] bg-white overflow-hidden">
-                        <div className="divide-y divide-[#e5e7eb]">
+                    <div className="rounded border border-line bg-white overflow-hidden">
+                        <div className="divide-y divide-line">
                             {members.map((member) => {
                                 const roleLabel = member.role === 'firm_admin' ? 'Firm Administrator' : 'Firm Member'
                                 const roleBadgeClass = member.role === 'firm_admin'
                                     ? 'bg-primary/10 text-primary ring-1 ring-inset ring-primary/25'
-                                    : 'bg-[#f3f4f6] text-[#45474c] ring-1 ring-inset ring-[#e5e7eb]'
+                                    : 'bg-surface-muted text-fg-muted ring-1 ring-inset ring-line'
                                 return (
                                     <div key={member.id} className="flex items-center gap-3 px-3 py-2.5 hover:bg-[#f3f4f6] transition-colors">
-                                        <Avatar className="h-8 w-8 shrink-0 border border-[#e5e7eb]">
+                                        <Avatar className="h-8 w-8 shrink-0 border border-line">
                                             <AvatarImage src={member.user?.avatarUrl} />
-                                            <AvatarFallback className="bg-slate-100 text-xs font-medium text-slate-600">
+                                            <AvatarFallback className="bg-surface-muted text-xs font-medium text-fg-muted">
                                                 {getInitials(member.user?.name)}
                                             </AvatarFallback>
                                         </Avatar>
                                         <div className="flex-1 min-w-0">
-                                            <p className="text-[13px] font-medium text-slate-900 truncate">{member.user?.name}</p>
-                                            <p className="text-[11px] text-slate-500 truncate">{member.user?.email}</p>
+                                            <p className="text-[13px] font-medium text-fg truncate">{member.user?.name}</p>
+                                            <p className="text-[11px] text-fg-muted truncate">{member.user?.email}</p>
                                         </div>
                                         <div className="w-36 flex justify-end shrink-0">
                                             <span className={`inline-flex items-center rounded-sm px-2 py-0.5 text-[10px] font-medium ${roleBadgeClass}`}>
@@ -200,7 +200,7 @@ export function FirmMembersTab({ firmId, groupSlug, orgSlug, canManage = false }
                                             </span>
                                         </div>
                                         <div className="w-24 flex justify-end shrink-0">
-                                            {member.createdAt && <RelativeDateTime date={member.createdAt} textClassName="text-[11px] text-slate-400" iconClassName="h-3 w-3 text-slate-400" tooltipSide="left" />}
+                                            {member.createdAt && <RelativeDateTime date={member.createdAt} textClassName="text-[11px] text-fg-subtle" iconClassName="h-3 w-3 text-fg-subtle" tooltipSide="left" />}
                                         </div>
                                         {canManage && member.role === 'firm_admin' && adminCount > 1 && (
                                             <Button
@@ -221,12 +221,12 @@ export function FirmMembersTab({ firmId, groupSlug, orgSlug, canManage = false }
                             })}
                             {invitations.map((inv) => (
                                 <div key={inv.id} className="flex items-center gap-3 px-3 py-2.5 hover:bg-[#f3f4f6] transition-colors">
-                                    <div className="h-8 w-8 shrink-0 rounded bg-[#f3f4f6] flex items-center justify-center">
-                                        <Mail className="h-4 w-4 text-slate-500" />
+                                    <div className="h-8 w-8 shrink-0 rounded bg-surface-muted flex items-center justify-center">
+                                        <Mail className="h-4 w-4 text-fg-muted" />
                                     </div>
                                     <div className="flex-1 min-w-0">
-                                        <p className="text-[13px] font-medium text-slate-900 truncate">{inv.email}</p>
-                                        <p className="text-[11px] text-slate-500 flex items-center gap-1">
+                                        <p className="text-[13px] font-medium text-fg truncate">{inv.email}</p>
+                                        <p className="text-[11px] text-fg-muted flex items-center gap-1">
                                             <Clock className="h-3 w-3" />
                                             Pending
                                         </p>
@@ -237,13 +237,13 @@ export function FirmMembersTab({ firmId, groupSlug, orgSlug, canManage = false }
                                         </span>
                                     </div>
                                     <div className="w-24 flex justify-end shrink-0">
-                                        {inv.createdAt && <RelativeDateTime date={inv.createdAt} textClassName="text-[11px] text-slate-400" iconClassName="h-3 w-3 text-slate-400" tooltipSide="left" />}
+                                        {inv.createdAt && <RelativeDateTime date={inv.createdAt} textClassName="text-[11px] text-fg-subtle" iconClassName="h-3 w-3 text-fg-subtle" tooltipSide="left" />}
                                     </div>
                                     <div className="w-7 flex justify-end shrink-0">
                                         {canManage && (
                                             <DropdownMenu>
                                                 <DropdownMenuTrigger asChild>
-                                                    <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-slate-600 shrink-0">
+                                                    <Button variant="ghost" size="icon" className="h-7 w-7 text-fg-subtle hover:text-fg-muted shrink-0">
                                                         <MoreHorizontal className="h-3.5 w-3.5" />
                                                     </Button>
                                                 </DropdownMenuTrigger>
@@ -271,7 +271,7 @@ export function FirmMembersTab({ firmId, groupSlug, orgSlug, canManage = false }
                             ))}
                         </div>
                         {members.length === 0 && invitations.length === 0 && (
-                            <div className="px-4 py-8 text-center text-sm text-slate-500">
+                            <div className="px-4 py-8 text-center text-sm text-fg-muted">
                                 No members yet. {canManage && 'Use Invite to add a Firm Administrator.'}
                             </div>
                         )}
@@ -317,7 +317,7 @@ export function FirmMembersTab({ firmId, groupSlug, orgSlug, canManage = false }
                     </span>
                 }
                 extra={
-                    <p className="text-[12px] text-slate-500 mt-1">
+                    <p className="text-[12px] text-fg-muted mt-1">
                         Not sure how? <a href="/support" className="text-primary underline underline-offset-2">Contact Support</a> and we'll help you through it.
                     </p>
                 }

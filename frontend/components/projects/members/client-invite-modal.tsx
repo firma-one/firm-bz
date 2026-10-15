@@ -48,7 +48,7 @@ export function ClientInviteModal({ firmId, clientId, open, onOpenChange, onSucc
                     <DialogTitle>Invite Client Administrator</DialogTitle>
                 </DialogHeader>
                 <form onSubmit={handleSubmit} className="space-y-6 pt-4">
-                    <p className="text-sm text-slate-500">
+                    <p className="text-sm text-fg-muted">
                         Invite someone to join this client as a Client Administrator. They will be able to manage client settings and members.
                     </p>
                     <div className="space-y-2">

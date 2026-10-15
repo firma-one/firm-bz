@@ -18,7 +18,7 @@ export type UserUiPrefs = {
     sidebarCollapsed: boolean
 }
 
-const DEFAULTS: UserUiPrefs = { shell: 'v1', sidebarCollapsed: false }
+const DEFAULTS: UserUiPrefs = { shell: 'v2', sidebarCollapsed: false }
 
 function normalize(raw: unknown): UserUiPrefs {
     const r = (raw ?? {}) as Record<string, unknown>

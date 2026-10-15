@@ -99,13 +99,13 @@ export function WikiEditor({ page, canEdit, onTitleChange }: Props) {
                     onChange={(e) => handleTitleChange(e.target.value)}
                     disabled={!canEdit}
                     placeholder="Untitled"
-                    className="w-full text-2xl font-bold text-slate-900 placeholder:text-slate-300 outline-none bg-transparent border-none disabled:cursor-default"
+                    className="w-full text-2xl font-bold text-fg placeholder:text-fg-subtle outline-none bg-transparent border-none disabled:cursor-default"
                 />
             </div>
 
             {/* Toolbar */}
             {canEdit && (
-                <div className="px-8 py-2 flex items-center gap-1 border-b border-slate-100">
+                <div className="px-8 py-2 flex items-center gap-1 border-b border-line">
                     <ToolbarBtn
                         active={editor.isActive('heading', { level: 1 })}
                         onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
@@ -149,7 +149,7 @@ export function WikiEditor({ page, canEdit, onTitleChange }: Props) {
                         title="Blockquote"
                     ><Quote className="h-4 w-4" /></ToolbarBtn>
 
-                    <div className="ml-auto flex items-center gap-1.5 text-[11px] text-slate-400">
+                    <div className="ml-auto flex items-center gap-1.5 text-[11px] text-fg-subtle">
                         {saveState === 'saving' && (
                             <><Loader2 className="h-3 w-3 animate-spin" />Saving…</>
                         )}
@@ -164,16 +164,16 @@ export function WikiEditor({ page, canEdit, onTitleChange }: Props) {
             {contentLoading ? (
                 <div className="flex-1 overflow-y-auto px-8 py-6">
                     <div className="space-y-3">
-                        <div className="h-4 bg-slate-100 rounded w-3/4 animate-pulse" />
-                        <div className="h-4 bg-slate-100 rounded w-1/2 animate-pulse" />
-                        <div className="h-4 bg-slate-100 rounded w-2/3 animate-pulse" />
+                        <div className="h-4 bg-surface-muted rounded w-3/4 animate-pulse" />
+                        <div className="h-4 bg-surface-muted rounded w-1/2 animate-pulse" />
+                        <div className="h-4 bg-surface-muted rounded w-2/3 animate-pulse" />
                     </div>
                 </div>
             ) : (
                 <div className="flex-1 overflow-y-auto px-8 py-6">
                     <EditorContent
                         editor={editor}
-                        className="prose prose-slate prose-sm max-w-none focus:outline-none [&_.ProseMirror]:outline-none [&_.ProseMirror_p.is-editor-empty:first-child::before]:content-[attr(data-placeholder)] [&_.ProseMirror_p.is-editor-empty:first-child::before]:text-slate-400 [&_.ProseMirror_p.is-editor-empty:first-child::before]:pointer-events-none [&_ul[data-type=taskList]]:list-none [&_ul[data-type=taskList]_li]:flex [&_ul[data-type=taskList]_li]:gap-2 [&_ul[data-type=taskList]_li>label]:mt-0.5"
+                        className="prose prose-slate prose-sm max-w-none focus:outline-none [&_.ProseMirror]:outline-none [&_.ProseMirror_p.is-editor-empty:first-child::before]:content-[attr(data-placeholder)] [&_.ProseMirror_p.is-editor-empty:first-child::before]:text-fg-subtle [&_.ProseMirror_p.is-editor-empty:first-child::before]:pointer-events-none [&_ul[data-type=taskList]]:list-none [&_ul[data-type=taskList]_li]:flex [&_ul[data-type=taskList]_li]:gap-2 [&_ul[data-type=taskList]_li>label]:mt-0.5"
                     />
                 </div>
             )}
@@ -189,7 +189,7 @@ function ToolbarBtn({ active, onClick, title, children }: { active: boolean; onC
             title={title}
             className={cn(
                 'p-1.5 rounded transition-colors',
-                active ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'
+                active ? 'bg-slate-900 text-white' : 'text-fg-muted hover:bg-surface-hover hover:text-fg'
             )}
         >
             {children}
@@ -198,5 +198,5 @@ function ToolbarBtn({ active, onClick, title, children }: { active: boolean; onC
 }
 
 function Divider() {
-    return <div className="w-px h-5 bg-slate-200 mx-1" />
+    return <div className="w-px h-5 bg-surface-selected mx-1" />
 }

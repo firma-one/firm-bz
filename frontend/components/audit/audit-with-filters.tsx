@@ -25,6 +25,7 @@ import {
   X,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { EmptyPanel } from '@/components/ui/empty-panel'
 import { formatSmartDateTime } from '@/lib/utils'
 import {
   DropdownMenu,
@@ -304,26 +305,26 @@ export function eventDetails(ev: AuditEventRow): string {
 }
 
 function EventIcon({ eventType }: { eventType: string }) {
-  if (eventType.startsWith('ONBOARDING_')) return <Rocket className="h-4 w-4 text-violet-500" />
-  if (eventType.startsWith('FIRM_MEMBER_')) return <UserPlus className="h-4 w-4 text-indigo-400" />
-  if (eventType.startsWith('FIRM_')) return <Building2 className="h-4 w-4 text-indigo-600" />
-  if (eventType.startsWith('CLIENT_CONTACT_')) return <MessageSquare className="h-4 w-4 text-teal-400" />
-  if (eventType.startsWith('CLIENT_MEMBER_')) return <UserPlus className="h-4 w-4 text-teal-400" />
-  if (eventType.startsWith('CLIENT_')) return <Users className="h-4 w-4 text-teal-600" />
-  if (eventType.startsWith('ENGAGEMENT_MEMBER_')) return <UserPlus className="h-4 w-4 text-blue-400" />
-  if (eventType.startsWith('ENGAGEMENT_')) return <Briefcase className="h-4 w-4 text-blue-600" />
-  if (eventType === 'DOCUMENT_OPENED') return <Eye className="h-4 w-4 text-slate-500" />
-  if (eventType === 'DOCUMENT_DOWNLOADED' || eventType === 'DOCUMENT_SHARE_DOWNLOADED') return <Download className="h-4 w-4 text-green-600" />
-  if (eventType === 'AUDIT_LOG_EXPORTED') return <ClipboardList className="h-4 w-4 text-orange-500" />
-  if (eventType.startsWith('DOCUMENT_SHARE_')) return <Share2 className="h-4 w-4 text-purple-600" />
-  if (eventType.startsWith('DOCUMENT_COMMENT_')) return <MessageSquare className="h-4 w-4 text-amber-500" />
-  if (eventType === 'DOCUMENT_FINALIZED' || eventType === 'DOCUMENT_LOCKED') return <Lock className="h-4 w-4 text-amber-600" />
-  if (eventType === 'DOCUMENT_STATUS_CHANGED' || eventType.includes('STATUS')) return <RefreshCw className="h-4 w-4 text-slate-600" />
-  if (eventType.includes('SHARED') || eventType === 'SHARED_EXT') return <Share2 className="h-4 w-4 text-purple-600" />
-  if (eventType.includes('LOCKED') || eventType.includes('CLOSED')) return <Lock className="h-4 w-4 text-amber-600" />
-  if (eventType.includes('UPLOAD') || eventType.includes('DOCUMENT_ADDED') || eventType === 'DOCUMENT_CREATED') return <FileUp className="h-4 w-4 text-blue-600" />
-  if (eventType.startsWith('DOCUMENT_')) return <FileText className="h-4 w-4 text-gray-500" />
-  return <FileText className="h-4 w-4 text-gray-400" />
+  if (eventType.startsWith('ONBOARDING_')) return <Rocket className="h-3.5 w-3.5 text-fg-subtle" />
+  if (eventType.startsWith('FIRM_MEMBER_')) return <UserPlus className="h-3.5 w-3.5 text-fg-subtle" />
+  if (eventType.startsWith('FIRM_')) return <Building2 className="h-3.5 w-3.5 text-fg-subtle" />
+  if (eventType.startsWith('CLIENT_CONTACT_')) return <MessageSquare className="h-3.5 w-3.5 text-fg-subtle" />
+  if (eventType.startsWith('CLIENT_MEMBER_')) return <UserPlus className="h-3.5 w-3.5 text-fg-subtle" />
+  if (eventType.startsWith('CLIENT_')) return <Users className="h-3.5 w-3.5 text-fg-subtle" />
+  if (eventType.startsWith('ENGAGEMENT_MEMBER_')) return <UserPlus className="h-3.5 w-3.5 text-fg-subtle" />
+  if (eventType.startsWith('ENGAGEMENT_')) return <Briefcase className="h-3.5 w-3.5 text-fg-subtle" />
+  if (eventType === 'DOCUMENT_OPENED') return <Eye className="h-3.5 w-3.5 text-fg-subtle" />
+  if (eventType === 'DOCUMENT_DOWNLOADED' || eventType === 'DOCUMENT_SHARE_DOWNLOADED') return <Download className="h-3.5 w-3.5 text-fg-subtle" />
+  if (eventType === 'AUDIT_LOG_EXPORTED') return <ClipboardList className="h-3.5 w-3.5 text-fg-subtle" />
+  if (eventType.startsWith('DOCUMENT_SHARE_')) return <Share2 className="h-3.5 w-3.5 text-fg-subtle" />
+  if (eventType.startsWith('DOCUMENT_COMMENT_')) return <MessageSquare className="h-3.5 w-3.5 text-fg-subtle" />
+  if (eventType === 'DOCUMENT_FINALIZED' || eventType === 'DOCUMENT_LOCKED') return <Lock className="h-3.5 w-3.5 text-fg-subtle" />
+  if (eventType === 'DOCUMENT_STATUS_CHANGED' || eventType.includes('STATUS')) return <RefreshCw className="h-3.5 w-3.5 text-fg-subtle" />
+  if (eventType.includes('SHARED') || eventType === 'SHARED_EXT') return <Share2 className="h-3.5 w-3.5 text-fg-subtle" />
+  if (eventType.includes('LOCKED') || eventType.includes('CLOSED')) return <Lock className="h-3.5 w-3.5 text-fg-subtle" />
+  if (eventType.includes('UPLOAD') || eventType.includes('DOCUMENT_ADDED') || eventType === 'DOCUMENT_CREATED') return <FileUp className="h-3.5 w-3.5 text-fg-subtle" />
+  if (eventType.startsWith('DOCUMENT_')) return <FileText className="h-3.5 w-3.5 text-fg-subtle" />
+  return <FileText className="h-3.5 w-3.5 text-fg-subtle" />
 }
 
 function isJsonObject(s: string): boolean {
@@ -333,7 +334,7 @@ function isJsonObject(s: string): boolean {
 function DetailCell({ ev }: { ev: AuditEventRow }) {
   const [copied, setCopied] = React.useState(false)
   const raw = eventDetails(ev)
-  if (!raw) return <span className="text-gray-400">—</span>
+  if (!raw) return <span className="text-fg-subtle">—</span>
 
   const isJson = isJsonObject(raw)
 
@@ -347,21 +348,21 @@ function DetailCell({ ev }: { ev: AuditEventRow }) {
   return (
     <div className="flex items-center gap-1.5 group max-w-xs">
       {isJson ? (
-        <code className="text-xs font-mono bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded truncate block max-w-[260px]" title={raw}>
+        <code className="block max-w-[260px] truncate rounded-control bg-surface-muted px-1.5 py-0.5 font-mono text-caption text-fg-muted" title={raw}>
           {raw}
         </code>
       ) : (
-        <span className="truncate text-gray-700 max-w-[260px]" title={raw}>{raw}</span>
+        <span className="truncate text-fg-muted max-w-[260px]" title={raw}>{raw}</span>
       )}
       <button
         type="button"
         onClick={handleCopy}
-        className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-slate-100"
+        className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-surface-hover"
         title="Copy"
       >
         {copied
           ? <Check className="h-3 w-3 text-green-500" />
-          : <Copy className="h-3 w-3 text-slate-400" />
+          : <Copy className="h-3 w-3 text-fg-subtle" />
         }
       </button>
     </div>
@@ -702,18 +703,16 @@ export function AuditWithFilters({
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      <p className="text-xs text-gray-500 mb-3">Audit history is permanent and cannot be edited.</p>
-
-      <div className="flex flex-wrap items-end gap-2 mb-4">
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-gray-600">From date</label>
+      
+      <div className="mb-3 flex flex-wrap items-center gap-1.5">
+        <div className="flex">
           <DateTimePicker
             key={`from-${pickerResetKey}`}
             value={fromDate}
             defaultTime="23:59"
             allowFutureDateTimes={false}
             placeholder="From date"
-            className="w-[190px]"
+            className="h-7 w-[176px] border-line text-small"
             onChange={(iso) => {
               setFromDate(iso)
               if (iso && toDate && new Date(iso) > new Date(toDate)) {
@@ -725,14 +724,13 @@ export function AuditWithFilters({
           />
         </div>
 
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-gray-600">To date</label>
+        <div className="flex">
           <DateTimePicker
             key={`to-${pickerResetKey}`}
             value={toDate}
             defaultTime="23:59"
             placeholder="To date"
-            className="w-[190px]"
+            className="h-7 w-[176px] border-line text-small"
             onChange={(iso) => {
               if (iso && fromDate && new Date(iso) < new Date(fromDate)) {
                 setDateRangeError('To must be after From')
@@ -745,30 +743,30 @@ export function AuditWithFilters({
         </div>
 
         {dateRangeError && (
-          <p className="text-xs text-red-500 self-end pb-1.5">{dateRangeError}</p>
+          <p className="text-small text-danger">{dateRangeError}</p>
         )}
 
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-gray-600">Event scope</label>
+        <div className="flex">
           <DropdownMenu open={scopeMenuOpen} onOpenChange={setScopeMenuOpen}>
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="rounded border border-slate-300/80 px-2 py-1.5 text-xs w-[130px] bg-white flex items-center justify-between gap-2"
+                aria-label="Event scope filter"
+                className="inline-flex h-7 max-w-[220px] items-center gap-1.5 rounded-control border border-line bg-surface px-2 text-small text-fg-muted transition-colors hover:bg-surface-hover data-[state=open]:bg-surface-hover"
               >
                 <span className="truncate">{selectedScopeLabel}</span>
-                <ChevronDown className="h-4 w-4 text-gray-500 shrink-0" />
+                <ChevronDown className="h-3.5 w-3.5 shrink-0 text-fg-subtle" />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent className="w-[200px] p-0">
-              <div className="max-h-[280px] overflow-y-auto py-1">
+              <div className="max-h-[280px] overflow-y-auto p-1">
                 <button
                   type="button"
-                  className="w-full px-2 py-1 text-xs flex items-center gap-2 hover:bg-gray-50"
+                  className="flex h-7 w-full items-center gap-2 rounded-control px-2 text-small text-fg hover:bg-surface-hover"
                   onClick={(e) => { e.preventDefault(); setScopeFilter([]) }}
                 >
-                  <span className="h-4 w-4 rounded border border-slate-300 bg-white flex items-center justify-center">
-                    <Check className={`h-3 w-3 ${scopeFilter.length === 0 ? 'text-slate-800' : 'text-slate-300'}`} strokeWidth={2.5} />
+                  <span className="h-4 w-4 flex items-center justify-center rounded-[3px] border border-line-strong bg-surface">
+                    <Check className={`h-3 w-3 ${scopeFilter.length === 0 ? 'text-fg' : 'text-fg-subtle'}`} strokeWidth={2.5} />
                   </span>
                   All scopes
                 </button>
@@ -778,11 +776,11 @@ export function AuditWithFilters({
                     <button
                       key={o.value}
                       type="button"
-                      className="w-full px-2 py-1 text-xs flex items-center gap-2 hover:bg-gray-50"
+                      className="flex h-7 w-full items-center gap-2 rounded-control px-2 text-small text-fg hover:bg-surface-hover"
                       onClick={(e) => { e.preventDefault(); setScopeFilter(toggleId(scopeFilter, o.value)) }}
                     >
-                      <span className="h-4 w-4 rounded border border-slate-300 bg-white flex items-center justify-center">
-                        <Check className={`h-3 w-3 ${checked ? 'text-slate-800' : 'text-slate-300'}`} strokeWidth={2.5} />
+                      <span className="h-4 w-4 flex items-center justify-center rounded-[3px] border border-line-strong bg-surface">
+                        <Check className={`h-3 w-3 ${checked ? 'text-fg' : 'text-fg-subtle'}`} strokeWidth={2.5} />
                       </span>
                       <span>{o.label}</span>
                     </button>
@@ -793,27 +791,27 @@ export function AuditWithFilters({
           </DropdownMenu>
         </div>
 
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-gray-600">Event type</label>
+        <div className="flex">
           <DropdownMenu open={actionMenuOpen} onOpenChange={setActionMenuOpen}>
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="rounded border border-slate-300/80 px-2 py-1.5 text-xs w-[130px] bg-white flex items-center justify-between gap-2"
+                aria-label="Event type filter"
+                className="inline-flex h-7 max-w-[220px] items-center gap-1.5 rounded-control border border-line bg-surface px-2 text-small text-fg-muted transition-colors hover:bg-surface-hover data-[state=open]:bg-surface-hover"
               >
                 <span className="truncate">{selectedActionLabel}</span>
-                <ChevronDown className="h-4 w-4 text-gray-500 shrink-0" />
+                <ChevronDown className="h-3.5 w-3.5 shrink-0 text-fg-subtle" />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent className="w-[200px] p-0">
-              <div className="max-h-[280px] overflow-y-auto py-1">
+              <div className="max-h-[280px] overflow-y-auto p-1">
                 <button
                   type="button"
-                  className="w-full px-2 py-1 text-xs flex items-center gap-2 hover:bg-gray-50"
+                  className="flex h-7 w-full items-center gap-2 rounded-control px-2 text-small text-fg hover:bg-surface-hover"
                   onClick={(e) => { e.preventDefault(); setActionFilter([]) }}
                 >
-                  <span className="h-4 w-4 rounded border border-slate-300 bg-white flex items-center justify-center">
-                    <Check className={`h-3 w-3 ${actionFilter.length === 0 ? 'text-slate-800' : 'text-slate-300'}`} strokeWidth={2.5} />
+                  <span className="h-4 w-4 flex items-center justify-center rounded-[3px] border border-line-strong bg-surface">
+                    <Check className={`h-3 w-3 ${actionFilter.length === 0 ? 'text-fg' : 'text-fg-subtle'}`} strokeWidth={2.5} />
                   </span>
                   All types
                 </button>
@@ -823,11 +821,11 @@ export function AuditWithFilters({
                     <button
                       key={o.value}
                       type="button"
-                      className="w-full px-2 py-1 text-xs flex items-center gap-2 hover:bg-gray-50"
+                      className="flex h-7 w-full items-center gap-2 rounded-control px-2 text-small text-fg hover:bg-surface-hover"
                       onClick={(e) => { e.preventDefault(); setActionFilter(toggleId(actionFilter, o.value)) }}
                     >
-                      <span className="h-4 w-4 rounded border border-slate-300 bg-white flex items-center justify-center">
-                        <Check className={`h-3 w-3 ${checked ? 'text-slate-800' : 'text-slate-300'}`} strokeWidth={2.5} />
+                      <span className="h-4 w-4 flex items-center justify-center rounded-[3px] border border-line-strong bg-surface">
+                        <Check className={`h-3 w-3 ${checked ? 'text-fg' : 'text-fg-subtle'}`} strokeWidth={2.5} />
                       </span>
                       <span>{o.label}</span>
                     </button>
@@ -840,30 +838,30 @@ export function AuditWithFilters({
 
         {showClientProjectFilters && (
           <>
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-gray-600">Client</label>
+            <div className="flex">
               <DropdownMenu open={clientMenuOpen} onOpenChange={setClientMenuOpen}>
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
-                    className="rounded border border-slate-300/80 px-2 py-1.5 text-xs w-[130px] bg-white flex items-center justify-between gap-2"
+                    aria-label="Client filter"
+                className="inline-flex h-7 max-w-[220px] items-center gap-1.5 rounded-control border border-line bg-surface px-2 text-small text-fg-muted transition-colors hover:bg-surface-hover data-[state=open]:bg-surface-hover"
                   >
                     <span className="truncate">{selectedClientLabel}</span>
-                    <ChevronDown className="h-4 w-4 text-gray-500 shrink-0" />
+                    <ChevronDown className="h-3.5 w-3.5 shrink-0 text-fg-subtle" />
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent className="w-[280px] p-0">
-                  <div className="px-2 py-2 flex items-center gap-2 border-b border-gray-100">
+                  <div className="flex items-center gap-2 border-b border-line p-1.5">
                     <input
                       value={clientSearch}
                       onChange={(e) => setClientSearch(e.target.value)}
                       onKeyDown={(e) => e.stopPropagation()}
                       placeholder="Search clients…"
-                      className="flex-1 rounded border border-slate-300/80 px-2 py-1.5 text-xs"
+                      className="h-7 flex-1 rounded-control border border-line bg-surface px-2 text-small text-fg outline-none placeholder:text-fg-subtle focus:border-action/60"
                     />
                     <Button
                       size="sm"
-                      className="bg-slate-900 hover:bg-slate-800 text-white"
+                      
                       onClick={(e) => {
                         e.preventDefault()
                         setClientMenuOpen(false)
@@ -874,15 +872,15 @@ export function AuditWithFilters({
                   </div>
                   <button
                     type="button"
-                    className="w-full px-2 py-1 text-xs flex items-center gap-2 hover:bg-gray-50"
+                    className="flex h-7 w-full items-center gap-2 rounded-control px-2 text-small text-fg hover:bg-surface-hover"
                     onClick={(e) => {
                       e.preventDefault()
                       setClientIdsFilter([])
                       setProjectIdsFilter([])
                     }}
                   >
-                    <span className="h-4 w-4 rounded border border-slate-300 bg-white flex items-center justify-center">
-                      <Check className={`h-3 w-3 ${clientIdsFilter.length === 0 ? 'text-slate-800' : 'text-slate-300'}`} strokeWidth={2.5} />
+                    <span className="h-4 w-4 flex items-center justify-center rounded-[3px] border border-line-strong bg-surface">
+                      <Check className={`h-3 w-3 ${clientIdsFilter.length === 0 ? 'text-fg' : 'text-fg-subtle'}`} strokeWidth={2.5} />
                     </span>
                     All clients
                   </button>
@@ -892,7 +890,7 @@ export function AuditWithFilters({
                       <button
                         key={c.id}
                         type="button"
-                        className="w-full px-2 py-1 text-xs flex items-center gap-2 hover:bg-gray-50"
+                        className="flex h-7 w-full items-center gap-2 rounded-control px-2 text-small text-fg hover:bg-surface-hover"
                         onClick={(e) => {
                           e.preventDefault()
                           const next = toggleId(clientIdsFilter, c.id)
@@ -903,8 +901,8 @@ export function AuditWithFilters({
                           )
                         }}
                       >
-                        <span className="h-4 w-4 rounded border border-slate-300 bg-white flex items-center justify-center">
-                          <Check className={`h-3 w-3 ${checked ? 'text-slate-800' : 'text-slate-300'}`} strokeWidth={2.5} />
+                        <span className="h-4 w-4 flex items-center justify-center rounded-[3px] border border-line-strong bg-surface">
+                          <Check className={`h-3 w-3 ${checked ? 'text-fg' : 'text-fg-subtle'}`} strokeWidth={2.5} />
                         </span>
                         <span className="truncate">{c.name}</span>
                       </button>
@@ -914,30 +912,30 @@ export function AuditWithFilters({
               </DropdownMenu>
             </div>
 
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-gray-600">Engagement</label>
+            <div className="flex">
               <DropdownMenu open={projectMenuOpen} onOpenChange={setProjectMenuOpen}>
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
-                    className="rounded border border-slate-300/80 px-2 py-1.5 text-xs w-[130px] bg-white flex items-center justify-between gap-2"
+                    aria-label="Engagement filter"
+                className="inline-flex h-7 max-w-[220px] items-center gap-1.5 rounded-control border border-line bg-surface px-2 text-small text-fg-muted transition-colors hover:bg-surface-hover data-[state=open]:bg-surface-hover"
                   >
                     <span className="truncate">{selectedProjectLabel}</span>
-                    <ChevronDown className="h-4 w-4 text-gray-500 shrink-0" />
+                    <ChevronDown className="h-3.5 w-3.5 shrink-0 text-fg-subtle" />
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent className="w-[280px] p-0">
-                  <div className="px-2 py-2 flex items-center gap-2 border-b border-gray-100">
+                  <div className="flex items-center gap-2 border-b border-line p-1.5">
                     <input
                       value={projectSearch}
                       onChange={(e) => setProjectSearch(e.target.value)}
                       onKeyDown={(e) => e.stopPropagation()}
                       placeholder="Search projects…"
-                      className="flex-1 rounded border border-slate-300/80 px-2 py-1.5 text-xs"
+                      className="h-7 flex-1 rounded-control border border-line bg-surface px-2 text-small text-fg outline-none placeholder:text-fg-subtle focus:border-action/60"
                     />
                     <Button
                       size="sm"
-                      className="bg-slate-900 hover:bg-slate-800 text-white"
+                      
                       onClick={(e) => {
                         e.preventDefault()
                         setProjectMenuOpen(false)
@@ -948,14 +946,14 @@ export function AuditWithFilters({
                   </div>
                   <button
                     type="button"
-                    className="w-full px-2 py-1 text-xs flex items-center gap-2 hover:bg-gray-50"
+                    className="flex h-7 w-full items-center gap-2 rounded-control px-2 text-small text-fg hover:bg-surface-hover"
                     onClick={(e) => {
                       e.preventDefault()
                       setProjectIdsFilter([])
                     }}
                   >
-                    <span className="h-4 w-4 rounded border border-slate-300 bg-white flex items-center justify-center">
-                      <Check className={`h-3 w-3 ${projectIdsFilter.length === 0 ? 'text-slate-800' : 'text-slate-300'}`} strokeWidth={2.5} />
+                    <span className="h-4 w-4 flex items-center justify-center rounded-[3px] border border-line-strong bg-surface">
+                      <Check className={`h-3 w-3 ${projectIdsFilter.length === 0 ? 'text-fg' : 'text-fg-subtle'}`} strokeWidth={2.5} />
                     </span>
                     All projects
                   </button>
@@ -965,14 +963,14 @@ export function AuditWithFilters({
                       <button
                         key={p.id}
                         type="button"
-                        className="w-full px-2 py-1 text-xs flex items-center gap-2 hover:bg-gray-50"
+                        className="flex h-7 w-full items-center gap-2 rounded-control px-2 text-small text-fg hover:bg-surface-hover"
                         onClick={(e) => {
                           e.preventDefault()
                           setProjectIdsFilter(toggleId(projectIdsFilter, p.id))
                         }}
                       >
-                        <span className="h-4 w-4 rounded border border-slate-300 bg-white flex items-center justify-center">
-                          <Check className={`h-3 w-3 ${checked ? 'text-slate-800' : 'text-slate-300'}`} strokeWidth={2.5} />
+                        <span className="h-4 w-4 flex items-center justify-center rounded-[3px] border border-line-strong bg-surface">
+                          <Check className={`h-3 w-3 ${checked ? 'text-fg' : 'text-fg-subtle'}`} strokeWidth={2.5} />
                         </span>
                         <span className="truncate">{p.name}</span>
                       </button>
@@ -984,30 +982,30 @@ export function AuditWithFilters({
           </>
         )}
 
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-gray-600">Actor</label>
+        <div className="flex">
           <DropdownMenu open={actorMenuOpen} onOpenChange={setActorMenuOpen}>
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="rounded border border-slate-300/80 px-2 py-1.5 text-xs w-[130px] bg-white flex items-center justify-between gap-2"
+                aria-label="Actor filter"
+                className="inline-flex h-7 max-w-[220px] items-center gap-1.5 rounded-control border border-line bg-surface px-2 text-small text-fg-muted transition-colors hover:bg-surface-hover data-[state=open]:bg-surface-hover"
               >
                 <span className="truncate">{selectedActorLabel}</span>
-                <ChevronDown className="h-4 w-4 text-gray-500 shrink-0" />
+                <ChevronDown className="h-3.5 w-3.5 shrink-0 text-fg-subtle" />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent className="w-[280px] p-0">
-              <div className="px-2 py-2 flex items-center gap-2 border-b border-gray-100">
+              <div className="flex items-center gap-2 border-b border-line p-1.5">
                 <input
                   value={actorSearch}
                   onChange={(e) => setActorSearch(e.target.value)}
                   onKeyDown={(e) => e.stopPropagation()}
                   placeholder="Search actors…"
-                  className="flex-1 rounded border border-slate-300/80 px-2 py-1.5 text-xs"
+                  className="h-7 flex-1 rounded-control border border-line bg-surface px-2 text-small text-fg outline-none placeholder:text-fg-subtle focus:border-action/60"
                 />
                 <Button
                   size="sm"
-                  className="bg-slate-900 hover:bg-slate-800 text-white"
+                  variant="ghost"
                   onClick={(e) => {
                     e.preventDefault()
                     setActorMenuOpen(false)
@@ -1016,22 +1014,22 @@ export function AuditWithFilters({
                   Done
                 </Button>
               </div>
-              <div className="max-h-[280px] overflow-y-auto">
+              <div className="max-h-[280px] overflow-y-auto p-1">
                 <button
                   type="button"
-                  className="w-full px-2 py-1 text-xs flex items-center gap-2 hover:bg-gray-50"
+                  className="flex h-7 w-full items-center gap-2 rounded-control px-2 text-small text-fg hover:bg-surface-hover"
                   onClick={(e) => {
                     e.preventDefault()
                     setActorFilter([])
                   }}
                 >
-                  <span className="h-4 w-4 rounded border border-slate-300 bg-white flex items-center justify-center">
-                    <Check className={`h-3 w-3 ${actorFilter.length === 0 ? 'text-slate-800' : 'text-slate-300'}`} strokeWidth={2.5} />
+                  <span className="h-4 w-4 flex items-center justify-center rounded-[3px] border border-line-strong bg-surface">
+                    <Check className={`h-3 w-3 ${actorFilter.length === 0 ? 'text-fg' : 'text-fg-subtle'}`} strokeWidth={2.5} />
                   </span>
                   All actors
                 </button>
                 {filteredActors.length === 0 && (
-                  <p className="px-3 py-2 text-xs text-gray-400 italic">No actors in loaded events</p>
+                  <p className="px-2 py-1.5 text-small text-fg-subtle">No actors in loaded events</p>
                 )}
                 {filteredActors.map((actor) => {
                   const checked = actorFilter.includes(actor.id)
@@ -1039,14 +1037,14 @@ export function AuditWithFilters({
                     <button
                       key={actor.id}
                       type="button"
-                      className="w-full px-2 py-1 text-xs flex items-center gap-2 hover:bg-gray-50"
+                      className="flex h-7 w-full items-center gap-2 rounded-control px-2 text-small text-fg hover:bg-surface-hover"
                       onClick={(e) => {
                         e.preventDefault()
                         setActorFilter(toggleId(actorFilter, actor.id))
                       }}
                     >
-                      <span className="h-4 w-4 rounded border border-slate-300 bg-white flex items-center justify-center shrink-0">
-                        <Check className={`h-3 w-3 ${checked ? 'text-slate-800' : 'text-slate-300'}`} strokeWidth={2.5} />
+                      <span className="h-4 w-4 flex items-center justify-center rounded-[3px] border border-line-strong bg-surface shrink-0">
+                        <Check className={`h-3 w-3 ${checked ? 'text-fg' : 'text-fg-subtle'}`} strokeWidth={2.5} />
                       </span>
                       <UserAvatarWithTooltip
                         displayName={actor.name}
@@ -1063,14 +1061,14 @@ export function AuditWithFilters({
           </DropdownMenu>
         </div>
 
-        <div className="flex items-end gap-1.5 ml-auto">
+        <div className="ml-auto flex items-center gap-0.5">
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 w-8 p-0"
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
                   onClick={() => {
                     setFromDate('')
                     setToDate('')
@@ -1099,9 +1097,9 @@ export function AuditWithFilters({
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 w-8 p-0"
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
                   onClick={() => { setNextCursor(null); load() }}
                 >
                   <RotateCcw className="h-3.5 w-3.5" />
@@ -1115,8 +1113,9 @@ export function AuditWithFilters({
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
-                  size="sm"
-                  className="h-8 w-8 p-0 bg-slate-900 hover:bg-slate-800 text-white"
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
                   disabled={events.length === 0}
                   onClick={() => exportToCsv(events, exportTitle ?? 'audit', true)}
                 >
@@ -1130,36 +1129,33 @@ export function AuditWithFilters({
       </div>
 
       {error && (
-        <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-3">
+        <div className="mb-3 rounded-card bg-tag-red-bg px-3 py-2 text-small text-tag-red-fg">
           {error}
         </div>
       )}
 
-      <div className="flex items-center justify-between mb-2 min-h-[20px]">
+      <div className="mb-1 flex min-h-[20px] items-center justify-between">
         {!loading && (
-          <span className="text-xs text-gray-500">
-            Showing <span className="font-medium text-gray-700">{visibleEvents.length}</span> row{visibleEvents.length !== 1 ? 's' : ''}
-            {nextCursor && <span className="text-gray-400"> · scroll to load more</span>}
+          <span className="text-caption text-fg-subtle">
+            <span className="tabular-nums">{visibleEvents.length}</span> event{visibleEvents.length !== 1 ? 's' : ''} · audit history is permanent
+            {nextCursor && <span className="text-fg-subtle"> · scroll to load more</span>}
           </span>
         )}
       </div>
 
-      <div className="flex-1 overflow-auto min-h-0 bg-white border border-[#e5e7eb] rounded">
+      <div className="min-h-0 flex-1 overflow-auto custom-scrollbar">
         {loading ? (
-          <div className="flex items-center justify-center py-8 text-gray-500">
-            <Loader2 className="h-6 w-6 animate-spin mr-2" />
+          <div className="flex items-center justify-center gap-2 py-10 text-small text-fg-muted">
+            <Loader2 className="h-4 w-4 animate-spin" />
             Loading audit log…
           </div>
         ) : events.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-8 text-gray-500">
-            <FolderLock className="h-10 w-10 text-gray-300 mb-2" />
-            <p className="text-sm">No audit events found.</p>
-          </div>
+          <EmptyPanel compact icon={<FolderLock />} title="No audit events" description="Nothing matches these filters yet." />
         ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-white border-b border-[#e5e7eb] sticky top-0">
+          <table className="w-full border-collapse text-left text-ui">
+            <thead className="sticky top-0 z-[1] border-b border-line bg-surface">
               <tr>
-                <th className="text-left py-2.5 px-3 text-[0.8125rem] font-medium text-[#45474c] w-[160px]">
+                <th className="h-8 px-2 text-small font-normal text-fg-muted first:pl-1 w-[160px]">
                   <span className="inline-flex items-center gap-1.5">
                     Date
                     <TooltipProvider>
@@ -1170,7 +1166,7 @@ export function AuditWithFilters({
                             role="switch"
                             aria-checked={showFullDate}
                             onClick={() => setShowFullDate((v) => !v)}
-                            className={`inline-flex h-4 w-7 shrink-0 items-center rounded-full transition-colors focus-visible:outline-none ${showFullDate ? 'bg-slate-600' : 'bg-gray-300'}`}
+                            className={`inline-flex h-4 w-7 shrink-0 items-center rounded-full transition-colors focus-visible:outline-none ${showFullDate ? 'bg-action' : 'bg-line-strong'}`}
                           >
                             <span className={`h-3 w-3 rounded-full bg-white shadow-sm transition-transform ${showFullDate ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
                           </button>
@@ -1180,18 +1176,18 @@ export function AuditWithFilters({
                     </TooltipProvider>
                   </span>
                 </th>
-                <th className="text-left py-2.5 px-3 text-[0.8125rem] font-medium text-[#45474c] w-[120px]">Client</th>
-                <th className="text-left py-2.5 px-3 text-[0.8125rem] font-medium text-[#45474c] w-[120px]">Engagement</th>
-                <th className="text-left py-2.5 px-3 text-[0.8125rem] font-medium text-[#45474c] w-[130px]">Event scope</th>
-                <th className="text-left py-2.5 px-3 text-[0.8125rem] font-medium text-[#45474c] w-[130px]">Event type</th>
-                <th className="text-left py-2.5 px-3 text-[0.8125rem] font-medium text-[#45474c] min-w-[80px]">Details</th>
-                <th className="text-left py-2.5 px-3 text-[0.8125rem] font-medium text-[#45474c] w-[200px]">Actor</th>
-                <th className="py-2.5 px-2 w-8 text-right">
+                {showClientProjectFilters && <th className="h-8 px-2 text-small font-normal text-fg-muted first:pl-1 w-[120px]">Client</th>}
+                {showClientProjectFilters && <th className="h-8 px-2 text-small font-normal text-fg-muted first:pl-1 w-[120px]">Engagement</th>}
+                <th className="h-8 px-2 text-small font-normal text-fg-muted first:pl-1 w-[130px]">Event scope</th>
+                <th className="h-8 px-2 text-small font-normal text-fg-muted first:pl-1 w-[130px]">Event type</th>
+                <th className="h-8 px-2 text-small font-normal text-fg-muted first:pl-1 min-w-[80px]">Details</th>
+                <th className="h-8 px-2 text-small font-normal text-fg-muted first:pl-1 w-[200px]">Actor</th>
+                <th className="h-8 w-8 px-1 text-right">
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <button
                         type="button"
-                        className={`inline-flex items-center justify-center h-6 w-6 rounded hover:bg-slate-200 transition-colors ${sortCol !== 'date' || sortDir !== 'desc' ? 'text-indigo-600' : 'text-slate-400'}`}
+                        className={`inline-flex items-center justify-center h-6 w-6 rounded hover:bg-surface-hover transition-colors ${sortCol !== 'date' || sortDir !== 'desc' ? 'text-action' : 'text-fg-subtle'}`}
                         title="Sort"
                       >
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -1199,12 +1195,11 @@ export function AuditWithFilters({
                         </svg>
                       </button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-[200px] py-1 text-xs">
-                      <DropdownMenuLabel className="text-xs uppercase tracking-wider text-slate-400 py-1">Sort by</DropdownMenuLabel>
-                      {SORT_COLS.map((c) => (
+                    <DropdownMenuContent align="end" className="w-[200px]">
+                      <DropdownMenuLabel className="py-1 text-caption font-normal text-fg-subtle">Sort by</DropdownMenuLabel>
+                      {SORT_COLS.filter((c) => showClientProjectFilters || (c.value !== 'client' && c.value !== 'project')).map((c) => (
                         <DropdownMenuCheckboxItem
                           key={c.value}
-                          className="text-xs"
                           checked={sortCol === c.value}
                           onCheckedChange={() => setSortCol(c.value)}
                         >
@@ -1212,16 +1207,14 @@ export function AuditWithFilters({
                         </DropdownMenuCheckboxItem>
                       ))}
                       <DropdownMenuSeparator />
-                      <DropdownMenuLabel className="text-xs uppercase tracking-wider text-slate-400 py-1">Sort direction</DropdownMenuLabel>
+                      <DropdownMenuLabel className="py-1 text-caption font-normal text-fg-subtle">Sort direction</DropdownMenuLabel>
                       <DropdownMenuCheckboxItem
-                        className="text-xs"
                         checked={sortDir === 'desc'}
                         onCheckedChange={() => setSortDir('desc')}
                       >
                         {sortCol === 'date' ? 'Newest first' : 'Z to A'}
                       </DropdownMenuCheckboxItem>
                       <DropdownMenuCheckboxItem
-                        className="text-xs"
                         checked={sortDir === 'asc'}
                         onCheckedChange={() => setSortDir('asc')}
                       >
@@ -1232,38 +1225,42 @@ export function AuditWithFilters({
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#e5e7eb]">
+            <tbody>
               {visibleEvents.map((ev) => (
-                <tr key={ev.id} className="hover:bg-[#f9f9fb] transition-colors">
-                  <td className="py-2.5 px-3 whitespace-nowrap">
+                <tr key={ev.id} className="h-9 border-b border-line transition-colors hover:bg-surface-hover">
+                  <td className="px-2 py-1 first:pl-1 whitespace-nowrap">
                     <TooltipProvider>
                       <RelativeDateTime
                         date={ev.eventAt}
                         displayFormat={showFullDate ? 'verbose' : 'short'}
                         tooltipSide="right"
-                        textClassName="text-[#45474c] text-[0.8125rem]"
+                        textClassName="text-fg-muted text-ui"
                       />
                     </TooltipProvider>
                   </td>
-                  <td className="py-2.5 px-3 text-[#45474c] text-[0.8125rem] max-w-[120px] truncate" title={ev.clientName ?? ''}>
-                    {ev.clientName ?? '—'}
-                  </td>
-                  <td className="py-2.5 px-3 text-[#45474c] text-[0.8125rem] max-w-[120px] truncate" title={ev.projectName ?? ''}>
-                    {ev.projectName ?? '—'}
-                  </td>
-                  <td className="py-2.5 px-3">
+                  {showClientProjectFilters && (
+                    <>
+                      <td className="max-w-[120px] truncate px-2 py-1 text-fg-muted" title={ev.clientName ?? ''}>
+                        {ev.clientName ?? '—'}
+                      </td>
+                      <td className="max-w-[120px] truncate px-2 py-1 text-fg-muted" title={ev.projectName ?? ''}>
+                        {ev.projectName ?? '—'}
+                      </td>
+                    </>
+                  )}
+                  <td className="px-2 py-1 first:pl-1">
                     <div className="flex items-center gap-2">
                       <EventIcon eventType={ev.eventType} />
-                      <span className="text-[#45474c] text-[0.8125rem]">{eventScope(ev.eventType)}</span>
+                      <span className="text-fg-muted text-ui">{eventScope(ev.eventType)}</span>
                     </div>
                   </td>
-                  <td className="py-2.5 px-3">
-                    <span className="font-medium text-[#1b1b1d] text-[0.8125rem]">{eventAction(ev.eventType)}</span>
+                  <td className="px-2 py-1 first:pl-1">
+                    <span className="text-fg">{eventAction(ev.eventType)}</span>
                   </td>
-                  <td className="py-2.5 px-3 text-[0.8125rem]">
+                  <td className="px-2 py-1 first:pl-1 text-ui">
                     <DetailCell ev={ev} />
                   </td>
-                  <td className="py-2.5 px-3 text-[0.8125rem]">
+                  <td className="px-2 py-1 first:pl-1 text-ui">
                     {ev.actorUserId ? (
                       <div className="flex items-center gap-1.5">
                         <UserAvatarWithTooltip
@@ -1271,21 +1268,21 @@ export function AuditWithFilters({
                           email={ev.actorEmail ?? undefined}
                           avatarSize="sm"
                         />
-                        <span className="text-[#45474c] truncate max-w-[160px]">{ev.actorName || ev.actorEmail || 'Unknown'}</span>
+                        <span className="text-fg-muted truncate max-w-[160px]">{ev.actorName || ev.actorEmail || 'Unknown'}</span>
                       </div>
                     ) : (
-                      <span className="text-gray-400 italic">System</span>
+                      <span className="text-fg-subtle">System</span>
                     )}
                   </td>
-                  <td className="py-2.5 px-2" />
+                  <td className="px-1" />
                 </tr>
               ))}
             </tbody>
           </table>
         )}
 
-        <div ref={sentinelRef} className="flex items-center justify-center py-3 border-t border-[#e5e7eb]">
-          {loadingMore && <Loader2 className="h-4 w-4 animate-spin text-gray-400" />}
+        <div ref={sentinelRef} className="flex items-center justify-center py-3">
+          {loadingMore && <Loader2 className="h-4 w-4 animate-spin text-fg-subtle" />}
         </div>
       </div>
     </div>

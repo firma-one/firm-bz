@@ -48,14 +48,14 @@ function SortablePage({ page, selectedId, canEdit, onSelect, onDelete }: {
         <div
             ref={setNodeRef}
             style={{ transform: CSS.Transform.toString(transform), transition }}
-            className={cn('group flex items-center gap-1 pl-7 pr-3 py-1', isDragging && 'opacity-50 bg-slate-100 rounded')}
+            className={cn('group flex items-center gap-1 pl-7 pr-3 py-1', isDragging && 'opacity-50 bg-surface-muted rounded')}
         >
             {canEdit && (
                 <button
                     type="button"
                     {...attributes}
                     {...listeners}
-                    className="opacity-0 group-hover:opacity-100 p-0.5 text-slate-300 hover:text-slate-500 cursor-grab active:cursor-grabbing transition-opacity shrink-0"
+                    className="opacity-0 group-hover:opacity-100 p-0.5 text-fg-subtle hover:text-fg-muted cursor-grab active:cursor-grabbing transition-opacity shrink-0"
                     tabIndex={-1}
                 >
                     <GripVertical className="h-3 w-3" />
@@ -67,8 +67,8 @@ function SortablePage({ page, selectedId, canEdit, onSelect, onDelete }: {
                 className={cn(
                     'flex-1 text-left text-[12px] truncate transition-colors',
                     selectedId === page.id
-                        ? 'font-semibold text-slate-900'
-                        : 'text-slate-500 hover:text-slate-800'
+                        ? 'font-semibold text-fg'
+                        : 'text-fg-muted hover:text-fg'
                 )}
             >
                 {page.title}
@@ -78,7 +78,7 @@ function SortablePage({ page, selectedId, canEdit, onSelect, onDelete }: {
                     type="button"
                     onClick={() => onDelete(page)}
                     title="Delete page"
-                    className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-opacity shrink-0"
+                    className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-rose-50 text-fg-subtle hover:text-rose-600 transition-opacity shrink-0"
                 >
                     <Trash2 className="h-3 w-3" />
                 </button>
@@ -147,16 +147,16 @@ export function WikiSidebar({ pages, selectedId, canEdit, onSelect, onNewSection
     }
 
     return (
-        <div className="flex flex-col h-full border-r border-slate-200 bg-slate-50/60">
+        <div className="flex flex-col h-full border-r border-line bg-slate-50/60">
             {/* Header */}
-            <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
-                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Pages</span>
+            <div className="px-4 py-3 border-b border-line flex items-center justify-between">
+                <span className="text-[11px] font-bold text-fg-muted uppercase tracking-wider">Pages</span>
                 {canEdit && (
                     <button
                         type="button"
                         onClick={onNewSection}
                         title="New section"
-                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-500 hover:text-slate-800 transition-colors"
+                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-fg-muted hover:text-fg transition-colors"
                     >
                         <Plus className="h-3.5 w-3.5" />
                         Section
@@ -167,7 +167,7 @@ export function WikiSidebar({ pages, selectedId, canEdit, onSelect, onNewSection
             {/* Tree */}
             <div className="flex-1 overflow-y-auto py-2">
                 {sections.length === 0 && (
-                    <p className="px-4 py-6 text-xs text-slate-400 text-center">No sections yet</p>
+                    <p className="px-4 py-6 text-xs text-fg-subtle text-center">No sections yet</p>
                 )}
                 {sections.map((section) => {
                     const children = childrenOf(section.id)
@@ -180,7 +180,7 @@ export function WikiSidebar({ pages, selectedId, canEdit, onSelect, onNewSection
                                 <button
                                     type="button"
                                     onClick={() => toggleSection(section.id)}
-                                    className="p-0.5 text-slate-400 hover:text-slate-600 shrink-0"
+                                    className="p-0.5 text-fg-subtle hover:text-fg-muted shrink-0"
                                 >
                                     <ChevronRight className={cn('h-3.5 w-3.5 transition-transform', isOpen && 'rotate-90')} />
                                 </button>
@@ -192,12 +192,12 @@ export function WikiSidebar({ pages, selectedId, canEdit, onSelect, onNewSection
                                         onChange={(e) => setEditingTitle(e.target.value)}
                                         onBlur={commitEdit}
                                         onKeyDown={handleKeyDown}
-                                        className="flex-1 min-w-0 text-[11px] font-bold uppercase tracking-wider text-slate-700 bg-white border border-slate-300 rounded px-1 py-0 outline-none focus:border-slate-500"
+                                        className="flex-1 min-w-0 text-[11px] font-bold uppercase tracking-wider text-fg-muted bg-white border border-line-strong rounded px-1 py-0 outline-none focus:border-slate-500"
                                     />
                                 ) : (
                                     <span
                                         onClick={() => toggleSection(section.id)}
-                                        className="flex-1 min-w-0 text-left text-[11px] font-bold uppercase tracking-wider truncate text-slate-500 cursor-pointer select-none"
+                                        className="flex-1 min-w-0 text-left text-[11px] font-bold uppercase tracking-wider truncate text-fg-muted cursor-pointer select-none"
                                     >
                                         {section.title}
                                     </span>
@@ -209,7 +209,7 @@ export function WikiSidebar({ pages, selectedId, canEdit, onSelect, onNewSection
                                             type="button"
                                             onClick={() => startEdit(section)}
                                             title="Rename section"
-                                            className="p-1 rounded hover:bg-slate-200 text-slate-400 hover:text-slate-700"
+                                            className="p-1 rounded hover:bg-surface-hover text-fg-subtle hover:text-fg-muted"
                                         >
                                             <Pencil className="h-3 w-3" />
                                         </button>
@@ -217,7 +217,7 @@ export function WikiSidebar({ pages, selectedId, canEdit, onSelect, onNewSection
                                             type="button"
                                             onClick={() => onNewPage(section.id)}
                                             title="Add page"
-                                            className="p-1 rounded hover:bg-slate-200 text-slate-400 hover:text-slate-700"
+                                            className="p-1 rounded hover:bg-surface-hover text-fg-subtle hover:text-fg-muted"
                                         >
                                             <Plus className="h-3 w-3" />
                                         </button>
@@ -225,7 +225,7 @@ export function WikiSidebar({ pages, selectedId, canEdit, onSelect, onNewSection
                                             type="button"
                                             onClick={() => onDelete(section)}
                                             title="Delete section"
-                                            className="p-1 rounded hover:bg-rose-50 text-slate-400 hover:text-rose-600"
+                                            className="p-1 rounded hover:bg-rose-50 text-fg-subtle hover:text-rose-600"
                                         >
                                             <Trash2 className="h-3 w-3" />
                                         </button>
@@ -258,7 +258,7 @@ export function WikiSidebar({ pages, selectedId, canEdit, onSelect, onNewSection
                                 <button
                                     type="button"
                                     onClick={() => onNewPage(section.id)}
-                                    className="flex items-center gap-1.5 pl-7 pr-3 py-1 text-[11px] text-slate-400 hover:text-slate-600 transition-colors w-full"
+                                    className="flex items-center gap-1.5 pl-7 pr-3 py-1 text-[11px] text-fg-subtle hover:text-fg-muted transition-colors w-full"
                                 >
                                     <Plus className="h-3 w-3" />
                                     Add page

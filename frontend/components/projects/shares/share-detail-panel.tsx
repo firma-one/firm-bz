@@ -57,14 +57,14 @@ export function ShareDetailPanel({
         style={{ width: '100%' }}
       >
         <header className="flex items-center justify-between gap-2 px-4 py-3 border-b border-slate-200/60 bg-slate-50/80 shrink-0 rounded-t-2xl">
-          <h2 className="text-sm font-semibold text-slate-900 truncate flex-1 min-w-0" title={title}>
+          <h2 className="text-sm font-semibold text-fg truncate flex-1 min-w-0" title={title}>
             {title}
           </h2>
           <div className="flex items-center gap-1 shrink-0">
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 rounded-lg text-slate-500 hover:text-slate-700 hover:bg-slate-200/80"
+              className="h-8 w-8 rounded-lg text-fg-muted hover:text-fg-muted hover:bg-slate-200/80"
               onClick={onExpand}
               title="Expand to full screen"
             >
@@ -73,7 +73,7 @@ export function ShareDetailPanel({
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 rounded-lg text-slate-500 hover:text-slate-700 hover:bg-slate-200/80"
+              className="h-8 w-8 rounded-lg text-fg-muted hover:text-fg-muted hover:bg-slate-200/80"
               onClick={onClose}
               title="Close"
             >
@@ -93,14 +93,14 @@ export function ShareDetailPanel({
         style={{ visibility: isExpanded ? 'visible' : 'hidden' }}
       >
         <header className="flex items-center justify-between gap-4 px-6 py-4 border-b border-slate-200/60 bg-slate-50/80 shrink-0">
-          <h2 className="text-lg font-semibold text-slate-900 truncate flex-1 min-w-0" title={title}>
+          <h2 className="text-lg font-semibold text-fg truncate flex-1 min-w-0" title={title}>
             {title}
           </h2>
           <div className="flex items-center gap-2 shrink-0">
             <Button
               variant="outline"
               size="sm"
-              className="rounded-xl border-slate-200 text-slate-600 hover:bg-slate-100"
+              className="rounded-xl border-line text-fg-muted hover:bg-surface-hover"
               onClick={onCollapse}
               title="Collapse to side panel"
             >
@@ -110,7 +110,7 @@ export function ShareDetailPanel({
             <Button
               variant="ghost"
               size="icon"
-              className="h-9 w-9 rounded-xl text-slate-500 hover:text-slate-700 hover:bg-slate-200/80"
+              className="h-9 w-9 rounded-xl text-fg-muted hover:text-fg-muted hover:bg-slate-200/80"
               onClick={onClose}
               title="Close"
             >

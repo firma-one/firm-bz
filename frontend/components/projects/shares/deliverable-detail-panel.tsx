@@ -19,7 +19,7 @@ import {
   CheckCircle, PenLine, Eye, ListTodo, Loader2,
   Folder, MoreVertical,
   Info, MessagesSquare, Settings as SettingsIcon,
-  UserPlus, ChevronDown, X, ScanEye, FolderOpen,
+  UserPlus, ChevronDown, X, ScanEye, FolderOpen, Check, CircleDot, CalendarClock,
 } from 'lucide-react'
 import {
   DropdownMenu,
@@ -31,6 +31,10 @@ import {
 import { DocumentIcon } from '@/components/ui/document-icon'
 import { DocumentActionMenu } from '@/components/ui/document-action-menu'
 import { DateTimePicker } from '@/components/ui/date-time-picker'
+import { Button } from '@/components/ui/button'
+import { StatusPill } from '@/components/ui/tag'
+import { PropertyList, PropertyRow } from '@/components/ui/property-list'
+import { DateProperty, PersonAvatar } from '@/components/ui/property-cells'
 import type { ActivityStatus } from '@/lib/sharing-settings'
 import { getAllowedTransitions, type EngagementRoleSlug } from '@/lib/deliverable-stage-roles'
 
@@ -116,22 +120,10 @@ const STAGE_ICON: Record<ActivityStatus, React.ReactNode> = {
   approved: <CheckCircle className="h-3.5 w-3.5" />,
 }
 
-const STAGE_COLOR: Record<ActivityStatus, string> = {
-  to_do: 'bg-[#f3b52f] text-white',
-  in_progress: 'bg-[#3b5bfd] text-white',
-  in_review: 'bg-[#7c3aed] text-white',
-  approved: 'bg-[#0d9f5f] text-white',
-}
+const FIELD_LABEL = 'block mb-1.5 text-small font-medium text-fg-muted'
 
-
-const FIELD_LABEL = 'font-mono text-[9px] font-bold uppercase tracking-widest text-[#45474c] block mb-1.5'
-
-const STAGE_ICON_SMALL: Record<ActivityStatus, React.ReactNode> = {
-  to_do: <ListTodo className="h-3 w-3" />,
-  in_progress: <PenLine className="h-3 w-3" />,
-  in_review: <Eye className="h-3 w-3" />,
-  approved: <CheckCircle className="h-3 w-3" />,
-}
+/** Inline property chip: plain text until hovered (Notion). */
+const CHIP = 'inline-flex h-7 items-center gap-1.5 rounded-control px-1.5 text-small text-fg-muted transition-colors hover:bg-surface-selected hover:text-fg data-[state=open]:bg-surface-selected disabled:cursor-not-allowed disabled:opacity-50'
 
 // ─── Subtask Row ─────────────────────────────────────────────────────────────
 
@@ -261,14 +253,14 @@ function SubtaskRow({
   }
 
   return (
-    <div className="group py-2 px-3 rounded hover:bg-[#f9f9fb] transition-colors">
-      <div className="flex items-center gap-2.5">
+    <div className="group px-4 py-1 transition-colors hover:bg-surface-hover">
+      <div className="flex min-h-8 items-center gap-2">
         <DocumentIcon mimeType={subtask.mimeType ?? undefined} className="h-3.5 w-3.5 shrink-0" size={14} />
         {subtask.docId && (
-          <span className="font-mono text-xs font-bold text-[#45474c] shrink-0">{subtask.docId}</span>
+          <span className="shrink-0 text-small tabular-nums text-fg-subtle">{subtask.docId}</span>
         )}
         {showExtras && (
-          <span className="flex-1 min-w-0 truncate text-xs text-[#1b1b1d]">{subtask.fileName}</span>
+          <span className="min-w-0 flex-1 truncate text-ui text-fg">{subtask.fileName}</span>
         )}
         {!showExtras && <span className="flex-1 min-w-0" />}
         {/* Expand toggle */}
@@ -276,10 +268,10 @@ function SubtaskRow({
           <button
             type="button"
             onClick={onToggleExpand}
-            className="shrink-0 text-[#9a9ba0] hover:text-[#45474c] transition-colors p-0.5"
+            className="shrink-0 rounded-control p-1 text-fg-subtle transition-colors hover:bg-surface-selected hover:text-fg"
             title={expanded ? 'Collapse' : 'Expand'}
           >
-            <ChevronDown className={cn('h-3 w-3 transition-transform duration-300 ease-in-out', expanded && 'rotate-180')} />
+            <ChevronDown className={cn('h-3.5 w-3.5 transition-transform duration-200', expanded && 'rotate-180')} />
           </button>
         )}
         <TooltipProvider delayDuration={300}>
@@ -290,10 +282,10 @@ function SubtaskRow({
                 <button
                   type="button"
                   onClick={() => onPreviewDocument(subtask)}
-                  className="shrink-0 h-7 w-7 rounded-md inline-flex items-center justify-center text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-control text-fg-subtle transition-colors hover:bg-surface-selected hover:text-fg"
                   aria-label="Preview"
                 >
-                  <ScanEye className="h-4 w-4" />
+                  <ScanEye className="h-3.5 w-3.5" />
                 </button>
               </TooltipTrigger>
               <TooltipContent side="top" className="text-xs">Preview</TooltipContent>
@@ -307,24 +299,17 @@ function SubtaskRow({
                   href={fileUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="shrink-0 h-7 w-7 rounded-md inline-flex items-center justify-center text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-control text-fg-subtle transition-colors hover:bg-surface-selected hover:text-fg"
                   aria-label="Open in Files"
                 >
-                  <FolderOpen className="h-4 w-4" />
+                  <FolderOpen className="h-3.5 w-3.5" />
                 </a>
               </TooltipTrigger>
               <TooltipContent side="top" className="text-xs">Open in Files</TooltipContent>
             </Tooltip>
           )}
           {/* Stage badge */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className={cn('flex items-center justify-center h-5 w-5 rounded shrink-0', STAGE_COLOR[status])}>
-                {STAGE_ICON_SMALL[status]}
-              </span>
-            </TooltipTrigger>
-            <TooltipContent side="top" className="text-xs">{STAGE_LABELS[status]}</TooltipContent>
-          </Tooltip>
+          <StatusPill kind="deliverable" status={status} className="shrink-0" />
         </TooltipProvider>
         <div className="shrink-0">
           <DocumentActionMenu
@@ -346,14 +331,14 @@ function SubtaskRow({
         <div className="overflow-hidden">
         <>
           {/* Row 2 — breadcrumb */}
-          <div className="flex items-center gap-1 mt-0.5 pl-6 min-w-0 overflow-hidden">
+          <div className="flex min-w-0 items-center gap-1 overflow-hidden pl-6">
             {subtask.breadcrumb && subtask.breadcrumb.length > 0 && (
               <>
-                <Folder className="h-2.5 w-2.5 shrink-0 stroke-slate-400 stroke-[1.5] fill-slate-200" aria-hidden />
+                <Folder className="h-3 w-3 shrink-0 fill-surface-muted text-fg-subtle" aria-hidden />
                 {subtask.breadcrumb.map((segment, i) => (
                   <span key={i} className="flex items-center gap-1 min-w-0">
-                    {i > 0 && <span className="text-[#c8c9cc] text-xs shrink-0">/</span>}
-                    <span className={cn('text-xs text-slate-500 shrink-0', i === subtask.breadcrumb!.length - 1 && 'truncate min-w-0')}>
+                    {i > 0 && <span className="shrink-0 text-small text-fg-subtle">/</span>}
+                    <span className={cn('shrink-0 text-small text-fg-muted', i === subtask.breadcrumb!.length - 1 && 'min-w-0 truncate')}>
                       {segment}
                     </span>
                   </span>
@@ -363,28 +348,22 @@ function SubtaskRow({
           </div>
 
           {/* Row 3 — Status · Assignee · Due Date (uniform w-40) */}
-          <div className="flex items-end gap-2 mt-1.5 pl-6">
+          <div className="flex flex-wrap items-center gap-0.5 pb-1 pl-5">
             {/* Status */}
-            <div className="flex flex-col gap-1">
-              <span className={FIELD_LABEL}>Status</span>
+            <div className="flex">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
                     disabled={saving || disabled}
-                    className={cn(
-                      'w-40 flex items-center gap-1.5 h-9 px-2 rounded border border-[#e5e7eb] bg-white text-[10px] font-bold font-mono uppercase tracking-widest text-[#45474c] hover:bg-[#f9f9fb] transition-colors data-[state=open]:bg-[#f9f9fb] disabled:opacity-50 disabled:cursor-not-allowed',
-                      disabled && 'pointer-events-none'
-                    )}
+                    aria-label="Document status"
+                    className={cn(CHIP, disabled && 'pointer-events-none')}
                   >
-                    <span className={cn('flex items-center justify-center h-5 w-5 rounded shrink-0', STAGE_COLOR[status])}>
-                      {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : STAGE_ICON_SMALL[status]}
-                    </span>
-                    <span className="flex-1 text-left">{STAGE_LABELS[status]}</span>
-                    <ChevronDown className="h-2.5 w-2.5 shrink-0 ml-auto" />
+                    <StatusPill kind="deliverable" status={status} />
+                    {saving && <Loader2 className="h-3 w-3 animate-spin" />}
                   </button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-48 text-xs">
+                <DropdownMenuContent align="start" className="w-48">
                   {(Object.keys(STAGE_LABELS) as ActivityStatus[]).map((s, i) => {
                     const currentIdx = (Object.keys(STAGE_LABELS) as ActivityStatus[]).indexOf(status)
                     const isDisabled = Math.abs(i - currentIdx) > 1
@@ -393,17 +372,10 @@ function SubtaskRow({
                         key={s}
                         onClick={() => !isDisabled && handleStatusChange(s)}
                         disabled={isDisabled}
-                        className={cn(
-                          'flex items-center gap-2 text-xs cursor-pointer',
-                          s === status && 'bg-primary/5',
-                          isDisabled && 'opacity-40 cursor-not-allowed',
-                        )}
+                        className={cn('flex cursor-pointer items-center gap-2', isDisabled && 'cursor-not-allowed opacity-40')}
                       >
-                        <span className={cn('flex items-center justify-center h-5 w-5 rounded shrink-0', STAGE_COLOR[s])}>
-                          {STAGE_ICON_SMALL[s]}
-                        </span>
-                        <span className="flex-1">{STAGE_LABELS[s]}</span>
-                        {s === status && <CheckCircle className="h-3 w-3 ml-auto shrink-0 text-primary" />}
+                        <StatusPill kind="deliverable" status={s} />
+                        {s === status && <Check className="ml-auto h-3.5 w-3.5 shrink-0 text-fg-muted" />}
                       </DropdownMenuItem>
                     )
                   })}
@@ -412,9 +384,8 @@ function SubtaskRow({
             </div>
 
             {/* Assignee */}
-            <div className="flex flex-col gap-1">
-              <span className={FIELD_LABEL}>Assignee</span>
-              <div className="flex items-center w-40 rounded border border-[#e5e7eb] bg-white overflow-hidden">
+            <div className="flex">
+              <div className="flex items-center">
               <TooltipProvider delayDuration={400}>
                 <Tooltip>
                   <DropdownMenu>
@@ -423,33 +394,26 @@ function SubtaskRow({
                         <button
                           type="button"
                           disabled={isDeliverableApproved}
-                          className={cn(
-                            'flex-1 min-w-0 flex items-center gap-1.5 h-9 px-2 text-[10px] transition-colors bg-white text-[#45474c] hover:bg-[#f9f9fb]',
-                            isDeliverableApproved && 'opacity-50 cursor-not-allowed pointer-events-none'
-                          )}
+                          aria-label="Assignee"
+                          className={cn(CHIP, 'max-w-[160px]', isDeliverableApproved && 'pointer-events-none opacity-50')}
                         >
                           {savingAssignee ? (
                             <Loader2 className="h-3 w-3 animate-spin shrink-0" />
                           ) : subtask.assigneeUserId ? (
                             <>
-                              <span className="h-5 w-5 rounded bg-primary/20 text-primary flex items-center justify-center text-[8px] font-bold shrink-0">
-                                {subtask.assigneeName
-                                  ? subtask.assigneeName.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()
-                                  : '?'}
-                              </span>
-                              <span className="font-bold font-mono uppercase tracking-widest truncate flex-1 text-left">{subtask.assigneeName?.split(' ')[0] ?? 'ASSIGNED'}</span>
+                              <PersonAvatar person={{ name: subtask.assigneeName ?? '?', avatarUrl: subtask.assigneeAvatarUrl }} size={18} />
+                              <span className="truncate text-fg">{subtask.assigneeName ?? 'Assigned'}</span>
                             </>
                           ) : (
                             <>
-                              <UserPlus className="h-3 w-3 shrink-0" />
-                              <span className="font-bold font-mono uppercase tracking-widest flex-1 text-left">Assign</span>
-                              <ChevronDown className="h-2.5 w-2.5 shrink-0 ml-auto" />
+                              <UserPlus className="h-3.5 w-3.5 shrink-0" />
+                              <span>Assign</span>
                             </>
                           )}
                         </button>
                       </DropdownMenuTrigger>
                     </TooltipTrigger>
-                    <DropdownMenuContent align="start" className="w-52 text-xs">
+                    <DropdownMenuContent align="start" className="w-52">
                       {/* Agents are excluded: Brio is a member and belongs in the Members list,
                           but assigning it a subtask would park the work with something that will
                           never pick it up. */}
@@ -457,14 +421,12 @@ function SubtaskRow({
                         <DropdownMenuItem
                           key={m.userId}
                           onClick={() => handleAssigneeSelect(m)}
-                          className={cn('flex items-center gap-2 text-xs cursor-pointer', m.userId === subtask.assigneeUserId && 'bg-primary/5')}
+                          className="flex cursor-pointer items-center gap-2"
                         >
                           <TooltipProvider delayDuration={400}>
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <span className="h-5 w-5 rounded bg-primary/10 text-primary flex items-center justify-center text-[9px] font-bold shrink-0">
-                                  {(m.name ?? m.email ?? '?').slice(0, 2).toUpperCase()}
-                                </span>
+                                <span className="shrink-0"><PersonAvatar person={{ name: m.name ?? m.email ?? '?', avatarUrl: m.avatarUrl ?? null }} size={20} /></span>
                               </TooltipTrigger>
                               <TooltipContent side="left" className="text-xs">
                                 {m.name ?? m.userId}
@@ -473,7 +435,7 @@ function SubtaskRow({
                             </Tooltip>
                           </TooltipProvider>
                           <span className="truncate">{m.name ?? m.email ?? m.userId}</span>
-                          {m.userId === subtask.assigneeUserId && <CheckCircle className="h-3 w-3 ml-auto shrink-0 text-primary" />}
+                          {m.userId === subtask.assigneeUserId && <Check className="ml-auto h-3.5 w-3.5 shrink-0 text-fg-muted" />}
                         </DropdownMenuItem>
                       ))}
                     </DropdownMenuContent>
@@ -490,7 +452,8 @@ function SubtaskRow({
                 <button
                   type="button"
                   onClick={() => handleAssigneeSelect(null)}
-                  className="shrink-0 h-9 px-1.5 text-[#9a9ba0] hover:text-[#45474c] hover:bg-[#f9f9fb] transition-colors border-l border-[#e5e7eb]"
+                  aria-label="Unassign"
+                  className="inline-flex h-7 w-6 shrink-0 items-center justify-center rounded-control text-fg-subtle transition-colors hover:bg-surface-selected hover:text-fg"
                 >
                   <X className="h-3 w-3" />
                 </button>
@@ -499,19 +462,15 @@ function SubtaskRow({
             </div>{/* end assignee flex-col wrapper */}
 
             {/* Due Date */}
-            <div className="flex flex-col gap-1">
-              <span className={FIELD_LABEL}>Due Date</span>
-              <div className="flex items-center gap-1">
-                {savingSubtaskDue && <Loader2 className="h-2.5 w-2.5 animate-spin text-[#9a9ba0]" />}
-                <div className="w-40">
-                  <DateTimePicker
-                    value={subtaskDueDate}
-                    onChange={(iso) => handleSubtaskDueDateChange(iso)}
-                    placeholder="SET DUE DATE"
-                    disabled={isDeliverableApproved}
-                  />
-                </div>
-              </div>
+            <div className="flex items-center gap-1">
+              <DateTimePicker
+                value={subtaskDueDate}
+                onChange={(iso) => handleSubtaskDueDateChange(iso)}
+                placeholder="Due date"
+                disabled={isDeliverableApproved}
+                className="h-7 w-auto border-transparent bg-transparent px-1.5 text-small shadow-none hover:bg-surface-selected"
+              />
+              {savingSubtaskDue && <Loader2 className="h-3 w-3 animate-spin text-fg-subtle" />}
             </div>
           </div>{/* end row-3 flex */}
         </>
@@ -539,7 +498,7 @@ function ToggleRow({
 }) {
   return (
     <div className={cn('flex items-center justify-between py-2', indent && 'pl-4')}>
-      <span className="text-xs text-[#45474c]">{label}</span>
+      <span className="text-ui text-fg">{label}</span>
       <Switch checked={checked} onCheckedChange={onCheckedChange} disabled={disabled} />
     </div>
   )
@@ -788,21 +747,17 @@ export function DeliverableDetailPanel({
   ]
 
   return (
-    <div className={cn('flex flex-col h-full overflow-hidden bg-white', className)}>
+    <div className={cn('flex flex-col h-full overflow-hidden bg-surface', className)}>
 
-      {/* Stage badge row */}
-      <div className="px-4 py-2.5 border-b border-[#e5e7eb] flex items-center gap-2">
+      {/* Properties (Linear issue peek): status and due date as label → value rows */}
+      <div className="shrink-0 px-4 py-2">
+       <PropertyList>
+        <PropertyRow label="Status" icon={<CircleDot />}>
         {canManage && status !== 'approved' ? (
           <Select value={status} onValueChange={(v) => handleMoveToNext(v as ActivityStatus)} disabled={movingStatus}>
-            <SelectTrigger className="h-9 border border-[#e5e7eb] bg-white shadow-none px-2 py-0 text-[10px] font-bold font-mono uppercase tracking-widest w-40 gap-1.5 rounded text-[#45474c] flex flex-row items-center focus:ring-0 focus:ring-offset-0 data-[state=open]:bg-[#f9f9fb]">
-              {movingStatus ? (
-                <Loader2 className="h-3 w-3 animate-spin shrink-0" />
-              ) : (
-                <span className={cn('flex items-center justify-center h-5 w-5 rounded shrink-0', STAGE_COLOR[status])}>
-                  {STAGE_ICON_SMALL[status]}
-                </span>
-              )}
-              {STAGE_LABELS[status]}
+            <SelectTrigger aria-label="Deliverable status" className="h-7 w-auto gap-1.5 border-transparent bg-transparent px-1.5 shadow-none hover:bg-surface-hover focus:ring-0 data-[state=open]:bg-surface-hover">
+              <StatusPill kind="deliverable" status={status} />
+              {movingStatus && <Loader2 className="h-3 w-3 shrink-0 animate-spin text-fg-subtle" />}
             </SelectTrigger>
             <SelectContent className="min-w-[200px]">
               {(['to_do', 'in_progress', 'in_review', 'approved'] as ActivityStatus[]).map((s, i) => {
@@ -814,19 +769,15 @@ export function DeliverableDetailPanel({
                   <SelectItem
                     key={s}
                     value={s}
-                    className="text-xs"
                     disabled={isDisabled}
                     endAdornment={approvalBlocked ? (
-                      <span className="text-[9px] font-medium text-[#9a9ba0] whitespace-nowrap">
+                      <span className="whitespace-nowrap text-caption text-fg-subtle">
                         {unapprovedCount} of {subtasks.length} pending
                       </span>
                     ) : undefined}
                   >
-                    <span className={cn('flex items-center gap-1.5', isDisabled && !approvalBlocked && 'opacity-40')}>
-                      <span className={cn('flex items-center justify-center h-5 w-5 rounded shrink-0', STAGE_COLOR[s])}>
-                        {STAGE_ICON_SMALL[s]}
-                      </span>
-                      {STAGE_LABELS[s]}
+                    <span className={cn('flex items-center', isDisabled && !approvalBlocked && 'opacity-40')}>
+                      <StatusPill kind="deliverable" status={s} />
                     </span>
                   </SelectItem>
                 )
@@ -835,66 +786,64 @@ export function DeliverableDetailPanel({
           </Select>
         ) : (
           <>
-            <span className="inline-flex items-center gap-1.5 h-9 px-2 rounded border border-[#e5e7eb] bg-white text-[10px] font-bold font-mono uppercase tracking-widest text-[#45474c]">
-              <span className={cn('flex items-center justify-center h-5 w-5 rounded shrink-0', STAGE_COLOR[status])}>
-                {STAGE_ICON_SMALL[status]}
-              </span>
-              {STAGE_LABELS[status]}
+            <span className="inline-flex h-7 items-center px-1.5">
+              <StatusPill kind="deliverable" status={status} />
             </span>
             {/* Single-option action button for restricted roles (EC, EV, EM) */}
             {allowedTransitions.length === 1 && (() => {
               const target = allowedTransitions[0]
               const isForward = ['to_do', 'in_progress', 'in_review', 'approved'].indexOf(target) >
                                 ['to_do', 'in_progress', 'in_review', 'approved'].indexOf(status)
-              const label = isForward ? 'Submit for Review' : 'Request Changes'
-              const cls = isForward
-                ? 'border-[#a5b4fc] bg-[#eef2ff] text-[#3730a3] hover:bg-[#e0e7ff]'
-                : 'border-[#fca5a5] bg-[#fff1f2] text-[#b91c1c] hover:bg-[#fee2e2]'
+              const label = isForward ? 'Submit for review' : 'Request changes'
               return (
-                <button
+                <Button
                   type="button"
+                  size="sm"
+                  variant={isForward ? 'default' : 'outline'}
                   onClick={() => handleMoveToNext(target)}
                   disabled={movingStatus}
-                  className={cn('inline-flex items-center gap-1.5 h-7 px-2.5 rounded border text-[10px] font-bold font-mono uppercase tracking-widest disabled:opacity-50 transition-colors', cls)}
+                  className="ml-1"
                 >
-                  {movingStatus && <Loader2 className="h-3 w-3 animate-spin shrink-0" />}
+                  {movingStatus && <Loader2 className="h-3 w-3 shrink-0 animate-spin" />}
                   {label}
-                </button>
+                </Button>
               )
             })()}
           </>
         )}
-        <div className="flex items-center gap-2">
-          {savingDueDate && <Loader2 className="h-3 w-3 animate-spin text-[#9a9ba0]" />}
-          <div className="w-40">
-            <DateTimePicker
-              value={deliverableDueDate}
-              onChange={(iso) => {
-                setDeliverableDueDate(iso)
-                handleDueDateChange(iso ? iso.slice(0, 10) : '', documentId)
-              }}
-              placeholder="SET DUE DATE"
-              disabled={isApproved}
-            />
-          </div>
-        </div>
-        {savingOptions && <Loader2 className="h-3 w-3 animate-spin text-[#9a9ba0]" />}
+          {savingOptions && <Loader2 className="ml-1 h-3 w-3 animate-spin text-fg-subtle" />}
+        </PropertyRow>
+        <PropertyRow label="Due" icon={<CalendarClock />}>
+          {/* The route stores a date, not a time — so a date picker, not the date-time one. */}
+          <DateProperty
+            value={deliverableDueDate || null}
+            placeholder="Empty"
+            disabled={isApproved}
+            highlightOverdue={!isApproved}
+            onChange={async (day) => {
+              setDeliverableDueDate(day ?? '')
+              await handleDueDateChange(day ?? '', documentId)
+            }}
+          />
+          {savingDueDate && <Loader2 className="h-3 w-3 animate-spin text-fg-subtle" />}
+        </PropertyRow>
+       </PropertyList>
       </div>
 
       {/* Tab bar */}
-      <div className="flex border-b border-[#e5e7eb] shrink-0">
+      <div className="flex shrink-0 gap-4 border-b border-line px-4">
         {TABS.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
             className={cn(
-              'inline-flex items-center px-4 py-2.5 text-xs font-medium border-b-2 -mb-px transition-all',
+              '-mb-px inline-flex h-9 items-center gap-1.5 border-b-2 text-small transition-colors',
               activeTab === tab.id
-                ? 'border-primary text-[#1b1b1d] font-bold opacity-100'
-                : 'border-transparent text-[#45474c] opacity-60 hover:text-[#1b1b1d] hover:opacity-100'
+                ? 'border-fg text-fg'
+                : 'border-transparent text-fg-muted hover:text-fg'
             )}
           >
-            <tab.icon className="w-3.5 h-3.5 mr-1.5" />
+            <tab.icon className="h-3.5 w-3.5" />
             {tab.label}
           </button>
         ))}
@@ -905,14 +854,14 @@ export function DeliverableDetailPanel({
 
         {/* ── DETAILS TAB ── */}
         {activeTab === 'details' && (
-          <div className="divide-y divide-[#e5e7eb]">
+          <div className="divide-y divide-line">
 
             {/* Description — editable for EL, read-only for others (hidden when empty for non-EL) */}
             {(canManage || description) && (
               <div className="px-4 py-4">
                 <label className={cn(FIELD_LABEL, 'flex items-center gap-1.5')}>
                   Description
-                  {savingDesc && <Loader2 className="h-2.5 w-2.5 animate-spin text-[#9a9ba0]" />}
+                  {savingDesc && <Loader2 className="h-2.5 w-2.5 animate-spin text-fg-subtle" />}
                 </label>
                 {canManage ? (
                   <Textarea
@@ -920,10 +869,10 @@ export function DeliverableDetailPanel({
                     onChange={(e) => handleDescChange(e.target.value)}
                     placeholder="Add a description…"
                     disabled={isApproved}
-                    className="text-xs min-h-[80px] resize-none border-[#e5e7eb] focus-visible:ring-1 focus-visible:ring-primary focus-visible:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="-mx-2 min-h-[72px] w-[calc(100%+1rem)] resize-none border-transparent bg-transparent px-2 py-1.5 text-ui shadow-none hover:bg-surface-hover focus-visible:bg-surface disabled:hover:bg-transparent"
                   />
                 ) : (
-                  <p className="text-xs text-[#45474c] whitespace-pre-wrap leading-relaxed">{description}</p>
+                  <p className="whitespace-pre-wrap text-ui leading-relaxed text-fg">{description}</p>
                 )}
               </div>
             )}
@@ -941,13 +890,13 @@ export function DeliverableDetailPanel({
                     </label>
                     {total > 0 && (
                       <>
-                        <div className="flex-1 h-1.5 rounded-full bg-[#e5e7eb] overflow-hidden">
+                        <div className="h-1 flex-1 overflow-hidden rounded-full bg-surface-muted">
                           <div
-                            className="h-full rounded-full bg-primary transition-all duration-300"
+                            className="h-full rounded-full bg-action transition-all duration-300"
                             style={{ width: `${pct}%` }}
                           />
                         </div>
-                        <span className="text-[10px] font-semibold text-[#9a9ba0] shrink-0 tabular-nums">
+                        <span className="shrink-0 text-caption tabular-nums text-fg-subtle">
                           {approvedCount}/{total}
                         </span>
                       </>
@@ -956,13 +905,13 @@ export function DeliverableDetailPanel({
                 )
               })()}
               {loadingSubtasks ? (
-                <div className="flex items-center gap-1.5 text-xs text-[#9a9ba0] py-2">
+                <div className="flex items-center gap-1.5 py-2 text-small text-fg-subtle">
                   <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading…
                 </div>
               ) : subtasks.length === 0 ? (
-                <p className="text-xs text-[#9a9ba0] py-1">No files in this deliverable yet</p>
+                <p className="py-1 text-small text-fg-subtle">No files in this deliverable yet.</p>
               ) : (
-                <div className="divide-y divide-[#e5e7eb] -mx-4 border-t border-b border-[#e5e7eb] mt-2">
+                <div className="-mx-4 mt-1 divide-y divide-line border-y border-line">
                   {subtasks.map((s) => (
                     <SubtaskRow
                       key={s.id}
@@ -994,19 +943,19 @@ export function DeliverableDetailPanel({
 
         {/* ── DELIVERY SETTINGS TAB ── */}
         {activeTab === 'delivery' && canManage && (
-          <div className="divide-y divide-[#e5e7eb]">
+          <div className="divide-y divide-line">
 
-            <div className="px-4 py-3 bg-[#f9fafb]">
-              <p className="text-[11px] text-[#9a9ba0] leading-relaxed">
+            <div className="px-4 py-3">
+              <p className="text-small text-fg-muted">
                 These settings apply to individual office-format files shared within this deliverable — Documents, Spreadsheets, Presentations, and Images.
               </p>
             </div>
 
             {showEC && (
               <div className="px-4 py-4">
-                <label className={FIELD_LABEL}>Contributor (External)</label>
+                <label className={FIELD_LABEL}>External contributors</label>
                 <ToggleRow
-                  label="Allow Download"
+                  label="Allow download"
                   checked={sharingOptions.ecAllowDownload}
                   onCheckedChange={(v) => handleToggle('ecAllowDownload', v)}
                   disabled={isApproved}
@@ -1016,22 +965,22 @@ export function DeliverableDetailPanel({
 
             {showEV && (
               <div className="px-4 py-4">
-                <label className={FIELD_LABEL}>Reviewer</label>
+                <label className={FIELD_LABEL}>Reviewers</label>
                 <ToggleRow
-                  label="Allow Download"
+                  label="Allow download"
                   checked={sharingOptions.evAllowDownload}
                   onCheckedChange={(v) => handleToggle('evAllowDownload', v)}
                   disabled={isApproved}
                 />
                 <ToggleRow
-                  label="PDF Only"
+                  label="PDF only"
                   checked={sharingOptions.evPdfOnly}
                   onCheckedChange={(v) => handleToggle('evPdfOnly', v)}
                   disabled={isApproved}
                 />
                 {sharingOptions.evPdfOnly && (
                   <ToggleRow
-                    label="Apply Watermark"
+                    label="Apply watermark"
                     checked={sharingOptions.evAddWatermark}
                     onCheckedChange={(v) => handleToggle('evAddWatermark', v)}
                     disabled={isApproved}

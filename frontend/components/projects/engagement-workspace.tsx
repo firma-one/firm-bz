@@ -1,13 +1,13 @@
 'use client'
 
-import { useEffect, useCallback, useState, useRef } from 'react'
+import { useEffect, useCallback, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { EngagementInsightsDashboard } from './engagement-insights-dashboard'
 import { EngagementFileList } from './engagement-file-list'
 import { type BreadcrumbItem } from '@/lib/files-folder-session'
 import { EngagementSettingsForm } from './engagement-settings-form'
-import { Folder, BarChart3, Building2, PenTool, ChevronRight, ChevronLeft, Users, Briefcase, Share2, Settings, Home, ClipboardList, MessagesSquare, Lock, LayoutGrid, List } from 'lucide-react'
+import { Folder, BarChart3, Building2, PenTool, ChevronRight, Users, Briefcase, Share2, Settings, Home, ClipboardList, MessagesSquare, Lock, LayoutGrid, List } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { EngagementMembersTab } from './members/engagement-members-tab'
@@ -23,6 +23,18 @@ import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip
 import { GoogleDriveIcon } from '@/components/ui/google-drive-icon'
 import { OneDriveIcon } from '@/components/ui/onedrive-icon'
 import { firmPath, clientPath, groupFirmListPath } from '@/lib/navigation/firm-paths'
+import { EngagementHeader } from './engagement-header'
+import { Tag } from '@/components/ui/tag'
+import { useUiShell } from '@/lib/ui-shell-context'
+
+/** Thin indeterminate bar under a tab while its route loads. */
+function PendingBar() {
+    return (
+        <span className="absolute -bottom-px left-0 right-0 h-0.5 overflow-hidden">
+            <span className="absolute inset-y-0 w-1/2 animate-[indeterminate-progress_1.5s_infinite_linear] rounded-full bg-fg" />
+        </span>
+    )
+}
 
 export interface ProjectPathSegments {
     tab: string
@@ -143,27 +155,9 @@ export function EngagementWorkspace({
     const [liveFileCount, setLiveFileCount] = useState<number | undefined>(fileCount)
     useEffect(() => { setLiveFileCount(fileCount) }, [fileCount])
     const [filesNavSlot, setFilesNavSlot] = useState<HTMLDivElement | null>(null)
-    const tabsScrollRef = useRef<HTMLDivElement>(null)
-    const [canScrollLeft, setCanScrollLeft] = useState(false)
-    const [canScrollRight, setCanScrollRight] = useState(false)
     const [pendingTab, setPendingTab] = useState<string | null>(null)
+    const uiShell = useUiShell()
 
-    const updateScrollState = useCallback(() => {
-        const el = tabsScrollRef.current
-        if (!el) return
-        setCanScrollLeft(el.scrollLeft > 0)
-        setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 1)
-    }, [])
-
-    useEffect(() => {
-        const el = tabsScrollRef.current
-        if (!el) return
-        updateScrollState()
-        el.addEventListener('scroll', updateScrollState)
-        const ro = new ResizeObserver(updateScrollState)
-        ro.observe(el)
-        return () => { el.removeEventListener('scroll', updateScrollState); ro.disconnect() }
-    }, [updateScrollState])
     const slugFromPath = pathname?.split('/e/')[1]?.split('/')[0] ?? pathname?.split('/p/')[1]?.split('/')[0] ?? ''
     const projectSlug = engagementSlug ?? slugFromPath
     const useEngagement = Boolean(engagementSlug)
@@ -212,20 +206,21 @@ export function EngagementWorkspace({
 
     return (
         <div className="flex flex-col flex-1 min-h-0">
-            {/* Breadcrumbs — monospace architectural style */}
-            <nav className="flex items-center gap-1.5 mb-4">
+            {/* The new shell's header bar already shows these breadcrumbs; keep them for the legacy shell. */}
+            {uiShell === 'v1' && (
+                <nav className="flex items-center gap-1.5 mb-4">
                 <Link href={groupFirmListPath(groupSlug)} className="hover:opacity-80">
-                    <Home className="h-4 w-4 text-[#1b1b1d]" />
+                    <Home className="h-4 w-4 text-fg" />
                 </Link>
-                <ChevronRight className="h-3.5 w-3.5 text-[#d1d5db]" />
+                <ChevronRight className="h-3.5 w-3.5 text-line-strong" />
                 <Tooltip>
                     <TooltipTrigger asChild>
                         <Link
                             href={firmPath(groupSlug, orgSlug)}
                             className="flex items-center gap-1.5 hover:opacity-100"
                         >
-                            <Building2 className="h-4 w-4 text-[#45474c] opacity-60" />
-                            <span className="font-mono text-[11px] text-[#45474c] opacity-60 uppercase tracking-tighter transition-opacity">
+                            <Building2 className="h-4 w-4 text-fg-muted opacity-60" />
+                            <span className="font-mono text-[11px] text-fg-muted opacity-60 uppercase tracking-tighter transition-opacity">
                                 {orgName || 'Organization'}
                             </span>
                         </Link>
@@ -234,15 +229,15 @@ export function EngagementWorkspace({
                 </Tooltip>
                 {clientName && (
                     <>
-                        <ChevronRight className="h-3.5 w-3.5 text-[#d1d5db]" />
+                        <ChevronRight className="h-3.5 w-3.5 text-line-strong" />
                         <Tooltip>
                             <TooltipTrigger asChild>
                                 <Link
                                     href={clientPath(groupSlug, orgSlug, clientSlug)}
                                     className="flex items-center gap-1.5 hover:opacity-100"
                                 >
-                                    <Users className="h-4 w-4 text-[#45474c] opacity-60" />
-                                    <span className="font-mono text-[11px] text-[#45474c] opacity-60 uppercase tracking-tighter transition-opacity">
+                                    <Users className="h-4 w-4 text-fg-muted opacity-60" />
+                                    <span className="font-mono text-[11px] text-fg-muted opacity-60 uppercase tracking-tighter transition-opacity">
                                         {clientName}
                                     </span>
                                 </Link>
@@ -253,12 +248,12 @@ export function EngagementWorkspace({
                 )}
                 {projectName && (
                     <>
-                        <ChevronRight className="h-3.5 w-3.5 text-[#d1d5db]" />
+                        <ChevronRight className="h-3.5 w-3.5 text-line-strong" />
                         <Tooltip>
                             <TooltipTrigger asChild>
                                 <span className="flex items-center gap-1.5">
                                     <Briefcase className="h-4 w-4 text-primary" />
-                                    <span className="font-mono text-[11px] font-bold text-[#1b1b1d] uppercase tracking-tighter">
+                                    <span className="font-mono text-[11px] font-bold text-fg uppercase tracking-tighter">
                                         {projectName}
                                     </span>
                                 </span>
@@ -268,223 +263,122 @@ export function EngagementWorkspace({
                     </>
                 )}
             </nav>
+            )}
 
-            {/* Project Identity Header — sits directly on pearl bg, no card wrapper */}
-            <div className="flex items-start justify-between gap-6 mb-6" data-demo-tour="engagement-header">
-                <div className="flex items-center gap-6">
-                    <div className="w-16 h-16 bg-white border border-[#e5e7eb] flex items-center justify-center rounded shadow-sm shrink-0">
-                        <Briefcase className="h-10 w-10 text-[#1b1b1d]" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-3 flex-wrap">
-                            <h1 className="font-headline text-3xl md:text-4xl font-bold tracking-tight text-[#1b1b1d] truncate">
-                                {projectName || 'Engagement Workspace'}
-                            </h1>
-                            {engagementStatus && (
-                                <span className="bg-[#f0edee] text-[#45474c] border border-[#e5e7eb] px-2 py-0.5 rounded font-mono text-[10px] tracking-tight uppercase shrink-0">
-                                    {engagementStatus}
-                                </span>
-                            )}
-                            {engagementDueDate && (() => {
-                                const today = new Date(); today.setHours(0, 0, 0, 0)
-                                const due = new Date(engagementDueDate); due.setHours(0, 0, 0, 0)
-                                const days = Math.round((due.getTime() - today.getTime()) / 86400000)
-                                const label = days < 0 ? `${Math.abs(days)}d overdue` : days === 0 ? 'Due today' : days === 1 ? 'Due tomorrow' : `Due in ${days}d`
-                                const color = days < 0 ? 'bg-red-50 text-red-700 border-red-200' : days <= 7 ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-[#f0edee] text-[#45474c] border-[#e5e7eb]'
-                                return <span className={`shrink-0 rounded font-mono text-[10px] border px-2 py-0.5 ${color}`}>{label}</span>
-                            })()}
-                        </div>
-                        <div className="flex items-center gap-2 mt-1 flex-wrap">
-                            <p className="text-sm text-[#45474c]">Manage files, sharing and collaboration for this engagement.</p>
-                            {projectPersonaDisplayName && (
-                                <span
-                                    className="shrink-0 bg-primary/10 text-primary border border-primary/20 rounded font-mono text-[10px] px-2 py-0.5"
-                                    title="Your role in this project"
-                                >
-                                    {projectPersonaDisplayName}
-                                </span>
-                            )}
-                        </div>
-                    </div>
-                </div>
-            </div>
+            <EngagementHeader
+                projectId={projectId}
+                groupSlug={groupSlug}
+                orgSlug={orgSlug}
+                clientSlug={clientSlug}
+                clientName={clientName}
+                name={projectName ?? ''}
+                description={projectDescription}
+                status={engagementStatus}
+                kickoffDate={engagementKickoffDate}
+                dueDate={engagementDueDate}
+                canManage={canManage}
+                showPeople={canViewInternalTabs}
+                membersHref={`${base}/members`}
+                personaDisplayName={projectPersonaDisplayName}
+            />
 
             <Tabs value={currentTab} onValueChange={handleTabChange} className="flex-1 flex flex-col min-h-0">
-                {/* Tab strip — full-width white with border-b, scrollable for many tabs */}
-                <div className="bg-white border border-[#e5e7eb] rounded mb-3 shrink-0 flex items-center h-14 overflow-hidden">
-                    <div className="flex-1 min-w-0 relative h-full">
-                    {canScrollLeft && (
-                        <button
-                            type="button"
-                            onClick={() => tabsScrollRef.current?.scrollBy({ left: -160, behavior: 'smooth' })}
-                            className="absolute left-0 top-0 z-10 h-full w-14 flex items-center justify-center bg-gradient-to-r from-white from-70% to-transparent text-[#45474c] hover:text-[#1b1b1d] transition-colors"
-                            aria-label="Scroll tabs left"
-                        >
-                            <span className="w-5 h-5 rounded-full border border-primary bg-white flex items-center justify-center shadow-sm">
-                                <ChevronLeft className="w-3 h-3 text-primary" />
-                            </span>
-                        </button>
-                    )}
-                    {canScrollRight && (
-                        <button
-                            type="button"
-                            onClick={() => tabsScrollRef.current?.scrollBy({ left: 160, behavior: 'smooth' })}
-                            className="absolute right-0 top-0 z-10 h-full w-14 flex items-center justify-center bg-gradient-to-l from-white from-70% to-transparent text-[#45474c] hover:text-[#1b1b1d] transition-colors"
-                            aria-label="Scroll tabs right"
-                        >
-                            <span className="w-5 h-5 rounded-full border border-primary bg-white flex items-center justify-center shadow-sm">
-                                <ChevronRight className="w-3 h-3 text-primary" />
-                            </span>
-                        </button>
-                    )}
-                    <div ref={tabsScrollRef} className="overflow-x-auto h-full [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" style={{ scrollPaddingLeft: canScrollLeft ? 40 : 0, scrollPaddingRight: canScrollRight ? 40 : 0 }}>
-                    <div className="flex items-center h-full min-w-max" style={{ paddingLeft: canScrollLeft ? 56 : 0, paddingRight: canScrollRight ? 56 : 0 }}>
-                        <TabsList className="h-full p-0 bg-transparent rounded-none inline-flex justify-start gap-0 border-0">
-                            <TabsTrigger
-                                value="analytics"
-                                data-demo-tour="engagement-overview-tab"
-                                className="relative group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
-                            >
-                                <BarChart3 className="w-4 h-4 mr-2" />
+                {/* Underline tabs (Linear/Notion); page actions sit at the right end of the tab row. */}
+                <div className="mb-4 flex shrink-0 items-end justify-between gap-3 border-b border-line">
+                    <div className="min-w-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                        <TabsList className="min-w-max border-b-0">
+                            <TabsTrigger value="analytics" data-demo-tour="engagement-overview-tab" className="relative gap-1.5">
+                                <BarChart3 className="h-4 w-4" />
                                 Overview
-                                                {pendingTab === 'analytics' && <span className="absolute bottom-0 left-0 right-0 h-0.5 overflow-hidden"><span className="absolute inset-y-0 w-1/2 bg-brand-accent animate-[indeterminate-progress_1.5s_infinite_linear] rounded-full" /></span>}
+                                {pendingTab === 'analytics' && <PendingBar />}
                             </TabsTrigger>
-                            <TabsTrigger
-                                value="files"
-                                data-demo-tour="engagement-files-tab"
-                                className="relative h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
-                            >
+                            <TabsTrigger value="files" data-demo-tour="engagement-files-tab" className="relative gap-1.5">
                                 {clientConnectorType === 'ONEDRIVE' ? (
-                                    <OneDriveIcon size={16} className="mr-2" />
+                                    <OneDriveIcon size={15} />
                                 ) : clientConnectorType === 'GOOGLE_DRIVE' ? (
-                                    <GoogleDriveIcon size={16} className="mr-2" />
+                                    <GoogleDriveIcon size={15} />
                                 ) : (
-                                    <Folder className="w-4 h-4 mr-2" />
+                                    <Folder className="h-4 w-4" />
                                 )}
                                 Files
-                                {pendingTab === 'files' && <span className="absolute bottom-0 left-0 right-0 h-0.5 overflow-hidden"><span className="absolute inset-y-0 w-1/2 bg-brand-accent animate-[indeterminate-progress_1.5s_infinite_linear] rounded-full" /></span>}
+                                {pendingTab === 'files' && <PendingBar />}
                             </TabsTrigger>
-                            <TabsTrigger
-                                value="board"
-                                data-demo-tour="engagement-board-tab"
-                                className="relative h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
-                            >
-                                <LayoutGrid className="w-4 h-4 mr-2" />
+                            <TabsTrigger value="board" data-demo-tour="engagement-board-tab" className="relative gap-1.5">
+                                <LayoutGrid className="h-4 w-4" />
                                 Board
-                                {sharesCount !== undefined && sharesCount > 0 && (
-                                    <span className="ml-2 font-mono text-[10px] font-bold bg-primary text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
-                                        {sharesCount}
-                                    </span>
-                                )}
-                                {pendingTab === 'board' && <span className="absolute bottom-0 left-0 right-0 h-0.5 overflow-hidden"><span className="absolute inset-y-0 w-1/2 bg-brand-accent animate-[indeterminate-progress_1.5s_infinite_linear] rounded-full" /></span>}
+                                {sharesCount !== undefined && sharesCount > 0 && <span className="text-small tabular-nums text-fg-subtle">{sharesCount}</span>}
+                                {pendingTab === 'board' && <PendingBar />}
                             </TabsTrigger>
-                            <TabsTrigger
-                                value="comments"
-                                data-demo-tour="engagement-comments-tab"
-                                className="relative h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
-                            >
-                                <MessagesSquare className="w-4 h-4 mr-2" />
+                            <TabsTrigger value="comments" data-demo-tour="engagement-comments-tab" className="relative gap-1.5">
+                                <MessagesSquare className="h-4 w-4" />
                                 Comments
-                                {commentsCount !== undefined && commentsCount > 0 && (
-                                    <span className="ml-2 font-mono text-[10px] font-bold bg-primary text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
-                                        {commentsCount}
-                                    </span>
-                                )}
-                                {pendingTab === 'comments' && <span className="absolute bottom-0 left-0 right-0 h-0.5 overflow-hidden"><span className="absolute inset-y-0 w-1/2 bg-brand-accent animate-[indeterminate-progress_1.5s_infinite_linear] rounded-full" /></span>}
+                                {commentsCount !== undefined && commentsCount > 0 && <span className="text-small tabular-nums text-fg-subtle">{commentsCount}</span>}
+                                {pendingTab === 'comments' && <PendingBar />}
                             </TabsTrigger>
                             {enableBetaFeatures && canViewInternalTabs && (
-                                <TabsTrigger
-                                    value="wiki"
-                                    className="relative group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
-                                >
-                                    <PenTool className="w-4 h-4 mr-2" />
+                                <TabsTrigger value="wiki" className="relative gap-1.5">
+                                    <PenTool className="h-4 w-4" />
                                     Dossier
-                                    <span title="Internal only"><Lock className="w-2.5 h-2.5 ml-1 text-[#45474c]/40 group-hover/lock:text-[#45474c] transition-colors shrink-0" /></span>
-                                    <span className="ml-2 rounded px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 leading-none">Beta</span>
-                                    {wikiPageCount !== undefined && wikiPageCount > 0 && (
-                                        <span className="ml-1 font-mono text-[10px] font-bold bg-primary text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
-                                            {wikiPageCount}
-                                        </span>
-                                    )}
-                                    {pendingTab === 'wiki' && <span className="absolute bottom-0 left-0 right-0 h-0.5 overflow-hidden"><span className="absolute inset-y-0 w-1/2 bg-brand-accent animate-[indeterminate-progress_1.5s_infinite_linear] rounded-full" /></span>}
+                                    <Tag color="yellow" className="h-4 px-1 text-[10px]">Beta</Tag>
+                                    <span title="Internal only"><Lock className="h-3 w-3 text-fg-subtle" /></span>
+                                    {wikiPageCount !== undefined && wikiPageCount > 0 && <span className="text-small tabular-nums text-fg-subtle">{wikiPageCount}</span>}
+                                    {pendingTab === 'wiki' && <PendingBar />}
                                 </TabsTrigger>
                             )}
                             {canManage && (
-                                <TabsTrigger
-                                    value="audit"
-                                    data-demo-tour="engagement-audit-tab"
-                                    className="relative group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
-                                >
-                                    <ClipboardList className="w-4 h-4 mr-2" />
+                                <TabsTrigger value="audit" data-demo-tour="engagement-audit-tab" className="relative gap-1.5">
+                                    <ClipboardList className="h-4 w-4" />
                                     Audit
-                                    <span title="Internal only"><Lock className="w-2.5 h-2.5 ml-1 text-[#45474c]/40 group-hover/lock:text-[#45474c] transition-colors shrink-0" /></span>
-                                    {auditCount !== undefined && auditCount > 0 && (
-                                        <span className="ml-2 font-mono text-[10px] font-bold bg-primary text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
-                                            {auditCount}
-                                        </span>
-                                    )}
-                                    {pendingTab === 'audit' && <span className="absolute bottom-0 left-0 right-0 h-0.5 overflow-hidden"><span className="absolute inset-y-0 w-1/2 bg-brand-accent animate-[indeterminate-progress_1.5s_infinite_linear] rounded-full" /></span>}
+                                    <span title="Internal only"><Lock className="h-3 w-3 text-fg-subtle" /></span>
+                                    {auditCount !== undefined && auditCount > 0 && <span className="text-small tabular-nums text-fg-subtle">{auditCount}</span>}
+                                    {pendingTab === 'audit' && <PendingBar />}
                                 </TabsTrigger>
                             )}
                             {canViewInternalTabs && (
-                                <TabsTrigger
-                                    value="members"
-                                    data-demo-tour="engagement-members-tab"
-                                    className="relative group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
-                                >
-                                    <Users className="w-4 h-4 mr-2" />
+                                <TabsTrigger value="members" data-demo-tour="engagement-members-tab" className="relative gap-1.5">
+                                    <Users className="h-4 w-4" />
                                     Members
-                                    <span title="Internal only"><Lock className="w-2.5 h-2.5 ml-1 text-[#45474c]/40 group-hover/lock:text-[#45474c] transition-colors shrink-0" /></span>
-                                    {memberCount !== undefined && memberCount > 0 && (
-                                        <span className="ml-2 font-mono text-[10px] font-bold bg-primary text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
-                                            {memberCount}
-                                        </span>
-                                    )}
-                                    {pendingTab === 'members' && <span className="absolute bottom-0 left-0 right-0 h-0.5 overflow-hidden"><span className="absolute inset-y-0 w-1/2 bg-brand-accent animate-[indeterminate-progress_1.5s_infinite_linear] rounded-full" /></span>}
+                                    <span title="Internal only"><Lock className="h-3 w-3 text-fg-subtle" /></span>
+                                    {memberCount !== undefined && memberCount > 0 && <span className="text-small tabular-nums text-fg-subtle">{memberCount}</span>}
+                                    {pendingTab === 'members' && <PendingBar />}
                                 </TabsTrigger>
                             )}
                             {canViewSettings && (
-                                <TabsTrigger
-                                    value="settings"
-                                    data-demo-tour="engagement-settings-tab"
-                                    className="relative group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
-                                >
-                                    <Settings className="w-4 h-4 mr-2" />
+                                <TabsTrigger value="settings" data-demo-tour="engagement-settings-tab" className="relative gap-1.5">
+                                    <Settings className="h-4 w-4" />
                                     Settings
-                                    <span title="Internal only"><Lock className="w-2.5 h-2.5 ml-1 text-[#45474c]/40 group-hover/lock:text-[#45474c] transition-colors shrink-0" /></span>
-                                    {pendingTab === 'settings' && <span className="absolute bottom-0 left-0 right-0 h-0.5 overflow-hidden"><span className="absolute inset-y-0 w-1/2 bg-brand-accent animate-[indeterminate-progress_1.5s_infinite_linear] rounded-full" /></span>}
+                                    <span title="Internal only"><Lock className="h-3 w-3 text-fg-subtle" /></span>
+                                    {pendingTab === 'settings' && <PendingBar />}
                                 </TabsTrigger>
                             )}
                         </TabsList>
                     </div>
-                    </div>
-                    </div>
                     {/* New Document button slot — EngagementFileList portals into this when Files is active */}
                     {currentTab === 'files' && (
-                        <div ref={setFilesNavSlot} className="shrink-0 px-3 border-l border-[#e5e7eb] flex items-center" />
+                        <div ref={setFilesNavSlot} className="flex shrink-0 items-center pb-1" />
                     )}
                     {/* Grid / List toggle — only when Shares tab is active */}
                     {currentTab === 'shares' && (() => {
                         const sharesBase = `${projectBase(groupSlug, orgSlug, clientSlug, projectSlug, useEngagement)}/shares`
                         const sharesViewMode = pathSegments?.viewMode ?? 'grid'
                         return (
-                            <div className="shrink-0 px-3 border-l border-[#e5e7eb] flex items-center">
-                                <div className="flex items-center bg-[#f3f4f6] p-0.5 rounded border border-[#e5e7eb]">
+                            <div className="flex shrink-0 items-center pb-1">
+                                <div className="flex items-center gap-0.5">
                                     <button
                                         type="button"
                                         title="Grid view"
                                         onClick={() => router.push(`${sharesBase}/grid`)}
-                                        className={`px-1.5 py-1 rounded transition-all ${sharesViewMode === 'grid' ? 'bg-white shadow-sm text-primary' : 'text-[#45474c] hover:text-[#1b1b1d] hover:bg-[#f0edee]'}`}
+                                        className={`rounded-control p-1.5 transition-colors ${sharesViewMode === 'grid' ? 'bg-surface-selected text-fg' : 'text-fg-muted hover:bg-surface-hover hover:text-fg'}`}
                                     >
-                                        <LayoutGrid className="h-3 w-3" />
+                                        <LayoutGrid className="h-3.5 w-3.5" />
                                     </button>
                                     <button
                                         type="button"
                                         title="List view"
                                         onClick={() => router.push(`${sharesBase}/list`)}
-                                        className={`px-1.5 py-1 rounded transition-all ${sharesViewMode === 'list' ? 'bg-white shadow-sm text-primary' : 'text-[#45474c] hover:text-[#1b1b1d] hover:bg-[#f0edee]'}`}
+                                        className={`rounded-control p-1.5 transition-colors ${sharesViewMode === 'list' ? 'bg-surface-selected text-fg' : 'text-fg-muted hover:bg-surface-hover hover:text-fg'}`}
                                     >
-                                        <List className="h-3 w-3" />
+                                        <List className="h-3.5 w-3.5" />
                                     </button>
                                 </div>
                             </div>
@@ -594,7 +488,7 @@ export function EngagementWorkspace({
                         )}
                     </div>
                 ) : (currentTab === 'analytics') ? (
-                    <div className="flex-1 overflow-y-auto custom-scrollbar pt-3">
+                    <div className="flex-1 overflow-y-auto custom-scrollbar">
                         <ErrorBoundary context="ProjectInsights">
                             <EngagementInsightsDashboard
                                 projectId={projectId}
@@ -610,7 +504,7 @@ export function EngagementWorkspace({
                         </ErrorBoundary>
                     </div>
                 ) : (
-                <div className="flex-1 overflow-y-auto custom-scrollbar bg-white border border-[#e5e7eb] rounded">
+                <div className="flex-1 overflow-y-auto custom-scrollbar">
                     {currentTab === 'comments' && (
                         <div className="py-1 h-full">
                             <ErrorBoundary context="ProjectComments">
@@ -630,7 +524,7 @@ export function EngagementWorkspace({
                         </div>
                     )}
                     {canManage && currentTab === 'audit' && (
-                        <div className="p-4 h-full">
+                        <div className="py-1 h-full">
                             <ErrorBoundary context="ProjectAudit">
                                 <EngagementAuditPane projectId={projectId} projectName={projectName} />
                             </ErrorBoundary>

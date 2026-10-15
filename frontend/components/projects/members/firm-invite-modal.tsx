@@ -9,8 +9,8 @@ import { inviteFirmMember } from '@/lib/actions/firm-members'
 import { ShieldCheck } from 'lucide-react'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 
-const fieldLabel = 'font-mono text-[9px] font-bold uppercase tracking-widest text-[#45474c] block mb-1'
-const inputCls = 'border-[#e5e7eb] text-[#1b1b1d] text-xs font-normal placeholder:text-[#9a9ba0] rounded focus-visible:ring-1 focus-visible:ring-primary focus-visible:border-primary disabled:opacity-50 disabled:cursor-not-allowed'
+const fieldLabel = 'font-mono text-[9px] font-bold uppercase tracking-widest text-fg-muted block mb-1'
+const inputCls = 'border-line text-fg text-xs font-normal placeholder:text-fg-subtle rounded focus-visible:ring-1 focus-visible:ring-primary focus-visible:border-primary disabled:opacity-50 disabled:cursor-not-allowed'
 
 interface FirmInviteModalProps {
     firmId: string
@@ -47,17 +47,17 @@ export function FirmInviteModal({ firmId, open, onOpenChange, onSuccess }: FirmI
 
     return (
         <Dialog open={open} onOpenChange={handleOpenChange}>
-            <DialogContent className="sm:max-w-[480px] border-[#e5e7eb] p-0 gap-0 rounded bg-[#f9f9fb]">
+            <DialogContent className="sm:max-w-[480px] border-line p-0 gap-0 rounded bg-surface-subtle">
                 <VisuallyHidden><DialogTitle>Invite Firm Administrator</DialogTitle></VisuallyHidden>
 
                 {/* Header */}
-                <div className="px-5 py-4 border-b border-[#e5e7eb] bg-white flex items-start gap-3">
+                <div className="px-5 py-4 border-b border-line bg-white flex items-start gap-3">
                     <div className="mt-0.5 h-7 w-7 rounded bg-primary/10 flex items-center justify-center shrink-0">
                         <ShieldCheck className="h-3.5 w-3.5 text-primary" />
                     </div>
                     <div>
-                        <p className="text-sm font-semibold text-[#1b1b1d] leading-tight">Invite Firm Administrator</p>
-                        <p className="text-xs text-[#45474c] mt-0.5">Send an invitation to join this firm as an administrator.</p>
+                        <p className="text-sm font-semibold text-fg leading-tight">Invite Firm Administrator</p>
+                        <p className="text-xs text-fg-muted mt-0.5">Send an invitation to join this firm as an administrator.</p>
                     </div>
                 </div>
 
@@ -70,11 +70,11 @@ export function FirmInviteModal({ firmId, open, onOpenChange, onSuccess }: FirmI
                         )}
 
                         {/* Access notice */}
-                        <div className="bg-white border border-[#e5e7eb] rounded p-3 flex items-start gap-2.5">
+                        <div className="bg-white border border-line rounded p-3 flex items-start gap-2.5">
                             <ShieldCheck className="h-4 w-4 shrink-0 text-primary mt-0.5" />
                             <div>
-                                <p className="text-xs font-semibold text-[#1b1b1d]">Firm Administrator access</p>
-                                <p className="text-[10px] text-[#45474c] mt-0.5">
+                                <p className="text-xs font-semibold text-fg">Firm Administrator access</p>
+                                <p className="text-[10px] text-fg-muted mt-0.5">
                                     This person will have full access to manage firm settings, members, and all client workspaces.
                                 </p>
                             </div>
@@ -96,7 +96,7 @@ export function FirmInviteModal({ firmId, open, onOpenChange, onSuccess }: FirmI
                     </div>
 
                     {/* Footer */}
-                    <div className="px-5 py-3 border-t border-[#e5e7eb] bg-white flex items-center justify-end gap-3">
+                    <div className="px-5 py-3 border-t border-line bg-white flex items-center justify-end gap-3">
                         <Button type="button" variant="outline" className="rounded w-28 text-[10px] font-headline font-bold tracking-widest uppercase" onClick={() => handleOpenChange(false)}>
                             Cancel
                         </Button>

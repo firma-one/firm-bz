@@ -123,9 +123,10 @@ export default async function RootLayout({
         className={`${inter.className} ${inter.variable} ${spaceGrotesk.variable} ${workSans.variable} bg-gray-50 text-gray-900`}
         suppressHydrationWarning
       >
-        {/* New UI toggle: set <html data-ui="v2"> before first paint so /d never flashes the old tokens.
-            The cookie mirrors user_personalizations.uiPrefs.shell — see lib/ui-shell.ts. */}
-        <Script id="fm-ui-shell" strategy="beforeInteractive" dangerouslySetInnerHTML={{ __html: `try{if(/^\\/d(\\/|$)/.test(location.pathname)&&/(?:^|;\\s*)${UI_SHELL_COOKIE}=v2(?:;|$)/.test(document.cookie)){document.documentElement.dataset.ui='v2'}}catch(e){}` }} />
+        {/* New UI: set <html data-ui="v2"> on /d before first paint so it never flashes the old tokens.
+            v2 is the default; only an explicit opt-out cookie (fm_ui_shell=v1, mirroring
+            user_personalizations.uiPrefs.shell) keeps the legacy UI — see lib/ui-shell.ts. */}
+        <Script id="fm-ui-shell" strategy="beforeInteractive" dangerouslySetInnerHTML={{ __html: `try{if(/^\\/d(\\/|$)/.test(location.pathname)&&!/(?:^|;\\s*)${UI_SHELL_COOKIE}=v1(?:;|$)/.test(document.cookie)){document.documentElement.dataset.ui='v2'}}catch(e){}` }} />
         {/* Inject firm brand CSS vars before first paint to prevent FOUC on dashboard routes */}
         <Script id="fm-brand-css-vars" strategy="beforeInteractive" dangerouslySetInnerHTML={{ __html: `try{var m=location.pathname.match(/^\\/d\\/[^/]+\\/f\\/([^/]+)/);if(m){var b=JSON.parse(sessionStorage.getItem('fm_firm_branding_'+m[1])||'null');if(b&&b.primaryHsl){document.documentElement.style.setProperty('--primary',b.primaryHsl);document.documentElement.style.setProperty('--primary-foreground',b.primaryFgHsl);if(b.primaryRgb)document.documentElement.style.setProperty('--primary-rgb',b.primaryRgb);}if(b&&b.accentHsl){document.documentElement.style.setProperty('--brand-accent',b.accentHsl);document.documentElement.style.setProperty('--brand-accent-foreground',b.accentFgHsl);}}}catch(e){}` }} />
         {/* GA is loaded client-side only when analytics consent is granted (see ConsentAwareGoogleAnalytics). */}

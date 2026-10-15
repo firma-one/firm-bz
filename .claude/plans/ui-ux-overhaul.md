@@ -649,36 +649,104 @@ passes the firm from the URL.
   - Inbox: the G-then-H conflict.
 - The file-search SQL ran against local Postgres (admin, empty scope and escaping cases).
 
-### Phase 6 — Restyle screens (v2 scope) ⏸ (not started; needs a checkpoint first)
+### Phase 6 — Redesign the inner pages (in progress, from 2026-10-15)
 
-**Prerequisites:**
-1. The `uiPrefs` / `user_recent_visits` migration is applied (`npm run build`).
-2. The local app is signed in inside the browser pane.
+**Deepak's feedback after trying Phases 1–5:**
+- Home and recents are right.
+- The inner pages barely changed. Cards have too many nested boxes, tables should follow Notion's
+  table, and forms need an overhaul.
+- He is happy to drop Firma's own design character entirely, adopt Notion's design language, and
+  borrow Linear's information architecture for the inner pages.
 
-Without both, the v2 shell can't render on real `/d` pages, and screen restyling can't be compared
-v1 against v2. Before running the codemod per screen, it also needs the same-className conflict
-check described under Phase 1.
+**Decisions (2026-10-15):**
+1. **Redesign in place.**
+   - The new UI is now the default for everyone: `normalizeUiShell` treats anything but an
+     explicit `v1` as `v2`, and the pre-paint script applies v2 unless the opt-out cookie says v1.
+   - Pages are restyled directly, without `v2:` duplicates; that rule stays only for the shared
+     primitives already built.
+   - The toggle remains as an opt-out escape hatch. The old shell is deleted after Deepak signs
+     off (Phase 7).
+   - Production has only Deepak, so shipping the in-progress redesign is low-risk.
+2. **Tables:** Notion's table look plus inline property editing (status, due date, assignee) where
+   APIs already exist. No saved per-table views yet.
+3. **Order:**
+   1. Engagement page: a Linear project-style header and properties, Files as a Notion table,
+      Board, Comments, Overview.
+   2. Client pages and lists.
+   3. Firm settings forms, Members, Audit.
+   4. Billing, onboarding, the remaining dialogs.
 
+**Design rules for every inner page:**
+- **Cards:** at most one level of container. Sections are a heading plus content separated by
+  whitespace or a hairline — no card inside a card, no shadow on in-page cards, no colored header
+  bars.
+- **Notion table:**
+  - The header row is 32px in `text-small` `fg-muted`, with a column icon; the table has no outer
+    border.
+  - Row lines are `border-line` hairlines; rows are 36px with a `surface-hover` hover.
+  - The first column is the title; row actions (⋯) appear on hover.
+  - Property cells use `StatusPill`/`Tag`, avatars and dates, and are clickable to edit in a
+    popover.
+- **Notion forms:**
+  - Label/value property rows (`PropertyRow`), not stacked boxed fields.
+  - Inputs are borderless until hover or focus.
+  - Group headings in `text-h3`; one primary action, bottom-right, or autosave.
+- **Linear information architecture:**
+  - Every entity page has the same top block: title, a properties row (status, lead, dates,
+    members), then underline tabs.
+  - Lists can be grouped and show item counts.
+  - Detail opens in the right pane, not a new page, where possible.
 
-Order follows traffic and how many hardcoded colors each screen has:
+**Progress (uncommitted, 2026-10-15) — engagement page:**
+- **New primitives:** `ui/popover`, `ui/notion-table`, `ui/property-cells` (`StatusProperty`,
+  `DateProperty`, `PersonProperty`). `PropertyRow` is tightened to 32px rows with a narrower label
+  on phones.
+- **Header and tabs:** `projects/engagement-header.tsx` holds the title, description and a properties
+  row: inline status (never Completed; closing and reopening stay in Settings), lead, members, and
+  start and due dates. The breadcrumb shows in v1 only. Tabs are underlined.
+- **Files:** a Notion table header with column icons, 36px rows, and an inline due date for
+  managers (`FileDueDateCell`, through the existing due-date route).
+- **Flattened:** Overview (insight cards and stat tiles), Board (lane theme from the status
+  palette), and Comments.
+- **Settings:**
+  - Details, Commercial and Tracking are property rows with borderless fields.
+  - Status uses the same picker as the header and includes Completed.
+  - Save is disabled while the name is blank.
+  - The danger zone is a Linear-style row.
+  - Fixed the `initialTags = []` default, which re-ran the sync effect on every render.
+- **Shared pickers:** `DateTimePicker` and `SelectWithCustomEntry` are restyled to tokens, which
+  changes them on every page that uses them.
+- **Members:**
+  - One Notion table grouped by role, with Linear group headers: count, description and
+    "Invite {role}".
+  - Invitations are rows in their own group.
+  - Clicking the role cell opens the role dialog. Row actions are shown only to managers; the old
+    no-persona fallback showed them to everyone.
+  - The tab has a slim toolbar and an `EmptyPanel` for when Drive isn't connected.
+- **Tests:** `property-cells`, `engagement-header`, `engagement-settings-form` and `member-list`.
+  An isolated production build passed with no warnings.
 
-1. **Engagement workspace:** header and tabs, Files list, Shares/Board, Comments pane, Overview dashboard.
-2. **Client page and engagement list; firm Clients list** (as Linear-style lists).
-3. **Firm Overview** (business insights, Action Center), Calendar, Doc Search.
-4. **Settings:** firm and client settings forms, Members, Audit, Connectors/Drive.
-5. **Profile, Billing, Support.**
-6. **Onboarding, sign-in/sign-up, invite pages.**
+- **Audit (`audit/audit-with-filters.tsx`, shared with the firm and demo audits):**
+  - Linear-style filter chips replace the stacked labeled fields.
+  - Ghost icon buttons; the events are a Notion table and the event icons are muted.
+  - The Client and Engagement columns and sorts show in firm mode only.
+- **Deliverable detail pane:**
+  - Status and Due are peek property rows. Due uses `DateProperty`, since the route stores a
+    date; status options are `StatusPill`.
+  - Submit and Request changes are plain buttons.
+  - Underline tabs and a ghost description field.
+  - Document rows show a status pill and inline status, assignee and due chips instead of
+    labeled boxes.
+- **`DateProperty`:** a bare `yyyy-MM-dd` is a local calendar day, both when displayed and
+  when edited; this is tested in America/Los_Angeles.
+- **Doc comments pane:**
+  - Comments are a hairline list, not cards. Filters and View are disclosure rows, not boxes.
+  - Reactions are neutral pills, with yours tinted in the accent.
+  - Mentioning you is shown as an accent left rule.
 
-Per screen:
+**Next:** client pages and lists, then firm settings, Members and Audit (order item 2 onward).
 
-- Hex and palette colors → tokens.
-- Micro-labels → `SectionLabel`.
-- Raw `<button>` → `Button`.
-- Hand-rolled `fixed inset-0` overlays → `Dialog`/`Sheet`.
-- Status spans → `StatusPill`.
-- Arbitrary font sizes → the type scale.
-
-Not in scope: marketing, landing, blog, legal, `/demo`, and `/system` admin.
+**Visual verification** still needs a signed-in session in the browser pane.
 
 ### Phase 7 — Sign-off and cutover
 

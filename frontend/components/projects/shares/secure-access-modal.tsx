@@ -68,7 +68,7 @@ export function SecureAccessModal({
             }}
         >
             <DialogContent
-                className="sm:max-w-sm border-[#e5e7eb] p-0 gap-0 rounded bg-[#f9f9fb]"
+                className="sm:max-w-sm border-line p-0 gap-0 rounded bg-surface-subtle"
                 hideClose={isBusy}
                 onInteractOutside={(e) => { if (isBusy) e.preventDefault() }}
                 onEscapeKeyDown={(e) => { if (isBusy) e.preventDefault() }}
@@ -76,7 +76,7 @@ export function SecureAccessModal({
                 <VisuallyHidden><DialogTitle>Secure Access Request</DialogTitle></VisuallyHidden>
 
                 {/* Header */}
-                <div className="px-5 py-4 border-b border-[#e5e7eb] bg-white flex items-start gap-3">
+                <div className="px-5 py-4 border-b border-line bg-white flex items-start gap-3">
                     <div className="mt-0.5 h-7 w-7 rounded flex items-center justify-center shrink-0 bg-primary/10 ring-1 ring-primary/20">
                         {effectiveMode === 'error' ? (
                             <AlertCircle className="h-4 w-4 text-destructive" />
@@ -89,7 +89,7 @@ export function SecureAccessModal({
                         )}
                     </div>
                     <div>
-                        <p className="text-[11px] font-headline font-bold tracking-widest uppercase text-[#1b1b1d] leading-tight">
+                        <p className="text-[11px] font-headline font-bold tracking-widest uppercase text-fg leading-tight">
                             {effectiveMode === 'error' ? 'Access Unavailable'
                                 : effectiveMode === 'opening' ? 'Opening Document'
                                 : effectiveMode === 'blocked' ? 'Ready To Open'
@@ -99,13 +99,13 @@ export function SecureAccessModal({
                         {effectiveMode === 'error' ? (
                             <p className="text-xs text-destructive mt-0.5">Unable to complete secure access</p>
                         ) : effectiveMode === 'opening' ? (
-                            <p className="text-xs text-[#45474c] mt-0.5">Opening in a new tab…</p>
+                            <p className="text-xs text-fg-muted mt-0.5">Opening in a new tab…</p>
                         ) : effectiveMode === 'blocked' ? (
-                            <p className="text-xs text-[#45474c] mt-0.5">Your access is ready — one more click</p>
+                            <p className="text-xs text-fg-muted mt-0.5">Your access is ready — one more click</p>
                         ) : effectiveMode === 'loading' ? (
-                            <p className="text-xs text-[#45474c] mt-0.5">Verifying access, one moment…</p>
+                            <p className="text-xs text-fg-muted mt-0.5">Verifying access, one moment…</p>
                         ) : (
-                            <p className="text-xs text-[#45474c] mt-0.5">A verification link has been sent to your inbox</p>
+                            <p className="text-xs text-fg-muted mt-0.5">A verification link has been sent to your inbox</p>
                         )}
                     </div>
                 </div>
@@ -115,14 +115,14 @@ export function SecureAccessModal({
                     {effectiveMode === 'error' ? (
                         <div className="flex items-start gap-3 p-3 rounded bg-white border border-destructive/20">
                             <AlertCircle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
-                            <p className="text-xs text-[#1b1b1d] leading-relaxed">{error}</p>
+                            <p className="text-xs text-fg leading-relaxed">{error}</p>
                         </div>
                     ) : (
                         <>
                             {/* File preview strip */}
-                            <div className="flex items-center gap-3 p-3 rounded bg-white border border-[#e5e7eb]">
+                            <div className="flex items-center gap-3 p-3 rounded bg-white border border-line">
                                 {proxyThumbnailUrl && !thumbnailFailed ? (
-                                    <div className="h-10 w-10 rounded overflow-hidden shrink-0 border border-[#e5e7eb]">
+                                    <div className="h-10 w-10 rounded overflow-hidden shrink-0 border border-line">
                                         <img
                                             src={proxyThumbnailUrl}
                                             alt={fileName}
@@ -143,16 +143,16 @@ export function SecureAccessModal({
                                     The dialog's own grid track is capped separately (see dialog.tsx)
                                     — without that cap this alone is not enough, because the ancestor
                                     grid item refuses to shrink and nothing here ever gets squeezed. */}
-                                <p className="min-w-0 text-xs font-medium text-[#1b1b1d] truncate leading-snug">{fileName}</p>
+                                <p className="min-w-0 text-xs font-medium text-fg truncate leading-snug">{fileName}</p>
                             </div>
 
                             {effectiveMode === 'opening' ? (
-                                <p className="text-xs text-[#45474c] leading-relaxed">
+                                <p className="text-xs text-fg-muted leading-relaxed">
                                     Your document is ready — it should open in a new tab momentarily.
                                 </p>
                             ) : effectiveMode === 'blocked' ? (
                                 <div className="space-y-3">
-                                    <p className="text-xs text-[#45474c] leading-relaxed">
+                                    <p className="text-xs text-fg-muted leading-relaxed">
                                         Access has been granted, but your browser blocked the new tab. Use the
                                         button below to open the document.
                                     </p>
@@ -169,22 +169,22 @@ export function SecureAccessModal({
                                 </div>
                             ) : effectiveMode === 'loading' ? (
                                 <div className="space-y-1.5">
-                                    <div className="h-3 w-full bg-[#e5e7eb] rounded animate-pulse" />
-                                    <div className="h-3 w-4/5 bg-[#e5e7eb] rounded animate-pulse" />
+                                    <div className="h-3 w-full bg-line rounded animate-pulse" />
+                                    <div className="h-3 w-4/5 bg-line rounded animate-pulse" />
                                 </div>
                             ) : (
                                 <>
                                     {/* Email destination */}
-                                    <div className="flex items-center gap-3 p-3 rounded bg-white border border-[#e5e7eb]">
-                                        <div className="h-7 w-7 rounded flex items-center justify-center shrink-0 bg-[#f9f9fb] border border-[#e5e7eb]">
-                                            <Mail className="h-4 w-4 text-[#45474c]" />
+                                    <div className="flex items-center gap-3 p-3 rounded bg-white border border-line">
+                                        <div className="h-7 w-7 rounded flex items-center justify-center shrink-0 bg-surface-subtle border border-line">
+                                            <Mail className="h-4 w-4 text-fg-muted" />
                                         </div>
                                         <div className="min-w-0">
-                                            <p className="text-[9px] font-headline font-bold tracking-widest uppercase text-[#45474c] leading-tight">Verification Inbox</p>
-                                            <p className="text-xs font-medium text-[#1b1b1d] truncate mt-0.5">{email}</p>
+                                            <p className="text-[9px] font-headline font-bold tracking-widest uppercase text-fg-muted leading-tight">Verification Inbox</p>
+                                            <p className="text-xs font-medium text-fg truncate mt-0.5">{email}</p>
                                         </div>
                                     </div>
-                                    <p className="text-xs text-[#45474c] leading-relaxed">
+                                    <p className="text-xs text-fg-muted leading-relaxed">
                                         Your storage provider requires a one-time verification step. Please follow the link in the email to open the document securely.
                                     </p>
                                 </>
@@ -195,7 +195,7 @@ export function SecureAccessModal({
 
                 {/* Footer */}
                 {effectiveMode !== 'opening' && (
-                    <div className="px-5 py-3 border-t border-[#e5e7eb] bg-white flex items-center justify-end">
+                    <div className="px-5 py-3 border-t border-line bg-white flex items-center justify-end">
                         <Button
                             variant="blackCta"
                             onClick={onClose}

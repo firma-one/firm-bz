@@ -18,6 +18,9 @@
  *   node scripts/ui-token-codemod.mjs [paths…]            dry run — prints what would change
  *   node scripts/ui-token-codemod.mjs --write [paths…]    rewrites files in place
  *   node scripts/ui-token-codemod.mjs --verbose [paths…]  also lists every skipped class
+ *   … --palette                                            ALSO maps Tailwind slate/gray classes to the
+ *                                                          nearest token. Lossy — changes the legacy UI —
+ *                                                          for the Phase 6 in-place redesign only.
  * Paths default to the logged-in app (components/, app/(app), lib/) minus the marketing, blog,
  * legal and demo trees, which never render under data-ui="v2".
  */
@@ -28,6 +31,7 @@ import { join, relative, extname } from 'node:path'
 const ROOT = process.cwd()
 const args = process.argv.slice(2)
 const WRITE = args.includes('--write')
+const PALETTE = args.includes('--palette')
 const VERBOSE = args.includes('--verbose')
 const pathArgs = args.filter((a) => !a.startsWith('--'))
 
@@ -56,6 +60,35 @@ const BG_SELECTED = { 'f3f4f6': 'surface-selected' }
 
 const INTERACTIVE_VARIANT = /^(?:group-|peer-)?(?:hover|focus|focus-visible|focus-within|active)(?:\/[\w-]+)?$|^data-\[highlighted\]$/
 const SELECTED_VARIANT = /^(?:aria-selected|data-\[state=(?:active|checked|on|open)\]|data-\[selected(?:=true)?\])$/
+
+/**
+ * --palette: neutral slate/gray shades → nearest token, by utility. Approximate by design: the
+ * redesign replaces the cool Tailwind grays with Notion's warm neutrals.
+ */
+const PALETTE_TOKEN = {
+    text: { 950: 'fg', 900: 'fg', 800: 'fg', 700: 'fg-muted', 600: 'fg-muted', 500: 'fg-muted', 400: 'fg-subtle', 300: 'fg-subtle' },
+    bg: { 50: 'surface-subtle', 100: 'surface-muted', 200: 'surface-selected' },
+    border: { 50: 'line', 100: 'line', 200: 'line', 300: 'line-strong' },
+    divide: { 50: 'line', 100: 'line', 200: 'line', 300: 'line-strong' },
+}
+const PALETTE_UTIL = /^(text|bg|border(?:-[xytrblse])?|divide)-(?:slate|gray)-(\d{2,3})$/
+
+function rewritePalette(cls) {
+    const parts = splitVariants(cls)
+    let util = parts.pop()
+    const important = util.startsWith('!')
+    if (important) util = util.slice(1)
+    const m = util.match(PALETTE_UTIL)
+    if (!m) return null
+    const [, prefix, shade] = m
+    const family = prefix.startsWith('border') ? 'border' : prefix
+    let token = PALETTE_TOKEN[family]?.[Number(shade)]
+    if (!token) return null
+    if (family === 'bg' && parts.some((v) => INTERACTIVE_VARIANT.test(v))) token = 'surface-hover'
+    const variants = parts.length ? `${parts.join(':')}:` : ''
+    return `${variants}${important ? '!' : ''}${prefix}-${token}`
+}
+const PALETTE_CANDIDATE = /(?<![\w-])(?:[\w\-\[\]=&>*.\/:]+:)?!?(?:text|bg|border(?:-[xytrblse])?|divide)-(?:slate|gray)-\d{2,3}(?![\w\/-])/g
 
 const COLOR_UTIL = /^(text|bg|border(?:-[xytrblse])?|divide|ring|ring-offset|outline|fill|stroke|decoration|caret|accent)-\[#([0-9a-fA-F]{6})\]$/
 const CANDIDATE = /[^\s"'`{}(),;]*\[#[0-9a-fA-F]{6}\][^\s"'`{}(),;]*/g
@@ -135,11 +168,19 @@ for (const root of roots) {
             if (VERBOSE) console.log(`  skip  ${relative(ROOT, file)}  ${cls}  (${key})`)
             return cls
         })
+        let paletteNext = next
+        if (PALETTE) {
+            paletteNext = next.replace(PALETTE_CANDIDATE, (cls) => {
+                const out = rewritePalette(cls)
+                if (out) { count++; return out }
+                return cls
+            })
+        }
         if (count > 0) {
             filesChanged++
             totalRewrites += count
             console.log(`${String(count).padStart(5)}  ${relative(ROOT, file)}`)
-            if (WRITE) writeFileSync(file, next)
+            if (WRITE) writeFileSync(file, paletteNext)
         }
     }
 }
