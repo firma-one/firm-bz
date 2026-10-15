@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { checkConnectTargetRights, getManageableConnector, getRequestUser, isFirmAdmin } from '@/lib/connectors/connector-access'
+import { signOAuthState } from '@/lib/connectors/oauth-state'
 import { randomBytes } from 'crypto'
 import { createClient as createSupabaseAdmin } from '@supabase/supabase-js'
 import { config, getGoogleDriveOAuthServerCredentials } from '@/lib/config'
@@ -35,6 +37,21 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { action, userId, email, connectionId, rootFolderId } = body
 
+    // Every action except `initiate` works on an existing connector named by `connectionId`. A
+    // connector id is not a secret, so check the caller may manage that connector — its owner, a
+    // firm admin of its firm, or a manager of a client using it — before any action runs. Unknown
+    // actions fall through this gate too. (.claude/plans/access-gates.md, P0 #3)
+    if (action !== 'initiate') {
+      const caller = await getRequestUser(request)
+      if (!caller) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      if (!(await getManageableConnector(caller.id, body.connectionId))) {
+        return NextResponse.json({ error: 'Connector not found' }, { status: 404 })
+      }
+      if (action === 'repair-org-folder' && !(await isFirmAdmin(caller.id, body.organizationId))) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      }
+    }
+
     if (action === 'initiate') {
       // Generate OAuth URL for Google Drive
       const clientId = config.googleDrive.clientId
@@ -68,10 +85,13 @@ export async function POST(request: NextRequest) {
         'https://www.googleapis.com/auth/userinfo.profile'
       ].join(' ')
 
-      if (!userId) {
-        console.error('[google-drive/route] initiate called without userId — aborting OAuth')
-        return NextResponse.json({ error: 'userId is required to initiate OAuth' }, { status: 400 })
-      }
+      // The connection belongs to whoever is signed in — never to a userId in the body — and the
+      // state is signed so the callback can trust it. Rights on what it will be attached to are
+      // checked here and again at the callback. (.claude/plans/access-gates.md, P0 #4)
+      const initiator = await getRequestUser(request)
+      if (!initiator) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      const rightsError = await checkConnectTargetRights(initiator.id, body)
+      if (rightsError) return NextResponse.json({ error: rightsError }, { status: 403 })
 
       // Use state parameter to pass userId, organizationId, next redirect path, and popup flow metadata
       const flow = body.flow === 'popup' ? 'popup' : 'redirect'
@@ -86,7 +106,7 @@ export async function POST(request: NextRequest) {
       // picker. See .claude/plans/connector-microsoft-impl.md, item 20.
       const declaredAccountType = body.declaredAccountType === 'personal' ? 'personal' : 'work_school'
       const stateObj = {
-        userId,
+        userId: initiator.id,
         organizationId: body.organizationId,
         ...(body.clientId && { clientId: body.clientId }),
         rootFolderId: rootFolderId || null,
@@ -99,7 +119,7 @@ export async function POST(request: NextRequest) {
         ...(flow === 'popup' && body.openerOrigin && { openerOrigin: body.openerOrigin }),
         declaredAccountType,
       }
-      const state = Buffer.from(JSON.stringify(stateObj)).toString('base64')
+      const state = signOAuthState(stateObj)
 
       const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth')
       authUrl.searchParams.set('client_id', clientId)
@@ -419,7 +439,9 @@ export async function POST(request: NextRequest) {
             })
             if (linkedClient) org = await prisma.firm.findUnique({ where: { id: linkedClient.firmId } })
           }
-          if (!org && hintFirmId) {
+          // The hint is caller-supplied: only follow it into a firm the caller administers, or
+          // they could set up folders (and firm.firmFolderId) in any firm.
+          if (!org && hintFirmId && (await isFirmAdmin(rootUser.id, hintFirmId))) {
             org = await prisma.firm.findUnique({ where: { id: hintFirmId } })
           }
           if (org) {

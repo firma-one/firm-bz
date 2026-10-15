@@ -42,15 +42,15 @@ export async function getProjectMembers(projectId: string) {
         orderBy: { id: 'asc' }
     })
 
-    // 2. Fetch Pending Invitations
-    const invitations = await prisma.engagementInvitation.findMany({
+    // 2. Fetch Pending Invitations — the invite token never leaves the server.
+    const invitations = (await prisma.engagementInvitation.findMany({
         where: {
             engagementId: projectId,
             status: { in: [InvitationStatus.PENDING, InvitationStatus.ACCEPTED, InvitationStatus.ERROR] }
         },
         include: { persona: true },
         orderBy: { createdAt: 'desc' }
-    })
+    })).map(({ token: _token, ...rest }) => rest)
 
     // 3. Enrich Members with User Data
     const enrichedMembers = await Promise.all(members.map(async (m: any) => {

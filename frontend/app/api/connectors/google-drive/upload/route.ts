@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getManageableConnector } from '@/lib/connectors/connector-access'
 import { ConnectorType } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { googleDriveConnector } from '@/lib/google-drive-connector'
@@ -79,6 +80,10 @@ export async function POST(request: NextRequest) {
                 resolvedParentId = folderIds.generalFolderId
             }
         } else if (connectionId) {
+            // A pre-authorized upload URL into this connector's Drive — connector managers only.
+            if (!(await getManageableConnector(user.id, connectionId))) {
+                return NextResponse.json({ error: 'No active storage connector found' }, { status: 404 })
+            }
             connector = await prisma.connector.findUnique({ where: { id: connectionId } })
         }
 

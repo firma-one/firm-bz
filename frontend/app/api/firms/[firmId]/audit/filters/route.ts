@@ -42,7 +42,9 @@ export async function GET(
       }),
       prisma.engagement.findMany({
         where: {
-          ...(clientIds.length > 0 ? { clientId: { in: clientIds } } : { client: { firmId } }),
+          // Always inside this firm — the clientId filter narrows, it never reaches another firm.
+          client: { firmId },
+          ...(clientIds.length > 0 ? { clientId: { in: clientIds } } : {}),
           isDeleted: false,
         },
         select: { id: true, name: true, clientId: true },

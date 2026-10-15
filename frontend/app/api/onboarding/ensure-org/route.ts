@@ -40,6 +40,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ organization: null })
     }
 
+    // The persona claim mirrors the user's real role in that firm. This used to write
+    // 'firm_admin' for anyone with a default firm — a guest included — and the permission helpers
+    // trusted the claim. (.claude/plans/access-gates.md, P0 #7)
+    const { prisma } = await import('@/lib/prisma')
+    const membership = await prisma.firmMember.findFirst({ where: { userId: user.id, firmId: firm.id }, select: { role: true } })
+
     // Inject JWT Metadata (RBAC V2)
     try {
       const adminClient = createAdminClient()
@@ -50,7 +56,7 @@ export async function POST(request: NextRequest) {
         app_metadata: mergeLeanAppMetadata(user.app_metadata as Record<string, unknown>, {
           active_firm_id: firm.id,
           active_firm_slug: firm.slug,
-          active_persona: 'firm_admin',
+          active_persona: membership?.role ?? undefined,
         }),
       })
       logger.info('JWT metadata injected during onboarding (ensure-org)', { userId: user.id, firmId: firm.id })

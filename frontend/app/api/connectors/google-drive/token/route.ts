@@ -3,6 +3,7 @@ import { ConnectorStatus } from '@prisma/client'
 import { googleDriveConnector } from '@/lib/google-drive-connector'
 import { prisma } from '@/lib/prisma'
 import { config } from '@/lib/config'
+import { accessErrorResponse, requireConnectorManager, requireRequestUser } from '@/lib/connectors/connector-access'
 
 /** Same Web client ID the user authorized (picker + OAuth must match). */
 function resolvePickerClientId(): string | undefined {
@@ -21,6 +22,11 @@ export async function GET(request: NextRequest) {
     if (!connectionId) {
       return NextResponse.json({ error: 'Missing connectionId', code: 'BAD_REQUEST' }, { status: 400 })
     }
+
+    // This hands out a live Google access token, so only the account that connected it or a firm
+    // admin of its firm — never anyone who merely knows the connector id.
+    const user = await requireRequestUser(request)
+    await requireConnectorManager(user.id, connectionId, { ownerOrFirmAdmin: true })
 
     const connector = await prisma.connector.findUnique({
       where: { id: connectionId },
@@ -66,6 +72,8 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ accessToken, clientId })
   } catch (error) {
+    const denied = accessErrorResponse(error)
+    if (denied) return NextResponse.json(denied.body, { status: denied.status })
     console.error('Token fetch error:', error)
     return NextResponse.json({ error: 'Internal Error', code: 'INTERNAL' }, { status: 500 })
   }

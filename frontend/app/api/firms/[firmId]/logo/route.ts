@@ -10,6 +10,7 @@ import { prisma } from '@/lib/prisma'
 import { googleDriveConnector } from '@/lib/google-drive-connector'
 import { getStorageAdapter } from '@/lib/connectors/registry'
 import { METADATA_FOLDER_NAME } from '@/lib/connectors/types'
+import { safeImageResponse, sniffImageType } from '@/lib/http/safe-image-response'
 
 const ASSETS_FOLDER = 'assets'
 const MAX_SIZE_BYTES = 5 * 1024 * 1024 // 5 MB
@@ -103,17 +104,13 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
 
     const file = await googleDriveConnector.downloadFile(connectorId, logo.id)
     const buffer = await new Response(file.stream).arrayBuffer()
-    console.log('[logo GET] serving', file.mimeType, buffer.byteLength, 'bytes')
-    return new NextResponse(buffer, {
-      status: 200,
-      headers: {
-        'Content-Type': file.mimeType || 'application/octet-stream',
-        'Cache-Control': 'public, max-age=3600',
-      },
-    })
+    // Only real images, SVG sandboxed — never the stored Content-Type as is. (P0 #9)
+    return safeImageResponse(buffer, file.mimeType)
   } catch (e) {
     console.error('[logo GET] error:', e)
-    return NextResponse.json({ error: 'Failed to load logo', detail: String(e) }, { status: 500 })
+    // No error detail: this route is public, and the message revealed whether a firm id exists
+    // and the state of its storage connector.
+    return NextResponse.json({ error: 'Failed to load logo' }, { status: 500 })
   }
 }
 
@@ -162,6 +159,13 @@ export async function POST(
     }
 
     const ext = extFromMime(type)
+    // The bytes must be the image type declared — a file labelled image/png that isn't one is refused.
+    const declaredBytes = new Uint8Array(await file.slice(0, 512).arrayBuffer())
+    const sniffed = sniffImageType(declaredBytes, type)
+    const expected = type === 'image/jpg' ? 'image/jpeg' : type
+    if (sniffed !== expected) {
+      return NextResponse.json({ error: 'Invalid type. Use JPG, PNG, or SVG.' }, { status: 400 })
+    }
     const fileName = `logo.${ext}`
     const buffer = Buffer.from(await file.arrayBuffer())
     const adapter = await getStorageAdapter(connectorId)

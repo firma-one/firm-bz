@@ -23,20 +23,26 @@ export async function getClientMembers(clientId: string) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) throw new Error('Unauthorized')
 
+    // Members and invitations of a client: its managers only, on the client's own firm. This only
+    // checked sign-in. (.claude/plans/access-gates.md, P0 #12)
+    const owning = await prisma.client.findUnique({ where: { id: clientId }, select: { firmId: true } })
+    if (!owning || !(await canManageClient(owning.firmId, clientId))) throw new Error('Insufficient permissions')
+
     const members = await prisma.clientMember.findMany({
         where: { clientId },
         include: { persona: true },
         orderBy: { id: 'asc' }
     })
 
-    const invitations = await prisma.clientInvitation.findMany({
+    // The invite token never leaves the server.
+    const invitations = (await prisma.clientInvitation.findMany({
         where: {
             clientId,
             status: { in: [InvitationStatus.PENDING, InvitationStatus.ACCEPTED, InvitationStatus.ERROR] }
         },
         include: { persona: true },
         orderBy: { createdAt: 'desc' }
-    })
+    })).map(({ token: _token, ...rest }) => rest)
 
     const enrichedMembers = await Promise.all(
         members.map(async (m) => {
@@ -67,14 +73,16 @@ export async function inviteClientMember(firmId: string, clientId: string, email
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) throw new Error('Unauthorized')
 
-    const canManage = await canManageClient(firmId, clientId)
-    if (!canManage) throw new Error('Insufficient permissions to invite client members')
-
     const client = await prisma.client.findUnique({
         where: { id: clientId },
         include: { firm: { select: { sandboxOnly: true, name: true } } }
     })
     if (!client) throw new Error('Client not found')
+    // Check against the client's own firm, never the firmId the caller sent — a firm admin of
+    // any firm used to pass for a foreign client. (.claude/plans/access-gates.md, P0 #8)
+    if (firmId && firmId !== client.firmId) throw new Error('Client not found')
+    const canManage = await canManageClient(client.firmId, clientId)
+    if (!canManage) throw new Error('Insufficient permissions to invite client members')
     if (client.firm?.sandboxOnly) {
         throw new Error('Inviting members is restricted for Sandbox firms. Upgrade to invite teammates.')
     }

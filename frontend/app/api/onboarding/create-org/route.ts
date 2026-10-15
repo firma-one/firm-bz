@@ -56,6 +56,12 @@ export async function POST(request: NextRequest) {
         if (!connectionId) {
             return NextResponse.json({ error: 'Missing connectionId' }, { status: 400 })
         }
+        // The new firm takes over this connector, so it must be one the caller connected — never
+        // someone else's connector id. (.claude/plans/access-gates.md, P0 #6)
+        const ownedConnector = await prisma.connector.findFirst({ where: { id: connectionId, userId }, select: { id: true } })
+        if (!ownedConnector) {
+            return NextResponse.json({ error: 'Connector not found' }, { status: 404 })
+        }
 
         if (!name?.trim()) {
             return NextResponse.json({ error: 'Missing organization name' }, { status: 400 })

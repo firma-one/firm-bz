@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getManageableConnector } from '@/lib/connectors/connector-access'
 import { createClient } from '@/utils/supabase/server'
 import { googleDriveConnector } from '@/lib/google-drive-connector'
 import { prisma } from '@/lib/prisma'
@@ -22,6 +23,23 @@ export async function POST(request: NextRequest) {
                 { error: 'Missing required params' },
                 { status: 400 }
             )
+        }
+
+        // The connector must be one the caller manages (the UI sends their own), and a target folder
+        // that belongs to an engagement needs edit rights on that engagement.
+        if (!(await getManageableConnector(user.id, connectionId))) {
+            return NextResponse.json({ error: 'Connector not found' }, { status: 404 })
+        }
+        const targetFolder = await prisma.engagementDocument.findFirst({
+            where: { externalId: parentId },
+            select: { engagementId: true, engagement: { select: { clientId: true, client: { select: { firmId: true } } } } },
+        })
+        if (targetFolder?.engagementId) {
+            const { canEditProject } = await import('@/lib/permission-helpers')
+            const e = targetFolder.engagement
+            if (!e || !(await canEditProject(e.client.firmId, e.clientId, targetFolder.engagementId))) {
+                return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+            }
         }
 
         // Enforce document cap before any Drive operations

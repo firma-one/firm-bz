@@ -7,7 +7,7 @@ import { syncDocumentSharingUsers } from '@/lib/sync-document-sharing'
 import { getFileInfo } from '@/lib/file-utils'
 import { safeInngestSend } from '@/lib/inngest/client'
 import { resolveProjectContext } from '@/lib/resolve-project-context'
-import { canManageProject } from '@/lib/permission-helpers'
+import { canManageProject, canViewProject } from '@/lib/permission-helpers'
 import { resolveEngagementConnector } from '@/lib/connectors/resolve-client-connector'
 import { getPermissionAdapter, getContentAdapter } from '@/lib/connectors/registry'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
@@ -21,7 +21,8 @@ import { engagementPath } from '@/lib/navigation/firm-paths'
 /** ProjectDocument can contain BigInt (fileSize); JSON.stringify cannot serialize it. */
 function toJsonSafeSharing(doc: Record<string, unknown> | null): Record<string, unknown> | null {
   if (!doc) return null
-  const { fileSize, ...rest } = doc
+  // connectorId never leaves the server: no caller uses it, and it names the firm's storage.
+  const { fileSize, connectorId: _connectorId, ...rest } = doc
   return {
     ...rest,
     fileSize: fileSize != null ? String(fileSize) : null,
@@ -101,6 +102,12 @@ export async function GET(
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const { projectId, documentId: documentIdParam } = await params
+    // This only checked sign-in, so anyone could read any engagement's document settings.
+    // Firm and client come from the engagement row, never from the caller.
+    const ctx = await resolveProjectContext(projectId)
+    if (!ctx || !(await canViewProject(ctx.firmId, ctx.clientId, projectId))) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
     const fileInfo = await getFileInfo(projectId, documentIdParam)
     if (!fileInfo) return NextResponse.json({ sharing: null })
 

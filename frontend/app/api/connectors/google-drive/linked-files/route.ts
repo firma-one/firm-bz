@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getManageableConnector, getRequestUser } from '@/lib/connectors/connector-access'
 import { ConnectorType } from '@prisma/client'
 import { readFile } from 'fs/promises'
 import path from 'path'
@@ -69,6 +70,12 @@ export async function GET(request: NextRequest) {
         if (!connectionId) {
             return NextResponse.json({ error: 'Missing connectionId' }, { status: 400 })
         }
+        // This had no sign-in at all: it lists every tracked document on the connector.
+        const caller = await getRequestUser(request)
+        if (!caller) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+        if (!(await getManageableConnector(caller.id, connectionId))) {
+            return NextResponse.json({ error: 'Connection not found' }, { status: 404 })
+        }
 
         const linkedFilesDb = await prisma.engagementDocument.findMany({
             where: { connectorId: connectionId },
@@ -116,6 +123,12 @@ export async function DELETE(request: NextRequest) {
 
         if (!id || !connectionId) {
             return NextResponse.json({ error: 'Missing file ID or connection ID' }, { status: 400 })
+        }
+        // This had no sign-in at all: it deletes the firm's document records for the connector.
+        const caller = await getRequestUser(request)
+        if (!caller) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+        if (!(await getManageableConnector(caller.id, connectionId))) {
+            return NextResponse.json({ error: 'Connection not found' }, { status: 404 })
         }
 
         await prisma.engagementDocument.deleteMany({
@@ -709,6 +722,16 @@ export async function POST(request: NextRequest) {
             let connector: any
             let isSandbox = false
             if (typeof bodyEngagementId === 'string' && bodyEngagementId) {
+                // Writes a folder or file into the engagement's Drive: the caller must be able to
+                // edit that engagement (firm and client resolved from the engagement row).
+                const target = await prisma.engagement.findFirst({
+                    where: { id: bodyEngagementId, isDeleted: false },
+                    select: { clientId: true, client: { select: { firmId: true } } },
+                })
+                const { canEditProject } = await import('@/lib/permission-helpers')
+                if (!target || !(await canEditProject(target.client.firmId, target.clientId, bodyEngagementId))) {
+                    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+                }
                 const [resolvedConnector, projectForSandbox] = await Promise.all([
                     resolveEngagementConnector(bodyEngagementId),
                     prisma.engagement.findUnique({

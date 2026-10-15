@@ -42,6 +42,27 @@ export function findProjectInPermissions(
 }
 
 // ============================================================================
+// Hierarchy binding — callers pass (firmId, clientId, projectId), sometimes from the browser.
+// The checks below grant firm admins and client managers broad rights inside *their* firm, so
+// each id must really sit under the one above it.
+// ============================================================================
+
+async function clientBelongsToFirm(clientId: string, firmId: string): Promise<boolean> {
+  if (!clientId || !firmId) return false
+  const { prisma } = await import('./prisma')
+  return !!(await prisma.client.findFirst({ where: { id: clientId, firmId }, select: { id: true } }))
+}
+
+async function engagementBelongsTo(projectId: string, clientId: string, firmId: string): Promise<boolean> {
+  if (!projectId || !clientId || !firmId) return false
+  const { prisma } = await import('./prisma')
+  return !!(await prisma.engagement.findFirst({
+    where: { id: projectId, clientId, client: { firmId } },
+    select: { id: true },
+  }))
+}
+
+// ============================================================================
 // Permission Check Functions (Server-Side)
 // ============================================================================
 
@@ -58,21 +79,17 @@ export async function checkFirmPermission(
 
   if (!user) return false
 
-  const settings = await userSettingsPlus.getUserSettingsPlus(user.id)
-
-  // High-performance check: If this is the active firm in the JWT (RBAC V2)
-  if (user.app_metadata?.active_firm_id === firmId) {
-    const { getCapabilitiesForPersona } = await import('./permissions/persona-map')
-    const persona = user.app_metadata.active_persona
-    const caps = getCapabilitiesForPersona(persona)
-
-    // Scopes mapping in V2
-    if (scope === 'firm') {
-      if (privilege === 'can_manage') return caps['firm:can_manage'] === true
-    }
-    // Add other scope mappings as needed for V2
+  // Firm management is answered by the database, every time. The JWT persona fast path that used
+  // to answer it trusted claims a removed admin keeps and that onboarding/ensure-org once wrote
+  // for anyone; the 30-minute UserSettingsPlus cache has the same staleness. The only way to hold
+  // firm:can_manage is FirmRole.firm_admin. (.claude/plans/access-gates.md, P0 #7)
+  if (scope === 'firm' && privilege === 'can_manage') {
+    const { prisma } = await import('./prisma')
+    const membership = await prisma.firmMember.findFirst({ where: { userId: user.id, firmId }, select: { role: true } })
+    return membership?.role === 'firm_admin'
   }
 
+  const settings = await userSettingsPlus.getUserSettingsPlus(user.id)
   const firm = findFirmInPermissions(settings.permissions, firmId)
 
   if (!firm) return false
@@ -94,20 +111,12 @@ export async function checkClientPermission(
 
   if (!user) return false
 
+  // The client must belong to the firm passed in. Every fallback below says yes to a firm admin of
+  // `firmId` — without this, a firm admin of any firm (anyone can create one) passed for a foreign
+  // client. (.claude/plans/access-gates.md, P0 #8.) The JWT persona fast path is gone (P0 #7).
+  if (!(await clientBelongsToFirm(clientId, firmId))) return false
+
   const settings = await userSettingsPlus.getUserSettingsPlus(user.id)
-
-  // High-performance check: If this is the active firm in the JWT (RBAC V2)
-  if (user.app_metadata?.active_firm_id === firmId) {
-    const { getCapabilitiesForPersona } = await import('./permissions/persona-map')
-    const persona = user.app_metadata.active_persona
-    const caps = getCapabilitiesForPersona(persona)
-
-    // Scopes mapping in V2 for client — only short-circuit on success so we can fall back
-    // when JWT persona is stale or missing client:can_manage while UserSettingsPlus says firm_admin.
-    if (scope === 'client' && privilege === 'can_manage' && caps['client:can_manage'] === true) {
-      return true
-    }
-  }
 
   const client = findClientInPermissions(settings.permissions, firmId, clientId)
 
@@ -160,22 +169,12 @@ export async function checkProjectPermission(
 
   if (!user) return false
 
+  // The engagement must belong to the client and firm passed in — the firm-admin and client-manager
+  // fallbacks below otherwise pass for a foreign engagement. (.claude/plans/access-gates.md, P0 #8.)
+  // The JWT persona fast path is gone (P0 #7).
+  if (!(await engagementBelongsTo(projectId, clientId, firmId))) return false
+
   const settings = await userSettingsPlus.getUserSettingsPlus(user.id)
-
-  // Safety: JWT path only for firm/client scope when active_firm_id matches.
-  // Project scope always uses UserSettingsPlus (project_members) — never trust JWT for project role.
-  if (scope !== 'project' && user.app_metadata?.active_firm_id === firmId) {
-    const { getCapabilitiesForPersona } = await import('./permissions/persona-map')
-    const persona = user.app_metadata?.active_persona
-    const caps = getCapabilitiesForPersona(persona ?? null)
-
-    if (scope === 'firm') {
-      if (privilege === 'can_manage') return caps['firm:can_manage'] === true
-    }
-    if (scope === 'client') {
-      if (privilege === 'can_manage') return caps['client:can_manage'] === true
-    }
-  }
 
   const project = findProjectInPermissions(settings.permissions, firmId, clientId, projectId)
 

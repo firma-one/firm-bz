@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getManageableConnector } from '@/lib/connectors/connector-access'
 import { createClient } from '@supabase/supabase-js'
 import { googleDriveConnector } from '@/lib/google-drive-connector'
 
@@ -28,6 +29,10 @@ export async function GET(request: NextRequest) {
 
     if (!connectionId) {
       return NextResponse.json({ error: 'Connection ID required' }, { status: 400 })
+    }
+    // Returns the Drive account's email, name, quota and recent file names — connector managers only.
+    if (!(await getManageableConnector(user.id, connectionId))) {
+      return NextResponse.json({ error: 'Connection not found' }, { status: 404 })
     }
 
     // Test the Google Drive connection by getting user info

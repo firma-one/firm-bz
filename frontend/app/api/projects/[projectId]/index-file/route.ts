@@ -98,8 +98,13 @@ export async function POST(
         // `organizationId` is the old name for the firm; the local name follows current
         // terminology. The request-body key and `authResult.ctx.orgId` are left alone — one is a
         // wire format, the other belongs to the shared auth helper.
-        const firmId = organizationId || authResult.ctx.orgId
-        const cliId = clientId || authResult.ctx.clientId
+        // Always the engagement's own firm and client. The body's organizationId/clientId were
+        // trusted here and steered the connector the indexer reads with — a way to ingest another
+        // tenant's file into this engagement. (.claude/plans/access-gates.md, P0 #8)
+        void organizationId
+        void clientId
+        const firmId = authResult.ctx.orgId
+        const cliId = authResult.ctx.clientId
 
         if (!firmId) {
             return NextResponse.json({ error: 'Organization context not found' }, { status: 404 })

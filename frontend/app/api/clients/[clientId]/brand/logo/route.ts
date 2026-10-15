@@ -2,6 +2,7 @@
 // Returns the logo as an image response from Brand.logoData base64
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { safeImageResponse } from '@/lib/http/safe-image-response'
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ clientId: string }> }) {
     const { clientId } = await params
@@ -15,7 +16,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ cli
     if (!match) return NextResponse.json({ error: 'Invalid logo data' }, { status: 500 })
     const [, mimeType, base64] = match
     const buffer = Buffer.from(base64, 'base64')
-    return new NextResponse(buffer, {
-        headers: { 'Content-Type': mimeType, 'Cache-Control': 'public, max-age=3600' }
-    })
+    // The stored data URL's type was served as is — `data:text/html;base64,…` ran as the app.
+    // Only real images now, SVG sandboxed. (.claude/plans/access-gates.md, P0 #9)
+    return safeImageResponse(new Uint8Array(buffer), mimeType)
 }

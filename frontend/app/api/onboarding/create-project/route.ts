@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { isClientManager } from '@/lib/connectors/connector-access'
 import { prisma } from '@/lib/prisma'
 import { logger } from '@/lib/logger'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
@@ -39,6 +40,12 @@ export async function POST(request: NextRequest) {
             where: { userId: user.id, firmId: resolvedFirmId }
         })
         if (!membership) {
+            return NextResponse.json({ error: 'Firm not found or access denied' }, { status: 403 })
+        }
+        // The client must be in that firm, and the caller must manage it — the engagement is created
+        // under it and its admins become leads. (.claude/plans/access-gates.md, P0 #8)
+        const targetClient = await (prisma as any).client.findFirst({ where: { id: clientId, firmId: resolvedFirmId }, select: { id: true } })
+        if (!targetClient || !(await isClientManager(user.id, clientId))) {
             return NextResponse.json({ error: 'Firm not found or access denied' }, { status: 403 })
         }
 

@@ -27,7 +27,14 @@ async function resolveClientAndProjectIds(args: {
   const directClientId = args.clientId?.trim() || null
   const directProjectId = args.projectId?.trim() || null
   if (directClientId) {
-    return { clientId: directClientId, projectId: directProjectId }
+    // Ids from the body must sit inside the firm being broadcast from — otherwise a firm admin of
+    // their own throwaway firm could message another tenant's client or engagement members.
+    // (.claude/plans/access-gates.md, P0 #8)
+    const client = await args.prisma.client.findFirst({ where: { id: directClientId, firmId: args.orgId }, select: { id: true } })
+    if (!client) return { clientId: null, projectId: null }
+    if (!directProjectId) return { clientId: client.id, projectId: null }
+    const engagement = await args.prisma.engagement.findFirst({ where: { id: directProjectId, clientId: client.id }, select: { id: true } })
+    return { clientId: client.id, projectId: engagement ? directProjectId : null }
   }
 
   const clientSlug = args.clientSlug?.trim() || null
