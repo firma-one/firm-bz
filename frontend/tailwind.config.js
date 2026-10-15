@@ -50,11 +50,17 @@ module.exports = {
 				'indeterminate-progress-y': {
 					'0%': { transform: 'translateY(-100%)' },
 					'100%': { transform: 'translateY(100%)' }
+				},
+				// Skeleton loading: a soft highlight sweeping across the placeholder (ShimmerBar).
+				'shimmer': {
+					'0%': { backgroundPosition: '100% 0' },
+					'100%': { backgroundPosition: '-100% 0' }
 				}
 			},
 			animation: {
 				'indeterminate-progress': 'indeterminate-progress 1.5s infinite linear',
-				'indeterminate-progress-y': 'indeterminate-progress-y 1.5s infinite linear'
+				'indeterminate-progress-y': 'indeterminate-progress-y 1.5s infinite linear',
+				'shimmer': 'shimmer 1.6s ease-in-out infinite'
 			},
 			colors: {
 				background: 'hsl(var(--background))',

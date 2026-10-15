@@ -1,6 +1,7 @@
 'use client'
 
-import { ChevronDown, SlidersHorizontal } from "lucide-react"
+import { ChevronRight } from "lucide-react"
+import { cn } from "@/lib/utils"
 
 interface OptionalFieldsSectionProps {
     open: boolean
@@ -10,26 +11,25 @@ interface OptionalFieldsSectionProps {
     className?: string
 }
 
-export function OptionalFieldsSection({ open, onToggle, children, label = 'Optional fields', className = '' }: OptionalFieldsSectionProps) {
+/**
+ * Notion's "N more properties" disclosure for the create dialogs (.claude/plans/ui-ux-overhaul.md,
+ * Phase 6): a quiet row that reveals the remaining property rows in place — no box, no header bar.
+ */
+export function OptionalFieldsSection({ open, onToggle, children, label = 'More properties', className = '' }: OptionalFieldsSectionProps) {
     return (
-        <section className={`border border-[#e5e7eb] rounded overflow-hidden ${className}`}>
+        <section className={cn('flex flex-col', className)}>
             <button
                 type="button"
                 onClick={onToggle}
                 aria-expanded={open}
-                className="w-full px-4 py-3 flex items-center justify-between bg-[#f9f9fb] hover:bg-[#f3f4f6] transition-colors"
+                className="flex h-8 w-fit items-center gap-1.5 rounded-control px-2 text-small text-fg-muted outline-none transition-colors hover:bg-surface-hover hover:text-fg focus-visible:ring-2 focus-visible:ring-action/30"
             >
-                <div className="flex items-center gap-2">
-                    <SlidersHorizontal className="h-3.5 w-3.5 text-[#45474c]" aria-hidden />
-                    <span className="font-mono text-[9px] font-bold uppercase tracking-widest text-[#45474c]">{label}</span>
-                </div>
-                <ChevronDown className={`h-3.5 w-3.5 text-[#45474c] transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
+                <ChevronRight className={cn('h-3.5 w-3.5 transition-transform duration-150', open && 'rotate-90')} aria-hidden />
+                {open ? 'Fewer properties' : label}
             </button>
-            <div className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${open ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
-                <div className="overflow-hidden min-h-0">
-                    <div className="p-4 border-t border-[#e5e7eb] bg-white space-y-3">
-                        {children}
-                    </div>
+            <div className={cn('grid transition-[grid-template-rows] duration-200 ease-out', open ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]')}>
+                <div className="min-h-0 overflow-hidden">
+                    <div className="pt-1">{children}</div>
                 </div>
             </div>
         </section>

@@ -7,6 +7,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { StatusPill } from "@/components/ui/tag"
 import { cn } from "@/lib/utils"
 import type { StatusKind } from "@/lib/ui/status-colors"
+import { initialsOf } from '@/lib/initials'
 
 /*
  * Notion-style inline property editors (.claude/plans/ui-ux-overhaul.md, Phase 6): the value shows
@@ -180,8 +181,8 @@ export function PersonAvatar({ person, size = 20 }: { person: Pick<PersonOption,
         return <img src={person.avatarUrl} alt="" style={style} className="shrink-0 rounded-full object-cover" />
     }
     return (
-        <span style={style} className="flex shrink-0 items-center justify-center rounded-full bg-surface-muted text-[10px] font-medium text-fg-muted">
-            {(person.name || "?").trim().charAt(0).toUpperCase()}
+        <span style={style} className="flex shrink-0 items-center justify-center rounded-full bg-surface-muted text-[9px] font-medium text-fg-muted">
+            {initialsOf(person.name)}
         </span>
     )
 }

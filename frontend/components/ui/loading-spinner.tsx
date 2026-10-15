@@ -4,116 +4,53 @@ interface LoadingSpinnerProps {
     className?: string
     message?: string
     size?: "sm" | "md" | "lg" | "xl"
-    showDots?: boolean // Kept for compatibility, though animation logic is internal now
+    showDots?: boolean // Kept for compatibility; the dots are gone
 }
 
-export function LoadingSpinner({
-    className,
-    message,
-    size = "lg"
-}: LoadingSpinnerProps) {
+/*
+ * A small arc with a fading tail (a conic gradient masked to a ring) — the quiet indicator current
+ * products use, replacing the large ring with a pulsing dot. It inherits the surrounding text color.
+ * For lists and tables, prefer a skeleton shaped like the content (components/ui/shimmer.tsx).
+ */
+const SIZES = {
+    sm: { box: "h-4 w-4", ring: "2px" },
+    md: { box: "h-5 w-5", ring: "2px" },
+    lg: { box: "h-7 w-7", ring: "2.5px" },
+    xl: { box: "h-9 w-9", ring: "3px" },
+} as const
 
-    // Size mapping for the container
-    const sizeClasses = {
-        sm: "w-6 h-6",
-        md: "w-10 h-10",
-        lg: "w-16 h-16",
-        xl: "w-24 h-24"
-    }
-
-    // Dynamic stroke width based on size
-    const strokeWidth = {
-        sm: 3,
-        md: 3,
-        lg: 2.5,
-        xl: 2
-    }
-
-    // Determine layout variant based on message presence
-    const isFullPage = !!message
-
-    return (
-        <div
+export function LoadingSpinner({ className, message, size = "lg" }: LoadingSpinnerProps) {
+    const s = SIZES[size]
+    const arc = (
+        <span
+            aria-hidden
             className={cn(
-                "flex flex-col items-center justify-center",
-                isFullPage ? "min-h-[50vh] p-4" : "p-0",
-                className,
+                "block shrink-0 animate-spin rounded-full [animation-duration:700ms] motion-reduce:[animation-duration:2s]",
+                "[background:conic-gradient(from_90deg,transparent_0deg,currentColor_330deg,currentColor_360deg)]",
+                s.box,
             )}
-        >
-            <div className={cn("flex flex-col items-center", isFullPage ? "gap-6" : "gap-0")}>
-                {/* Modern Spinner: Dot inside Circle (Strictly Black) */}
-                <div
-                    className={cn(
-                        "relative grid place-items-center",
-                        sizeClasses[size],
-                        isFullPage && "mb-2",
-                    )}
-                >
+            style={{
+                WebkitMask: `radial-gradient(farthest-side, transparent calc(100% - ${s.ring}), #000 calc(100% - ${s.ring}))`,
+                mask: `radial-gradient(farthest-side, transparent calc(100% - ${s.ring}), #000 calc(100% - ${s.ring}))`,
+            }}
+        />
+    )
 
-                    {/* 1. Rotating Ring with Gradual Opacity (The "Circle") */}
-                    <svg
-                        className="animate-spin absolute inset-0 text-current"
-                        viewBox="0 0 50 50"
-                        fill="none"
-                        width="100%"
-                        height="100%"
-                        xmlns="http://www.w3.org/2000/svg"
-                    >
-                        {/* Static Track (Low Opacity) */}
-                        <circle
-                            cx="25"
-                            cy="25"
-                            r="20"
-                            stroke="currentColor"
-                            strokeWidth={strokeWidth[size]}
-                            className="opacity-10"
-                        />
-                        {/* Active Spinning Segment */}
-                        <circle
-                            cx="25"
-                            cy="25"
-                            r="20"
-                            stroke="currentColor"
-                            strokeWidth={strokeWidth[size]}
-                            strokeDasharray="80"
-                            strokeDashoffset="60"
-                            strokeLinecap="round"
-                            className="opacity-100"
-                        />
-                    </svg>
+    if (!message) {
+        return (
+            <span role="status" aria-label="Loading" className={cn("inline-flex items-center justify-center", className)}>
+                {arc}
+            </span>
+        )
+    }
 
-                    {/* 2. The "Dot Inside" (Pulsing Center) */}
-                    <div className={cn("bg-current rounded-full animate-pulse", {
-                        "w-1.5 h-1.5": size === 'sm',
-                        "w-2.5 h-2.5": size === 'md',
-                        "w-3 h-3": size === 'lg',
-                        "w-4 h-4": size === 'xl',
-                    })} />
-                </div>
-
-                {/* Full Page Text Layout */}
-                {isFullPage && (
-                    <div className="flex flex-col items-center animate-in fade-in slide-in-from-bottom-2 duration-700 space-y-2">
-                        {/* Main Message */}
-                        <p className="text-base font-semibold text-current tracking-tight">
-                            {message}
-                        </p>
-
-                        {/* Subtext and Bouncing Dots */}
-                        <div className="flex flex-col items-center gap-2">
-                            <p className="text-xs text-gray-500 font-medium">
-                                This will only take a moment
-                            </p>
-
-                            {/* 3 Dots Animation */}
-                            <div className="flex items-center gap-1.5 mt-1">
-                                <div className="h-1 w-1 bg-current rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                                <div className="h-1 w-1 bg-current rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                                <div className="h-1 w-1 bg-current rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                            </div>
-                        </div>
-                    </div>
-                )}
+    // Full-page variant: the arc above a short message.
+    return (
+        <div role="status" className={cn("flex min-h-[50vh] flex-col items-center justify-center gap-3 p-4", className)}>
+            {arc}
+            <div className="flex flex-col items-center gap-0.5 text-center">
+                <p className="text-ui font-medium text-fg">{message}</p>
+                <p className="text-small text-fg-muted">This will only take a moment</p>
             </div>
         </div>
     )

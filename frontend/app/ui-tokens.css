@@ -74,6 +74,17 @@
   --ui-tag-pink-fg: #a64276;
   --ui-tag-red-bg: #ffe2dd;
   --ui-tag-red-fg: #b1403b;
+
+  /* Chart series — filled bars, segments and legend swatches. The tag colors above are text
+     tones (too dark and muddy as fills); these are their vivid counterparts, picked to stay apart
+     from each other at small sizes. Use as var(--ui-chart-blue) etc. */
+  --ui-chart-blue: #4f7df3;
+  --ui-chart-orange: #ef7a3c;
+  --ui-chart-green: #3fae74;
+  --ui-chart-yellow: #e9b63b;
+  --ui-chart-purple: #9b6ce0;
+  --ui-chart-pink: #e2629a;
+  --ui-chart-teal: #34b3b0;
 }
 
 [data-ui='v2'] {

@@ -6,6 +6,19 @@ import { cn } from "@/lib/utils"
  * at the top of an engagement, client or document.
  */
 
+/**
+ * Settings forms built from property rows (engagement, client, firm): borderless fields that tint
+ * on hover and outline on focus, so a row reads as a value until you edit it.
+ */
+export const PROPERTY_FIELD_CLASS =
+    "h-8 w-full border-transparent bg-transparent px-2 text-ui text-fg shadow-none hover:bg-surface-hover focus-visible:bg-surface disabled:hover:bg-transparent"
+export const PROPERTY_TEXTAREA_CLASS =
+    "min-h-[64px] border-transparent bg-transparent px-2 py-1.5 text-ui text-fg shadow-none hover:bg-surface-hover focus-visible:bg-surface disabled:hover:bg-transparent"
+/** Hint under a property value, aligned with the field's text. */
+export const PROPERTY_HINT_CLASS = "px-2 text-caption text-fg-subtle"
+/** Section title over a group of property rows. */
+export const SETTINGS_SECTION_HEADING_CLASS = "mb-2 border-b border-line pb-2 text-h3 text-fg"
+
 export function PropertyList({ className, ...props }: React.HTMLAttributes<HTMLDListElement>) {
     return <dl className={cn("flex flex-col gap-0.5", className)} {...props} />
 }
