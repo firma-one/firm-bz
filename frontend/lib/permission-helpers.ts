@@ -228,7 +228,14 @@ export async function checkProjectPermission(
     // even when the UserSettingsPlus cache is stale or cross-pod invalidation hasn't propagated.
     const viewableEngagementRoles = ['eng_admin', 'eng_member', 'eng_ext_collaborator', 'eng_viewer']
     if (dbEngagementMembership && viewableEngagementRoles.includes(dbEngagementMembership.role)) {
-      return true
+      // Membership answers can_view. Where the persona map decides the privilege (can_manage,
+      // can_edit, can_view_internal), ask the member's role — otherwise a Reviewer whose cache
+      // hasn't caught up would pass a manage check. Privileges the map doesn't define keep the
+      // membership answer.
+      const { getCapabilitiesForPersona } = await import('./permissions/persona-map')
+      const caps = getCapabilitiesForPersona(dbEngagementMembership.role) as Record<string, boolean | undefined>
+      const key = `${scope}:${privilege}`
+      return key in caps ? caps[key] === true : true
     }
   } catch (dbError) {
     // Non-fatal: If DB check fails, fall through to false
