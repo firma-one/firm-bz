@@ -1048,6 +1048,13 @@ firm" answer. Also from this round: Tag takes an `icon` prop, so an icon no long
 onto its own line. That fixes the Doc Search match chips, the Primary contact tag, the client
 follow-up tags and the Your data request tag.
 
+**Doc Search is Filters only (2026-10-15, Deepak's call):** Ask Brio ran the same search as Filters,
+only filling the chips with a paid model call, so it found nothing extra while costing credits and
+forcing a mode choice. `ASK_MODE_ENABLED = false` in `global-search-view.tsx` hides the toggle, and
+the subtitle no longer mentions it. The interpret route and Ask code stay until sign-off. Billing's
+AI credits breakdown drops the "Firm Doc Search" row, except in a period that already spent credits
+on it, so the rows still add up.
+
 **Next:** Phase 7 sign-off: visual review of everything above in a signed-in browser, then
 cleanup (delete the v1 shell, the `setUiShell` action and `uiPrefs.shell`, `DueSoonSection`, the
 old Bookmarks table and personal Recent/Reminders/Notifications pages, and the unused onboarding

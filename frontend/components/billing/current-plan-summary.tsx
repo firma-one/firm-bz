@@ -130,7 +130,7 @@ function SectionLabel({ children }: { children: ReactNode }) {
  * resolve at all. Silence is the honest option there: a null allowance is a fault in the data, not
  * a generous plan, and this page is the wrong place to diagnose it.
  */
-function AiCreditsRow({ usage }: { usage: BillingPlanUsage | null | undefined }) {
+export function AiCreditsRow({ usage }: { usage: BillingPlanUsage | null | undefined }) {
     const ai = usage?.aiCredits ?? null
     if (!ai) return null
 
@@ -141,13 +141,17 @@ function AiCreditsRow({ usage }: { usage: BillingPlanUsage | null | undefined })
     // breakdown: the question this answers is "which feature spent the credits", so each one needs
     // its own hue. What's left of the allowance is the gray track, listed last as "Remaining".
     const chart = (c: string) => `var(--ui-chart-${c})`
+    //
+    // Doc Search's Ask Brio mode is hidden (2026-10-15), so it no longer spends credits and its row
+    // is left out — unless this period already has credits from it, which stay listed so the rows
+    // still add up to the total. It drops off by itself when the period rolls over.
     const AI_FEATURES: Array<{ key: keyof typeof ai.byFeature; label: string; fill: string }> = [
-        { key: 'brief', label: 'Firm briefs', fill: chart('blue') },
-        { key: 'searchInterpret', label: 'Firm Doc Search', fill: chart('orange') },
-        { key: 'summary', label: 'Engagement summaries', fill: chart('green') },
-        { key: 'chat', label: 'Engagement assistant chat', fill: chart('yellow') },
-        { key: 'filesAgent', label: 'Files agent', fill: chart('purple') },
-    ]
+        { key: 'brief' as const, label: 'Firm briefs', fill: chart('blue') },
+        { key: 'searchInterpret' as const, label: 'Firm Doc Search', fill: chart('orange') },
+        { key: 'summary' as const, label: 'Engagement summaries', fill: chart('green') },
+        { key: 'chat' as const, label: 'Engagement assistant chat', fill: chart('yellow') },
+        { key: 'filesAgent' as const, label: 'Files agent', fill: chart('purple') },
+    ].filter((f) => f.key !== 'searchInterpret' || (ai.byFeature.searchInterpret ?? 0) > 0)
     const fmt = (n: number) => (n % 1 === 0 ? String(n) : n.toFixed(1))
     const since = new Date(ai.periodStartIso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
 

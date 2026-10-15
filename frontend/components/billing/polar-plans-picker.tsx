@@ -104,7 +104,7 @@ interface PolarPlansPickerProps {
  * a tag rather than a fill, quiet feature lists and one call to action per card.
  */
 
-/** Annual / Monthly segmented control — the same control as Doc Search's Filters / Ask. */
+/** Annual / Monthly segmented control, styled like the table / gallery view toggle. */
 const PERIOD_TRACK_CLASS =
     'inline-flex shrink-0 items-center rounded-control border border-line bg-surface-subtle p-0.5'
 

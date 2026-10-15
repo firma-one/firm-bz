@@ -185,6 +185,14 @@ function resolveRelativeTimeRange(preset: RelativeTimePreset, now: Date = new Da
 // as separate history entries mid-keystroke.
 const DEBOUNCE_MS = 900
 
+/**
+ * Ask Brio mode — prose interpreted into filter chips by a paid model call — is hidden
+ * (2026-10-15). It runs the same search as Filters, so it found nothing Filters doesn't, while
+ * costing credits and making people pick a mode. The code stays until Deepak signs off on
+ * removing it; flip this to bring the Filters / Ask toggle back.
+ */
+const ASK_MODE_ENABLED = false
+
 // Detailed search history — supersedes the earlier simpler text-only "recent searches" quick-list
 // is text-only, session-scoped; this one is the full record shown in the history sidebar,
 // persisted across sessions in localStorage, last 10 per firm).
@@ -779,7 +787,11 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
             className="pb-0"
             icon={<Search />}
             title="Doc Search"
-            description={<>Search documents across every client and engagement you have access to. Narrow with filters, or switch to Ask <Brio /> and describe what you need.</>}
+            description={
+              ASK_MODE_ENABLED
+                ? <>Search documents across every client and engagement you have access to. Narrow with filters, or switch to Ask <Brio /> and describe what you need.</>
+                : 'Search documents across every client and engagement you have access to, and narrow with filters.'
+            }
             actions={
             <Button
               type="button"
@@ -820,7 +832,9 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                   Deliverable badges are disabled until their parent (Client/Engagement) is set,
                   matching the same hierarchy gating the keyboard flow already enforces. */}
               {/* Mode toggle. Filters is today's search, unchanged and free. Ask interprets a
-                  sentence into filters on submit and consumes AI credits. */}
+                  sentence into filters on submit and consumes AI credits. Hidden while
+                  ASK_MODE_ENABLED is off. */}
+              {ASK_MODE_ENABLED && (
               <div className="flex items-center gap-1 px-3 pt-2.5">
                 <div className="inline-flex items-center rounded-control border border-line bg-surface-subtle p-0.5" role="group" aria-label="Search mode">
                   <button
@@ -852,10 +866,11 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                   </span>
                 )}
               </div>
+              )}
 
               {/* Filters — plain dropdowns, styled to match the Engagement > Files toolbar.
                   Client/Engagement/Deliverable are interdependent: each narrows the next. */}
-              <div className="flex flex-wrap items-center gap-1.5 border-b border-line px-3 pb-2.5 pt-2">
+              <div className={cn('flex flex-wrap items-center gap-1.5 border-b border-line px-3 pb-2.5', ASK_MODE_ENABLED ? 'pt-2' : 'pt-2.5')}>
                 {FILTER_STAGE_ORDER.map((stage) => {
                   const chip = chips.find((c) => c.stage === stage) || null
                   const Icon = STAGE_ICON[stage]
