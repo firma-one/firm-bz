@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { Search, Folder, Sparkles, X, Building2, Briefcase, Package, Hash, FileText, ArrowUpRight, ArrowRight, RefreshCw, ChevronDown, History, BrushCleaning, CalendarClock, Info, ChevronRight } from 'lucide-react'
+import { Search, Folder, Sparkles, X, Check, Building2, Briefcase, Package, Hash, FileText, ArrowUpRight, ArrowRight, RefreshCw, ChevronDown, History, BrushCleaning, CalendarClock, Info, ChevronRight } from 'lucide-react'
 import { DocumentIcon } from '@/components/ui/document-icon'
 import { Button } from '@/components/ui/button'
 import {
@@ -22,6 +22,7 @@ import { PageHeading } from '@/components/ui/page-heading'
 import { EmptyPanel } from '@/components/ui/empty-panel'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { Tag } from '@/components/ui/tag'
+import { Hint } from '@/components/ui/tooltip'
 import { RelativeDateTime } from '@/components/ui/relative-date-time'
 import { resolvePeriod } from '@/lib/search/period'
 import { fetchWithTimeout, AI_TIMEOUT_MS } from '@/lib/ai/fetch-timeout'
@@ -154,6 +155,82 @@ const RELATIVE_TIME_PRESETS = [
 ] as const
 type RelativeTimePreset = typeof RELATIVE_TIME_PRESETS[number]
 
+/** What the Time menu and chip show. The preset itself stays the id (the search and the Ask
+ *  interpreter match on it), so only the display moves to sentence case. */
+const TIME_PRESET_LABEL: Record<RelativeTimePreset, string> = {
+  'Overdue': 'Overdue',
+  'Today': 'Today',
+  'Last 7 days': 'Last 7 days',
+  'Last 30 days': 'Last 30 days',
+  'This Quarter': 'This quarter',
+  'This Year': 'This year',
+}
+
+/** Long lists (clients, engagements, deliverables) get a search box in their menu past this. */
+const MENU_SEARCH_THRESHOLD = 7
+
+/**
+ * The search box at the top of a long filter menu. Radix focuses the menu itself when it opens, so
+ * this takes the focus back on the next frame: typing filters the list straight away.
+ */
+function MenuSearchInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
+  const ref = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    const id = requestAnimationFrame(() => ref.current?.focus())
+    return () => cancelAnimationFrame(id)
+  }, [])
+  return (
+    <input
+      ref={ref}
+      {...props}
+      className="h-7 w-full rounded-control border border-line bg-surface-subtle px-2 text-small text-fg placeholder:text-fg-subtle focus:border-line-strong focus:bg-surface focus:outline-none"
+    />
+  )
+}
+
+/** One row in a filter menu, Notion-style: compact, with a check on the chosen value. */
+function FilterMenuRow({
+  selected,
+  multi = false,
+  onSelect,
+  children,
+}: {
+  selected: boolean
+  /**
+   * Multi-select (Type): a checkbox leads the row and the menu stays open, so several values can
+   * be ticked. Single-select rows show a check on the chosen value and close the menu.
+   */
+  multi?: boolean
+  onSelect: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <DropdownMenuItem
+      onSelect={(e) => {
+        if (multi) e.preventDefault()
+        onSelect()
+      }}
+      role={multi ? 'menuitemcheckbox' : undefined}
+      aria-checked={multi ? selected : undefined}
+      className={cn('h-8 cursor-pointer gap-2 px-2 py-0', !multi && selected && 'font-medium')}
+    >
+      {multi && (
+        <span
+          aria-hidden
+          className={cn(
+            'flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[3px] border',
+            selected ? 'border-action bg-action text-action-fg' : 'border-line-strong'
+          )}
+        >
+          {selected && <Check className="h-2.5 w-2.5" strokeWidth={3} />}
+        </span>
+      )}
+      <span className="min-w-0 flex-1 truncate">{children}</span>
+      {!multi && selected && <Check className="h-3.5 w-3.5 shrink-0 text-fg-muted" aria-hidden />}
+    </DropdownMenuItem>
+  )
+}
+
 function resolveRelativeTimeRange(preset: RelativeTimePreset, now: Date = new Date()): { start: Date; end: Date } {
   const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0)
   const endOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999)
@@ -270,7 +347,10 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
   const [debouncedQuery, setDebouncedQuery] = useState('')
   // 'filters' is today's live chip-picker search. 'ask' interprets prose into chips on submit,
   // costs AI credits, and never fires while typing.
-  const [mode, setMode] = useState<'filters' | 'ask'>('filters')
+  const [modeState, setMode] = useState<'filters' | 'ask'>('filters')
+  // Ask only exists while ASK_MODE_ENABLED is on: state left over from before it was switched off
+  // (a tab kept open, fast refresh) must not bring back its prompt or its paid submit.
+  const mode = ASK_MODE_ENABLED ? modeState : 'filters'
   const [interpreting, setInterpreting] = useState(false)
   const [askNote, setAskNote] = useState<string | null>(null)
   // Chips the model inferred, by stage — rendered with a marker so they are distinguishable
@@ -308,6 +388,8 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
   // Selected filter chips — same idea as mentionedUsers in the Comments @mention picker:
   // a chip array decoupled from the raw text, rendered before the textarea.
   const [chips, setChips] = useState<SelectedChip[]>([])
+  /** The search box inside whichever filter menu is open; cleared each time a menu opens. */
+  const [menuQuery, setMenuQuery] = useState('')
   // Index into `chips` of the chip currently focused via keyboard, or null when focus is in the text input.
   // In-progress multi-select state while the Type picker is open — not committed to `chips`
   // until the user confirms (Enter) or closes the picker, so partial toggling doesn't
@@ -498,7 +580,7 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
       return pickerData.deliverables
     }
     if (stage === 'dateRange') {
-      return RELATIVE_TIME_PRESETS.map((p) => ({ id: p, name: p }))
+      return RELATIVE_TIME_PRESETS.map((p) => ({ id: p, name: TIME_PRESET_LABEL[p] }))
     }
     return []
   }, [pickerData, clientChip, engagementChip])
@@ -535,7 +617,9 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
       return [...without, {
         stage: 'type' as FilterStage,
         id: next.join(','),
-        name: next.length === 1 ? FILE_TYPE_LABEL[next[0]] : `${next.length} types`,
+        name: next.length <= 2
+          ? next.map((t) => FILE_TYPE_LABEL[t]).join(', ')
+          : `${FILE_TYPE_LABEL[next[0]]} +${next.length - 1}`,
       }]
     })
     setInferredStages((prev) => prev.filter((s) => s !== 'type'))
@@ -822,20 +906,12 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
           />
 
           <div ref={composerRef} className="relative mt-4">
-            <div className="overflow-hidden rounded-card border border-line bg-surface transition-[border-color,box-shadow] focus-within:border-line-strong focus-within:shadow-sm">
-              {/* Row 1 — filters only, inside the same bordered control as the search input below.
-                  Every stage always has a fixed slot in canonical order: a filled pill (icon +
-                  value + remove ×) once selected, or the same pill shape in a muted/outline
-                  "empty" state (icon only) that's a direct mouse entry point — click it to open
-                  that exact stage's picker, no @ or sequencing required. Selecting a value (via
-                  mouse or keyboard) turns the same slot into the filled pill in place. Engagement/
-                  Deliverable badges are disabled until their parent (Client/Engagement) is set,
-                  matching the same hierarchy gating the keyboard flow already enforces. */}
+            <div>
               {/* Mode toggle. Filters is today's search, unchanged and free. Ask interprets a
                   sentence into filters on submit and consumes AI credits. Hidden while
                   ASK_MODE_ENABLED is off. */}
               {ASK_MODE_ENABLED && (
-              <div className="flex items-center gap-1 px-3 pt-2.5">
+              <div className="flex items-center gap-1 pb-2.5">
                 <div className="inline-flex items-center rounded-control border border-line bg-surface-subtle p-0.5" role="group" aria-label="Search mode">
                   <button
                     type="button"
@@ -868,9 +944,102 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
               </div>
               )}
 
-              {/* Filters — plain dropdowns, styled to match the Engagement > Files toolbar.
-                  Client/Engagement/Deliverable are interdependent: each narrows the next. */}
-              <div className={cn('flex flex-wrap items-center gap-1.5 border-b border-line px-3 pb-2.5', ASK_MODE_ENABLED ? 'pt-2' : 'pt-2.5')}>
+            {/* Search — Notion's search field: large and borderless, with a rule under it that
+                darkens on focus. The filter pills sit on their own row below. */}
+            <div className="flex items-center gap-2.5 border-b border-line pb-2 transition-colors focus-within:border-line-strong">
+              <div className="flex shrink-0 items-center">
+                {mode === 'ask'
+                  ? <Sparkles className="h-[18px] w-[18px] text-action" />
+                  : <Search className="h-[18px] w-[18px] text-fg-subtle" />}
+              </div>
+              <div className="flex min-w-0 flex-1 items-center">
+                <input
+                  ref={textareaRef}
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      if (mode === 'ask') runAskSearch()
+                      else setDebouncedQuery(searchQuery)
+                    }
+                  }}
+                  placeholder={mode === 'ask'
+                    ? `Ask ${ASSISTANT.name}, e.g. overdue spreadsheets on the Nexus rollout`
+                    // A topic, not a filename: semantic search finds documents by what they are
+                    // about, which a filename example would never show.
+                    : 'Search by name or topic, e.g. competitor pricing research'}
+                  className="min-w-[10rem] flex-1 border-0 bg-transparent py-1.5 text-body text-fg shadow-none placeholder:text-fg-subtle focus:outline-none focus:ring-0"
+                  autoFocus
+                  aria-label="Document search"
+                />
+              </div>
+              <div className="flex shrink-0 flex-row items-center justify-center gap-1">
+                {/* Ask mode is submit-driven, so it needs an explicit send affordance. Clear only
+                    appears once there are results to clear — before that there is nothing to undo. */}
+                {mode === 'ask' ? (
+                  <>
+                    {hasSearched && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSearchQuery('')
+                          setChips([])
+                          setInferredStages([])
+                          setAskNote(null)
+                          setResults([])
+                          setHasSearched(false)
+                        }}
+                        className="p-1 rounded-full text-fg-muted hover:bg-surface-hover"
+                        aria-label="Clear search and start again"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={runAskSearch}
+                      disabled={interpreting || !searchQuery.trim()}
+                      className={cn(
+                        'p-1.5 rounded-full transition-colors',
+                        interpreting || !searchQuery.trim()
+                          ? 'text-fg-subtle'
+                          : 'bg-action text-action-fg hover:bg-action-hover'
+                      )}
+                      aria-label={`Ask ${ASSISTANT.name}`}
+                    >
+                      {interpreting
+                        ? <RefreshCw className="h-4 w-4 animate-spin" />
+                        : <ArrowRight className="h-4 w-4" />}
+                    </button>
+                  </>
+                ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery('')
+                    setChips([])
+                  }}
+                  disabled={!searchQuery.trim() && chips.length === 0}
+                  className={cn(
+                    'p-1 rounded-full',
+                    (searchQuery.trim() || chips.length > 0) ? 'text-fg-muted hover:bg-surface-hover' : 'text-fg-subtle'
+                  )}
+                  aria-label="Clear search"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+                )}
+              </div>
+            </div>
+
+              {/* Filters — Notion's filter-bar pills, one fixed slot per stage in canonical order.
+                  Empty: a quiet outlined pill ("Client"). Set: filled in the accent, reading
+                  "Client: Contoso", with an x to remove it. Client/Engagement/Deliverable are
+                  interdependent: each narrows the next, so a stage waiting on its parent is faded
+                  and says why in the app's tooltip. */}
+              <div className="flex flex-wrap items-center gap-1.5 pt-3">
                 {FILTER_STAGE_ORDER.map((stage) => {
                   const chip = chips.find((c) => c.stage === stage) || null
                   const Icon = STAGE_ICON[stage]
@@ -880,115 +1049,136 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                   // A chip the zero-result ladder relaxed is shown struck through: it is still
                   // there to be restored or removed, but it did NOT constrain these results.
                   const isRelaxed = relaxedStages.includes(stage)
+                  const hint = isRelaxed
+                    ? `Not applied — no results matched this ${STAGE_LABEL[stage].toLowerCase()} filter`
+                    : disabledReason
 
-                  return (
-                    <DropdownMenu key={stage}>
+                  const pill = (
+                    <DropdownMenu key={stage} onOpenChange={(open) => { if (open) setMenuQuery('') }}>
                       <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="outline"
-                          size="sm"
+                        <button
+                          type="button"
                           disabled={Boolean(disabledReason)}
                           className={cn(
-                            'h-7 gap-1.5 border-line bg-surface px-2 text-small font-normal text-fg-muted hover:bg-surface-hover hover:text-fg',
-                            chip && 'border-line-strong bg-surface-selected text-fg',
-                            isInferred && 'border-action/40',
-                            isRelaxed && 'border-dashed border-line-strong bg-surface-muted text-fg-muted hover:bg-surface-hover',
+                            'inline-flex h-7 max-w-[18rem] items-center gap-1.5 rounded-full border px-2.5 text-small transition-colors outline-none focus-visible:ring-2 focus-visible:ring-action/30',
+                            'disabled:pointer-events-none disabled:opacity-40',
+                            chip
+                              ? 'border-action/30 bg-action/[0.08] text-action hover:bg-action/[0.14]'
+                              : 'border-line text-fg-muted hover:bg-surface-hover hover:text-fg',
+                            isRelaxed && 'border-dashed border-line-strong bg-transparent text-fg-muted hover:bg-surface-hover',
                           )}
-                          title={isRelaxed
-                            ? `Not applied — no results matched this ${STAGE_LABEL[stage].toLowerCase()} filter`
-                            : disabledReason ?? undefined}
                         >
                           {isInferred
-                            ? <Sparkles className="h-3 w-3 text-action" />
-                            : <Icon className="h-3 w-3 text-fg-subtle" />}
-                          {chip ? chip.name : STAGE_LABEL[stage]}
-                          {isRelaxed && (
-                            <span className="ml-0.5 rounded-sm bg-surface-selected px-1 py-px text-caption text-fg-muted">
-                              not applied
+                            ? <Sparkles className="h-3.5 w-3.5 shrink-0" />
+                            : <Icon className={cn('h-3.5 w-3.5 shrink-0', !chip && 'text-fg-subtle')} />}
+                          {chip ? (
+                            <span className="flex min-w-0 items-baseline gap-1">
+                              <span className="shrink-0 opacity-75">{STAGE_LABEL[stage]}:</span>
+                              <span className={cn('truncate font-medium', isRelaxed && 'line-through')}>{chip.name}</span>
                             </span>
+                          ) : (
+                            <span>{STAGE_LABEL[stage]}</span>
                           )}
-                          {chip && (
+                          {isRelaxed && <span className="shrink-0 text-caption">not applied</span>}
+                          {chip ? (
                             <span
                               role="button"
                               tabIndex={-1}
                               aria-label={`Clear ${STAGE_LABEL[stage]} filter`}
                               onClick={(e) => { e.preventDefault(); e.stopPropagation(); removeChip(stage) }}
-                              className="ml-0.5 rounded hover:bg-surface-hover"
+                              className="-mr-1 flex h-4 w-4 shrink-0 items-center justify-center rounded-full hover:bg-action/15"
                             >
                               <X className="h-3 w-3" />
                             </span>
+                          ) : (
+                            <ChevronDown className="h-3 w-3 shrink-0 text-fg-subtle" />
                           )}
-                          <ChevronDown className="h-3 w-3 text-fg-subtle" />
-                        </Button>
+                        </button>
                       </DropdownMenuTrigger>
-
-                      <DropdownMenuContent align="start" className="w-[240px] max-h-[320px] overflow-y-auto py-1">
-                        <DropdownMenuLabel className="px-2 py-1.5 text-caption font-normal text-fg-subtle">
-                          {STAGE_LABEL[stage]}
-                        </DropdownMenuLabel>
-                        <DropdownMenuSeparator />
-
-                        {stage === 'type' ? (
-                          FILE_TYPE_OPTIONS.map((opt) => (
-                            <DropdownMenuCheckboxItem
-                              key={opt}
-                              checked={opt === 'any' ? selectedFileTypes.length === 0 : selectedFileTypes.includes(opt)}
-                              onCheckedChange={() => toggleFileTypeSimple(opt)}
-                              onSelect={(e) => e.preventDefault()}
-                              className="py-1.5 pl-8"
-                            >
-                              {FILE_TYPE_LABEL[opt]}
-                            </DropdownMenuCheckboxItem>
-                          ))
-                        ) : options.length === 0 ? (
-                          <div className="px-2.5 py-2 text-small text-fg-subtle">Nothing available</div>
-                        ) : (
-                          <>
-                            {/* "No filter" option — an explicit way back to unfiltered from inside
-                                the menu, rather than only via the chip's ✕. Not a selectable value:
-                                choosing it clears the filter. */}
-                            <DropdownMenuItem
-                              onClick={() => removeChip(stage)}
-                              className={cn(
-                                'cursor-pointer px-2.5 py-1.5',
-                                !chip && 'bg-surface-muted font-medium',
+                      {/* Notion's filter menu: the property name, a search box when the list is
+                          long, then compact rows with a check on the chosen value. "Any …" leads
+                          every menu as the way back to no filter. */}
+                      <DropdownMenuContent align="start" className="w-[260px] p-1">
+                        {(() => {
+                          const searchable = stage !== 'type' && stage !== 'dateRange' && options.length > MENU_SEARCH_THRESHOLD
+                          const q = menuQuery.trim().toLowerCase()
+                          const shown = searchable && q ? options.filter((o) => o.name.toLowerCase().includes(q)) : options
+                          return (
+                            <>
+                              <p className="px-2 pb-1 pt-1.5 text-caption text-fg-subtle">{STAGE_LABEL[stage]}</p>
+                              {searchable && (
+                                <div className="px-1 pb-1">
+                                  <MenuSearchInput
+                                    value={menuQuery}
+                                    onChange={(e) => setMenuQuery(e.target.value)}
+                                    // Typing belongs to the box, not the menu's type-to-select;
+                                    // arrows and Escape still reach the menu.
+                                    onKeyDown={(e) => {
+                                      if (e.key.length === 1 || e.key === 'Backspace' || e.key === 'Delete') e.stopPropagation()
+                                    }}
+                                    placeholder={`Search ${STAGE_LABEL[stage].toLowerCase()}s…`}
+                                    aria-label={`Search ${STAGE_LABEL[stage].toLowerCase()}s`}
+                                  />
+                                </div>
                               )}
-                            >
-                              {STAGE_ANY_LABEL[stage]}
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            {options.map((o) => (
-                              <DropdownMenuItem
-                                key={o.id}
-                                onClick={() => selectStageValue(stage, o)}
-                                className={cn(
-                                  'cursor-pointer px-2.5 py-1.5',
-                                  chip?.id === o.id && 'bg-surface-muted font-medium',
+                              <div className="max-h-[280px] overflow-y-auto overflow-x-hidden">
+                                {stage === 'type' ? (
+                                  <>
+                                    <FilterMenuRow multi selected={selectedFileTypes.length === 0} onSelect={() => toggleFileTypeSimple('any')}>
+                                      {STAGE_ANY_LABEL.type}
+                                    </FilterMenuRow>
+                                    <DropdownMenuSeparator className="mx-0 my-1" />
+                                    {FILE_TYPE_OPTIONS.filter((opt) => opt !== 'any').map((opt) => (
+                                      <FilterMenuRow key={opt} multi selected={selectedFileTypes.includes(opt)} onSelect={() => toggleFileTypeSimple(opt)}>
+                                        {FILE_TYPE_LABEL[opt]}
+                                      </FilterMenuRow>
+                                    ))}
+                                  </>
+                                ) : options.length === 0 ? (
+                                  <p className="px-2 py-1.5 text-small text-fg-subtle">Nothing available</p>
+                                ) : (
+                                  <>
+                                    <FilterMenuRow selected={!chip} onSelect={() => removeChip(stage)}>
+                                      {STAGE_ANY_LABEL[stage]}
+                                    </FilterMenuRow>
+                                    <DropdownMenuSeparator className="mx-0 my-1" />
+                                    {shown.map((o) => (
+                                      <FilterMenuRow key={o.id} selected={chip?.id === o.id} onSelect={() => selectStageValue(stage, o)}>
+                                        {o.name}
+                                      </FilterMenuRow>
+                                    ))}
+                                    {shown.length === 0 && <p className="px-2 py-1.5 text-small text-fg-subtle">No matches</p>}
+                                  </>
                                 )}
-                              >
-                                {o.name}
-                              </DropdownMenuItem>
-                            ))}
-                          </>
-                        )}
+                              </div>
+                            </>
+                          )
+                        })()}
                       </DropdownMenuContent>
                     </DropdownMenu>
                   )
+                  // The app's tooltip, not the browser's. A disabled button gets no pointer events,
+                  // so the hint sits on a wrapper.
+                  return hint ? (
+                    <Hint key={stage} label={hint}>
+                      <span className="inline-flex">{pill}</span>
+                    </Hint>
+                  ) : pill
                 })}
 
                 {chips.length > 0 && (
                   <button
                     type="button"
                     onClick={() => { setChips([]); setInferredStages([]) }}
-                    className="ml-1 text-small text-fg-muted underline underline-offset-2 hover:text-fg"
+                    className="ml-0.5 h-7 rounded-full px-2 text-small text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg"
                   >
-                    Clear filters
+                    Clear
                   </button>
                 )}
               </div>
 
               {(interpreting || askNote || ambiguity) && (
-                <div className="flex items-center gap-1.5 px-3 pt-2 text-small">
+                <div className="flex items-center gap-1.5 pt-2 text-small">
                   {interpreting ? (
                     <>
                       <span className="inline-flex items-center gap-1.5 text-action">
@@ -1025,91 +1215,6 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                 </div>
               )}
 
-              <div className="flex">
-                <div className="flex flex-col justify-center py-3 pl-4 pr-2 shrink-0">
-                  {mode === 'ask'
-                    ? <Sparkles className="h-4 w-4 text-action" />
-                    : <Search className="h-4 w-4 text-fg-subtle" />}
-                </div>
-                <div className="flex-1 min-w-0 flex items-center px-1 py-2.5">
-                  <input
-                    ref={textareaRef}
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault()
-                        if (mode === 'ask') runAskSearch()
-                        else setDebouncedQuery(searchQuery)
-                      }
-                    }}
-                    placeholder={mode === 'ask'
-                      ? `Ask ${ASSISTANT.name}, e.g. overdue spreadsheets on the Nexus rollout`
-                      : 'Search by filename or topic, e.g. SEO strategy documents'}
-                    className="flex-1 min-w-[10rem] border-0 bg-transparent px-1 py-1 text-ui text-fg shadow-none placeholder:text-fg-subtle focus:outline-none focus:ring-0"
-                    autoFocus
-                    aria-label="Document search"
-                  />
-                </div>
-                <div className="flex flex-row items-center justify-center gap-1 py-2 pl-1.5 pr-3 shrink-0">
-                  {/* Ask mode is submit-driven, so it needs an explicit send affordance. Clear only
-                      appears once there are results to clear — before that there is nothing to undo. */}
-                  {mode === 'ask' ? (
-                    <>
-                      {hasSearched && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSearchQuery('')
-                            setChips([])
-                            setInferredStages([])
-                            setAskNote(null)
-                            setResults([])
-                            setHasSearched(false)
-                          }}
-                          className="p-1 rounded-full text-fg-muted hover:bg-surface-hover"
-                          aria-label="Clear search and start again"
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={runAskSearch}
-                        disabled={interpreting || !searchQuery.trim()}
-                        className={cn(
-                          'p-1.5 rounded-full transition-colors',
-                          interpreting || !searchQuery.trim()
-                            ? 'text-fg-subtle'
-                            : 'bg-action text-action-fg hover:bg-action-hover'
-                        )}
-                        aria-label={`Ask ${ASSISTANT.name}`}
-                      >
-                        {interpreting
-                          ? <RefreshCw className="h-4 w-4 animate-spin" />
-                          : <ArrowRight className="h-4 w-4" />}
-                      </button>
-                    </>
-                  ) : (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSearchQuery('')
-                      setChips([])
-                    }}
-                    disabled={!searchQuery.trim() && chips.length === 0}
-                    className={cn(
-                      'p-1 rounded-full',
-                      (searchQuery.trim() || chips.length > 0) ? 'text-fg-muted hover:bg-surface-hover' : 'text-fg-subtle'
-                    )}
-                    aria-label="Clear search"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                  )}
-                </div>
-              </div>
             </div>
 
           </div>

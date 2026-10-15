@@ -1055,6 +1055,24 @@ the subtitle no longer mentions it. The interpret route and Ask code stay until 
 AI credits breakdown drops the "Firm Doc Search" row, except in a period that already spent credits
 on it, so the rows still add up.
 
+**Doc Search in Notion's style (2026-10-15):**
+- **Search field:** comes first, large and borderless, with a rule under it that darkens on focus.
+  The boxed card is gone. The placeholder gives a topic example ("competitor pricing research"),
+  since search matches by meaning, not only by filename.
+- **Filter pills:** Notion's filter-bar pills sit on the row below. Empty filters are quiet
+  outlined pills; set ones are filled in the accent and read "Client: Contoso", with an x. A
+  filter waiting on its parent is faded and explains why in the app's tooltip.
+- **Filter menus:** compact 32px rows with a check on the chosen value, "Any …" first (Type
+  included), and a search box once a list passes 7 entries.
+- **Multi-select:** Type stays multi-select, as it always was: checkbox rows, and the menu stays
+  open for several picks. Its pill reads "Type: Document, Spreadsheet", or "Type: Document +2"
+  from three. Client and Engagement were never multi-select (the git history confirms they always
+  replaced the pick) and stay single-select.
+  Time presets read in sentence case; only the label changed, not the preset id. Menus no longer
+  scroll sideways.
+- **Ask can't resurface:** `mode` is forced to Filters while `ASK_MODE_ENABLED` is off, so stale
+  state (fast refresh, an old tab) can't bring back the Ask prompt.
+
 **Next:** Phase 7 sign-off: visual review of everything above in a signed-in browser, then
 cleanup (delete the v1 shell, the `setUiShell` action and `uiPrefs.shell`, `DueSoonSection`, the
 old Bookmarks table and personal Recent/Reminders/Notifications pages, and the unused onboarding
