@@ -25,21 +25,21 @@ export function UpgradePlansDialog({ open, onOpenChange, firmId, returnPath }: U
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent
                 className={cn(
-                    'max-h-[min(92vh,40rem)] w-[calc(100vw-1.5rem)] max-w-lg gap-0 overflow-hidden p-0 sm:rounded-2xl',
+                    'max-h-[min(92vh,40rem)] w-[calc(100vw-1.5rem)] max-w-lg gap-0 overflow-hidden p-0',
                     'md:max-w-3xl',
-                    'border-2 border-slate-200 bg-white shadow-2xl'
+                    'rounded-dialog border-0 bg-surface shadow-dialog'
                 )}
             >
-                <DialogHeader className="space-y-2 border-b border-slate-100 px-5 pb-4 pt-5 text-left sm:px-6 sm:pt-6">
-                    <DialogTitle className="text-lg font-semibold text-slate-900 sm:text-xl">
+                <DialogHeader className="space-y-1 border-b border-line px-5 pb-4 pt-5 text-left sm:px-6">
+                    <DialogTitle className="pr-8 text-h3 text-fg">
                         {upgradeCopy.upgradeDialogTitle}
                     </DialogTitle>
-                    <DialogDescription className="text-left text-sm text-slate-600 leading-relaxed">
+                    <DialogDescription className="text-left text-small text-fg-muted">
                         {upgradeCopy.upgradeDialogBody}
                     </DialogDescription>
                 </DialogHeader>
 
-                <div className="max-h-[min(58vh,24rem)] overflow-y-auto px-5 py-4 sm:px-6 md:max-h-[min(62vh,28rem)]">
+                <div className="max-h-[min(58vh,24rem)] overflow-y-auto px-5 py-5 sm:px-6 md:max-h-[min(62vh,28rem)]">
                     <PolarPlansPicker
                         firmId={id}
                         returnPath={returnPath}

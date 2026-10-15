@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
 import { resolveDefaultFirmLandingPath } from '@/lib/landing/default-landing-path'
 import { BillingPageClient } from '@/components/billing/billing-page-client'
+import { LoadingSpinner } from '@/components/ui/loading-spinner'
 
 type Props = {
     searchParams: Promise<{ from_checkout?: string }>
@@ -25,8 +26,9 @@ export default async function BillingPage({ searchParams }: Props) {
     return (
         <Suspense
             fallback={
-                <div className="flex min-h-[40vh] items-center justify-center text-sm text-slate-500">
-                    Loading billing…
+                <div className="flex min-h-[40vh] items-center justify-center gap-2 text-small text-fg-muted">
+                    <LoadingSpinner size="sm" />
+                    <span>Loading billing…</span>
                 </div>
             }
         >

@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { Building2, CreditCard, ExternalLink, HelpCircle, Loader2, Receipt, Rows3 } from 'lucide-react'
+import { Building2, CreditCard, ExternalLink, HelpCircle, Info, Lock, Receipt, Rows3 } from 'lucide-react'
 import { getUserFirms } from '@/lib/actions/firms'
 import { firmPath } from '@/lib/navigation/firm-paths'
 import { validateCheckoutReturnTo } from '@/lib/billing/checkout-return-path'
@@ -14,17 +14,29 @@ import { PolarPlansPicker, type BillingCurrentPlanState } from '@/components/bil
 import { fetchBillingCurrentPlan } from '@/lib/billing/fetch-billing-current-plan'
 import { shouldShowSandboxUpgradeMarketing } from '@/lib/billing/subscription-display'
 import { PageBreadcrumb } from '@/components/ui/page-breadcrumb'
+import { PageHeading } from '@/components/ui/page-heading'
+import { Button, buttonVariants } from '@/components/ui/button'
+import { EmptyPanel } from '@/components/ui/empty-panel'
+import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { useUiShell } from '@/lib/ui-shell-context'
 import { cn } from '@/lib/utils'
 
+/*
+ * Billing (.claude/plans/ui-ux-overhaul.md, Phase 6): a page heading, then three sections in the
+ * order a billing admin reads them — what you're on (Current plan), what you could be on (Plans),
+ * and how paying works (Payments). Sections are a heading plus content; only the current plan and
+ * the plan cards are boxed, one level deep.
+ */
 
-const cardSurface = cn(
-    'rounded border border-[#e5e7eb] bg-white shadow-sm'
-)
+/** Section title, matching the firm settings forms. */
+const SECTION_HEADING_CLASS = 'text-h3 text-fg'
 
-const trustIconTileClass = cn(
-    'flex h-10 w-10 shrink-0 items-center justify-center rounded',
-    'border border-[#e5e7eb] bg-[#f9f9fb] text-[#45474c]'
-)
+/** A quiet one-line notice (skip confirmation, free-plan reminder). */
+const NOTICE_CLASS =
+    'flex items-start gap-2 rounded-card border border-line bg-surface-subtle px-3 py-2 text-small text-fg-muted'
+
+/** An external link styled as a small outline button. */
+const OUTLINE_LINK_CLASS = buttonVariants({ variant: 'outline', size: 'sm' })
 
 export type BillingPageClientProps = {
     /**
@@ -45,6 +57,7 @@ export function BillingPageClient({
     const pathname = usePathname()
     const router = useRouter()
     const searchParams = useSearchParams()
+    const uiShell = useUiShell()
     const firmSlugParam = searchParams.get('firmSlug')?.trim() || ''
     const returnToParam = searchParams.get('returnTo')
     const paidPlanIntent = searchParams.get('paid_plan') === 'true'
@@ -202,8 +215,8 @@ export function BillingPageClient({
 
     if (firms.length > 0 && selectedFirm?.id && !firmManageChecked) {
         return (
-            <div className="flex min-h-[40vh] items-center justify-center gap-2 text-sm text-slate-500">
-                <Loader2 className="h-4 w-4 animate-spin text-slate-500/80" aria-hidden />
+            <div className="flex min-h-[40vh] items-center justify-center gap-2 text-small text-fg-muted">
+                <LoadingSpinner size="sm" />
                 <span>Loading billing…</span>
             </div>
         )
@@ -214,24 +227,20 @@ export function BillingPageClient({
             return null
         }
         return (
-            <div className="relative mx-auto max-w-5xl space-y-6 pb-10 px-4 sm:px-5 md:px-6">
-                <div className="rounded border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-950">
-                    <p className="font-medium">Billing isn&apos;t available for your role on this workspace.</p>
-                    <p className="mt-1 text-amber-900/90">
-                        Ask an owner to assign billing access, or continue onboarding to connect Google Drive.
-                    </p>
-                </div>
-                {onSkipToConnectDrive ? (
-                    <div className="flex justify-end">
-                        <button
-                            type="button"
-                            onClick={() => void onSkipToConnectDrive()}
-                            className="inline-flex h-8 items-center rounded border border-[#e5e7eb] bg-white px-3 text-xs font-medium text-[#45474c] transition hover:bg-[#f9f9fb] hover:text-[#1b1b1d]"
-                        >
-                            Skip to Google Drive
-                        </button>
-                    </div>
-                ) : null}
+            <div className="relative mx-auto max-w-5xl pb-10">
+                <EmptyPanel
+                    className="rounded-card border border-line"
+                    icon={<Lock strokeWidth={1.75} />}
+                    title="Billing isn't available for your role on this workspace"
+                    description="Ask an owner to assign billing access, or continue onboarding to connect Google Drive."
+                    action={
+                        onSkipToConnectDrive ? (
+                            <Button type="button" variant="outline" size="sm" onClick={() => void onSkipToConnectDrive()}>
+                                Skip to Google Drive
+                            </Button>
+                        ) : null
+                    }
+                />
             </div>
         )
     }
@@ -253,9 +262,18 @@ export function BillingPageClient({
         }
     }
 
+    const comparePlansLink = (
+        <Link href="/pricing" target="_blank" rel="noopener noreferrer" className={OUTLINE_LINK_CLASS}>
+            <Rows3 className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden />
+            {upgradeCopy.ctaComparePlans}
+            <ExternalLink className="h-3 w-3 text-fg-subtle" strokeWidth={1.75} aria-hidden />
+        </Link>
+    )
+
     return (
-        <div className="relative space-y-10 pb-10" data-demo-tour="billing-page">
-            {!isOnboardingSubscribe && selectedFirm ? (
+        <div className="relative mx-auto w-full max-w-4xl space-y-10 pb-10" data-demo-tour="billing-page">
+            {/* The old breadcrumb shows in v1 only; v2 has the shell's header bar. */}
+            {uiShell === 'v1' && !isOnboardingSubscribe && selectedFirm ? (
                 <PageBreadcrumb
                     items={[
                         {
@@ -271,123 +289,64 @@ export function BillingPageClient({
                 />
             ) : null}
 
-            <header className="space-y-4">
-                <div className="flex flex-wrap items-start justify-between gap-4">
-                    <h1 className="min-w-0 font-headline text-2xl font-bold text-[#1b1b1d]">
-                        {upgradeCopy.billingPageTitle}
-                    </h1>
-                    {isOnboardingSubscribe && onSkipToConnectDrive ? (
-                        <button
-                            type="button"
-                            data-onboarding-billing-skip-tour
-                            onClick={() => void onSkipToConnectDrive()}
-                            className={cn(
-                                'h-auto px-4 py-1.5 rounded bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:bg-primary hover:brightness-105 shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all border-0 inline-flex shrink-0 items-center justify-center'
-                            )}
-                            aria-label="Skip subscribing for now and continue to connect Google Drive"
-                        >
-                            {upgradeCopy.billingOnboardingSkipSubscribeCta}
-                        </button>
-                    ) : null}
-                </div>
-
-                {showOnboardingSkipHint ? (
-                    <p className="text-sm leading-relaxed text-slate-600">
-                        Compare plans below, or skip when you&apos;re ready to connect Google Drive. Billing stays
-                        available from settings later.
-                    </p>
-                ) : null}
-
-                {showFreeTierUpgradeCopy ? (
-                    <>
-                        <p className="text-[0.8125rem] font-bold text-[#1b1b1d]">
-                            {upgradeCopy.billingHeadline}
-                        </p>
-                        <p className="max-w-2xl text-xs leading-relaxed text-[#45474c]">
-                            {upgradeCopy.billingBody}<br />{upgradeCopy.billingBodyLine2}
-                        </p>
-                    </>
-                ) : null}
+            <div className="space-y-3">
+                <PageHeading
+                    className="pb-0"
+                    title={isOnboardingSubscribe ? upgradeCopy.billingPageTitle : 'Billing'}
+                    description={
+                        showOnboardingSkipHint
+                            ? "Compare plans below, or skip when you're ready to connect Google Drive. Billing stays available from settings later."
+                            : undefined
+                    }
+                    actions={
+                        isOnboardingSubscribe && onSkipToConnectDrive ? (
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                data-onboarding-billing-skip-tour
+                                onClick={() => void onSkipToConnectDrive()}
+                                aria-label="Skip subscribing for now and continue to connect Google Drive"
+                            >
+                                {upgradeCopy.billingOnboardingSkipSubscribeCta}
+                            </Button>
+                        ) : null
+                    }
+                />
                 {paidPlanIntent && (
-                    <div className="mt-3 rounded border border-primary/25 bg-primary/8 px-3 py-2 text-xs text-[#1b1b1d]">
-                        You currently have an active Free plan. You can upgrade now, or skip and continue.
+                    <div className={cn(NOTICE_CLASS, 'items-center')}>
+                        <Info className="h-4 w-4 shrink-0 text-fg-subtle" strokeWidth={1.75} aria-hidden />
+                        <span className="min-w-0 flex-1">
+                            You currently have an active Free plan. You can upgrade now, or skip and continue.
+                        </span>
+                        {!isOnboardingSubscribe ? (
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="shrink-0"
+                                onClick={handleSkipUpgrade}
+                                disabled={skipSubmitting}
+                            >
+                                {skipSubmitting ? 'Saving…' : 'Skip for now'}
+                            </Button>
+                        ) : null}
                     </div>
                 )}
                 {skipMessage && (
-                    <div className="rounded border border-[#e5e7eb] bg-[#f9f9fb] px-3 py-2 text-xs text-[#45474c]">
+                    <div className={NOTICE_CLASS} role="status">
                         {skipMessage}
                     </div>
                 )}
-            </header>
+            </div>
 
-            <ul className="grid gap-4 sm:grid-cols-2">
-                {/* Secure Checkout */}
-                <li className={cn('flex gap-3 p-4 sm:p-5', cardSurface)}>
-                    <span className={trustIconTileClass}>
-                        <PolarBillingLogo className="h-5 w-5" aria-hidden />
-                    </span>
-                    <div className="min-w-0 flex gap-4">
-                        <div className="flex-1 min-w-0">
-                            <p className="text-[0.8125rem] font-bold text-[#1b1b1d]">{upgradeCopy.billingTrustLine1}</p>
-                            <p className="mt-1 text-xs leading-relaxed text-[#45474c]">{upgradeCopy.billingTrustLine1Detail}</p>
-                        </div>
-                        <div className="w-px self-stretch bg-[#e5e7eb] shrink-0" aria-hidden />
-                        <div className="flex-1 min-w-0">
-                            <p className="text-xs leading-relaxed text-[#45474c]">
-                                {upgradeCopy.billingCheckoutIntro}{' '}
-                                <BillingPolarExplainInline className="mx-px" />
-                                {upgradeCopy.billingCheckoutOutro}
-                            </p>
-                        </div>
-                    </div>
-                </li>
-                {/* Pricing & Billing */}
-                <li className={cn('flex gap-3 p-4 sm:p-5', cardSurface)}>
-                    <span className={trustIconTileClass}>
-                        <Receipt className="h-5 w-5" aria-hidden />
-                    </span>
-                    <div className="min-w-0 flex gap-4">
-                        <div className="flex-1 min-w-0 flex flex-col gap-2">
-                            <p className="text-[0.8125rem] font-bold text-[#1b1b1d]">{upgradeCopy.billingTrustLine3}</p>
-                            <p className="text-xs leading-relaxed text-[#45474c]">{upgradeCopy.billingTrustLine3Detail}</p>
-                            <Link
-                                href="/pricing"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="mt-auto inline-flex w-full items-center gap-1.5 rounded border border-[#e5e7eb] bg-white px-3 py-1.5 text-xs font-medium text-[#1b1b1d] shadow-sm hover:bg-[#f9f9fb]"
-                            >
-                                <Rows3 className="h-3.5 w-3.5 opacity-70" aria-hidden />
-                                {upgradeCopy.ctaComparePlans}
-                                <ExternalLink className="ml-auto h-3 w-3 opacity-60" aria-hidden />
-                            </Link>
-                        </div>
-                        <div className="w-px self-stretch bg-[#e5e7eb] shrink-0" aria-hidden />
-                        <div className="flex-1 min-w-0 flex flex-col gap-2">
-                            <div className="text-xs leading-relaxed text-[#45474c]">
-                                <BillingRefundPolicyNote />
-                            </div>
-                            <Link
-                                href="/resources/faq"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="mt-auto inline-flex w-full items-center gap-1.5 rounded border border-[#e5e7eb] bg-white px-3 py-1.5 text-xs font-medium text-[#1b1b1d] shadow-sm hover:bg-[#f9f9fb]"
-                            >
-                                <HelpCircle className="h-3.5 w-3.5 opacity-70" aria-hidden />
-                                FAQs
-                                <ExternalLink className="ml-auto h-3 w-3 opacity-60" aria-hidden />
-                            </Link>
-                        </div>
-                    </div>
-                </li>
-            </ul>
-
-            {/* One card: the billing entity is the plan card's first row rather than a separate
-                box beside it, so "who is billed" and "what they are on" read as one subject. */}
-            <div className="flex flex-col gap-4">
+            {/* Current plan: one card — the billing entity is its first property row rather than a
+                separate box beside it, so "who is billed" and "what they are on" read as one subject. */}
+            <section aria-label="Current plan">
                 {loadError ? (
-                    <p className="text-sm text-red-600">{loadError}</p>
+                    <p className="text-small text-danger">{loadError}</p>
                 ) : !firms.length ? (
-                    <p className="text-sm text-slate-600">
+                    <p className="text-small text-fg-muted">
                         No workspaces found. Open the app from a firm first.
                     </p>
                 ) : selectedFirm ? (
@@ -398,42 +357,82 @@ export function BillingPageClient({
                         loading={!currentPlanFetchCompleted || currentPlanLoading}
                         variant="embedded"
                         entity={{
-                            kind: 'Firm Group',
+                            kind: 'Firm group',
                             name: selectedFirm.groupName ?? selectedFirm.name,
                         }}
                     />
                 ) : null}
-            </div>
+            </section>
 
-            <section className={cn('overflow-hidden', cardSurface)}>
-                <div className="space-y-6 px-5 py-6 sm:px-7 sm:py-7">
-                    {selectedFirm ? (
-                        <PolarPlansPicker
-                            firmId={selectedFirm.id}
-                            returnPath={returnPath}
-                            portalReturnPath={portalReturnPath}
-                            density="default"
-                            currentPlanState={currentPlanState}
-                            fallbackCanManageBilling={firmManageChecked && firmManageOk}
-                            blueAccentTrial={false}
-                            hideStandaloneFreePlan
-                            enableBillingTour
-                        />
-                    ) : null}
+            {selectedFirm ? (
+                <section aria-labelledby="billing-plans-heading" className="space-y-4">
+                    <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
+                        <div className="min-w-0 space-y-0.5">
+                            <h2 id="billing-plans-heading" className={SECTION_HEADING_CLASS}>
+                                Plans
+                            </h2>
+                            {showFreeTierUpgradeCopy ? (
+                                <p className="max-w-2xl text-small text-fg-muted">
+                                    {upgradeCopy.billingBody} {upgradeCopy.billingBodyLine2}
+                                </p>
+                            ) : null}
+                        </div>
+                        {comparePlansLink}
+                    </div>
+                    <PolarPlansPicker
+                        firmId={selectedFirm.id}
+                        returnPath={returnPath}
+                        portalReturnPath={portalReturnPath}
+                        density="default"
+                        currentPlanState={currentPlanState}
+                        fallbackCanManageBilling={firmManageChecked && firmManageOk}
+                        blueAccentTrial={false}
+                        hideStandaloneFreePlan
+                        enableBillingTour
+                    />
+                </section>
+            ) : null}
+
+            {/* How paying works: quiet reference text under a hairline, not marketing cards. */}
+            <section aria-labelledby="billing-payments-heading" className="space-y-4 border-t border-line pt-6">
+                <h2 id="billing-payments-heading" className={SECTION_HEADING_CLASS}>
+                    Payments
+                </h2>
+                <div className="grid gap-x-10 gap-y-6 sm:grid-cols-2">
+                    <div className="flex gap-3">
+                        <PolarBillingLogo className="mt-0.5 h-4 w-4 text-fg-muted" aria-hidden />
+                        <div className="min-w-0 space-y-1.5">
+                            <h3 className="text-ui font-medium text-fg">{upgradeCopy.billingTrustLine1}</h3>
+                            <p className="text-small text-fg-muted">{upgradeCopy.billingTrustLine1Detail}</p>
+                            <p className="text-small text-fg-muted">
+                                {upgradeCopy.billingCheckoutIntro}{' '}
+                                <BillingPolarExplainInline className="mx-px" />
+                                {upgradeCopy.billingCheckoutOutro}
+                            </p>
+                        </div>
+                    </div>
+                    <div className="flex gap-3">
+                        <Receipt className="mt-0.5 h-4 w-4 shrink-0 text-fg-muted" strokeWidth={1.75} aria-hidden />
+                        <div className="min-w-0 space-y-1.5">
+                            <h3 className="text-ui font-medium text-fg">{upgradeCopy.billingTrustLine3}</h3>
+                            <p className="text-small text-fg-muted">{upgradeCopy.billingTrustLine3Detail}</p>
+                            <BillingRefundPolicyNote />
+                            <div className="pt-1.5">
+                                <Link
+                                    href="/resources/faq"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className={OUTLINE_LINK_CLASS}
+                                >
+                                    <HelpCircle className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden />
+                                    FAQs
+                                    <ExternalLink className="h-3 w-3 text-fg-subtle" strokeWidth={1.75} aria-hidden />
+                                </Link>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </section>
-            {paidPlanIntent && !isOnboardingSubscribe && (
-                <div className="flex justify-end">
-                    <button
-                        type="button"
-                        onClick={handleSkipUpgrade}
-                        disabled={skipSubmitting}
-                        className="inline-flex h-8 items-center rounded border border-[#e5e7eb] bg-white px-3 text-xs font-medium text-[#45474c] transition hover:bg-[#f9f9fb] hover:text-[#1b1b1d] disabled:opacity-60"
-                    >
-                        {skipSubmitting ? 'Saving…' : 'Skip for now'}
-                    </button>
-                </div>
-            )}
         </div>
     )
 }

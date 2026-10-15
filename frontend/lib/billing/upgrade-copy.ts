@@ -10,7 +10,7 @@ export const upgradeCopy = {
     /** Hosted checkout when changing paid plan without customer portal */
     planPickerSwitchPlanCta: 'Switch plan',
     /** Polar customer portal — shared CTA above plan grid for active subscribers */
-    billingPortalManageSubscriptionCta: 'Manage Subscription',
+    billingPortalManageSubscriptionCta: 'Manage subscription',
     /** Compact CTA on billing workspace plan strip */
     billingPortalManageShortCta: 'Manage',
     planPickerCurrentPlanBadge: 'Current plan',
@@ -21,7 +21,7 @@ export const upgradeCopy = {
     currentPlanLabelValidUntil: 'Valid until',
     currentPlanLabelAccessEnds: 'Access ends',
     currentPlanValidUntilUnlimited: 'Unlimited',
-    scheduledCancelWarning: 'Subscription cancelled — access to custom firms ends on',
+    scheduledCancelWarning: 'Subscription canceled — access to custom firms ends on',
     scheduledCancelWarningTrail: '. Reactivate before this date to keep access.',
     /** https://polar.sh — linked from billing UI */
     polarShUrl: 'https://polar.sh',
@@ -50,7 +50,7 @@ export const upgradeCopy = {
     billingBody: `Your current plan includes limits on clients and AI credits.`,
     billingBodyLine2: `Your Demo firm is always available on all plans. Upgrade to increase your limits.`,
     billingCheckoutReturnNote: `When checkout completes, you\'ll return to the workspace you started from.`,
-    billingTrustLine1: 'Secure Checkout',
+    billingTrustLine1: 'Secure checkout',
     billingTrustLine1Detail: `Your card is entered only on our billing partner's secure page—not inside ${BRAND_NAME}.`,
     billingTrustLine2: 'Workspace stays linked',
     billingTrustLine2Detail: 'This upgrade applies to the workspace shown below.',
@@ -101,12 +101,12 @@ freeSandboxFootnote: 'No checkout needed—keep exploring your Demo firm.',
     /** Unused on billing page — Polar is named in `billingCheckoutIntro` / `BillingCheckoutFootnote`. */
     billingPortalManagedByPrefix: 'Managed by our billing partner ',
     billingPortalManagedBySuffix: '.',
-    /** Shown under Manage Subscription in the portal CTA pair. */
+    /** Shown under Manage subscription in the portal CTA pair. */
     billingPortalSyncFootnote:
         'When you return, this page refreshes automatically; updates may take a moment while webhooks sync.',
     billingPortalOpening: 'Opening billing portal…',
     billingPortalSwitchUseSharedCtaHint:
-        'Use Manage Subscription above to open the secure billing page and change plans when available.',
+        'Use Manage subscription above to open the secure billing page and change plans when available.',
     billingPortalAdminOnlyHint:
         'Only a firm admin can manage subscription and billing. Ask an admin for access.',
     /** Post-checkout success page — past tense; Polar link inserted via `BillingPolarExplainInline`. */

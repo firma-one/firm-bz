@@ -1,11 +1,15 @@
 'use client'
 
 import { useCallback, useState, type ReactNode } from 'react'
-import { AlertTriangle, Loader2, Settings, CreditCard } from 'lucide-react'
+import { AlertTriangle, Building2, CalendarClock, Settings, CreditCard } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 
 import type { BillingCurrentPlanState, BillingPlanEntitlements, BillingPlanUsage } from '@/components/billing/polar-plans-picker'
 import { Button } from '@/components/ui/button'
+import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { PropertyList, PropertyRow } from '@/components/ui/property-list'
+import { LoadingAnnouncement, ShimmerBar } from '@/components/ui/shimmer'
+import { Tag } from '@/components/ui/tag'
 import { openPolarCustomerPortalSession } from '@/lib/billing/open-polar-customer-portal'
 import { upgradeCopy } from '@/lib/billing/upgrade-copy'
 import { isScheduledToCancel, planNameForSummary, validUntilForSummary } from '@/lib/billing/subscription-display'
@@ -42,24 +46,23 @@ function UsageBar({
     const isAtCap = !isUnlimited && used !== null && used >= cap!
     const isNearCap = !isUnlimited && !isAtCap && used !== null && pct >= 80
 
+    // Status colors come from the tag palette: orange as the cap nears, danger once it is reached.
     const barColor = isAtCap
-        ? 'bg-rose-500'
+        ? 'bg-danger'
         : isNearCap
-        ? 'bg-amber-400'
-        : 'bg-primary'
+        ? 'bg-tag-orange-fg'
+        : 'bg-action'
 
     return (
-        <div className="flex flex-col gap-1 min-w-0">
-            <div className="flex items-baseline justify-between gap-2">
-                <span className="text-[10px] text-[#45474c] whitespace-nowrap">{label}</span>
-                <span className={cn('text-[10px] tabular-nums font-medium whitespace-nowrap', isAtCap ? 'text-rose-600' : 'text-[#1b1b1d]')}>
-                    {isUnlimited ? '∞' : used === null ? '—' : `${used} / ${cap}`}
-                </span>
-            </div>
-            <div className="h-1.5 w-full rounded-full bg-primary/10 overflow-hidden">
+        <div className="flex min-w-0 flex-col gap-1">
+            <span className="truncate text-small text-fg-muted">{label}</span>
+            <span className={cn('text-ui font-medium tabular-nums', isAtCap ? 'text-danger' : 'text-fg')}>
+                {isUnlimited ? '∞' : used === null ? '—' : `${used} / ${cap}`}
+            </span>
+            <div className="mt-0.5 h-1 w-full overflow-hidden rounded-full bg-surface-muted">
                 {!isUnlimited && (
                     <div
-                        className={cn('h-full rounded-full transition-all', barColor)}
+                        className={cn('h-full rounded-full transition-[width] duration-300', barColor)}
                         style={{ width: `${pct}%` }}
                     />
                 )}
@@ -70,9 +73,9 @@ function UsageBar({
 
 function RetentionStat({ value, label }: { value: string; label: string }) {
     return (
-        <div className="flex flex-col gap-1 min-w-0">
-            <span className="text-[10px] text-[#45474c] whitespace-nowrap">{label}</span>
-            <span className="text-[13px] font-bold leading-none text-primary tabular-nums">{value}</span>
+        <div className="flex min-w-0 flex-col gap-1">
+            <span className="truncate text-small text-fg-muted">{label}</span>
+            <span className="text-ui font-medium tabular-nums text-fg">{value}</span>
         </div>
     )
 }
@@ -85,30 +88,26 @@ function PlanEntitlementsSection({
     usage: BillingPlanUsage | null | undefined
 }) {
     return (
-        <div className="mt-3 pt-3 border-t border-primary/15">
+        <div className="mt-4 border-t border-line pt-4">
             <SectionLabel>Plan usage</SectionLabel>
             {/* One grid for everything, so bars and retention share the same columns instead of a
                 five-across row competing with a side rail. Two columns on narrow screens. */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-5 gap-y-3">
+            <div className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3">
                 {/* Clients and AI credits only — see PUBLISHED_ENTITLEMENTS. Firms, engagements,
                     contacts, deliverables and documents remain enforced, just not advertised. */}
-                <UsageBar label={e.clients === 1 ? 'client' : 'clients'} cap={e.clients} used={usage?.clients ?? null} />
+                <UsageBar label={e.clients === 1 ? 'Client' : 'Clients'} cap={e.clients} used={usage?.clients ?? null} />
                 {/* Retention has no usage concept — just the policy — so it renders as a value,
                     not a bar, but still occupies a grid cell to keep the alignment. */}
-                <RetentionStat value={e.auditDays === 0 ? 'No' : daysLabel(e.auditDays)} label="audit trail" />
-                <RetentionStat value={daysLabel(e.commentHistoryDays)} label="comments" />
+                <RetentionStat value={e.auditDays === 0 ? 'No' : daysLabel(e.auditDays)} label="Audit trail" />
+                <RetentionStat value={daysLabel(e.commentHistoryDays)} label="Comments" />
             </div>
         </div>
     )
 }
 
-/** Small caps heading shared by the usage subsections. */
+/** Sentence-case label shared by the usage subsections. */
 function SectionLabel({ children }: { children: ReactNode }) {
-    return (
-        <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[#45474c]">
-            {children}
-        </p>
-    )
+    return <p className="mb-3 text-small font-medium text-fg-muted">{children}</p>
 }
 
 /**
@@ -138,16 +137,16 @@ function AiCreditsRow({ usage }: { usage: BillingPlanUsage | null | undefined })
     // Ordered firm-scoped first, then engagement-scoped, so the two halves of the product read
     // as groups rather than an arbitrary list. Labels name the surface the credit was spent on.
     //
-    // Colors are four steps of the brand green rather than a categorical palette: these segments
-    // are parts of ONE measure (credits against one allowance), so varying lightness reads as a
-    // single bar divided up, where four unrelated hues would read as four competing series.
-    // Descending lightness also keeps the order legible at the 6px height this bar renders at.
+    // One categorical color per feature (the chart palette in ui-tokens.css), like a context-usage
+    // breakdown: the question this answers is "which feature spent the credits", so each one needs
+    // its own hue. What's left of the allowance is the gray track, listed last as "Remaining".
+    const chart = (c: string) => `var(--ui-chart-${c})`
     const AI_FEATURES: Array<{ key: keyof typeof ai.byFeature; label: string; fill: string }> = [
-        { key: 'brief', label: 'Firm briefs', fill: 'hsl(var(--primary))' },
-        { key: 'searchInterpret', label: 'Firm Doc Search', fill: 'hsl(161 70% 45%)' },
-        { key: 'summary', label: 'Engagement summaries', fill: 'hsl(161 55% 62%)' },
-        { key: 'chat', label: 'Engagement assistant chat', fill: 'hsl(161 45% 78%)' },
-        { key: 'filesAgent', label: 'Files agent', fill: 'hsl(161 35% 88%)' },
+        { key: 'brief', label: 'Firm briefs', fill: chart('blue') },
+        { key: 'searchInterpret', label: 'Firm Doc Search', fill: chart('orange') },
+        { key: 'summary', label: 'Engagement summaries', fill: chart('green') },
+        { key: 'chat', label: 'Engagement assistant chat', fill: chart('yellow') },
+        { key: 'filesAgent', label: 'Files agent', fill: chart('purple') },
     ]
     const fmt = (n: number) => (n % 1 === 0 ? String(n) : n.toFixed(1))
     const since = new Date(ai.periodStartIso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
@@ -161,12 +160,12 @@ function AiCreditsRow({ usage }: { usage: BillingPlanUsage | null | undefined })
     const nearlyOut = hasLiveCap && usedPct >= 80
 
     return (
-        <div className="mt-3 pt-3 border-t border-primary/15">
-            <div className="mb-2 flex items-baseline gap-2 flex-wrap">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-[#45474c]">
+        <div className="mt-4 border-t border-line pt-4">
+            <div className="mb-3 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                <p className="text-small font-medium text-fg-muted">
                     AI credits
                 </p>
-                <span className="text-[10px] text-[#45474c]">
+                <span className="text-caption tabular-nums text-fg-muted">
                     {hasLiveCap
                         ? `${fmt(ai.used)} of ${fmt(ai.allowance!)} used since ${since}`
                         : `${fmt(ai.used)} used since ${since}`}
@@ -178,11 +177,11 @@ function AiCreditsRow({ usage }: { usage: BillingPlanUsage | null | undefined })
                     original bug, telling a capped customer they are uncapped. Say nothing about
                     limits instead, and let the system admin tools report the fault. */}
                 {hasLiveCap ? (
-                    <span className={`text-[10px] font-medium ${nearlyOut ? 'text-amber-700' : 'text-[#45474c]'}`}>
+                    <span className={cn('text-caption tabular-nums', nearlyOut ? 'text-tag-orange-fg' : 'text-fg-muted')}>
                         · {fmt(remaining!)} left
                     </span>
                 ) : ai.allowance != null ? (
-                    <span className="text-[10px] text-gray-400">· {fmt(ai.allowance)} included</span>
+                    <span className="text-caption tabular-nums text-fg-subtle">· {fmt(ai.allowance)} included</span>
                 ) : null}
             </div>
             {/* One stacked bar: each segment is a feature's share, and when a cap is live the
@@ -191,7 +190,7 @@ function AiCreditsRow({ usage }: { usage: BillingPlanUsage | null | undefined })
                 the track and the bar reads as a pure composition of what was spent. */}
             <TooltipProvider delayDuration={150}>
                 <div
-                    className="mb-2.5 flex h-2 w-full overflow-hidden rounded-full bg-primary/10"
+                    className="mb-3 flex h-2 w-full gap-px overflow-hidden rounded-full bg-surface-muted"
                     role="img"
                     aria-label={AI_FEATURES.map(({ key, label }) => `${label}: ${fmt(ai.byFeature[key] ?? 0)}`).join(', ')}
                 >
@@ -207,7 +206,7 @@ function AiCreditsRow({ usage }: { usage: BillingPlanUsage | null | undefined })
                             <Tooltip key={key}>
                                 <TooltipTrigger asChild>
                                     <div
-                                        className="h-full transition-all first:rounded-l-full last:rounded-r-full"
+                                        className="h-full transition-[width] duration-300 first:rounded-l-full last:rounded-r-full"
                                         style={{ width: `${pct}%`, backgroundColor: fill }}
                                     />
                                 </TooltipTrigger>
@@ -219,26 +218,29 @@ function AiCreditsRow({ usage }: { usage: BillingPlanUsage | null | undefined })
                     })}
                 </div>
             </TooltipProvider>
-            {/* Legend doubles as the per-feature readout, so the numbers that used to sit above
-                four separate bars are still here — one row instead of a grid of tracks. */}
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
-                {AI_FEATURES.map(({ key, label, fill }) => {
-                    const value = ai.byFeature[key] ?? 0
-                    return (
-                        <div key={key} className="flex items-center gap-1.5 min-w-0">
-                            <span
-                                className="h-2 w-2 shrink-0 rounded-[2px]"
-                                style={{ backgroundColor: fill }}
-                                aria-hidden="true"
-                            />
-                            <span className="text-[10px] text-[#45474c] whitespace-nowrap">{label}</span>
-                            <span className="text-[10px] tabular-nums font-medium text-[#1b1b1d] whitespace-nowrap">
-                                {fmt(value)}
-                            </span>
-                        </div>
-                    )
-                })}
-            </div>
+            {/* Legend doubles as the per-feature readout: swatch, feature, credits and its share —
+                of the allowance when a cap is live (so the rows plus Remaining add up to 100%),
+                otherwise of what was spent. */}
+            {(() => {
+                const denominator = hasLiveCap ? ai.allowance! : ai.used
+                const share = (n: number) => (denominator > 0 ? `${((n / denominator) * 100).toFixed(1)}%` : '—')
+                const rows = [
+                    ...AI_FEATURES.map(({ key, label, fill }) => ({ key: String(key), label, fill, value: ai.byFeature[key] ?? 0 })),
+                    ...(hasLiveCap ? [{ key: 'remaining', label: 'Remaining', fill: 'var(--ui-surface-muted)', value: remaining! }] : []),
+                ]
+                return (
+                    <div className="grid gap-x-8 gap-y-1 sm:grid-cols-2">
+                        {rows.map(({ key, label, fill, value }) => (
+                            <div key={key} className="flex min-w-0 items-center gap-2 text-small">
+                                <span className={cn('h-2.5 w-2.5 shrink-0 rounded-[3px]', key === 'remaining' && 'ring-1 ring-inset ring-line-strong')} style={{ backgroundColor: fill }} aria-hidden="true" />
+                                <span className="min-w-0 flex-1 truncate text-fg-muted">{label}</span>
+                                <span className="tabular-nums text-fg">{fmt(value)}</span>
+                                <span className="w-12 text-right tabular-nums text-fg-subtle">{share(value)}</span>
+                            </div>
+                        ))}
+                    </div>
+                )
+            })()}
         </div>
     )
 }
@@ -289,20 +291,27 @@ export function CurrentPlanSummary({
         }
     }, [firmId, portalReturnPath])
 
-    const labelClass = 'text-[#45474c]'
-    const valueClass = 'font-bold text-primary'
+    // One flat card (the plan plus who is billed), like the firm Overview cards: hairline, no shadow.
     const shell = cn(
-        variant === 'embedded'
-            ? 'rounded border-2 border-primary/30 bg-primary/5 px-4 py-4 sm:px-5 shadow-md'
-            : 'rounded border-2 border-primary/30 bg-primary/5 px-4 py-4 sm:px-5 shadow-md'
+        'rounded-card border border-line bg-surface',
+        variant === 'embedded' ? 'p-5' : 'p-5 sm:p-6'
     )
+    const heading = <h2 className="text-h3 text-fg">Current plan</h2>
 
     if (loading) {
         return (
             <div className={shell} aria-busy="true" aria-live="polite">
-                <div className="flex items-center gap-2 text-xs text-[#45474c]">
-                    <Loader2 className="h-4 w-4 shrink-0 animate-spin text-[#45474c]/60" aria-hidden />
-                    <span>Loading plan…</span>
+                <LoadingAnnouncement label="Loading plan…" />
+                {heading}
+                {/* Shaped like the property rows that are coming, so nothing jumps when they land. */}
+                <div className="mt-2 flex flex-col gap-0.5">
+                    {[0, 1, 2].map((i) => (
+                        <div key={i} className="flex h-9 items-center gap-2">
+                            <ShimmerBar className="w-20 shrink-0 sm:w-24" />
+                            <span className="w-8 shrink-0 sm:w-16" aria-hidden />
+                            <ShimmerBar className={i === 0 ? 'w-44' : i === 1 ? 'w-24' : 'w-32'} />
+                        </div>
+                    ))}
                 </div>
             </div>
         )
@@ -311,7 +320,8 @@ export function CurrentPlanSummary({
     if (!currentPlanState) {
         return (
             <div className={shell}>
-                <p className="text-xs text-[#45474c]">{upgradeCopy.currentPlanSummaryUnavailable}</p>
+                {heading}
+                <p className="mt-1 text-small text-fg-muted">{upgradeCopy.currentPlanSummaryUnavailable}</p>
             </div>
         )
     }
@@ -339,79 +349,67 @@ export function CurrentPlanSummary({
 
     return (
         <div className={shell}>
-            {/* Identity block: billing entity above plan, sharing one two-column grid so "Plan"
-                sits under "Billing Entity Type" and "Valid until" under "Billing Entity Name".
-                No divider between them — they describe the same subject, and a rule implied two
-                unrelated sections. Manage spans both rows. */}
-            {/* items-center so the icon sits across both rows rather than against the first. */}
-            <div className="flex items-center justify-between gap-4">
-                {/* Carried over from the standalone entity card this block replaced. */}
-                <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded border border-primary/25 bg-white text-primary shadow-sm">
-                    <CreditCard className="h-3.5 w-3.5" aria-hidden />
-                </span>
-                <div className="min-w-0 flex-1 grid grid-cols-[auto_1fr] gap-x-8 gap-y-1.5 items-baseline">
-                    {entity && (
-                        <>
-                            <p className={cn('text-xs whitespace-nowrap', labelClass)}>
-                                <span className="font-medium">Billing Entity Type:</span>{' '}
-                                <span className={valueClass}>{entity.kind}</span>
-                            </p>
-                            <p className={cn('text-xs min-w-0', labelClass)}>
-                                {entity.name && (
-                                    <>
-                                        <span className="font-medium">Billing Entity Name:</span>{' '}
-                                        <span className={valueClass}>{entity.name}</span>
-                                    </>
-                                )}
-                            </p>
-                        </>
-                    )}
-
-                    <p className={cn('text-xs whitespace-nowrap', labelClass)}>
-                        <span className="font-medium">{upgradeCopy.currentPlanLabelPlan}:</span>{' '}
-                        <span className={valueClass}>{planName}</span>
-                    </p>
-                    <p className={cn('text-xs flex items-center gap-1.5 min-w-0', labelClass)}>
-                        <span className="font-medium whitespace-nowrap">{validUntilLabel}:</span>{' '}
-                        <span className={cn('tabular-nums', scheduledCancel ? 'text-red-600 font-bold' : valueClass)}>{validUntil}</span>
-                        {scheduledCancel && (
-                            <TooltipProvider delayDuration={200}>
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
-                                        <span className="inline-flex items-center cursor-default">
-                                            <AlertTriangle className="h-3.5 w-3.5 text-red-500" />
-                                        </span>
-                                    </TooltipTrigger>
-                                    <TooltipContent side="top" className="max-w-[14rem] text-xs leading-relaxed">
-                                        {upgradeCopy.scheduledCancelWarning}{' '}
-                                        <span className="font-semibold">{validUntil}</span>
-                                        {upgradeCopy.scheduledCancelWarningTrail}
-                                    </TooltipContent>
-                                </Tooltip>
-                            </TooltipProvider>
-                        )}
-                    </p>
-                </div>
-            {showManageSubscription ? (
-                <div className="shrink-0">
-                    <Button
-                        type="button"
-                        variant="blackCta"
-                        className="h-auto py-1.5 px-4 gap-2 rounded text-[10px] font-headline font-bold tracking-widest uppercase"
-                        disabled={portalLoading}
-                        onClick={() => void openBillingPortal()}
-                    >
-                        {portalLoading ? (
-                            <Loader2 className="h-4 w-4 shrink-0 animate-spin opacity-90" aria-hidden />
-                        ) : (
-                            <Settings className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
-                        )}
-                        {portalLoading ? upgradeCopy.billingPortalOpening : upgradeCopy.billingPortalManageShortCta}
-                    </Button>
-                    {portalError ? <p className="mt-2 text-right text-sm text-red-600">{portalError}</p> : null}
-                </div>
-            ) : null}
+            <div className="flex items-start justify-between gap-4">
+                {heading}
+                {showManageSubscription ? (
+                    <div className="flex shrink-0 flex-col items-end gap-1">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={portalLoading}
+                            onClick={() => void openBillingPortal()}
+                        >
+                            {portalLoading ? (
+                                <LoadingSpinner size="sm" />
+                            ) : (
+                                <Settings className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} aria-hidden />
+                            )}
+                            {portalLoading ? upgradeCopy.billingPortalOpening : upgradeCopy.billingPortalManageShortCta}
+                        </Button>
+                        {portalError ? <p className="max-w-xs text-right text-small text-danger">{portalError}</p> : null}
+                    </div>
+                ) : null}
             </div>
+            {/* Identity block as property rows: who is billed, then what they are on and until when.
+                No divider between them — they describe the same subject. */}
+            <PropertyList className="mt-2">
+                {entity && (
+                    <PropertyRow label="Billing entity" icon={<Building2 strokeWidth={1.75} aria-hidden />}>
+                        {entity.name ? <span className="min-w-0 truncate font-medium">{entity.name}</span> : null}
+                        <Tag color="gray">{entity.kind}</Tag>
+                    </PropertyRow>
+                )}
+                <PropertyRow
+                    label={upgradeCopy.currentPlanLabelPlan}
+                    icon={<CreditCard strokeWidth={1.75} aria-hidden />}
+                >
+                    <span className="min-w-0 truncate font-medium">{planName}</span>
+                </PropertyRow>
+                <PropertyRow label={validUntilLabel} icon={<CalendarClock strokeWidth={1.75} aria-hidden />}>
+                    <span className={cn('tabular-nums', scheduledCancel && 'font-medium text-danger')}>{validUntil}</span>
+                    {scheduledCancel && (
+                        <TooltipProvider delayDuration={200}>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <span
+                                        tabIndex={0}
+                                        aria-label="Cancellation scheduled"
+                                        className="inline-flex cursor-default items-center rounded-control text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action/30"
+                                    >
+                                        <AlertTriangle className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden />
+                                    </span>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="max-w-[14rem] text-small">
+                                    {upgradeCopy.scheduledCancelWarning}{' '}
+                                    <span className="font-semibold">{validUntil}</span>
+                                    {upgradeCopy.scheduledCancelWarningTrail}
+                                </TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
+                    )}
+                </PropertyRow>
+            </PropertyList>
             {/* Entitlement usage bars */}
             {hasCaps && entitlements && (
                 <PlanEntitlementsSection e={entitlements} usage={usage} />

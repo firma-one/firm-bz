@@ -151,10 +151,10 @@ export function StandardCheckoutIntentBanner() {
 
     const billingIconTile = (
         <div
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white p-0.5 shadow-sm"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-control bg-surface-muted text-fg-muted"
             aria-hidden
         >
-            <CreditCard className="h-4 w-4 text-slate-600" strokeWidth={2} />
+            <CreditCard className="h-4 w-4" strokeWidth={1.75} />
         </div>
     )
 
@@ -173,21 +173,18 @@ export function StandardCheckoutIntentBanner() {
                     <Link
                         href={checkoutHref}
                         onClick={onContinueToBillingClick}
-                        className={cn(
-                            buttonVariants({ variant: 'blackCta', size: 'sm' }),
-                            'h-9 shrink-0 justify-center px-4 text-[10px] font-semibold uppercase tracking-widest'
-                        )}
+                        className={cn(buttonVariants({ variant: 'greenCta', size: 'sm' }), 'shrink-0')}
                     >
                         Upgrade
                     </Link>
                     <button
                         type="button"
                         onClick={dismissHintForSession}
-                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded border border-slate-200 bg-white text-slate-600 shadow-sm transition-colors hover:bg-slate-50 hover:text-slate-900"
+                        className={cn(buttonVariants({ variant: 'ghost', size: 'icon' }), 'h-7 w-7 shrink-0 text-fg-muted')}
                         aria-label="Hide until you sign out"
                         title="Hide until you sign out"
                     >
-                        <X className="h-4 w-4" strokeWidth={2.25} />
+                        <X className="h-4 w-4" strokeWidth={1.75} />
                     </button>
                 </>
             }

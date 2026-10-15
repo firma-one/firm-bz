@@ -13,7 +13,7 @@ export function PolarBillingLogo({ className }: { className?: string }) {
             viewBox="0 0 29 29"
             fill="none"
             xmlns="http://www.w3.org/2000/svg"
-            className={cn('shrink-0 text-black dark:text-white', className)}
+            className={cn('shrink-0 text-fg', className)}
             aria-hidden
         >
             <path
@@ -47,7 +47,7 @@ export function BillingPolarExplainInline({ className }: { className?: string })
                 href={upgradeCopy.polarShUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="font-medium leading-none text-slate-700 underline decoration-slate-300/90 underline-offset-[0.15em] hover:text-slate-900 hover:decoration-slate-500"
+                className="font-medium leading-none text-fg underline decoration-line-strong underline-offset-[0.15em] transition-colors hover:decoration-fg-muted"
             >
                 {upgradeCopy.polarLinkLabel}
             </Link>
@@ -56,13 +56,13 @@ export function BillingPolarExplainInline({ className }: { className?: string })
                     <TooltipTrigger asChild>
                         <button
                             type="button"
-                            className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400/50 focus-visible:ring-offset-1 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+                            className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-control text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action/30"
                             aria-label={`About ${upgradeCopy.polarLinkLabel}`}
                         >
-                            <HelpCircle className="h-3 w-3" aria-hidden />
+                            <HelpCircle className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden />
                         </button>
                     </TooltipTrigger>
-                    <TooltipContent side="top" align="start" className="max-w-[min(20rem,calc(100vw-2rem))] text-xs leading-relaxed">
+                    <TooltipContent side="top" align="start" className="max-w-[min(20rem,calc(100vw-2rem))] text-small">
                         {upgradeCopy.polarTooltip}
                     </TooltipContent>
                 </Tooltip>
@@ -75,8 +75,8 @@ export function BillingCheckoutFootnote({ dense }: { dense?: boolean }) {
     return (
         <p
             className={cn(
-                'leading-relaxed',
-                dense ? 'text-[11px] text-slate-600' : 'text-xs text-slate-700'
+                'text-fg-muted',
+                dense ? 'text-caption font-normal' : 'text-small'
             )}
         >
             {upgradeCopy.billingCheckoutIntro}{' '}
@@ -90,14 +90,14 @@ export function BillingRefundPolicyNote({ compact }: { compact?: boolean }) {
     return (
         <p
             className={cn(
-                'leading-relaxed text-slate-600',
-                compact ? 'text-xs' : 'text-xs sm:text-xs'
+                'text-fg-muted',
+                compact ? 'text-caption font-normal' : 'text-small'
             )}
         >
             {upgradeCopy.billingRefundPolicyNoteIntro}{' '}
             <Link
                 href="/d/support"
-                className="font-medium underline underline-offset-2 text-slate-700 decoration-slate-300/80 hover:text-slate-900 hover:decoration-slate-400"
+                className="font-medium text-fg underline decoration-line-strong underline-offset-2 transition-colors hover:decoration-fg-muted"
             >
                 contact support
             </Link>

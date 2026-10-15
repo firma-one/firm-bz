@@ -30,6 +30,7 @@ import {
 import { BillingPageClient } from '@/components/billing/billing-page-client'
 import { clearCheckoutIntent } from '@/lib/marketing/checkout-intent'
 import { Checkbox } from "@/components/ui/checkbox"
+import { Tag } from "@/components/ui/tag"
 import { generateWorkspaceFolderName } from "@/lib/generate-unique-workspace-folder-name"
 
 const ONBOARDING_CREATING_STORAGE_KEY = 'firm_onboarding_creating'
@@ -58,26 +59,26 @@ function clearOnboardingCreatingSession(): void {
  * Calls getUser() first (server-side verification) to satisfy Supabase's security recommendation,
  * then reads the session token. Each API call also verifies the token server-side.
  */
-/** Progress indicator for org tree: todo = rounded empty circle, completed = tick mark in rounded circle, in progress = spinner. */
+/** Progress indicator for org tree: todo = empty ring, completed = filled accent check, in progress = spinner. */
 function OrgTreeProgressCheck({ status, size = 'md' }: { status: 'completed' | 'inProgress' | 'pending'; size?: 'sm' | 'md' | 'lg' }) {
-    const sizeClass = size === 'sm' ? 'h-3.5 w-3.5' : size === 'lg' ? 'h-5 w-5' : 'h-4 w-4'
+    const sizeClass = size === 'sm' ? 'h-3.5 w-3.5' : size === 'lg' ? 'h-[18px] w-[18px]' : 'h-4 w-4'
     const iconClass = size === 'sm' ? 'h-2 w-2' : size === 'lg' ? 'h-3 w-3' : 'h-2.5 w-2.5'
     if (status === 'completed') {
         return (
-            <div className={`${sizeClass} rounded-full border-2 border-[#1b1b1d] flex items-center justify-center flex-shrink-0`}>
-                <Check className={`${iconClass} text-[#1b1b1d]`} strokeWidth={2.5} />
+            <div className={`${sizeClass} flex shrink-0 items-center justify-center rounded-full bg-action text-action-fg`}>
+                <Check className={iconClass} strokeWidth={3} />
             </div>
         )
     }
     if (status === 'inProgress') {
         return (
-            <div className={`${sizeClass} rounded-full border-2 border-[#e5e7eb] bg-amber-50 flex items-center justify-center flex-shrink-0`}>
-                <Loader2 className={`${iconClass} text-amber-600 animate-spin`} strokeWidth={2.5} />
+            <div className={`${sizeClass} flex shrink-0 items-center justify-center text-action`}>
+                <LoadingSpinner size="sm" className={sizeClass} />
             </div>
         )
     }
     return (
-        <div className={`${sizeClass} rounded-full border-2 border-[#e5e7eb] flex-shrink-0`} />
+        <div className={`${sizeClass} shrink-0 rounded-full border border-line-strong`} />
     )
 }
 
@@ -96,30 +97,30 @@ function SandboxHierarchyPreview({
 
     return (
         <>
-            <div className="flex items-center gap-3 mb-3">
+            <div className="mb-3 flex items-center gap-2.5">
                 <OrgTreeProgressCheck status={nodeStatus(FIRM_STEP)} size="lg" />
-                <Building2 className="h-4 w-4 text-[#45474c]/50 flex-shrink-0" />
-                <span className="text-sm font-semibold text-[#1b1b1d]">{sandboxFirmName}</span>
-                <span className="ml-auto text-[10px] font-semibold uppercase tracking-wider text-[#45474c]/50 bg-[#f9f9fb] px-2 py-0.5 rounded-full">Firm</span>
+                <Building2 className="h-4 w-4 shrink-0 text-fg-subtle" strokeWidth={1.75} />
+                <span className="min-w-0 truncate text-ui font-medium text-fg">{sandboxFirmName}</span>
+                <Tag className="ml-auto">Firm</Tag>
             </div>
-            <div className="pl-6 border-l-2 border-[#e5e7eb] ml-2.5 space-y-4">
+            <div className="ml-2 space-y-3 border-l border-line pl-5">
                 {SANDBOX_HIERARCHY.map((client, ci) => {
                     const clientStep = getClientStepIndex(ci)
                     return (
                         <div key={ci}>
-                            <div className="flex items-center gap-3 mb-2">
+                            <div className="mb-1.5 flex items-center gap-2.5">
                                 <OrgTreeProgressCheck status={nodeStatus(clientStep)} size="md" />
-                                <Users className="h-4 w-4 text-[#45474c]/50 flex-shrink-0" />
-                                <span className="text-sm font-medium text-[#45474c]">{client.clientName}</span>
-                                <span className="ml-auto text-[10px] font-semibold uppercase tracking-wider text-[#45474c]/50 bg-[#f9f9fb] px-2 py-0.5 rounded-full">Client</span>
+                                <Users className="h-4 w-4 shrink-0 text-fg-subtle" strokeWidth={1.75} />
+                                <span className="min-w-0 truncate text-ui text-fg">{client.clientName}</span>
+                                <Tag className="ml-auto">Client</Tag>
                             </div>
-                            <div className="pl-6 border-l-2 border-[#e5e7eb] ml-2.5 space-y-1.5">
+                            <div className="ml-2 space-y-1 border-l border-line pl-5">
                                 {client.engagements.map((engagement, ei) => (
-                                    <div key={ei} className="flex items-center gap-3">
+                                    <div key={ei} className="flex items-center gap-2.5">
                                         <OrgTreeProgressCheck status={nodeStatus(getEngagementStepIndex(ci, ei))} size="sm" />
-                                        <Briefcase className="h-3.5 w-3.5 text-[#45474c]/30 flex-shrink-0" />
-                                        <span className="text-xs text-[#45474c]/60 italic">{engagement.name}</span>
-                                        <span className="ml-auto text-[9px] font-semibold uppercase tracking-wider text-[#45474c]/30 bg-[#f9f9fb] px-1.5 py-0.5 rounded-full">Engagement</span>
+                                        <Briefcase className="h-3.5 w-3.5 shrink-0 text-fg-subtle" strokeWidth={1.75} />
+                                        <span className="min-w-0 truncate text-small text-fg-muted">{engagement.name}</span>
+                                        <Tag className="ml-auto">Engagement</Tag>
                                     </div>
                                 ))}
                             </div>
@@ -144,7 +145,7 @@ function buildFinalizeTerminalSteps(firmName: string): string[] {
     ]
 }
 
-/** One monospace line under the tree: current provisioning step (typing animation). */
+/** One line under the tree: current provisioning step (typing animation). */
 const FinalizeProvisioningLine = ({ steps, activeStepIndex }: { steps: string[]; activeStepIndex: number }) => {
     const [currentText, setCurrentText] = useState('')
     const [isTyping, setIsTyping] = useState(false)
@@ -176,14 +177,14 @@ const FinalizeProvisioningLine = ({ steps, activeStepIndex }: { steps: string[];
     const showCaret = isTyping && currentText.length < label.length
 
     return (
-        <div className="mt-3 flex items-start gap-2.5 rounded border border-emerald-200/80 bg-white/80 px-3 py-2.5 font-mono text-[12px] leading-snug text-[#1b1b1d] shadow-sm">
-            <Loader2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600 animate-spin" aria-hidden />
+        <div className="mt-3 flex items-start gap-2 rounded-control bg-surface-subtle px-3 py-2 text-small text-fg-muted">
+            <LoadingSpinner size="sm" className="mt-px text-fg-subtle" />
             <p className="min-w-0 flex-1">
                 {isTyping ? (
                     <>
                         {currentText}
                         {showCaret ? (
-                            <span className="inline-block h-3.5 w-1.5 translate-y-0.5 bg-[#45474c] ml-0.5 animate-[blink_1s_infinite] align-middle" />
+                            <span className="ml-0.5 inline-block h-3.5 w-px translate-y-0.5 bg-fg-muted align-middle animate-[blink_1s_infinite]" />
                         ) : null}
                     </>
                 ) : (
@@ -194,17 +195,71 @@ const FinalizeProvisioningLine = ({ steps, activeStepIndex }: { steps: string[];
     )
 }
 
+/** Sentence-case requirement tag (New UI) — neutral metadata, not a warning. */
 function StepRequirementBadge({ kind }: { kind: 'mandatory' | 'optional' }) {
+    return <Tag color="gray">{kind === 'mandatory' ? 'Required' : 'Optional'}</Tag>
+}
+
+/**
+ * Onboarding question block (Notion/Linear onboarding): an optional caption row, a large question
+ * and a muted explanation. `centered` is for the short status screens, which use the smaller h2.
+ */
+function StepIntro({
+    eyebrow,
+    title,
+    description,
+    centered = false,
+}: {
+    eyebrow?: React.ReactNode
+    title: React.ReactNode
+    description?: React.ReactNode
+    centered?: boolean
+}) {
     return (
-        <span
-            className={`font-mono inline-flex shrink-0 items-center rounded-sm px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide tabular-nums leading-none ${
-                kind === 'mandatory'
-                    ? 'bg-[#1b1b1d]/10 text-[#1b1b1d]'
-                    : 'border border-amber-200/80 bg-amber-50 text-amber-900'
-            }`}
-        >
-            {kind === 'mandatory' ? 'Mandatory' : 'Optional'}
-        </span>
+        <header className={centered ? 'flex flex-col items-center text-center' : undefined}>
+            {eyebrow && <div className="mb-3 flex flex-wrap items-center gap-2">{eyebrow}</div>}
+            <h1 className={centered ? 'text-h2 text-fg' : 'text-h1 text-fg'}>{title}</h1>
+            {description && (
+                <p className={`mt-2 text-ui text-fg-muted ${centered ? 'max-w-md' : 'max-w-xl'}`}>{description}</p>
+            )}
+        </header>
+    )
+}
+
+/** A numbered sub-step label inside a step (e.g. the Shared Drive walkthrough). */
+function StepSectionLabel({ n, done = false, children }: { n: number; done?: boolean; children: React.ReactNode }) {
+    return (
+        <div className="flex items-center gap-2">
+            <span
+                aria-hidden
+                className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-caption tabular-nums ${
+                    done ? 'bg-action text-action-fg' : 'bg-surface-muted text-fg-muted'
+                }`}
+            >
+                {done ? <Check className="h-3 w-3" strokeWidth={2.5} /> : n}
+            </span>
+            <p className="text-ui font-medium text-fg">{children}</p>
+        </div>
+    )
+}
+
+/** Calm inline error (Notion red tag pair), used for every step's failure message. */
+function ErrorNotice({ children, className = '' }: { children: React.ReactNode; className?: string }) {
+    return (
+        <div role="alert" className={`flex items-start gap-2 rounded-control bg-tag-red-bg px-3 py-2.5 text-left text-small text-tag-red-fg ${className}`}>
+            <AlertCircle className="mt-px h-4 w-4 shrink-0" strokeWidth={1.75} />
+            <span className="min-w-0">{children}</span>
+        </div>
+    )
+}
+
+/** Neutral note with a leading icon. */
+function InfoNotice({ children, className = '' }: { children: React.ReactNode; className?: string }) {
+    return (
+        <div className={`flex items-start gap-2 rounded-control bg-surface-subtle px-3 py-2.5 text-small text-fg-muted ${className}`}>
+            <Info className="mt-px h-4 w-4 shrink-0 text-fg-subtle" strokeWidth={1.75} />
+            <div className="min-w-0">{children}</div>
+        </div>
     )
 }
 
@@ -232,23 +287,21 @@ const AlreadyCompletedScreen = ({ onGoToDashboard }: { onGoToDashboard: () => vo
     }, [onGoToDashboard])
 
     return (
-        <div className="animate-in fade-in duration-500 text-center py-16">
-            <div className="h-20 w-20 rounded bg-primary/10 border border-primary/20 flex items-center justify-center mb-6 mx-auto">
-                <CheckCircle2 className="h-10 w-10 text-primary" />
-            </div>
-            <h1 className="font-headline text-2xl font-bold text-[#1b1b1d] mb-3">You're all set!</h1>
-            <p className="text-[#45474c] mb-2 text-[0.8125rem]">
-                Onboarding has already been completed for your account.
+        <div className="animate-in fade-in duration-300 flex flex-col items-center py-16 text-center">
+            <span className="mb-5 flex h-10 w-10 items-center justify-center rounded-card bg-tag-green-bg text-tag-green-fg">
+                <CheckCircle2 className="h-5 w-5" strokeWidth={1.75} />
+            </span>
+            <StepIntro
+                centered
+                title="You're all set"
+                description="Onboarding has already been completed for your account."
+            />
+            <p className="mt-2 text-caption text-fg-subtle">
+                Redirecting to your dashboard in <span className="tabular-nums text-fg-muted">{countdown}s</span>…
             </p>
-            <p className="text-xs text-[#45474c]/60 mb-8">
-                Redirecting to your dashboard in <span className="font-bold text-[#45474c]">{countdown}s</span>…
-            </p>
-            <button
-                onClick={onGoToDashboard}
-                className="inline-flex items-center gap-2 h-auto px-4 py-1.5 rounded bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:bg-primary hover:brightness-105 shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all border-0"
-            >
-                Go to Dashboard <ArrowRight className="h-4 w-4" />
-            </button>
+            <Button type="button" variant="greenCta" onClick={onGoToDashboard} className="mt-6">
+                Go to dashboard <ArrowRight className="h-4 w-4" strokeWidth={1.75} />
+            </Button>
         </div>
     )
 }
@@ -1262,12 +1315,12 @@ const OnboardingContent = () => {
         <>
             <style dangerouslySetInnerHTML={{ __html: arrowAnimationStyle }} />
             {isLoading ? (
-                <div className="min-h-screen flex items-center justify-center">
-                    <LoadingSpinner message="Setting up your workspace..." showDots={true} size="lg" />
+                <div className="flex h-full min-h-[60vh] items-center justify-center text-fg-muted">
+                    <LoadingSpinner message="Setting up your workspace…" showDots={true} size="md" />
                 </div>
             ) : (
-                <div className="w-full h-full overflow-y-auto px-8 pt-6 pb-8 flex justify-center">
-                    <div className={`w-full ${step === 2 || step === 3 ? 'max-w-5xl' : 'max-w-2xl'}`}>
+                <div className="flex h-full w-full justify-center overflow-y-auto px-4 pb-12 pt-8 sm:px-8 sm:pt-12">
+                    <div className={`w-full ${step === 2 ? 'max-w-5xl' : step === 3 ? 'max-w-3xl' : 'max-w-xl'}`}>
                         {/* Onboarding Already Completed — redirect guard */}
                         {step === -1 && (
                             <AlreadyCompletedScreen onGoToDashboard={() => void handleFinish()} />
@@ -1275,55 +1328,45 @@ const OnboardingContent = () => {
 
                         {/* Step 3: Connect Cloud Storage — mandatory; Inngest runs after link + root. */}
                         {step === 3 && (
-                            <div className="animate-in fade-in slide-in-from-right-4 duration-300">
-                                <div className="mb-4 flex items-center justify-center gap-3">
-                                    <div className="h-10 w-10 rounded bg-[#f9f9fb] border border-[#e5e7eb] flex items-center justify-center flex-shrink-0">
-                                        <Cloud className="h-5 w-5 text-[#45474c]" strokeWidth={2} aria-hidden />
-                                    </div>
-                                    <div className="text-left flex-1 min-w-0">
-                                        <div className="flex flex-wrap items-center gap-2 mb-1">
-                                            <h1 className="font-headline text-2xl font-bold text-[#1b1b1d] tracking-tight">Bring your Cloud Drive</h1>
+                            <div className="animate-in fade-in duration-200">
+                                <StepIntro
+                                    eyebrow={
+                                        <>
+                                            <Cloud className="h-4 w-4 text-fg-subtle" strokeWidth={1.75} aria-hidden />
                                             <StepRequirementBadge kind="mandatory" />
-                                        </div>
-                                        <p className="text-[0.8125rem] text-[#45474c]">
-                                            Non-custodial by design—your files stay in the Google Drive you already own. We connect to organize, share, and deliver a client portal on top of your storage.
-                                        </p>
-                                    </div>
-                                </div>
+                                        </>
+                                    }
+                                    title="Bring your cloud drive"
+                                    description="Non-custodial by design—your files stay in the Google Drive you already own. We connect to organize, share, and deliver a client portal on top of your storage."
+                                />
 
                                 {isConnected ? (
-                                    <div className="space-y-6 text-left border-t border-[#e5e7eb] pt-6">
-                                        {/* Step ① — label + card grouped tightly */}
+                                    <div className="mt-8 space-y-8 text-left">
+                                        {/* Step ① — label + connected row grouped tightly */}
                                         <div className="space-y-2">
-                                            <div className="flex items-center gap-2">
-                                                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-white">1</span>
-                                                <p className="text-[0.8125rem] font-semibold text-[#1b1b1d]">Google Drive Connected</p>
-                                            </div>
-                                            {/* Connected badge */}
-                                            <div className="p-4 bg-white border border-[#e5e7eb] flex items-center justify-between">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="h-10 w-10 rounded bg-white border border-[#e5e7eb] flex items-center justify-center">
-                                                        <GoogleDriveIcon size={20} />
-                                                    </div>
-                                                    <div>
-                                                        <p className="text-[0.8125rem] font-semibold text-[#1b1b1d]">Google Drive Connected</p>
+                                            <StepSectionLabel n={1} done>Google Drive connected</StepSectionLabel>
+                                            {/* Connected row */}
+                                            <div className="flex items-center justify-between gap-3 rounded-card border border-line px-3 py-2.5">
+                                                <div className="flex min-w-0 items-center gap-3">
+                                                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-control bg-surface-subtle">
+                                                        <GoogleDriveIcon size={18} />
+                                                    </span>
+                                                    <div className="min-w-0">
+                                                        <p className="text-ui font-medium text-fg">Google Drive</p>
                                                         {connectedEmail && (
-                                                            <p className="text-xs text-[#45474c]">{connectedEmail}</p>
+                                                            <p className="truncate text-small text-fg-muted">{connectedEmail}</p>
                                                         )}
                                                     </div>
                                                 </div>
-                                                <div className="flex items-center gap-1.5 text-xs font-medium text-green-600 bg-green-50 px-2 py-1 rounded-md border border-green-100">
-                                                    <CheckCircle2 className="h-3 w-3" />
-                                                    Verified
-                                                </div>
+                                                <Tag color="green" dot>Verified</Tag>
                                             </div>
                                         </div>
 
                                         {/* Drive location selection */}
                                         {!previewDrive ? (
-                                            <div className="animate-in fade-in slide-in-from-top-2 duration-300">
-                                                <p className="text-[0.8125rem] text-[#45474c] mb-3">Choose where your workspace folder should live in Google Drive.</p>
-                                                <div className="grid grid-cols-2 gap-3">
+                                            <div className="animate-in fade-in duration-200">
+                                                <p className="mb-3 text-ui text-fg-muted">Choose where your workspace folder should live in Google Drive.</p>
+                                                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                                                     <button
                                                         type="button"
                                                         onClick={async () => {
@@ -1355,52 +1398,49 @@ const OnboardingContent = () => {
                                                                 setMyDriveCountdown(3)
                                                             }
                                                         }}
-                                                        className="group flex flex-col items-start gap-3 border border-[#e5e7eb] bg-white p-5 text-left transition-all hover:border-[#1b1b1d] hover:shadow-lg active:scale-[0.98]"
+                                                        className="group flex flex-col items-start gap-2.5 rounded-card border border-line bg-surface p-4 text-left transition-colors duration-100 hover:border-line-strong hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action/30"
                                                     >
-                                                        <div className="flex items-center gap-3">
-                                                            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-sm bg-[#f9f9fb] group-hover:bg-[#f9f9fb]">
+                                                        <div className="flex items-center gap-2.5">
+                                                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-control bg-surface-subtle [&_svg]:h-5 [&_svg]:w-5">
                                                                 <svg width="24px" height="24px" viewBox="0 0 24 24" fill="#4285F4" focusable="false"><path d="M9.05 15H15q.275 0 .5-.137.225-.138.35-.363l1.1-1.9q.125-.225.1-.5-.025-.275-.15-.5l-2.95-5.1q-.125-.225-.35-.363Q13.375 6 13.1 6h-2.2q-.275 0-.5.137-.225.138-.35.363L7.1 11.6q-.125.225-.125.5t.125.5l1.05 1.9q.125.25.375.375T9.05 15Zm1.2-3L12 9l1.75 3ZM3 17V4q0-.825.587-1.413Q4.175 2 5 2h14q.825 0 1.413.587Q21 3.175 21 4v13Zm2 5q-.825 0-1.413-.587Q3 20.825 3 20v-1h18v1q0 .825-.587 1.413Q19.825 22 19 22Z"/></svg>
                                                             </div>
-                                                            <p className="font-bold text-[#1b1b1d]">My Drive</p>
+                                                            <p className="text-ui font-medium text-fg">My Drive</p>
                                                         </div>
-                                                        <p className="text-xs text-[#45474c] leading-relaxed">
+                                                        <p className="text-small text-fg-muted">
                                                             Your personal Google Drive. Best if you don&apos;t have a Google Workspace account or prefer to store files in your own Drive.
                                                         </p>
                                                     </button>
                                                     <button
                                                         type="button"
                                                         onClick={() => setPreviewDrive("Shared Drive")}
-                                                        className="group flex flex-col items-start gap-3 border border-[#e5e7eb] bg-white p-5 text-left transition-all hover:border-[#1b1b1d] hover:shadow-lg active:scale-[0.98]"
+                                                        className="group flex flex-col items-start gap-2.5 rounded-card border border-line bg-surface p-4 text-left transition-colors duration-100 hover:border-line-strong hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action/30"
                                                     >
-                                                        <div className="flex items-center gap-3">
-                                                            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-sm bg-[#f9f9fb] group-hover:bg-[#f9f9fb]">
+                                                        <div className="flex items-center gap-2.5">
+                                                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-control bg-surface-subtle [&_svg]:h-5 [&_svg]:w-5">
                                                                 <svg width="24px" height="24px" viewBox="0 0 24 24" fill="#34A853" focusable="false"><g><rect fill="none" height="24" width="24"/></g><g><g><path d="M19,2H5C3.9,2,3,2.9,3,4v13h18V4C21,2.9,20.1,2,19,2z M9.5,7C10.33,7,11,7.67,11,8.5c0,0.83-0.67,1.5-1.5,1.5 S8,9.33,8,8.5C8,7.67,8.67,7,9.5,7z M13,14H6v-1.35C6,11.55,8.34,11,9.5,11s3.5,0.55,3.5,1.65V14z M14.5,7C15.33,7,16,7.67,16,8.5 c0,0.83-0.67,1.5-1.5,1.5S13,9.33,13,8.5C13,7.67,13.67,7,14.5,7z M18,14h-4v-1.35c0-0.62-0.3-1.12-0.75-1.5 c0.46-0.1,0.9-0.15,1.25-0.15c1.16,0,3.5,0.55,3.5,1.65V14z"/><path d="M3,20c0,1.1,0.9,2,2,2h14c1.1,0,2-0.9,2-2v-2H3V20z M18,19c0.55,0,1,0.45,1,1s-0.45,1-1,1s-1-0.45-1-1S17.45,19,18,19z"/></g></g></svg>
                                                             </div>
-                                                            <p className="font-bold text-[#1b1b1d]">Shared Drive</p>
+                                                            <p className="text-ui font-medium text-fg">Shared Drive</p>
                                                         </div>
-                                                        <p className="text-xs text-[#45474c] leading-relaxed">
+                                                        <p className="text-small text-fg-muted">
                                                             A team drive under your Google Workspace account. Recommended for firms where files should be owned by the organization, not an individual.
                                                         </p>
                                                     </button>
                                                 </div>
                                             </div>
                                         ) : previewDrive === "My Drive" ? (
-                                            <div className="animate-in fade-in slide-in-from-top-2 duration-300 space-y-4">
+                                            <div className="animate-in fade-in duration-200 space-y-4">
                                                 {myDriveCreating ? (
-                                                    <div className="flex items-center gap-3 rounded border border-[#e5e7eb] bg-[#f9f9fb] px-4 py-3">
-                                                        <svg className="h-4 w-4 shrink-0 animate-spin text-[#45474c]" viewBox="0 0 24 24" fill="none">
-                                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
-                                                        </svg>
-                                                        <p className="text-[0.8125rem] text-[#45474c]">Creating workspace folder in My Drive…</p>
+                                                    <div className="flex items-center gap-2 rounded-control bg-surface-subtle px-3 py-2.5 text-small text-fg-muted">
+                                                        <LoadingSpinner size="sm" className="text-fg-subtle" />
+                                                        <p>Creating workspace folder in My Drive…</p>
                                                     </div>
                                                 ) : (
-                                                    <div className="flex items-center gap-2 rounded border border-emerald-100 bg-emerald-50/60 px-4 py-3">
-                                                        <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
-                                                        <p className="text-[0.8125rem] text-[#45474c]">
-                                                            Workspace folder created in <span className="font-semibold text-[#1b1b1d]">My Drive</span>.
+                                                    <div className="flex items-center gap-2 rounded-control bg-tag-green-bg px-3 py-2.5 text-small text-tag-green-fg">
+                                                        <CheckCircle2 className="h-4 w-4 shrink-0" strokeWidth={1.75} />
+                                                        <p>
+                                                            Workspace folder created in <span className="font-medium">My Drive</span>.
                                                             {myDriveCountdown !== null && myDriveCountdown > 0 && (
-                                                                <span className="ml-1 text-[#45474c]/50">Continuing in {myDriveCountdown}s…</span>
+                                                                <span className="ml-1 tabular-nums opacity-80">Continuing in {myDriveCountdown}s…</span>
                                                             )}
                                                         </p>
                                                     </div>
@@ -1409,70 +1449,64 @@ const OnboardingContent = () => {
                                                     <div className="flex items-center justify-between gap-3">
                                                         <Button
                                                             type="button"
-                                                            variant="outline"
-                                                            size="sm"
+                                                            variant="ghost"
                                                             onClick={() => { setPreviewDrive(null); setMyDriveCreated(false); setMyDriveCountdown(null) }}
-                                                            className="border-[#e5e7eb] text-[#45474c]"
                                                         >
-                                                            <ArrowLeft className="mr-1.5 h-3.5 w-3.5" />
+                                                            <ArrowLeft className="h-4 w-4" strokeWidth={1.75} />
                                                             Change location
                                                         </Button>
                                                         <Button
                                                             type="button"
-                                                            className="bg-primary text-primary-foreground font-headline font-bold tracking-widest text-[10px] uppercase rounded hover:brightness-105 shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all"
+                                                            variant="greenCta"
                                                             onClick={() => setDriveLocationConfirmed(true)}
                                                         >
                                                             Continue now
-                                                            <ArrowRight className="ml-2 h-4 w-4" />
+                                                            <ArrowRight className="h-4 w-4" strokeWidth={1.75} />
                                                         </Button>
                                                     </div>
                                                 )}
                                             </div>
                                         ) : (
                                             /* Shared Drive — 2-step wizard */
-                                            <div className="animate-in fade-in slide-in-from-top-2 duration-300 space-y-4">
+                                            <div className="animate-in fade-in duration-200 space-y-4">
                                                 {/* Step 1 — guided demo + create folder */}
                                                 {sharedDriveWizardStep === 1 && (
                                                     <div className="animate-in fade-in duration-200 space-y-8">
 
                                                         {/* ② Copy folder name */}
                                                         <div className="space-y-2">
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#1b1b1d] text-[10px] font-bold text-white">2</span>
-                                                                <p className="text-[0.8125rem] font-semibold text-[#1b1b1d]">Copy your workspace root folder name</p>
-                                                            </div>
-                                                            <div className="flex items-center justify-between gap-2 rounded border border-[#e5e7eb] bg-[#f9f9fb] px-3 py-2.5">
-                                                                <code className="break-all font-mono text-[0.8125rem] text-[#1b1b1d]">{workspaceFolderName}</code>
-                                                                <button
+                                                            <StepSectionLabel n={2}>Copy your workspace root folder name</StepSectionLabel>
+                                                            <div className="flex items-center justify-between gap-2 rounded-control border border-line bg-surface-subtle py-1.5 pl-3 pr-1.5">
+                                                                <code className="min-w-0 break-all font-mono text-small text-fg">{workspaceFolderName}</code>
+                                                                <Button
                                                                     type="button"
+                                                                    variant="outline"
+                                                                    size="sm"
                                                                     onClick={() => {
                                                                         void navigator.clipboard.writeText(workspaceFolderName)
                                                                         setHasCopied(true)
                                                                         setTimeout(() => setHasCopied(false), 2000)
                                                                     }}
-                                                                    className="ml-2 shrink-0 flex items-center gap-1 rounded-sm border border-[#e5e7eb] bg-white px-2.5 py-1.5 text-xs font-semibold text-[#45474c] hover:bg-[#f9f9fb] active:scale-95 transition-all"
+                                                                    className="shrink-0"
                                                                 >
-                                                                    {hasCopied ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
-                                                                    {hasCopied ? "Copied!" : "Copy"}
-                                                                </button>
+                                                                    {hasCopied ? <Check className="h-3.5 w-3.5 text-action" strokeWidth={2} /> : <Copy className="h-3.5 w-3.5" strokeWidth={1.75} />}
+                                                                    {hasCopied ? "Copied" : "Copy"}
+                                                                </Button>
                                                             </div>
                                                         </div>
 
                                                         {/* ③ Visual guide + instructions */}
                                                         <div className="space-y-3">
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#1b1b1d] text-[10px] font-bold text-white">3</span>
-                                                                <p className="text-[0.8125rem] font-semibold text-[#1b1b1d]">Follow instructions to create workspace root folder in Google Shared Drive</p>
-                                                            </div>
+                                                            <StepSectionLabel n={3}>Create the workspace root folder in your Google Shared Drive</StepSectionLabel>
 
-                                                            <div className="grid grid-cols-2 gap-4 items-stretch">
+                                                            <div className="grid grid-cols-1 items-stretch gap-3 md:grid-cols-2">
                                                                 {/* Callout — spans both columns */}
-                                                                <div className={`col-span-2 flex items-center gap-2 rounded border px-3 py-2 text-xs font-medium transition-colors duration-300 ${
+                                                                <div className={`flex items-center gap-2 rounded-control px-3 py-2 text-small transition-colors duration-300 md:col-span-2 ${
                                                                     mockCallout.done
-                                                                        ? "border-emerald-100 bg-emerald-50 text-emerald-800"
-                                                                        : "border-blue-100 bg-blue-50 text-blue-800"
+                                                                        ? "bg-tag-green-bg text-tag-green-fg"
+                                                                        : "bg-tag-blue-bg text-tag-blue-fg"
                                                                 }`}>
-                                                                    <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${mockCallout.done ? "bg-emerald-500" : "animate-pulse bg-blue-500"}`} />
+                                                                    <span className={`h-1.5 w-1.5 shrink-0 rounded-full bg-current ${mockCallout.done ? "" : "animate-pulse motion-reduce:animate-none"}`} />
                                                                     {mockCallout.text}
                                                                 </div>
 
@@ -1483,30 +1517,30 @@ const OnboardingContent = () => {
                                                                 />
 
                                                                 {/* Roman numeral steps with live highlighting */}
-                                                                <div className="flex flex-col justify-center rounded border border-[#e5e7eb] bg-white px-5 py-4">
+                                                                <div className="flex flex-col justify-center rounded-card border border-line bg-surface px-4 py-3">
                                                                     {([
-                                                                        { n: 1, roman: "i",   text: <>Open <a href={`https://drive.google.com/drive/u/0/shared-drives?authuser=${connectedEmail ?? ""}`} target="_blank" rel="noopener noreferrer" className="font-medium text-blue-600 hover:underline">Google Drive &gt; Shared Drives</a></> },
+                                                                        { n: 1, roman: "i",   text: <>Open <a href={`https://drive.google.com/drive/u/0/shared-drives?authuser=${connectedEmail ?? ""}`} target="_blank" rel="noopener noreferrer" className="font-medium text-action underline-offset-2 hover:underline">Google Drive &gt; Shared drives</a></> },
                                                                         { n: 2, roman: "ii",  text: <>Double-click the Shared Drive where your workspace should live.</> },
-                                                                        { n: 3, roman: "iii", text: <>Click <span className="font-semibold">+ New</span> → <span className="font-semibold">New folder</span>.</> },
-                                                                        { n: 4, roman: "iv",  text: <>Paste the folder name from above and click <span className="font-semibold">Create</span>.</> },
-                                                                        { n: 5, roman: "v",   text: <>Return here and click <span className="font-semibold">Select Folder</span>.</> },
+                                                                        { n: 3, roman: "iii", text: <>Click <span className="font-medium">+ New</span> → <span className="font-medium">New folder</span>.</> },
+                                                                        { n: 4, roman: "iv",  text: <>Paste the folder name from above and click <span className="font-medium">Create</span>.</> },
+                                                                        { n: 5, roman: "v",   text: <>Return here and click <span className="font-medium">Select folder</span>.</> },
                                                                     ] as { n: number; roman: string; text: React.ReactNode }[]).map(({ n, roman, text }) => {
                                                                         const completed = n < mockActiveStep
                                                                         const active = n === mockActiveStep
                                                                         return (
-                                                                            <div key={n} className={`flex items-start gap-2.5 py-1.5 transition-all duration-300 ${active ? "opacity-100" : completed ? "opacity-70" : "opacity-40"}`}>
-                                                                                <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold transition-all duration-300 ${
-                                                                                    completed ? "bg-emerald-100 text-emerald-600" :
-                                                                                    active    ? "bg-blue-600 text-white shadow-sm ring-2 ring-blue-200" :
-                                                                                                "bg-[#f9f9fb] text-[#45474c]/50"
+                                                                            <div key={n} className="flex items-start gap-2.5 py-1.5">
+                                                                                <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-caption transition-colors duration-300 ${
+                                                                                    completed ? "bg-tag-green-bg text-tag-green-fg" :
+                                                                                    active    ? "bg-action text-action-fg" :
+                                                                                                "bg-surface-muted text-fg-subtle"
                                                                                 }`}>
                                                                                     {roman}
                                                                                 </span>
-                                                                                <span className={`flex-1 text-[0.8125rem] transition-colors duration-300 ${active ? "font-semibold text-[#1b1b1d]" : completed ? "text-[#45474c]" : "text-[#45474c]/40"}`}>
+                                                                                <span className={`flex-1 text-ui transition-colors duration-300 ${active ? "font-medium text-fg" : completed ? "text-fg-muted" : "text-fg-subtle"}`}>
                                                                                     {text}
                                                                                 </span>
                                                                                 {completed && (
-                                                                                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500 transition-all duration-300" />
+                                                                                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-action" strokeWidth={2} />
                                                                                 )}
                                                                             </div>
                                                                         )
@@ -1517,14 +1551,11 @@ const OnboardingContent = () => {
 
                                                         {/* ④ Confirmation */}
                                                         <div className="space-y-2">
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#1b1b1d] text-[10px] font-bold text-white">4</span>
-                                                                <p className="text-[0.8125rem] font-semibold text-[#1b1b1d]">Confirm folder creation</p>
-                                                            </div>
-                                                            <label className={`flex items-start gap-3 rounded border p-3 transition-colors duration-300 ${
+                                                            <StepSectionLabel n={4}>Confirm folder creation</StepSectionLabel>
+                                                            <label className={`flex items-start gap-3 rounded-card border border-line p-3 transition-colors duration-100 ${
                                                                 mockCompleted
-                                                                    ? "cursor-pointer border-[#e5e7eb] bg-white"
-                                                                    : "cursor-not-allowed border-[#e5e7eb] bg-[#f9f9fb] opacity-50"
+                                                                    ? "cursor-pointer bg-surface hover:bg-surface-hover"
+                                                                    : "cursor-not-allowed bg-surface-subtle opacity-60"
                                                             }`}>
                                                                 <Checkbox
                                                                     checked={sharedDriveFolderConfirmed}
@@ -1532,31 +1563,30 @@ const OnboardingContent = () => {
                                                                     disabled={!mockCompleted}
                                                                     className="mt-0.5"
                                                                 />
-                                                                <span className="text-[0.8125rem] text-[#45474c]">I&apos;ve created the folder with the exact name in my Shared Drive.</span>
+                                                                <span className="text-ui text-fg">I&apos;ve created the folder with the exact name in my Shared Drive.</span>
                                                             </label>
                                                             {!mockCompleted && (
-                                                                <p className="text-xs text-[#45474c]/50">Watch the guide above to unlock this step.</p>
+                                                                <p className="text-caption text-fg-subtle">Watch the guide above to unlock this step.</p>
                                                             )}
                                                         </div>
 
-                                                        <div className="flex items-center justify-between pt-1">
+                                                        <div className="flex items-center justify-between gap-3 border-t border-line pt-4">
                                                             <Button
                                                                 type="button"
-                                                                variant="outline"
+                                                                variant="ghost"
                                                                 onClick={() => { setPreviewDrive(null); setSharedDriveWizardStep(1); setSharedDriveFolderConfirmed(false); setHasCopied(false) }}
-                                                                className="border-[#e5e7eb] text-[#45474c]"
                                                             >
-                                                                <ArrowLeft className="mr-1.5 h-3.5 w-3.5" />
+                                                                <ArrowLeft className="h-4 w-4" strokeWidth={1.75} />
                                                                 Change location
                                                             </Button>
                                                             <Button
                                                                 type="button"
-                                                                className="bg-primary text-primary-foreground font-headline font-bold tracking-widest text-[10px] uppercase rounded hover:brightness-105 shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all"
+                                                                variant="greenCta"
                                                                 disabled={!sharedDriveFolderConfirmed}
                                                                 onClick={() => setSharedDriveWizardStep(2)}
                                                             >
-                                                                Select Folder
-                                                                <ArrowRight className="ml-2 h-4 w-4" />
+                                                                Select folder
+                                                                <ArrowRight className="h-4 w-4" strokeWidth={1.75} />
                                                             </Button>
                                                         </div>
                                                     </div>
@@ -1564,8 +1594,8 @@ const OnboardingContent = () => {
 
                                                 {/* Step 2 — pick the folder via Google Picker */}
                                                 {sharedDriveWizardStep === 2 && (
-                                                    <div className="animate-in fade-in duration-200 space-y-3">
-                                                        <p className="text-[0.8125rem] text-[#45474c]">
+                                                    <div className="animate-in fade-in duration-200 space-y-4">
+                                                        <p className="text-ui text-fg-muted">
                                                             Open the folder picker below. The search is pre-filled with your folder name — select it to set it as your workspace root.
                                                         </p>
                                                         {connectionDetails?.connectionId ? (
@@ -1582,26 +1612,26 @@ const OnboardingContent = () => {
                                                             >
                                                                 <Button
                                                                     type="button"
-                                                                    variant="blackCta"
-                                                                    className="w-full py-5 text-base font-medium"
+                                                                    variant="greenCta"
+                                                                    size="lg"
+                                                                    className="w-full"
                                                                 >
-                                                                    <FolderOpen className="mr-2 h-5 w-5" />
+                                                                    <FolderOpen className="h-4 w-4" strokeWidth={1.75} />
                                                                     Open folder picker
                                                                 </Button>
                                                             </GooglePickerButton>
                                                         ) : (
-                                                            <div className="flex items-center justify-center gap-2 rounded border border-dashed border-[#e5e7eb] py-5 text-[0.8125rem] text-[#45474c]/50">
-                                                                <LoadingSpinner size="sm" />
+                                                            <div className="flex items-center justify-center gap-2 rounded-card border border-dashed border-line-strong py-5 text-small text-fg-muted">
+                                                                <LoadingSpinner size="sm" className="text-fg-subtle" />
                                                                 Loading picker…
                                                             </div>
                                                         )}
                                                         <Button
                                                             type="button"
-                                                            variant="outline"
+                                                            variant="ghost"
                                                             onClick={() => setSharedDriveWizardStep(1)}
-                                                            className="border-[#e5e7eb] text-[#45474c]"
                                                         >
-                                                            <ArrowLeft className="mr-1.5 h-3.5 w-3.5" />
+                                                            <ArrowLeft className="h-4 w-4" strokeWidth={1.75} />
                                                             Back
                                                         </Button>
                                                     </div>
@@ -1610,85 +1640,79 @@ const OnboardingContent = () => {
                                         )}
                                     </div>
                                 ) : (
-                                    <div className="space-y-6">
-                                        <div className="p-5 bg-white border border-[#e5e7eb] rounded">
-                                            <h3 className="font-headline font-semibold text-[#1b1b1d] mb-4">Your Drive. Your data. Our layer on top.</h3>
-                                            <ul className="space-y-3 text-[0.8125rem] text-[#45474c]">
+                                    <div className="mt-8 space-y-6">
+                                        <section>
+                                            <h2 className="text-h3 text-fg">Your Drive. Your data. Our layer on top.</h2>
+                                            <ul className="mt-3 space-y-3 text-ui text-fg-muted">
                                                 <li className="flex items-start gap-3">
-                                                    <GoogleDriveIcon size={20} className="flex-shrink-0 mt-0.5" />
+                                                    <GoogleDriveIcon size={16} className="mt-0.5 shrink-0" />
                                                     <span>
-                                                        <strong className="font-semibold text-[#1b1b1d]">Bring your own Drive.</strong>{' '}
+                                                        <strong className="font-medium text-fg">Bring your own Drive.</strong>{' '}
                                                         Plug in the Google account you already use—no migration, no duplicate file warehouse.
                                                     </span>
                                                 </li>
                                                 <li className="flex items-start gap-3">
-                                                    <Lock className="h-5 w-5 text-[#45474c] flex-shrink-0 mt-0.5" />
+                                                    <Lock className="mt-0.5 h-4 w-4 shrink-0 text-fg-muted" strokeWidth={1.75} />
                                                     <span>
-                                                        <strong className="font-semibold text-[#1b1b1d]">Non-custodial storage.</strong>{' '}
+                                                        <strong className="font-medium text-fg">Non-custodial storage.</strong>{' '}
                                                         {BRAND_NAME} never takes custody of your documents; we orchestrate folders, access, and a polished client experience while the files remain yours.
                                                     </span>
                                                 </li>
                                                 <li className="flex items-start gap-3">
-                                                    <HardDrive className="h-5 w-5 text-[#45474c] flex-shrink-0 mt-0.5" />
+                                                    <HardDrive className="mt-0.5 h-4 w-4 shrink-0 text-fg-muted" strokeWidth={1.75} />
                                                     <span>
-                                                        <strong className="font-semibold text-[#1b1b1d]">Stored on your Drive.</strong>{' '}
+                                                        <strong className="font-medium text-fg">Stored on your Drive.</strong>{' '}
                                                         Your content lives in your Google workspace under your policies, retention, and controls—not copied onto ours.
                                                     </span>
                                                 </li>
                                             </ul>
-                                        </div>
+                                        </section>
 
-                                        {error && (
-                                            <div className="p-4 bg-red-50 border border-red-200 rounded text-[0.8125rem] text-red-700">
-                                                <div className="flex items-start gap-3">
-                                                    <AlertCircle className="h-5 w-5 flex-shrink-0 mt-0.5" />
-                                                    <span>{error}</span>
-                                                </div>
-                                            </div>
-                                        )}
+                                        {error && <ErrorNotice>{error}</ErrorNotice>}
 
                                         {/* Google Workspace tip */}
-                                        <div className="flex gap-2.5 border border-blue-100 bg-blue-50 rounded px-3.5 py-3 text-xs text-blue-800">
-                                            <Info className="h-3.5 w-3.5 shrink-0 mt-0.5 text-blue-500" />
-                                            <p className="leading-relaxed">
-                                                <span className="font-semibold">Google Workspace?</span> Connect with a dedicated account not tied to any individual user, so access isn&apos;t disrupted if someone leaves.{' '}
+                                        <InfoNotice>
+                                            <p>
+                                                <span className="font-medium text-fg">Google Workspace?</span> Connect with a dedicated account not tied to any individual user, so access isn&apos;t disrupted if someone leaves.{' '}
                                                 <a
                                                     href="https://support.google.com/a/answer/7378726"
                                                     target="_blank"
                                                     rel="noopener noreferrer"
-                                                    className="underline underline-offset-2 hover:text-blue-900 transition-colors"
+                                                    className="text-action underline-offset-2 hover:underline"
                                                 >
                                                     How to create a service account →
                                                 </a>
                                             </p>
-                                        </div>
+                                        </InfoNotice>
 
                                         <div className="space-y-3">
                                             <Button
                                                 type="button"
+                                                variant="greenCta"
+                                                size="lg"
                                                 onClick={(e) => handleConnectDrive(e)}
                                                 disabled={!authUrl || isSubmitting || isFetchingAuthUrl || isConnectingDrive}
-                                                className="w-full h-12 flex items-center justify-center bg-primary text-primary-foreground font-headline font-bold tracking-widest text-[10px] uppercase rounded hover:brightness-105 shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all disabled:opacity-50 cta-hover-arrow"
+                                                className="w-full"
                                             >
                                                 {isConnectingDrive ? (
                                                     <>
-                                                        <LoadingSpinner size="sm" className="mr-2" />
+                                                        <LoadingSpinner size="sm" />
                                                         Connecting…
                                                     </>
                                                 ) : isSubmitting ? (
                                                     <>
-                                                        <LoadingSpinner size="sm" className="mr-2" />
-                                                        Connecting...
+                                                        <LoadingSpinner size="sm" />
+                                                        Connecting…
                                                     </>
                                                 ) : isFetchingAuthUrl ? (
                                                     <>
-                                                        <LoadingSpinner size="sm" className="mr-2" />
+                                                        <LoadingSpinner size="sm" />
                                                         Preparing…
                                                     </>
                                                 ) : (
                                                     <>
                                                         Connect your Google Drive
-                                                        <ArrowRight className="inline-block ml-2 h-4 w-4 animate-arrow" />
+                                                        <ArrowRight className="h-4 w-4" strokeWidth={1.75} />
                                                     </>
                                                 )}
                                             </Button>
@@ -1700,30 +1724,30 @@ const OnboardingContent = () => {
 
                         {/* Step 1: Anchor firm (mandatory, silent — auto-runs; no full-screen form). */}
                         {step === 1 && (
-                            <div className="animate-in fade-in slide-in-from-right-4 duration-300 flex flex-col items-center justify-center min-h-[280px] text-center px-4">
-                                <div className="flex items-center justify-center gap-2 mb-3">
-                                    <StepRequirementBadge kind="mandatory" />
-                                </div>
-                                <LoadingSpinner size="lg" className="mb-4" />
-                                <p className="text-[0.8125rem] font-semibold text-[#1b1b1d]">Initializing workspace…</p>
-                                <p className="text-xs text-[#45474c]/60 mt-2 max-w-sm">
-                                    This only takes a moment. Demo firm folders and sample data run in the background after you connect Google Drive.
-                                </p>
-                                {error && (
-                                    <div className="mt-6 w-full max-w-md p-4 bg-red-50 border border-red-200 rounded text-[0.8125rem] text-red-700 flex items-start gap-3 text-left">
-                                        <AlertCircle className="h-5 w-5 flex-shrink-0 mt-0.5" />
-                                        <span>{error}</span>
-                                    </div>
-                                )}
+                            <div className="animate-in fade-in duration-200 flex min-h-[320px] flex-col items-center justify-center text-center">
+                                {!error && <LoadingSpinner size="md" className="mb-5 text-fg-muted" />}
+                                <StepIntro
+                                    centered
+                                    eyebrow={
+                                        <>
+                                            <span className="text-caption text-fg-subtle">Step 1 of 2</span>
+                                            <StepRequirementBadge kind="mandatory" />
+                                        </>
+                                    }
+                                    title="Initializing workspace…"
+                                    description="This only takes a moment. Demo firm folders and sample data run in the background after you connect Google Drive."
+                                />
+                                {error && <ErrorNotice className="mt-6 w-full max-w-md">{error}</ErrorNotice>}
                                 {error && (
                                     <Button
+                                        variant="greenCta"
                                         onClick={() => void handlePrepareSandboxShell()}
                                         disabled={creatingSandbox || !sandboxFirmName?.trim() || isSubmitting}
-                                        className="mt-4 h-11 rounded font-headline font-bold tracking-widest text-[10px] uppercase bg-primary text-primary-foreground hover:brightness-105 shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all"
+                                        className="mt-4"
                                     >
                                         {creatingSandbox ? (
                                             <>
-                                                <LoadingSpinner size="sm" className="mr-2" />
+                                                <LoadingSpinner size="sm" />
                                                 Retrying…
                                             </>
                                         ) : (
@@ -1736,13 +1760,8 @@ const OnboardingContent = () => {
 
                         {/* Step 2: Subscribe — full billing UI (same as /d/billing); Skip → Drive (step 3). */}
                         {step === 2 && (
-                            <div className="animate-in fade-in slide-in-from-right-4 duration-300">
-                                {error && (
-                                    <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded text-[0.8125rem] text-red-700 flex items-start gap-3">
-                                        <AlertCircle className="h-5 w-5 flex-shrink-0 mt-0.5" />
-                                        <span>{error}</span>
-                                    </div>
-                                )}
+                            <div className="animate-in fade-in duration-200">
+                                {error && <ErrorNotice className="mb-4">{error}</ErrorNotice>}
                                 <BillingPageClient
                                     variant="onboardingSubscribe"
                                     onSkipToConnectDrive={() => void skipSubscribeGoToDrive()}
@@ -1753,43 +1772,49 @@ const OnboardingContent = () => {
 
                         {/* Step 4: Finalize workspace — background sandbox build (Inngest) with progress UI. */}
                         {step === 4 && (
-                            <div className="animate-in fade-in slide-in-from-right-4 duration-300">
-                                <div className="mb-4 flex items-center gap-3">
-                                    <div className="h-10 w-10 rounded bg-[#f9f9fb] border border-[#e5e7eb] flex items-center justify-center flex-shrink-0">
-                                        <Building2 className="h-5 w-5 text-[#45474c]" />
-                                    </div>
-                                    <div className="min-w-0 flex-1">
-                                        <div className="flex flex-wrap items-center gap-2 mb-1">
-                                            <h1 className="font-headline text-2xl font-bold text-[#1b1b1d] tracking-tight">Finalize Workspace</h1>
+                            <div className="animate-in fade-in duration-200">
+                                <StepIntro
+                                    eyebrow={
+                                        <>
+                                            <Building2 className="h-4 w-4 text-fg-subtle" strokeWidth={1.75} aria-hidden />
                                             <StepRequirementBadge kind="mandatory" />
-                                        </div>
-                                        <p className="text-[0.8125rem] text-[#45474c]">
-                                            We&apos;re creating your Demo firm structure, clients, and engagements on your Drive. This runs in the background—you can continue when you&apos;re ready.
-                                        </p>
-                                    </div>
-                                </div>
+                                        </>
+                                    }
+                                    title="Finalize workspace"
+                                    description={<>We&apos;re creating your Demo firm structure, clients, and engagements on your Drive. This runs in the background—you can continue when you&apos;re ready.</>}
+                                />
 
-                                <div className="space-y-4">
-                                    <div className="border border-emerald-100 bg-emerald-50/60 p-5 shadow-sm rounded">
-                                        <div className="flex items-start gap-3">
-                                            <div className="h-10 w-10 rounded bg-white border border-emerald-200 flex items-center justify-center flex-shrink-0">
-                                                <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-                                            </div>
-                                            <div className="min-w-0 flex-1">
-                                                <div className="flex flex-wrap items-baseline justify-between gap-2 gap-y-1">
-                                                    <p className="font-semibold text-[#1b1b1d]">Building your Demo firm</p>
-                                                    {finalizeTerminalSteps.length > 0 ? (
-                                                        <span className="text-[11px] font-medium tabular-nums text-[#45474c]">
-                                                            {finalizeTerminalActiveIndex} of {finalizeTerminalSteps.length} complete
-                                                        </span>
-                                                    ) : null}
-                                                </div>
-                                                <p className="mt-1 text-xs leading-relaxed text-[#45474c]">
-                                                    The tree below tracks progress while sample clients and engagements are created on your Drive.
-                                                </p>
-                                            </div>
+                                <div className="mt-8 space-y-4">
+                                    <section className="rounded-card border border-line p-4">
+                                        <div className="flex flex-wrap items-baseline justify-between gap-2 gap-y-1">
+                                            <p className="text-ui font-medium text-fg">Building your Demo firm</p>
+                                            {finalizeTerminalSteps.length > 0 ? (
+                                                <span className="text-caption tabular-nums text-fg-subtle">
+                                                    {finalizeTerminalActiveIndex} of {finalizeTerminalSteps.length} complete
+                                                </span>
+                                            ) : null}
                                         </div>
-                                        <div className="mt-4 border border-emerald-100/80 bg-white/90 p-4">
+                                        <p className="mt-0.5 text-small text-fg-muted">
+                                            The tree below tracks progress while sample clients and engagements are created on your Drive.
+                                        </p>
+                                        {finalizeTerminalSteps.length > 0 ? (
+                                            <div
+                                                className="mt-3 h-1 overflow-hidden rounded-full bg-surface-muted"
+                                                role="progressbar"
+                                                aria-label="Demo firm build progress"
+                                                aria-valuemin={0}
+                                                aria-valuemax={finalizeTerminalSteps.length}
+                                                aria-valuenow={Math.max(0, finalizeTerminalActiveIndex)}
+                                            >
+                                                <div
+                                                    className="h-full rounded-full bg-action transition-[width] duration-500 ease-out"
+                                                    style={{
+                                                        width: `${Math.max(0, Math.min(100, (finalizeTerminalActiveIndex / finalizeTerminalSteps.length) * 100))}%`,
+                                                    }}
+                                                />
+                                            </div>
+                                        ) : null}
+                                        <div className="mt-4 border-t border-line pt-4">
                                             <SandboxHierarchyPreview
                                                 sandboxFirmName={sandboxFirmName}
                                                 nodeStatus={(ix) => {
@@ -1806,35 +1831,29 @@ const OnboardingContent = () => {
                                                 activeStepIndex={finalizeTerminalActiveIndex}
                                             />
                                         ) : null}
-                                    </div>
+                                    </section>
 
-                                    <div className="flex items-start gap-3 border border-[#e5e7eb] bg-white p-3.5 rounded">
-                                        <div className="h-8 w-8 shrink-0 rounded bg-white border border-[#e5e7eb] flex items-center justify-center mt-0.5">
-                                            <Info className="h-4 w-4 text-[#45474c]" />
-                                        </div>
-                                        <p className="text-xs leading-relaxed text-[#45474c]">
-                                            Sample data is provisioned on <strong className="text-[#1b1b1d]">your </strong> Google Drive. You can continue to your workspace whenever you&apos;re ready—provisioning keeps running in the background and will finish asynchronously.
+                                    <InfoNotice>
+                                        <p>
+                                            Sample data is provisioned on <strong className="font-medium text-fg">your</strong> Google Drive. You can continue to your workspace whenever you&apos;re ready—provisioning keeps running in the background and will finish asynchronously.
                                         </p>
-                                    </div>
+                                    </InfoNotice>
                                 </div>
 
-                                {error && (
-                                    <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded text-[0.8125rem] text-red-700 flex items-start gap-3">
-                                        <AlertCircle className="h-5 w-5 flex-shrink-0 mt-0.5" />
-                                        <span>{error}</span>
-                                    </div>
-                                )}
+                                {error && <ErrorNotice className="mt-4">{error}</ErrorNotice>}
 
                                 <div className="mt-6 w-full">
                                     <Button
                                         type="button"
-                                        className="relative h-12 w-full overflow-hidden rounded bg-primary text-primary-foreground font-headline font-bold tracking-widest text-[10px] uppercase hover:brightness-105 shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all"
+                                        variant="greenCta"
+                                        size="lg"
+                                        className="relative w-full overflow-hidden"
                                         onClick={() => void handleFinish()}
                                     >
                                         {finalizeAutoNavSeconds !== null && finalizeAutoNavSeconds > 0 ? (
                                             <span
                                                 aria-hidden="true"
-                                                className="absolute inset-y-0 left-0 bg-white/20 transition-[width] duration-1000 ease-linear"
+                                                className="absolute inset-y-0 left-0 bg-action-fg/15 transition-[width] duration-1000 ease-linear"
                                                 style={{
                                                     width: `${Math.max(
                                                         0,
@@ -1848,13 +1867,13 @@ const OnboardingContent = () => {
                                                 }}
                                             />
                                         ) : null}
-                                        <span className="relative z-10 inline-flex flex-col items-center justify-center gap-0.5 sm:flex-row sm:gap-2">
-                                            <span className="inline-flex items-center gap-2">
+                                        <span className="relative z-10 inline-flex items-center justify-center gap-2">
+                                            <span className="inline-flex items-center gap-1.5">
                                                 Continue to workspace
-                                                <ArrowRight className="h-4 w-4 shrink-0" />
+                                                <ArrowRight className="h-4 w-4 shrink-0" strokeWidth={1.75} />
                                             </span>
                                             {finalizeAutoNavSeconds !== null && finalizeAutoNavSeconds > 0 ? (
-                                                <span className="text-xs font-medium text-white/85">
+                                                <span className="tabular-nums opacity-80">
                                                     {finalizeAutoNavSeconds}s
                                                 </span>
                                             ) : null}
@@ -1873,7 +1892,7 @@ const OnboardingContent = () => {
 
 export default function OnboardingPage() {
     return (
-        <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><LoadingSpinner size="lg" /></div>}>
+        <Suspense fallback={<div className="flex h-full min-h-[60vh] items-center justify-center text-fg-muted"><LoadingSpinner size="md" /></div>}>
             <OnboardingContent />
         </Suspense>
     )

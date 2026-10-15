@@ -4,7 +4,7 @@ export const profileBillingCopy = {
     pageSubtitle: 'Your account and billing preferences.',
     billingSectionTitle: 'Billing & invoices',
     /** Shown under workspace on profile — Billing page holds catalog + Polar portal entry */
-    billingSectionPlansOnBillingHint: 'Full plan list and Manage Subscription (Polar) are on',
+    billingSectionPlansOnBillingHint: 'Full plan list and Manage subscription (Polar) are on',
     billingSectionPlansOnBillingLink: 'Billing',
     currentPlanHeading: 'Current plan',
     inclusionsHeading: "What's included",
