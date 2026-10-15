@@ -504,7 +504,7 @@ export function DocumentActionMenu({
             size="sm"
             disabled={disabled}
             data-demo-tour="document-action-trigger"
-            className="text-gray-600 hover:text-gray-800 hover:bg-gray-50 h-8 w-8 p-0 disabled:opacity-30 disabled:cursor-not-allowed"
+            className="text-fg-muted hover:text-fg hover:bg-surface-hover h-8 w-8 p-0 disabled:opacity-30 disabled:cursor-not-allowed"
             title="More actions"
           >
             {triggerIcon ?? <MoreHorizontal className="h-4 w-4" />}
@@ -524,9 +524,9 @@ export function DocumentActionMenu({
           {sandboxPreview && (
             <div className="absolute inset-0 z-10 rounded-[inherit] pointer-events-auto cursor-not-allowed bg-transparent" />
           )}
-          <div className="px-3 py-2.5 border-b border-gray-200 flex-none">
+          <div className="px-3 py-2.5 border-b border-line flex-none">
             <div className="flex items-center space-x-2.5">
-              <div className="w-8 h-8 bg-gray-100 rounded flex items-center justify-center shrink-0">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-control bg-surface-muted">
                 <DocumentIcon mimeType={document.mimeType} className="h-5 w-5" />
               </div>
               <div className="flex-1 min-w-0 pr-2">
@@ -534,7 +534,7 @@ export function DocumentActionMenu({
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <h3 className="text-sm font-medium text-gray-900 truncate select-text cursor-default max-w-[180px]">
+                        <h3 className="max-w-[180px] cursor-default select-text truncate text-ui font-medium text-fg">
                           {document.name}
                         </h3>
                       </TooltipTrigger>
@@ -545,20 +545,20 @@ export function DocumentActionMenu({
                   </TooltipProvider>
                   <button
                     onClick={(e) => handleCopyName(e, document.name)}
-                    className="text-gray-400 hover:text-gray-600 p-0.5 rounded transition-colors flex-shrink-0"
+                    className="shrink-0 rounded-control p-0.5 text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg"
                     title="Copy name"
                   >
-                    {hasCopiedName ? <Check className="h-3 w-3 text-green-600" /> : <Copy className="h-3 w-3" />}
+                    {hasCopiedName ? <Check className="h-3 w-3 text-action" /> : <Copy className="h-3 w-3" />}
                   </button>
                 </div>
-                <p className="text-xs text-gray-500">
+                <p className="text-small text-fg-muted">
                   {getDisplayType(document)}
                   {!document.mimeType?.includes('folder') && document.size != null && typeof document.size === 'number' && (
                     <> • {formatFileSize(document.size)}</>
                   )}
                 </p>
                 {(document.modifiedTime || document.createdTime) && (
-                  <p className="text-[10px] text-gray-400 mt-0.5">
+                  <p className="text-caption text-fg-subtle mt-0.5">
                     {document.lastModifyingUser?.displayName || 'Unknown'} · {document.modifiedTime && !Number.isNaN(new Date(document.modifiedTime).getTime()) ? formatSmartDateTime(document.modifiedTime) : document.createdTime && !Number.isNaN(new Date(document.createdTime).getTime()) ? formatSmartDateTime(document.createdTime) : '—'}
                   </p>
                 )}
@@ -573,27 +573,27 @@ export function DocumentActionMenu({
                 {onApproveIntake && (
                   <DropdownMenuItem
                     onSelect={() => onApproveIntake(document)}
-                    className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs text-emerald-700 focus:text-emerald-700 focus:bg-emerald-50"
+                    className="flex cursor-pointer items-center gap-2"
                   >
-                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                    <CheckCircle2 className="h-4 w-4 text-action" />
                     <span>Approve</span>
                   </DropdownMenuItem>
                 )}
                 {onRejectIntake && (
                   <DropdownMenuItem
                     onSelect={() => onRejectIntake(document)}
-                    className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs text-red-600 focus:text-red-600 focus:bg-red-50"
+                    className="flex cursor-pointer items-center gap-2 text-danger focus:text-danger"
                   >
-                    <XCircle className="h-4 w-4 text-red-500" />
+                    <XCircle className="h-4 w-4 text-danger" />
                     <span>Reject</span>
                   </DropdownMenuItem>
                 )}
                 {onWithdrawIntake && (
                   <DropdownMenuItem
                     onSelect={() => onWithdrawIntake(document)}
-                    className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
+                    className="flex cursor-pointer items-center gap-2"
                   >
-                    <X className="h-4 w-4 text-slate-500" />
+                    <X className="h-4 w-4 text-fg-muted" />
                     <span>Withdraw upload</span>
                   </DropdownMenuItem>
                 )}
@@ -605,27 +605,27 @@ export function DocumentActionMenu({
                 {onApproveFolder && (
                   <DropdownMenuItem
                     onSelect={() => onApproveFolder(document)}
-                    className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs text-emerald-700 focus:text-emerald-700 focus:bg-emerald-50"
+                    className="flex cursor-pointer items-center gap-2"
                   >
-                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                    <CheckCircle2 className="h-4 w-4 text-action" />
                     <span>Approve folder upload</span>
                   </DropdownMenuItem>
                 )}
                 {onRejectFolder && (
                   <DropdownMenuItem
                     onSelect={() => onRejectFolder(document)}
-                    className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs text-red-600 focus:text-red-600 focus:bg-red-50"
+                    className="flex cursor-pointer items-center gap-2 text-danger focus:text-danger"
                   >
-                    <XCircle className="h-4 w-4 text-red-500" />
+                    <XCircle className="h-4 w-4 text-danger" />
                     <span>Reject folder</span>
                   </DropdownMenuItem>
                 )}
                 {onWithdrawFolder && (
                   <DropdownMenuItem
                     onSelect={() => onWithdrawFolder(document)}
-                    className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs text-orange-700 focus:text-orange-700 focus:bg-orange-50"
+                    className="flex items-center gap-2 px-2 py-1.5 cursor-pointer text-ui text-tag-orange-fg focus:text-tag-orange-fg"
                   >
-                    <FolderUp className="h-4 w-4 text-orange-600" />
+                    <FolderUp className="h-4 w-4 text-tag-orange-fg" />
                     <span>Withdraw folder</span>
                   </DropdownMenuItem>
                 )}
@@ -642,9 +642,9 @@ export function DocumentActionMenu({
                       .then(() => addToast({ type: 'success', title: 'Link copied', message: 'Link copied to clipboard' }))
                       .catch(() => addToast({ type: 'error', title: 'Copy failed', message: 'Could not copy link.' }))
                   }}
-                  className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
+                  className="flex cursor-pointer items-center gap-2"
                 >
-                  <Link2 className="h-4 w-4 text-gray-600" />
+                  <Link2 className="h-4 w-4 text-fg-muted" />
                   <span>Copy link</span>
                 </DropdownMenuItem>
                 {showShareModal && projectId && (
@@ -655,7 +655,7 @@ export function DocumentActionMenu({
                           <DropdownMenuItem
                             aria-disabled="true"
                             onSelect={(e) => e.preventDefault()}
-                            className="flex items-center space-x-3 px-3 py-2 text-xs opacity-50 cursor-not-allowed"
+                            className="flex items-center gap-2 px-2 py-1.5 text-ui opacity-50 cursor-not-allowed"
                           >
                             <XCircle className="h-4 w-4" />
                             <span>Untag as Deliverable</span>
@@ -674,7 +674,7 @@ export function DocumentActionMenu({
                         }
                         setShowUntagConfirm(true)
                       }}
-                      className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs text-destructive focus:text-destructive"
+                      className="flex items-center gap-2 px-2 py-1.5 cursor-pointer text-ui text-danger focus:text-danger"
                     >
                       <XCircle className="h-4 w-4" />
                       <span>Untag as Deliverable</span>
@@ -686,9 +686,9 @@ export function DocumentActionMenu({
                           <DropdownMenuItem
                             aria-disabled="true"
                             onSelect={(e) => e.preventDefault()}
-                            className="flex items-center space-x-3 px-3 py-2 text-xs opacity-50 cursor-not-allowed"
+                            className="flex items-center gap-2 px-2 py-1.5 text-ui opacity-50 cursor-not-allowed"
                           >
-                            <Package className="h-4 w-4 text-purple-600" />
+                            <Package className="h-4 w-4 text-fg-subtle" />
                             <span>Promote as Deliverable</span>
                           </DropdownMenuItem>
                         </TooltipTrigger>
@@ -701,9 +701,9 @@ export function DocumentActionMenu({
                         <TooltipTrigger asChild>
                           <DropdownMenuItem
                             onSelect={(e) => { e.preventDefault(); setTagDeliverableDueDate(""); setShowTagDeliverableModal(true) }}
-                            className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
+                            className="flex cursor-pointer items-center gap-2"
                           >
-                            <Package className="h-4 w-4 text-purple-600" />
+                            <Package className="h-4 w-4 text-fg-subtle" />
                             <span>Promote as Deliverable</span>
                           </DropdownMenuItem>
                         </TooltipTrigger>
@@ -716,7 +716,7 @@ export function DocumentActionMenu({
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <div className="flex items-center space-x-3 px-3 py-2 text-xs text-muted-foreground opacity-50 cursor-not-allowed select-none">
+                        <div className="flex items-center gap-2 px-2 py-1.5 text-ui text-fg-subtle opacity-50 cursor-not-allowed select-none">
                           <FolderOpen className="h-4 w-4" />
                           <span>Organize</span>
                         </div>
@@ -728,49 +728,49 @@ export function DocumentActionMenu({
                   </TooltipProvider>
                 ) : (onCopyDocument || onMoveDocument || onRenameDocument || onDuplicateDocument || canManage) && (
                   <DropdownMenuSub>
-                    <DropdownMenuSubTrigger className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs">
-                      <FolderOpen className="h-4 w-4 text-gray-600" />
+                    <DropdownMenuSubTrigger className="flex cursor-pointer items-center gap-2">
+                      <FolderOpen className="h-4 w-4 text-fg-muted" />
                       <span>Organize</span>
                     </DropdownMenuSubTrigger>
                     <DropdownMenuSubContent className="w-56">
                       {onRenameDocument && (
                         isApprovedDeliverable ? (
-                          <div className="flex items-center space-x-3 px-3 py-2 text-xs text-muted-foreground opacity-40 cursor-not-allowed select-none">
+                          <div className="flex items-center gap-2 px-2 py-1.5 text-ui text-fg-subtle opacity-40 cursor-not-allowed select-none">
                             <Edit3 className="h-4 w-4" /><span>Rename</span>
                           </div>
                         ) : (
-                          <DropdownMenuItem onSelect={() => onRenameDocument(document)} className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs">
-                            <Edit3 className="h-4 w-4 text-gray-600" />
+                          <DropdownMenuItem onSelect={() => onRenameDocument(document)} className="flex cursor-pointer items-center gap-2">
+                            <Edit3 className="h-4 w-4 text-fg-muted" />
                             <span>Rename</span>
                           </DropdownMenuItem>
                         )
                       )}
                       {onDuplicateDocument && (
                         isApprovedDeliverable ? (
-                          <div className="flex items-center space-x-3 px-3 py-2 text-xs text-muted-foreground opacity-40 cursor-not-allowed select-none">
+                          <div className="flex items-center gap-2 px-2 py-1.5 text-ui text-fg-subtle opacity-40 cursor-not-allowed select-none">
                             <Copy className="h-4 w-4" /><span>Duplicate</span>
                           </div>
                         ) : (
-                          <DropdownMenuItem onSelect={() => onDuplicateDocument(document)} className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs">
-                            <Copy className="h-4 w-4 text-gray-600" />
+                          <DropdownMenuItem onSelect={() => onDuplicateDocument(document)} className="flex cursor-pointer items-center gap-2">
+                            <Copy className="h-4 w-4 text-fg-muted" />
                             <span>Duplicate</span>
                           </DropdownMenuItem>
                         )
                       )}
                       {onCopyDocument && (
-                        <DropdownMenuItem onSelect={() => onCopyDocument(document)} className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs">
-                          <Copy className="h-4 w-4 text-gray-600" />
+                        <DropdownMenuItem onSelect={() => onCopyDocument(document)} className="flex cursor-pointer items-center gap-2">
+                          <Copy className="h-4 w-4 text-fg-muted" />
                           <span>Copy</span>
                         </DropdownMenuItem>
                       )}
                       {onMoveDocument && (
                         isApprovedDeliverable ? (
-                          <div className="flex items-center space-x-3 px-3 py-2 text-xs text-muted-foreground opacity-40 cursor-not-allowed select-none">
+                          <div className="flex items-center gap-2 px-2 py-1.5 text-ui text-fg-subtle opacity-40 cursor-not-allowed select-none">
                             <Move className="h-4 w-4" /><span>Move</span>
                           </div>
                         ) : (
-                          <DropdownMenuItem onSelect={() => onMoveDocument(document)} className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs">
-                            <Move className="h-4 w-4 text-gray-600" />
+                          <DropdownMenuItem onSelect={() => onMoveDocument(document)} className="flex cursor-pointer items-center gap-2">
+                            <Move className="h-4 w-4 text-fg-muted" />
                             <span>Move</span>
                           </DropdownMenuItem>
                         )
@@ -778,7 +778,7 @@ export function DocumentActionMenu({
                       {(canManage && (onMakePrivate || onMakePublic)) && <DropdownMenuSeparator />}
                       {canManage && !document.isPrivate && onMakePrivate && (
                         isApprovedDeliverable ? (
-                          <div className="flex items-center space-x-3 px-3 py-2 text-xs text-muted-foreground opacity-40 cursor-not-allowed select-none">
+                          <div className="flex items-center gap-2 px-2 py-1.5 text-ui text-fg-subtle opacity-40 cursor-not-allowed select-none">
                             <FolderLock className="h-4 w-4" /><span>Make Private</span>
                           </div>
                         ) : document.isSharedWithExternal ? (
@@ -787,11 +787,11 @@ export function DocumentActionMenu({
                               <TooltipTrigger asChild>
                                 <div
                                   onClick={(e) => { e.stopPropagation(); setPrivateInfoOpen((v) => !v) }}
-                                  className="flex items-center space-x-3 px-3 py-2 text-xs text-muted-foreground cursor-pointer opacity-50 hover:bg-accent rounded-sm"
+                                  className="flex items-center gap-2 px-2 py-1.5 text-ui text-fg-subtle cursor-pointer opacity-50 rounded-control hover:bg-surface-hover"
                                 >
-                                  <FolderLock className="h-4 w-4 text-orange-500" />
+                                  <FolderLock className="h-4 w-4 text-fg-subtle" />
                                   <span>Make Private</span>
-                                  <Info className="h-3.5 w-3.5 ml-auto text-slate-400" />
+                                  <Info className="h-3.5 w-3.5 ml-auto text-fg-subtle" />
                                 </div>
                               </TooltipTrigger>
                               <TooltipContent side="left" className="text-xs max-w-[220px]">
@@ -800,20 +800,20 @@ export function DocumentActionMenu({
                             </Tooltip>
                           </TooltipProvider>
                         ) : (
-                          <DropdownMenuItem onClick={() => onMakePrivate(document)} className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs">
-                            <FolderLock className="h-4 w-4 text-orange-500" />
+                          <DropdownMenuItem onClick={() => onMakePrivate(document)} className="flex cursor-pointer items-center gap-2">
+                            <FolderLock className="h-4 w-4 text-fg-subtle" />
                             <span>Make Private</span>
                           </DropdownMenuItem>
                         )
                       )}
                       {canManage && document.isPrivate && onMakePublic && (
                         isApprovedDeliverable ? (
-                          <div className="flex items-center space-x-3 px-3 py-2 text-xs text-muted-foreground opacity-40 cursor-not-allowed select-none">
+                          <div className="flex items-center gap-2 px-2 py-1.5 text-ui text-fg-subtle opacity-40 cursor-not-allowed select-none">
                             <FolderUp className="h-4 w-4" /><span>Make Public</span>
                           </div>
                         ) : (
-                          <DropdownMenuItem onClick={() => onMakePublic(document)} className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs">
-                            <FolderUp className="h-4 w-4 text-slate-500" />
+                          <DropdownMenuItem onClick={() => onMakePublic(document)} className="flex cursor-pointer items-center gap-2">
+                            <FolderUp className="h-4 w-4 text-fg-muted" />
                             <span>Make Public</span>
                           </DropdownMenuItem>
                         )
@@ -828,14 +828,14 @@ export function DocumentActionMenu({
                       <Tooltip>
                         <TooltipTrigger asChild>
                           {isApprovedDeliverable ? (
-                            <div className="flex items-center space-x-3 px-3 py-2 text-xs text-muted-foreground opacity-50 cursor-not-allowed select-none">
+                            <div className="flex items-center gap-2 px-2 py-1.5 text-ui text-fg-subtle opacity-50 cursor-not-allowed select-none">
                               <Trash2 className="h-4 w-4" />
                               <span>{document.documentType === 'LINK' ? 'Delete' : 'Move to Bin'}</span>
                             </div>
                           ) : (
                             <DropdownMenuItem
                               onSelect={(e) => { e.preventDefault(); onDeleteDocument!(document); }}
-                              className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
+                              className="flex cursor-pointer items-center gap-2 text-danger focus:text-danger"
                             >
                               <Trash2 className="h-4 w-4" />
                               <span>{document.documentType === 'LINK' ? 'Delete' : 'Move to Bin'}</span>
@@ -858,8 +858,8 @@ export function DocumentActionMenu({
                 <>
                   <DropdownMenuSeparator />
                   <DropdownMenuSub>
-                    <DropdownMenuSubTrigger className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs">
-                      <ExternalLink className="h-4 w-4 text-gray-600" />
+                    <DropdownMenuSubTrigger className="flex cursor-pointer items-center gap-2">
+                      <ExternalLink className="h-4 w-4 text-fg-muted" />
                       <span>Drive Actions</span>
                     </DropdownMenuSubTrigger>
                     <DropdownMenuSubContent className="w-56">
@@ -872,7 +872,7 @@ export function DocumentActionMenu({
                           const driveUrl = document.webViewLink || `https://drive.google.com/drive/folders/${document.id}`
                           if (typeof window !== 'undefined') window.open(driveUrl, '_blank')
                         }}
-                        className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
+                        className="flex cursor-pointer items-center gap-2"
                       >
                         {isOneDriveClient ? (
                           <OneDriveIcon size={16} />
@@ -890,8 +890,8 @@ export function DocumentActionMenu({
               <>
                 {document.documentType !== 'LINK' && (
                 <DropdownMenuSub>
-                  <DropdownMenuSubTrigger className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs">
-                    <Info className="h-4 w-4 text-gray-600" />
+                  <DropdownMenuSubTrigger className="flex cursor-pointer items-center gap-2">
+                    <Info className="h-4 w-4 text-fg-muted" />
                     <span>Info</span>
                   </DropdownMenuSubTrigger>
                   <DropdownMenuSubContent className="w-56">
@@ -905,48 +905,48 @@ export function DocumentActionMenu({
                         rightPane.setContent(
                           <div className="flex flex-col h-full min-h-0 p-4 min-w-0">
                             {document.parentName && (
-                              <div className="flex items-center gap-1 text-[11px] text-slate-400 mb-2">
+                              <div className="flex items-center gap-1 text-caption text-fg-subtle mb-2">
                                 <Folder className="h-3 w-3" />
                                 <span>{document.parentName}</span>
                                 <ChevronRight className="h-3 w-3" />
-                                <span className="text-slate-600 font-medium truncate max-w-[180px]">{document.name}</span>
+                                <span className="text-fg-muted font-medium truncate max-w-[180px]">{document.name}</span>
                               </div>
                             )}
-                            <div className="inline-flex max-w-full items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 mb-4">
-                              <span className="truncate text-xs font-medium text-slate-700" title={document.name}>{document.name}</span>
+                            <div className="mb-4 inline-flex max-w-full items-center gap-2 rounded-card border border-line bg-surface-subtle px-3 py-2">
+                              <span className="truncate text-xs font-medium text-fg-muted" title={document.name}>{document.name}</span>
                             </div>
-                            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 space-y-3">
+                            <div className="space-y-3 rounded-card border border-line bg-surface px-3 py-3">
                               <div className="flex justify-between items-center">
-                                <span className="text-xs text-slate-500">File type</span>
+                                <span className="text-xs text-fg-muted">File type</span>
                                 <span className="text-xs">{getDisplayType(document)}</span>
                               </div>
                               {(document.mimeType ?? '').trim() !== '' && (
                                 <div className="flex justify-between items-center">
-                                  <span className="text-xs text-slate-500">Mime type</span>
-                                  <span className="font-mono text-[10px] truncate max-w-[240px] text-right" title={document.mimeType ?? ''}>{document.mimeType}</span>
+                                  <span className="text-xs text-fg-muted">Mime type</span>
+                                  <span className="font-mono text-caption truncate max-w-[240px] text-right" title={document.mimeType ?? ''}>{document.mimeType}</span>
                                 </div>
                               )}
                               {document.size != null && typeof document.size === 'number' && (
                                 <div className="flex justify-between items-center">
-                                  <span className="text-xs text-slate-500">Size</span>
+                                  <span className="text-xs text-fg-muted">Size</span>
                                   <span className="text-xs">{formatFileSize(document.size)}</span>
                                 </div>
                               )}
                               {document.modifiedTime && !Number.isNaN(new Date(document.modifiedTime).getTime()) && (
                                 <div className="flex justify-between items-center">
-                                  <span className="text-xs text-slate-500">Modified</span>
+                                  <span className="text-xs text-fg-muted">Modified</span>
                                   <span className="text-xs">{formatSmartDateTime(document.modifiedTime)}</span>
                                 </div>
                               )}
                               {document.createdTime && !Number.isNaN(new Date(document.createdTime).getTime()) && (
                                 <div className="flex justify-between items-center">
-                                  <span className="text-xs text-slate-500">Created</span>
+                                  <span className="text-xs text-fg-muted">Created</span>
                                   <span className="text-xs">{formatSmartDateTime(document.createdTime)}</span>
                                 </div>
                               )}
                               {(document.owners?.[0]?.displayName || document.lastModifyingUser?.displayName) && (
                                 <div className="flex justify-between items-center">
-                                  <span className="text-xs text-slate-500">Owner</span>
+                                  <span className="text-xs text-fg-muted">Owner</span>
                                   {document.owners?.[0] ? (
                                     <UserAvatarWithTooltip
                                       displayName={document.owners[0].displayName}
@@ -966,9 +966,9 @@ export function DocumentActionMenu({
                         )
                         rightPane.setExpanded?.(false)
                       }}
-                      className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
+                      className="flex cursor-pointer items-center gap-2"
                     >
-                      <Info className="h-4 w-4 text-gray-600" />
+                      <Info className="h-4 w-4 text-fg-muted" />
                       <span>File information</span>
                     </DropdownMenuItem>
                     <DropdownMenuItem
@@ -981,9 +981,9 @@ export function DocumentActionMenu({
                         rightPane.setContent(<DocumentActivityPane document={document} />)
                         rightPane.setExpanded?.(false)
                       }}
-                      className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
+                      className="flex cursor-pointer items-center gap-2"
                     >
-                      <Clock className="h-4 w-4 text-gray-600" />
+                      <Clock className="h-4 w-4 text-fg-muted" />
                       <span>Activity Stream</span>
                     </DropdownMenuItem>
                     {document.documentType !== 'LINK' && (
@@ -998,9 +998,9 @@ export function DocumentActionMenu({
                         rightPane.setExpanded?.(false)
                         onVersionHistory?.(document)
                       }}
-                      className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
+                      className="flex cursor-pointer items-center gap-2"
                     >
-                      <Clock className="h-4 w-4 text-gray-600" />
+                      <Clock className="h-4 w-4 text-fg-muted" />
                       <span>Version History</span>
                     </DropdownMenuItem>
                     )}
@@ -1014,7 +1014,7 @@ export function DocumentActionMenu({
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <div className="flex items-center space-x-3 px-3 py-2 text-xs text-muted-foreground opacity-50 cursor-not-allowed select-none">
+                        <div className="flex items-center gap-2 px-2 py-1.5 text-ui text-fg-subtle opacity-50 cursor-not-allowed select-none">
                           <Eye className="h-4 w-4" />
                           <span>Open</span>
                         </div>
@@ -1038,9 +1038,9 @@ export function DocumentActionMenu({
                         rightPane.setContent(<DocumentPreviewPanelContent document={document} />)
                       }
                     }}
-                    className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
+                    className="flex cursor-pointer items-center gap-2"
                   >
-                    <Eye className="h-4 w-4 text-gray-600" />
+                    <Eye className="h-4 w-4 text-fg-muted" />
                     <span>Open</span>
                   </DropdownMenuItem>
                 )}
@@ -1053,9 +1053,9 @@ export function DocumentActionMenu({
                       .then(() => addToast({ type: 'success', title: 'Link copied', message: 'Link copied to clipboard' }))
                       .catch(() => addToast({ type: 'error', title: 'Copy failed', message: 'Could not copy link.' }))
                   }}
-                  className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
+                  className="flex cursor-pointer items-center gap-2"
                 >
-                  <Link2 className="h-4 w-4 text-gray-600" />
+                  <Link2 className="h-4 w-4 text-fg-muted" />
                   <span>Copy link</span>
                 </DropdownMenuItem>
 
@@ -1064,9 +1064,9 @@ export function DocumentActionMenu({
                  !(document.isExternalCollaborator && !document.ecAllowDownload) && (
                   <DropdownMenuItem
                     onClick={() => { handleDownload(document); onDownloadDocument?.(document) }}
-                    className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
+                    className="flex cursor-pointer items-center gap-2"
                   >
-                    <Download className="h-4 w-4 text-blue-600" />
+                    <Download className="h-4 w-4 text-fg-subtle" />
                     <span>Download</span>
                   </DropdownMenuItem>
                 )}
@@ -1094,9 +1094,9 @@ export function DocumentActionMenu({
                         rightPane.setExpanded?.(false)
                       }
                     }}
-                    className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
+                    className="flex cursor-pointer items-center gap-2"
                   >
-                    <MessagesSquare className="h-4 w-4 text-gray-600" />
+                    <MessagesSquare className="h-4 w-4 text-fg-muted" />
                     <span>Comment</span>
                   </DropdownMenuItem>
                 )}
@@ -1106,7 +1106,7 @@ export function DocumentActionMenu({
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <div className="flex items-center space-x-3 px-3 py-2 text-xs text-muted-foreground opacity-50 cursor-not-allowed select-none">
+                        <div className="flex items-center gap-2 px-2 py-1.5 text-ui text-fg-subtle opacity-50 cursor-not-allowed select-none">
                           <FolderOpen className="h-4 w-4" />
                           <span>Organize</span>
                         </div>
@@ -1118,37 +1118,37 @@ export function DocumentActionMenu({
                   </TooltipProvider>
                 ) : (onCopyDocument || onMoveDocument || onRenameDocument || onDuplicateDocument || canManage) && (
                   <DropdownMenuSub>
-                    <DropdownMenuSubTrigger className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs">
-                      <FolderOpen className="h-4 w-4 text-gray-600" />
+                    <DropdownMenuSubTrigger className="flex cursor-pointer items-center gap-2">
+                      <FolderOpen className="h-4 w-4 text-fg-muted" />
                       <span>Organize</span>
                     </DropdownMenuSubTrigger>
                     <DropdownMenuSubContent className="w-56">
                       {onRenameDocument && (
                         isApprovedDeliverable ? (
-                          <div className="flex items-center space-x-3 px-3 py-2 text-xs text-muted-foreground opacity-40 cursor-not-allowed select-none">
+                          <div className="flex items-center gap-2 px-2 py-1.5 text-ui text-fg-subtle opacity-40 cursor-not-allowed select-none">
                             <Edit3 className="h-4 w-4" /><span>Rename</span>
                           </div>
                         ) : (
                           <DropdownMenuItem
                             onSelect={() => onRenameDocument(document)}
-                            className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
+                            className="flex cursor-pointer items-center gap-2"
                           >
-                            <Edit3 className="h-4 w-4 text-gray-600" />
+                            <Edit3 className="h-4 w-4 text-fg-muted" />
                             <span>Rename</span>
                           </DropdownMenuItem>
                         )
                       )}
                       {onDuplicateDocument && document.documentType !== 'LINK' && (
                         isApprovedDeliverable ? (
-                          <div className="flex items-center space-x-3 px-3 py-2 text-xs text-muted-foreground opacity-40 cursor-not-allowed select-none">
+                          <div className="flex items-center gap-2 px-2 py-1.5 text-ui text-fg-subtle opacity-40 cursor-not-allowed select-none">
                             <Copy className="h-4 w-4" /><span>Duplicate</span>
                           </div>
                         ) : (
                           <DropdownMenuItem
                             onSelect={() => onDuplicateDocument(document)}
-                            className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
+                            className="flex cursor-pointer items-center gap-2"
                           >
-                            <Copy className="h-4 w-4 text-gray-600" />
+                            <Copy className="h-4 w-4 text-fg-muted" />
                             <span>Duplicate</span>
                           </DropdownMenuItem>
                         )
@@ -1156,23 +1156,23 @@ export function DocumentActionMenu({
                       {onCopyDocument && document.documentType !== 'LINK' && (
                         <DropdownMenuItem
                           onSelect={() => onCopyDocument(document)}
-                          className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
+                          className="flex cursor-pointer items-center gap-2"
                         >
-                          <Copy className="h-4 w-4 text-gray-600" />
+                          <Copy className="h-4 w-4 text-fg-muted" />
                           <span>Copy</span>
                         </DropdownMenuItem>
                       )}
                       {onMoveDocument && document.documentType !== 'LINK' && (
                         isApprovedDeliverable ? (
-                          <div className="flex items-center space-x-3 px-3 py-2 text-xs text-muted-foreground opacity-40 cursor-not-allowed select-none">
+                          <div className="flex items-center gap-2 px-2 py-1.5 text-ui text-fg-subtle opacity-40 cursor-not-allowed select-none">
                             <Move className="h-4 w-4" /><span>Move</span>
                           </div>
                         ) : (
                           <DropdownMenuItem
                             onSelect={() => onMoveDocument(document)}
-                            className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
+                            className="flex cursor-pointer items-center gap-2"
                           >
-                            <Move className="h-4 w-4 text-gray-600" />
+                            <Move className="h-4 w-4 text-fg-muted" />
                             <span>Move</span>
                           </DropdownMenuItem>
                         )
@@ -1181,16 +1181,16 @@ export function DocumentActionMenu({
                       {onCrossEngagementCopy && document.documentType !== 'LINK' && (
                         <DropdownMenuItem
                           onSelect={() => onCrossEngagementCopy(document)}
-                          className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
+                          className="flex cursor-pointer items-center gap-2"
                         >
-                          <Building2 className="h-4 w-4 flex-shrink-0 text-blue-600" />
+                          <Building2 className="h-4 w-4 flex-shrink-0 text-fg-subtle" />
                           <span className="whitespace-nowrap">Copy to another engagement…</span>
                         </DropdownMenuItem>
                       )}
                       {(canManage && (onMakePrivate || onMakePublic)) && <DropdownMenuSeparator />}
                       {canManage && !document.isPrivate && onMakePrivate && (
                         isApprovedDeliverable ? (
-                          <div className="flex items-center space-x-3 px-3 py-2 text-xs text-muted-foreground opacity-40 cursor-not-allowed select-none">
+                          <div className="flex items-center gap-2 px-2 py-1.5 text-ui text-fg-subtle opacity-40 cursor-not-allowed select-none">
                             <FolderLock className="h-4 w-4" /><span>Make Private</span>
                           </div>
                         ) : document.isSharedWithExternal ? (
@@ -1199,11 +1199,11 @@ export function DocumentActionMenu({
                               <TooltipTrigger asChild>
                                 <div
                                   onClick={(e) => { e.stopPropagation(); setPrivateInfoOpen((v) => !v) }}
-                                  className="flex items-center space-x-3 px-3 py-2 text-xs text-muted-foreground cursor-pointer opacity-50 hover:bg-accent rounded-sm"
+                                  className="flex items-center gap-2 px-2 py-1.5 text-ui text-fg-subtle cursor-pointer opacity-50 rounded-control hover:bg-surface-hover"
                                 >
-                                  <FolderLock className="h-4 w-4 text-orange-500" />
+                                  <FolderLock className="h-4 w-4 text-fg-subtle" />
                                   <span>Make Private</span>
-                                  <Info className="h-3.5 w-3.5 ml-auto text-slate-400" />
+                                  <Info className="h-3.5 w-3.5 ml-auto text-fg-subtle" />
                                 </div>
                               </TooltipTrigger>
                               <TooltipContent side="left" className="text-xs max-w-[220px]">
@@ -1214,24 +1214,24 @@ export function DocumentActionMenu({
                         ) : (
                           <DropdownMenuItem
                             onClick={() => onMakePrivate(document)}
-                            className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
+                            className="flex cursor-pointer items-center gap-2"
                           >
-                            <FolderLock className="h-4 w-4 text-orange-500" />
+                            <FolderLock className="h-4 w-4 text-fg-subtle" />
                             <span>Make Private</span>
                           </DropdownMenuItem>
                         )
                       )}
                       {canManage && document.isPrivate && onMakePublic && (
                         isApprovedDeliverable ? (
-                          <div className="flex items-center space-x-3 px-3 py-2 text-xs text-muted-foreground opacity-40 cursor-not-allowed select-none">
+                          <div className="flex items-center gap-2 px-2 py-1.5 text-ui text-fg-subtle opacity-40 cursor-not-allowed select-none">
                             <FolderUp className="h-4 w-4" /><span>Make Public</span>
                           </div>
                         ) : (
                           <DropdownMenuItem
                             onClick={() => onMakePublic(document)}
-                            className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
+                            className="flex cursor-pointer items-center gap-2"
                           >
-                            <FolderUp className="h-4 w-4 text-slate-500" />
+                            <FolderUp className="h-4 w-4 text-fg-muted" />
                             <span>Make Public</span>
                           </DropdownMenuItem>
                         )
@@ -1303,9 +1303,9 @@ export function DocumentActionMenu({
                       addToast({ type: 'error', title: 'Failed', message: e instanceof Error ? e.message : 'Failed to update bookmark.' })
                     }
                   }}
-                  className="flex items-center space-x-3 px-3 py-2 text-xs data-[disabled]:opacity-50 data-[disabled]:pointer-events-none"
+                  className="flex items-center gap-2 px-2 py-1.5 text-ui data-[disabled]:opacity-50 data-[disabled]:pointer-events-none"
                 >
-                  <Bookmark className={`h-4 w-4 ${existingBookmarkId ? 'fill-current text-primary' : 'text-gray-600'}`} />
+                  <Bookmark className={`h-4 w-4 ${existingBookmarkId ? 'fill-current text-action' : 'text-fg-muted'}`} />
                   <span>{existingBookmarkId ? 'Remove bookmark' : 'Bookmark'}</span>
                 </DropdownMenuItem>
                     </span>
@@ -1319,8 +1319,8 @@ export function DocumentActionMenu({
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <div className="flex items-center space-x-3 px-3 py-2 text-xs text-muted-foreground opacity-50 cursor-not-allowed select-none">
-                          <Calendar className="h-4 w-4 text-orange-600" />
+                        <div className="flex items-center gap-2 px-2 py-1.5 text-ui text-fg-subtle opacity-50 cursor-not-allowed select-none">
+                          <Calendar className="h-4 w-4 text-fg-subtle" />
                           <span>Set Due Date</span>
                         </div>
                       </TooltipTrigger>
@@ -1332,9 +1332,9 @@ export function DocumentActionMenu({
                 ) : (
                   <DropdownMenuItem
                     onClick={() => setShowDueDatePicker(true)}
-                    className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
+                    className="flex cursor-pointer items-center gap-2"
                   >
-                    <Calendar className="h-4 w-4 text-orange-600" />
+                    <Calendar className="h-4 w-4 text-fg-subtle" />
                     <span>Set Due Date</span>
                   </DropdownMenuItem>
                 )}
@@ -1342,7 +1342,7 @@ export function DocumentActionMenu({
                   const doc = document as { lock?: { type?: string } | null }
                   const isAlreadyLocked = doc.lock?.type === 'finalize'
                   if (isAlreadyLocked) return (
-                    <DropdownMenuItem disabled className="flex items-center space-x-3 px-3 py-2 text-xs text-muted-foreground opacity-50 cursor-not-allowed data-[disabled]:pointer-events-none">
+                    <DropdownMenuItem disabled className="flex items-center gap-2 px-2 py-1.5 text-ui text-fg-subtle opacity-50 cursor-not-allowed data-[disabled]:pointer-events-none">
                       <BadgeCheck className="h-4 w-4 shrink-0" />
                       <span className="whitespace-nowrap">Accepted</span>
                     </DropdownMenuItem>
@@ -1351,9 +1351,9 @@ export function DocumentActionMenu({
                     <DropdownMenuItem
                       disabled={finalizeLockDisabled}
                       onClick={() => void handleAcceptDocument()}
-                      className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs text-emerald-800 focus:bg-emerald-50 focus:text-emerald-900 data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+                      className="flex cursor-pointer items-center gap-2 data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
                     >
-                      <BadgeCheck className="h-4 w-4 text-emerald-700 shrink-0" />
+                      <BadgeCheck className="h-4 w-4 shrink-0 text-action" />
                       <span className="whitespace-nowrap">Accept</span>
                     </DropdownMenuItem>
                   )
@@ -1366,14 +1366,14 @@ export function DocumentActionMenu({
                       <Tooltip>
                         <TooltipTrigger asChild>
                           {isApprovedDeliverable ? (
-                            <div className="flex items-center space-x-3 px-3 py-2 text-xs text-muted-foreground opacity-50 cursor-not-allowed select-none">
+                            <div className="flex items-center gap-2 px-2 py-1.5 text-ui text-fg-subtle opacity-50 cursor-not-allowed select-none">
                               <Trash2 className="h-4 w-4" />
                               <span>{document.documentType === 'LINK' ? 'Delete' : 'Move to Bin'}</span>
                             </div>
                           ) : (
                             <DropdownMenuItem
                               onSelect={(e) => { e.preventDefault(); onDeleteDocument!(document); }}
-                              className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
+                              className="flex cursor-pointer items-center gap-2 text-danger focus:text-danger"
                             >
                               <Trash2 className="h-4 w-4" />
                               <span>{document.documentType === 'LINK' ? 'Delete' : 'Move to Bin'}</span>
@@ -1396,8 +1396,8 @@ export function DocumentActionMenu({
                 <>
                   <DropdownMenuSeparator />
                   <DropdownMenuSub>
-                    <DropdownMenuSubTrigger className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs">
-                      <ExternalLink className="h-4 w-4 text-gray-600" />
+                    <DropdownMenuSubTrigger className="flex cursor-pointer items-center gap-2">
+                      <ExternalLink className="h-4 w-4 text-fg-muted" />
                       <span>Drive Actions</span>
                     </DropdownMenuSubTrigger>
                     <DropdownMenuSubContent className="w-56">
@@ -1410,9 +1410,9 @@ export function DocumentActionMenu({
                             : `https://drive.google.com/drive/my-drive${authParam}`
                           window.open(url, '_blank')
                         }}
-                        className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
+                        className="flex cursor-pointer items-center gap-2"
                       >
-                        <ExternalLink className="h-4 w-4 text-blue-600" />
+                        <ExternalLink className="h-4 w-4 text-fg-subtle" />
                         <span>Open containing Folder in Google Drive</span>
                       </DropdownMenuItem>
                     </DropdownMenuSubContent>
@@ -1423,8 +1423,8 @@ export function DocumentActionMenu({
             )}
           </div>
           {sandboxPreview && (
-            <div className="px-3 py-2 border-t border-[#e5e7eb] bg-[#f9f9fb]">
-              <p className="text-[10px] text-[#9a9ba0] leading-snug">Actions are unavailable in sandbox preview.</p>
+            <div className="px-3 py-2 border-t border-line bg-surface-subtle">
+              <p className="text-caption text-fg-subtle leading-snug">Actions are unavailable in sandbox preview.</p>
             </div>
           )}
         </DropdownMenuContent>
@@ -1443,7 +1443,7 @@ export function DocumentActionMenu({
         description="This will share the folder externally and add it to the Board."
         extra={
           <div>
-            <label className="block text-[11px] font-headline font-bold tracking-widest uppercase text-[#45474c] mb-2">
+            <label className="mb-2 block text-small font-medium text-fg-muted">
               Due date (optional)
             </label>
             <DateTimePicker
@@ -1471,7 +1471,7 @@ export function DocumentActionMenu({
         iconVariant="red"
         title="Untag as Deliverable"
         subtitle="This action will revoke all external access."
-        description={<>This will remove the deliverable tag from <span className="font-semibold text-[#1b1b1d]">{document.name}</span> and revoke all sharing access for external collaborators and viewers.</>}
+        description={<>This will remove the deliverable tag from <span className="font-semibold text-fg">{document.name}</span> and revoke all sharing access for external collaborators and viewers.</>}
         confirmLabel="Untag"
         confirmVariant="red"
         onCancel={() => setShowUntagConfirm(false)}
@@ -1536,27 +1536,27 @@ export function DocumentActionMenu({
           onClick={() => setShowDueDatePicker(false)}
         >
           <div
-            className="bg-white rounded shadow-xl max-w-md w-full mx-4 modal-content z-[1000000]"
+            className="modal-content z-[1000000] mx-4 w-full max-w-md rounded-dialog bg-surface shadow-dialog"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="p-4 border-b border-gray-200">
+            <div className="p-4 border-b border-line">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 bg-orange-100 rounded flex items-center justify-center">
-                    <Calendar className="h-5 w-5 text-orange-600" />
+                  <div className="flex h-10 w-10 items-center justify-center rounded-control bg-tag-orange-bg text-tag-orange-fg">
+                    <Calendar className="h-5 w-5" />
                   </div>
                   <div>
-                    <h3 className="text-sm font-medium text-gray-900">
+                    <h3 className="text-sm font-medium text-fg">
                       Set Due Date
                     </h3>
-                    <p className="text-xs text-gray-500">
+                    <p className="text-xs text-fg-muted">
                       {document.name}
                     </p>
                   </div>
                 </div>
                 <button
                   onClick={() => setShowDueDatePicker(false)}
-                  className="text-gray-400 hover:text-gray-600 p-1 rounded hover:bg-gray-100 transition-colors"
+                  className="text-fg-subtle hover:text-fg-muted p-1 rounded hover:bg-surface-hover transition-colors"
                 >
                   <XSquare className="h-5 w-5" />
                 </button>
@@ -1565,7 +1565,7 @@ export function DocumentActionMenu({
 
             <div className="p-4">
               <div className="mb-2">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-fg-muted mb-2">
                   Select due date and time
                 </label>
                 <DateTimePicker

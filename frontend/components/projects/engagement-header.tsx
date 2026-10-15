@@ -3,11 +3,11 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { CalendarDays, Flag, FolderOpen, Users } from "lucide-react"
+import { Briefcase, CalendarDays, Flag, FolderOpen, Users } from "lucide-react"
 import { updateProject, type LwCrmEngagementStatus } from "@/lib/actions/project"
 import { DateProperty, PersonAvatar, StatusProperty, type PersonOption } from "@/components/ui/property-cells"
 import { Tag } from "@/components/ui/tag"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { HeaderProp as Prop } from "@/components/ui/header-prop"
 import { useToast } from "@/components/ui/toast"
 import { clientPath } from "@/lib/navigation/firm-paths"
 
@@ -24,6 +24,9 @@ const INLINE_STATUSES: LwCrmEngagementStatus[] = ["PLANNED", "ACTIVE", "PAUSED"]
 
 type Member = { userId: string; name: string; role: string; avatarUrl: string | null; isAgent: boolean }
 
+/** Last member list per engagement, so a revisit (or the page's loading state) shows people at once. */
+const membersCache = new Map<string, Member[]>()
+
 export function EngagementHeader({
     projectId,
     groupSlug,
@@ -39,6 +42,7 @@ export function EngagementHeader({
     showPeople,
     membersHref,
     personaDisplayName,
+    fetchPeople = true,
 }: {
     projectId: string
     groupSlug: string
@@ -56,20 +60,26 @@ export function EngagementHeader({
     showPeople: boolean
     membersHref: string
     personaDisplayName?: string | null
+    /** False in the page's loading state: show the cached people only, don't fetch them again. */
+    fetchPeople?: boolean
 }) {
     const router = useRouter()
     const { addToast } = useToast()
-    const [members, setMembers] = useState<Member[] | null>(null)
+    const [members, setMembers] = useState<Member[] | null>(() => membersCache.get(projectId) ?? null)
 
     useEffect(() => {
-        if (!showPeople) return
+        if (!showPeople || !fetchPeople) return
         let cancelled = false
         fetch(`/api/projects/${projectId}/members`)
             .then((r) => (r.ok ? r.json() : { members: [] }))
-            .then((d) => { if (!cancelled) setMembers(((d.members ?? []) as Member[]).filter((m) => !m.isAgent)) })
+            .then((d) => {
+                const list = ((d.members ?? []) as Member[]).filter((m) => !m.isAgent)
+                membersCache.set(projectId, list)
+                if (!cancelled) setMembers(list)
+            })
             .catch(() => { if (!cancelled) setMembers([]) })
         return () => { cancelled = true }
-    }, [projectId, showPeople])
+    }, [projectId, showPeople, fetchPeople])
 
     async function save(data: Parameters<typeof updateProject>[1], what: string) {
         try {
@@ -88,7 +98,12 @@ export function EngagementHeader({
     return (
         <header className="flex flex-col gap-2 pb-3" data-demo-tour="engagement-header">
             <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
-                <h1 className="min-w-0 text-h1 text-fg">{name || "Engagement"}</h1>
+                <div className="flex min-w-0 items-center gap-3">
+                    <span className="flex shrink-0 items-center text-fg-muted [&_svg]:h-7 [&_svg]:w-7" aria-hidden>
+                        <Briefcase />
+                    </span>
+                    <h1 className="min-w-0 text-h1 text-fg">{name || "Engagement"}</h1>
+                </div>
                 {personaDisplayName && (
                     <Tag color="gray" title="Your role on this engagement" className="mt-2">
                         You · {personaDisplayName}
@@ -171,20 +186,5 @@ export function EngagementHeader({
                 )}
             </div>
         </header>
-    )
-}
-
-/** One property in the row; the label shows as a tooltip, Linear-style. */
-function Prop({ label, icon, children }: { label: string; icon?: React.ReactNode; children: React.ReactNode }) {
-    return (
-        <Tooltip>
-            <TooltipTrigger asChild>
-                <span className="inline-flex items-center text-fg-subtle">
-                    {icon && <span className="pl-1.5">{icon}</span>}
-                    {children}
-                </span>
-            </TooltipTrigger>
-            <TooltipContent variant="dark" side="bottom">{label}</TooltipContent>
-        </Tooltip>
     )
 }

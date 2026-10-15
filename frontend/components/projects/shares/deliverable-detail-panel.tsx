@@ -756,7 +756,11 @@ export function DeliverableDetailPanel({
         {canManage && status !== 'approved' ? (
           <Select value={status} onValueChange={(v) => handleMoveToNext(v as ActivityStatus)} disabled={movingStatus}>
             <SelectTrigger aria-label="Deliverable status" className="h-7 w-auto gap-1.5 border-transparent bg-transparent px-1.5 shadow-none hover:bg-surface-hover focus:ring-0 data-[state=open]:bg-surface-hover">
-              <StatusPill kind="deliverable" status={status} />
+              {/* In a div: SelectTrigger clamps its direct <span> children (`[&>span]:line-clamp-1`),
+                  which breaks the pill's flex row — label pushed up, status dot gone. */}
+              <div className="flex items-center">
+                <StatusPill kind="deliverable" status={status} />
+              </div>
               {movingStatus && <Loader2 className="h-3 w-3 shrink-0 animate-spin text-fg-subtle" />}
             </SelectTrigger>
             <SelectContent className="min-w-[200px]">

@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { PropertyList, PropertyRow } from '@/components/ui/property-list'
+import { PropertyList, PropertyRow, PROPERTY_FIELD_CLASS, PROPERTY_TEXTAREA_CLASS, SETTINGS_SECTION_HEADING_CLASS } from '@/components/ui/property-list'
 import { StatusProperty } from '@/components/ui/property-cells'
 import { updateProject, deleteProject } from '@/lib/actions/project'
 import type { LwCrmEngagementStatus } from '@/lib/actions/project'
@@ -39,9 +39,9 @@ export interface EngagementSettingsFormProps {
 }
 
 /** Notion property value: reads as plain text until hovered or focused. */
-const fieldCls = 'h-8 w-full border-transparent bg-transparent px-2 text-ui text-fg shadow-none hover:bg-surface-hover focus-visible:bg-surface disabled:hover:bg-transparent'
-const textareaFieldCls = 'min-h-[64px] border-transparent bg-transparent px-2 py-1.5 text-ui text-fg shadow-none hover:bg-surface-hover focus-visible:bg-surface disabled:hover:bg-transparent'
-const sectionHeading = 'mb-2 border-b border-line pb-2 text-h3 text-fg'
+const fieldCls = PROPERTY_FIELD_CLASS
+const textareaFieldCls = PROPERTY_TEXTAREA_CLASS
+const sectionHeading = SETTINGS_SECTION_HEADING_CLASS
 
 const STATUS_OPTIONS: LwCrmEngagementStatus[] = ['PLANNED', 'ACTIVE', 'PAUSED', 'COMPLETED']
 /** Stable default — a fresh `[]` per render would re-run the sync effect below on every render. */

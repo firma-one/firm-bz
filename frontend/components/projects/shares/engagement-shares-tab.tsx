@@ -52,6 +52,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useProjectPersonaLabels } from '@/lib/hooks/use-project-persona-labels'
 import { useToast } from '@/components/ui/toast'
 import { getAllowedTransitions, type EngagementRoleSlug } from '@/lib/deliverable-stage-roles'
+import { initialsOf } from '@/lib/initials'
 
 type ActivityStatus = 'to_do' | 'in_progress' | 'in_review' | 'approved'
 
@@ -233,17 +234,9 @@ const LANES: {
   ]
 
 function getInitials(nameOrEmail: string | null | undefined): string {
-  if (!nameOrEmail) return '?'
   // Remove UUIDs if they accidentally leak in
-  if (nameOrEmail.length > 30 && nameOrEmail.includes('-')) return '?'
-
-  const clean = nameOrEmail.split('@')[0].replace(/[._-]/g, ' ')
-  const parts = clean.split(' ').filter(p => p.length > 0)
-
-  if (parts.length >= 2) {
-    return (parts[0][0] + parts[1][0]).toUpperCase()
-  }
-  return parts[0].slice(0, 2).toUpperCase()
+  if (nameOrEmail && nameOrEmail.length > 30 && nameOrEmail.includes('-')) return '?'
+  return initialsOf(nameOrEmail)
 }
 
 function DroppableLane({
@@ -766,7 +759,7 @@ function ModifierBubble({
 }) {
   const [copied, setCopied] = useState(false)
   const displayEmail = updatedByEmail ?? null
-  const initials = displayEmail ? displayEmail.slice(0, 2).toUpperCase() : getInitials(updatedBy)
+  const initials = getInitials(updatedBy ?? displayEmail)
 
   const handleCopy = (e: React.MouseEvent) => {
     e.preventDefault()
@@ -782,7 +775,7 @@ function ModifierBubble({
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
-          <div className="h-8 w-8 rounded-lg border border-slate-200/80 bg-surface-subtle flex items-center justify-center overflow-hidden shrink-0 cursor-default">
+          <div className="flex h-8 w-8 shrink-0 cursor-default items-center justify-center overflow-hidden rounded-full bg-surface-muted">
             {updatedByAvatarUrl ? (
               <img src={updatedByAvatarUrl} alt="" className="h-full w-full object-cover" />
             ) : (
@@ -2312,7 +2305,10 @@ export function EngagementSharesTab({
         </div>
       </div>
 
-      <div className={cn('flex flex-1 overflow-hidden gap-4', viewMode === 'board' ? 'min-h-[calc(100vh-220px)]' : 'min-h-0')}>
+      {/* Fills the space the page gives it. A viewport-based min-height (100vh - 220px) assumed the
+          old header; under the New UI header, properties row and tabs it overflowed by a few pixels,
+          and the page showed a full-height scrollbar beside the detail pane. */}
+      <div className="flex min-h-0 flex-1 gap-4 overflow-hidden">
         <div className={cn('flex-1 min-w-0 overflow-auto', viewMode === 'grid' && 'py-1')}>
           {isLoading ? (
             <div className="flex items-center justify-center min-h-[200px]">

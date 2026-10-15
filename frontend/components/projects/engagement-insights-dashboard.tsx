@@ -2945,7 +2945,7 @@ export function EngagementInsightsDashboard({
                                             <TooltipTrigger asChild>
                                                 <Link
                                                     href={firmSettingsPath(groupSlug, orgSlug, 'appsettings')}
-                                                    className="p-1.5 rounded text-violet-400 hover:text-primary hover:bg-primary/10 transition-colors"
+                                                    className="rounded-control p-1.5 text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg"
                                                     aria-label="Display, Print & Sharing settings"
                                                 >
                                                     <Settings className="h-4 w-4" />
@@ -2960,10 +2960,10 @@ export function EngagementInsightsDashboard({
                                             <button
                                                 onClick={handleDownloadHealth}
                                                 disabled={dlState !== 'idle'}
-                                                className={`p-1.5 rounded transition-colors${dlState !== 'idle' ? ' cursor-wait opacity-50' : ' text-blue-400 hover:text-blue-600 hover:bg-blue-50'}`}
+                                                className={`rounded-control p-1.5 transition-colors${dlState !== 'idle' ? ' cursor-wait opacity-50' : ' text-fg-subtle hover:bg-surface-hover hover:text-fg'}`}
                                                 aria-label="Download PDF"
                                             >
-                                                {dlState === 'capturing' ? <RefreshCw className="h-4 w-4 animate-spin" /> : dlState === 'done' ? <Check className="h-4 w-4 text-green-600" /> : <Download className="h-4 w-4" />}
+                                                {dlState === 'capturing' ? <RefreshCw className="h-4 w-4 animate-spin" /> : dlState === 'done' ? <Check className="h-4 w-4 text-action" /> : <Download className="h-4 w-4" />}
                                             </button>
                                         </TooltipTrigger>
                                         <TooltipContent side="bottom" className="text-xs">Download health report as PDF</TooltipContent>
@@ -2973,10 +2973,10 @@ export function EngagementInsightsDashboard({
                                             <button
                                                 onClick={handleShareHealth}
                                                 disabled={shareState !== 'idle' && shareState !== 'error'}
-                                                className={`p-1.5 rounded transition-colors${shareState !== 'idle' && shareState !== 'error' ? ' cursor-wait opacity-50' : shareState === 'error' ? ' text-red-500' : ' text-emerald-400 hover:text-emerald-600 hover:bg-emerald-50'}`}
+                                                className={`rounded-control p-1.5 transition-colors${shareState !== 'idle' && shareState !== 'error' ? ' cursor-wait opacity-50' : shareState === 'error' ? ' text-danger' : ' text-fg-subtle hover:bg-surface-hover hover:text-fg'}`}
                                                 aria-label="Share PDF"
                                             >
-                                                {shareState === 'capturing' || shareState === 'sending' ? <RefreshCw className="h-4 w-4 animate-spin" /> : shareState === 'sent' ? <Check className="h-4 w-4 text-green-600" /> : shareState === 'error' ? <X className="h-4 w-4" /> : <Mail className="h-4 w-4" />}
+                                                {shareState === 'capturing' || shareState === 'sending' ? <RefreshCw className="h-4 w-4 animate-spin" /> : shareState === 'sent' ? <Check className="h-4 w-4 text-action" /> : shareState === 'error' ? <X className="h-4 w-4" /> : <Mail className="h-4 w-4" />}
                                             </button>
                                         </TooltipTrigger>
                                         <TooltipContent side="bottom" className="text-xs">
@@ -2996,7 +2996,7 @@ export function EngagementInsightsDashboard({
                                     animate={{ opacity: 1, height: 'auto' }}
                                     exit={{ opacity: 0, height: 0 }}
                                     transition={{ duration: 0.2, ease: 'easeOut' }}
-                                    className="mx-6 mt-5 bg-white border border-line rounded p-4 flex flex-col gap-2 overflow-hidden"
+                                    className="mx-6 mt-4 flex flex-col gap-2 overflow-hidden rounded-card bg-surface-subtle p-3"
                                 >
                                     <span className="text-small font-medium text-fg-muted">
                                         Engagement Summary
@@ -3009,27 +3009,19 @@ export function EngagementInsightsDashboard({
                                         placeholder="Add a summary for this engagement…"
                                         // Height set in CSS, not `rows`, so the textarea collapses with the
                                         // card's height animation instead of holding an intrinsic size.
-                                        className="w-full h-[6.5rem] text-sm text-fg-muted bg-white border border-line rounded px-3 py-2 leading-relaxed resize-none focus:outline-none focus:ring-1 focus:ring-primary/30 placeholder:text-fg-subtle disabled:opacity-60"
+                                        className="h-[6.5rem] w-full resize-none rounded-control border border-line bg-surface px-3 py-2 text-ui leading-relaxed text-fg placeholder:text-fg-subtle focus:border-action/60 focus:outline-none focus:ring-2 focus:ring-action/20 disabled:opacity-60"
                                     />
-                                    <p className="text-[11px] text-fg-muted">
+                                    <p className="text-caption text-fg-muted">
                                         Visible to the client and included in PDF and email exports.
                                     </p>
                                     <div className="flex items-center justify-end gap-2">
-                                        <button
-                                            onClick={() => setSummaryEditing(false)}
-                                            disabled={summarySaving}
-                                            className="rounded text-[10px] font-headline font-bold tracking-widest uppercase border border-line text-fg-muted hover:bg-white px-3 py-1.5 transition-colors disabled:opacity-50"
-                                        >
+                                        <Button size="sm" variant="ghost" onClick={() => setSummaryEditing(false)} disabled={summarySaving}>
                                             Cancel
-                                        </button>
-                                        <button
-                                            onClick={handleSummarySave}
-                                            disabled={summarySaving}
-                                            className="rounded text-[10px] font-headline font-bold tracking-widest uppercase bg-primary hover:brightness-105 text-white px-3 py-1.5 transition-colors disabled:opacity-50 flex items-center gap-1.5"
-                                        >
+                                        </Button>
+                                        <Button size="sm" onClick={handleSummarySave} disabled={summarySaving}>
                                             {summarySaving && <RefreshCw className="h-3 w-3 animate-spin" />}
                                             {summarySaving ? 'Saving…' : 'Save'}
-                                        </button>
+                                        </Button>
                                     </div>
                                 </motion.div>
                             )}
@@ -3044,10 +3036,10 @@ export function EngagementInsightsDashboard({
                                     animate={{ opacity: 1, height: 'auto' }}
                                     exit={{ opacity: 0, height: 0 }}
                                     transition={{ duration: 0.2, ease: 'easeOut' }}
-                                    className="mx-6 mt-5 bg-primary/5 border border-primary/30 rounded p-4 flex flex-col gap-2 overflow-hidden"
+                                    className="mx-6 mt-4 flex flex-col gap-2 overflow-hidden rounded-card bg-surface-subtle p-3"
                                 >
                                     <div className="flex items-center gap-2">
-                                        <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary tracking-wide">
+                                        <span className="inline-flex items-center gap-1.5 text-small font-medium text-fg-muted">
                                             {aiStreaming ? (
                                                 <>
                                                     <Brio className={aiStreaming ? 'animate-pulse' : ''} />
@@ -3058,7 +3050,7 @@ export function EngagementInsightsDashboard({
                                             )}
                                         </span>
                                         {!aiStreaming && data?.insightsSummaryDraft && (
-                                            <span className="text-[11px] text-fg-subtle">
+                                            <span className="text-caption text-fg-subtle">
                                                 {formatRelativeTime(data.insightsSummaryDraft.generatedAt)}
                                             </span>
                                         )}
@@ -3072,13 +3064,13 @@ export function EngagementInsightsDashboard({
                                             initial={{ opacity: 0 }}
                                             animate={{ opacity: 1 }}
                                             transition={{ duration: 0.15 }}
-                                            className="hover-scrollbar w-full text-sm text-fg-muted bg-white border border-primary/20 rounded px-3 py-2 leading-relaxed whitespace-pre-wrap h-[19.5rem] overflow-y-auto"
+                                            className="hover-scrollbar h-[19.5rem] w-full overflow-y-auto whitespace-pre-wrap rounded-control border border-line bg-surface px-3 py-2 text-ui leading-relaxed text-fg"
                                         >
                                             <StreamingText text={aiStreamText} />
                                             {/* Block caret, terminal style. Sized in `em` so it tracks the
                                                 font rather than a fixed pixel width. */}
                                             <span
-                                                className="inline-block w-[0.5em] h-[1.05em] -mb-[0.15em] ml-0.5 translate-y-px bg-primary/100 align-baseline"
+                                                className="inline-block w-[0.5em] h-[1.05em] -mb-[0.15em] ml-0.5 translate-y-px bg-action align-baseline"
                                                 style={{ animation: 'fm-caret 1.3s ease-in-out infinite' }}
                                             />
                                             {!aiStreamText && (
@@ -3094,24 +3086,24 @@ export function EngagementInsightsDashboard({
                                             value={aiDraftEdit}
                                             onChange={(e) => setAiDraftEdit(e.target.value)}
                                             disabled={aiDraftBusy}
-                                            className="hover-scrollbar w-full text-sm text-fg-muted bg-white border border-primary/20 rounded px-3 py-2 leading-relaxed h-[19.5rem] resize-none overflow-y-scroll [scrollbar-gutter:stable] focus:outline-none focus:ring-1 focus:ring-primary/40 disabled:opacity-60"
+                                            className="hover-scrollbar h-[19.5rem] w-full resize-none overflow-y-scroll [scrollbar-gutter:stable] rounded-control border border-line bg-surface px-3 py-2 text-ui leading-relaxed text-fg focus:border-action/60 focus:outline-none focus:ring-2 focus:ring-action/20 disabled:opacity-60"
                                         />
                                     )}
 
                                     {aiGenerateNote && !aiStreaming && (
-                                        <p className="text-[11px] text-primary">{aiGenerateNote}</p>
+                                        <p className="text-caption text-action">{aiGenerateNote}</p>
                                     )}
 
                                     {!aiStreaming && (
                                         <>
                                             {unfilledSections.length > 0 && (
-                                                <p className="text-[11px] text-amber-700">
+                                                <p className="text-caption text-tag-orange-fg">
                                                     <strong>{unfilledSections.join(' and ')}</strong> are yours to
                                                     decide. <Brio /> reports what the data shows; it does not
                                                     commit your firm to a plan. Add your notes before publishing.
                                                 </p>
                                             )}
-                                            <p className="text-[11px] text-fg-muted">
+                                            <p className="text-caption text-fg-muted">
                                                 Review and edit before publishing — once published this becomes the engagement
                                                 summary, visible to the client and included in PDF and email exports.
                                                 {data?.insightsSummary && (
@@ -3122,36 +3114,34 @@ export function EngagementInsightsDashboard({
                                                 )}
                                             </p>
                                             <div className="flex items-center justify-end gap-2">
-                                                <button
+                                                <Button
+                                                    size="sm"
+                                                    variant="ghost"
                                                     onClick={() => copySummary(aiDraftEdit, 'draft')}
                                                     disabled={!aiDraftEdit.trim()}
                                                     aria-label="Copy draft summary to clipboard"
-                                                    className="mr-auto rounded text-[10px] font-headline font-bold tracking-widest uppercase border border-line text-fg-muted hover:bg-white px-3 py-1.5 transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                                                    className="mr-auto"
                                                 >
                                                     {summaryCopied === 'draft'
-                                                        ? <Check className="h-3 w-3 text-primary" />
+                                                        ? <Check className="h-3 w-3 text-action" />
                                                         : <Copy className="h-3 w-3" />}
                                                     {summaryCopied === 'draft' ? 'Copied' : 'Copy'}
-                                                </button>
-                                                <button
-                                                    onClick={handleAiSummaryDismiss}
-                                                    disabled={aiDraftBusy}
-                                                    className="rounded text-[10px] font-headline font-bold tracking-widest uppercase border border-line text-fg-muted hover:bg-white px-3 py-1.5 transition-colors disabled:opacity-50 flex items-center gap-1.5"
-                                                >
+                                                </Button>
+                                                <Button size="sm" variant="outline" onClick={handleAiSummaryDismiss} disabled={aiDraftBusy}>
                                                     {aiDraftAction === 'dismiss' && <RefreshCw className="h-3 w-3 animate-spin" />}
                                                     Dismiss
-                                                </button>
-                                                <button
+                                                </Button>
+                                                <Button
+                                                    size="sm"
                                                     onClick={handleAiSummaryApprove}
                                                     disabled={aiDraftBusy || !aiDraftEdit.trim() || unfilledSections.length > 0}
                                                     title={unfilledSections.length > 0
                                                         ? `Complete: ${unfilledSections.join(', ')}`
                                                         : undefined}
-                                                    className="rounded text-[10px] font-headline font-bold tracking-widest uppercase bg-primary hover:brightness-105 text-white px-3 py-1.5 transition-colors disabled:opacity-50 flex items-center gap-1.5"
                                                 >
                                                     {aiDraftAction === 'publish' && <RefreshCw className="h-3 w-3 animate-spin" />}
                                                     Publish
-                                                </button>
+                                                </Button>
                                             </div>
                                         </>
                                     )}
@@ -3161,7 +3151,7 @@ export function EngagementInsightsDashboard({
 
                             {/* Generation feedback when there is no draft card to host it (AI off, or failure). */}
                             {isFirmAdmin && aiGenerateNote && !data?.insightsSummaryDraft && !aiStreamText && !aiStreaming && (
-                                <p className="mx-6 mt-4 text-[11px] text-fg-muted">{aiGenerateNote}</p>
+                                <p className="mx-6 mt-4 text-caption text-fg-muted">{aiGenerateNote}</p>
                             )}
 
                             {/* Stale marker — firm users only, and outside healthCardRef so it never
@@ -3174,7 +3164,7 @@ export function EngagementInsightsDashboard({
                                     animate={{ opacity: 1 }}
                                     exit={{ opacity: 0 }}
                                     transition={{ duration: 0.18, ease: 'easeOut' }}
-                                    className="mx-6 mt-4 flex items-center gap-2 text-[11px] text-amber-700"
+                                    className="mx-6 mt-4 flex items-center gap-2 text-caption text-tag-orange-fg"
                                 >
                                     <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                                     <span>
@@ -3183,7 +3173,7 @@ export function EngagementInsightsDashboard({
                                     </span>
                                     <button
                                         onClick={handleGenerateSummary}
-                                        className="underline underline-offset-2 hover:text-amber-900 transition-colors"
+                                        className="underline underline-offset-2 transition-colors hover:text-fg"
                                     >
                                         Ask <Brio /> for an update
                                     </button>
@@ -3239,7 +3229,7 @@ export function EngagementInsightsDashboard({
                                         animate={{ opacity: 1, height: 'auto' }}
                                         exit={{ opacity: 0, height: 0 }}
                                         transition={{ duration: 0.2, ease: 'easeOut' }}
-                                        className="mx-6 mt-5 bg-white border border-line rounded flex flex-col overflow-hidden"
+                                        className="mx-6 mt-4 flex flex-col overflow-hidden rounded-card border border-line bg-surface"
                                     >
                                         <div className="flex items-center justify-between gap-4 px-4 pt-3 pb-2 border-b border-line">
                                             <div className="flex items-baseline gap-2 min-w-0">
@@ -3249,7 +3239,7 @@ export function EngagementInsightsDashboard({
                                                 {data.insightsSummaryPublishedAt && (
                                                     <Tooltip>
                                                         <TooltipTrigger asChild>
-                                                            <span className="inline-flex items-center gap-1 text-[11px] text-fg-subtle shrink-0 cursor-default">
+                                                            <span className="inline-flex shrink-0 cursor-default items-center gap-1 text-caption text-fg-subtle">
                                                                 <Clock className="h-3 w-3" />
                                                                 {formatRelativeTime(data.insightsSummaryPublishedAt)}
                                                             </span>
@@ -3267,7 +3257,7 @@ export function EngagementInsightsDashboard({
                                                 {data.insightsSummaryPublishedAt && !data.insightsSummaryStale && (
                                                     <Tooltip>
                                                         <TooltipTrigger asChild>
-                                                            <span className="inline-flex items-center gap-1 text-[11px] text-fg-subtle shrink-0 cursor-default">
+                                                            <span className="inline-flex shrink-0 cursor-default items-center gap-1 text-caption text-fg-subtle">
                                                                 <Check className="h-3 w-3" />
                                                                 No delivery changes
                                                             </span>
@@ -3290,10 +3280,10 @@ export function EngagementInsightsDashboard({
                                                                 <button
                                                                     onClick={() => copySummary(data.insightsSummary!, 'published')}
                                                                     aria-label="Copy summary to clipboard"
-                                                                    className="inline-flex h-7 items-center gap-1.5 rounded border border-line bg-white px-2.5 text-[11px] font-medium text-fg-muted transition-colors hover:border-line-strong hover:bg-surface-hover hover:text-fg"
+                                                                    className="inline-flex h-7 items-center gap-1.5 rounded-control border border-line bg-surface px-2 text-small text-fg-muted transition-colors hover:border-line-strong hover:bg-surface-hover hover:text-fg"
                                                                 >
                                                                     {summaryCopied === 'published'
-                                                                        ? <Check className="h-3 w-3 text-primary" />
+                                                                        ? <Check className="h-3 w-3 text-action" />
                                                                         : <Copy className="h-3 w-3" />}
                                                                     {summaryCopied === 'published' ? 'Copied' : 'Copy'}
                                                                 </button>
@@ -3305,14 +3295,14 @@ export function EngagementInsightsDashboard({
                                                     )}
                                                     <button
                                                         onClick={() => { setSummaryDraft(data.insightsSummary ?? ''); setSummaryEditing(true) }}
-                                                        className="inline-flex h-7 items-center gap-1.5 rounded border border-line bg-white px-2.5 text-[11px] font-medium text-fg-muted transition-colors hover:border-line-strong hover:bg-surface-hover hover:text-fg"
+                                                        className="inline-flex h-7 items-center gap-1.5 rounded-control border border-line bg-surface px-2 text-small text-fg-muted transition-colors hover:border-line-strong hover:bg-surface-hover hover:text-fg"
                                                     >
                                                         <Pencil className="h-3 w-3" />
                                                         {data.insightsSummary ? 'Edit' : 'Add'}
                                                     </button>
                                                     <button
                                                         onClick={handleGenerateSummary}
-                                                        className="inline-flex h-7 items-center gap-1.5 rounded border border-primary/30 bg-primary/5 px-2.5 text-[11px] font-medium text-primary transition-colors hover:border-primary/50 hover:bg-primary/10"
+                                                        className="inline-flex h-7 items-center gap-1.5 rounded-control border border-line bg-surface px-2 text-small font-medium text-action transition-colors hover:border-line-strong hover:bg-surface-hover"
                                                     >
                                                         {data.insightsSummary ? <>Rewrite with</> : <>Write with</>}
                                                         <Brio />
@@ -3390,7 +3380,7 @@ export function EngagementInsightsDashboard({
                                 {/* End of report marker */}
                                 <div className="mx-6 mb-4 flex items-center gap-3">
                                     <div className="flex-1 h-px bg-surface-muted" />
-                                    <span className="text-[10px] font-headline font-bold tracking-widest uppercase text-fg-subtle">End of Report</span>
+                                    <span className="text-caption text-fg-subtle">End of report</span>
                                     <div className="flex-1 h-px bg-surface-muted" />
                                 </div>
                             </div>

@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/tooltip'
 import { DateTimePicker } from '@/components/ui/date-time-picker'
 import { SetupReminderModal } from '@/components/ui/setup-reminder-modal'
+import { initialsOf } from '@/lib/initials'
 
 export interface DocumentDocCommentsPaneProps {
   engagementId: string
@@ -499,7 +500,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
       if (t.type !== 'mention') return <span key={i}>{t.value}</span>
       const nameWithoutAt = t.value.replace(/^@/, '')
       const member = firmMembers.find((m) => m.name === nameWithoutAt || m.name === t.value)
-      const initials = nameWithoutAt.split(/[\s._-]/).filter(Boolean).map((p: string) => p[0]).join('').slice(0, 2).toUpperCase() || '?'
+      const initials = initialsOf(nameWithoutAt)
       const pill = (
         <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold bg-action/10 text-action leading-none mr-1 cursor-pointer">
           {t.value}
@@ -511,7 +512,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
           <TooltipTrigger asChild>{pill}</TooltipTrigger>
           <TooltipContent side="top" className="z-[9999] p-2 bg-surface border border-line shadow-popover text-xs text-fg">
             <div className="flex items-center gap-2">
-              <div className="h-7 w-7 rounded-full overflow-hidden shrink-0 flex items-center justify-center text-caption font-bold bg-action/20 text-action">
+              <div className="h-7 w-7 rounded-full overflow-hidden shrink-0 flex items-center justify-center text-[11px] font-medium bg-surface-muted text-fg-muted">
                 {member.avatarUrl
                   ? <img src={member.avatarUrl} alt="" className="h-full w-full object-cover" />
                   : initials}
@@ -601,7 +602,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
 
   // MentionPill: shows avatar + name, hover tooltip with avatar, click to edit
   const MentionPill = ({ u }: { u: { userId: string; name: string; avatarUrl?: string | null } }) => {
-    const initials = u.name.replace('@', '').split(/[\s._-]/).filter(Boolean).map((p: string) => p[0]).join('').slice(0, 2).toUpperCase() || '?'
+    const initials = initialsOf(u.name)
     return (
       <Tooltip>
         <TooltipTrigger asChild>
@@ -611,7 +612,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
             className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-semibold bg-action/10 text-action hover:bg-action/20 transition-colors cursor-pointer leading-none"
             aria-label={`Edit mention of ${u.name}`}
           >
-            <span className="inline-flex h-4 w-4 rounded-full overflow-hidden shrink-0 items-center justify-center text-[9px] font-bold bg-action/20 text-action">
+            <span className="inline-flex h-4 w-4 rounded-full overflow-hidden shrink-0 items-center justify-center text-[8px] font-medium bg-surface-muted text-fg-muted">
               {u.avatarUrl
                 ? <img src={u.avatarUrl} alt="" className="h-full w-full object-cover" />
                 : initials}
@@ -621,7 +622,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
         </TooltipTrigger>
         <TooltipContent side="top" className="z-[9999] p-2 bg-surface border border-line shadow-popover text-xs text-fg">
           <div className="flex items-center gap-2">
-            <div className="h-7 w-7 rounded-full overflow-hidden shrink-0 flex items-center justify-center text-caption font-bold bg-action/20 text-action">
+            <div className="h-7 w-7 rounded-full overflow-hidden shrink-0 flex items-center justify-center text-[11px] font-medium bg-surface-muted text-fg-muted">
               {u.avatarUrl
                 ? <img src={u.avatarUrl} alt="" className="h-full w-full object-cover" />
                 : initials}

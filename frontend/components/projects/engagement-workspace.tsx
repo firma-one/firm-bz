@@ -2,12 +2,12 @@
 
 import { useEffect, useCallback, useState } from 'react'
 import { cn } from '@/lib/utils'
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs } from "@/components/ui/tabs"
 import { EngagementInsightsDashboard } from './engagement-insights-dashboard'
 import { EngagementFileList } from './engagement-file-list'
 import { type BreadcrumbItem } from '@/lib/files-folder-session'
 import { EngagementSettingsForm } from './engagement-settings-form'
-import { Folder, BarChart3, Building2, PenTool, ChevronRight, Users, Briefcase, Share2, Settings, Home, ClipboardList, MessagesSquare, Lock, LayoutGrid, List } from 'lucide-react'
+import { Building2, ChevronRight, Users, Briefcase, Home, LayoutGrid, List } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { EngagementMembersTab } from './members/engagement-members-tab'
@@ -20,21 +20,10 @@ import { EngagementCommentsTab } from './engagement-comments-tab'
 import { EngagementWikiTab } from './wiki/engagement-wiki-tab'
 import type { LwCrmEngagementStatus } from '@/lib/actions/project'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
-import { GoogleDriveIcon } from '@/components/ui/google-drive-icon'
-import { OneDriveIcon } from '@/components/ui/onedrive-icon'
 import { firmPath, clientPath, groupFirmListPath } from '@/lib/navigation/firm-paths'
 import { EngagementHeader } from './engagement-header'
-import { Tag } from '@/components/ui/tag'
+import { EngagementTabsList, engagementChromeKey, rememberEngagementChrome, type EngagementTabsConfig } from './engagement-tabs'
 import { useUiShell } from '@/lib/ui-shell-context'
-
-/** Thin indeterminate bar under a tab while its route loads. */
-function PendingBar() {
-    return (
-        <span className="absolute -bottom-px left-0 right-0 h-0.5 overflow-hidden">
-            <span className="absolute inset-y-0 w-1/2 animate-[indeterminate-progress_1.5s_infinite_linear] rounded-full bg-fg" />
-        </span>
-    )
-}
 
 export interface ProjectPathSegments {
     tab: string
@@ -188,6 +177,36 @@ export function EngagementWorkspace({
         return () => window.removeEventListener('hashchange', ensureFilesTabForDeeplink)
     }, [base, currentTab, router])
 
+    // What sits above the tab body. The route's loading state redraws it from this snapshot, so a tab
+    // switch keeps the header and tab row on screen and only the body shows a skeleton.
+    const tabsConfig: EngagementTabsConfig = {
+        clientConnectorType,
+        sharesCount,
+        commentsCount,
+        wikiPageCount,
+        auditCount,
+        memberCount,
+        enableBetaFeatures,
+        canViewInternalTabs: Boolean(canViewInternalTabs),
+        canManage: Boolean(canManage),
+        canViewSettings: Boolean(canViewSettings),
+    }
+    useEffect(() => {
+        if (!projectSlug) return
+        rememberEngagementChrome(engagementChromeKey(orgSlug, clientSlug, projectSlug), {
+            projectId,
+            clientName,
+            name: projectName ?? '',
+            description: projectDescription,
+            status: engagementStatus,
+            kickoffDate: engagementKickoffDate,
+            dueDate: engagementDueDate,
+            showPeople: Boolean(canViewInternalTabs),
+            personaDisplayName: projectPersonaDisplayName,
+            tabs: tabsConfig,
+        })
+    })
+
     // Clear pending state once pathname catches up (engagement tabs navigate by path, not query param)
     useEffect(() => {
         setPendingTab(null)
@@ -286,72 +305,7 @@ export function EngagementWorkspace({
                 {/* Underline tabs (Linear/Notion); page actions sit at the right end of the tab row. */}
                 <div className="mb-4 flex shrink-0 items-end justify-between gap-3 border-b border-line">
                     <div className="min-w-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                        <TabsList className="min-w-max border-b-0">
-                            <TabsTrigger value="analytics" data-demo-tour="engagement-overview-tab" className="relative gap-1.5">
-                                <BarChart3 className="h-4 w-4" />
-                                Overview
-                                {pendingTab === 'analytics' && <PendingBar />}
-                            </TabsTrigger>
-                            <TabsTrigger value="files" data-demo-tour="engagement-files-tab" className="relative gap-1.5">
-                                {clientConnectorType === 'ONEDRIVE' ? (
-                                    <OneDriveIcon size={15} />
-                                ) : clientConnectorType === 'GOOGLE_DRIVE' ? (
-                                    <GoogleDriveIcon size={15} />
-                                ) : (
-                                    <Folder className="h-4 w-4" />
-                                )}
-                                Files
-                                {pendingTab === 'files' && <PendingBar />}
-                            </TabsTrigger>
-                            <TabsTrigger value="board" data-demo-tour="engagement-board-tab" className="relative gap-1.5">
-                                <LayoutGrid className="h-4 w-4" />
-                                Board
-                                {sharesCount !== undefined && sharesCount > 0 && <span className="text-small tabular-nums text-fg-subtle">{sharesCount}</span>}
-                                {pendingTab === 'board' && <PendingBar />}
-                            </TabsTrigger>
-                            <TabsTrigger value="comments" data-demo-tour="engagement-comments-tab" className="relative gap-1.5">
-                                <MessagesSquare className="h-4 w-4" />
-                                Comments
-                                {commentsCount !== undefined && commentsCount > 0 && <span className="text-small tabular-nums text-fg-subtle">{commentsCount}</span>}
-                                {pendingTab === 'comments' && <PendingBar />}
-                            </TabsTrigger>
-                            {enableBetaFeatures && canViewInternalTabs && (
-                                <TabsTrigger value="wiki" className="relative gap-1.5">
-                                    <PenTool className="h-4 w-4" />
-                                    Dossier
-                                    <Tag color="yellow" className="h-4 px-1 text-[10px]">Beta</Tag>
-                                    <span title="Internal only"><Lock className="h-3 w-3 text-fg-subtle" /></span>
-                                    {wikiPageCount !== undefined && wikiPageCount > 0 && <span className="text-small tabular-nums text-fg-subtle">{wikiPageCount}</span>}
-                                    {pendingTab === 'wiki' && <PendingBar />}
-                                </TabsTrigger>
-                            )}
-                            {canManage && (
-                                <TabsTrigger value="audit" data-demo-tour="engagement-audit-tab" className="relative gap-1.5">
-                                    <ClipboardList className="h-4 w-4" />
-                                    Audit
-                                    <span title="Internal only"><Lock className="h-3 w-3 text-fg-subtle" /></span>
-                                    {auditCount !== undefined && auditCount > 0 && <span className="text-small tabular-nums text-fg-subtle">{auditCount}</span>}
-                                    {pendingTab === 'audit' && <PendingBar />}
-                                </TabsTrigger>
-                            )}
-                            {canViewInternalTabs && (
-                                <TabsTrigger value="members" data-demo-tour="engagement-members-tab" className="relative gap-1.5">
-                                    <Users className="h-4 w-4" />
-                                    Members
-                                    <span title="Internal only"><Lock className="h-3 w-3 text-fg-subtle" /></span>
-                                    {memberCount !== undefined && memberCount > 0 && <span className="text-small tabular-nums text-fg-subtle">{memberCount}</span>}
-                                    {pendingTab === 'members' && <PendingBar />}
-                                </TabsTrigger>
-                            )}
-                            {canViewSettings && (
-                                <TabsTrigger value="settings" data-demo-tour="engagement-settings-tab" className="relative gap-1.5">
-                                    <Settings className="h-4 w-4" />
-                                    Settings
-                                    <span title="Internal only"><Lock className="h-3 w-3 text-fg-subtle" /></span>
-                                    {pendingTab === 'settings' && <PendingBar />}
-                                </TabsTrigger>
-                            )}
-                        </TabsList>
+                        <EngagementTabsList {...tabsConfig} pendingTab={pendingTab} />
                     </div>
                     {/* New Document button slot — EngagementFileList portals into this when Files is active */}
                     {currentTab === 'files' && (

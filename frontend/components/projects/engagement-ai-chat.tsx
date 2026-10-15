@@ -114,7 +114,7 @@ function AnswerActions({
     const [picking, setPicking] = useState<boolean | null>(null)
 
     const iconButton =
-        'inline-flex h-6 w-6 items-center justify-center rounded text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 disabled:opacity-40'
+        'inline-flex h-6 w-6 items-center justify-center rounded text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg-muted disabled:opacity-40'
 
     // Clicking a thumb records the rating immediately and opens its chips. Recording first means a
     // user who ignores the chips has still been counted — the chip is detail, the thumb is the
@@ -125,7 +125,7 @@ function AnswerActions({
     }
 
     return (
-        <div className="mt-1.5 border-t border-gray-200/70 pt-1">
+        <div className="mt-1.5 border-t border-line pt-1">
             <TooltipProvider delayDuration={150}>
                 <div className="flex items-center gap-0.5">
                     {/* Relative time, with the absolute timestamp in its own tooltip. Answers are
@@ -134,13 +134,13 @@ function AnswerActions({
                     <RelativeDateTime
                         date={new Date(at)}
                         className="mr-1.5"
-                        textClassName="text-[10px] text-gray-400"
+                        textClassName="text-caption text-fg-subtle"
                         iconClassName="hidden"
                     />
                     <Tooltip>
                         <TooltipTrigger asChild>
                             <button type="button" onClick={onCopy} className={iconButton} aria-label="Copy answer">
-                                {copied ? <Check className="h-3.5 w-3.5 text-primary" /> : <Copy className="h-3.5 w-3.5" />}
+                                {copied ? <Check className="h-3.5 w-3.5 text-action" /> : <Copy className="h-3.5 w-3.5" />}
                             </button>
                         </TooltipTrigger>
                         <TooltipContent side="top">{copied ? 'Copied' : 'Copy'}</TooltipContent>
@@ -164,7 +164,7 @@ function AnswerActions({
                                 onClick={() => onThumb(true)}
                                 aria-label="Good response"
                                 aria-pressed={rating?.helpful === true}
-                                className={`${iconButton} ${rating?.helpful === true ? 'text-primary' : ''}`}
+                                className={`${iconButton} ${rating?.helpful === true ? 'text-action' : ''}`}
                             >
                                 <ThumbsUp className="h-3.5 w-3.5" />
                             </button>
@@ -200,16 +200,16 @@ function AnswerActions({
                 right answer — multi-select would need a confirm button and cost us ratings. */}
             {rateable && picking !== null && (
                 <div className="mt-1.5 flex flex-wrap items-center gap-1">
-                    <span className="text-[10px] text-gray-500">
+                    <span className="text-caption text-fg-muted">
                         {picking ? 'What was good about it?' : 'What went wrong?'}
                     </span>
                     {reasonsFor(picking).map((r) => {
                         const active = rating?.helpful === picking && rating?.reason === r.value
                         const tone = picking
-                            ? 'hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-800'
+                            ? 'hover:border-action/40 hover:bg-action/10 hover:text-action'
                             : 'hover:border-amber-300 hover:bg-amber-50 hover:text-amber-800'
                         const activeTone = picking
-                            ? 'border-emerald-300 bg-emerald-50 text-emerald-800'
+                            ? 'border-action/40 bg-action/10 text-action'
                             : 'border-amber-300 bg-amber-50 text-amber-800'
                         return (
                             <button
@@ -220,8 +220,8 @@ function AnswerActions({
                                     setPicking(null)
                                 }}
                                 aria-pressed={active}
-                                className={`rounded-full border px-2 py-0.5 text-[10px] transition-colors ${
-                                    active ? activeTone : `border-gray-200 text-gray-600 ${tone}`
+                                className={`rounded-full border px-2 py-0.5 text-caption transition-colors ${
+                                    active ? activeTone : `border-line text-fg-muted ${tone}`
                                 }`}
                             >
                                 {r.label}
@@ -232,7 +232,7 @@ function AnswerActions({
                     <button
                         type="button"
                         onClick={() => setPicking(null)}
-                        className="px-1 text-[10px] text-gray-400 underline transition-colors hover:text-gray-700"
+                        className="px-1 text-caption text-fg-subtle underline transition-colors hover:text-fg-muted"
                     >
                         Skip
                     </button>
@@ -928,14 +928,14 @@ export function EngagementAiChat({
     // question. Show it inert with an explanation instead.
     if (unavailable) {
         return (
-            <div className={`bg-white p-4 ${
-                chrome === 'floating' ? 'rounded-b-lg' : 'border border-[#e5e7eb] rounded shadow-sm'
+            <div className={`bg-surface p-4 ${
+                chrome === 'floating' ? 'rounded-b-card' : 'border border-line rounded-card'
             }`}>
                 <div className="flex items-center gap-2 mb-1.5">
-                    <span className="text-sm font-semibold text-gray-900">Ask</span>
-                    <Brio className="text-sm text-gray-400" />
+                    <span className="text-sm font-semibold text-fg">Ask</span>
+                    <Brio className="text-sm text-fg-subtle" />
                 </div>
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-fg-muted">
                     {ASSISTANT.name} is not available right now. Everything else on this page works as usual.
                 </p>
             </div>
@@ -987,14 +987,14 @@ export function EngagementAiChat({
                                 // The one you are reading, marked. Without it, opening a
                                 // conversation and reopening the pane gives no clue which of ten
                                 // rows is on screen behind it.
-                                ? 'border-primary/40 bg-primary/5 text-primary'
-                                : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-primary/30 hover:bg-primary/5 hover:text-primary'
+                                ? 'border-action/40 bg-action/5 text-action'
+                                : 'border-line bg-surface-subtle text-fg-muted hover:border-action/30 hover:bg-action/5 hover:text-action'
                         }`}
                     >
                         {c.pinned
-                            ? <Pin className="h-3 w-3 shrink-0 text-primary/60" aria-hidden />
-                            : <Clock className="h-3 w-3 shrink-0 text-gray-400" aria-hidden />}
-                        <span className="shrink-0 text-[10px] tabular-nums text-gray-400">
+                            ? <Pin className="h-3 w-3 shrink-0 text-action/60" aria-hidden />
+                            : <Clock className="h-3 w-3 shrink-0 text-fg-subtle" aria-hidden />}
+                        <span className="shrink-0 text-caption tabular-nums text-fg-subtle">
                             {formatRelativeTime(new Date(c.updatedAt))}
                         </span>
                         <span className="truncate">{c.title}</span>
@@ -1002,12 +1002,12 @@ export function EngagementAiChat({
                 </TooltipTrigger>
                 <TooltipContent side="top" className="max-w-xs">
                     {c.title}
-                    <span className="mt-0.5 block text-[10px] opacity-70">
+                    <span className="mt-0.5 block text-caption opacity-70">
                         {c.messages.filter((m) => m.role === 'user').length} question
                         {c.messages.filter((m) => m.role === 'user').length === 1 ? '' : 's'}
                         {' · last active '}{formatDateTimeWithTZ(new Date(c.updatedAt))}
                     </span>
-                    <span className="mt-0.5 block text-[10px] opacity-70">
+                    <span className="mt-0.5 block text-caption opacity-70">
                         Opens this conversation — answers are shown as they were, with their date.
                     </span>
                 </TooltipContent>
@@ -1023,7 +1023,7 @@ export function EngagementAiChat({
                         // Disabled at the cap rather than evicting the oldest pin: silently
                         // dropping something deliberately kept is the failure pinning prevents.
                         disabled={streaming || (!c.pinned && pinsFull)}
-                        className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-gray-300 opacity-0 transition-all hover:bg-primary/10 hover:text-primary focus-visible:opacity-100 group-hover/item:opacity-100 disabled:pointer-events-none disabled:opacity-0"
+                        className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-fg-subtle opacity-0 transition-all hover:bg-action/10 hover:text-action focus-visible:opacity-100 group-hover/item:opacity-100 disabled:pointer-events-none disabled:opacity-0"
                         aria-label={c.pinned ? `Unpin "${c.title}"` : `Pin "${c.title}"`}
                     >
                         {c.pinned ? <PinOff className="h-3 w-3" /> : <Pin className="h-3 w-3" />}
@@ -1048,7 +1048,7 @@ export function EngagementAiChat({
                         if (c.id === activeId) startNewConversation()
                     }}
                     disabled={streaming}
-                    className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-gray-300 opacity-0 transition-all hover:bg-red-50 hover:text-red-600 focus-visible:opacity-100 group-hover/item:opacity-100 disabled:opacity-0"
+                    className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-fg-subtle opacity-0 transition-all hover:bg-red-50 hover:text-red-600 focus-visible:opacity-100 group-hover/item:opacity-100 disabled:opacity-0"
                     aria-label={`Delete "${c.title}"`}
                     title="Delete"
                 >
@@ -1091,17 +1091,17 @@ export function EngagementAiChat({
     }) => (
         <div
             aria-hidden={!open}
-            className={`flex shrink-0 flex-col overflow-hidden bg-white pt-2 transition-[width] duration-200 ease-out ${
+            className={`flex shrink-0 flex-col overflow-hidden bg-surface pt-2 transition-[width] duration-200 ease-out ${
                 open ? 'w-[17rem]' : 'w-0'
             } ${
                 /* Lighter than the rail's border although both are 1px. The rail sits on a
                    tinted background, so its edge is already softened by the fill beside it;
                    this one divides two whites, where the same gray reads as a heavier rule. */
-                dockSide === 'right' ? 'border-r border-gray-100' : 'border-l border-gray-100'
+                dockSide === 'right' ? 'border-r border-line' : 'border-l border-line'
             }`}
         >
             <div className="mb-1.5 flex w-[17rem] shrink-0 items-center gap-2 px-3">
-                <span className="flex-1 text-[10px] font-semibold uppercase tracking-wider text-gray-500">
+                <span className="flex-1 text-caption font-medium text-fg-muted">
                     {title}
                 </span>
                 {action}
@@ -1115,7 +1115,7 @@ export function EngagementAiChat({
                 <button
                     type="button"
                     onClick={() => setRailPane(null)}
-                    className="flex h-5 w-5 items-center justify-center rounded text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700"
+                    className="flex h-5 w-5 items-center justify-center rounded text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg-muted"
                     aria-label={`Collapse ${title.toLowerCase()}`}
                     title="Collapse"
                 >
@@ -1127,7 +1127,7 @@ export function EngagementAiChat({
                     {children}
                 </div>
             </TooltipProvider>
-            <p className="mt-1.5 w-[17rem] shrink-0 px-3 pb-2 text-[10px] text-gray-400">
+            <p className="mt-1.5 w-[17rem] shrink-0 px-3 pb-2 text-caption text-fg-subtle">
                 {footer}
             </p>
         </div>
@@ -1149,7 +1149,7 @@ export function EngagementAiChat({
                 // Clearing only removes the unpinned ones, so there is nothing to do when
                 // every conversation is pinned.
                 disabled={conversations.every((c) => c.pinned)}
-                className="flex h-5 w-5 items-center justify-center rounded text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:pointer-events-none disabled:opacity-30"
+                className="flex h-5 w-5 items-center justify-center rounded text-fg-subtle transition-colors hover:bg-red-50 hover:text-red-600 disabled:pointer-events-none disabled:opacity-30"
                 aria-label="Clear recent conversations. Pinned conversations are kept."
                 title="Clear recents (pins are kept)"
             >
@@ -1160,7 +1160,7 @@ export function EngagementAiChat({
         // age-out — a flat "kept for 30 days" would be wrong about half of what is shown.
         footer: `Unpinned conversations are kept on this browser for ${MAX_AGE_DAYS} days.`,
         children: allConversations.length === 0 ? (
-            <p className="text-[11px] leading-snug text-gray-400">
+            <p className="text-caption leading-snug text-fg-subtle">
                 Conversations you have here will show up in this list.
             </p>
         ) : (
@@ -1175,7 +1175,7 @@ export function EngagementAiChat({
         children: pinnedConversations.length === 0 ? (
             /* Says where pinning happens. Pins are made on a recents row, so an empty pin tab
                with no pointer back is a dead end. */
-            <p className="text-[11px] leading-snug text-gray-400">
+            <p className="text-caption leading-snug text-fg-subtle">
                 No pinned conversations yet. Hover one on the conversations tab and press the pin
                 to keep it here.
             </p>
@@ -1199,8 +1199,8 @@ export function EngagementAiChat({
             <div
                 className={`flex w-10 shrink-0 flex-col items-center gap-1 bg-gray-50/70 pt-2 ${
                     dockSide === 'right'
-                        ? 'border-r border-gray-200 rounded-bl-lg'
-                        : 'border-l border-gray-200 rounded-br-lg'
+                        ? 'border-r border-line rounded-bl-lg'
+                        : 'border-l border-line rounded-br-lg'
                 }`}
             >
                 {/* NEW CHAT, above the stops and separated from them.
@@ -1213,7 +1213,7 @@ export function EngagementAiChat({
                             type="button"
                             onClick={startNewConversation}
                             disabled={streaming || (activeId === null && messages.length === 0)}
-                            className="flex h-8 w-8 items-center justify-center rounded-md text-gray-400 transition-colors hover:bg-gray-200/60 hover:text-gray-700 disabled:pointer-events-none disabled:opacity-30"
+                            className="flex h-8 w-8 items-center justify-center rounded-md text-fg-subtle transition-colors hover:bg-gray-200/60 hover:text-fg-muted disabled:pointer-events-none disabled:opacity-30"
                             aria-label="Start a new conversation"
                         >
                             <SquarePen className="h-4 w-4" />
@@ -1223,7 +1223,7 @@ export function EngagementAiChat({
                         New conversation
                     </TooltipContent>
                 </Tooltip>
-                <span aria-hidden className="my-1 h-px w-5 bg-gray-200" />
+                <span aria-hidden className="my-1 h-px w-5 bg-surface-selected" />
 
                 {/* Two stops. Suggested prompts are deliberately NOT one: they belong above the
                     composer, where the eye already is when deciding what to ask, and a copy in
@@ -1241,8 +1241,8 @@ export function EngagementAiChat({
                                 aria-label={railPane === id ? `Collapse ${label.toLowerCase()}` : label}
                                 className={`relative flex h-8 w-8 items-center justify-center rounded-md transition-colors ${
                                     railPane === id
-                                        ? 'bg-primary/15 text-primary'
-                                        : 'text-gray-400 hover:bg-gray-200/60 hover:text-gray-700'
+                                        ? 'bg-action/15 text-action'
+                                        : 'text-fg-subtle hover:bg-gray-200/60 hover:text-fg-muted'
                                 }`}
                             >
                                 <Icon className="h-4 w-4" />
@@ -1251,7 +1251,7 @@ export function EngagementAiChat({
                                     whether there is anything in there is the part that decides
                                     whether to open it. */}
                                 {count > 0 && railPane !== id && (
-                                    <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-primary/60" aria-hidden />
+                                    <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-action/60" aria-hidden />
                                 )}
                             </button>
                         </TooltipTrigger>
@@ -1290,15 +1290,14 @@ export function EngagementAiChat({
         </>
     )
 
-    // The primary accent and tinted header are deliberate: this panel sits in a column of
-    // uniformly white cards, where it read as one more widget rather than the one thing on the
-    // page that answers questions.
+    // New UI: a plain surface with a hairline header — the Brio mark carries the identity. (The
+    // accent tint it used to wear came from the old card-grid layout.)
     //
     // `relative` on the card anchors the history overlay; `overflow-hidden` then keeps that overlay
     // inside the card, which is what we want — it should never spill over the Action Center below.
     return (
-        <div className={`relative bg-white flex flex-col overflow-hidden ${
-            chrome === 'floating' ? 'min-h-0 flex-1 rounded-b-lg' : 'border border-primary/25 rounded shadow-sm'
+        <div className={`relative bg-surface flex flex-col overflow-hidden ${
+            chrome === 'floating' ? 'min-h-0 flex-1 rounded-b-card' : 'border border-line rounded-card'
         }`}>
             <div
                 // The WHOLE header is the drag target, not a strip above it. A grip icon says
@@ -1308,19 +1307,19 @@ export function EngagementAiChat({
                 // `onPointerDown` on the container rather than a handle: the buttons inside stop
                 // propagation themselves, so a click on collapse never starts a drag.
                 onPointerDown={onStartDrag}
-                className={`border-b border-primary/15 bg-primary/5 px-4 py-3 ${
+                className={`border-b border-line px-4 py-3 transition-colors ${
                     onStartDrag ? 'cursor-grab active:cursor-grabbing' : ''
-                } ${dragging ? 'bg-primary/10' : ''}`}
+                } ${dragging ? 'bg-surface-hover' : 'bg-surface'}`}
             >
             <div className="flex items-start gap-2">
                 <div className="flex min-w-0 flex-1 items-center gap-2">
                     {onStartDrag && (
-                        <GripVertical className="h-4 w-4 shrink-0 text-gray-400" aria-hidden />
+                        <GripVertical className="h-4 w-4 shrink-0 text-fg-subtle" aria-hidden />
                     )}
                     {/* No separate sparkle: the Brio mark already carries one, and two side by
                         side read as two different things rather than one brand. */}
-                    <span className="text-sm font-semibold text-gray-900">Ask</span>
-                    <Brio className="text-sm text-primary" />
+                    <span className="text-sm font-semibold text-fg">Ask</span>
+                    <Brio className="text-sm text-action" />
                 </div>
                 {/* The same words the collapsed pill uses. It said "Files" collapsed and "This
                     engagement" open, which read as two different scopes for one panel.
@@ -1329,7 +1328,7 @@ export function EngagementAiChat({
                     caller's label describes where you are, and after a switch that is no longer
                     what Brio is answering about. This label is the only thing on screen that
                     says which, so it has to be the thing that changed. */}
-                <span className="shrink-0 pt-0.5 text-[10px] uppercase tracking-wider text-primary/70">
+                <span className="shrink-0 pt-0.5 text-caption text-fg-subtle">
                     {scope === surface ? (scopeLabel ?? 'This engagement') : (scope === 'files' ? 'Files' : 'This engagement')}
                 </span>
                 {/* Only once there is a conversation to export, and only on this panel — which
@@ -1343,7 +1342,7 @@ export function EngagementAiChat({
                                     type="button"
                                     onClick={() => void copyTranscript()}
                                     aria-label="Copy conversation"
-                                    className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-primary/70 transition-colors hover:bg-primary/10"
+                                    className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-caption text-action/70 transition-colors hover:bg-action/10"
                                 >
                                     {transcriptCopied
                                         ? <Check className="h-3 w-3" />
@@ -1370,7 +1369,7 @@ export function EngagementAiChat({
                         type="button"
                         onPointerDown={(e) => e.stopPropagation()}
                         onClick={onCollapse}
-                        className="-mr-1 flex h-5 w-5 shrink-0 items-center justify-center rounded text-gray-400 transition-colors hover:bg-white hover:text-gray-700"
+                        className="-mr-1 flex h-5 w-5 shrink-0 items-center justify-center rounded text-fg-subtle transition-colors hover:bg-surface hover:text-fg-muted"
                         aria-label="Collapse the assistant"
                         title="Collapse"
                     >
@@ -1392,7 +1391,7 @@ export function EngagementAiChat({
                 answer the reader is in the middle of. `line-clamp-2` on a reserved two lines keeps
                 the box the same height whichever note is showing and whatever the panel's width,
                 so opening recents moves nothing above the thread. */}
-            <p className="mt-1.5 line-clamp-2 h-[2.1rem] text-[11px] leading-snug text-gray-500">
+            <p className="mt-1.5 line-clamp-2 h-[2.1rem] text-caption leading-snug text-fg-muted">
                 {headerNote}
             </p>
             </div>
@@ -1428,7 +1427,7 @@ export function EngagementAiChat({
 
                    Written as an arbitrary value because Tailwind's `shadow-inner` is a single
                    faint token that disappears entirely against this background. */
-                className={`hover-scrollbar bg-gray-50/60 px-4 py-4 space-y-3 overflow-y-auto overflow-x-hidden shadow-[inset_0_6px_8px_-6px_rgba(16,24,40,0.10),inset_0_-4px_6px_-5px_rgba(16,24,40,0.06)] ${
+                className={`hover-scrollbar bg-surface px-4 py-4 space-y-3 overflow-y-auto overflow-x-hidden ${
                     chrome === 'floating'
                         // Fills the frame's fixed height and scrolls inside it, rather than
                         // setting the panel's height by growing.
@@ -1448,11 +1447,11 @@ export function EngagementAiChat({
                     showing one is not empty. */}
                 {messages.length === 0 && !streaming && !aboveThread && (
                     <div className="flex h-full flex-col items-center justify-center px-6 text-center">
-                        <Sparkles className="h-5 w-5 text-primary/30" aria-hidden />
-                        <p className="mt-2 text-xs font-medium text-gray-600">
+                        <Sparkles className="h-5 w-5 text-action/30" aria-hidden />
+                        <p className="mt-2 text-xs font-medium text-fg-muted">
                             Ask <Brio noIcon /> about this engagement
                         </p>
-                        <p className="mt-1 max-w-[16rem] text-[11px] leading-relaxed text-gray-400">
+                        <p className="mt-1 max-w-[16rem] text-caption leading-relaxed text-fg-subtle">
                             {emptyStateHint}
                         </p>
                     </div>
@@ -1469,9 +1468,9 @@ export function EngagementAiChat({
                     {restoredCount > 0 && i === restoredCount && (
                         // A wave rather than a straight rule — see `.fm-wave-rule` in
                         // globals.css for why, and why it is CSS rather than an inline SVG.
-                        <div className="flex items-center gap-2 py-1 text-gray-300">
+                        <div className="flex items-center gap-2 py-1 text-fg-subtle">
                             <div className="fm-wave-rule flex-1" aria-hidden />
-                            <span className="shrink-0 text-[10px] text-gray-400">
+                            <span className="shrink-0 text-caption text-fg-subtle">
                                 Earlier · figures were current when asked
                             </span>
                             <div className="fm-wave-rule flex-1" aria-hidden />
@@ -1491,16 +1490,15 @@ export function EngagementAiChat({
                                     // produces bubbles of 150-character lines. The percentage keeps
                                     // bubbles off the opposite edge at narrow widths; the rem value
                                     // keeps the line readable at wide ones.
-                                    ? 'bg-gray-200 text-gray-900 text-sm rounded-lg rounded-br-sm px-3 py-2 max-w-[85%] sm:max-w-[38rem]'
+                                    ? 'bg-surface-muted text-fg text-ui rounded-card px-3 py-2 max-w-[85%] sm:max-w-[38rem]'
                                     // The ASSISTANT bubble takes the full width, and the cap moves
                                     // inside it (see ChatMarkdown): its prose is capped at the same
                                     // measure, but a table must be free to use the width the user
                                     // widened the panel for. Capping the bubble would make the
                                     // table scroll inside a 38rem box in a 56rem panel.
-                                    // White on the recessed thread, not gray: the surface is
-                                    // tinted now, and a gray bubble on it has nothing to
-                                    // separate it from the background it sits in.
-                                    : 'bg-white border border-gray-200/70 text-gray-800 text-sm rounded-lg rounded-bl-sm px-3 py-2 w-full whitespace-pre-line break-words leading-relaxed'
+                                    // New UI: no bubble at all — the answer reads as text on the
+                                    // page, as in Notion AI; only the question sits in a tint.
+                                    : 'text-fg text-ui px-0.5 py-1 w-full whitespace-pre-line break-words leading-relaxed'
                             }
                         >
                             {m.content ? (
@@ -1529,17 +1527,17 @@ export function EngagementAiChat({
                                 // there are no steps to narrate — listing them would be inventing
                                 // detail. The timer still earns its place, since it is what tells a
                                 // waiting user whether a slow answer is slow or stuck.
-                                <span className="inline-flex items-center gap-1.5 text-gray-400">
+                                <span className="inline-flex items-center gap-1.5 text-fg-subtle">
                                     <Loader2 className="w-3 h-3 animate-spin" />
                                     <Brio /> is thinking
-                                    <ElapsedTime className="text-[10px] text-gray-400" />
+                                    <ElapsedTime className="text-caption text-fg-subtle" />
                                 </span>
                             )}
                             {/* Says plainly that the answer is incomplete. Without this a stopped
                                 turn is indistinguishable from a finished one, and a half-answer
                                 about an engagement would read as the whole picture. */}
                             {m.stopped && (
-                                <p className="mt-1 text-[11px] italic text-gray-400">
+                                <p className="mt-1 text-caption italic text-fg-subtle">
                                     Stopped — this answer is incomplete.
                                 </p>
                             )}
@@ -1592,7 +1590,7 @@ export function EngagementAiChat({
                         and read as the tail of the last answer rather than a set of actions.
                         Hairline, not a heavy divider: it separates two things that belong to the
                         same panel. */}
-                    <div className="flex min-w-0 flex-wrap items-center gap-1.5 border-t border-gray-100 bg-white px-4 pb-2.5 pt-2.5">
+                    <div className="flex min-w-0 flex-wrap items-center gap-1.5 border-t border-line bg-surface px-4 pb-2.5 pt-2.5">
                         {/* The recents control used to live here, as a count beside the chips.
                             It now lives on the rail: this row is hidden while an answer streams,
                             which left no way to reach history mid-answer, and two buttons for one
@@ -1608,7 +1606,7 @@ export function EngagementAiChat({
                                            `truncate` shortens the TEXT and leaves the icon alone.
                                            On the button it would have truncated the whole row,
                                            clipping the icon off the end of a long chip. */
-                                        className="group/chip inline-flex max-w-full items-center gap-1.5 rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-left text-xs text-gray-600 transition-colors hover:border-primary/30 hover:bg-primary/5 hover:text-primary"
+                                        className="group/chip inline-flex max-w-full items-center gap-1.5 rounded-control border border-line bg-surface px-2.5 py-1 text-left text-small text-fg-muted transition-colors hover:border-line-strong hover:bg-surface-hover hover:text-fg"
                                     >
                                         <span className="truncate">{s}</span>
                                         {/* Says the chip SENDS rather than filling the composer —
@@ -1623,7 +1621,7 @@ export function EngagementAiChat({
                                             signal is only needed at the moment of deciding to
                                             click. `shrink-0` so it survives a truncated label. */}
                                         <Send
-                                            className="h-3 w-3 shrink-0 text-primary/70 opacity-0 transition-opacity group-hover/chip:opacity-100 group-focus-visible/chip:opacity-100"
+                                            className="h-3 w-3 shrink-0 text-action/70 opacity-0 transition-opacity group-hover/chip:opacity-100 group-focus-visible/chip:opacity-100"
                                             aria-hidden
                                         />
                                     </button>
@@ -1640,17 +1638,15 @@ export function EngagementAiChat({
 
             <form
                 onSubmit={(e) => { e.preventDefault(); ask(input) }}
-                // White, and raised. The tint used to live here to separate the composer from
-                // the thread; now the THREAD is the recessed surface, so the same tint on both
-                // would flatten the very distinction the inset shadow draws. White puts the
-                // composer on the frame, with the thread sunk behind it.
-                className="border-t border-gray-100 bg-white px-3 pb-3 pt-2.5"
+                // New UI: thread and composer share one plain surface; the hairline above and the
+                // bordered input box below are enough to say where to type.
+                className="border-t border-line bg-surface px-3 pb-3 pt-2.5"
             >
                 {/* The composer is its own surface — a bordered, rounded box inset from the card —
                     rather than a hairline rule with text beneath it. At the bottom of a long thread
                     a divider alone did not read as somewhere to type. `focus-within` moves the ring
                     to this wrapper so the whole box lights up, not just the textarea inside it. */}
-                <div className="flex items-end gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 shadow-sm transition-colors focus-within:border-primary/40 focus-within:ring-1 focus-within:ring-primary/20">
+                <div className="flex items-end gap-2 rounded-card border border-line-strong bg-surface px-3 py-2 transition-colors focus-within:border-action/60 focus-within:ring-2 focus-within:ring-action/20">
                 {/* A textarea, not an input: a long question scrolled sideways in a single line, so
                     the user could not read back what they had typed. It grows to three rows and
                     scrolls beyond that, which keeps the panel from pushing the Action Center down
@@ -1672,7 +1668,7 @@ export function EngagementAiChat({
                     // maxHeight comes from the same constant the grow effect clamps to; as a
                     // Tailwind class it would be a second number to keep in step.
                     style={{ maxHeight: MAX_COMPOSER_HEIGHT_PX }}
-                    className="hover-scrollbar flex-1 resize-none overflow-y-auto bg-transparent text-sm leading-6 outline-none placeholder:text-gray-400 disabled:opacity-50"
+                    className="hover-scrollbar flex-1 resize-none overflow-y-auto bg-transparent text-ui leading-6 outline-none placeholder:text-fg-subtle disabled:opacity-50"
                 />
                     {/* While streaming, the spinner itself is the stop control: the ring carries the
                         "working" signal and the small square inside it says it can be interrupted.
@@ -1684,7 +1680,7 @@ export function EngagementAiChat({
                         <button
                             type="button"
                             onClick={stop}
-                            className="group mb-0.5 relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-gray-400 transition-colors hover:text-gray-700"
+                            className="group mb-0.5 relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-fg-subtle transition-colors hover:text-fg-muted"
                             aria-label="Stop generating"
                             title="Stop generating"
                         >
@@ -1692,7 +1688,7 @@ export function EngagementAiChat({
                                 a spinner without a second icon stacked over the square. */}
                             <span
                                 aria-hidden
-                                className="absolute inset-0 animate-spin rounded-full border-2 border-gray-200 border-t-primary"
+                                className="absolute inset-0 animate-spin rounded-full border-2 border-line border-t-action"
                             />
                             <Square className="h-2.5 w-2.5 fill-current" />
                         </button>
@@ -1702,7 +1698,7 @@ export function EngagementAiChat({
                         <button
                             type="submit"
                             disabled={!input.trim()}
-                            className="mb-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary text-white transition-colors hover:brightness-105 disabled:bg-gray-100 disabled:text-gray-400"
+                            className="mb-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-control bg-action text-action-fg hover:bg-action-hover transition-colors hover:brightness-105 disabled:bg-surface-muted disabled:text-fg-subtle"
                             aria-label="Send question"
                         >
                             <Send className="h-3.5 w-3.5" />
@@ -1726,14 +1722,14 @@ export function EngagementAiChat({
                             disabled={streaming}
                             aria-expanded={scopePickerOpen}
                             aria-label={`Brio is answering about ${scope}. Change scope.`}
-                            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] transition-colors disabled:opacity-50 ${
+                            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-caption transition-colors disabled:opacity-50 ${
                                 scopePickerOpen
-                                    ? 'bg-gray-100 text-gray-700'
-                                    : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600'
+                                    ? 'bg-surface-muted text-fg-muted'
+                                    : 'text-fg-subtle hover:bg-surface-hover hover:text-fg-muted'
                             }`}
                         >
                             <span>Answering about</span>
-                            <span className="font-medium capitalize text-gray-600">{scope}</span>
+                            <span className="font-medium capitalize text-fg-muted">{scope}</span>
                             <ChevronDown
                                 className={`h-3 w-3 transition-transform ${scopePickerOpen ? 'rotate-180' : ''}`}
                                 aria-hidden
@@ -1746,18 +1742,18 @@ export function EngagementAiChat({
                             <div
                                 role="radiogroup"
                                 aria-label="What Brio answers about"
-                                className="absolute bottom-full z-20 mb-1.5 flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 shadow-lg"
+                                className="absolute bottom-full z-20 mb-1.5 flex items-center gap-2 rounded-card border border-line bg-surface px-3 py-2 shadow-popover"
                             >
                                 <span
-                                    className={`text-[10px] capitalize transition-colors ${
-                                        scope === CHAT_SCOPES[0] ? 'text-gray-700' : 'text-gray-400'
+                                    className={`text-caption capitalize transition-colors ${
+                                        scope === CHAT_SCOPES[0] ? 'text-fg-muted' : 'text-fg-subtle'
                                     }`}
                                 >
                                     {CHAT_SCOPES[0]}
                                 </span>
 
                                 <div className="relative h-3.5 w-20 shrink-0 select-none">
-                                    <div className="absolute inset-x-0 top-1/2 h-3 -translate-y-1/2 rounded-full bg-gray-100" />
+                                    <div className="absolute inset-x-0 top-1/2 h-3 -translate-y-1/2 rounded-full bg-surface-muted" />
 
                                     {/* Ticks say the control is discrete — a bare track reads as
                                         continuous, and a scope is not. */}
@@ -1774,7 +1770,7 @@ export function EngagementAiChat({
                                         arithmetic here. */}
                                     <span
                                         aria-hidden
-                                        className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-gray-300 bg-white shadow-sm transition-[left] duration-200 ease-out"
+                                        className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-line-strong bg-surface shadow-sm transition-[left] duration-200 ease-out"
                                         style={{
                                             left: `${((CHAT_SCOPES.indexOf(scope) + 0.5) / CHAT_SCOPES.length) * 100}%`,
                                         }}
@@ -1790,7 +1786,7 @@ export function EngagementAiChat({
                                             aria-checked={scope === s}
                                             aria-label={`Answer about ${s}`}
                                             onClick={() => { setScope(s); setScopePickerOpen(false) }}
-                                            className="absolute -inset-y-1.5 rounded-full focus-visible:outline focus-visible:outline-1 focus-visible:outline-primary/40"
+                                            className="absolute -inset-y-1.5 rounded-full focus-visible:outline focus-visible:outline-1 focus-visible:outline-action/40"
                                             style={{
                                                 left: `${(i / CHAT_SCOPES.length) * 100}%`,
                                                 width: `${100 / CHAT_SCOPES.length}%`,
@@ -1800,8 +1796,8 @@ export function EngagementAiChat({
                                 </div>
 
                                 <span
-                                    className={`text-[10px] capitalize transition-colors ${
-                                        scope === CHAT_SCOPES[CHAT_SCOPES.length - 1] ? 'text-gray-700' : 'text-gray-400'
+                                    className={`text-caption capitalize transition-colors ${
+                                        scope === CHAT_SCOPES[CHAT_SCOPES.length - 1] ? 'text-fg-muted' : 'text-fg-subtle'
                                     }`}
                                 >
                                     {CHAT_SCOPES[CHAT_SCOPES.length - 1]}

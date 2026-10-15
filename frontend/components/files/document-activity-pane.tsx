@@ -6,6 +6,7 @@ import { DriveFile, DriveRevision } from "@/lib/types"
 import { useAuth } from "@/lib/auth-context"
 import { RelativeDateTime } from "@/components/ui/relative-date-time"
 import { UserAvatarWithTooltip } from "@/components/ui/user-avatar-with-tooltip"
+import { initialsOf } from '@/lib/initials'
 
 interface DocumentActivityPaneProps {
     document: DriveFile
@@ -93,7 +94,7 @@ export function DocumentActivityPane({ document }: DocumentActivityPaneProps) {
                 <div className="flex-1 overflow-y-auto min-h-0 space-y-3 pr-2">
                     {activity.map((rev) => {
                         const displayName = rev.lastModifyingUser?.displayName || 'Unknown'
-                        const initials = displayName.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()
+                        const initials = initialsOf(displayName)
                         return (
                             <div
                                 key={rev.id}

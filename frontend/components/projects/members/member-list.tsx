@@ -30,6 +30,7 @@ import { removeMember, revokeInvitation, updateMemberPersona } from '@/lib/actio
 import { resendInvitation } from '@/lib/actions/invitations'
 import { useToast } from "@/components/ui/toast"
 import { PERSONA_UI_GROUPS, PersonaUiRole, PersonaUiSubRole, SUB_ROLE_LABEL, getPersonaUiGroup, resolvePersonaSlug } from '@/lib/persona-ui-groups'
+import { initialsOf } from '@/lib/initials'
 
 interface MemberListProps {
     members: any[]
@@ -145,9 +146,7 @@ export function MemberList({ members, invitations, personas, onRefresh, canManag
         }
     }
 
-    const getInitials = (name: string) => {
-        return name ? name.substring(0, 2).toUpperCase() : '??'
-    }
+    const getInitials = (name: string) => initialsOf(name)
 
     const formatDate = (date: string | Date | null | undefined) => {
         if (!date) return '-'

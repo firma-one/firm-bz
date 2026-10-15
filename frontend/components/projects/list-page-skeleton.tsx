@@ -1,53 +1,35 @@
 'use client'
 
-import { Skeleton } from '@/components/ui/skeleton'
+import { usePathname } from 'next/navigation'
+import { LoadingAnnouncement, ShimmerBar, ShimmerBlock } from '@/components/ui/shimmer'
+import { EngagementPageLoading } from './engagement-page-loading'
+
+const ENGAGEMENT_PATH = /\/c\/[^/]+\/e\/[^/]+/
 
 /**
- * Shared skeleton for Org, Client & Project list pages.
- * Matches the real layout: breadcrumb, header panel, card grid.
- * Use in loading.tsx so the right pane has consistent layout with no extra white space.
+ * Loading state for the firm, client-list and client routes (their loading.tsx). These boundaries
+ * also catch a navigation INTO an engagement from outside it (Home, a client page, the sidebar), so
+ * engagement URLs get the engagement's own loading state — header and tabs, skeleton body — rather
+ * than a list skeleton. Everything else gets a page heading and table rows, matching the new pages.
  */
 export function ListPageSkeleton() {
+    const pathname = usePathname() ?? ''
+    if (ENGAGEMENT_PATH.test(pathname)) return <EngagementPageLoading />
+
     return (
-        <div className="flex flex-col h-full">
-            {/* Breadcrumb */}
-            <div className="flex items-center gap-2 text-sm mb-2">
-                <Skeleton className="h-6 w-24 rounded-md" />
-                <Skeleton className="h-4 w-4 rounded" />
-                <Skeleton className="h-6 w-32 rounded-md" />
+        <div className="flex h-full flex-col" aria-busy="true">
+            <LoadingAnnouncement label="Loading" />
+            <div className="flex flex-col gap-2 pb-6" aria-hidden>
+                <ShimmerBar className="h-7 w-56" />
+                <ShimmerBar className="w-80 max-w-full" />
             </div>
-
-            {/* Header panel (title, count, view toggle, button) */}
-            <div className="bg-white border border-slate-200 rounded-xl p-5 mb-4 shadow-sm">
-                <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-4">
-                        <Skeleton className="h-6 w-6 rounded" />
-                        <Skeleton className="h-6 w-36" />
-                        <Skeleton className="h-6 w-20 rounded-full" />
-                        <div className="flex items-center bg-slate-100 p-1 rounded-lg border border-slate-200">
-                            <Skeleton className="h-8 w-8 rounded-md" />
-                            <Skeleton className="h-8 w-8 rounded-md" />
-                        </div>
-                    </div>
-                    <div className="ml-auto">
-                        <Skeleton className="h-9 w-32 rounded-md" />
-                    </div>
-                </div>
-            </div>
-
-            {/* Card grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {[1, 2, 3, 4, 5, 6].map((i) => (
-                    <div
-                        key={i}
-                        className="bg-white border border-slate-200 rounded-xl p-5 flex flex-col h-48"
-                    >
-                        <div className="flex items-start justify-between mb-3">
-                            <Skeleton className="h-10 w-10 rounded-lg shrink-0" />
-                        </div>
-                        <Skeleton className="h-4 w-3/4 mb-2" />
-                        <Skeleton className="h-3 w-full mb-2" />
-                        <Skeleton className="h-3 w-28 mt-auto pt-3" />
+            <div className="border-t border-line" aria-hidden>
+                {[0, 1, 2, 3, 4, 5].map((i) => (
+                    <div key={i} className="flex h-9 items-center gap-3 border-b border-line px-1">
+                        <ShimmerBlock className="h-5 w-5" />
+                        <ShimmerBar className="w-[34%]" />
+                        <ShimmerBar className="ml-auto w-16" />
+                        <ShimmerBar className="w-20" />
                     </div>
                 ))}
             </div>

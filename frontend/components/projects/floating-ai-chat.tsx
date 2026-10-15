@@ -524,23 +524,23 @@ export function FloatingAiChat({
                     transformOrigin: side === 'right' ? 'bottom right' : 'bottom left',
                     ...(side === 'right' ? { right: `${GUTTER + rightInset}px` } : { left: `${GUTTER}px` }),
                 }}
-                className={`fixed bottom-6 z-40 flex animate-in fade-in zoom-in-95 items-center gap-2 rounded-full border border-primary/20 bg-white py-2.5 pl-3 pr-4 shadow-lg duration-200 transition-shadow hover:shadow-xl hover:border-primary/40`}
+                className={`fixed bottom-6 z-40 flex animate-in fade-in zoom-in-95 items-center gap-2 rounded-full border border-line bg-surface py-2 pl-3 pr-3.5 shadow-popover duration-200 transition-colors hover:border-line-strong hover:bg-surface-hover`}
                 aria-label="Open the engagement assistant"
             >
                 {/* Labelled rather than icon-only: a bare sparkle is now ambiguous beside the AI
                     credits indicator in the top bar. The Brio mark is the only glyph — a second
                     sparkle beside it reads as two things rather than one brand. */}
-                <span className="text-sm font-medium text-gray-900">
-                    Ask <Brio className="text-sm text-primary" />
-                    {title ? <span className="ml-1 text-gray-400">· {title}</span> : null}
+                <span className="text-sm font-medium text-fg">
+                    Ask <Brio className="text-sm text-action" />
+                    {title ? <span className="ml-1 text-fg-subtle">· {title}</span> : null}
                 </span>
                 {/* Something is still running behind the collapsed pill. Without this the panel
                     looks idle while an answer is arriving, and the user has no reason to reopen
                     it — the work finishes unseen. */}
                 {busy && (
                     <span className="relative flex h-2 w-2 shrink-0" aria-hidden>
-                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-60" />
-                        <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
+                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-action opacity-60" />
+                        <span className="relative inline-flex h-2 w-2 rounded-full bg-action" />
                     </span>
                 )}
                 {busy && <span className="sr-only">Working on your answer</span>}
@@ -624,7 +624,7 @@ export function FloatingAiChat({
                Width is a literal class, not interpolated: Tailwind extracts class names
                statically, so an interpolated `w-[...]` would never be generated. PANEL_WIDTH_REM
                must be kept in step with it. */
-            className={`${!open && !closing ? 'hidden' : 'flex'} fixed bottom-6 z-40 max-h-[calc(100vh-6rem)] ${resizing || resizingWidth ? 'select-none' : ''} max-w-[calc(100vw-3rem)] flex-col overflow-hidden rounded-lg border border-primary/25 bg-white shadow-2xl duration-200 ${
+            className={`${!open && !closing ? 'hidden' : 'flex'} fixed bottom-6 z-40 max-h-[calc(100vh-6rem)] ${resizing || resizingWidth ? 'select-none' : ''} max-w-[calc(100vw-3rem)] flex-col overflow-hidden rounded-card border border-line bg-surface shadow-dialog duration-200 ${
                 closing
                     // pointer-events-none so a fast click cannot land on a control in a panel that
                     // is on its way out.
@@ -652,7 +652,7 @@ export function FloatingAiChat({
                 title="Drag to resize"
                 className={`absolute inset-y-0 z-10 w-1.5 cursor-ew-resize touch-none transition-colors ${
                     side === 'right' ? 'left-0' : 'right-0'
-                } ${resizingWidth ? 'bg-primary/40' : 'hover:bg-primary/25'}`}
+                } ${resizingWidth ? 'bg-action/40' : 'hover:bg-action/25'}`}
             />
 
             {/* Resize grip along the TOP edge, because the panel is anchored at the bottom: the top
@@ -671,7 +671,7 @@ export function FloatingAiChat({
                 // `n-resize`, not `ns-resize`: the panel only grows upward from its default, and a
                 // two-headed cursor would promise a direction that does nothing.
                 className={`absolute inset-x-0 top-0 z-10 h-1.5 cursor-n-resize touch-none transition-colors ${
-                    resizing ? 'bg-primary/40' : 'hover:bg-primary/25'
+                    resizing ? 'bg-action/40' : 'hover:bg-action/25'
                 }`}
             />
 

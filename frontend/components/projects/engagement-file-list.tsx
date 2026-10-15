@@ -7,9 +7,10 @@ import { FilesAgentPanel, type FilesAgentReview } from '@/components/projects/fi
 import type { ChatThreadApi } from '@/components/projects/engagement-ai-chat'
 import { FilesScaffoldPanel, FilesScaffoldTrigger } from '@/components/projects/files-scaffold-panel'
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
+import { LoadingAnnouncement, ShimmerBar, ShimmerBlock } from "@/components/ui/shimmer"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { CoffeeIcon, type CoffeeIconHandle } from "@/components/ui/coffee-icon"
-import { SquarePlus, Upload, FolderUp, X, Folder, File as FileIcon, ArrowUp, ArrowDown, ChevronRight, Search, List as ListIcon, LayoutGrid, Filter, ChevronDown, User, FileText, FileSpreadsheet, Presentation, ListChecks, PenTool, Map as MapIcon, LayoutTemplate, FileCode, AlertCircle, ShieldCheck, Maximize2, Minimize2, CheckCircle2, XCircle, Trash2, Layout, Code, Laptop, RefreshCw, Info, Share2, Layers, Building2, Users, Briefcase, Lock, FolderLock, Inbox, Sparkles, Link2, ExternalLink, MessagesSquare, CircleChevronLeft, Download, MoreVertical, Clock, Copy, FolderInput, Loader2, Pencil, Hash, Type, UserRound, Clock3, Flag, HardDrive } from 'lucide-react'
+import { SquarePlus, Upload, FolderUp, X, Folder, File as FileIcon, ArrowUp, ArrowDown, ChevronRight, Search, List as ListIcon, LayoutGrid, Filter, ChevronDown, User, FileText, FileSpreadsheet, Presentation, ListChecks, PenTool, Map as MapIcon, LayoutTemplate, FileCode, AlertCircle, ShieldCheck, Maximize2, Minimize2, CheckCircle2, XCircle, Trash2, Layout, Code, Laptop, RefreshCw, Info, Share2, Layers, Building2, Users, Briefcase, Lock, FolderLock, Inbox, Sparkles, Link2, ExternalLink, MessagesSquare, CircleChevronLeft, Download, MoreVertical, Clock, Copy, FolderInput, Loader2, Pencil, Hash, Type, UserRound, Clock3, Flag, HardDrive, Plus } from 'lucide-react'
 import Fuse from 'fuse.js'
 import { config } from "@/lib/config"
 import { DocumentIcon } from '@/components/ui/document-icon'
@@ -228,6 +229,30 @@ function CopyMoveSubmitButton({ label, submitting, disabled, onClick }: { label:
         >
             <BusyLabel busy={submitting}>{label}</BusyLabel>
         </Button>
+    )
+}
+
+/** Loading placeholder for the Files table: 36px rows on the table's own grid. */
+function FileTableSkeleton({ rows = 8 }: { rows?: number }) {
+    return (
+        <div aria-busy="true">
+            <LoadingAnnouncement label="Loading files" />
+            {Array.from({ length: rows }).map((_, i) => (
+                <div key={i} className={`grid h-9 items-center gap-4 pl-1 pr-2 ${FILE_TABLE_GRID_COLS_CLASS}`} style={{ opacity: 1 - i * 0.09 }}>
+                    <ShimmerBlock className="h-3.5 w-3.5" />
+                    <ShimmerBar className="w-10" />
+                    <span className="flex min-w-0 items-center gap-2">
+                        <ShimmerBlock />
+                        <ShimmerBar style={{ width: `${38 + ((i * 23) % 40)}%` }} />
+                    </span>
+                    <span className="col-span-2" />
+                    <span className={`items-center ${OWNER_COL_CLASS}`}><ShimmerBar className="w-20" /></span>
+                    <span className={`items-center ${DATE_MODIFIED_COL_CLASS}`}><ShimmerBar className="w-16" /></span>
+                    <span className={`items-center ${DUE_DATE_COL_CLASS}`}><ShimmerBar className="w-12" /></span>
+                    <span className={`items-center ${FILE_SIZE_COL_CLASS}`}><ShimmerBar className="w-8" /></span>
+                </div>
+            ))}
+        </div>
     )
 }
 
@@ -2200,13 +2225,14 @@ const handleRefresh = async () => {
                     (!isAtProjectRoot && !currentFolderIsApprovedDeliverable && (canEdit || (restrictToSharedOnly && currentFolderIsDeliverable))) ? (
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <Button data-demo-tour="engagement-upload-btn" disabled={loading || isLoadingFolders || isUploading || isUploadInitiating} className="h-auto px-4 py-1.5 rounded bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:bg-primary hover:brightness-105 hover:text-white shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all border-0 inline-flex items-center gap-1.5">
-                                    <Upload className="h-3.5 w-3.5" />
-                                    New File / Folder
+                                <Button data-demo-tour="engagement-upload-btn" size="sm" title="New file or folder" disabled={loading || isLoadingFolders || isUploading || isUploadInitiating}>
+                                    <Plus className="h-3.5 w-3.5" />
+                                    New
+                                    <ChevronDown className="h-3.5 w-3.5 opacity-70" />
                                 </Button>
                             </DropdownMenuTrigger>
-                                <DropdownMenuContent align="start" className="w-[280px] py-1 rounded">
-                                    <DropdownMenuItem onClick={() => openCreateDialog('folder')} className="text-xs py-1.5">
+                                <DropdownMenuContent align="start" className="w-[280px]">
+                                    <DropdownMenuItem onClick={() => openCreateDialog('folder')}>
                                         <Folder className="mr-2 h-3.5 w-3.5 text-fg-muted" />
                                         New folder
                                     </DropdownMenuItem>
@@ -2218,7 +2244,7 @@ const handleRefresh = async () => {
                                         tabIndex={0}
                                         onClick={() => setFromComputerExpanded(!fromComputerExpanded)}
                                         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setFromComputerExpanded(!fromComputerExpanded) } }}
-                                        className="flex items-center justify-between px-2 py-1.5 text-xs font-semibold text-fg-muted hover:bg-surface-hover rounded-sm cursor-pointer select-none"
+                                        className="flex cursor-pointer select-none items-center justify-between rounded-control px-2 py-1.5 text-ui font-medium text-fg-muted hover:bg-surface-hover"
                                     >
                                         <span className="flex items-center gap-2">
                                             <Laptop className="h-3.5 w-3.5 text-fg-muted" />
@@ -2230,14 +2256,14 @@ const handleRefresh = async () => {
                                         <div className="overflow-hidden">
                                             <DropdownMenuItem
                                                 onClick={() => fileInputRef.current?.click()}
-                                                className="text-xs py-1.5 pl-8"
+                                                className="pl-8"
                                             >
                                                 <Upload className="mr-2 h-3.5 w-3.5 text-fg-muted" />
                                                 Upload files
                                             </DropdownMenuItem>
                                             <DropdownMenuItem
                                                 onClick={() => setIsFolderUploadModalOpen(true)}
-                                                className="text-xs py-1.5 pl-8"
+                                                className="pl-8"
                                             >
                                                 <FolderUp className="mr-2 h-3.5 w-3.5 text-fg-muted" />
                                                 Upload folder
@@ -2259,7 +2285,7 @@ const handleRefresh = async () => {
                                             tabIndex={0}
                                             onClick={() => setFromDriveExpanded(!fromDriveExpanded)}
                                             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setFromDriveExpanded(!fromDriveExpanded) } }}
-                                            className="flex items-center justify-between px-2 py-1.5 text-xs font-semibold text-fg-muted hover:bg-surface-hover rounded-sm cursor-pointer select-none"
+                                            className="flex cursor-pointer select-none items-center justify-between rounded-control px-2 py-1.5 text-ui font-medium text-fg-muted hover:bg-surface-hover"
                                         >
                                             <span className="flex items-center gap-2">
                                                 <svg className="h-3.5 w-3.5" viewBox="0 0 24 24">
@@ -2274,7 +2300,7 @@ const handleRefresh = async () => {
                                         </div>
                                         {fromDriveExpanded && (
                                             <>
-                                                <DropdownMenuItem onClick={handleGoogleDrivePicker} className="text-xs py-1.5 pl-8">
+                                                <DropdownMenuItem onClick={handleGoogleDrivePicker} className="pl-8">
                                                     <Upload className="mr-2 h-3.5 w-3.5 text-fg-muted" />
                                                     Upload files
                                                 </DropdownMenuItem>
@@ -2296,7 +2322,7 @@ const handleRefresh = async () => {
                                         tabIndex={0}
                                         onClick={() => setNewFileExpanded(!newFileExpanded)}
                                         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setNewFileExpanded(!newFileExpanded) } }}
-                                        className="flex items-center justify-between px-2 py-1.5 text-xs font-semibold text-fg-muted hover:bg-surface-hover rounded-sm cursor-pointer select-none"
+                                        className="flex cursor-pointer select-none items-center justify-between rounded-control px-2 py-1.5 text-ui font-medium text-fg-muted hover:bg-surface-hover"
                                     >
                                         <span className="flex items-center gap-2">
                                             <SquarePlus className="h-3.5 w-3.5 text-fg-muted" />
@@ -2308,53 +2334,53 @@ const handleRefresh = async () => {
                                         <div className="overflow-hidden">
                                         {isOneDriveClient ? (
                                             <>
-                                                <DropdownMenuItem onClick={() => openCreateDialog('word')} className="text-xs py-1.5 pl-8">
+                                                <DropdownMenuItem onClick={() => openCreateDialog('word')} className="pl-8">
                                                     <FileText className="mr-2 h-3.5 w-3.5 text-blue-600" />
                                                     Word Document
                                                 </DropdownMenuItem>
-                                                <DropdownMenuItem onClick={() => openCreateDialog('excel')} className="text-xs py-1.5 pl-8">
+                                                <DropdownMenuItem onClick={() => openCreateDialog('excel')} className="pl-8">
                                                     <FileSpreadsheet className="mr-2 h-3.5 w-3.5 text-green-600" />
                                                     Excel Workbook
                                                 </DropdownMenuItem>
-                                                <DropdownMenuItem onClick={() => openCreateDialog('powerpoint')} className="text-xs py-1.5 pl-8">
+                                                <DropdownMenuItem onClick={() => openCreateDialog('powerpoint')} className="pl-8">
                                                     <Presentation className="mr-2 h-3.5 w-3.5 text-orange-600" />
                                                     PowerPoint Presentation
                                                 </DropdownMenuItem>
                                             </>
                                         ) : (
                                         <>
-                                            <DropdownMenuItem onClick={() => openCreateDialog('doc')} className="text-xs py-1.5 pl-8">
+                                            <DropdownMenuItem onClick={() => openCreateDialog('doc')} className="pl-8">
                                                 <FileText className="mr-2 h-3.5 w-3.5 text-blue-500" />
                                                 Google Doc
                                             </DropdownMenuItem>
-                                            <DropdownMenuItem onClick={() => openCreateDialog('sheet')} className="text-xs py-1.5 pl-8">
+                                            <DropdownMenuItem onClick={() => openCreateDialog('sheet')} className="pl-8">
                                                 <FileSpreadsheet className="mr-2 h-3.5 w-3.5 text-green-500" />
                                                 Google Sheet
                                             </DropdownMenuItem>
-                                            <DropdownMenuItem onClick={() => openCreateDialog('slide')} className="text-xs py-1.5 pl-8">
+                                            <DropdownMenuItem onClick={() => openCreateDialog('slide')} className="pl-8">
                                                 <Presentation className="mr-2 h-3.5 w-3.5 text-yellow-500" />
                                                 Google Slide
                                             </DropdownMenuItem>
-                                            <DropdownMenuItem onClick={() => openCreateDialog('form')} className="text-xs py-1.5 pl-8">
+                                            <DropdownMenuItem onClick={() => openCreateDialog('form')} className="pl-8">
                                                 <ListChecks className="mr-2 h-3.5 w-3.5 text-purple-600" />
                                                 Google Form
                                             </DropdownMenuItem>
                                             <DropdownMenuSub>
-                                                <DropdownMenuSubTrigger className="text-xs py-1.5 pl-8">More</DropdownMenuSubTrigger>
+                                                <DropdownMenuSubTrigger className="pl-8">More</DropdownMenuSubTrigger>
                                                 <DropdownMenuSubContent className="w-[200px] py-1">
-                                                    <DropdownMenuItem onClick={() => openCreateDialog('drawing')} className="text-xs py-1.5">
+                                                    <DropdownMenuItem onClick={() => openCreateDialog('drawing')}>
                                                         <PenTool className="mr-2 h-3.5 w-3.5 text-red-500" />
                                                         Google Drawing
                                                     </DropdownMenuItem>
-                                                    <DropdownMenuItem onClick={() => openCreateDialog('map')} className="text-xs py-1.5">
+                                                    <DropdownMenuItem onClick={() => openCreateDialog('map')}>
                                                         <MapIcon className="mr-2 h-3.5 w-3.5 text-orange-500" />
                                                         Google My Map
                                                     </DropdownMenuItem>
-                                                    <DropdownMenuItem onClick={() => openCreateDialog('site')} className="text-xs py-1.5">
+                                                    <DropdownMenuItem onClick={() => openCreateDialog('site')}>
                                                         <Layout className="mr-2 h-3.5 w-3.5 text-blue-600" />
                                                         Google Site
                                                     </DropdownMenuItem>
-                                                    <DropdownMenuItem onClick={() => openCreateDialog('script')} className="text-xs py-1.5">
+                                                    <DropdownMenuItem onClick={() => openCreateDialog('script')}>
                                                         <Code className="mr-2 h-3.5 w-3.5 text-fg-muted" />
                                                         Google Apps Script
                                                     </DropdownMenuItem>
@@ -2362,7 +2388,7 @@ const handleRefresh = async () => {
                                             </DropdownMenuSub>
                                         </>
                                         )}
-                                        <DropdownMenuItem onClick={() => openCreateDialog('link')} className="text-xs py-1.5 pl-8">
+                                        <DropdownMenuItem onClick={() => openCreateDialog('link')} className="pl-8">
                                             <ExternalLink className="mr-2 h-3.5 w-3.5 text-purple-600" />
                                             External Link
                                         </DropdownMenuItem>
@@ -2829,26 +2855,10 @@ const handleRefresh = async () => {
 
                 {/* File List */}
                 <div className="flex-1 overflow-y-auto custom-scrollbar relative">
-                    {deeplinkResolving ? (
-                        <div className="divide-y divide-line animate-pulse">
-                            {Array.from({ length: 7 }).map((_, i) => (
-                                <div key={i} className="grid items-center px-4 py-2.5" style={{ gridTemplateColumns: '1fr 80px 120px 160px 80px 36px' }}>
-                                    <div className="flex items-center gap-2.5 min-w-0">
-                                        <div className="h-4 w-4 rounded bg-surface-selected flex-shrink-0" />
-                                        <div className={`h-3 rounded bg-surface-selected`} style={{ width: `${40 + (i * 17) % 45}%` }} />
-                                    </div>
-                                    <div className="h-3 w-8 rounded bg-surface-muted" />
-                                    <div className="h-3 w-16 rounded bg-surface-muted" />
-                                    <div className="h-3 w-20 rounded bg-surface-muted" />
-                                    <div className="h-3 w-8 rounded bg-surface-muted" />
-                                    <div className="h-3 w-4 rounded bg-surface-muted" />
-                                </div>
-                            ))}
-                        </div>
-                    ) : loading || isLoadingFolders ? (
-                        <div className="flex h-64 items-center justify-center">
-                            <LoadingSpinner size="md" />
-                        </div>
+                    {deeplinkResolving || loading || isLoadingFolders ? (
+                        // Rows shaped like the table that is coming (same grid as the header and
+                        // FileRow), so nothing jumps when the files arrive.
+                        <FileTableSkeleton />
                     ) : error ? (
                         <div className="flex flex-col items-center justify-center h-64 text-center px-3">
                             <AlertCircle className="h-10 w-10 text-red-500 mb-3" />
