@@ -9,8 +9,9 @@ import { FilesScaffoldPanel, FilesScaffoldTrigger } from '@/components/projects/
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
 import { LoadingAnnouncement, ShimmerBar, ShimmerBlock } from "@/components/ui/shimmer"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
+import { FilterMenuLabel, FilterMenuRow, FilterPill, summarizePicks } from "@/components/ui/filter-pill"
 import { CoffeeIcon, type CoffeeIconHandle } from "@/components/ui/coffee-icon"
-import { SquarePlus, Upload, FolderUp, X, Folder, File as FileIcon, ArrowUp, ArrowDown, ChevronRight, Search, List as ListIcon, LayoutGrid, Filter, ChevronDown, User, FileText, FileSpreadsheet, Presentation, ListChecks, PenTool, Map as MapIcon, LayoutTemplate, FileCode, AlertCircle, ShieldCheck, Maximize2, Minimize2, CheckCircle2, XCircle, Trash2, Layout, Code, Laptop, RefreshCw, Info, Share2, Layers, Building2, Users, Briefcase, Lock, FolderLock, Inbox, Sparkles, Link2, ExternalLink, MessagesSquare, CircleChevronLeft, Download, MoreVertical, Clock, Copy, FolderInput, Loader2, Pencil, Hash, Type, UserRound, Clock3, Flag, HardDrive, Plus } from 'lucide-react'
+import { SquarePlus, Upload, FolderUp, X, Folder, File as FileIcon, ArrowUp, ArrowDown, ChevronRight, Search, List as ListIcon, LayoutGrid, ChevronDown, User, FileText, FileSpreadsheet, Presentation, ListChecks, PenTool, Map as MapIcon, LayoutTemplate, FileCode, AlertCircle, ShieldCheck, Maximize2, Minimize2, CheckCircle2, XCircle, Trash2, Layout, Code, Laptop, RefreshCw, Info, Share2, Layers, Building2, Users, Briefcase, Lock, FolderLock, Inbox, Sparkles, Link2, ExternalLink, MessagesSquare, CircleChevronLeft, Download, MoreVertical, Clock, Copy, FolderInput, Loader2, Pencil, Hash, Type, UserRound, Clock3, Flag, HardDrive, Plus } from 'lucide-react'
 import Fuse from 'fuse.js'
 import { config } from "@/lib/config"
 import { DocumentIcon } from '@/components/ui/document-icon'
@@ -53,8 +54,6 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
     DropdownMenuSeparator,
-    DropdownMenuLabel,
-    DropdownMenuCheckboxItem,
     DropdownMenuSub,
     DropdownMenuSubTrigger,
     DropdownMenuSubContent
@@ -117,6 +116,33 @@ interface EngagementFileListProps {
 }
 
 type SortByOption = 'name' | 'modifiedTime' | 'modifiedTimeByMe' | 'viewedByMeTime'
+
+// Toolbar filter options, in menu order. The labels also name a set filter on its pill.
+const FILE_TYPE_FILTERS: Array<[string, string]> = [
+    ['folder', 'Folders'],
+    ['document', 'Documents'],
+    ['spreadsheet', 'Spreadsheets'],
+    ['presentation', 'Presentations'],
+    ['image', 'Images'],
+    ['other', 'Other'],
+]
+const OWNER_FILTER_LABEL = { me: 'Owned by me', 'not-me': 'Owned by others', 'private-me': 'Private to me' } as const
+const MODIFIED_FILTER_LABEL = { '7d': 'Last 7 days', '30d': 'Last 30 days', year: 'This year' } as const
+const SORT_BY_LABEL: Record<SortByOption, string> = {
+    name: 'Name',
+    modifiedTime: 'Date modified',
+    modifiedTimeByMe: 'Date modified by me',
+    viewedByMeTime: 'Date opened by me',
+}
+
+/** The sort control's icon (three shortening bars), shared by the pill and nothing else. */
+function SortBarsIcon() {
+    return (
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" fill="currentColor" aria-hidden>
+            <path d="M120-240v-80h240v80H120Zm0-200v-80h480v80H120Zm0-200v-80h720v80H120Z" />
+        </svg>
+    )
+}
 type SortConfig = {
     sortBy: SortByOption
     direction: 'asc' | 'desc'
@@ -2403,159 +2429,118 @@ const handleRefresh = async () => {
 
                 {/* Toolbar: Filters + right-side actions */}
                 <div className="flex items-center justify-between gap-4">
-                    {/* Left: Filters */}
-                    <div className="flex items-center gap-2">
+                    {/* Left: Filters — Notion's filter-bar pills and menus, the same parts as Doc
+                        Search (components/ui/filter-pill.tsx). Empty: a quiet outlined pill. Set:
+                        filled in the accent and reading "Type: Folders, Documents", with an x.
+                        Sort always has a value, so it stays neutral. */}
+                    <div className="flex flex-wrap items-center gap-1.5">
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <Button disabled={loading} variant="outline" size="sm" className="h-8 gap-1.5 text-xs bg-white rounded border-line text-fg-muted hover:bg-surface-hover hover:text-fg transition-colors">
-                                    <Filter className="h-3 w-3 opacity-60" />
-                                    Type
-                                    {filterTypes.size > 0 && <span className="ml-0.5 bg-surface-selected text-fg px-1.5 rounded-full text-[10px] font-medium">{filterTypes.size}</span>}
-                                    <ChevronDown className="h-3 w-3 opacity-50" />
-                                </Button>
+                                <FilterPill
+                                    disabled={loading}
+                                    icon={<FileText />}
+                                    label="Type"
+                                    value={filterTypes.size > 0
+                                        ? summarizePicks(FILE_TYPE_FILTERS.filter(([key]) => filterTypes.has(key)).map(([, label]) => label))
+                                        : undefined}
+                                    onClear={() => setFilterTypes(new Set())}
+                                />
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start" className="w-[200px] py-1 text-xs rounded">
-                                <div className="flex items-center justify-between px-2 py-1.5 border-b border-line">
-                                    <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-fg-subtle p-0 font-medium">Type</DropdownMenuLabel>
-                                    <DropdownMenuItem className="text-xs rounded bg-slate-900 text-white hover:bg-slate-800 hover:text-white focus:bg-slate-800 focus:text-white p-1.5 px-2 cursor-pointer">
-                                        Done
-                                    </DropdownMenuItem>
-                                </div>
-                                <DropdownMenuCheckboxItem checked={filterTypes.size === 0 ? true : (filterTypes.size < 5 ? ('indeterminate' as const) : false)} onCheckedChange={() => setFilterTypes(new Set())} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
+                            <DropdownMenuContent align="start" className="w-[220px] p-1">
+                                <FilterMenuLabel>Type</FilterMenuLabel>
+                                <FilterMenuRow multi selected={filterTypes.size === 0} onSelect={() => setFilterTypes(new Set())}>
                                     Any type
-                                </DropdownMenuCheckboxItem>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuCheckboxItem checked={filterTypes.has('folder')} onCheckedChange={() => toggleFilterType('folder')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
-                                    Folders
-                                </DropdownMenuCheckboxItem>
-                                <DropdownMenuCheckboxItem checked={filterTypes.has('document')} onCheckedChange={() => toggleFilterType('document')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
-                                    Documents
-                                </DropdownMenuCheckboxItem>
-                                <DropdownMenuCheckboxItem checked={filterTypes.has('spreadsheet')} onCheckedChange={() => toggleFilterType('spreadsheet')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
-                                    Spreadsheets
-                                </DropdownMenuCheckboxItem>
-                                <DropdownMenuCheckboxItem checked={filterTypes.has('presentation')} onCheckedChange={() => toggleFilterType('presentation')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
-                                    Presentations
-                                </DropdownMenuCheckboxItem>
-                                <DropdownMenuCheckboxItem checked={filterTypes.has('image')} onCheckedChange={() => toggleFilterType('image')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
-                                    Images
-                                </DropdownMenuCheckboxItem>
-                                <DropdownMenuCheckboxItem checked={filterTypes.has('other')} onCheckedChange={() => toggleFilterType('other')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
-                                    Other
-                                </DropdownMenuCheckboxItem>
+                                </FilterMenuRow>
+                                <DropdownMenuSeparator className="mx-0 my-1" />
+                                {FILE_TYPE_FILTERS.map(([key, label]) => (
+                                    <FilterMenuRow key={key} multi selected={filterTypes.has(key)} onSelect={() => toggleFilterType(key)}>
+                                        {label}
+                                    </FilterMenuRow>
+                                ))}
                             </DropdownMenuContent>
                         </DropdownMenu>
 
-                        {/* ... Other Filters (unchanged) ... */}
                         <DropdownMenu open={peopleFilterOpen} onOpenChange={setPeopleFilterOpen}>
                             <DropdownMenuTrigger asChild>
-                                <Button disabled={loading} variant="outline" size="sm" className={cn("h-8 gap-1.5 text-xs bg-white rounded border-line text-fg-muted hover:bg-surface-hover hover:text-fg transition-colors", filterOwner !== 'any' && "border-slate-400 ring-1 ring-slate-300")}>
-                                    <Filter className="h-3 w-3 opacity-60" />
-                                    People
-                                    {filterOwner !== 'any' && <span className="ml-0.5 bg-surface-selected text-fg px-1.5 rounded-full text-[10px] font-medium">1</span>}
-                                    <ChevronDown className="h-3 w-3 opacity-50" />
-                                </Button>
+                                <FilterPill
+                                    disabled={loading}
+                                    icon={<User />}
+                                    label="People"
+                                    value={filterOwner !== 'any' ? OWNER_FILTER_LABEL[filterOwner] : undefined}
+                                    onClear={() => setFilterOwner('any')}
+                                />
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start" className="w-[200px] py-1 text-xs rounded">
-                                <div className="flex items-center justify-between px-2 py-1.5 border-b border-line">
-                                    <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-fg-subtle p-0 font-medium">People</DropdownMenuLabel>
-                                    <DropdownMenuItem onSelect={() => setPeopleFilterOpen(false)} className="text-xs rounded bg-slate-900 text-white hover:bg-slate-800 hover:text-white focus:bg-slate-800 focus:text-white p-1.5 px-2 cursor-pointer">
-                                        Done
-                                    </DropdownMenuItem>
-                                </div>
-                                <DropdownMenuCheckboxItem checked={filterOwner === 'any'} onCheckedChange={() => setFilterOwner('any')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
-                                    <User className="h-3.5 w-3.5 mr-2" />
+                            <DropdownMenuContent align="start" className="w-[220px] p-1">
+                                <FilterMenuLabel>People</FilterMenuLabel>
+                                <FilterMenuRow selected={filterOwner === 'any'} onSelect={() => setFilterOwner('any')}>
                                     Anyone
-                                </DropdownMenuCheckboxItem>
-                                <DropdownMenuSeparator />
-                                <div className="px-2 pt-1.5 pb-0.5">
-                                    <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-fg-subtle p-0 font-medium">Owner</DropdownMenuLabel>
-                                </div>
-                                <DropdownMenuCheckboxItem checked={filterOwner === 'me'} onCheckedChange={() => setFilterOwner(filterOwner === 'me' ? 'any' : 'me')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
-                                    <User className="h-3.5 w-3.5 mr-2" />
-                                    Owned by me
-                                </DropdownMenuCheckboxItem>
-                                <DropdownMenuCheckboxItem checked={filterOwner === 'not-me'} onCheckedChange={() => setFilterOwner(filterOwner === 'not-me' ? 'any' : 'not-me')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
-                                    <User className="h-3.5 w-3.5 mr-2" />
-                                    Owned by others
-                                </DropdownMenuCheckboxItem>
-                                <DropdownMenuCheckboxItem checked={filterOwner === 'private-me'} onCheckedChange={() => setFilterOwner(filterOwner === 'private-me' ? 'any' : 'private-me')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
-                                    <User className="h-3.5 w-3.5 mr-2" />
-                                    Private to me
-                                </DropdownMenuCheckboxItem>
+                                </FilterMenuRow>
+                                <DropdownMenuSeparator className="mx-0 my-1" />
+                                {(Object.keys(OWNER_FILTER_LABEL) as Array<keyof typeof OWNER_FILTER_LABEL>).map((key) => (
+                                    <FilterMenuRow key={key} selected={filterOwner === key} onSelect={() => setFilterOwner(key)}>
+                                        {OWNER_FILTER_LABEL[key]}
+                                    </FilterMenuRow>
+                                ))}
                             </DropdownMenuContent>
                         </DropdownMenu>
 
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <Button disabled={loading} variant="outline" size="sm" className={cn("h-8 gap-1.5 text-xs bg-white rounded border-line text-fg-muted hover:bg-surface-hover hover:text-fg transition-colors", filterModified !== 'any' && "border-slate-400 ring-1 ring-slate-300")}>
-                                    <Filter className="h-3 w-3 opacity-60" />
-                                    Modified
-                                    {filterModified !== 'any' && <span className="ml-0.5 bg-surface-selected text-fg px-1.5 rounded-full text-[10px] font-medium">1</span>}
-                                    <ChevronDown className="h-3 w-3 opacity-50" />
-                                </Button>
+                                <FilterPill
+                                    disabled={loading}
+                                    icon={<Clock />}
+                                    label="Modified"
+                                    value={filterModified !== 'any' ? MODIFIED_FILTER_LABEL[filterModified] : undefined}
+                                    onClear={() => setFilterModified('any')}
+                                />
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start" className="w-[180px] py-1 text-xs rounded">
-                                <div className="flex items-center justify-between px-2 py-1.5 border-b border-line">
-                                    <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-fg-subtle p-0 font-medium">Modified</DropdownMenuLabel>
-                                    <DropdownMenuItem className="text-xs rounded bg-slate-900 text-white hover:bg-slate-800 hover:text-white focus:bg-slate-800 focus:text-white p-1.5 px-2 cursor-pointer">
-                                        Done
-                                    </DropdownMenuItem>
-                                </div>
-                                <DropdownMenuCheckboxItem checked={filterModified === 'any'} onCheckedChange={() => setFilterModified('any')} className="text-xs py-1.5 pl-8">
+                            <DropdownMenuContent align="start" className="w-[200px] p-1">
+                                <FilterMenuLabel>Modified</FilterMenuLabel>
+                                <FilterMenuRow selected={filterModified === 'any'} onSelect={() => setFilterModified('any')}>
                                     Any time
-                                </DropdownMenuCheckboxItem>
-                                <DropdownMenuCheckboxItem checked={filterModified === '7d'} onCheckedChange={() => setFilterModified('7d')} className="text-xs py-1.5 pl-8">
-                                    Last 7 days
-                                </DropdownMenuCheckboxItem>
-                                <DropdownMenuCheckboxItem checked={filterModified === '30d'} onCheckedChange={() => setFilterModified('30d')} className="text-xs py-1.5 pl-8">
-                                    Last 30 days
-                                </DropdownMenuCheckboxItem>
-                                <DropdownMenuCheckboxItem checked={filterModified === 'year'} onCheckedChange={() => setFilterModified('year')} className="text-xs py-1.5 pl-8">
-                                    This year
-                                </DropdownMenuCheckboxItem>
+                                </FilterMenuRow>
+                                <DropdownMenuSeparator className="mx-0 my-1" />
+                                {(Object.keys(MODIFIED_FILTER_LABEL) as Array<keyof typeof MODIFIED_FILTER_LABEL>).map((key) => (
+                                    <FilterMenuRow key={key} selected={filterModified === key} onSelect={() => setFilterModified(key)}>
+                                        {MODIFIED_FILTER_LABEL[key]}
+                                    </FilterMenuRow>
+                                ))}
                             </DropdownMenuContent>
                         </DropdownMenu>
 
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <Button disabled={loading} variant="outline" size="sm" className="h-8 gap-1.5 text-xs bg-white rounded border-line text-fg-muted hover:bg-surface-hover hover:text-fg transition-colors">
-                                    <svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24" fill="currentColor" className="h-3.5 w-3.5">
-                                        <path d="M120-240v-80h240v80H120Zm0-200v-80h480v80H120Zm0-200v-80h720v80H120Z" />
-                                    </svg>
-                                    Sort
-                                </Button>
+                                <FilterPill
+                                    disabled={loading}
+                                    neutral
+                                    icon={<SortBarsIcon />}
+                                    label="Sort"
+                                    value={SORT_BY_LABEL[sortConfig.sortBy]}
+                                />
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start" className="w-[220px] py-1 text-xs rounded">
-                                <DropdownMenuLabel className="text-xs uppercase tracking-wider text-fg-subtle">Sort by</DropdownMenuLabel>
-                                <DropdownMenuCheckboxItem className="text-xs" checked={sortConfig.sortBy === 'name'} onCheckedChange={() => setSortBy('name')}>
-                                    Name
-                                </DropdownMenuCheckboxItem>
-                                <DropdownMenuCheckboxItem className="text-xs" checked={sortConfig.sortBy === 'modifiedTime'} onCheckedChange={() => setSortBy('modifiedTime')}>
-                                    Date modified
-                                </DropdownMenuCheckboxItem>
-                                <DropdownMenuCheckboxItem className="text-xs" checked={sortConfig.sortBy === 'modifiedTimeByMe'} onCheckedChange={() => setSortBy('modifiedTimeByMe')}>
-                                    Date modified by me
-                                </DropdownMenuCheckboxItem>
-                                <DropdownMenuCheckboxItem className="text-xs" checked={sortConfig.sortBy === 'viewedByMeTime'} onCheckedChange={() => setSortBy('viewedByMeTime')}>
-                                    Date opened by me
-                                </DropdownMenuCheckboxItem>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuLabel className="text-xs uppercase tracking-wider text-fg-subtle">Sort direction</DropdownMenuLabel>
-                                <DropdownMenuCheckboxItem className="text-xs" checked={sortConfig.direction === 'asc'} onCheckedChange={() => setSortDirection('asc')}>
+                            <DropdownMenuContent align="start" className="w-[220px] p-1">
+                                <FilterMenuLabel>Sort by</FilterMenuLabel>
+                                {(Object.keys(SORT_BY_LABEL) as SortByOption[]).map((key) => (
+                                    <FilterMenuRow key={key} selected={sortConfig.sortBy === key} onSelect={() => setSortBy(key)}>
+                                        {SORT_BY_LABEL[key]}
+                                    </FilterMenuRow>
+                                ))}
+                                <DropdownMenuSeparator className="mx-0 my-1" />
+                                <FilterMenuLabel>Direction</FilterMenuLabel>
+                                <FilterMenuRow selected={sortConfig.direction === 'asc'} onSelect={() => setSortDirection('asc')}>
                                     A to Z
-                                </DropdownMenuCheckboxItem>
-                                <DropdownMenuCheckboxItem className="text-xs" checked={sortConfig.direction === 'desc'} onCheckedChange={() => setSortDirection('desc')}>
+                                </FilterMenuRow>
+                                <FilterMenuRow selected={sortConfig.direction === 'desc'} onSelect={() => setSortDirection('desc')}>
                                     Z to A
-                                </DropdownMenuCheckboxItem>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuLabel className="text-xs uppercase tracking-wider text-fg-subtle">Folders</DropdownMenuLabel>
-                                <DropdownMenuCheckboxItem className="text-xs" checked={sortConfig.foldersFirst} onCheckedChange={(c) => c === true && setFoldersFirst(true)}>
+                                </FilterMenuRow>
+                                <DropdownMenuSeparator className="mx-0 my-1" />
+                                <FilterMenuLabel>Folders</FilterMenuLabel>
+                                <FilterMenuRow selected={sortConfig.foldersFirst} onSelect={() => setFoldersFirst(true)}>
                                     On top
-                                </DropdownMenuCheckboxItem>
-                                <DropdownMenuCheckboxItem className="text-xs" checked={!sortConfig.foldersFirst} onCheckedChange={(c) => c === true && setFoldersFirst(false)}>
+                                </FilterMenuRow>
+                                <FilterMenuRow selected={!sortConfig.foldersFirst} onSelect={() => setFoldersFirst(false)}>
                                     Mixed with files
-                                </DropdownMenuCheckboxItem>
+                                </FilterMenuRow>
                             </DropdownMenuContent>
                         </DropdownMenu>
 
@@ -2567,9 +2552,9 @@ const handleRefresh = async () => {
                                     setFilterOwner('any')
                                     setFilterModified('any')
                                 }}
-                                className="h-8 px-2.5 text-xs rounded border border-line bg-white text-fg-muted hover:bg-surface-hover hover:text-fg transition-colors"
+                                className="ml-0.5 h-7 rounded-full px-2 text-small text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg"
                             >
-                                Clear all
+                                Clear
                             </button>
                         )}
                     </div>

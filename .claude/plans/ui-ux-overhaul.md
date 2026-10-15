@@ -1073,6 +1073,16 @@ on it, so the rows still add up.
 - **Ask can't resurface:** `mode` is forced to Filters while `ASK_MODE_ENABLED` is off, so stale
   state (fast refresh, an old tab) can't bring back the Ask prompt.
 
+**Engagement Files filters match Doc Search (2026-10-15):**
+- **Shared parts:** the pill, menu label, menu row and menu search box moved to
+  `components/ui/filter-pill.tsx` (`FilterPill`, `FilterMenuLabel`, `FilterMenuRow`,
+  `FilterMenuSearch`, `summarizePicks`). Doc Search and the Files toolbar both use them.
+- **Files toolbar:** Type (multi-select, checkbox rows), People and Modified (single, check on the
+  chosen value) and Sort are pills. Each menu leads with "Any …" and has no "Done" button.
+- **Sort** is a neutral pill reading "Sort: Name", since it always has a value. Its menu has
+  sections for Sort by, Direction and Folders.
+- **"Clear all"** became a plain "Clear" text button.
+
 **Next:** Phase 7 sign-off: visual review of everything above in a signed-in browser, then
 cleanup (delete the v1 shell, the `setUiShell` action and `uiPrefs.shell`, `DueSoonSection`, the
 old Bookmarks table and personal Recent/Reminders/Notifications pages, and the unused onboarding

@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { Search, Folder, Sparkles, X, Check, Building2, Briefcase, Package, Hash, FileText, ArrowUpRight, ArrowRight, RefreshCw, ChevronDown, History, BrushCleaning, CalendarClock, Info, ChevronRight } from 'lucide-react'
+import { Search, Folder, Sparkles, X, Building2, Briefcase, Package, Hash, FileText, ArrowUpRight, ArrowRight, RefreshCw, History, BrushCleaning, CalendarClock, Info, ChevronRight } from 'lucide-react'
 import { DocumentIcon } from '@/components/ui/document-icon'
 import { Button } from '@/components/ui/button'
 import {
@@ -23,6 +23,7 @@ import { EmptyPanel } from '@/components/ui/empty-panel'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { Tag } from '@/components/ui/tag'
 import { Hint } from '@/components/ui/tooltip'
+import { FilterMenuLabel, FilterMenuRow, FilterMenuSearch, FilterPill, summarizePicks } from '@/components/ui/filter-pill'
 import { RelativeDateTime } from '@/components/ui/relative-date-time'
 import { resolvePeriod } from '@/lib/search/period'
 import { fetchWithTimeout, AI_TIMEOUT_MS } from '@/lib/ai/fetch-timeout'
@@ -169,67 +170,6 @@ const TIME_PRESET_LABEL: Record<RelativeTimePreset, string> = {
 /** Long lists (clients, engagements, deliverables) get a search box in their menu past this. */
 const MENU_SEARCH_THRESHOLD = 7
 
-/**
- * The search box at the top of a long filter menu. Radix focuses the menu itself when it opens, so
- * this takes the focus back on the next frame: typing filters the list straight away.
- */
-function MenuSearchInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
-  const ref = useRef<HTMLInputElement>(null)
-  useEffect(() => {
-    const id = requestAnimationFrame(() => ref.current?.focus())
-    return () => cancelAnimationFrame(id)
-  }, [])
-  return (
-    <input
-      ref={ref}
-      {...props}
-      className="h-7 w-full rounded-control border border-line bg-surface-subtle px-2 text-small text-fg placeholder:text-fg-subtle focus:border-line-strong focus:bg-surface focus:outline-none"
-    />
-  )
-}
-
-/** One row in a filter menu, Notion-style: compact, with a check on the chosen value. */
-function FilterMenuRow({
-  selected,
-  multi = false,
-  onSelect,
-  children,
-}: {
-  selected: boolean
-  /**
-   * Multi-select (Type): a checkbox leads the row and the menu stays open, so several values can
-   * be ticked. Single-select rows show a check on the chosen value and close the menu.
-   */
-  multi?: boolean
-  onSelect: () => void
-  children: React.ReactNode
-}) {
-  return (
-    <DropdownMenuItem
-      onSelect={(e) => {
-        if (multi) e.preventDefault()
-        onSelect()
-      }}
-      role={multi ? 'menuitemcheckbox' : undefined}
-      aria-checked={multi ? selected : undefined}
-      className={cn('h-8 cursor-pointer gap-2 px-2 py-0', !multi && selected && 'font-medium')}
-    >
-      {multi && (
-        <span
-          aria-hidden
-          className={cn(
-            'flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[3px] border',
-            selected ? 'border-action bg-action text-action-fg' : 'border-line-strong'
-          )}
-        >
-          {selected && <Check className="h-2.5 w-2.5" strokeWidth={3} />}
-        </span>
-      )}
-      <span className="min-w-0 flex-1 truncate">{children}</span>
-      {!multi && selected && <Check className="h-3.5 w-3.5 shrink-0 text-fg-muted" aria-hidden />}
-    </DropdownMenuItem>
-  )
-}
 
 function resolveRelativeTimeRange(preset: RelativeTimePreset, now: Date = new Date()): { start: Date; end: Date } {
   const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0)
@@ -617,9 +557,7 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
       return [...without, {
         stage: 'type' as FilterStage,
         id: next.join(','),
-        name: next.length <= 2
-          ? next.map((t) => FILE_TYPE_LABEL[t]).join(', ')
-          : `${FILE_TYPE_LABEL[next[0]]} +${next.length - 1}`,
+        name: summarizePicks(next.map((t) => FILE_TYPE_LABEL[t])),
       }]
     })
     setInferredStages((prev) => prev.filter((s) => s !== 'type'))
@@ -1056,44 +994,14 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                   const pill = (
                     <DropdownMenu key={stage} onOpenChange={(open) => { if (open) setMenuQuery('') }}>
                       <DropdownMenuTrigger asChild>
-                        <button
-                          type="button"
+                        <FilterPill
                           disabled={Boolean(disabledReason)}
-                          className={cn(
-                            'inline-flex h-7 max-w-[18rem] items-center gap-1.5 rounded-full border px-2.5 text-small transition-colors outline-none focus-visible:ring-2 focus-visible:ring-action/30',
-                            'disabled:pointer-events-none disabled:opacity-40',
-                            chip
-                              ? 'border-action/30 bg-action/[0.08] text-action hover:bg-action/[0.14]'
-                              : 'border-line text-fg-muted hover:bg-surface-hover hover:text-fg',
-                            isRelaxed && 'border-dashed border-line-strong bg-transparent text-fg-muted hover:bg-surface-hover',
-                          )}
-                        >
-                          {isInferred
-                            ? <Sparkles className="h-3.5 w-3.5 shrink-0" />
-                            : <Icon className={cn('h-3.5 w-3.5 shrink-0', !chip && 'text-fg-subtle')} />}
-                          {chip ? (
-                            <span className="flex min-w-0 items-baseline gap-1">
-                              <span className="shrink-0 opacity-75">{STAGE_LABEL[stage]}:</span>
-                              <span className={cn('truncate font-medium', isRelaxed && 'line-through')}>{chip.name}</span>
-                            </span>
-                          ) : (
-                            <span>{STAGE_LABEL[stage]}</span>
-                          )}
-                          {isRelaxed && <span className="shrink-0 text-caption">not applied</span>}
-                          {chip ? (
-                            <span
-                              role="button"
-                              tabIndex={-1}
-                              aria-label={`Clear ${STAGE_LABEL[stage]} filter`}
-                              onClick={(e) => { e.preventDefault(); e.stopPropagation(); removeChip(stage) }}
-                              className="-mr-1 flex h-4 w-4 shrink-0 items-center justify-center rounded-full hover:bg-action/15"
-                            >
-                              <X className="h-3 w-3" />
-                            </span>
-                          ) : (
-                            <ChevronDown className="h-3 w-3 shrink-0 text-fg-subtle" />
-                          )}
-                        </button>
+                          icon={isInferred ? <Sparkles /> : <Icon />}
+                          label={STAGE_LABEL[stage]}
+                          value={chip?.name}
+                          onClear={() => removeChip(stage)}
+                          relaxed={isRelaxed}
+                        />
                       </DropdownMenuTrigger>
                       {/* Notion's filter menu: the property name, a search box when the list is
                           long, then compact rows with a check on the chosen value. "Any …" leads
@@ -1105,21 +1013,14 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                           const shown = searchable && q ? options.filter((o) => o.name.toLowerCase().includes(q)) : options
                           return (
                             <>
-                              <p className="px-2 pb-1 pt-1.5 text-caption text-fg-subtle">{STAGE_LABEL[stage]}</p>
+                              <FilterMenuLabel>{STAGE_LABEL[stage]}</FilterMenuLabel>
                               {searchable && (
-                                <div className="px-1 pb-1">
-                                  <MenuSearchInput
-                                    value={menuQuery}
-                                    onChange={(e) => setMenuQuery(e.target.value)}
-                                    // Typing belongs to the box, not the menu's type-to-select;
-                                    // arrows and Escape still reach the menu.
-                                    onKeyDown={(e) => {
-                                      if (e.key.length === 1 || e.key === 'Backspace' || e.key === 'Delete') e.stopPropagation()
-                                    }}
-                                    placeholder={`Search ${STAGE_LABEL[stage].toLowerCase()}s…`}
-                                    aria-label={`Search ${STAGE_LABEL[stage].toLowerCase()}s`}
-                                  />
-                                </div>
+                                <FilterMenuSearch
+                                  value={menuQuery}
+                                  onChange={(e) => setMenuQuery(e.target.value)}
+                                  placeholder={`Search ${STAGE_LABEL[stage].toLowerCase()}s…`}
+                                  aria-label={`Search ${STAGE_LABEL[stage].toLowerCase()}s`}
+                                />
                               )}
                               <div className="max-h-[280px] overflow-y-auto overflow-x-hidden">
                                 {stage === 'type' ? (
