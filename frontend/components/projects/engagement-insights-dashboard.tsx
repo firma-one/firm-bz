@@ -2139,7 +2139,7 @@ function FolderHealthBody({ storageHealth, folderHealth, hiddenRings = [] }: {
             <div className="relative">
                 <div
                     ref={gridRef}
-                    className="grid grid-cols-3 gap-8 overflow-hidden transition-[max-height] duration-700 ease-[cubic-bezier(0.65,0,0.35,1)]"
+                    className="grid grid-cols-3 gap-8 overflow-hidden transition-[max-height] duration-700 [transition-timing-function:cubic-bezier(0.65,0,0.35,1)]"
                     style={{ maxHeight: !expanded && hasMoreRows ? 220 : (fullHeight ?? 1200) }}
                 >
                     {/* Score ring — cell 1 */}
