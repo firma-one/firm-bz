@@ -116,14 +116,11 @@ export function buildSnapshot(data: FirmInsightsResponse): string {
         )
     }
 
-    if (data.urgentReminders?.length) {
-        lines.push(
-            `${data.urgentReminders.length} urgent reminder(s): ` +
-            data.urgentReminders.slice(0, 3)
-                .map((r) => `${r.action} on ${r.entityName}${r.note ? ` (${r.note})` : ''}`)
-                .join('; ') + '.'
-        )
-    }
+    // Deliberately omitted: urgentReminders / upcomingReminders.
+    //
+    // Reminders are personal — they come from the user who triggered generation, notes included —
+    // but the brief is cached firm-wide in Firm.settings.aiBrief and served to every admin. Feeding
+    // them in would show one admin's private reminders to the others for the next hour.
 
     if (data.pendingInvitations?.length) {
         lines.push(`${data.pendingInvitations.length} invitation(s) still pending acceptance.`)

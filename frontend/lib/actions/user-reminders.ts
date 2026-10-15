@@ -7,6 +7,11 @@ import { safeInngestSend } from '@/lib/inngest/client'
 import { getFirmReminderConfig } from '@/lib/actions/firms'
 import { logger } from '@/lib/logger'
 import { resolveEntity } from '@/lib/reminders/entity-registry'
+import {
+    loadReminderItems as loadItems,
+    saveReminderItems as saveItems,
+    withReminderLock,
+} from '@/lib/reminders/reminder-store'
 
 // ─── Stored shape ────────────────────────────────────────────────────────────
 
@@ -84,54 +89,8 @@ function computeLabel(delta: number): { label: string; labelStyle: ReminderWithC
     }
 }
 
-async function loadItems(userId: string): Promise<ReminderItem[]> {
-    const p = await prisma.userPersonalization.findUnique({
-        where: { userId },
-        select: { reminders: true },
-    })
-    return Array.isArray(p?.reminders) ? (p!.reminders as ReminderItem[]) : []
-}
-
-async function saveItems(userId: string, items: ReminderItem[]): Promise<void> {
-    await prisma.userPersonalization.upsert({
-        where: { userId },
-        create: { userId, reminders: items as any },
-        update: { reminders: items as any },
-    })
-}
-
-/**
- * Serialises mutations of one user's reminders array within this process.
- *
- * The array lives in a single JSON column, so load → modify → save is a read-modify-write.
- * updateProject fires up to three upserts for one save (due / kickoff / follow-up), and
- * concurrent runs each read the same starting array and write back their own copy —
- * last write wins, and a reminder silently disappears. Its scheduled Inngest job then
- * wakes, cannot find the id, and returns skipped:'done', so no email and no push.
- *
- * Per-user chaining rather than a global lock: two different users never contend.
- * In-process only, which is enough for the concurrency that actually caused this (one
- * request fanning out); withReminderLock also re-reads inside the lock so each mutation
- * sees the previous one's writes.
- */
-const reminderLocks = new Map<string, Promise<unknown>>()
-
-async function withReminderLock<T>(userId: string, fn: () => Promise<T>): Promise<T> {
-    const previous = reminderLocks.get(userId) ?? Promise.resolve()
-    const run = previous.then(fn, fn)
-    // Keep the chain alive even if this link rejects, and drop it once it is the tail.
-    reminderLocks.set(userId, run.catch(() => undefined))
-    try {
-        return await run
-    } finally {
-        if (reminderLocks.get(userId) === run || reminderLocks.get(userId)) {
-            const current = reminderLocks.get(userId)
-            void Promise.resolve(current).then(() => {
-                if (reminderLocks.get(userId) === current) reminderLocks.delete(userId)
-            })
-        }
-    }
-}
+// loadItems / saveItems / withReminderLock live in lib/reminders/reminder-store.ts so route
+// handlers that write other users' reminders share the same per-user lock.
 
 // ─── Public server actions ───────────────────────────────────────────────────
 

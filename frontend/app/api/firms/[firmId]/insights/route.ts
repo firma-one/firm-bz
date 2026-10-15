@@ -444,8 +444,11 @@ export async function GET(
       if (s in engagementStatusBreakdown) engagementStatusBreakdown[s] = row._count._all
     }
 
-    // Split reminders by urgency (filter out hidden)
-    const visibleReminders = reminders.filter((r) => !r.hiddenAt)
+    // Split reminders by urgency (filter out hidden). getUserReminders() is the user's whole
+    // cross-firm list, so keep only reminders whose entity belongs to this firm — otherwise firm
+    // A's Action Center shows firm B's work. A reminder whose entity is gone has no firmId and
+    // stays in the user's own reminders panel only.
+    const visibleReminders = reminders.filter((r) => !r.hiddenAt && r.firmId === firmId)
     const urgentReminders = visibleReminders.filter((r) =>
       r.labelStyle === 'red' || r.labelStyle === 'orange'
     )

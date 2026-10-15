@@ -7,6 +7,13 @@ import { redirect } from 'next/navigation'
 import { parseSettingsFromDb, type ActivityStatus } from '@/lib/sharing-settings'
 import { getReminderKeysForUser } from '@/lib/actions/user-reminders'
 import { engagementPath } from '@/lib/navigation/firm-paths'
+import { isExternalEngagementRole } from '@/lib/engagement-access'
+import {
+  getSharedAndAncestorIdsForPersona,
+  isFolderUnderSharedFolderDB,
+  type SharedOnlyPersonaSlug,
+} from '@/lib/engagement-sharing-ids'
+import { externalCanSeeDocumentDueDate } from '@/lib/calendar-visibility'
 
 export type CalendarEngagement = {
   id: string
@@ -67,6 +74,8 @@ const EMPTY_CALENDAR_DATA: CalendarData = { engagements: [], events: [] }
  * Fetch all Engagement/Deliverable calendar events for a firm, scoped to the
  * requesting user's engagement memberships (mirrors getClients()/getFirmHierarchy()
  * in lib/actions/hierarchy.ts — permission check embedded in the query WHERE clause).
+ * In engagements where the user is an external member (EC/EV), document events are
+ * further limited to what that persona can open — see externalCanSeeDocumentDueDate.
  */
 export async function getFirmCalendarData(firmSlug: string): Promise<CalendarData> {
   const supabase = await createClient()
@@ -101,9 +110,11 @@ export async function getFirmCalendarData(firmSlug: string): Promise<CalendarDat
       dueDate: true,
       followUpDate: true,
       client: { select: { name: true, slug: true } },
+      // The caller's own membership row — its role decides whether the external filter applies.
+      members: { where: { userId: user.id }, select: { role: true } },
       documents: {
         where: { dueDate: { not: null } },
-        select: { id: true, fileName: true, dueDate: true, isFolder: true, settings: true, parentId: true, docId: true },
+        select: { id: true, externalId: true, fileName: true, dueDate: true, isFolder: true, settings: true, parentId: true, docId: true },
       },
     },
     orderBy: { updatedAt: 'desc' },
@@ -141,6 +152,45 @@ export async function getFirmCalendarData(firmSlug: string): Promise<CalendarDat
     return null
   }
 
+  const folderById = new Map(allFolders.map((f) => [f.id, f]))
+
+  /** A deliverable's board stage; unreadable settings count as the most restricted stage. */
+  function deliverableStageOf(settings: unknown): ActivityStatus {
+    try { return parseSettingsFromDb(settings as any).activity?.status ?? 'to_do' } catch { return 'to_do' }
+  }
+
+  // External members (EC/EV) only see due dates on documents they could open: inside their
+  // persona's shared subtree and, for deliverables, at a stage their role may see. Without this
+  // they saw every dated document in the engagement, internal work-in-progress included.
+  // skipDescendants keeps this to DB reads; the subtree check walks the returned parentMap.
+  const externalAccessByEngagement = new Map<string, { role: SharedOnlyPersonaSlug; sharedIds: string[]; parentMap: Map<string, string> }>()
+  await Promise.all(engagements.map(async (e) => {
+    const role = e.members[0]?.role
+    if (!isExternalEngagementRole(role)) return
+    const persona = role as SharedOnlyPersonaSlug
+    const { sharedIds, parentMap } = await getSharedAndAncestorIdsForPersona(e.id, persona, { skipDescendants: true })
+    externalAccessByEngagement.set(e.id, { role: persona, sharedIds, parentMap })
+  }))
+
+  const visibleDocumentsByEngagement = new Map<string, typeof engagements[number]['documents']>()
+  for (const e of engagements) {
+    const access = externalAccessByEngagement.get(e.id)
+    visibleDocumentsByEngagement.set(e.id, e.documents.filter((doc) => {
+      if (!doc.dueDate) return false
+      if (!access) return true
+      const deliverableId = doc.isFolder && isDeliverableSettings(doc.settings)
+        ? doc.id
+        : findAncestorDeliverableId(e.id, doc.parentId ?? null)
+      const deliverableStage = deliverableId === null
+        ? null
+        : deliverableStageOf(deliverableId === doc.id ? doc.settings : folderById.get(deliverableId)?.settings)
+      return externalCanSeeDocumentDueDate(access.role, {
+        inSharedSubtree: isFolderUnderSharedFolderDB(doc.externalId, access.sharedIds, access.parentMap),
+        deliverableStage,
+      })
+    }))
+  }
+
   const calendarEngagements: CalendarEngagement[] = engagements.map((e) => ({
     id: e.id,
     name: e.name,
@@ -155,7 +205,7 @@ export async function getFirmCalendarData(firmSlug: string): Promise<CalendarDat
   // Supabase auth users in one batch rather than one lookup per event.
   const assigneeUserIdByDocId = new Map<string, string>()
   for (const e of engagements) {
-    for (const doc of e.documents) {
+    for (const doc of visibleDocumentsByEngagement.get(e.id) ?? []) {
       if (!doc.dueDate) continue
       const assigneeUserId = (() => {
         try { return (doc.settings as any)?.assigneeUserId ?? null } catch { return null }
@@ -260,7 +310,7 @@ export async function getFirmCalendarData(firmSlug: string): Promise<CalendarDat
     // All documents with a due date, folder or nested file — not filtered to
     // deliverable folders only, so due dates on individual files inside a
     // deliverable are included too. isFolder only picks the label/CTA shape.
-    for (const doc of e.documents) {
+    for (const doc of visibleDocumentsByEngagement.get(e.id) ?? []) {
       if (!doc.dueDate) continue
       const parsedSettings = (() => {
         try { return parseSettingsFromDb(doc.settings as any) } catch { return null }

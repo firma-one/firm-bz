@@ -74,3 +74,30 @@ describe('buildSnapshot — monetary privacy', () => {
         expect(snap).toMatch(/3 active of 5 total/)
     })
 })
+
+/**
+ * Reminders are one user's own (notes included), but the brief is cached firm-wide in
+ * Firm.settings.aiBrief and read by every admin. Nothing from them may reach the prompt.
+ */
+describe('buildSnapshot — per-user data', () => {
+    const personal = {
+        id: 'r1',
+        entityKey: 'platform.clients.id',
+        entityValue: 'c1',
+        action: 'Chase unpaid retainer',
+        entityName: 'Initech Holdings',
+        note: 'partner is going through a divorce',
+        labelStyle: 'red',
+    }
+
+    it('leaves the generating admin\'s reminders out of the snapshot', () => {
+        const snap = buildSnapshot(firm({
+            urgentReminders: [personal],
+            upcomingReminders: [{ ...personal, id: 'r2', labelStyle: 'amber' }],
+        }))
+        expect(snap).not.toContain('Chase unpaid retainer')
+        expect(snap).not.toContain('Initech Holdings')
+        expect(snap).not.toContain('divorce')
+        expect(snap).not.toMatch(/reminder/i)
+    })
+})

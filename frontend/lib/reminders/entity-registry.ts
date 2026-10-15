@@ -141,10 +141,12 @@ registerEntityResolver('platform.firm_invitations', async (id) => {
 })
 
 registerEntityResolver('platform.documents', async (id) => {
-    const doc = await (prisma as any).engagementDocument.findUnique({
+    // Typed client on purpose: this select once asked for `name` (the column is `fileName`), and
+    // behind `as any` the validation error was swallowed by computeDueReminders' catch.
+    const doc = await prisma.engagementDocument.findUnique({
         where: { id },
         select: {
-            name: true,
+            fileName: true,
             engagement: { select: { slug: true, client: { select: { slug: true, firm: { select: { id: true, slug: true, group: { select: { slug: true } } } } } } } },
         },
     })
@@ -154,7 +156,7 @@ registerEntityResolver('platform.documents', async (id) => {
     const clientSlug = doc?.engagement?.client?.slug ?? null
     const engSlug = doc?.engagement?.slug ?? null
     return {
-        name: doc?.name ?? 'Shared document',
+        name: doc?.fileName ?? 'Shared document',
         slug: null,
         firmSlug,
         firmId,
