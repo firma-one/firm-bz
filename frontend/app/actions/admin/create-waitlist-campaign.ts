@@ -2,6 +2,7 @@
 
 import { prisma } from '@/lib/prisma'
 import { serverActionWrapper, ActionResponse } from '@/lib/server-action-wrapper'
+import { requireSystemAdmin } from '@/lib/auth/require-system-admin'
 
 interface CreatedCampaign {
     id: string
@@ -10,6 +11,7 @@ interface CreatedCampaign {
 
 export async function createWaitlistCampaign(name: string): Promise<ActionResponse<CreatedCampaign>> {
     return serverActionWrapper(async () => {
+        await requireSystemAdmin()
         // Close any currently active campaign
         await (prisma as any).waitlistCampaign.updateMany({
             where: { isActive: true },

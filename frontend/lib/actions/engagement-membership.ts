@@ -25,7 +25,7 @@ import { getPermissionAdapter } from '@/lib/connectors/registry'
 import { resolveEngagementConnectorId } from '@/lib/connectors/resolve-client-connector'
 import { Prisma } from '@prisma/client'
 import { engagementPath } from '@/lib/navigation/firm-paths'
-import { getFirmReminderConfig } from '@/lib/actions/firms'
+import { getFirmReminderConfig } from '@/lib/firm-reminder-config'
 import { createEventNotifications, sendEventEmailToUser, buildAbsoluteUrl } from '@/lib/notify-event'
 import { renderInviteAcceptedEmail } from '@/lib/email-templates/invite-accepted'
 

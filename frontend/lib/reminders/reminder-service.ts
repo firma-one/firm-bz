@@ -3,7 +3,7 @@ import 'server-only'
 import { isAgentUserIdAsync } from '@/lib/ai/agent-email'
 import { createClient } from '@/utils/supabase/server'
 import { safeInngestSend } from '@/lib/inngest/client'
-import { getFirmReminderConfig } from '@/lib/actions/firms'
+import { getFirmReminderConfig } from '@/lib/firm-reminder-config'
 import { logger } from '@/lib/logger'
 import { resolveEntity } from '@/lib/reminders/entity-registry'
 import {

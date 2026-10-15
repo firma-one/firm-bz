@@ -1624,7 +1624,7 @@ export const sendRecurringReminderEmails = inngest.createFunction(
             if (!item) return { skipped: 'done' }
 
             // Re-read firm config — user may have disabled recurring since this was scheduled
-            const { getFirmReminderConfig } = await import('@/lib/actions/firms')
+            const { getFirmReminderConfig } = await import('@/lib/firm-reminder-config')
             const config = await getFirmReminderConfig(event.data.firmId)
             if (!config.recurring.enabled) return { skipped: 'disabled' }
 
@@ -1808,7 +1808,7 @@ export const sendDeliverableDueReminder = inngest.createFunction(
 
         const getEventConfig = async () => {
             if (!firmId) return null
-            const { getFirmReminderConfig } = await import("@/lib/actions/firms")
+            const { getFirmReminderConfig } = await import("@/lib/firm-reminder-config")
             return getFirmReminderConfig(firmId)
         }
 

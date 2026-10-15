@@ -7,6 +7,8 @@ import { resolveClientConnector } from '@/lib/connectors/resolve-client-connecto
 import { getContentAdapter, getPermissionAdapter } from '@/lib/connectors/registry'
 import { ensureOneDriveFolderPath } from '@/lib/connectors/adapters/onedrive-file-ops'
 import { renameOneDriveFile } from '@/lib/connectors/adapters/onedrive-file-ops'
+import { resolveProjectContext } from '@/lib/resolve-project-context'
+import { canEditProject, canViewProjectInternalTabs } from '@/lib/permission-helpers'
 
 async function isOneDriveConnector(connectorId: string): Promise<boolean> {
   const connector = await prisma.connector.findUnique({ where: { id: connectorId }, select: { type: true } })
@@ -41,6 +43,33 @@ async function getUser() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   return user
+}
+
+/**
+ * The Dossier (wiki) is an internal engagement tab: the engagement page only shows it to users with
+ * project:can_view_internal (eng_admin / eng_member / firm admin), never to EC/EV guests. Every action
+ * here is a callable endpoint taking an engagement or page id, so each one re-checks that rule
+ * server-side — reading needs internal access, changing anything also needs project:can_edit.
+ * Returns the caller and the engagement's firm (never the caller's say-so).
+ */
+async function requireWikiAccess(engagementId: string, mode: 'read' | 'write'): Promise<{ userId: string; firmId: string }> {
+  const user = await getUser()
+  if (!user) throw new Error('Unauthorized')
+  const ctx = await resolveProjectContext(engagementId)
+  if (!ctx) throw new Error('Engagement not found')
+  const allowed =
+    (await canViewProjectInternalTabs(ctx.firmId, ctx.clientId, ctx.projectId)) &&
+    (mode === 'read' || (await canEditProject(ctx.firmId, ctx.clientId, ctx.projectId)))
+  if (!allowed) throw new Error('Unauthorized')
+  return { userId: user.id, firmId: ctx.firmId }
+}
+
+/** Access check for an action addressed by wiki page id: resolves the page's own engagement first. */
+async function requireWikiPageAccess(pageId: string, mode: 'read' | 'write'): Promise<{ userId: string; engagementId: string }> {
+  const page = await (prisma as any).engagementWikiPage.findUnique({ where: { id: pageId }, select: { engagementId: true } })
+  if (!page) throw new Error('Not found')
+  const { userId } = await requireWikiAccess(page.engagementId, mode)
+  return { userId, engagementId: page.engagementId }
 }
 
 function toSlug(title: string): string {
@@ -100,8 +129,7 @@ async function ensureSectionFolder(connectorId: string, connectorRootFolderId: s
 }
 
 export async function getWikiPages(engagementId: string): Promise<WikiPage[]> {
-  const user = await getUser()
-  if (!user) throw new Error('Unauthorized')
+  await requireWikiAccess(engagementId, 'read')
 
   return (prisma as any).engagementWikiPage.findMany({
     where: { engagementId },
@@ -110,8 +138,7 @@ export async function getWikiPages(engagementId: string): Promise<WikiPage[]> {
 }
 
 export async function getWikiPageContent(id: string): Promise<string> {
-  const user = await getUser()
-  if (!user) throw new Error('Unauthorized')
+  await requireWikiPageAccess(id, 'read')
 
   const row = await (prisma as any).engagementWikiPage.findUnique({
     where: { id },
@@ -137,10 +164,16 @@ export async function getWikiPageContent(id: string): Promise<string> {
 
 export async function createWikiPage(
   engagementId: string,
-  firmId: string,
+  _callerFirmId: string,
   opts: { title: string; parentId?: string | null }
 ): Promise<WikiPage> {
-  const user = await getUser()
+  // The firm comes from the engagement, not the caller — the second argument is kept only so
+  // existing call sites keep compiling.
+  const { userId, firmId } = await requireWikiAccess(engagementId, 'write')
+  if (opts.parentId) {
+    const parent = await (prisma as any).engagementWikiPage.findUnique({ where: { id: opts.parentId }, select: { engagementId: true } })
+    if (!parent || parent.engagementId !== engagementId) throw new Error('Parent section not found')
+  }
   const baseSlug = toSlug(opts.title)
   const slug = await uniqueSlug(engagementId, baseSlug)
 
@@ -187,8 +220,8 @@ export async function createWikiPage(
       parentId: opts.parentId ?? null,
       order: maxOrder + 1,
       driveFileId,
-      createdBy: user?.id ?? null,
-      updatedBy: user?.id ?? null,
+      createdBy: userId,
+      updatedBy: userId,
     },
   }) as Promise<WikiPage>
 }
@@ -197,7 +230,7 @@ export async function updateWikiPage(
   id: string,
   patch: { title?: string; content?: string }
 ): Promise<WikiPage> {
-  const user = await getUser()
+  const { userId } = await requireWikiPageAccess(id, 'write')
 
   const row = await (prisma as any).engagementWikiPage.findUnique({
     where: { id },
@@ -257,7 +290,7 @@ export async function updateWikiPage(
     }
   }
 
-  const dbData: Record<string, unknown> = { updatedBy: user?.id ?? null }
+  const dbData: Record<string, unknown> = { updatedBy: userId }
   if (patch.title !== undefined) dbData.title = patch.title
 
   return (prisma as any).engagementWikiPage.update({
@@ -267,8 +300,7 @@ export async function updateWikiPage(
 }
 
 export async function deleteWikiPage(id: string): Promise<void> {
-  const user = await getUser()
-  if (!user) throw new Error('Unauthorized')
+  await requireWikiPageAccess(id, 'write')
 
   const row = await (prisma as any).engagementWikiPage.findUnique({
     where: { id },
@@ -304,8 +336,14 @@ export async function deleteWikiPage(id: string): Promise<void> {
 }
 
 export async function reorderPages(orderedIds: string[]): Promise<void> {
-  const user = await getUser()
-  if (!user) throw new Error('Unauthorized')
+  if (!Array.isArray(orderedIds) || orderedIds.length === 0) return
+  const pages = await (prisma as any).engagementWikiPage.findMany({
+    where: { id: { in: orderedIds } },
+    select: { engagementId: true },
+  })
+  const engagementIds = Array.from(new Set(pages.map((p: { engagementId: string }) => p.engagementId)))
+  if (pages.length !== new Set(orderedIds).size || engagementIds.length !== 1) throw new Error('Unauthorized')
+  await requireWikiAccess(engagementIds[0] as string, 'write')
 
   await Promise.all(
     orderedIds.map((pageId, index) =>

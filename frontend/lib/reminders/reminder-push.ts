@@ -1,5 +1,5 @@
 import { sendPushToUser } from '@/lib/push'
-import { getFirmReminderConfig } from '@/lib/actions/firms'
+import { getFirmReminderConfig } from '@/lib/firm-reminder-config'
 import { logger } from '@/lib/logger'
 
 /**

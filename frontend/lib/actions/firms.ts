@@ -472,41 +472,9 @@ export type FirmReminderEmailConfig = {
     events?: FirmEventNotificationConfig
 }
 
-const EVENT_NOTIFICATION_DEFAULTS: FirmEventNotificationConfig = {
-    newDocumentIntake: { email: true, inApp: true },
-    statusChanged: { email: false, inApp: true },
-    documentRejected: { email: true, inApp: true },
-    externalClientComment: { email: true, inApp: true },
-    engagementInviteAccepted: { email: false, inApp: true },
-    deliverableOverdue: { email: true, inApp: true },
-    // email defaults true to preserve existing behavior — reminder emails already send.
-    reminders: { email: true, inApp: true },
-}
+// getFirmReminderConfig lives in lib/firm-reminder-config.ts (server-only): it reads any firm's
+// settings by id and is called from crons and webhooks with no session, so it can't be a server action.
 
-export async function getFirmReminderConfig(firmId: string): Promise<FirmReminderEmailConfig & { events: FirmEventNotificationConfig }> {
-    const firm = await prisma.firm.findUnique({ where: { id: firmId }, select: { settings: true } })
-    const raw = (firm?.settings as any)?.reminderEmailConfig ?? {}
-    const rawEvents = raw.events ?? {}
-    const events = {} as FirmEventNotificationConfig
-    for (const key of Object.keys(EVENT_NOTIFICATION_DEFAULTS) as (keyof FirmEventNotificationConfig)[]) {
-        const defaults = EVENT_NOTIFICATION_DEFAULTS[key]
-        const rawEvent = rawEvents[key] ?? {}
-        events[key] = {
-            email: rawEvent.email ?? defaults.email,
-            inApp: rawEvent.inApp ?? defaults.inApp,
-        }
-    }
-    return {
-        immediateOnCreate: raw.immediateOnCreate ?? true,
-        recurring: {
-            enabled: raw.recurring?.enabled ?? true,
-            frequencyDays: raw.recurring?.frequencyDays ?? 1,
-            startDaysBeforeDue: raw.recurring?.startDaysBeforeDue ?? 7,
-        },
-        mentionEmailOnCreate: raw.mentionEmailOnCreate ?? true,
-        events,
-    }
-}
 
 export async function updateFirm(
     firmSlug: string,
@@ -648,10 +616,23 @@ export interface FirmConnectorRecord {
     documentCount: number
 }
 
-export async function getFirmConnectors(firmId: string): Promise<FirmConnectorRecord[]> {
+/**
+ * Firm Storage settings (FirmDriveSection) is a firm-admin screen. Every connector action below is a
+ * callable endpoint, so each requires firm can_manage on the firm that actually owns the connector or
+ * client — a firmId passed by the caller is never trusted on its own.
+ */
+async function requireFirmManager(firmId: string | null | undefined): Promise<{ userId: string }> {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) throw new Error('Unauthorized')
+    if (!firmId) throw new Error('Unauthorized')
+    const { canManageOrganization } = await import('@/lib/permission-helpers')
+    if (!(await canManageOrganization(firmId))) throw new Error('Unauthorized')
+    return { userId: user.id }
+}
+
+export async function getFirmConnectors(firmId: string): Promise<FirmConnectorRecord[]> {
+    await requireFirmManager(firmId)
 
     const connectors = await prisma.connector.findMany({
         where: { firmId },
@@ -706,16 +687,13 @@ export async function getFirmConnectors(firmId: string): Promise<FirmConnectorRe
 }
 
 export async function disconnectFirmConnector({ connectorId, firmId }: { connectorId: string; firmId: string }): Promise<void> {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('Unauthorized')
-
     const connector = await prisma.connector.findUnique({
         where: { id: connectorId },
         select: { firmId: true },
     })
     if (!connector) throw new Error('Connector not found')
     if (connector.firmId !== firmId) throw new Error('Unauthorized')
+    const user = { id: (await requireFirmManager(connector.firmId)).userId }
 
     await prisma.connector.update({
         where: { id: connectorId },
@@ -733,21 +711,21 @@ export async function disconnectFirmConnector({ connectorId, firmId }: { connect
 }
 
 export async function removeFirmConnector({ connectorId }: { connectorId: string; firmId?: string }): Promise<void> {
+    const connector = await prisma.connector.findUnique({ where: { id: connectorId }, select: { firmId: true } })
+    if (!connector) throw new Error('Connector not found')
+    await requireFirmManager(connector.firmId)
     const { removeConnector } = await import('@/lib/actions/connectors')
     await removeConnector({ connectorId })
 }
 
 export async function renameFirmConnector({ connectorId, firmId, name }: { connectorId: string; firmId: string; name: string }): Promise<void> {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('Unauthorized')
-
     const connector = await prisma.connector.findUnique({
         where: { id: connectorId },
         select: { firmId: true },
     })
     if (!connector) throw new Error('Connector not found')
     if (connector.firmId !== firmId) throw new Error('Unauthorized')
+    await requireFirmManager(connector.firmId)
 
     await prisma.connector.update({
         where: { id: connectorId },
@@ -763,9 +741,7 @@ export interface FirmClientRecord {
 }
 
 export async function getFirmAllClients(firmId: string): Promise<FirmClientRecord[]> {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('Unauthorized')
+    await requireFirmManager(firmId)
 
     const clients = await prisma.client.findMany({
         where: { firmId, deletedAt: null },
@@ -776,16 +752,13 @@ export async function getFirmAllClients(firmId: string): Promise<FirmClientRecor
 }
 
 export async function detachConnectorFromClient({ clientId, firmId }: { clientId: string; firmId: string }): Promise<void> {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('Unauthorized')
-
     const client = await prisma.client.findUnique({
         where: { id: clientId },
         select: { firmId: true, connectorId: true },
     })
     if (!client) throw new Error('Client not found')
     if (client.firmId !== firmId) throw new Error('Unauthorized')
+    await requireFirmManager(client.firmId)
 
     // Clear engagement + document connector references so re-linking uses the new workspace
     const engagements = await prisma.engagement.findMany({

@@ -9,7 +9,7 @@ import { createClient as createSupabaseAdmin } from '@supabase/supabase-js'
 import { requireEngagementMember, externalMemberCanAccessDocument, isExternalEngagementRole } from '@/lib/engagement-access'
 import { loadAnchorForCaps, effectiveCommentHistoryDays } from '@/lib/billing/effective-billing-caps'
 import { engagementDocCommentPath } from '@/lib/navigation/firm-paths'
-import { getFirmReminderConfig } from '@/lib/actions/firms'
+import { getFirmReminderConfig } from '@/lib/firm-reminder-config'
 import { createEventNotifications, sendEventEmailToUser, buildAbsoluteUrl } from '@/lib/notify-event'
 import { renderClientCommentEmail } from '@/lib/email-templates/client-comment'
 
