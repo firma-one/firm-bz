@@ -66,7 +66,7 @@ export function ClientInviteModal({ firmId, clientId, open, onOpenChange, onSucc
                         />
                     </div>
                     {error && (
-                        <p className="text-sm text-red-500 bg-red-50 p-2 rounded">{error}</p>
+                        <p className="text-sm text-danger bg-tag-red-bg p-2 rounded">{error}</p>
                     )}
                     <div className="flex justify-end gap-3">
                         <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>

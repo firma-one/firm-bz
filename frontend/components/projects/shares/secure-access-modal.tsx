@@ -68,7 +68,7 @@ export function SecureAccessModal({
             }}
         >
             <DialogContent
-                className="sm:max-w-sm border-line p-0 gap-0 rounded bg-surface-subtle"
+                className="sm:max-w-sm p-0 gap-0"
                 hideClose={isBusy}
                 onInteractOutside={(e) => { if (isBusy) e.preventDefault() }}
                 onEscapeKeyDown={(e) => { if (isBusy) e.preventDefault() }}
@@ -76,8 +76,8 @@ export function SecureAccessModal({
                 <VisuallyHidden><DialogTitle>Secure Access Request</DialogTitle></VisuallyHidden>
 
                 {/* Header */}
-                <div className="px-5 py-4 border-b border-line bg-white flex items-start gap-3">
-                    <div className="mt-0.5 h-7 w-7 rounded flex items-center justify-center shrink-0 bg-primary/10 ring-1 ring-primary/20">
+                <div className="px-5 py-4 border-b border-line bg-surface flex items-start gap-3">
+                    <div className="mt-0.5 h-7 w-7 rounded flex items-center justify-center shrink-0 bg-surface-muted ring-1 ring-primary/20">
                         {effectiveMode === 'error' ? (
                             <AlertCircle className="h-4 w-4 text-destructive" />
                         ) : effectiveMode === 'opening' || effectiveMode === 'blocked' ? (
@@ -89,7 +89,7 @@ export function SecureAccessModal({
                         )}
                     </div>
                     <div>
-                        <p className="text-[11px] font-headline font-bold tracking-widest uppercase text-fg leading-tight">
+                        <p className="text-ui font-semibold text-fg leading-tight">
                             {effectiveMode === 'error' ? 'Access Unavailable'
                                 : effectiveMode === 'opening' ? 'Opening Document'
                                 : effectiveMode === 'blocked' ? 'Ready To Open'
@@ -113,14 +113,14 @@ export function SecureAccessModal({
                 {/* Body */}
                 <div className="p-5 space-y-4">
                     {effectiveMode === 'error' ? (
-                        <div className="flex items-start gap-3 p-3 rounded bg-white border border-destructive/20">
+                        <div className="flex items-start gap-3 p-3 rounded bg-surface border border-destructive/20">
                             <AlertCircle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
                             <p className="text-xs text-fg leading-relaxed">{error}</p>
                         </div>
                     ) : (
                         <>
                             {/* File preview strip */}
-                            <div className="flex items-center gap-3 p-3 rounded bg-white border border-line">
+                            <div className="flex items-center gap-3 p-3 rounded bg-surface border border-line">
                                 {proxyThumbnailUrl && !thumbnailFailed ? (
                                     <div className="h-10 w-10 rounded overflow-hidden shrink-0 border border-line">
                                         <img
@@ -160,7 +160,7 @@ export function SecureAccessModal({
                                         <Button
                                             variant="blackCta"
                                             onClick={() => window.open(documentUrl, '_blank')}
-                                            className="w-full rounded text-[10px] font-headline font-bold tracking-widest uppercase"
+                                            className="w-full rounded"
                                         >
                                             <ExternalLink className="h-3.5 w-3.5 mr-1.5" />
                                             Open Document
@@ -175,12 +175,12 @@ export function SecureAccessModal({
                             ) : (
                                 <>
                                     {/* Email destination */}
-                                    <div className="flex items-center gap-3 p-3 rounded bg-white border border-line">
+                                    <div className="flex items-center gap-3 p-3 rounded bg-surface border border-line">
                                         <div className="h-7 w-7 rounded flex items-center justify-center shrink-0 bg-surface-subtle border border-line">
                                             <Mail className="h-4 w-4 text-fg-muted" />
                                         </div>
                                         <div className="min-w-0">
-                                            <p className="text-[9px] font-headline font-bold tracking-widest uppercase text-fg-muted leading-tight">Verification Inbox</p>
+                                            <p className="text-ui font-semibold text-fg-muted leading-tight">Verification Inbox</p>
                                             <p className="text-xs font-medium text-fg truncate mt-0.5">{email}</p>
                                         </div>
                                     </div>
@@ -195,18 +195,18 @@ export function SecureAccessModal({
 
                 {/* Footer */}
                 {effectiveMode !== 'opening' && (
-                    <div className="px-5 py-3 border-t border-line bg-white flex items-center justify-end">
+                    <div className="px-5 py-3 border-t border-line bg-surface flex items-center justify-end">
                         <Button
                             variant="blackCta"
                             onClick={onClose}
                             disabled={isBusy}
-                            className="rounded text-[10px] font-headline font-bold tracking-widest uppercase disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="rounded disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             {effectiveMode === 'error' || effectiveMode === 'blocked' ? 'Close' : effectiveMode === 'loading' ? (
                                 <span className="inline-flex items-center gap-1" aria-label="Please wait">
-                                    <span className="w-1.5 h-1.5 bg-white rounded-full animate-bounce [animation-delay:-0.3s]" />
-                                    <span className="w-1.5 h-1.5 bg-white rounded-full animate-bounce [animation-delay:-0.15s]" />
-                                    <span className="w-1.5 h-1.5 bg-white rounded-full animate-bounce" />
+                                    <span className="w-1.5 h-1.5 bg-surface rounded-full animate-bounce [animation-delay:-0.3s]" />
+                                    <span className="w-1.5 h-1.5 bg-surface rounded-full animate-bounce [animation-delay:-0.15s]" />
+                                    <span className="w-1.5 h-1.5 bg-surface rounded-full animate-bounce" />
                                 </span>
                             ) : 'I understand. Close this message'}
                         </Button>

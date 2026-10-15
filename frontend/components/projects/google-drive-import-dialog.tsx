@@ -38,12 +38,12 @@ export function GoogleDriveImportDialog({
                 </DialogHeader>
 
                 <div className="py-4">
-                    <div className="bg-slate-50 p-3 rounded-md border border-slate-200">
-                        <div className="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wider">Selected Files</div>
+                    <div className="bg-surface-subtle p-3 rounded-md border border-line">
+                        <div className="text-small font-semibold text-fg-muted mb-2">Selected Files</div>
                         <div className="space-y-1 max-h-[100px] overflow-y-auto custom-scrollbar">
                             {selectedFiles.map((file) => (
-                                <div key={file.id} className="flex items-center gap-2 text-sm text-slate-700">
-                                    <FileText className="h-3.5 w-3.5 text-slate-400" />
+                                <div key={file.id} className="flex items-center gap-2 text-sm text-fg-muted">
+                                    <FileText className="h-3.5 w-3.5 text-fg-subtle" />
                                     <span className="truncate">{file.name}</span>
                                 </div>
                             ))}

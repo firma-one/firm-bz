@@ -23,7 +23,7 @@ interface AddReminderPopoverProps {
     disabled?: boolean
 }
 
-const textareaCls = 'flex w-full rounded border border-[#e5e7eb] bg-white px-3 py-2 text-xs font-normal text-[#1b1b1d] placeholder:text-[#9a9ba0] focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed resize-none'
+const textareaCls = 'flex w-full rounded border border-line bg-surface px-3 py-2 text-xs font-normal text-fg placeholder:text-fg-subtle focus:outline-none focus:ring-2 focus:ring-action/30 focus:border-action disabled:opacity-50 disabled:cursor-not-allowed resize-none'
 
 export function AddReminderPopover({
     entityKey,
@@ -72,7 +72,7 @@ export function AddReminderPopover({
             <Button
                 variant="outline"
                 size="sm"
-                className="h-7 px-2.5 text-xs gap-1.5 border-[#e5e7eb] text-[#45474c] hover:text-[#1b1b1d]"
+                className="h-7 px-2.5 text-xs gap-1.5 border-line text-fg-muted hover:text-fg"
                 disabled={disabled}
                 onClick={() => setOpen(true)}
             >
@@ -83,36 +83,36 @@ export function AddReminderPopover({
             <Dialog open={open} onOpenChange={setOpen}>
                 <DialogContent className="sm:max-w-[400px]">
                     <DialogHeader>
-                        <DialogTitle className="font-mono text-xs font-bold uppercase tracking-widest text-[#45474c]">
+                        <DialogTitle className="text-small font-medium text-fg-muted">
                             Add Reminder
                         </DialogTitle>
                     </DialogHeader>
 
                     <div className="space-y-3 pt-1">
                         <div>
-                            <label className="font-mono text-[9px] font-bold uppercase tracking-widest text-[#45474c] block mb-1">
-                                Action / label <span className="text-red-500">*</span>
+                            <label className="text-small font-medium text-fg-muted block mb-1">
+                                Action / label <span className="text-danger">*</span>
                             </label>
                             <Input
                                 value={action}
                                 onChange={(e) => setAction(e.target.value)}
                                 placeholder="e.g. Post-delivery review"
-                                className="border-[#e5e7eb] text-[#1b1b1d] text-xs"
+                                className="border-line text-fg text-xs"
                                 onKeyDown={(e) => e.key === 'Enter' && handleSave()}
                                 autoFocus
                             />
                         </div>
 
                         <div>
-                            <label className="font-mono text-[9px] font-bold uppercase tracking-widest text-[#45474c] block mb-1">
-                                Due date <span className="text-[#9a9ba0] font-normal normal-case tracking-normal">— optional</span>
+                            <label className="text-small font-medium text-fg-muted block mb-1">
+                                Due date <span className="text-fg-subtle font-normal normal-case tracking-normal">— optional</span>
                             </label>
                             <DateTimePicker value={dueDate} onChange={setDueDate} placeholder="Select date" defaultTime="09:00" />
                         </div>
 
                         <div>
-                            <label className="font-mono text-[9px] font-bold uppercase tracking-widest text-[#45474c] block mb-1">
-                                Note <span className="text-[#9a9ba0] font-normal normal-case tracking-normal">— optional</span>
+                            <label className="text-small font-medium text-fg-muted block mb-1">
+                                Note <span className="text-fg-subtle font-normal normal-case tracking-normal">— optional</span>
                             </label>
                             <textarea
                                 value={note}

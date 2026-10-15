@@ -72,32 +72,32 @@ export function BroadcastModal({ open, onOpenChange, broadcastScopes, onSent }: 
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[520px] border-[#e5e7eb] p-0 gap-0 rounded">
+      <DialogContent className="sm:max-w-[520px] p-0 gap-0">
         <VisuallyHidden><DialogTitle>New Broadcast</DialogTitle></VisuallyHidden>
 
         {/* Header */}
-        <div className="px-5 py-4 border-b border-[#e5e7eb] bg-[#f9f9fb] flex items-start gap-3">
-          <div className="mt-0.5 h-7 w-7 rounded bg-primary/10 flex items-center justify-center shrink-0">
-            <Megaphone className="h-3.5 w-3.5 text-primary" />
+        <div className="px-5 py-4 border-b border-line flex items-start gap-3">
+          <div className="mt-0.5 h-7 w-7 rounded bg-surface-muted flex items-center justify-center shrink-0">
+            <Megaphone className="h-3.5 w-3.5 text-fg-muted" />
           </div>
           <div>
-            <p className="text-sm font-semibold text-[#1b1b1d] leading-tight">New Broadcast</p>
-            <p className="text-xs text-[#45474c] mt-0.5">Send a notification to your team.</p>
+            <p className="text-sm font-semibold text-fg leading-tight">New Broadcast</p>
+            <p className="text-xs text-fg-muted mt-0.5">Send a notification to your team.</p>
           </div>
         </div>
 
         {/* Body */}
         <div className="p-5 space-y-4">
           {error && (
-            <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs px-3 py-2 rounded">
+            <div className="bg-tag-red-bg border border-tag-red-bg text-tag-red-fg text-xs px-3 py-2 rounded">
               {error}
             </div>
           )}
 
           {/* Scope */}
           <div>
-            <p className="font-mono text-[9px] font-bold uppercase tracking-widest text-[#45474c] mb-2">
-              Scope <span className="normal-case tracking-normal font-sans text-[#9a9ba0] font-normal">— choose who receives this broadcast</span>
+            <p className="text-small font-medium text-fg-muted mb-2">
+              Scope <span className="normal-case tracking-normal font-sans text-fg-subtle font-normal">— choose who receives this broadcast</span>
             </p>
             <div className="grid grid-cols-3 gap-2">
               {(['org', 'client', 'project'] as const).map((s) => {
@@ -111,10 +111,10 @@ export function BroadcastModal({ open, onOpenChange, broadcastScopes, onSent }: 
                     onClick={() => enabled && setScope(s)}
                     className={`h-9 rounded border px-2 text-xs font-semibold transition-colors ${
                       !enabled
-                        ? 'border-[#e5e7eb] bg-[#f9f9fb] text-[#45474c] cursor-not-allowed opacity-40'
+                        ? 'border-line bg-surface-subtle text-fg-muted cursor-not-allowed opacity-40'
                         : isActive
-                          ? 'border-primary bg-primary/10 text-primary'
-                          : 'border-[#e5e7eb] bg-white text-[#1b1b1d] hover:border-primary/50 hover:bg-[#f9f9fb]'
+                          ? 'border-primary bg-surface-muted text-fg-muted'
+                          : 'border-line bg-surface text-fg hover:border-primary/50 hover:bg-surface-hover'
                     }`}
                   >
                     {SCOPE_LABELS[s]}
@@ -126,40 +126,40 @@ export function BroadcastModal({ open, onOpenChange, broadcastScopes, onSent }: 
 
           {/* Title */}
           <div>
-            <label className="font-mono text-[9px] font-bold uppercase tracking-widest text-[#45474c] block mb-1">
-              Title <span className="normal-case tracking-normal font-sans text-[#9a9ba0] font-normal">(optional)</span>
+            <label className="text-small font-medium text-fg-muted block mb-1">
+              Title <span className="normal-case tracking-normal font-sans text-fg-subtle font-normal">(optional)</span>
             </label>
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="e.g. System maintenance tonight"
-              className="w-full h-9 rounded border border-[#e5e7eb] bg-white px-2.5 text-sm text-[#1b1b1d] placeholder:text-[#9ca3af] focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+              className="w-full h-9 rounded border border-line bg-surface px-2.5 text-sm text-fg placeholder:text-[#9ca3af] focus:outline-none focus:ring-2 focus:ring-action/30 focus:border-action"
             />
           </div>
 
           {/* Message */}
           <div>
-            <label className="font-mono text-[9px] font-bold uppercase tracking-widest text-[#45474c] block mb-1">
-              Message <span className="text-red-500 normal-case tracking-normal font-sans font-normal">*</span>
+            <label className="text-small font-medium text-fg-muted block mb-1">
+              Message <span className="text-danger normal-case tracking-normal font-sans font-normal">*</span>
             </label>
             <textarea
               value={message}
               onChange={(e) => setMessage(e.target.value.slice(0, 1000))}
               placeholder="Broadcast message (max 1000 chars)…"
               rows={5}
-              className="w-full rounded border border-[#e5e7eb] bg-white px-2.5 py-2 text-sm text-[#1b1b1d] placeholder:text-[#9ca3af] focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary resize-none"
+              className="w-full rounded border border-line bg-surface px-2.5 py-2 text-sm text-fg placeholder:text-[#9ca3af] focus:outline-none focus:ring-2 focus:ring-action/30 focus:border-action resize-none"
             />
-            <p className="text-[11px] text-[#9ca3af] mt-1 text-right">{message.length}/1000</p>
+            <p className="text-caption text-[#9ca3af] mt-1 text-right">{message.length}/1000</p>
           </div>
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-3 border-t border-[#e5e7eb] bg-[#f9f9fb] flex items-center justify-end gap-2">
+        <div className="px-5 py-3 border-t border-line flex items-center justify-end gap-2">
           <button
             type="button"
             onClick={handleClose}
             disabled={sending}
-            className="h-9 px-4 rounded border border-[#e5e7eb] bg-white text-sm text-[#45474c] hover:bg-[#f3f4f6] disabled:opacity-50 transition-colors"
+            className="h-9 px-4 rounded border border-line bg-surface text-sm text-fg-muted hover:bg-[#f3f4f6] disabled:opacity-50 transition-colors"
           >
             Cancel
           </button>

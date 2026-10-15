@@ -2,21 +2,18 @@
 
 import React, { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
-import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { VisuallyHidden } from "@radix-ui/react-visually-hidden"
+import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Building2, FileText, Globe, Linkedin, Lock, MapPin, SquarePlus, Users2 } from "lucide-react"
-import { LoadingSpinner } from "@/components/ui/loading-spinner"
+import { Building2, Factory, FileText, Globe, Linkedin, Lock, MapPin, Plus, Users2 } from "lucide-react"
+import { Textarea } from "@/components/ui/textarea"
+import { PropertyList, PropertyRow, PROPERTY_FIELD_CLASS, PROPERTY_HINT_CLASS, PROPERTY_TEXTAREA_CLASS } from "@/components/ui/property-list"
+import { CreateDialogFooter, CreateDialogHeader, CreateDialogNotice } from "@/components/ui/create-dialog"
 import { SelectWithCustomEntry } from "@/components/ui/select-with-custom-entry"
 import { OptionalFieldsSection } from "@/components/ui/optional-fields-toggle"
 import { createFirm, updateFirm } from '@/lib/actions/firms'
 import { firmPath } from '@/lib/navigation/firm-paths'
 
-const fieldLabel = 'font-mono text-[9px] font-bold uppercase tracking-widest text-[#45474c] block mb-1'
-const inputCls = 'border-[#e5e7eb] text-[#1b1b1d] text-xs font-normal placeholder:text-[#9a9ba0] rounded focus-visible:ring-1 focus-visible:ring-primary focus-visible:border-primary disabled:opacity-50 disabled:cursor-not-allowed'
-const textareaCls = 'flex w-full rounded border border-[#e5e7eb] bg-white px-3 py-2 text-xs font-normal text-[#1b1b1d] placeholder:text-[#9a9ba0] focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed'
 
 interface AddFirmModalProps {
     trigger?: React.ReactNode
@@ -130,8 +127,8 @@ export function AddFirmModal({ trigger, open: controlledOpen, onOpenChange: cont
     const renderTrigger = () => {
         if (trigger && React.isValidElement(trigger)) return trigger
         return (
-            <Button variant="blackCta" size="sm" className="gap-2">
-                <SquarePlus className="h-4 w-4" /> New Firm
+            <Button size="sm">
+                <Plus className="h-3.5 w-3.5" /> New firm
             </Button>
         )
     }
@@ -141,119 +138,69 @@ export function AddFirmModal({ trigger, open: controlledOpen, onOpenChange: cont
             <Dialog open={open} onOpenChange={handleOpenChange}>
                 {!isControlled && <DialogTrigger asChild>{renderTrigger()}</DialogTrigger>}
 
-                <DialogContent className="sm:max-w-[860px] border-[#e5e7eb] p-0 gap-0 rounded bg-[#f9f9fb] max-h-[90vh] overflow-y-auto">
-                    <VisuallyHidden><DialogTitle>New Firm</DialogTitle></VisuallyHidden>
-
-                    {/* Header */}
-                    <div className="px-5 py-4 border-b border-[#e5e7eb] bg-white flex items-start gap-3 sticky top-0 z-10">
-                        <div className="mt-0.5 h-7 w-7 rounded bg-primary/10 flex items-center justify-center shrink-0">
-                            <Building2 className="h-3.5 w-3.5 text-primary" />
-                        </div>
-                        <div>
-                            <p className="text-sm font-semibold text-[#1b1b1d] leading-tight">New Firm</p>
-                            <p className="text-xs text-[#45474c] mt-0.5">Fill in the details and click Create.</p>
-                        </div>
-                    </div>
-
-                    {capBlocked && capMessage && (
-                        <div className="mx-4 mt-4 bg-rose-50 border border-rose-200 text-rose-700 text-xs px-3 py-2 rounded flex items-center gap-2">
-                            <Lock className="h-3.5 w-3.5 shrink-0 text-rose-500" />
-                            <span>
-                                {capMessage.split('Upgrade')[0]}
-                                <Link href="/d/billing" className="font-semibold underline underline-offset-2 hover:text-rose-900">Upgrade</Link>
-                                {capMessage.split('Upgrade')[1]}
-                            </span>
-                        </div>
-                    )}
-                    {error && (
-                        <div className="mx-4 mt-4 bg-rose-50 border border-rose-200 text-rose-700 text-xs px-3 py-2 rounded">
-                            {error}
-                        </div>
-                    )}
+                <DialogContent className="max-h-[90vh] gap-0 overflow-y-auto p-0 sm:max-w-[600px]">
+                    <CreateDialogHeader title="New firm" description="Add a firm to this workspace." />
 
                     <form onSubmit={handleCreate}>
-                        <div className="p-4 space-y-3">
-                            <div className="bg-white rounded border border-[#e5e7eb] p-4 space-y-3">
-                                <div>
-                                    <label htmlFor="cf-name" className={fieldLabel}>
-                                        <span className="inline-flex items-center gap-1"><Building2 className="h-3 w-3" /> Firm name <span className="text-red-500 normal-case tracking-normal font-sans">*</span></span>
-                                    </label>
+                        <div className="flex flex-col gap-3 px-5 pb-5 pt-2">
+                            {capBlocked && capMessage && <CreateDialogNotice message={capMessage} limit />}
+                            {error && <CreateDialogNotice message={error} />}
+
+                            {/* Same property rows as Firm Settings: create and edit look alike. */}
+                            <PropertyList>
+                                <PropertyRow label={<label htmlFor="cf-name">Firm name <span className="text-danger">*</span></label>} icon={<Building2 />}>
                                     <Input id="cf-name" value={name} onChange={(e) => setName(e.target.value)}
-                                        placeholder="e.g. Acme Consulting" disabled={isFormDisabled} required autoFocus className={inputCls} />
-                                </div>
-                            </div>
+                                        placeholder="e.g. Acme Consulting" disabled={isFormDisabled} required autoFocus className={PROPERTY_FIELD_CLASS} />
+                                </PropertyRow>
+                            </PropertyList>
 
                             <OptionalFieldsSection open={showOptional} onToggle={() => setShowOptional((v) => !v)}>
-                                    <div className="grid grid-cols-2 gap-4 items-stretch">
-
-                                        {/* LEFT — Details */}
-                                        <div className="flex flex-col gap-3">
-                                            <div>
-                                                <label htmlFor="cf-memo" className={fieldLabel}>
-                                                    <span className="inline-flex items-center gap-1"><Lock className="h-3 w-3" /> Internal memo <span className="text-[#9a9ba0] normal-case tracking-normal font-sans font-normal">— internal only</span></span>
-                                                </label>
-                                                <textarea id="cf-memo" value={internalMemo} onChange={(e) => setInternalMemo(e.target.value)}
-                                                    placeholder="Private notes, context about this firm…" rows={2}
-                                                    disabled={isFormDisabled} className={textareaCls} />
-                                            </div>
-                                            <div>
-                                                <label htmlFor="cf-industry" className={fieldLabel}><span className="inline-flex items-center gap-1"><Building2 className="h-3 w-3" /> Industry</span></label>
-                                                <Input id="cf-industry" value={industry} onChange={(e) => setIndustry(e.target.value)}
-                                                    placeholder="e.g. Technology" disabled={isFormDisabled} className={inputCls} />
-                                            </div>
-                                            <div>
-                                                <label htmlFor="cf-size" className={fieldLabel}><span className="inline-flex items-center gap-1"><Users2 className="h-3 w-3" /> Company size</span></label>
-                                                <SelectWithCustomEntry id="cf-size" value={companySizeBracket} onChange={setCompanySizeBracket}
-                                                    options={['<10', '11–50', '51–200', '201–1000', '1000+']} placeholder="Select size bracket…"
-                                                    customEntryHint="Custom…" disabled={isFormDisabled} />
-                                            </div>
+                                <PropertyList>
+                                    <PropertyRow label={<label htmlFor="cf-industry">Industry</label>} icon={<Factory />}>
+                                        <Input id="cf-industry" value={industry} onChange={(e) => setIndustry(e.target.value)}
+                                            placeholder="Empty" disabled={isFormDisabled} className={PROPERTY_FIELD_CLASS} />
+                                    </PropertyRow>
+                                    <PropertyRow label={<label htmlFor="cf-size">Company size</label>} icon={<Users2 />}>
+                                        <SelectWithCustomEntry id="cf-size" value={companySizeBracket} onChange={setCompanySizeBracket}
+                                            options={['<10', '11–50', '51–200', '201–1000', '1000+']} placeholder="Empty"
+                                            customEntryHint="Custom…" disabled={isFormDisabled} className={PROPERTY_FIELD_CLASS} />
+                                    </PropertyRow>
+                                    <PropertyRow label={<label htmlFor="cf-website">Website</label>} icon={<Globe />}>
+                                        <Input id="cf-website" type="url" value={companyWebsite} onChange={(e) => setCompanyWebsite(e.target.value)}
+                                            placeholder="https://…" disabled={isFormDisabled} className={PROPERTY_FIELD_CLASS} />
+                                    </PropertyRow>
+                                    <PropertyRow label={<label htmlFor="cf-linkedin">LinkedIn</label>} icon={<Linkedin />}>
+                                        <Input id="cf-linkedin" value={linkedInUrl} onChange={(e) => setLinkedInUrl(e.target.value)}
+                                            placeholder="https://linkedin.com/company/…" disabled={isFormDisabled} className={PROPERTY_FIELD_CLASS} />
+                                    </PropertyRow>
+                                    <PropertyRow label={<label htmlFor="cf-billing">Billing address</label>} icon={<MapPin />}>
+                                        <Textarea id="cf-billing" value={billingAddress} onChange={(e) => setBillingAddress(e.target.value)}
+                                            placeholder={"123 Main St\nCity, State ZIP\nCountry"} rows={3}
+                                            disabled={isFormDisabled} className={PROPERTY_TEXTAREA_CLASS} />
+                                    </PropertyRow>
+                                    <PropertyRow label={<label htmlFor="cf-notes">Notes</label>} icon={<FileText />}>
+                                        <Textarea id="cf-notes" value={notes} onChange={(e) => setNotes(e.target.value)}
+                                            placeholder="Additional details about the firm" rows={2}
+                                            disabled={isFormDisabled} className={PROPERTY_TEXTAREA_CLASS} />
+                                    </PropertyRow>
+                                    <PropertyRow label={<label htmlFor="cf-memo">Internal memo</label>} icon={<Lock />}>
+                                        <div className="flex w-full flex-col gap-1">
+                                            <Textarea id="cf-memo" value={internalMemo} onChange={(e) => setInternalMemo(e.target.value)}
+                                                placeholder="Private notes, context about this firm…" rows={2}
+                                                disabled={isFormDisabled} className={PROPERTY_TEXTAREA_CLASS} />
+                                            <p className={PROPERTY_HINT_CLASS}>Only firm admins see this.</p>
                                         </div>
-
-                                        {/* RIGHT — Company */}
-                                        <div className="flex flex-col gap-3">
-                                            <div className="shrink-0">
-                                                <label htmlFor="cf-website" className={fieldLabel}><span className="inline-flex items-center gap-1"><Globe className="h-3 w-3" /> Website</span></label>
-                                                <Input id="cf-website" type="url" value={companyWebsite} onChange={(e) => setCompanyWebsite(e.target.value)}
-                                                    placeholder="https://…" disabled={isFormDisabled} className={inputCls} />
-                                            </div>
-                                            <div className="shrink-0">
-                                                <label htmlFor="cf-linkedin" className={fieldLabel}><span className="inline-flex items-center gap-1"><Linkedin className="h-3 w-3" /> LinkedIn</span></label>
-                                                <Input id="cf-linkedin" value={linkedInUrl} onChange={(e) => setLinkedInUrl(e.target.value)}
-                                                    placeholder="https://linkedin.com/company/…" disabled={isFormDisabled} className={inputCls} />
-                                            </div>
-                                            <div className="flex flex-col flex-1">
-                                                <label htmlFor="cf-billing" className={fieldLabel}><span className="inline-flex items-center gap-1"><MapPin className="h-3 w-3" /> Billing address</span></label>
-                                                <textarea id="cf-billing" value={billingAddress} onChange={(e) => setBillingAddress(e.target.value)}
-                                                    placeholder={"123 Main St\nCity, State ZIP\nCountry"}
-                                                    disabled={isFormDisabled} className={`${textareaCls} flex-1 resize-none`} />
-                                            </div>
-                                            <div className="flex flex-col flex-1">
-                                                <label htmlFor="cf-notes" className={fieldLabel}><span className="inline-flex items-center gap-1"><FileText className="h-3 w-3" /> Notes</span></label>
-                                                <textarea id="cf-notes" value={notes} onChange={(e) => setNotes(e.target.value)}
-                                                    placeholder="Additional details about the firm"
-                                                    disabled={isFormDisabled} className={`${textareaCls} flex-1 resize-none`} />
-                                            </div>
-                                        </div>
-
-                                    </div>
+                                    </PropertyRow>
+                                </PropertyList>
                             </OptionalFieldsSection>
                         </div>
 
-                        {/* Footer */}
-                        <div className="px-5 py-3 border-t border-[#e5e7eb] bg-white flex items-center justify-end gap-3 sticky bottom-0">
-                            <Button type="button" variant="outline"
-                                className="rounded w-32 text-[10px] font-headline font-bold tracking-widest uppercase"
-                                onClick={() => handleOpenChange(false)}
-                                disabled={isDismissDisabled}>
-                                Cancel
-                            </Button>
-                            <Button type="submit"
-                                variant="greenCta"
-                                disabled={isFormDisabled || !name.trim()}
-                                className="rounded w-40 text-[10px] font-headline font-bold tracking-widest uppercase">
-                                {creating ? <LoadingSpinner size="sm" /> : 'Create'}
-                            </Button>
-                        </div>
+                        <CreateDialogFooter
+                            onCancel={() => handleOpenChange(false)}
+                            cancelDisabled={isDismissDisabled}
+                            submitDisabled={isFormDisabled || !name.trim()}
+                            submitting={creating}
+                        />
                     </form>
                 </DialogContent>
             </Dialog>

@@ -179,11 +179,11 @@ export function DocumentShareModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[480px] border-[#e5e7eb] p-0 gap-0 rounded bg-[#f9f9fb]">
+      <DialogContent className="sm:max-w-[480px] p-0 gap-0">
         {/* Header */}
-        <DialogHeader className="px-5 py-4 border-b border-[#e5e7eb] bg-white">
-          <DialogTitle className="text-[11px] font-headline font-bold tracking-widest uppercase text-[#1b1b1d] leading-tight">Share document</DialogTitle>
-          <DialogDescription className="flex items-center gap-1.5 truncate text-xs text-[#45474c] mt-0.5" title={doc.name}>
+        <DialogHeader className="px-5 py-4 border-b border-line bg-surface">
+          <DialogTitle className="text-ui font-semibold text-fg leading-tight">Share document</DialogTitle>
+          <DialogDescription className="flex items-center gap-1.5 truncate text-xs text-fg-muted mt-0.5" title={doc.name}>
             <DocumentIcon mimeType={doc.mimeType} size={14} className="shrink-0" />
             {doc.name}
           </DialogDescription>
@@ -197,15 +197,15 @@ export function DocumentShareModal({
         ) : (
           <div className="p-5 space-y-5">
             {/* External Collaborator (platform.personas.eng_ext_collaborator) */}
-            <div className="rounded border border-[#e5e7eb] bg-white overflow-hidden">
+            <div className="rounded border border-line bg-surface overflow-hidden">
               <div className="flex items-center justify-between gap-4 px-4 py-3">
                 <div className="flex items-center gap-3 min-w-0">
-                  <Users className="h-4 w-4 text-[#45474c] shrink-0" />
+                  <Users className="h-4 w-4 text-fg-muted shrink-0" />
                   <div className="min-w-0">
-                    <Label htmlFor="share-ec" className="text-xs font-semibold text-[#1b1b1d] cursor-pointer leading-tight">
+                    <Label htmlFor="share-ec" className="text-xs font-semibold text-fg cursor-pointer leading-tight">
                       {projExtCollaborator}
                     </Label>
-                    <p className="text-[11px] text-[#45474c] mt-0.5">Contractors, consultants &amp; agency partners who co-create content</p>
+                    <p className="text-caption text-fg-muted mt-0.5">Contractors, consultants &amp; agency partners who co-create content</p>
                   </div>
                 </div>
                 <Switch
@@ -219,18 +219,18 @@ export function DocumentShareModal({
                 style={{ gridTemplateRows: settings.externalCollaborator ? '1fr' : '0fr' }}
                 aria-hidden={!settings.externalCollaborator}
               >
-                <div className="min-h-0 overflow-hidden"><div className="mx-4 border-t border-[#e5e7eb]" />
-                  <div className="bg-white px-4 py-3 space-y-3">
-                    <p className="font-mono text-[9px] font-bold uppercase tracking-widest text-[#45474c]">Options</p>
+                <div className="min-h-0 overflow-hidden"><div className="mx-4 border-t border-line" />
+                  <div className="bg-surface px-4 py-3 space-y-3">
+                    <p className="text-small font-medium text-fg-muted">Options</p>
                     <div className="space-y-3 pl-4">
                       <div className="flex items-center justify-between gap-3">
-                        <span className="text-xs text-rose-600 flex items-center gap-2">
+                        <span className="text-xs text-tag-red-fg flex items-center gap-2">
                           <Pencil className="h-3.5 w-3.5" /> Read-Write permission
                         </span>
                         <Switch checked disabled className="opacity-50 cursor-not-allowed !bg-rose-500" />
                       </div>
                       <div className="flex items-center justify-between gap-3">
-                        <Label htmlFor="ec-download" className="text-xs text-[#45474c] flex items-center gap-2 cursor-pointer">
+                        <Label htmlFor="ec-download" className="text-xs text-fg-muted flex items-center gap-2 cursor-pointer">
                           <FileDown className="h-3.5 w-3.5" /> Allow download
                         </Label>
                         <Switch
@@ -246,15 +246,15 @@ export function DocumentShareModal({
             </div>
 
             {/* Guest (platform.personas.eng_viewer): main toggle + options enclosed in one tile */}
-            <div className="rounded border border-[#e5e7eb] bg-white overflow-hidden">
+            <div className="rounded border border-line bg-surface overflow-hidden">
               <div className="flex items-center justify-between gap-4 px-4 py-3">
                 <div className="flex items-center gap-3 min-w-0">
-                  <UserCircle className="h-4 w-4 text-[#45474c] shrink-0" />
+                  <UserCircle className="h-4 w-4 text-fg-muted shrink-0" />
                   <div className="min-w-0">
-                    <Label htmlFor="share-guest" className="text-xs font-semibold text-[#1b1b1d] cursor-pointer leading-tight">
+                    <Label htmlFor="share-guest" className="text-xs font-semibold text-fg cursor-pointer leading-tight">
                       {projViewer}
                     </Label>
-                    <p className="text-[11px] text-[#45474c] mt-0.5">Clients, sponsors &amp; stakeholders who review &amp; stay informed</p>
+                    <p className="text-caption text-fg-muted mt-0.5">Clients, sponsors &amp; stakeholders who review &amp; stay informed</p>
                   </div>
                 </div>
                 <Switch
@@ -269,9 +269,9 @@ export function DocumentShareModal({
                 style={{ gridTemplateRows: settings.guest ? '1fr' : '0fr' }}
                 aria-hidden={!settings.guest}
               >
-                <div className="min-h-0 overflow-hidden"><div className="mx-4 border-t border-[#e5e7eb]" />
-                  <div className="bg-white px-4 py-3 space-y-3">
-                    <p className="font-mono text-[9px] font-bold uppercase tracking-widest text-[#45474c]">Options</p>
+                <div className="min-h-0 overflow-hidden"><div className="mx-4 border-t border-line" />
+                  <div className="bg-surface px-4 py-3 space-y-3">
+                    <p className="text-small font-medium text-fg-muted">Options</p>
                     <div className="space-y-3 pl-4">
                       <div className="flex items-center justify-between gap-3">
                         <span className="text-xs text-primary flex items-center gap-2">
@@ -280,7 +280,7 @@ export function DocumentShareModal({
                         <Switch checked disabled className="opacity-50 cursor-not-allowed" />
                       </div>
                       <div className="flex items-center justify-between gap-3">
-                        <Label htmlFor="guest-pdf" className="text-xs text-[#45474c] flex items-center gap-2 cursor-pointer">
+                        <Label htmlFor="guest-pdf" className="text-xs text-fg-muted flex items-center gap-2 cursor-pointer">
                           <FileText className="h-3.5 w-3.5" /> Share PDF version only
                         </Label>
                         <Switch
@@ -302,14 +302,14 @@ export function DocumentShareModal({
                       <div className={cn("flex items-center justify-between gap-3", !settings.guestOptions.sharePdfOnly && "opacity-40")}>
                         <Label
                           htmlFor="guest-watermark"
-                          className={cn("text-xs text-[#45474c] flex items-center gap-2", settings.guestOptions.sharePdfOnly ? "cursor-pointer" : "cursor-not-allowed")}
+                          className={cn("text-xs text-fg-muted flex items-center gap-2", settings.guestOptions.sharePdfOnly ? "cursor-pointer" : "cursor-not-allowed")}
                         >
                           <Droplets className="h-3.5 w-3.5" />
                           Add watermark
                           <TooltipProvider>
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <Info className="h-3 w-3 text-[#45474c] cursor-help" />
+                                <Info className="h-3 w-3 text-fg-muted cursor-help" />
                               </TooltipTrigger>
                               <TooltipContent side="top" className="max-w-[200px] text-center">
                                 Your firm name will be applied as a diagonal watermark on each page. Requires &ldquo;Share PDF version only&rdquo;.
@@ -330,7 +330,7 @@ export function DocumentShareModal({
                         />
                       </div>
                       <div className="flex items-center justify-between gap-3">
-                        <Label htmlFor="guest-download" className="text-xs text-[#45474c] flex items-center gap-2 cursor-pointer">
+                        <Label htmlFor="guest-download" className="text-xs text-fg-muted flex items-center gap-2 cursor-pointer">
                           <FileDown className="h-3.5 w-3.5" /> Allow download
                         </Label>
                         <Switch
@@ -353,10 +353,10 @@ export function DocumentShareModal({
         )}
 
         {/* Footer */}
-        <div className="px-5 py-3 border-t border-[#e5e7eb] bg-white flex items-center justify-end gap-2">
+        <div className="px-5 py-3 border-t border-line bg-surface flex items-center justify-end gap-2">
           <Button
             variant="outline"
-            className="rounded text-[10px] font-headline font-bold tracking-widest uppercase border-[#e5e7eb] text-[#45474c] hover:bg-[#f9f9fb]"
+            className="rounded border-line text-fg-muted hover:bg-surface-hover"
             onClick={() => onOpenChange(false)}
             disabled={saving}
           >
@@ -364,7 +364,7 @@ export function DocumentShareModal({
           </Button>
           <Button
             variant="greenCta"
-            className="rounded text-[10px] font-headline font-bold tracking-widest uppercase"
+            className="rounded"
             onClick={handleSave}
             disabled={saving || !initialLoadDone || !hasChanges}
           >

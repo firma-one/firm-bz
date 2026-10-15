@@ -617,7 +617,7 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
     return (
       <div className="space-y-3" aria-label="Loading connectors" role="status">
         {[0, 1, 2].map(i => (
-          <div key={i} className="rounded border border-[#e5e7eb] bg-[#fdfdfe] overflow-hidden">
+          <div key={i} className="rounded border border-line bg-[#fdfdfe] overflow-hidden">
             {/* Account row */}
             <div className="flex items-center justify-between gap-3 px-4 py-3">
               <div className="flex items-center gap-3 min-w-0">
@@ -634,7 +634,7 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
               </div>
             </div>
             {/* Location row */}
-            <div className="flex items-center justify-between gap-3 px-4 py-3 border-t border-[#e5e7eb]">
+            <div className="flex items-center justify-between gap-3 px-4 py-3 border-t border-line">
               <div className="flex items-center gap-3 min-w-0">
                 <Skeleton className="h-9 w-9 rounded shrink-0" />
                 <div className="space-y-1.5">
@@ -667,7 +667,7 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
               const isPersonalDrive = driveRoot?.workspaceRootLocation === 'PERSONAL'
 
               return (
-                <div key={connector.id} className="relative rounded border border-[#e5e7eb] bg-[#fdfdfe] overflow-hidden">
+                <div key={connector.id} className="relative rounded border border-line bg-[#fdfdfe] overflow-hidden">
                   {/* Watermark number */}
                   <span className="pointer-events-none select-none absolute -left-1 -bottom-6 text-[8rem] font-black leading-none text-[#e8eaed]/50 z-0 tracking-tighter">
                     {connectorIndex + 1}
@@ -675,7 +675,7 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
                   {/* Account row */}
                   <div className="relative z-10 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-4 py-3">
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="h-9 w-9 shrink-0 bg-white border border-[#e5e7eb] rounded flex items-center justify-center p-1.5">
+                      <div className="h-9 w-9 shrink-0 bg-surface border border-line rounded flex items-center justify-center p-1.5">
                         <GoogleDriveProductMark width={20} height={20} />
                       </div>
                       <div className="min-w-0">
@@ -690,28 +690,28 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
                                 if (e.key === 'Enter') void handleSaveName(connector.id)
                                 if (e.key === 'Escape') setEditingId(null)
                               }}
-                              className="rounded border border-primary bg-white px-2 py-0.5 text-[0.8125rem] font-bold text-[#1b1b1d] focus:outline-none focus:ring-1 focus:ring-primary w-44"
+                              className="rounded border border-primary bg-surface px-2 py-0.5 text-[0.8125rem] font-bold text-fg focus:outline-none focus:ring-2 focus:ring-action/30 w-44"
                             />
                             <button type="button" onClick={() => void handleSaveName(connector.id)}
                               disabled={savingName || !editNameValue.trim()}
-                              className="text-emerald-600 hover:text-emerald-700 transition-colors disabled:opacity-40 disabled:pointer-events-none">
+                              className="text-tag-green-fg hover:text-tag-green-fg transition-colors disabled:opacity-40 disabled:pointer-events-none">
                               {savingName ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                             </button>
                             <button type="button" onClick={() => setEditingId(null)}
-                              className="text-[#9a9ba0] hover:text-[#45474c] transition-colors">
+                              className="text-fg-subtle hover:text-fg-muted transition-colors">
                               <XSquare className="w-4 h-4" />
                             </button>
                           </div>
                         ) : (
                           <div className="group/name flex items-center gap-1.5">
-                            <p className="text-[0.8125rem] font-bold text-[#1b1b1d] truncate leading-snug">
+                            <p className="text-[0.8125rem] font-bold text-fg truncate leading-snug">
                               {connector.name || connector.email || 'Google account'}
                             </p>
                             <button
                               type="button"
                               onClick={() => { setEditNameValue(connector.name || ''); setEditingId(connector.id) }}
                               aria-label="Rename connection"
-                              className="shrink-0 text-[#9a9ba0] transition-colors hover:text-[#45474c] disabled:opacity-0 disabled:pointer-events-none"
+                              className="shrink-0 text-fg-subtle transition-colors hover:text-fg-muted disabled:opacity-0 disabled:pointer-events-none"
                             >
                               <Pencil className="w-3 h-3" />
                             </button>
@@ -719,7 +719,7 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
                         )}
                         <div className="flex items-center gap-1.5 mt-0.5">
                           <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isActive ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-                          <p className={`text-xs ${isActive ? 'text-[#45474c]' : 'text-[#9a9ba0]'}`}>
+                          <p className={`text-xs ${isActive ? 'text-fg-muted' : 'text-fg-subtle'}`}>
                             {isActive ? (connector.email || 'Connected') : 'Disconnected — reconnect to restore access'}
                           </p>
                         </div>
@@ -732,7 +732,7 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <Button type="button" variant="outline" size="sm"
-                                className="h-8 w-[6.5rem] justify-center px-3 text-xs border-[#e5e7eb] bg-white text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] rounded"
+                                className="h-8 w-[6.5rem] justify-center px-3 text-xs border-line bg-surface text-fg-muted hover:bg-surface-hover hover:text-fg rounded"
                                 onClick={() => void handleTestConnection(connector)}
                                 disabled={isTesting}>
                                 {isTesting
@@ -748,7 +748,7 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
                             <TooltipTrigger asChild>
                               <span tabIndex={isPersonalDrive ? 0 : undefined} className={isPersonalDrive ? 'cursor-not-allowed' : undefined}>
                                 <Button type="button" variant="outline" size="sm"
-                                  className="h-8 w-[6.5rem] justify-center px-3 text-xs border-[#e5e7eb] bg-white text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] rounded"
+                                  className="h-8 w-[6.5rem] justify-center px-3 text-xs border-line bg-surface text-fg-muted hover:bg-surface-hover hover:text-fg rounded"
                                   onClick={() => void handleOpenSwitchModal(connector)}
                                   disabled={loading || isPersonalDrive || clientLinkBusy}>
                                   <SwitchCamera className="w-3.5 h-3.5 mr-1.5" />Transfer
@@ -766,7 +766,7 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
                             <TooltipTrigger asChild>
                               <span tabIndex={connector.attachedClients.length > 0 ? 0 : undefined} className={connector.attachedClients.length > 0 ? 'cursor-not-allowed' : undefined}>
                                 <Button type="button" variant="outline" size="sm"
-                                  className="h-8 w-[6.5rem] justify-center px-3 text-xs border-[#e5e7eb] bg-white text-rose-600 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200 rounded"
+                                  className="h-8 w-[6.5rem] justify-center px-3 text-xs border-line bg-surface text-tag-red-fg hover:bg-tag-red-bg hover:text-tag-red-fg hover:border-tag-red-bg rounded"
                                   onClick={() => setDisconnectTarget(connector)}
                                   disabled={connector.attachedClients.length > 0 || clientLinkBusy}>
                                   <Unplug className="w-3.5 h-3.5 mr-1.5" />Disconnect
@@ -796,7 +796,7 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <Button type="button" variant="outline" size="sm"
-                                className="h-8 px-3 text-xs border-[#e5e7eb] bg-white text-rose-600 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200 rounded"
+                                className="h-8 px-3 text-xs border-line bg-surface text-tag-red-fg hover:bg-tag-red-bg hover:text-tag-red-fg hover:border-tag-red-bg rounded"
                                 onClick={() => setRemoveTarget(connector)}>
                                 <Trash2 className="w-3.5 h-3.5 mr-1.5" />Remove
                               </Button>
@@ -811,22 +811,22 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
                   {/* Account-type mismatch banner — declared answer disagreed with the id_token-detected
                       account type. See .claude/plans/connector-microsoft-impl.md, item 20. */}
                   {driveRoot?.accountTypeMismatch && (
-                    <div className="relative z-10 mx-4 mt-3 flex items-start gap-2.5 rounded border border-amber-200 bg-amber-50 px-3 py-2.5">
-                      <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 mt-0.5" />
+                    <div className="relative z-10 mx-4 mt-3 flex items-start gap-2.5 rounded border border-tag-yellow-bg bg-tag-yellow-bg px-3 py-2.5">
+                      <AlertTriangle className="h-4 w-4 shrink-0 text-tag-yellow-fg mt-0.5" />
                       <div className="flex-1">
                         <p className="text-xs font-medium text-amber-900">
                           {driveRoot?.detectedIsPersonalAccount
                             ? 'This looks like a personal Google account, not a Work or School account.'
                             : 'This looks like a Work or School account, not a personal account.'}
                         </p>
-                        <p className="text-xs text-amber-700 mt-0.5">
+                        <p className="text-xs text-tag-yellow-fg mt-0.5">
                           {driveRoot?.detectedIsPersonalAccount
                             ? 'Reconnect and choose "Personal" for the correct setup.'
                             : 'Reconnect and choose "Work or School" to unlock Shared Drive.'}
                         </p>
                       </div>
                       <Button type="button" variant="outline" size="sm"
-                        className="h-7 shrink-0 px-2.5 text-[11px] border-amber-300 bg-white text-amber-800 hover:bg-amber-100 rounded"
+                        className="h-7 shrink-0 px-2.5 text-caption border-amber-300 bg-surface text-tag-yellow-fg hover:bg-amber-100 rounded"
                         onClick={() => handleReconnect(connector)}>
                         Reconnect
                       </Button>
@@ -835,7 +835,7 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
 
                   {/* Workspace root — shown once status is loaded regardless of connection state; GoogleDriveWorkspaceRoot masks/disables itself internally when there's no live accessToken */}
                   {driveRoot !== null && (
-                    <div className="relative z-10 pl-12 pr-4 py-3 border-t border-[#e5e7eb]">
+                    <div className="relative z-10 pl-12 pr-4 py-3 border-t border-line">
                       <GoogleDriveWorkspaceRoot
                         connectionId={connector.id}
                         accessToken={session?.access_token}
@@ -884,14 +884,14 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
               const isShared = oneDriveRoot?.workspaceRootLocation === 'SHARED'
               const isEditing = editingId === connector.id
               return (
-                <div key={connector.id} className="relative rounded border border-[#e5e7eb] bg-[#fdfdfe] overflow-hidden">
+                <div key={connector.id} className="relative rounded border border-line bg-[#fdfdfe] overflow-hidden">
                   {/* Watermark number — continues the sequence started by the Google Drive list above */}
                   <span className="pointer-events-none select-none absolute -left-1 -bottom-6 text-[8rem] font-black leading-none text-[#e8eaed]/50 z-0 tracking-tighter">
                     {googleConnectors.length + oneDriveIndex + 1}
                   </span>
                   <div className="relative z-10 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-4 py-3">
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="h-9 w-9 shrink-0 bg-white border border-[#e5e7eb] rounded flex items-center justify-center p-1.5">
+                      <div className="h-9 w-9 shrink-0 bg-surface border border-line rounded flex items-center justify-center p-1.5">
                         {isShared ? <SharePointIcon size={20} /> : <OneDriveIcon size={20} />}
                       </div>
                       <div className="min-w-0">
@@ -906,28 +906,28 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
                                 if (e.key === 'Enter') void handleSaveName(connector.id)
                                 if (e.key === 'Escape') setEditingId(null)
                               }}
-                              className="rounded border border-primary bg-white px-2 py-0.5 text-[0.8125rem] font-bold text-[#1b1b1d] focus:outline-none focus:ring-1 focus:ring-primary w-44"
+                              className="rounded border border-primary bg-surface px-2 py-0.5 text-[0.8125rem] font-bold text-fg focus:outline-none focus:ring-2 focus:ring-action/30 w-44"
                             />
                             <button type="button" onClick={() => void handleSaveName(connector.id)}
                               disabled={savingName || !editNameValue.trim()}
-                              className="text-emerald-600 hover:text-emerald-700 transition-colors disabled:opacity-40 disabled:pointer-events-none">
+                              className="text-tag-green-fg hover:text-tag-green-fg transition-colors disabled:opacity-40 disabled:pointer-events-none">
                               {savingName ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                             </button>
                             <button type="button" onClick={() => setEditingId(null)}
-                              className="text-[#9a9ba0] hover:text-[#45474c] transition-colors">
+                              className="text-fg-subtle hover:text-fg-muted transition-colors">
                               <XSquare className="w-4 h-4" />
                             </button>
                           </div>
                         ) : (
                           <div className="group/name flex items-center gap-1.5">
-                            <p className="text-[0.8125rem] font-bold text-[#1b1b1d] truncate leading-snug">
+                            <p className="text-[0.8125rem] font-bold text-fg truncate leading-snug">
                               {connector.name || connector.email || (isShared ? 'SharePoint site' : 'OneDrive account')}
                             </p>
                             <button
                               type="button"
                               onClick={() => { setEditNameValue(connector.name || ''); setEditingId(connector.id) }}
                               aria-label="Rename connection"
-                              className="shrink-0 text-[#9a9ba0] transition-colors hover:text-[#45474c] disabled:opacity-0 disabled:pointer-events-none"
+                              className="shrink-0 text-fg-subtle transition-colors hover:text-fg-muted disabled:opacity-0 disabled:pointer-events-none"
                             >
                               <Pencil className="w-3 h-3" />
                             </button>
@@ -935,7 +935,7 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
                         )}
                         <div className="flex items-center gap-1.5 mt-0.5">
                           <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isActive ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-                          <p className={`text-xs ${isActive ? 'text-[#45474c]' : 'text-[#9a9ba0]'}`}>
+                          <p className={`text-xs ${isActive ? 'text-fg-muted' : 'text-fg-subtle'}`}>
                             {isActive ? (connector.email || 'Connected') : 'Disconnected — reconnect to restore access'}
                           </p>
                         </div>
@@ -947,7 +947,7 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <Button type="button" variant="outline" size="sm"
-                                className="h-8 w-[6.5rem] justify-center px-3 text-xs border-[#e5e7eb] bg-white text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] rounded"
+                                className="h-8 w-[6.5rem] justify-center px-3 text-xs border-line bg-surface text-fg-muted hover:bg-surface-hover hover:text-fg rounded"
                                 onClick={() => void handleOneDriveTestConnection(connector)}
                                 disabled={testingId === connector.id}>
                                 {testingId === connector.id
@@ -963,7 +963,7 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
                             <TooltipTrigger asChild>
                               <span tabIndex={!isShared ? 0 : undefined} className={!isShared ? 'cursor-not-allowed' : undefined}>
                                 <Button type="button" variant="outline" size="sm"
-                                  className="h-8 w-[6.5rem] justify-center px-3 text-xs border-[#e5e7eb] bg-white text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] rounded"
+                                  className="h-8 w-[6.5rem] justify-center px-3 text-xs border-line bg-surface text-fg-muted hover:bg-surface-hover hover:text-fg rounded"
                                   onClick={() => void handleOpenSwitchModal(connector)}
                                   disabled={oneDriveLoading || !isShared || clientLinkBusy}>
                                   <SwitchCamera className="w-3.5 h-3.5 mr-1.5" />Transfer
@@ -981,7 +981,7 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
                             <TooltipTrigger asChild>
                               <span tabIndex={connector.attachedClients.length > 0 ? 0 : undefined} className={connector.attachedClients.length > 0 ? 'cursor-not-allowed' : undefined}>
                                 <Button type="button" variant="outline" size="sm"
-                                  className="h-8 w-[6.5rem] justify-center px-3 text-xs border-[#e5e7eb] bg-white text-rose-600 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200 rounded"
+                                  className="h-8 w-[6.5rem] justify-center px-3 text-xs border-line bg-surface text-tag-red-fg hover:bg-tag-red-bg hover:text-tag-red-fg hover:border-tag-red-bg rounded"
                                   onClick={() => setOneDriveDisconnectTarget(connector)}
                                   disabled={connector.attachedClients.length > 0 || clientLinkBusy}>
                                   <Unplug className="w-3.5 h-3.5 mr-1.5" />Disconnect
@@ -1011,7 +1011,7 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <Button type="button" variant="outline" size="sm"
-                                className="h-8 px-3 text-xs border-[#e5e7eb] bg-white text-rose-600 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200 rounded"
+                                className="h-8 px-3 text-xs border-line bg-surface text-tag-red-fg hover:bg-tag-red-bg hover:text-tag-red-fg hover:border-tag-red-bg rounded"
                                 onClick={() => setOneDriveRemoveTarget(connector)}>
                                 <Trash2 className="w-3.5 h-3.5 mr-1.5" />Remove
                               </Button>
@@ -1029,22 +1029,22 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
                       and external-guest sharing won't work until reconnected. See
                       .claude/plans/connector-microsoft-impl.md, item 20. */}
                   {oneDriveRoot?.accountTypeMismatch && (
-                    <div className="relative z-10 mx-4 mt-3 flex items-start gap-2.5 rounded border border-amber-200 bg-amber-50 px-3 py-2.5">
-                      <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 mt-0.5" />
+                    <div className="relative z-10 mx-4 mt-3 flex items-start gap-2.5 rounded border border-tag-yellow-bg bg-tag-yellow-bg px-3 py-2.5">
+                      <AlertTriangle className="h-4 w-4 shrink-0 text-tag-yellow-fg mt-0.5" />
                       <div className="flex-1">
                         <p className="text-xs font-medium text-amber-900">
                           {oneDriveRoot?.detectedIsPersonalAccount
                             ? 'This looks like a personal Microsoft account, not work or school.'
                             : 'This looks like a work or school Microsoft account, not personal.'}
                         </p>
-                        <p className="text-xs text-amber-700 mt-0.5">
+                        <p className="text-xs text-tag-yellow-fg mt-0.5">
                           {oneDriveRoot?.detectedIsPersonalAccount
                             ? 'Reconnect and choose "Personal" for the correct setup.'
                             : 'Reconnect and choose "Work or School" to unlock SharePoint and sharing with people outside your organization.'}
                         </p>
                       </div>
                       <Button type="button" variant="outline" size="sm"
-                        className="h-7 shrink-0 px-2.5 text-[11px] border-amber-300 bg-white text-amber-800 hover:bg-amber-100 rounded"
+                        className="h-7 shrink-0 px-2.5 text-caption border-amber-300 bg-surface text-tag-yellow-fg hover:bg-amber-100 rounded"
                         onClick={() => handleOneDriveReconnect(connector)}>
                         Reconnect
                       </Button>
@@ -1053,7 +1053,7 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
 
                   {/* Workspace root — shown once status is loaded regardless of connection state; OneDriveWorkspaceRoot masks/disables itself internally when disconnected */}
                   {oneDriveRoot !== null && (
-                    <div className="relative z-10 pl-12 pr-4 py-3 border-t border-[#e5e7eb]">
+                    <div className="relative z-10 pl-12 pr-4 py-3 border-t border-line">
                       <OneDriveWorkspaceRoot
                         connectionId={connector.id}
                         accessToken={session?.access_token}
@@ -1099,25 +1099,25 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
             className={cn(
               "inline-flex w-auto items-center gap-2 mb-2 h-8 rounded border transition-all duration-200 group",
               addNewOpen
-                ? "justify-start border-transparent bg-transparent px-0 text-[#45474c]"
+                ? "justify-start border-transparent bg-transparent px-0 text-fg-muted"
                 : "justify-center border-0 bg-primary px-4 text-white hover:brightness-105"
             )}
           >
             <p className={cn(
-              "text-[10px] font-bold uppercase tracking-[0.2em] text-left transition-colors",
-              addNewOpen ? "text-[#45474c]" : "text-white"
+              "text-small font-medium text-left transition-colors",
+              addNewOpen ? "text-fg-muted" : "text-white"
             )}>
               {connectors.length === 0 ? 'Connect storage account' : 'Add new connection'}
             </p>
             <span className={cn(
               "flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-all duration-200",
               addNewOpen
-                ? "border-[#e5e7eb] bg-white text-[#45474c] group-hover:border-[#1b1b1d]"
+                ? "border-line bg-surface text-fg-muted group-hover:border-fg"
                 : "border-transparent bg-transparent"
             )}>
               {addNewOpen
-                ? <span className="text-[10px] font-bold leading-none">−</span>
-                : <span className="text-[10px] font-bold leading-none">+</span>
+                ? <span className="text-caption font-bold leading-none">−</span>
+                : <span className="text-caption font-bold leading-none">+</span>
               }
             </span>
           </button>
@@ -1130,15 +1130,15 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
             transition={{ duration: 0.2, ease: "easeOut" }}
             className="overflow-hidden"
           >
-          <div className="flex flex-col gap-0.5 border border-[#e5e7eb] rounded p-1">
-            <div className="flex items-start gap-2.5 px-2.5 py-2.5 rounded hover:bg-slate-50 transition-colors">
-              <div className="h-8 w-8 shrink-0 bg-white border border-[#e5e7eb] rounded flex items-center justify-center p-1.5 mt-0.5">
-                {loading ? <RefreshCw className="w-3.5 h-3.5 text-[#45474c] animate-spin" /> : <GoogleDriveProductMark width={18} height={18} />}
+          <div className="flex flex-col gap-0.5 border border-line rounded p-1">
+            <div className="flex items-start gap-2.5 px-2.5 py-2.5 rounded hover:bg-surface-hover transition-colors">
+              <div className="h-8 w-8 shrink-0 bg-surface border border-line rounded flex items-center justify-center p-1.5 mt-0.5">
+                {loading ? <RefreshCw className="w-3.5 h-3.5 text-fg-muted animate-spin" /> : <GoogleDriveProductMark width={18} height={18} />}
               </div>
               <div className="flex flex-col min-w-0 flex-1 gap-1.5">
                 <div>
-                  <span className="text-[0.8125rem] font-semibold text-[#1b1b1d] leading-snug">Google Drive</span>
-                  <span className="text-xs text-[#45474c] block">{loading ? 'Opening Google sign-in…' : 'Name this connection, then sign in to authorize access.'}</span>
+                  <span className="text-[0.8125rem] font-semibold text-fg leading-snug">Google Drive</span>
+                  <span className="text-xs text-fg-muted block">{loading ? 'Opening Google sign-in…' : 'Name this connection, then sign in to authorize access.'}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <input
@@ -1148,7 +1148,7 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
                     onKeyDown={(e) => { if (e.key === 'Enter') handleConnect() }}
                     placeholder='Connection name, e.g. "Acme Corp Drive"'
                     disabled={loading}
-                    className="flex-1 rounded border border-[#e5e7eb] bg-white px-2.5 py-1.5 text-xs text-[#1b1b1d] placeholder:text-[#9a9ba0] focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary disabled:opacity-50"
+                    className="flex-1 rounded border border-line bg-surface px-2.5 py-1.5 text-xs text-fg placeholder:text-fg-subtle focus:outline-none focus:ring-2 focus:ring-action/30 focus:border-action disabled:opacity-50"
                   />
                   <button
                     type="button"
@@ -1160,23 +1160,23 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
                   </button>
                 </div>
                 {friendlyNameTouched && !friendlyName.trim() && (
-                  <p className="text-[10px] text-red-500">Give this connection a name first.</p>
+                  <p className="text-caption text-danger">Give this connection a name first.</p>
                 )}
               </div>
             </div>
             {microsoftConnectorEnabled && (
               <>
-                <div className="h-px bg-[#f3f4f6] mx-2" />
-                <div className="flex items-start gap-2.5 px-2.5 py-2.5 rounded hover:bg-slate-50 transition-colors">
-                  <div className="h-8 w-8 shrink-0 bg-white border border-[#e5e7eb] rounded flex items-center justify-center p-1.5 mt-0.5">
-                    {oneDriveLoading ? <RefreshCw className="w-3.5 h-3.5 text-[#45474c] animate-spin" /> : <OneDriveIcon size={18} />}
+                <div className="h-px bg-surface-muted mx-2" />
+                <div className="flex items-start gap-2.5 px-2.5 py-2.5 rounded hover:bg-surface-hover transition-colors">
+                  <div className="h-8 w-8 shrink-0 bg-surface border border-line rounded flex items-center justify-center p-1.5 mt-0.5">
+                    {oneDriveLoading ? <RefreshCw className="w-3.5 h-3.5 text-fg-muted animate-spin" /> : <OneDriveIcon size={18} />}
                   </div>
                   <div className="flex flex-col min-w-0 flex-1 gap-1.5">
                     <div>
-                      <span className="text-[0.8125rem] font-semibold text-[#1b1b1d] leading-snug">
+                      <span className="text-[0.8125rem] font-semibold text-fg leading-snug">
                         Microsoft OneDrive / SharePoint
                       </span>
-                      <span className="text-xs text-[#45474c] block">{oneDriveLoading ? 'Opening Microsoft sign-in…' : 'Name this connection, then sign in to authorize access.'}</span>
+                      <span className="text-xs text-fg-muted block">{oneDriveLoading ? 'Opening Microsoft sign-in…' : 'Name this connection, then sign in to authorize access.'}</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <input
@@ -1186,7 +1186,7 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
                         onKeyDown={(e) => { if (e.key === 'Enter') handleOneDriveConnect() }}
                         placeholder='Connection name, e.g. "Acme Corp OneDrive"'
                         disabled={oneDriveLoading}
-                        className="flex-1 rounded border border-[#e5e7eb] bg-white px-2.5 py-1.5 text-xs text-[#1b1b1d] placeholder:text-[#9a9ba0] focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary disabled:opacity-50"
+                        className="flex-1 rounded border border-line bg-surface px-2.5 py-1.5 text-xs text-fg placeholder:text-fg-subtle focus:outline-none focus:ring-2 focus:ring-action/30 focus:border-action disabled:opacity-50"
                       />
                       <button
                         type="button"
@@ -1198,7 +1198,7 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
                       </button>
                     </div>
                     {oneDriveFriendlyNameTouched && !oneDriveFriendlyName.trim() && (
-                      <p className="text-[10px] text-red-500">Give this connection a name first.</p>
+                      <p className="text-caption text-danger">Give this connection a name first.</p>
                     )}
                   </div>
                 </div>
@@ -1320,8 +1320,8 @@ function removeTargetWarnings(target: FirmConnectorRecord | null): React.ReactNo
   return (
     <>
       {target.documentCount > 0 && (
-        <div className="flex gap-2.5 rounded border border-red-200 bg-red-50 px-3 py-2.5 text-xs text-red-800">
-          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-500" />
+        <div className="flex gap-2.5 rounded border border-tag-red-bg bg-tag-red-bg px-3 py-2.5 text-xs text-tag-red-fg">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-danger" />
           <span>
             <span className="font-semibold">{target.documentCount} file{target.documentCount === 1 ? '' : 's'}</span>{' '}
             {target.documentCount === 1 ? 'is' : 'are'} tracked against this connector. Removing it will not delete
@@ -1331,8 +1331,8 @@ function removeTargetWarnings(target: FirmConnectorRecord | null): React.ReactNo
         </div>
       )}
       {target.attachedClients.length > 0 && (
-        <div className="flex gap-2.5 rounded border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800">
-          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
+        <div className="flex gap-2.5 rounded border border-tag-yellow-bg bg-tag-yellow-bg px-3 py-2.5 text-xs text-tag-yellow-fg">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-tag-yellow-fg" />
           <span>
             This connector is attached to{' '}
             <span className="font-semibold">{target.attachedClients.map(c => c.name).join(', ')}</span>.
@@ -1372,15 +1372,15 @@ function ConnectorClientAttachSection({
   const attachAllDisabled = disabled || !rootFolderId || attachingAll || clientLinkBusy
 
   return (
-    <div className="relative z-10 border-t border-[#e5e7eb]">
+    <div className="relative z-10 border-t border-line">
       <div className="pl-12 pr-4 pt-3 pb-1 flex items-center gap-3">
-        <div className="h-9 w-9 shrink-0 bg-[#f9f9fb] border border-[#e5e7eb] rounded flex items-center justify-center p-1.5">
-          <Users className="w-4 h-4 text-[#45474c]" strokeWidth={1.75} />
+        <div className="h-9 w-9 shrink-0 bg-surface-subtle border border-line rounded flex items-center justify-center p-1.5">
+          <Users className="w-4 h-4 text-fg-muted" strokeWidth={1.75} />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-[0.8125rem] font-bold text-[#1b1b1d] leading-snug">Clients</p>
+          <p className="text-[0.8125rem] font-bold text-fg leading-snug">Clients</p>
           {visibleClients.length > 0 && (
-            <p className="text-xs text-[#9a9ba0] mt-0.5">
+            <p className="text-xs text-fg-subtle mt-0.5">
               Attached to {connector.attachedClients.length} of {visibleClients.length} client{visibleClients.length === 1 ? '' : 's'}
             </p>
           )}
@@ -1392,7 +1392,7 @@ function ConnectorClientAttachSection({
                 type="button"
                 variant="outline"
                 size="sm"
-                className="h-7 shrink-0 px-2.5 text-[11px] border-[#e5e7eb] bg-white text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] rounded"
+                className="h-7 shrink-0 px-2.5 text-caption border-line bg-surface text-fg-muted hover:bg-surface-hover hover:text-fg rounded"
                 onClick={() => void onAttachAll(connector.id)}
                 disabled={attachAllDisabled}
               >
@@ -1407,7 +1407,7 @@ function ConnectorClientAttachSection({
         )}
       </div>
       {visibleClients.length === 0 ? (
-        <p className="pl-[4.75rem] pr-4 pb-3 text-xs text-[#9a9ba0]">No clients available to attach.</p>
+        <p className="pl-[4.75rem] pr-4 pb-3 text-xs text-fg-subtle">No clients available to attach.</p>
       ) : (
         <div className="pl-[5.25rem] pr-3 pb-3 flex flex-col gap-0.5">
           {visibleClients.map(client => {
@@ -1446,10 +1446,10 @@ function ConnectorClientAttachSection({
               >
                 <div className="flex items-center gap-2 min-w-0">
                   {isAttachedHere
-                    ? <SquareCheck className="w-4 h-4 shrink-0 text-emerald-600" />
-                    : <Square className="w-4 h-4 shrink-0 text-[#d1d5db]" />
+                    ? <SquareCheck className="w-4 h-4 shrink-0 text-tag-green-fg" />
+                    : <Square className="w-4 h-4 shrink-0 text-line-strong" />
                   }
-                  <span className={`text-xs truncate ${isAttachedHere ? 'font-medium text-[#1b1b1d]' : 'text-[#45474c]'}`}>
+                  <span className={`text-xs truncate ${isAttachedHere ? 'font-medium text-fg' : 'text-fg-muted'}`}>
                     {client.name}
                   </span>
                 </div>
@@ -1462,10 +1462,10 @@ function ConnectorClientAttachSection({
                     ? onDetach(connector.id, client.id)
                     : onAttach(connector.id, client.id))}
                   className={cn(
-                    "h-7 w-[6.5rem] shrink-0 justify-center px-3 text-xs rounded border-[#e5e7eb] bg-white",
+                    "h-7 w-[6.5rem] shrink-0 justify-center px-3 text-xs rounded border-line bg-surface",
                     isAttachedHere
-                      ? "text-rose-600 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200"
-                      : "text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 hover:border-emerald-200"
+                      ? "text-tag-red-fg hover:bg-tag-red-bg hover:text-tag-red-fg hover:border-tag-red-bg"
+                      : "text-tag-green-fg hover:bg-tag-green-bg hover:text-tag-green-fg hover:border-tag-green-bg"
                   )}
                 >
                   {isWorking ? (

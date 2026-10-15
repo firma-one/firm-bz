@@ -81,50 +81,50 @@ export function FirmSwitchDialog({
 
     return (
         <Dialog open={open} onOpenChange={handleCancel}>
-            <DialogContent className="sm:max-w-[420px] border-[#e5e7eb] p-0 gap-0 rounded">
+            <DialogContent className="sm:max-w-[420px] p-0 gap-0">
 
                 <VisuallyHidden><DialogTitle>Switch Firm</DialogTitle></VisuallyHidden>
 
                 {/* Header */}
-                <div className="px-5 py-4 border-b border-[#e5e7eb] bg-[#f9f9fb] flex items-start gap-3">
-                    <div className="mt-0.5 h-7 w-7 rounded bg-primary/10 flex items-center justify-center shrink-0">
-                        <Building2 className="h-3.5 w-3.5 text-primary" />
+                <div className="px-5 py-4 border-b border-line flex items-start gap-3">
+                    <div className="mt-0.5 h-7 w-7 rounded bg-surface-muted flex items-center justify-center shrink-0">
+                        <Building2 className="h-3.5 w-3.5 text-fg-muted" />
                     </div>
                     <div>
-                        <p className="text-sm font-semibold text-[#1b1b1d] leading-tight">Switch Firm</p>
-                        <p className="text-xs text-[#45474c] mt-0.5">You are switching to a different firm workspace.</p>
+                        <p className="text-sm font-semibold text-fg leading-tight">Switch Firm</p>
+                        <p className="text-xs text-fg-muted mt-0.5">You are switching to a different firm workspace.</p>
                     </div>
                 </div>
 
                 {/* Body */}
                 <div className="p-5 space-y-4">
                     {error && (
-                        <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs px-3 py-2 rounded">
+                        <div className="bg-tag-red-bg border border-tag-red-bg text-tag-red-fg text-xs px-3 py-2 rounded">
                             {error}
                         </div>
                     )}
-                    <p className="text-sm text-[#45474c]">
+                    <p className="text-sm text-fg-muted">
                         {currentFirmName ? (
                             <>
-                                You are about to switch from <span className="font-semibold text-[#1b1b1d]">{currentFirmName}</span> to <span className="font-semibold text-[#1b1b1d]">{targetFirmName}</span>.
+                                You are about to switch from <span className="font-semibold text-fg">{currentFirmName}</span> to <span className="font-semibold text-fg">{targetFirmName}</span>.
                             </>
                         ) : (
                             <>
-                                You are about to switch to <span className="font-semibold text-[#1b1b1d]">{targetFirmName}</span>.
+                                You are about to switch to <span className="font-semibold text-fg">{targetFirmName}</span>.
                             </>
                         )}
                     </p>
-                    <p className="text-xs text-[#9a9ba0]">
+                    <p className="text-xs text-fg-subtle">
                         Your permissions will be refreshed for this firm workspace.
                     </p>
                 </div>
 
                 {/* Footer */}
-                <div className="px-5 py-3 border-t border-[#e5e7eb] flex items-center justify-end gap-3">
+                <div className="px-5 py-3 border-t border-line flex items-center justify-end gap-3">
                     <Button
                         type="button"
                         variant="outline"
-                        className="!rounded text-[10px] font-headline font-bold tracking-widest uppercase border-gray-300"
+                        className="!rounded border-line-strong"
                         onClick={handleCancel}
                         disabled={isLoading}
                     >
@@ -134,7 +134,7 @@ export function FirmSwitchDialog({
                         variant="greenCta"
                         onClick={handleSwitch}
                         disabled={isLoading}
-                        className="min-w-[8rem] text-[10px] font-headline font-bold tracking-widest uppercase"
+                        className="min-w-[8rem]"
                     >
                         {isLoading ? <LoadingSpinner size="sm" /> : 'Switch Firm'}
                     </Button>

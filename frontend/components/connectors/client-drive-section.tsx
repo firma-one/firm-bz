@@ -105,18 +105,18 @@ export function ClientDriveSection({
   return (
     <div>
       {connectorId ? (
-        <div className="rounded border border-[#e5e7eb] bg-white px-4 py-3 flex items-center gap-3">
-          <div className="h-8 w-8 shrink-0 bg-white border border-[#e5e7eb] rounded flex items-center justify-center p-1.5">
+        <div className="rounded border border-line bg-surface px-4 py-3 flex items-center gap-3">
+          <div className="h-8 w-8 shrink-0 bg-surface border border-line rounded flex items-center justify-center p-1.5">
             {provider === 'onedrive'
               ? (workspaceRootLocation === 'SHARED' ? <SharePointIcon size={18} /> : <OneDriveIcon size={18} />)
               : <GoogleDriveProductMark width={18} height={18} />}
           </div>
-          <SquareCheck className="w-4 h-4 shrink-0 text-emerald-500" />
+          <SquareCheck className="w-4 h-4 shrink-0 text-tag-green-fg" />
           <div className="min-w-0 flex-1">
-            <p className="text-[0.8125rem] font-semibold text-[#1b1b1d] truncate leading-snug">
+            <p className="text-[0.8125rem] font-semibold text-fg truncate leading-snug">
               {name || email || (provider === 'onedrive' ? 'Microsoft account' : 'Google account')}
             </p>
-            <p className={`text-xs mt-0.5 ${isActive ? 'text-[#45474c]' : 'text-[#9a9ba0]'}`}>
+            <p className={`text-xs mt-0.5 ${isActive ? 'text-fg-muted' : 'text-fg-subtle'}`}>
               {isActive ? (email || 'Connected') : 'Disconnected — reconnect in Firm Settings'}
             </p>
           </div>
@@ -124,7 +124,7 @@ export function ClientDriveSection({
             type="button"
             variant="outline"
             size="sm"
-            className="h-7 px-2 text-xs border-[#e5e7eb] bg-white text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] gap-1 shrink-0 rounded"
+            className="h-7 px-2 text-xs border-line bg-surface text-fg-muted hover:bg-surface-hover hover:text-fg gap-1 shrink-0 rounded"
             onClick={() => router.push(firmSettingsPath(groupSlug, orgSlug, 'storage'))}
           >
             <ExternalLink className="w-3 h-3" />
@@ -132,20 +132,20 @@ export function ClientDriveSection({
           </Button>
         </div>
       ) : (
-        <div className="rounded border border-[#e5e7eb] bg-white px-4 py-3 flex items-center gap-3">
-          <div className="h-8 w-8 shrink-0 bg-white border border-[#e5e7eb] rounded flex items-center justify-center p-1.5 opacity-40">
+        <div className="rounded border border-line bg-surface px-4 py-3 flex items-center gap-3">
+          <div className="h-8 w-8 shrink-0 bg-surface border border-line rounded flex items-center justify-center p-1.5 opacity-40">
             <GoogleDriveProductMark width={18} height={18} />
           </div>
-          <Square className="w-4 h-4 shrink-0 text-[#d1d5db]" />
+          <Square className="w-4 h-4 shrink-0 text-line-strong" />
           <div className="min-w-0 flex-1">
-            <p className="text-[0.8125rem] font-semibold text-[#9a9ba0] leading-snug">No connector linked</p>
-            <p className="text-xs text-[#9a9ba0] mt-0.5">Set one up in Firm Settings → Document Storage</p>
+            <p className="text-[0.8125rem] font-semibold text-fg-subtle leading-snug">No connector linked</p>
+            <p className="text-xs text-fg-subtle mt-0.5">Set one up in Firm Settings → Document Storage</p>
           </div>
           <Button
             type="button"
             variant="outline"
             size="sm"
-            className="h-7 px-2 text-xs border-[#e5e7eb] bg-white text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] gap-1 shrink-0 rounded"
+            className="h-7 px-2 text-xs border-line bg-surface text-fg-muted hover:bg-surface-hover hover:text-fg gap-1 shrink-0 rounded"
             onClick={() => router.push(firmSettingsPath(groupSlug, orgSlug, 'storage'))}
           >
             <ExternalLink className="w-3 h-3" />
