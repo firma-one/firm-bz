@@ -1,13 +1,24 @@
 'use client'
 
-import React from 'react'
-import { Users, Clock, CalendarClock } from 'lucide-react'
-import { ClientSummary } from '@/lib/actions/hierarchy'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { formatDistanceToNow } from 'date-fns'
-import { useBranding } from '@/lib/use-branding'
+import { formatDistanceToNowStrict } from 'date-fns'
+import { Briefcase, Building2, CalendarClock, CircleDot, Clock3, Type, Users } from 'lucide-react'
+import type { ClientSummary } from '@/lib/actions/hierarchy'
 import { clientPath } from '@/lib/navigation/firm-paths'
+import { useBranding } from '@/lib/use-branding'
+import {
+    NotionTable,
+    NotionTableBody,
+    NotionTableCell,
+    NotionTableHead,
+    NotionTableHeader,
+    NotionTableRow,
+} from '@/components/ui/notion-table'
+import { StatusPill, Tag } from '@/components/ui/tag'
+import { EmptyPanel } from '@/components/ui/empty-panel'
+import { ShimmerBar, ShimmerBlock } from '@/components/ui/shimmer'
+import type { TagColor } from '@/lib/ui/status-colors'
 
 interface ClientListProps {
     clients: ClientSummary[]
@@ -17,197 +28,151 @@ interface ClientListProps {
     isRefreshing?: boolean
 }
 
-function clientStatusLabel(status: string | null | undefined): string {
-    switch (status) {
-        case 'PROSPECT':
-            return 'Prospect'
-        case 'ON_HOLD':
-            return 'On hold'
-        case 'PAST':
-            return 'Past'
-        case 'ACTIVE':
-        default:
-            return 'Active'
-    }
-}
-
-function clientStatusBadgeClass(status: string | null | undefined): string {
-    switch (status) {
-        case 'PROSPECT':
-            return 'bg-blue-50 text-blue-700 ring-1 ring-blue-200'
-        case 'ON_HOLD':
-            return 'bg-amber-50 text-amber-500 ring-1 ring-amber-200'
-        case 'PAST':
-            return 'bg-zinc-50 text-zinc-400 ring-1 ring-zinc-200'
-        case 'ACTIVE':
-        default:
-            return 'bg-primary/10 text-primary ring-1 ring-primary/25'
-    }
-}
-
-function getFollowUpChip(followUpDate: Date | null): { label: string; cls: string } | null {
+/** Follow-up due within two days either side, as a tag — else nothing. */
+function followUpTag(followUpDate: Date | null): { label: string; color: TagColor } | null {
     if (!followUpDate) return null
     const today = new Date(); today.setHours(0, 0, 0, 0)
     const fud = new Date(followUpDate); fud.setHours(0, 0, 0, 0)
     const delta = Math.round((fud.getTime() - today.getTime()) / 86400000)
-    if (delta > 2 || delta < -2) return null
     switch (delta) {
-        case 2:
-        case 1:  return { label: delta === 1 ? 'Follow up · tomorrow' : 'Follow up · in 2 days', cls: 'bg-blue-50 text-blue-600 border-blue-200' }
-        case 0:  return { label: 'Follow up today', cls: 'bg-amber-50 text-amber-600 border-amber-200' }
-        case -1: return { label: 'Follow up · 1 day late', cls: 'bg-orange-50 text-orange-600 border-orange-200' }
-        case -2: return { label: 'Follow up · 2 days late', cls: 'bg-rose-50 text-rose-600 border-rose-200' }
+        case 2: return { label: 'Follow up in 2 days', color: 'blue' }
+        case 1: return { label: 'Follow up tomorrow', color: 'blue' }
+        case 0: return { label: 'Follow up today', color: 'yellow' }
+        case -1: return { label: 'Follow-up 1 day late', color: 'orange' }
+        case -2: return { label: 'Follow-up 2 days late', color: 'red' }
         default: return null
     }
 }
 
-export function ClientList({ clients, groupSlug, orgSlug, viewMode = 'grid', isRefreshing = false }: ClientListProps) {
+function ago(value: Date): string {
+    return formatDistanceToNowStrict(new Date(value), { addSuffix: true })
+}
+
+/** The client's logo, else an icon on a tile tinted with its (or the firm's) brand color. */
+function ClientMark({ client, accent, size = 'sm' }: { client: ClientSummary; accent: string | null; size?: 'sm' | 'md' }) {
+    const box = size === 'md' ? 'h-9 w-9' : 'h-5 w-5'
+    if (client.brandLogoUrl) {
+        return (
+            <span className={`flex ${box} shrink-0 items-center justify-center overflow-hidden rounded-control border border-line bg-surface`}>
+                <img src={client.brandLogoUrl} alt="" className="h-full w-full object-contain" />
+            </span>
+        )
+    }
+    return (
+        <span
+            className={`flex ${box} shrink-0 items-center justify-center rounded-control bg-surface-muted text-fg-subtle`}
+            style={accent ? { backgroundColor: `${accent}1f`, color: accent } : undefined}
+        >
+            <Users className={size === 'md' ? 'h-4 w-4' : 'h-3 w-3'} />
+        </span>
+    )
+}
+
+/**
+ * The firm's clients (.claude/plans/ui-ux-overhaul.md, Phase 6): a Notion table by default, or a
+ * gallery of flat cards. Rows and cards open the client.
+ */
+export function ClientList({ clients, groupSlug, orgSlug, viewMode = 'list', isRefreshing = false }: ClientListProps) {
     const router = useRouter()
     const firmBranding = useBranding()
     const firmAccent = firmBranding?.themeColor && /^#[0-9A-Fa-f]{6}$/.test(firmBranding.themeColor) ? firmBranding.themeColor : null
+    const accentFor = (c: ClientSummary) =>
+        (c.brandPrimaryColor && /^#[0-9A-Fa-f]{6}$/.test(c.brandPrimaryColor) ? c.brandPrimaryColor : null) ?? firmAccent
+
     if (clients.length === 0 && !isRefreshing) {
-        return (
-            <div className="flex flex-col items-center justify-center h-64 text-center border-2 border-dashed border-slate-200 rounded bg-slate-50/50">
-                <div className="h-12 w-12 bg-slate-100 rounded flex items-center justify-center mb-4 text-slate-400">
-                    <Users className="h-6 w-6" />
-                </div>
-                <h3 className="text-sm font-semibold text-slate-900">No clients found</h3>
-                <p className="text-xs text-slate-500 mt-1 max-w-[200px]">
-                    This organization doesn't have any client workspaces yet.
-                </p>
-            </div>
-        )
+        return <EmptyPanel icon={<Users />} title="No clients yet" description="Clients you add show up here." />
     }
 
     if (viewMode === 'list') {
         return (
-            <div className="bg-white border border-[#e5e7eb] rounded overflow-hidden">
-                <table className="w-full text-left text-sm">
-                    <thead>
-                        <tr className="bg-white border-b border-[#e5e7eb]">
-                            <th className="px-4 py-3 font-medium text-slate-500">Client</th>
-                            <th className="px-4 py-3 font-medium text-slate-500">Status</th>
-                            <th className="px-4 py-3 font-medium text-slate-500">Projects</th>
-                            <th className="px-4 py-3 font-medium text-slate-500 text-right">Last Updated</th>
+            <NotionTable>
+                <NotionTableHeader>
+                    <NotionTableHead icon={<Type />}>Name</NotionTableHead>
+                    <NotionTableHead icon={<CircleDot />}>Status</NotionTableHead>
+                    <NotionTableHead icon={<Building2 />} className="hidden md:table-cell">Industry</NotionTableHead>
+                    <NotionTableHead icon={<Briefcase />}>Engagements</NotionTableHead>
+                    <NotionTableHead icon={<Clock3 />} className="hidden sm:table-cell">Updated</NotionTableHead>
+                </NotionTableHeader>
+                <NotionTableBody>
+                    {isRefreshing && (
+                        <tr className="h-9 border-b border-line" aria-hidden>
+                            <td colSpan={5} className="px-2 first:pl-1">
+                                <span className="flex items-center gap-2"><ShimmerBlock className="h-5 w-5" /><ShimmerBar className="w-40" /></span>
+                            </td>
                         </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                        {isRefreshing && (
-                            <tr className="animate-pulse">
-                                <td className="px-4 py-3"><div className="h-4 w-40 bg-slate-100 rounded" /></td>
-                                <td className="px-4 py-3"><div className="h-5 w-16 bg-slate-100 rounded-sm" /></td>
-                                <td className="px-4 py-3"><div className="h-5 w-16 bg-slate-100 rounded-sm" /></td>
-                                <td className="px-4 py-3"><div className="h-4 w-20 bg-slate-100 rounded ml-auto" /></td>
-                            </tr>
-                        )}
-                        {clients.map((client) => (
-                            <tr key={client.id} className="group hover:bg-[#f3f4f6] transition-colors">
-                                <td className="px-4 py-3">
-                                    <Link href={clientPath(groupSlug, orgSlug, client.slug)} className="flex items-center gap-3">
-                                        <div className="h-8 w-8 bg-[#f3f4f6] text-[#45474c] rounded flex items-center justify-center">
-                                            <Users className="h-4 w-4" />
-                                        </div>
-                                        <div className="flex items-center gap-2 flex-wrap">
-                                            <span className="font-medium text-slate-900 group-hover:text-black transition-colors">{client.name}</span>
-                                            {(() => { const chip = getFollowUpChip(client.followUpDate ?? null); return chip ? (
-                                                <span className={`inline-flex items-center gap-1 rounded-sm border px-2 py-0.5 text-xs font-medium ${chip.cls}`}>
-                                                    <CalendarClock className="h-3 w-3" />
-                                                    {chip.label}
-                                                </span>
-                                            ) : null })()}
-                                        </div>
+                    )}
+                    {clients.map((client) => {
+                        const href = clientPath(groupSlug, orgSlug, client.slug)
+                        const follow = followUpTag(client.followUpDate ?? null)
+                        return (
+                            <NotionTableRow key={client.id} onClick={() => router.push(href)}>
+                                <NotionTableCell className="w-[40%] max-w-0">
+                                    <Link href={href} onClick={(e) => e.stopPropagation()} className="flex min-w-0 items-center gap-2 text-fg">
+                                        <ClientMark client={client} accent={accentFor(client)} />
+                                        <span className="truncate font-medium">{client.name}</span>
+                                        {follow && (
+                                            <Tag color={follow.color} className="shrink-0" icon={<CalendarClock />}>
+                                                {follow.label}
+                                            </Tag>
+                                        )}
                                     </Link>
-                                </td>
-                                <td className="px-4 py-3">
-                                    <span className={`px-2 py-0.5 rounded-sm text-xs font-medium ${clientStatusBadgeClass(client.status)}`}>
-                                        {clientStatusLabel(client.status)}
-                                    </span>
-                                </td>
-                                <td className="px-4 py-3 text-slate-500">
-                                    <span className="px-2 py-0.5 bg-[#f3f4f6] text-[#45474c] ring-1 ring-[#e5e7eb] rounded-sm text-xs font-medium">
-                                        {client.engagements.length} {client.engagements.length === 1 ? 'Engagement' : 'Engagements'}
-                                    </span>
-                                </td>
-                                <td className="px-4 py-3 text-right text-slate-400">
-                                    <div className="flex items-center justify-end gap-1.5">
-                                        <Clock className="h-3 w-3" />
-                                        <span>{formatDistanceToNow(new Date(client.updatedAt), { addSuffix: true })}</span>
-                                    </div>
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
+                                </NotionTableCell>
+                                <NotionTableCell><StatusPill kind="client" status={client.status ?? 'ACTIVE'} /></NotionTableCell>
+                                <NotionTableCell className="hidden max-w-[12rem] truncate text-small text-fg-muted md:table-cell">
+                                    {client.industry ?? <span className="text-fg-subtle">—</span>}
+                                </NotionTableCell>
+                                <NotionTableCell className="text-small tabular-nums text-fg-muted">{client.engagements.length}</NotionTableCell>
+                                <NotionTableCell className="hidden whitespace-nowrap text-small text-fg-subtle sm:table-cell">
+                                    <time dateTime={new Date(client.updatedAt).toISOString()} suppressHydrationWarning>{ago(client.updatedAt)}</time>
+                                </NotionTableCell>
+                            </NotionTableRow>
+                        )
+                    })}
+                </NotionTableBody>
+            </NotionTable>
         )
     }
 
+    // Gallery: flat cards, Notion's gallery view.
     return (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {isRefreshing && (
-                <div className="relative bg-white border border-[#e5e7eb] rounded p-5 flex flex-col h-48 animate-pulse">
-                    <div className="flex items-start justify-between mb-3">
-                        <div className="h-10 w-10 bg-slate-100 rounded" />
-                        <div className="h-5 w-14 bg-slate-100 rounded-sm" />
-                    </div>
-                    <div className="h-4 w-3/4 bg-slate-100 rounded mb-auto" />
-                    <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between">
-                        <div className="h-3 w-20 bg-slate-100 rounded" />
-                        <div className="h-3 w-16 bg-slate-100 rounded" />
-                    </div>
+                <div className="flex h-36 flex-col gap-3 rounded-card border border-line bg-surface p-3.5" aria-hidden>
+                    <ShimmerBlock className="h-9 w-9" />
+                    <ShimmerBar className="w-3/4" />
+                    <ShimmerBar className="mt-auto w-1/3" />
                 </div>
             )}
             {clients.map((client) => {
-                const accent = (client.brandPrimaryColor && /^#[0-9A-Fa-f]{6}$/.test(client.brandPrimaryColor) ? client.brandPrimaryColor : null) ?? firmAccent
-                const solidFill = accent ?? 'hsl(var(--primary))'
+                const follow = followUpTag(client.followUpDate ?? null)
                 return (
-                <Link
-                    key={client.id}
-                    href={clientPath(groupSlug, orgSlug, client.slug)}
-                    className={`group relative bg-white rounded overflow-hidden shadow-md hover:shadow-lg transition-all duration-200 flex flex-col h-48 ${client.status === 'PROSPECT' ? 'border border-dashed border-[#e5e7eb] hover:border-[#d1d5db]' : 'border border-[#e5e7eb] hover:border-[#d1d5db]'}`}
-                >
-                    {/* Brand color corner cut — bottom-right triangle */}
-                    <svg className="absolute bottom-0 right-0 pointer-events-none" width="36" height="36" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <polygon points="36,0 36,36 0,36" fill={solidFill} fillOpacity="0.12" />
-                        <polygon points="36,16 36,36 16,36" fill={solidFill} />
-                    </svg>
-                    <div className="flex flex-col flex-1 p-5">
-                    <div className="flex items-start justify-between mb-3">
-                        <div className="h-10 w-10 rounded flex items-center justify-center shrink-0 overflow-hidden border border-[#ebebed]"
-                            style={{ backgroundColor: accent ? `${accent}18` : '#f3f4f6', color: accent ?? '#45474c' }}>
-                            {client.brandLogoUrl
-                                ? <img src={client.brandLogoUrl} alt="" className="h-full w-full object-contain" />
-                                : <Users className="h-5 w-5" />
-                            }
+                    <Link
+                        key={client.id}
+                        href={clientPath(groupSlug, orgSlug, client.slug)}
+                        className={`group flex h-36 flex-col rounded-card border bg-surface p-3.5 transition-colors hover:border-line-strong hover:bg-surface-hover ${
+                            client.status === 'PROSPECT' ? 'border-dashed border-line-strong' : 'border-line'
+                        }`}
+                    >
+                        <div className="flex items-start justify-between gap-2">
+                            <ClientMark client={client} accent={accentFor(client)} size="md" />
+                            <StatusPill kind="client" status={client.status ?? 'ACTIVE'} />
                         </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                            <span className={`shrink-0 px-2 py-0.5 rounded-sm text-xs font-medium ${clientStatusBadgeClass(client.status)}`}>
-                                {clientStatusLabel(client.status)}
+                        <span className="mt-2.5 line-clamp-1 text-ui font-medium text-fg">{client.name}</span>
+                        {follow && (
+                            <Tag color={follow.color} className="mt-1.5 w-fit" icon={<CalendarClock />}>
+                                {follow.label}
+                            </Tag>
+                        )}
+                        <div className="mt-auto flex items-center justify-between text-caption text-fg-subtle">
+                            <span className="flex items-center gap-1" title="Last updated">
+                                <Clock3 className="h-3 w-3" />
+                                <time dateTime={new Date(client.updatedAt).toISOString()} suppressHydrationWarning>{ago(client.updatedAt)}</time>
+                            </span>
+                            <span className="tabular-nums">
+                                {client.engagements.length} {client.engagements.length === 1 ? 'engagement' : 'engagements'}
                             </span>
                         </div>
-                    </div>
-
-                    <h3 className="text-sm font-semibold text-slate-900 mb-auto line-clamp-1 group-hover:text-black transition-colors">
-                        {client.name}
-                    </h3>
-                    {(() => { const chip = getFollowUpChip(client.followUpDate ?? null); return chip ? (
-                        <span className={`inline-flex items-center gap-1 mt-2 rounded-sm border px-2 py-0.5 text-[11px] font-medium w-fit ${chip.cls}`}>
-                            <CalendarClock className="h-3 w-3" />
-                            {chip.label}
-                        </span>
-                    ) : null })()}
-
-                    <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400">
-                        <div className="flex items-center gap-1.5" title="Last updated">
-                            <Clock className="h-3 w-3" />
-                            <span>{formatDistanceToNow(new Date(client.updatedAt), { addSuffix: true })}</span>
-                        </div>
-                        <span className="font-medium text-slate-500">
-                            {client.engagements.length} {client.engagements.length === 1 ? 'engagement' : 'engagements'}
-                        </span>
-                    </div>
-                    </div>
-                </Link>
+                    </Link>
                 )
             })}
         </div>

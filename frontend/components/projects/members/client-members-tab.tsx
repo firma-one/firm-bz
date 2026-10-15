@@ -16,6 +16,7 @@ import {
 import { formatFullDate } from '@/lib/utils'
 import { useToast } from '@/components/ui/toast'
 import { logger } from '@/lib/logger'
+import { initialsOf } from '@/lib/initials'
 
 interface ClientMembersTabProps {
     firmId: string
@@ -26,7 +27,7 @@ interface ClientMembersTabProps {
 }
 
 function getInitials(name: string) {
-    return name ? name.substring(0, 2).toUpperCase() : '??'
+    return initialsOf(name)
 }
 
 function formatDate(date: string | Date | null | undefined) {

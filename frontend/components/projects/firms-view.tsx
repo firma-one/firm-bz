@@ -2,11 +2,11 @@
 
 import React, { useState, useEffect } from 'react'
 import { FirmOption } from '@/lib/actions/firms'
-import { Home, LayoutGrid, List, SquarePlus } from 'lucide-react'
+import { Building2, LayoutGrid, List, Plus } from 'lucide-react'
 import { FirmList } from './firm-list'
 import { AddFirmModal } from './add-firm-modal'
 import { Button } from '@/components/ui/button'
-import Link from 'next/link'
+import { PageHeading } from '@/components/ui/page-heading'
 
 interface FirmsViewProps {
     firms: FirmOption[]
@@ -14,7 +14,7 @@ interface FirmsViewProps {
 }
 
 export function FirmsView({ firms, activeOrgIdFromJWT }: FirmsViewProps) {
-    const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
+    const [viewMode, setViewMode] = useState<'grid' | 'list'>('list')
 
     // Load view mode preference from localStorage on mount
     useEffect(() => {
@@ -31,65 +31,48 @@ export function FirmsView({ firms, activeOrgIdFromJWT }: FirmsViewProps) {
 
     return (
         <div className="flex flex-col h-full">
-            {/* Breadcrumbs */}
-            <div className="flex items-center text-sm text-slate-500 mb-2">
-                <div className="flex items-center gap-2 text-slate-900 bg-slate-100 px-2 py-1 rounded-md">
-                    <Home className="h-4 w-4" />
-                    <span className="font-semibold">Home</span>
-                </div>
-            </div>
-
-            {/* Main Content Area: Firm List */}
-            <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
-                <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-                    {/* Header Control Panel */}
-                    <div className="bg-white border border-stone-200 rounded-xl p-5 mb-4 shadow-sm">
-                        <div className="flex items-center gap-4">
-                            <div className="flex items-center gap-4">
-                                <h2 className="d-title flex items-center gap-2.5">
-                                    <Home className="h-6 w-6 text-stone-500" />
-                                    Firms
-                                </h2>
-                                <span className="px-3 py-1 bg-stone-100 rounded-full d-body-strong text-stone-600">
-                                    {firms.length} {firms.length === 1 ? 'Firm' : 'Firms'}
-                                </span>
-                                {/* View Toggle — generous padding for hover hit area */}
-                                <div className="flex items-center bg-slate-100 p-1 rounded-lg border border-slate-200">
-                                    <button
-                                        onClick={() => handleViewModeChange('grid')}
-                                        className={`px-3 py-2 rounded-md transition-all ${viewMode === 'grid' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-200/60'}`}
-                                        title="Grid View"
-                                    >
-                                        <LayoutGrid className="h-4 w-4" />
-                                    </button>
-                                    <button
-                                        onClick={() => handleViewModeChange('list')}
-                                        className={`px-3 py-2 rounded-md transition-all ${viewMode === 'list' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-200/60'}`}
-                                        title="List View"
-                                    >
-                                        <List className="h-4 w-4" />
-                                    </button>
-                                </div>
-                            </div>
-                            {/* New Firm Button - Right Aligned */}
-                            <div className="ml-auto">
-                                <AddFirmModal
-                                    trigger={
-                                        <Button variant="blackCta" size="sm" className="gap-2">
-                                            <SquarePlus className="h-4 w-4" />
-                                            New Firm
-                                        </Button>
-                                    }
-                                />
-                            </div>
+            <PageHeading
+                icon={<Building2 />}
+                title={
+                    <span className="flex min-w-0 items-center gap-2">
+                        <span className="truncate">Firms</span>
+                        {firms.length > 0 && <span className="text-h3 font-normal tabular-nums text-fg-subtle">{firms.length}</span>}
+                    </span>
+                }
+                actions={
+                    <>
+                        <div className="inline-flex items-center rounded-control border border-line bg-surface-subtle p-0.5" role="group" aria-label="View">
+                            {([['grid', 'Gallery view', LayoutGrid], ['list', 'List view', List]] as const).map(([mode, label, Icon]) => (
+                                <button
+                                    key={mode}
+                                    type="button"
+                                    onClick={() => handleViewModeChange(mode)}
+                                    aria-pressed={viewMode === mode}
+                                    aria-label={label}
+                                    title={label}
+                                    className={`flex h-6 w-7 items-center justify-center rounded-[4px] transition-colors outline-none focus-visible:ring-2 focus-visible:ring-action/30 ${viewMode === mode ? 'bg-surface text-fg shadow-sm' : 'text-fg-subtle hover:text-fg'}`}
+                                >
+                                    <Icon className="h-3.5 w-3.5" />
+                                </button>
+                            ))}
                         </div>
-                    </div>
-                    <FirmList
-                        firms={firms}
-                        viewMode={viewMode}
-                        activeOrgIdFromJWT={activeOrgIdFromJWT}
-                    />
-                </div>
+                        <AddFirmModal
+                            trigger={
+                                <Button size="sm">
+                                    <Plus className="h-3.5 w-3.5" />
+                                    New firm
+                                </Button>
+                            }
+                        />
+                    </>
+                }
+            />
+            <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
+                <FirmList
+                    firms={firms}
+                    viewMode={viewMode}
+                    activeOrgIdFromJWT={activeOrgIdFromJWT}
+                />
             </div>
         </div>
     )

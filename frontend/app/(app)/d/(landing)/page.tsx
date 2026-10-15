@@ -54,7 +54,7 @@ export default async function FirmsPage({
             // there would be a self-redirect. Render the group picker directly instead.
             if (path === '/d/') {
                 return (
-                    <div className="h-full flex flex-col p-8 bg-stone-50/30">
+                    <div className="h-full flex flex-col p-8 bg-stone-50/30 v2:p-0 v2:bg-transparent">
                         <GroupPicker />
                     </div>
                 )
@@ -74,7 +74,7 @@ export default async function FirmsPage({
     // fallback below.
     if (await shouldShowSwitchWorkspace()) {
         return (
-            <div className="h-full flex flex-col p-8 bg-stone-50/30">
+            <div className="h-full flex flex-col p-8 bg-stone-50/30 v2:p-0 v2:bg-transparent">
                 <GroupPicker />
             </div>
         )
@@ -91,7 +91,7 @@ export default async function FirmsPage({
     }
 
     return (
-        <div className="h-full flex flex-col p-8 bg-stone-50/30">
+        <div className="h-full flex flex-col p-8 bg-stone-50/30 v2:p-0 v2:bg-transparent">
             <FirmsView firms={firms} activeOrgIdFromJWT={null} />
         </div>
     )

@@ -1,8 +1,13 @@
 'use client'
 
-import { useState, useEffect, useTransition } from 'react'
+import { useState, useEffect, useTransition, type ReactNode } from 'react'
 import { ClientSummary, getFirmName } from '@/lib/actions/hierarchy'
-import { UserPlus, Building2, LayoutGrid, List, Home, ChevronRight, Settings, Users, ClipboardList, UserCog, LayoutDashboard, Lock, Printer, Search, CalendarDays } from 'lucide-react'
+import { UserPlus, Building2, LayoutGrid, List, Home, ChevronRight, Settings, Users, ClipboardList, UserCog, LayoutDashboard, Lock, Printer, Search, CalendarDays, Plus, Table2, BarChart3 } from 'lucide-react'
+import { useUiShell } from '@/lib/ui-shell-context'
+import { PageHeading } from '@/components/ui/page-heading'
+import { AccessLock } from '@/components/ui/access-lock'
+import { ShimmerBar } from '@/components/ui/shimmer'
+import { ViewModeToggle } from '@/components/ui/view-mode-toggle'
 import { Button } from '@/components/ui/button'
 import { ClientList } from './client-list'
 import { AddClientModal } from './add-client-modal'
@@ -36,6 +41,23 @@ interface FirmClientsViewProps {
     microsoftConnectorEnabled?: boolean
 }
 
+const FIRM_ADMINS_ONLY = 'Firm admins only — hidden from other members'
+
+/** New UI: the table is the default; whichever view the user last picked is remembered. */
+const V2_VIEW_MODE_KEY = 'fm-clients-view'
+
+/**
+ * New UI title for each firm view. Doc Search and Members carry their own headings (search
+ * history toggle, invite button), so they are left out here.
+ */
+const V2_VIEW_TITLES: Record<string, { title: string; icon: ReactNode; lock?: string }> = {
+    analytics: { title: 'Overview', icon: <BarChart3 />, lock: FIRM_ADMINS_ONLY },
+    clients: { title: 'Clients', icon: <Users /> },
+    calendar: { title: 'Calendar', icon: <CalendarDays /> },
+    audit: { title: 'Audit', icon: <ClipboardList />, lock: FIRM_ADMINS_ONLY },
+    settings: { title: 'Settings', icon: <Settings />, lock: FIRM_ADMINS_ONLY },
+}
+
 export function FirmClientsView({ clients, groupSlug, orgSlug, orgId, firmSandboxOnly = false, memberCount, auditCount, microsoftConnectorEnabled = false }: FirmClientsViewProps) {
     const router = useRouter()
     const pathname = usePathname()
@@ -46,7 +68,8 @@ export function FirmClientsView({ clients, groupSlug, orgSlug, orgId, firmSandbo
         return landed === 'new' || landed === 'returning' ? landed : null
     })
     const [showArrivalOverlay, setShowArrivalOverlay] = useState(arrivalVariant !== null)
-    const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
+    const isV2 = useUiShell() !== 'v1'
+    const [viewMode, setViewMode] = useState<'grid' | 'list'>(isV2 ? 'list' : 'grid')
     const [orgName, setOrgName] = useState<string | null>(null)
     const [firmLogoUrl, setFirmLogoUrl] = useState<string | null>(null)
     const [isPendingRefresh, startRefresh] = useTransition()
@@ -89,12 +112,19 @@ export function FirmClientsView({ clients, groupSlug, orgSlug, orgId, firmSandbo
 
     // Load view mode preference from localStorage on mount (only restore grid; Card View is default)
     useEffect(() => {
+        if (isV2) {
+            try {
+                const saved = localStorage.getItem(V2_VIEW_MODE_KEY)
+                if (saved === 'grid' || saved === 'list') setViewMode(saved)
+            } catch { /* storage blocked — keep the table */ }
+            return
+        }
         const saved = localStorage.getItem('fm-client-view-mode')
         if (saved === 'grid') {
             setViewMode('grid')
         }
         // Intentionally do not restore 'list' — Client List defaults to Card View
-    }, [])
+    }, [isV2])
 
     // Fetch firm name
     useEffect(() => {
@@ -160,8 +190,79 @@ export function FirmClientsView({ clients, groupSlug, orgSlug, orgId, firmSandbo
 
     const handleViewModeChange = (mode: 'grid' | 'list') => {
         setViewMode(mode)
-        localStorage.setItem('fm-client-view-mode', mode)
+        try {
+            localStorage.setItem(isV2 ? V2_VIEW_MODE_KEY : 'fm-client-view-mode', mode)
+        } catch { /* storage blocked — the choice lasts for this visit */ }
     }
+
+    // Overview print: title the document with a timestamp so the saved PDF is a dated snapshot.
+    const printOverview = () => {
+        const now = new Date()
+        const pad = (n: number) => String(n).padStart(2, '0')
+        const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}--${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`
+        const prev = document.title
+        document.title = `${orgName} - Overview - ${stamp}`
+        const restore = () => {
+            document.title = prev
+            window.removeEventListener('afterprint', restore)
+        }
+        window.addEventListener('afterprint', restore)
+        window.print()
+    }
+
+    const canAddClient = canCreateClient || firmSandboxOnly
+    const v2View = V2_VIEW_TITLES[currentTab]
+    const v2Count = currentTab === 'clients' ? clients.length : currentTab === 'audit' ? auditCount : undefined
+    const v2Heading = isV2 && v2View && (
+        <PageHeading
+            className="pb-4 print:hidden"
+            icon={v2View.icon}
+            title={
+                <span className="flex min-w-0 items-center gap-2">
+                    <span className="truncate">{v2View.title}</span>
+                    {v2Count !== undefined && v2Count > 0 && (
+                        <span className="text-h3 font-normal tabular-nums text-fg-subtle">{v2Count}</span>
+                    )}
+                    {v2View.lock && <AccessLock label={v2View.lock} className="[&_svg]:h-3.5 [&_svg]:w-3.5" />}
+                </span>
+            }
+            actions={
+                currentTab === 'analytics' ? (
+                    <TooltipProvider delayDuration={300}>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button variant="outline" size="sm" onClick={printOverview}>
+                                    <Printer className="h-3.5 w-3.5" />
+                                    Print
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent side="bottom" align="end">
+                                Save a dated PDF snapshot to compare against later
+                            </TooltipContent>
+                        </Tooltip>
+                    </TooltipProvider>
+                ) : currentTab === 'clients' ? (
+                    <>
+                        {clients.length > 0 && <ViewModeToggle value={viewMode} onChange={handleViewModeChange} />}
+                        {canAddClient && (
+                            <AddClientModal
+                                groupSlug={groupSlug}
+                                orgSlug={orgSlug}
+                                firmId={orgId}
+                                onSaved={() => startRefresh(() => router.refresh())}
+                                trigger={
+                                    <Button size="sm" type="button" data-demo-tour="firm-add-client-btn">
+                                        <Plus className="h-3.5 w-3.5" />
+                                        New client
+                                    </Button>
+                                }
+                            />
+                        )}
+                    </>
+                ) : undefined
+            }
+        />
+    )
 
     const closeArrivalOverlay = () => {
         setShowArrivalOverlay(false)
@@ -180,6 +281,8 @@ export function FirmClientsView({ clients, groupSlug, orgSlug, orgId, firmSandbo
                     onClose={closeArrivalOverlay}
                 />
             )}
+            {/* v1 only: the New UI's header bar carries the breadcrumb and each view its own heading. */}
+            {!isV2 && (<>
             {/* Breadcrumbs — monospace architectural style */}
             <nav className="flex items-center gap-1.5 mb-4 print:hidden">
                 <Link href={groupFirmListPath(groupSlug)} className="hover:opacity-80">
@@ -209,15 +312,26 @@ export function FirmClientsView({ clients, groupSlug, orgSlug, orgId, firmSandbo
                     </div>
                 </div>
             </div>
+            </>)}
 
             {permissionsLoading ? (
+                isV2 ? (
+                    <div className="flex flex-col gap-4 pb-4" aria-hidden>
+                        <ShimmerBar className="h-7 w-48" />
+                        <ShimmerBar className="w-full max-w-xl" />
+                        <ShimmerBar className="w-full max-w-md" />
+                    </div>
+                ) : (
                 <div className="flex-1 flex flex-col min-h-0 gap-4 animate-in fade-in duration-200 ease-out">
                     <Skeleton className="h-14 w-full rounded" />
                     <Skeleton className="flex-1 w-full rounded" />
                 </div>
+                )
             ) : (
             <Tabs value={currentTab} onValueChange={handleTabChange} className="flex-1 flex flex-col min-h-0 print:block print:flex-none animate-in fade-in duration-200 ease-out">
-                {/* Tab navigation — full-width white strip with border-b, matching HTML sub-header */}
+                {v2Heading}
+                {/* Tab navigation — v1 only; in the New UI the sidebar's Firm section picks the view. */}
+                {!isV2 && (
                 <div className="bg-white border border-[#e5e7eb] rounded mb-6 shrink-0 print:hidden">
                     <div className="flex items-center justify-between h-14 pr-4">
                         <TabsList className="h-full p-0 bg-transparent rounded-none inline-flex justify-start gap-0 border-0">
@@ -317,19 +431,7 @@ export function FirmClientsView({ clients, groupSlug, orgSlug, orgId, firmSandbo
                                     <Tooltip>
                                         <TooltipTrigger asChild>
                                             <button
-                                                onClick={() => {
-                                                    const now = new Date()
-                                                    const pad = (n: number) => String(n).padStart(2, '0')
-                                                    const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}--${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`
-                                                    const prev = document.title
-                                                    document.title = `${orgName} - Overview - ${stamp}`
-                                                    const restore = () => {
-                                                        document.title = prev
-                                                        window.removeEventListener('afterprint', restore)
-                                                    }
-                                                    window.addEventListener('afterprint', restore)
-                                                    window.print()
-                                                }}
+                                                onClick={printOverview}
                                                 className="h-auto px-4 py-1.5 rounded bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:bg-primary hover:brightness-105 hover:text-white shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all border-0 inline-flex items-center gap-1.5 print:hidden"
                                             >
                                                 <Printer className="h-3.5 w-3.5" />
@@ -384,6 +486,7 @@ export function FirmClientsView({ clients, groupSlug, orgSlug, orgId, firmSandbo
                     </div>
                 </div>
                 </div>
+                )}
 
                 <div className="flex-1 overflow-y-auto custom-scrollbar print:overflow-visible print:flex-none print:h-auto">
                     <TabsContent value="clients" className="m-0 h-full">
