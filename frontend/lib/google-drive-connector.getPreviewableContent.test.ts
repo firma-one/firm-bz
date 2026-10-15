@@ -125,6 +125,32 @@ describe('GoogleDriveConnector.getPreviewableContent', () => {
     expect(exportSpy).not.toHaveBeenCalled()
   })
 
+  it('streams a PDF that has exportLinks as stored, rather than re-exporting it', async () => {
+    // Drive populates exportLinks for uploaded files it has processed, PDFs included. When
+    // the export branch was checked first, an ordinary PDF was fetched back through Drive's
+    // own PDF export — a conversion of something that needed none, which re-paginates and
+    // was adding a stray blank page at the end. The previous test only covered a PDF with
+    // no exportLinks, so it passed throughout.
+    const fetchSpy = vi.spyOn(global, 'fetch')
+    fetchSpy.mockResolvedValueOnce(jsonResponse({
+      mimeType: 'application/pdf',
+      name: 'Signed.pdf',
+      exportLinks: { 'application/pdf': 'https://drive.example/export/pdf' },
+    }))
+    fetchSpy.mockResolvedValueOnce({ ok: true, body: {} as ReadableStream } as Response)
+    const exportSpy = vi.spyOn(g, 'exportFileToPdf')
+
+    const result = await g.getPreviewableContent(connectorId, fileId)
+
+    expect(result.mimeType).toBe('application/pdf')
+    expect(result.fileName).toBe('Signed.pdf')
+    expect(exportSpy).not.toHaveBeenCalled()
+
+    const contentUrl = String(fetchSpy.mock.calls[1][0])
+    expect(contentUrl).toContain('alt=media')
+    expect(contentUrl).not.toContain('export')
+  })
+
   it('PDF-exports a native Google Workspace file via exportFileToPdf', async () => {
     vi.spyOn(global, 'fetch').mockResolvedValueOnce(
       jsonResponse({ mimeType: 'application/vnd.google-apps.spreadsheet', name: 'Sheet1' })

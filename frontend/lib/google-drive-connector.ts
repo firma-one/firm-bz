@@ -4525,13 +4525,28 @@ export class GoogleDriveConnector {
     }
 
     // Priority:
-    //   a) exportLinks['application/pdf'] exists  →  fetch & stream as PDF  (covers
+    //   a) Already a PDF, or an image  →  stream the stored bytes
+    //   b) exportLinks['application/pdf'] exists  →  fetch & stream as PDF  (covers
     //      all Workspace files AND uploaded Office files in one path)
-    //   b) Native Google Workspace file  →  exportFileToPdf (handles auth correctly)
-    //   c) Already a PDF  →  stream raw bytes
-    //   d) Image  →  stream raw bytes (browsers render natively)
-    //   e) Office mimetype without an export link yet  →  exportFileToPdf
-    //   f) Anything else  →  unsupported
+    //   c) Native Google Workspace file  →  exportFileToPdf (handles auth correctly)
+    //   d) Office mimetype without an export link yet  →  exportFileToPdf
+    //   e) Anything else  →  unsupported
+
+    // A file that is already a PDF is streamed as it is stored, and this check comes first.
+    // Drive populates exportLinks for uploaded files it has processed, PDFs among them, so
+    // when this ran after the export branch an ordinary PDF was fetched back through
+    // Drive's own PDF export — re-rendering a document that needed no conversion at all.
+    // That round trip is where the stray blank page at the end came from: the re-export
+    // re-paginates, and page boundaries do not always survive it. Streaming the original
+    // bytes is both faster and exactly what the user uploaded.
+    if (mimeType === 'application/pdf' || mimeType.startsWith('image/')) {
+      const downloadUrl = `https://www.googleapis.com/drive/v3/files/${resolvedExternalId}?alt=media&supportsAllDrives=true`
+      const contentRes = await fetch(downloadUrl, { headers: { Authorization: `Bearer ${accessToken}` } })
+      if (!contentRes.ok || !contentRes.body) {
+        throw new Error(`Failed to fetch document content from Google Drive: ${contentRes.status}`)
+      }
+      return { stream: contentRes.body as unknown as ReadableStream, mimeType, fileName: finalName }
+    }
 
     if (pdfExportUrl && !isGoogleWorkspaceMime) {
       const contentRes = await fetch(pdfExportUrl, { headers: { Authorization: `Bearer ${accessToken}` } })
@@ -4550,15 +4565,6 @@ export class GoogleDriveConnector {
     if (isGoogleWorkspaceMime) {
       const pdfBytes = await this.exportFileToPdf(connectorId, resolvedExternalId)
       return { stream: bufferToReadableStream(pdfBytes), mimeType: 'application/pdf', fileName: finalName }
-    }
-
-    if (mimeType === 'application/pdf' || mimeType.startsWith('image/')) {
-      const downloadUrl = `https://www.googleapis.com/drive/v3/files/${resolvedExternalId}?alt=media&supportsAllDrives=true`
-      const contentRes = await fetch(downloadUrl, { headers: { Authorization: `Bearer ${accessToken}` } })
-      if (!contentRes.ok || !contentRes.body) {
-        throw new Error(`Failed to fetch document content from Google Drive: ${contentRes.status}`)
-      }
-      return { stream: contentRes.body as unknown as ReadableStream, mimeType, fileName: finalName }
     }
 
     const OFFICE_MIMES = [
