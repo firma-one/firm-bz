@@ -3,7 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 
 const { actions, push } = vi.hoisted(() => ({
     actions: {
-        getUserReminders: vi.fn(),
+        getAllUserReminders: vi.fn(),
         markReminderDone: vi.fn(async () => {}),
         hideReminder: vi.fn(async () => {}),
     },
@@ -18,11 +18,16 @@ const fetchMock = vi.fn()
 
 beforeEach(() => {
     vi.clearAllMocks()
-    actions.getUserReminders.mockResolvedValue([
+    actions.getAllUserReminders.mockResolvedValue([
         {
             id: 'r1', entityKey: 'platform.doc_comments', entityValue: 'x', action: 'Review comment', dateKey: null, dateValue: null,
             hiddenAt: null, entityName: 'Engagement letter', entitySlug: null, firmSlug: 'acme', firmId: 'f1', ctaUrl: '/d/doc',
             delta: null, label: '', labelStyle: 'slate',
+        },
+        {
+            id: 'r-later', entityKey: 'platform.engagements.id', entityValue: 'e9', action: 'Engagement due', dateKey: 'platform.engagements.dueDate', dateValue: '2027-01-31T11:30:00.000Z',
+            hiddenAt: null, entityName: 'Q2 Go-To-Market Positioning', entitySlug: 'q2', firmSlug: 'acme', firmId: 'f1', ctaUrl: '/d/q2',
+            delta: 108, label: 'Due in 108 days', labelStyle: 'slate',
         },
         {
             id: 'r-other', entityKey: 'x', entityValue: 'y', action: 'Follow-up', dateKey: null, dateValue: null,
@@ -78,6 +83,18 @@ describe('InboxView', () => {
         expect(actions.hideReminder).not.toHaveBeenCalled()
         fireEvent.keyDown(window, { key: 'h' })
         await waitFor(() => expect(actions.hideReminder).toHaveBeenCalledWith('r1'))
+    })
+
+    it('shows reminders months away under Upcoming, and filters by tab', async () => {
+        render(<InboxView firmId="f1" firmName="Acme" />)
+        expect(await screen.findByText('Q2 Go-To-Market Positioning')).toBeTruthy()
+        expect(screen.getByText(/Upcoming/)).toBeTruthy()
+        fireEvent.click(screen.getByRole('tab', { name: /Notifications/ }))
+        expect(screen.queryByText('Q2 Go-To-Market Positioning')).toBeNull()
+        expect(screen.getAllByText('New upload from Contoso').length).toBeGreaterThan(0)
+        fireEvent.click(screen.getByRole('tab', { name: /Reminders/ }))
+        expect(screen.getByText('Q2 Go-To-Market Positioning')).toBeTruthy()
+        expect(screen.queryByText('New upload from Contoso')).toBeNull()
     })
 
     it('opens the selected item with Enter', async () => {

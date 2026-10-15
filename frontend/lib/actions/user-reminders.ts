@@ -57,6 +57,17 @@ export async function getUserReminders(): Promise<ReminderWithContext[]> {
 }
 
 /**
+ * Every one of the signed-in user's reminders, however far out — the New UI Inbox's Reminders view.
+ * getUserReminders keeps its 30-day window for the legacy panel and the digest.
+ */
+export async function getAllUserReminders(): Promise<ReminderWithContext[]> {
+    const supabase = await createClient()
+    const { data: { user }, error } = await supabase.auth.getUser()
+    if (error || !user) return []
+    return computeDueReminders(user.id, { horizonDays: null })
+}
+
+/**
  * In-app counterpart to the daily digest push: on the first app load of the user's local
  * day, reports whether they have unseen due/overdue reminders so the panel can surface
  * itself once. Shares claimDailyDigest() with the cron, so a user who signs in before

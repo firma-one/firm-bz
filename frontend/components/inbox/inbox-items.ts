@@ -79,26 +79,34 @@ export function notificationToItem(n: ApiNotification): InboxItem {
     }
 }
 
-/**
- * To do: this firm's visible reminders, overdue first then soonest, undated (review requests) after.
- * Notifications: newest first.
- */
-export function buildInbox(
-    firmId: string,
-    reminders: ReminderWithContext[],
-    notifications: ApiNotification[]
-): { todo: InboxItem[]; notifications: InboxItem[] } {
-    const todo = reminders
+export type ReminderGroups = {
+    /** Past their date. */
+    overdue: InboxItem[]
+    /** Due today. */
+    today: InboxItem[]
+    /** Review requests and @mentions — no date, but waiting on you. */
+    undated: InboxItem[]
+    /** Dated in the future, however far out. */
+    upcoming: InboxItem[]
+}
+
+/** Reminders in groups that need you first; within a group, soonest first. */
+export function groupReminders(firmId: string, reminders: ReminderWithContext[]): ReminderGroups {
+    const visible = reminders
         .filter((r) => !r.hiddenAt && r.firmId === firmId)
-        .sort((a, b) => {
-            if (a.delta === null && b.delta === null) return 0
-            if (a.delta === null) return 1
-            if (b.delta === null) return -1
-            return a.delta - b.delta
-        })
-        .map(reminderToItem)
-    const notes = [...notifications]
-        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-        .map(notificationToItem)
-    return { todo, notifications: notes }
+        .sort((a, b) => (a.delta ?? Infinity) - (b.delta ?? Infinity))
+    const groups: ReminderGroups = { overdue: [], today: [], undated: [], upcoming: [] }
+    for (const r of visible) {
+        const item = reminderToItem(r)
+        if (r.delta === null) groups.undated.push(item)
+        else if (r.delta < 0) groups.overdue.push(item)
+        else if (r.delta === 0) groups.today.push(item)
+        else groups.upcoming.push(item)
+    }
+    return groups
+}
+
+/** Notifications for the Inbox: newest first. */
+export function sortNotifications(notifications: ApiNotification[]): InboxItem[] {
+    return [...notifications].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map(notificationToItem)
 }

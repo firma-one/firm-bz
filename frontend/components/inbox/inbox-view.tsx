@@ -4,14 +4,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { formatDistanceToNowStrict, format } from "date-fns"
 import { AlarmClock, ArrowLeft, Bell, CheckCheck, CheckCircle2, EyeOff, ExternalLink, Inbox as InboxIcon, Loader2 } from "lucide-react"
-import { getUserReminders, hideReminder, markReminderDone, type ReminderWithContext } from "@/lib/actions/user-reminders"
+import { getAllUserReminders, hideReminder, markReminderDone, type ReminderWithContext } from "@/lib/actions/user-reminders"
 import { Button } from "@/components/ui/button"
 import { EmptyPanel } from "@/components/ui/empty-panel"
 import { Kbd } from "@/components/ui/kbd"
 import { PageHeading } from "@/components/ui/page-heading"
 import { Tag } from "@/components/ui/tag"
 import { cn } from "@/lib/utils"
-import { buildInbox, INBOX_CHANGED_EVENT, type ApiNotification, type InboxItem } from "./inbox-items"
+import { groupReminders, sortNotifications, INBOX_CHANGED_EVENT, type ApiNotification, type InboxItem } from "./inbox-items"
 
 function notifyChanged() {
     window.dispatchEvent(new Event(INBOX_CHANGED_EVENT))
@@ -24,8 +24,9 @@ function isTypingTarget(target: EventTarget | null): boolean {
 
 function ItemTime({ item }: { item: InboxItem }) {
     if (item.source === "reminder") {
-        if (!item.dueLabel) return null
-        return item.overdue ? <Tag color="red">{item.dueLabel}</Tag> : <span>{item.dueLabel}</span>
+        if (!item.dueLabel || !item.at) return null
+        if (item.overdue) return <Tag color="red">{item.dueLabel}</Tag>
+        return <span title={item.dueLabel}>{format(new Date(item.at), "MMM d, yyyy")}</span>
     }
     if (!item.at) return null
     return (
@@ -35,10 +36,15 @@ function ItemTime({ item }: { item: InboxItem }) {
     )
 }
 
+type InboxTab = "all" | "reminders" | "notifications"
+
+type Section = { id: string; title: string; icon: React.ReactNode; items: InboxItem[] }
+
 /**
- * The New UI's unified Inbox for one firm: a list on the left (To do = reminders, then
- * notifications) and the selected item's detail on the right. Keyboard: j/k or arrows to move,
- * Enter to open, e to mark done or dismiss, h to hide a reminder.
+ * The New UI's unified Inbox for one firm: reminders (overdue, today, waiting on you, upcoming —
+ * however far out) and notifications, filterable by tab, with the selected item's detail on the
+ * right. Keyboard: j/k or arrows to move, Enter to open, e to mark done or dismiss, h to hide a
+ * reminder.
  */
 export function InboxView({ firmId, firmName }: { firmId: string; firmName: string }) {
     const router = useRouter()
@@ -48,11 +54,12 @@ export function InboxView({ firmId, firmName }: { firmId: string; firmName: stri
     const [selectedKey, setSelectedKey] = useState<string | null>(null)
     const [showDetailOnMobile, setShowDetailOnMobile] = useState(false)
     const [busy, setBusy] = useState(false)
+    const [tab, setTab] = useState<InboxTab>("all")
     const listRef = useRef<HTMLDivElement>(null)
 
     const load = useCallback(async () => {
         const [rem, res] = await Promise.all([
-            getUserReminders().catch(() => [] as ReminderWithContext[]),
+            getAllUserReminders().catch(() => [] as ReminderWithContext[]),
             fetch(`/api/notifications?firmId=${encodeURIComponent(firmId)}`)
                 .then((r) => (r.ok ? r.json() : { notifications: [] }))
                 .catch(() => ({ notifications: [] })),
@@ -66,10 +73,30 @@ export function InboxView({ firmId, firmName }: { firmId: string; firmName: stri
         void load()
     }, [load])
 
-    const { todo, notifications: notes } = useMemo(() => buildInbox(firmId, reminders, notifications), [firmId, reminders, notifications])
-    const flat = useMemo(() => [...todo, ...notes], [todo, notes])
-    const selected = flat.find((i) => i.key === selectedKey) ?? null
+    const groups = useMemo(() => groupReminders(firmId, reminders), [firmId, reminders])
+    const notes = useMemo(() => sortNotifications(notifications), [notifications])
+    const reminderCount = groups.overdue.length + groups.today.length + groups.undated.length + groups.upcoming.length
     const unreadNotes = notes.filter((n) => n.unread).length
+
+    // "All" leads with what needs you now and keeps upcoming reminders last; "Reminders" lists every
+    // reminder by date.
+    const sections = useMemo<Section[]>(() => {
+        const reminderSections: Section[] = [
+            { id: "overdue", title: "Overdue", icon: <AlarmClock className="h-3.5 w-3.5" />, items: groups.overdue },
+            { id: "today", title: "Today", icon: <AlarmClock className="h-3.5 w-3.5" />, items: groups.today },
+            { id: "undated", title: "Waiting on you", icon: <AlarmClock className="h-3.5 w-3.5" />, items: groups.undated },
+        ]
+        const upcoming: Section = { id: "upcoming", title: "Upcoming", icon: <AlarmClock className="h-3.5 w-3.5" />, items: groups.upcoming }
+        const notifs: Section = { id: "notifications", title: unreadNotes > 0 ? `Notifications · ${unreadNotes} unread` : "Notifications", icon: <Bell className="h-3.5 w-3.5" />, items: notes }
+        const all =
+            tab === "reminders" ? [...reminderSections, upcoming]
+            : tab === "notifications" ? [notifs]
+            : [...reminderSections, notifs, upcoming]
+        return all.filter((sec) => sec.items.length > 0)
+    }, [groups, notes, unreadNotes, tab])
+
+    const flat = useMemo(() => sections.flatMap((sec) => sec.items), [sections])
+    const selected = flat.find((i) => i.key === selectedKey) ?? null
 
     // Keep a selection on desktop so the detail pane is never empty while there is something to show.
     useEffect(() => {
@@ -236,12 +263,43 @@ export function InboxView({ firmId, firmName }: { firmId: string; firmName: stri
                 }
             />
 
+            <div className="mb-3 flex items-center gap-0.5" role="tablist" aria-label="Show">
+                {([
+                    ["all", "All", reminderCount + notes.length],
+                    ["reminders", "Reminders", reminderCount],
+                    ["notifications", "Notifications", notes.length],
+                ] as [InboxTab, string, number][]).map(([id, label, count]) => (
+                    <button
+                        key={id}
+                        type="button"
+                        role="tab"
+                        aria-selected={tab === id}
+                        onClick={() => { setTab(id); setSelectedKey(null) }}
+                        className={cn(
+                            "flex items-center gap-1.5 rounded-control px-2 py-1 text-small transition-colors",
+                            tab === id ? "bg-surface-selected text-fg" : "text-fg-muted hover:bg-surface-hover hover:text-fg"
+                        )}
+                    >
+                        {label}
+                        <span className="tabular-nums text-fg-subtle">{count}</span>
+                    </button>
+                ))}
+            </div>
+
             {loading ? (
                 <div className="flex flex-1 items-center justify-center py-16 text-fg-subtle">
                     <Loader2 className="h-5 w-5 animate-spin" />
                 </div>
             ) : flat.length === 0 ? (
-                <EmptyPanel icon={<InboxIcon />} title="You're all caught up" description="Reminders, @mentions and notifications for this firm land here." />
+                <EmptyPanel
+                    icon={<InboxIcon />}
+                    title={tab === "reminders" ? "No reminders" : tab === "notifications" ? "No notifications" : "You're all caught up"}
+                    description={
+                        tab === "reminders"
+                            ? "Reminders from due dates, follow-ups, review requests and @mentions in this firm show up here."
+                            : "Reminders, @mentions and notifications for this firm land here."
+                    }
+                />
             ) : (
                 <div className="flex min-h-[28rem] flex-1 overflow-hidden rounded-card border border-line">
                     {/* List */}
@@ -252,22 +310,14 @@ export function InboxView({ firmId, firmName }: { firmId: string; firmName: stri
                             showDetailOnMobile && "hidden lg:flex"
                         )}
                     >
-                        {todo.length > 0 && (
-                            <div className="flex flex-col gap-px">
+                        {sections.map((sec) => (
+                            <div key={sec.id} className="flex flex-col gap-px">
                                 <p className="flex items-center gap-1.5 px-2 pb-1 text-caption text-fg-subtle">
-                                    <AlarmClock className="h-3.5 w-3.5" /> To do · {todo.length}
+                                    {sec.icon} {sec.title}{sec.id === "notifications" ? "" : ` · ${sec.items.length}`}
                                 </p>
-                                {todo.map(renderRow)}
+                                {sec.items.map(renderRow)}
                             </div>
-                        )}
-                        {notes.length > 0 && (
-                            <div className="flex flex-col gap-px">
-                                <p className="flex items-center gap-1.5 px-2 pb-1 text-caption text-fg-subtle">
-                                    <Bell className="h-3.5 w-3.5" /> Notifications{unreadNotes > 0 ? ` · ${unreadNotes} unread` : ""}
-                                </p>
-                                {notes.map(renderRow)}
-                            </div>
-                        )}
+                        ))}
                     </div>
 
                     {/* Detail */}

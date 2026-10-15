@@ -44,18 +44,28 @@ function computeLabel(delta: number): { label: string; labelStyle: ReminderWithC
  * never disagree with the panel they open. Takes an explicit userId because the cron has
  * no session; getUserReminders() is the session-scoped wrapper.
  */
-export async function computeDueReminders(userId: string): Promise<ReminderWithContext[]> {
+export async function computeDueReminders(
+    userId: string,
+    opts: {
+        /** Upcoming reminders further out than this are left out. `null` = no limit (the Inbox's
+         *  Upcoming list). Default 30, which the panel, the digest and the badges rely on. */
+        horizonDays?: number | null
+    } = {}
+): Promise<ReminderWithContext[]> {
     const items = await loadItems(userId)
+    const horizonDays = opts.horizonDays === undefined ? 30 : opts.horizonDays
 
     const today = new Date(); today.setHours(0, 0, 0, 0)
-    const in30Days = new Date(today); in30Days.setDate(today.getDate() + 30); in30Days.setHours(23, 59, 59, 999)
+    const horizon = horizonDays === null ? null : new Date(today)
+    if (horizon) { horizon.setDate(today.getDate() + (horizonDays as number)); horizon.setHours(23, 59, 59, 999) }
 
     const validItems = items.filter((item) => item.entityKey && item.entityValue && item.action)
 
     const inWindow = validItems.filter((item) => {
         if (!item.dateValue) return true // date-less: always show
+        if (!horizon) return true
         const d = new Date(item.dateValue)
-        return d <= in30Days // show all overdue + upcoming within 30d
+        return d <= horizon // all overdue + upcoming within the horizon
     })
 
     const resolved = await Promise.all(
