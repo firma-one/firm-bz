@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useState, type ReactNode } from "react"
+import { useCallback, useEffect, useState, type ReactNode, useRef } from "react"
 import { usePathname } from "next/navigation"
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet"
 import { setSidebarCollapsed } from "@/lib/actions/user-ui-prefs"
@@ -71,11 +71,15 @@ export function AppShellV2({
 
     useRecordVisits()
 
+    // Persist outside the state updater. React runs updaters while rendering (twice in Strict
+    // Mode), and a server action called there updates the Router mid-render — "Cannot update a
+    // component (Router) while rendering AppShellV2" — and saved the preference twice.
+    const collapsedRef = useRef(initialCollapsed)
     const toggleSidebar = useCallback(() => {
-        setCollapsed((c) => {
-            void setSidebarCollapsed(!c)
-            return !c
-        })
+        const next = !collapsedRef.current
+        collapsedRef.current = next
+        setCollapsed(next)
+        void setSidebarCollapsed(next)
     }, [])
 
     useEffect(() => {
@@ -91,11 +95,27 @@ export function AppShellV2({
     return (
         <ShellDataProvider>
             <div className="d-app flex h-screen overflow-hidden bg-surface text-fg print:block print:h-auto print:overflow-visible">
-                {!collapsed && (
-                    <aside className="hidden w-60 shrink-0 border-r border-line lg:flex print:hidden">
+                {/* Stays mounted so collapse can animate: the width eases between 0 and 240px in
+                    150ms while the content keeps its width and is clipped, so nothing reflows
+                    mid-animation. Collapsed, it is inert — not focusable, not read out. */}
+                <aside
+                    inert={collapsed}
+                    aria-hidden={collapsed || undefined}
+                    className={cn(
+                        "hidden shrink-0 overflow-hidden border-line lg:flex print:hidden",
+                        "transition-[width] duration-150 ease-out motion-reduce:transition-none",
+                        collapsed ? "w-0" : "w-60 border-r"
+                    )}
+                >
+                    <div
+                        className={cn(
+                            "flex w-60 shrink-0 transition-opacity duration-150 ease-out motion-reduce:transition-none",
+                            collapsed ? "opacity-0" : "opacity-100"
+                        )}
+                    >
                         <SidebarV2 isSystemAdmin={isSystemAdmin} onCollapse={toggleSidebar} />
-                    </aside>
-                )}
+                    </div>
+                </aside>
 
                 <div className="flex min-w-0 flex-1 flex-col print:block">
                     <div className="print:hidden">

@@ -3,9 +3,7 @@
 import { useState, useRef, useLayoutEffect, useEffect } from "react"
 import { createPortal } from "react-dom"
 import Link from "next/link"
-import { LogOut, ChevronDown, ChevronUp, Building2, CreditCard, UserCircle, LifeBuoy, MonitorCheck, PanelsTopLeft } from "lucide-react"
-import { useUiShell } from "@/lib/ui-shell-context"
-import { setUiShell } from "@/lib/actions/user-ui-prefs"
+import { LogOut, ChevronDown, ChevronUp, Building2, CreditCard, UserCircle, LifeBuoy, MonitorCheck } from "lucide-react"
 import { ProfileBubble, ProfileBubblePopupContent } from "@/components/ui/profile-bubble-popup"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { BrandMarkIcon } from "@/components/brand/BrandMarkIcon"
@@ -56,19 +54,6 @@ export function ProfileSection({
 }: ProfileSectionProps) {
   const [isProfileOpen, setIsProfileOpen] = useState(false)
   const profileRef = useRef<HTMLDivElement>(null)
-  const uiShell = useUiShell()
-  const [isSwitchingUi, setIsSwitchingUi] = useState(false)
-  // New UI is under construction (.claude/plans/ui-ux-overhaul.md): offered to system admins in
-  // production, and to every account locally so the role matrix can be checked in both shells.
-  const showUiToggle = isSystemAdmin || process.env.NODE_ENV !== 'production'
-
-  const toggleUiShell = async () => {
-    setIsSwitchingUi(true)
-    const { ok } = await setUiShell(uiShell === 'v2' ? 'v1' : 'v2')
-    // Full reload so the server layout re-reads the preference and every surface repaints in one go.
-    if (ok) window.location.reload()
-    else setIsSwitchingUi(false)
-  }
   const [popupPosition, setPopupPosition] = useState<{ top: number; left: number; width?: number } | null>(null)
 
   const getUserDisplayName = () => {
@@ -269,25 +254,6 @@ export function ProfileSection({
                       <Building2 className="h-4 w-4 shrink-0" aria-hidden />
                       Switch Workspace
                     </Link>
-                  )}
-                  {showUiToggle && (
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={uiShell === 'v2'}
-                      disabled={isSwitchingUi}
-                      onClick={() => void toggleUiShell()}
-                      className="d-sidebar-nav flex w-full items-center gap-2 rounded px-3 py-2.5 text-left text-[#45474c] transition-colors hover:bg-[#f3f4f6] hover:text-[#1b1b1d] disabled:opacity-60"
-                    >
-                      <PanelsTopLeft className="h-4 w-4 shrink-0" aria-hidden />
-                      <span className="flex-1">New UI</span>
-                      <span
-                        aria-hidden
-                        className={`relative inline-flex h-4 w-7 shrink-0 items-center rounded-full transition-colors ${uiShell === 'v2' ? 'bg-primary' : 'bg-slate-300'}`}
-                      >
-                        <span className={`inline-block h-3 w-3 rounded-full bg-white shadow transition-transform ${uiShell === 'v2' ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
-                      </span>
-                    </button>
                   )}
                   <button
                     type="button"

@@ -1,8 +1,8 @@
 /**
- * UI shell version — the per-user "New UI" toggle (see .claude/plans/ui-ux-overhaul.md).
+ * UI shell version (see .claude/plans/ui-ux-overhaul.md).
  *
- * `v2` (the Notion/Linear UI) is the default for everyone since 2026-10-15; `v1` is the legacy UI,
- * kept only as an opt-out escape hatch until the old shell is removed. `v2` sets `data-ui="v2"` on
+ * `v2` (the Notion/Linear UI) is the only UI since 2026-10-15, when the "New UI" opt-out toggle was
+ * removed; `v1` is the legacy UI, still compiled until the old shell is deleted (Phase 7). `v2` sets `data-ui="v2"` on
  * <html>, which swaps the semantic tokens in `app/ui-tokens.css` to the Notion-style values.
  *
  * Source of truth is `user_personalizations.uiPrefs.shell`. The cookie mirrors it only so the root
@@ -19,9 +19,12 @@ export const UI_SHELL_COOKIE = 'fm_ui_shell'
 /** One year — the cookie is a cache of a server preference, re-synced on every `/d` load. */
 export const UI_SHELL_COOKIE_MAX_AGE = 60 * 60 * 24 * 365
 
-/** Anything other than an explicit opt-out is the new UI. */
-export function normalizeUiShell(raw: unknown): UiShell {
-    return raw === 'v1' ? 'v1' : 'v2'
+/**
+ * Always the new UI. The opt-out toggle was removed on 2026-10-15, so a stored `v1` preference or
+ * cookie no longer applies; the `v1` code paths stay compiled until the Phase 7 cleanup deletes them.
+ */
+export function normalizeUiShell(_raw: unknown): UiShell {
+    return 'v2'
 }
 
 /** Applies the shell to <html> and mirrors it into the cookie. Browser only. */
