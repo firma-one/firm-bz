@@ -2455,10 +2455,16 @@ function EngagementHealthBody({ health, deliverables, planningHygiene, commentTh
                 {/* Ring 7 — First-Time-Right (approved deliverables only) */}
                 {show('engagement.first_time_right') && (
                         <div id="ring-ftr" className="flex flex-col items-center gap-3 scroll-mt-24">
-                            <p className="text-sm font-semibold text-fg-muted flex items-center gap-1.5">
-                                <Target className="h-4 w-4 text-fg-subtle" /> First-Time-Right
-                                <span className="text-[10px] font-medium text-fg-subtle bg-surface-muted px-1.5 py-0.5 rounded-full">approved only</span>
-                                <InfoTip ariaLabel="About First-Time-Right" text="Of the deliverables that reached Approved, the share that got there without ever being sent back for rework (zero backward status transitions). In-flight deliverables don't count until they're approved. Higher is better." />
+                            {/* The title and its info icon never break (the hyphens used to split it over
+                                two lines). "approved only" is plain muted text: as a grey pill it wrapped
+                                into a box that read as an empty card. In a narrow column it drops to its
+                                own line, as a subtitle. */}
+                            <p className="flex flex-wrap items-center justify-center gap-x-1.5 gap-y-0.5 text-sm font-semibold text-fg-muted">
+                                <span className="flex items-center gap-1.5 whitespace-nowrap">
+                                    <Target className="h-4 w-4 text-fg-subtle" /> First-Time-Right
+                                    <InfoTip ariaLabel="About First-Time-Right" text="Of the deliverables that reached Approved, the share that got there without ever being sent back for rework (zero backward status transitions). In-flight deliverables don't count until they're approved. Higher is better." />
+                                </span>
+                                <span className="whitespace-nowrap text-small font-normal text-fg-subtle">approved only</span>
                             </p>
                             {ftrTotal > 0 ? (
                                 <RingWithLegend
