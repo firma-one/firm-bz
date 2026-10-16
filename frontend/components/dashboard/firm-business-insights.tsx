@@ -2,11 +2,13 @@
 
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/lib/auth-context'
-import { Users, Briefcase, MailOpen, TrendingUp, RefreshCw, UserPlus, Send, CheckCircle2, PauseCircle, UserMinus, ArrowLeft, CalendarClock } from 'lucide-react'
+import { Users, Briefcase, MailOpen, TrendingUp, RefreshCw, UserPlus, Send, CheckCircle2, PauseCircle, UserMinus, ArrowLeft, CalendarClock, LineChart } from 'lucide-react'
 import type { FirmInsightsResponse, ClientPipelineItem, EngagementPipelineItem } from '@/app/api/firms/[firmId]/insights/route'
 import { StatTile } from '@/components/ui/stat-tile'
 import { AiFirmBrief } from '@/components/dashboard/ai-firm-brief'
+import { InsightCard } from '@/components/dashboard/insight-card'
 import { Button } from '@/components/ui/button'
+import { Hint } from '@/components/ui/tooltip'
 import { Tag } from '@/components/ui/tag'
 
 function formatValue(val: number, symbol = ''): string {
@@ -195,12 +197,18 @@ function PipelineBar({ items, total, symbol }: { items: ClientPipelineItem[]; to
     )
 }
 
-/** Muted section label inside the card, as on the engagement Overview. */
-function SubHeading({ children, trailing }: { children: React.ReactNode; trailing?: React.ReactNode }) {
+/**
+ * One block of the Business overview. A full-width hairline sets it apart from the block above,
+ * as between the ring rows on the engagement Overview.
+ */
+function SubSection({ title, trailing, children }: { title: string; trailing?: React.ReactNode; children: React.ReactNode }) {
     return (
-        <div className="mb-2 mt-6 flex items-baseline justify-between gap-3">
-            <h3 className="text-small font-medium text-fg-muted">{children}</h3>
-            {trailing}
+        <div className="mt-5 border-t border-line pt-4">
+            <div className="mb-3 flex items-baseline justify-between gap-3">
+                <h3 className="text-small font-medium text-fg-muted">{title}</h3>
+                {trailing}
+            </div>
+            {children}
         </div>
     )
 }
@@ -237,42 +245,46 @@ export function FirmBusinessInsights({ firmId }: FirmBusinessInsightsProps) {
     const overdueDueCount = data?.engagementsDueSoon?.filter((e) => e.daysUntil < 0).length ?? 0
     const atRiskClientCount = data ? (data.clientCounts?.ACTIVE ?? 0) + (data.clientCounts?.PROSPECT ?? 0) - (data.engagementsDueSoon?.length ?? 0) : 0
 
+    const refreshButton = (
+        <Hint label="Refresh">
+            <button
+                type="button"
+                onClick={() => setRefreshTick((t) => t + 1)}
+                className="rounded-control p-1.5 text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg print:hidden"
+                aria-label="Refresh business overview"
+            >
+                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+        </Hint>
+    )
+
     return (
         <>
         <AiFirmBrief firmId={firmId} />
-        <div className="rounded-card border border-line bg-surface p-5">
-            <div className="mb-4 flex items-start justify-between gap-4">
-                <div>
-                    <h2 className="text-h3 text-fg">Business overview</h2>
-                    <p className="mt-0.5 text-small text-fg-muted">Client pipeline and active engagements</p>
+        <InsightCard title="Business overview" icon={LineChart} theme="blue" subtext="Client pipeline and active engagements" headerExtra={refreshButton}>
+            <div className={`transition-opacity duration-300 ${loading ? 'opacity-50' : ''}`}>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-3 pt-4 md:grid-cols-4">
+                    <StatTile icon={Users} label="Active clients" count={totalActiveClients} colorClass="text-fg-subtle" />
+                    <StatTile icon={TrendingUp} label="Prospects" count={totalProspects} colorClass="text-fg-subtle" />
+                    <StatTile icon={Briefcase} label="Active engagements" count={totalEngagements} colorClass="text-fg-subtle" />
+                    <StatTile icon={MailOpen} label="Pending invitations" count={totalPendingInvites} colorClass="text-fg-subtle" />
+                    {(data?.clientCounts?.ON_HOLD ?? 0) > 0 && (
+                        <StatTile icon={PauseCircle} label="Clients on hold" count={data?.clientCounts?.ON_HOLD ?? 0} colorClass="text-fg-subtle" />
+                    )}
+                    {(data?.clientCounts?.PAST ?? 0) > 0 && (
+                        <StatTile icon={UserMinus} label="Past clients" count={data?.clientCounts?.PAST ?? 0} colorClass="text-fg-subtle" />
+                    )}
+                    {(data?.engagementStatusBreakdown?.PLANNED ?? 0) > 0 && (
+                        <StatTile icon={CalendarClock} label="Planned engagements" count={data!.engagementStatusBreakdown.PLANNED} colorClass="text-fg-subtle" />
+                    )}
+                    {(data?.engagementStatusBreakdown?.PAUSED ?? 0) > 0 && (
+                        <StatTile icon={PauseCircle} label="Paused engagements" count={data!.engagementStatusBreakdown.PAUSED} colorClass="text-fg-subtle" />
+                    )}
                 </div>
-                <Button variant="ghost" size="icon" onClick={() => setRefreshTick((t) => t + 1)} className="h-7 w-7" title="Refresh" aria-label="Refresh business overview">
-                    <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
-                </Button>
-            </div>
 
-            <div className={`grid grid-cols-2 gap-x-4 gap-y-3 transition-opacity duration-300 md:grid-cols-4 ${loading ? 'opacity-50' : ''}`}>
-                <StatTile icon={Users} label="Active clients" count={totalActiveClients} colorClass="text-fg-subtle" />
-                <StatTile icon={TrendingUp} label="Prospects" count={totalProspects} colorClass="text-fg-subtle" />
-                <StatTile icon={Briefcase} label="Active engagements" count={totalEngagements} colorClass="text-fg-subtle" />
-                <StatTile icon={MailOpen} label="Pending invitations" count={totalPendingInvites} colorClass="text-fg-subtle" />
-                {(data?.clientCounts?.ON_HOLD ?? 0) > 0 && (
-                    <StatTile icon={PauseCircle} label="Clients on hold" count={data?.clientCounts?.ON_HOLD ?? 0} colorClass="text-fg-subtle" />
-                )}
-                {(data?.clientCounts?.PAST ?? 0) > 0 && (
-                    <StatTile icon={UserMinus} label="Past clients" count={data?.clientCounts?.PAST ?? 0} colorClass="text-fg-subtle" />
-                )}
-                {(data?.engagementStatusBreakdown?.PLANNED ?? 0) > 0 && (
-                    <StatTile icon={CalendarClock} label="Planned engagements" count={data!.engagementStatusBreakdown.PLANNED} colorClass="text-fg-subtle" />
-                )}
-                {(data?.engagementStatusBreakdown?.PAUSED ?? 0) > 0 && (
-                    <StatTile icon={PauseCircle} label="Paused engagements" count={data!.engagementStatusBreakdown.PAUSED} colorClass="text-fg-subtle" />
-                )}
-            </div>
-
-            {(data?.clientPipelineBreakdown !== undefined) && (
-                <div className={`transition-opacity duration-300 ${loading ? 'opacity-50' : ''}`}>
-                    <SubHeading
+                {(data?.clientPipelineBreakdown !== undefined) && (
+                    <SubSection
+                        title="Revenue pipeline"
                         trailing={
                             <div className="flex items-baseline gap-3 text-small">
                                 {(closingSoonCount > 0 || overdueDueCount > 0) && (
@@ -290,38 +302,36 @@ export function FirmBusinessInsights({ firmId }: FirmBusinessInsightsProps) {
                             </div>
                         }
                     >
-                        Revenue pipeline
-                    </SubHeading>
-                    <PipelineBar items={data!.clientPipelineBreakdown} total={data?.pipelineValue ?? 0} symbol={data?.currencySymbol ?? ''} />
-                </div>
-            )}
+                        <PipelineBar items={data!.clientPipelineBreakdown} total={data?.pipelineValue ?? 0} symbol={data?.currencySymbol ?? ''} />
+                    </SubSection>
+                )}
 
-            {(data?.contractTypeBreakdown?.length ?? 0) > 0 && (
-                <div className={`transition-opacity duration-300 ${loading ? 'opacity-50' : ''}`}>
-                    <SubHeading>Engagement types</SubHeading>
-                    <div className="flex flex-wrap gap-1.5">
-                        {data!.contractTypeBreakdown.map(({ type, count }) => (
-                            <span key={type} className="inline-flex items-center gap-1.5 rounded-control bg-surface-muted px-2 py-1 text-small">
-                                <span className="font-medium tabular-nums text-fg">{count}</span>
-                                <span className="text-fg-muted">{type}</span>
-                            </span>
-                        ))}
-                    </div>
-                </div>
-            )}
+                {(data?.contractTypeBreakdown?.length ?? 0) > 0 && (
+                    <SubSection title="Engagement types">
+                        {/* A plain legend, like the pipeline's: label then count, no chips. */}
+                        <div className="flex flex-wrap gap-x-5 gap-y-1.5 text-small">
+                            {data!.contractTypeBreakdown.map(({ type, count }) => (
+                                <span key={type} className="inline-flex items-baseline gap-1.5">
+                                    <span className="text-fg-muted">{type}</span>
+                                    <span className="font-medium tabular-nums text-fg">{count}</span>
+                                </span>
+                            ))}
+                        </div>
+                    </SubSection>
+                )}
 
-            {data?.weeklyActivity && (
-                <div className={`transition-opacity duration-300 ${loading ? 'opacity-50' : ''}`}>
-                    <SubHeading>This week</SubHeading>
-                    <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-                        <StatTile icon={UserPlus} label="New clients" count={data.weeklyActivity.newClients} colorClass="text-fg-subtle" />
-                        <StatTile icon={Briefcase} label="New engagements" count={data.weeklyActivity.newEngagements} colorClass="text-fg-subtle" />
-                        <StatTile icon={Send} label="Invitations sent" count={data.weeklyActivity.invitationsSent} colorClass="text-fg-subtle" />
-                        <StatTile icon={CheckCircle2} label="Engagements closed" count={data.weeklyActivity.engagementsClosed} colorClass="text-fg-subtle" />
-                    </div>
-                </div>
-            )}
-        </div>
+                {data?.weeklyActivity && (
+                    <SubSection title="This week">
+                        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                            <StatTile icon={UserPlus} label="New clients" count={data.weeklyActivity.newClients} colorClass="text-fg-subtle" />
+                            <StatTile icon={Briefcase} label="New engagements" count={data.weeklyActivity.newEngagements} colorClass="text-fg-subtle" />
+                            <StatTile icon={Send} label="Invitations sent" count={data.weeklyActivity.invitationsSent} colorClass="text-fg-subtle" />
+                            <StatTile icon={CheckCircle2} label="Engagements closed" count={data.weeklyActivity.engagementsClosed} colorClass="text-fg-subtle" />
+                        </div>
+                    </SubSection>
+                )}
+            </div>
+        </InsightCard>
         </>
     )
 }

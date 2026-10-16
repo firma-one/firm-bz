@@ -1157,6 +1157,28 @@ emerald. Deepak expects it on buttons, links, the Brio pill and deliverable icon
 - **Known gap:** first paint shows emerald for a moment before the brand applies (the pre-paint
   script only knows the v1 payload).
 
+**Secondary accent color hidden (2026-10-16):** Deepak saw no effect from it. In the New UI it
+colored only a 2px stripe on the checked role in the Invite member dropdown (now `border-action`).
+The nav stripe, tab underlines and upload progress bar it drove are v1-only. A second brand color
+doesn't fit a one-accent system, and a pale one fails contrast. `SHOW_ACCENT_COLOR = false` hides
+the row on the firm and client Branding tabs, which now label the remaining color "Brand color" and
+say what it colors. A saved value still loads and is saved back unchanged; the column, the
+`--brand-accent` writes and the v1 consumers stay until the Phase 7 cleanup.
+
+**Firm Overview brought in line with the engagement Overview (2026-10-16):**
+- **Layout:** the same grid (`xl:grid-cols-[minmax(0,1fr)_20rem]`, `gap-10` sections). The brief
+  and Business overview are flat `InsightCard` sections instead of bordered cards, with refresh in
+  each heading row (Hint tooltips, `print:hidden`). The headings line up with the Action Center's.
+- **Action Center:** the engagement page's Linear-style list moved to a shared
+  `components/dashboard/action-list.tsx` (`ActionSection`, `ActionRow`, `attentionCount`), used by
+  both pages. The firm groups are "Follow-ups" (Overdue, Upcoming, Unanswered comments) and
+  "Documents" (Sensitive files, Sharing alerts, Large files), with scan freshness as a footnote.
+  The tinted icon tiles, the "All caught up" banner and the colored date chips in the drill-downs
+  are gone: dates are plain text, red once overdue.
+- **Business overview:** hairlines between its blocks (stats, Revenue pipeline, Engagement types,
+  This week), as between the ring rows; engagement types are a plain legend instead of chips.
+- **Print:** the grid still stacks under `[data-print-overview]`; the controls are hidden.
+
 **Next:** Phase 7 sign-off: visual review of everything above in a signed-in browser, then
 cleanup (delete the v1 shell, the `setUiShell` action and `uiPrefs.shell`, `DueSoonSection`, the
 old Bookmarks table and personal Recent/Reminders/Notifications pages, and the unused onboarding

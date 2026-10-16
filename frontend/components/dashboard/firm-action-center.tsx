@@ -6,21 +6,22 @@ import { useAuth } from '@/lib/auth-context'
 import {
     Briefcase,
     MailOpen,
-    AlertCircle,
+    AlertTriangle,
     Clock,
     RefreshCw,
     CheckCircle2,
     ArrowUpRight,
-    ArrowLeft,
-    ChevronRight,
+    ChevronLeft,
     TrendingUp,
     Bell,
     Share2,
     FileWarning,
     HardDrive,
     FolderOpen,
-    MessageSquare,
+    MessagesSquare,
     CheckCheck,
+    CalendarClock,
+    Inbox,
 } from 'lucide-react'
 import type { FirmInsightsResponse, ProspectItem, PendingInviteItem, EngagementDueSoonItem, UnansweredThreadItem } from '@/app/api/firms/[firmId]/insights/route'
 import type { DriveAlertsResponse, EngagementDriveAlert } from '@/app/api/firms/[firmId]/drive-alerts/route'
@@ -28,9 +29,9 @@ import type { ReminderWithContext } from '@/lib/actions/user-reminders'
 import { markAllRemindersDone, markReminderDone } from '@/lib/actions/user-reminders'
 import { clientPath, engagementPath } from '@/lib/navigation/firm-paths'
 import { Button } from '@/components/ui/button'
-import { Tag } from '@/components/ui/tag'
+import { Hint } from '@/components/ui/tooltip'
 import { ShimmerBlock } from '@/components/ui/shimmer'
-import type { TagColor } from '@/lib/ui/status-colors'
+import { ActionSection, attentionCount, type ActionItem } from '@/components/dashboard/action-list'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -51,29 +52,24 @@ function formatDelta(days: number): string {
     return `In ${days}d`
 }
 
-function deltaColor(days: number): TagColor {
-    if (days < 0) return 'red'
-    if (days === 0) return 'yellow'
-    if (days <= 3) return 'orange'
-    if (days <= 7) return 'yellow'
-    return 'gray'
+/** Dates as plain text, Linear-style: red once overdue, full strength when close, muted after. */
+function deltaClass(days: number): string {
+    if (days < 0) return 'text-danger'
+    if (days <= 3) return 'text-fg'
+    return 'text-fg-subtle'
 }
 
-function reminderLabelColor(style: ReminderWithContext['labelStyle']): TagColor {
-    switch (style) {
-        case 'red':    return 'red'
-        case 'orange': return 'orange'
-        case 'amber':  return 'yellow'
-        default:       return 'gray'
-    }
+function plural(n: number, word: string): string {
+    return `${n} ${word}${n === 1 ? '' : 's'}`
 }
 
-// ─── Section Block ────────────────────────────────────────────────────────────
+// ─── Drill-down pieces ─────────────────────────────────────────────────────────
 
+/** A quiet group label inside a drill-down, like the duplicate groups on the engagement page. */
 function SectionBlock({ title, icon: Icon, children }: { title: string; icon: React.ElementType; children: React.ReactNode }) {
     return (
-        <div className="flex flex-col gap-1">
-            <div className="flex items-center gap-1.5 px-2">
+        <div className="flex flex-col gap-0.5">
+            <div className="flex items-center gap-1.5 px-2 pb-0.5">
                 <Icon className="h-3.5 w-3.5 text-fg-subtle" />
                 <span className="text-small font-medium text-fg-muted">{title}</span>
             </div>
@@ -82,17 +78,15 @@ function SectionBlock({ title, icon: Icon, children }: { title: string; icon: Re
     )
 }
 
-/** The calm "nothing here" line used in place of a green banner. */
+/** The calm "nothing here" line. */
 function AllClear({ children }: { children: React.ReactNode }) {
     return (
-        <div className="flex items-center gap-2 rounded-control bg-surface-subtle px-3 py-2 text-small text-fg-muted">
-            <CheckCircle2 className="h-4 w-4 shrink-0 text-tag-green-fg" />
+        <p className="flex items-center gap-1.5 px-2 py-1.5 text-small text-fg-subtle">
+            <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
             {children}
-        </div>
+        </p>
     )
 }
-
-// ─── Row Items ────────────────────────────────────────────────────────────────
 
 const ROW_CLASS = 'group flex items-center justify-between gap-3 rounded-control px-2 py-1.5 transition-colors hover:bg-surface-hover'
 
@@ -100,7 +94,7 @@ function RowArrow() {
     return <ArrowUpRight className="h-3.5 w-3.5 text-fg-subtle opacity-0 transition-opacity group-hover:opacity-100" />
 }
 
-function reminderTypeBadge(entityKey: string, action: string): string {
+function reminderTypeLabel(entityKey: string, action: string): string {
     const table = entityKey.split('.').slice(0, 2).join('.')
     if (table === 'platform.clients') return `Client · ${action}`
     if (table === 'platform.engagements') return `Engagement · ${action}`
@@ -108,34 +102,38 @@ function reminderTypeBadge(entityKey: string, action: string): string {
 }
 
 function ReminderRow({ reminder, onMarkDone, isMarkingDone }: { reminder: ReminderWithContext; onMarkDone?: () => void; isMarkingDone?: boolean }) {
-    const typeBadge = reminderTypeBadge(reminder.entityKey, reminder.action)
+    const urgent = reminder.labelStyle === 'red' || reminder.labelStyle === 'orange'
     return (
         <div className={`${ROW_CLASS} items-start`}>
             <div className="min-w-0 flex-1">
                 <p className="truncate text-ui text-fg">{reminder.entityName}</p>
-                <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
-                    <Tag color="gray" className="shrink-0">{typeBadge}</Tag>
-                    <Tag color={reminderLabelColor(reminder.labelStyle)}>{reminder.label}</Tag>
-                    {reminder.note && <span className="truncate text-small text-fg-subtle">{reminder.note}</span>}
-                </div>
+                <p className="truncate text-small text-fg-muted">
+                    {reminderTypeLabel(reminder.entityKey, reminder.action)}
+                    {' · '}
+                    <span className={urgent ? 'text-danger' : undefined}>{reminder.label}</span>
+                    {reminder.note && <span className="text-fg-subtle"> · {reminder.note}</span>}
+                </p>
             </div>
             <div className="mt-0.5 flex shrink-0 items-center gap-0.5">
                 {reminder.ctaUrl && (
-                    <Link href={reminder.ctaUrl} target="_blank" rel="noopener noreferrer" className="rounded-control p-1 text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg" aria-label={`Open ${reminder.entityName}`}>
-                        <ArrowUpRight className="h-3.5 w-3.5" />
-                    </Link>
+                    <Hint label="Open">
+                        <Link href={reminder.ctaUrl} target="_blank" rel="noopener noreferrer" className="rounded-control p-1 text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg" aria-label={`Open ${reminder.entityName}`}>
+                            <ArrowUpRight className="h-3.5 w-3.5" />
+                        </Link>
+                    </Hint>
                 )}
                 {onMarkDone && (
-                    <button
-                        type="button"
-                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); onMarkDone() }}
-                        disabled={isMarkingDone}
-                        className="rounded-control p-1 text-fg-subtle transition-colors hover:bg-surface-hover hover:text-tag-green-fg disabled:opacity-50"
-                        title="Mark done"
-                        aria-label={`Mark ${reminder.entityName} done`}
-                    >
-                        <CheckCircle2 className="h-4 w-4" />
-                    </button>
+                    <Hint label="Mark done">
+                        <button
+                            type="button"
+                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); onMarkDone() }}
+                            disabled={isMarkingDone}
+                            className="rounded-control p-1 text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg disabled:opacity-50"
+                            aria-label={`Mark ${reminder.entityName} done`}
+                        >
+                            <CheckCircle2 className="h-4 w-4" />
+                        </button>
+                    </Hint>
                 )}
             </div>
         </div>
@@ -143,13 +141,6 @@ function ReminderRow({ reminder, onMarkDone, isMarkingDone }: { reminder: Remind
 }
 
 function ThreadRow({ item, groupSlug, firmSlug }: { item: UnansweredThreadItem; groupSlug: string; firmSlug: string }) {
-    const timeAgo = (() => {
-        const diff = Date.now() - new Date(item.lastMessageAt).getTime()
-        const h = Math.floor(diff / 3600000)
-        if (h < 1) return 'Just now'
-        if (h < 24) return `${h}h ago`
-        return `${Math.floor(h / 24)}d ago`
-    })()
     return (
         <Link
             href={engagementPath(groupSlug, firmSlug, item.clientSlug, item.engagementSlug)}
@@ -158,14 +149,14 @@ function ThreadRow({ item, groupSlug, firmSlug }: { item: UnansweredThreadItem; 
             className={ROW_CLASS}
         >
             <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                    <p className="truncate text-ui text-fg">{item.documentName}</p>
-                    <Tag color="gray" className="shrink-0">{item.engagementName}</Tag>
-                </div>
-                {item.lastMessage && <p className="mt-0.5 truncate text-small text-fg-muted">{item.lastMessage}</p>}
+                <p className="truncate text-ui text-fg">{item.documentName}</p>
+                <p className="truncate text-small text-fg-muted">
+                    {item.engagementName}
+                    {item.lastMessage && <span className="text-fg-subtle"> · {item.lastMessage}</span>}
+                </p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
-                <span className="text-small text-fg-subtle">{timeAgo}</span>
+                <span className="text-small text-fg-subtle">{timeAgo(item.lastMessageAt)}</span>
                 <RowArrow />
             </div>
         </Link>
@@ -184,7 +175,7 @@ function ProspectRow({ item, groupSlug, firmSlug }: { item: ProspectItem; groupS
                 </p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
-                <Tag color={deltaColor(item.daysUntil)}>{formatDelta(item.daysUntil)}</Tag>
+                <span className={`text-small tabular-nums ${deltaClass(item.daysUntil)}`}>{formatDelta(item.daysUntil)}</span>
                 <RowArrow />
             </div>
         </Link>
@@ -192,7 +183,6 @@ function ProspectRow({ item, groupSlug, firmSlug }: { item: ProspectItem; groupS
 }
 
 function InviteRow({ item, groupSlug, firmSlug }: { item: PendingInviteItem; groupSlug: string; firmSlug: string }) {
-    const color: TagColor = item.daysUntilExpiry <= 2 ? 'red' : item.daysUntilExpiry <= 5 ? 'yellow' : 'gray'
     return (
         <Link
             href={engagementPath(groupSlug, firmSlug, item.clientSlug, item.engagementSlug, { tab: 'members' })}
@@ -205,7 +195,9 @@ function InviteRow({ item, groupSlug, firmSlug }: { item: PendingInviteItem; gro
                 <p className="truncate text-small text-fg-muted">{item.engagementName}</p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
-                <Tag color={color}>{item.daysUntilExpiry <= 0 ? 'Expires today' : `Expires in ${item.daysUntilExpiry}d`}</Tag>
+                <span className={`text-small tabular-nums ${item.daysUntilExpiry <= 2 ? 'text-danger' : 'text-fg-subtle'}`}>
+                    {item.daysUntilExpiry <= 0 ? 'Expires today' : `Expires in ${item.daysUntilExpiry}d`}
+                </span>
                 <RowArrow />
             </div>
         </Link>
@@ -220,7 +212,7 @@ function EngagementDueRow({ item, groupSlug, firmSlug }: { item: EngagementDueSo
                 <p className="truncate text-small text-fg-muted">{item.clientName}</p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
-                <Tag color={deltaColor(item.daysUntil)}>{formatDelta(item.daysUntil)}</Tag>
+                <span className={`text-small tabular-nums ${deltaClass(item.daysUntil)}`}>{formatDelta(item.daysUntil)}</span>
                 <RowArrow />
             </div>
         </Link>
@@ -235,41 +227,36 @@ function DriveAlertRow({ item, groupSlug, firmSlug }: { item: EngagementDriveAle
                 <p className="truncate text-small text-fg-muted">{item.clientName}</p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
-                <span className="text-small tabular-nums text-fg-muted">{item.count} file{item.count !== 1 ? 's' : ''}</span>
+                <span className="text-small tabular-nums text-fg-muted">{plural(item.count, 'file')}</span>
                 <RowArrow />
             </div>
         </Link>
     )
 }
 
-/** A summary line that opens one of the drill-in lists. Neutral when there is nothing to act on. */
-function SummaryRow({ icon: Icon, color, title, subtitle, count, onClick }: {
-    icon: React.ElementType
-    color: TagColor | null
-    title: string
-    subtitle: string
-    count: number
-    onClick: () => void
-}) {
+/** The drill-down's own header under the Action Center title, as on the engagement page. */
+function DrilldownHeader({ title, meta, onBack }: { title: string; meta: string; onBack: () => void }) {
     return (
-        <button type="button" onClick={onClick} className="group flex w-full items-center gap-3 rounded-control px-2 py-2 text-left transition-colors hover:bg-surface-hover">
-            <span
-                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-control ${color ? '' : 'bg-surface-muted text-fg-subtle'}`}
-                style={color ? { backgroundColor: `var(--ui-tag-${color}-bg)`, color: `var(--ui-tag-${color}-fg)` } : undefined}
+        <div className="flex items-center gap-2 border-b border-line pb-3">
+            <button
+                type="button"
+                onClick={onBack}
+                className="group/back inline-flex items-center gap-1 text-small text-fg-subtle transition-colors hover:text-fg-muted"
             >
-                <Icon className="h-4 w-4" />
-            </span>
-            <span className="min-w-0 flex-1">
-                <span className="block truncate text-ui text-fg">{title}</span>
-                <span className="block truncate text-small text-fg-muted">{subtitle}</span>
-            </span>
-            <span className={`text-ui font-medium tabular-nums ${color ? 'text-fg' : 'text-fg-subtle'}`}>{count}</span>
-            <ChevronRight className="h-4 w-4 shrink-0 text-fg-subtle" />
-        </button>
+                <ChevronLeft className="h-3.5 w-3.5 transition-transform group-hover/back:-translate-x-0.5" />
+                Back
+            </button>
+            <span className="text-small text-fg-subtle">·</span>
+            <span className="truncate text-small font-medium text-fg-muted">{title}</span>
+            <span className="ml-auto shrink-0 text-small tabular-nums text-fg-subtle">{meta}</span>
+        </div>
     )
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
+
+type DriveKind = 'sharing' | 'sensitive' | 'storage'
+type AcView = 'summary' | 'overdue' | 'upcoming' | 'threads' | DriveKind
 
 interface FirmActionCenterProps {
     firmId: string
@@ -282,7 +269,7 @@ export function FirmActionCenter({ firmId, groupSlug, firmSlug }: FirmActionCent
     const [data, setData] = useState<FirmInsightsResponse | null>(null)
     const [loading, setLoading] = useState(true)
     const [refreshTick, setRefreshTick] = useState(0)
-    const [acView, setAcView] = useState<'summary' | 'overdue' | 'upcoming' | 'threads' | 'sharing' | 'sensitive' | 'storage'>('summary')
+    const [acView, setAcView] = useState<AcView>('summary')
     const [isMarkingDone, setIsMarkingDone] = useState(false)
     const [markingDoneId, setMarkingDoneId] = useState<string | null>(null)
     const [driveAlerts, setDriveAlerts] = useState<DriveAlertsResponse | null>(null)
@@ -334,22 +321,20 @@ export function FirmActionCenter({ firmId, groupSlug, firmSlug }: FirmActionCent
     const pendingInvites = data?.pendingInvitations?.filter(i => i.daysUntilExpiry > 0) ?? []
     const upcomingCount = upcomingReminders.length + upcomingEngagements.length + pendingInvites.length
 
-    const overdueSubtitle = (): string => {
-        const parts: string[] = []
-        if (overdueReminders.length) parts.push(`${overdueReminders.length} reminder${overdueReminders.length > 1 ? 's' : ''}`)
-        if (overdueEngagements.length) parts.push(`${overdueEngagements.length} engagement${overdueEngagements.length > 1 ? 's' : ''}`)
-        if (overdueProspects.length) parts.push(`${overdueProspects.length} prospect${overdueProspects.length > 1 ? 's' : ''}`)
-        if (expiredInvites.length) parts.push(`${expiredInvites.length} invite${expiredInvites.length > 1 ? 's' : ''}`)
-        return parts.slice(0, 3).join(' · ')
-    }
+    const breakdown = (parts: [number, string][]): string =>
+        parts.filter(([n]) => n > 0).slice(0, 3).map(([n, word]) => plural(n, word)).join(' · ')
 
-    const upcomingSubtitle = (): string => {
-        const parts: string[] = []
-        if (upcomingReminders.length) parts.push(`${upcomingReminders.length} reminder${upcomingReminders.length > 1 ? 's' : ''}`)
-        if (upcomingEngagements.length) parts.push(`${upcomingEngagements.length} engagement${upcomingEngagements.length > 1 ? 's' : ''}`)
-        if (pendingInvites.length) parts.push(`${pendingInvites.length} invite${pendingInvites.length > 1 ? 's' : ''}`)
-        return parts.slice(0, 3).join(' · ')
-    }
+    const overdueSubtitle = breakdown([
+        [overdueReminders.length, 'reminder'],
+        [overdueEngagements.length, 'engagement'],
+        [overdueProspects.length, 'prospect'],
+        [expiredInvites.length, 'invite'],
+    ])
+    const upcomingSubtitle = breakdown([
+        [upcomingReminders.length, 'reminder'],
+        [upcomingEngagements.length, 'engagement'],
+        [pendingInvites.length, 'invite'],
+    ])
 
     const unansweredThreads = data?.unansweredThreads ?? []
     const threadsCount = unansweredThreads.length
@@ -390,205 +375,193 @@ export function FirmActionCenter({ firmId, groupSlug, firmSlug }: FirmActionCent
         }
     }
 
-    const sharingFileCount = driveAlerts?.sharing?.reduce((s, e) => s + e.count, 0) ?? 0
-    const sensitiveFileCount = driveAlerts?.sensitive?.reduce((s, e) => s + e.count, 0) ?? 0
-    const storageFileCount = driveAlerts?.storage?.reduce((s, e) => s + e.count, 0) ?? 0
-
-    const driveViewLabel: Record<string, string> = { sharing: 'Sharing alerts', sensitive: 'Sensitive files', storage: 'Storage alerts' }
-    const driveViewCount: Record<string, number> = { sharing: sharingFileCount, sensitive: sensitiveFileCount, storage: storageFileCount }
-    const driveViewColor: Record<string, TagColor> = { sharing: 'blue', sensitive: 'orange', storage: 'purple' }
-    const isDriveView = acView === 'sharing' || acView === 'sensitive' || acView === 'storage'
+    const driveItems = (kind: DriveKind): EngagementDriveAlert[] => driveAlerts?.[kind] ?? []
+    const driveFileCount = (kind: DriveKind) => driveItems(kind).reduce((s, e) => s + e.count, 0)
     const scannedCount = driveAlerts?.scannedCount ?? 0
     const totalDriveCount = driveAlerts?.totalCount ?? 0
     const hasPartialScan = totalDriveCount > scannedCount && totalDriveCount > 0
 
-    const viewTitle = acView === 'overdue' ? 'Overdue' : acView === 'upcoming' ? 'Upcoming' : acView === 'threads' ? 'Unanswered threads' : driveViewLabel[acView]
-    const viewCount = acView === 'overdue' ? overdueCount : acView === 'upcoming' ? upcomingCount : acView === 'threads' ? threadsCount : driveViewCount[acView]
-    const viewColor: TagColor = acView === 'overdue' ? 'red' : acView === 'upcoming' ? 'yellow' : acView === 'threads' ? 'purple' : driveViewColor[acView] ?? 'gray'
+    const followUps: ActionItem[] = [
+        { key: 'overdue', label: 'Overdue', count: overdueCount, severity: 'critical', icon: AlertTriangle,
+          sub: overdueSubtitle, onSelect: () => setAcView('overdue') },
+        { key: 'upcoming', label: 'Upcoming', count: upcomingCount, severity: 'info', icon: Clock,
+          sub: upcomingSubtitle, onSelect: () => setAcView('upcoming') },
+        { key: 'threads', label: 'Unanswered comments', count: threadsCount, severity: 'warning', icon: MessagesSquare,
+          sub: 'client waiting on a reply', onSelect: () => setAcView('threads') },
+    ]
+
+    const DRIVE_META: Record<DriveKind, { label: string; severity: ActionItem['severity']; icon: React.ElementType; listTitle: string }> = {
+        sensitive: { label: 'Sensitive files', severity: 'critical', icon: FileWarning, listTitle: 'Engagements with sensitive files' },
+        sharing: { label: 'Sharing alerts', severity: 'warning', icon: Share2, listTitle: 'Engagements with sharing alerts' },
+        storage: { label: 'Large files', severity: 'warning', icon: HardDrive, listTitle: 'Engagements with large files' },
+    }
+    const documents: ActionItem[] = (['sensitive', 'sharing', 'storage'] as const).map((kind) => ({
+        key: kind,
+        label: DRIVE_META[kind].label,
+        count: driveFileCount(kind),
+        severity: DRIVE_META[kind].severity,
+        icon: DRIVE_META[kind].icon,
+        sub: `in ${plural(driveItems(kind).length, 'engagement')}`,
+        onSelect: () => setAcView(kind),
+    }))
+
+    const attentionTotal = attentionCount(followUps, driveLoading ? [] : documents)
+
+    // How fresh the document scan is — a footnote under the Documents group, not a header badge.
+    const scanNote = driveAlerts?.lastScannedAt ? (
+        <p className="px-2 pt-1 text-caption text-fg-subtle">Full scan {timeAgo(driveAlerts.lastScannedAt)}</p>
+    ) : hasPartialScan ? (
+        <div className="flex items-center gap-1.5 px-2 pt-1 text-caption text-fg-subtle">
+            <span>{scannedCount} of {totalDriveCount} engagements scanned</span>
+            <span>·</span>
+            <button
+                type="button"
+                onClick={handleScanAll}
+                disabled={isScanningAll}
+                className="inline-flex items-center gap-1 rounded-control text-fg-muted underline-offset-2 transition-colors hover:text-fg hover:underline disabled:opacity-50 print:hidden"
+            >
+                {isScanningAll && <RefreshCw className="h-3 w-3 animate-spin" />}
+                {isScanningAll ? 'Scanning…' : 'Scan all'}
+            </button>
+        </div>
+    ) : null
 
     return (
-        <div className="flex h-full flex-col gap-3 rounded-card border border-line bg-surface p-4 print:h-auto">
-            {/* Header */}
-            <div className="flex h-7 items-center justify-between gap-2">
-                {acView === 'summary' ? (
-                    <h3 className="text-h3 text-fg">Action center</h3>
-                ) : (
-                    <div className="flex min-w-0 flex-1 items-center gap-2 animate-in fade-in slide-in-from-left-2 duration-200">
-                        <Button variant="ghost" size="sm" onClick={() => setAcView('summary')} className="h-7 px-2">
-                            <ArrowLeft className="h-3.5 w-3.5" />
-                            Back
-                        </Button>
-                        <span className="truncate text-ui font-medium text-fg">{viewTitle}</span>
-                        <Tag color={viewColor} className="ml-auto tabular-nums">{viewCount}</Tag>
+        <div className="sticky top-0 print:static">
+            <div className="flex flex-col gap-6 xl:border-l xl:border-line xl:pl-6">
+                {/* Header — the same shape as the section headings on the left, so the two line up:
+                    icon, title, a plain count of items needing attention, a quiet refresh. */}
+                <div className="flex items-center justify-between gap-3 border-b border-line pb-2">
+                    <div className="flex min-w-0 items-center gap-2">
+                        <Inbox className="h-4 w-4 shrink-0 text-fg-subtle" />
+                        <h2 className="truncate text-h3 text-fg">Action Center</h2>
+                        {!loading && attentionTotal > 0 && (
+                            <span className="text-small tabular-nums text-fg-subtle">{attentionTotal}</span>
+                        )}
                     </div>
-                )}
-                {acView === 'summary' && (
-                    <Button variant="ghost" size="icon" onClick={() => setRefreshTick((t) => t + 1)} className="h-7 w-7" title="Refresh" aria-label="Refresh action center">
-                        <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
-                    </Button>
-                )}
-            </div>
+                    <Hint label="Refresh">
+                        <button
+                            type="button"
+                            onClick={() => setRefreshTick((t) => t + 1)}
+                            className="rounded-control p-1.5 text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg print:hidden"
+                            aria-label="Refresh action center"
+                        >
+                            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                        </button>
+                    </Hint>
+                </div>
 
-            {/* Content */}
-            <div
-                key={acView}
-                className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto animate-in fade-in slide-in-from-bottom-2 duration-200 [&::-webkit-scrollbar]:hidden [scrollbar-width:none] print:h-auto print:flex-none print:overflow-visible"
-            >
                 {loading ? (
                     <div className="flex flex-col gap-2" aria-busy="true">
                         {[1, 2, 3].map((i) => <ShimmerBlock key={i} className="h-10 w-full" />)}
                     </div>
                 ) : acView === 'summary' ? (
-                    <div className="flex flex-col gap-1">
-                        {overdueCount === 0 && upcomingCount === 0 ? (
-                            <AllClear>All caught up — no pending actions</AllClear>
+                    <div className="flex flex-col gap-4">
+                        <ActionSection title="Follow-ups" icon={CalendarClock} items={followUps} />
+                        {driveLoading ? (
+                            <ShimmerBlock className="h-10 w-full" />
+                        ) : (
+                            <ActionSection title="Documents" icon={FolderOpen} items={documents} footer={scanNote} />
+                        )}
+                    </div>
+                ) : (
+                    <div key={acView} className="flex flex-col gap-3 animate-in fade-in duration-200">
+                        {acView === 'threads' ? (
+                            <>
+                                <DrilldownHeader title="Unanswered comments" meta={plural(threadsCount, 'thread')} onBack={() => setAcView('summary')} />
+                                {unansweredThreads.length > 0 ? (
+                                    <div className="flex flex-col">
+                                        {unansweredThreads.map((t) => (
+                                            <ThreadRow key={t.threadId} item={t} groupSlug={groupSlug} firmSlug={firmSlug} />
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <AllClear>No unanswered comments</AllClear>
+                                )}
+                            </>
+                        ) : acView === 'overdue' ? (
+                            <>
+                                <DrilldownHeader title="Overdue" meta={plural(overdueCount, 'item')} onBack={() => setAcView('summary')} />
+                                {overdueCount === 0 && <AllClear>Nothing overdue</AllClear>}
+                                {overdueReminders.length > 0 && (
+                                    <SectionBlock title="Reminders" icon={Bell}>
+                                        {overdueReminders.slice(0, 5).map((r) => (
+                                            <ReminderRow key={r.id} reminder={r} onMarkDone={() => handleMarkOneDone(r.id)} isMarkingDone={markingDoneId === r.id} />
+                                        ))}
+                                        <Button variant="ghost" size="sm" onClick={() => handleMarkAllDone(overdueReminders)} disabled={isMarkingDone} className="mt-1 w-full">
+                                            <CheckCheck className="h-3.5 w-3.5" />
+                                            Mark all done
+                                        </Button>
+                                    </SectionBlock>
+                                )}
+                                {overdueEngagements.length > 0 && (
+                                    <SectionBlock title="Engagements" icon={Briefcase}>
+                                        {overdueEngagements.slice(0, 5).map((e) => (
+                                            <EngagementDueRow key={e.engagementId} item={e} groupSlug={groupSlug} firmSlug={firmSlug} />
+                                        ))}
+                                    </SectionBlock>
+                                )}
+                                {overdueProspects.length > 0 && (
+                                    <SectionBlock title="Prospect follow-ups" icon={TrendingUp}>
+                                        {overdueProspects.slice(0, 5).map((p) => (
+                                            <ProspectRow key={p.clientId} item={p} groupSlug={groupSlug} firmSlug={firmSlug} />
+                                        ))}
+                                    </SectionBlock>
+                                )}
+                                {expiredInvites.length > 0 && (
+                                    <SectionBlock title="Expired invitations" icon={MailOpen}>
+                                        {expiredInvites.slice(0, 5).map((inv) => (
+                                            <InviteRow key={inv.invitationId} item={inv} groupSlug={groupSlug} firmSlug={firmSlug} />
+                                        ))}
+                                    </SectionBlock>
+                                )}
+                            </>
+                        ) : acView === 'upcoming' ? (
+                            <>
+                                <DrilldownHeader title="Upcoming" meta={plural(upcomingCount, 'item')} onBack={() => setAcView('summary')} />
+                                {upcomingCount === 0 && <AllClear>Nothing upcoming</AllClear>}
+                                {upcomingReminders.length > 0 && (
+                                    <SectionBlock title="Reminders" icon={Bell}>
+                                        {upcomingReminders.slice(0, 5).map((r) => (
+                                            <ReminderRow key={r.id} reminder={r} />
+                                        ))}
+                                        <Button variant="ghost" size="sm" onClick={() => handleMarkAllDone(upcomingReminders)} disabled={isMarkingDone} className="mt-1 w-full">
+                                            <CheckCheck className="h-3.5 w-3.5" />
+                                            Mark all done
+                                        </Button>
+                                    </SectionBlock>
+                                )}
+                                {upcomingEngagements.length > 0 && (
+                                    <SectionBlock title="Engagement due dates" icon={Briefcase}>
+                                        {upcomingEngagements.slice(0, 6).map((e) => (
+                                            <EngagementDueRow key={e.engagementId} item={e} groupSlug={groupSlug} firmSlug={firmSlug} />
+                                        ))}
+                                    </SectionBlock>
+                                )}
+                                {pendingInvites.length > 0 && (
+                                    <SectionBlock title="Pending invitations" icon={MailOpen}>
+                                        {pendingInvites.slice(0, 5).map((inv) => (
+                                            <InviteRow key={inv.invitationId} item={inv} groupSlug={groupSlug} firmSlug={firmSlug} />
+                                        ))}
+                                    </SectionBlock>
+                                )}
+                            </>
                         ) : (
                             <>
-                                {overdueCount > 0 && (
-                                    <SummaryRow icon={AlertCircle} color="red" title="Overdue" subtitle={overdueSubtitle()} count={overdueCount} onClick={() => setAcView('overdue')} />
-                                )}
-                                {upcomingCount > 0 && (
-                                    <SummaryRow icon={Clock} color="yellow" title="Upcoming" subtitle={upcomingSubtitle()} count={upcomingCount} onClick={() => setAcView('upcoming')} />
+                                <DrilldownHeader title={DRIVE_META[acView].label} meta={plural(driveFileCount(acView), 'file')} onBack={() => setAcView('summary')} />
+                                {driveItems(acView).length > 0 ? (
+                                    <SectionBlock title={DRIVE_META[acView].listTitle} icon={DRIVE_META[acView].icon}>
+                                        {driveItems(acView).map((item) => (
+                                            <DriveAlertRow key={item.engagementId} item={item} groupSlug={groupSlug} firmSlug={firmSlug} />
+                                        ))}
+                                    </SectionBlock>
+                                ) : (
+                                    <AllClear>No alerts — all engagements look good</AllClear>
                                 )}
                             </>
                         )}
-
-                        {threadsCount > 0 && (
-                            <SummaryRow icon={MessageSquare} color="purple" title="Unanswered threads" subtitle="Awaiting a reply from the firm" count={threadsCount} onClick={() => setAcView('threads')} />
-                        )}
-
-                        {/* Document alerts — drill-in rows */}
-                        {driveLoading ? (
-                            <ShimmerBlock className="mt-3 h-10 w-full" />
-                        ) : (
-                            <div className="mt-3 flex flex-col gap-1">
-                                <div className="flex items-center justify-between gap-2 px-2">
-                                    <span className="flex items-center gap-1.5 text-small font-medium text-fg-muted">
-                                        <FolderOpen className="h-3.5 w-3.5 text-fg-subtle" />
-                                        Document alerts
-                                    </span>
-                                    {driveAlerts?.lastScannedAt ? (
-                                        <span className="text-caption text-fg-subtle">Full scan · {timeAgo(driveAlerts.lastScannedAt)}</span>
-                                    ) : hasPartialScan ? (
-                                        <span className="flex items-center gap-1.5">
-                                            <Tag color="orange">{scannedCount} of {totalDriveCount} scanned</Tag>
-                                            <button
-                                                type="button"
-                                                onClick={handleScanAll}
-                                                disabled={isScanningAll}
-                                                className="flex items-center gap-1 rounded-control px-1.5 py-0.5 text-caption text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg disabled:opacity-50"
-                                            >
-                                                {isScanningAll ? <RefreshCw className="h-3 w-3 animate-spin" /> : null}
-                                                {isScanningAll ? 'Scanning…' : 'Scan all'}
-                                            </button>
-                                        </span>
-                                    ) : null}
-                                </div>
-                                {([
-                                    { key: 'sharing' as const, icon: Share2, label: 'Sharing', count: sharingFileCount, engCount: driveAlerts?.sharing?.length ?? 0, color: 'blue' as const },
-                                    { key: 'sensitive' as const, icon: FileWarning, label: 'Sensitive', count: sensitiveFileCount, engCount: driveAlerts?.sensitive?.length ?? 0, color: 'orange' as const },
-                                    { key: 'storage' as const, icon: HardDrive, label: 'Storage', count: storageFileCount, engCount: driveAlerts?.storage?.length ?? 0, color: 'purple' as const },
-                                ]).map(({ key, icon, label, count, engCount, color }) => (
-                                    <SummaryRow
-                                        key={key}
-                                        icon={icon}
-                                        color={count > 0 ? color : null}
-                                        title={label}
-                                        subtitle={count > 0 ? `${engCount} engagement${engCount !== 1 ? 's' : ''}` : 'No alerts'}
-                                        count={count}
-                                        onClick={() => setAcView(key)}
-                                    />
-                                ))}
-                            </div>
-                        )}
                     </div>
-                ) : acView === 'threads' ? (
-                    <SectionBlock title="Unanswered client threads" icon={MessageSquare}>
-                        {unansweredThreads.length > 0 ? unansweredThreads.map((t) => (
-                            <ThreadRow key={t.threadId} item={t} groupSlug={groupSlug} firmSlug={firmSlug} />
-                        )) : (
-                            <AllClear>No unanswered threads</AllClear>
-                        )}
-                    </SectionBlock>
-                ) : !isDriveView && acView === 'overdue' ? (
-                    <div className="flex flex-col gap-4">
-                        {overdueReminders.length > 0 && (
-                            <SectionBlock title="Overdue reminders" icon={Bell}>
-                                {overdueReminders.slice(0, 5).map((r) => (
-                                    <ReminderRow key={r.id} reminder={r} onMarkDone={() => handleMarkOneDone(r.id)} isMarkingDone={markingDoneId === r.id} />
-                                ))}
-                                <Button variant="ghost" size="sm" onClick={() => handleMarkAllDone(overdueReminders)} disabled={isMarkingDone} className="mt-1 w-full">
-                                    <CheckCheck className="h-3.5 w-3.5" />
-                                    Mark all done
-                                </Button>
-                            </SectionBlock>
-                        )}
-                        {overdueEngagements.length > 0 && (
-                            <SectionBlock title="Overdue engagements" icon={Briefcase}>
-                                {overdueEngagements.slice(0, 5).map((e) => (
-                                    <EngagementDueRow key={e.engagementId} item={e} groupSlug={groupSlug} firmSlug={firmSlug} />
-                                ))}
-                            </SectionBlock>
-                        )}
-                        {overdueProspects.length > 0 && (
-                            <SectionBlock title="Overdue follow-ups" icon={TrendingUp}>
-                                {overdueProspects.slice(0, 5).map((p) => (
-                                    <ProspectRow key={p.clientId} item={p} groupSlug={groupSlug} firmSlug={firmSlug} />
-                                ))}
-                            </SectionBlock>
-                        )}
-                        {expiredInvites.length > 0 && (
-                            <SectionBlock title="Expired invitations" icon={MailOpen}>
-                                {expiredInvites.slice(0, 5).map((inv) => (
-                                    <InviteRow key={inv.invitationId} item={inv} groupSlug={groupSlug} firmSlug={firmSlug} />
-                                ))}
-                            </SectionBlock>
-                        )}
-                    </div>
-                ) : acView === 'upcoming' ? (
-                    <div className="flex flex-col gap-4">
-                        {upcomingReminders.length > 0 && (
-                            <SectionBlock title="Upcoming reminders" icon={Bell}>
-                                {upcomingReminders.slice(0, 5).map((r) => (
-                                    <ReminderRow key={r.id} reminder={r} />
-                                ))}
-                                <Button variant="ghost" size="sm" onClick={() => handleMarkAllDone(upcomingReminders)} disabled={isMarkingDone} className="mt-1 w-full">
-                                    <CheckCheck className="h-3.5 w-3.5" />
-                                    Mark all done
-                                </Button>
-                            </SectionBlock>
-                        )}
-                        {upcomingEngagements.length > 0 && (
-                            <SectionBlock title="Engagement due dates" icon={Briefcase}>
-                                {upcomingEngagements.slice(0, 6).map((e) => (
-                                    <EngagementDueRow key={e.engagementId} item={e} groupSlug={groupSlug} firmSlug={firmSlug} />
-                                ))}
-                            </SectionBlock>
-                        )}
-                        {pendingInvites.length > 0 && (
-                            <SectionBlock title="Pending invitations" icon={MailOpen}>
-                                {pendingInvites.slice(0, 5).map((inv) => (
-                                    <InviteRow key={inv.invitationId} item={inv} groupSlug={groupSlug} firmSlug={firmSlug} />
-                                ))}
-                            </SectionBlock>
-                        )}
-                    </div>
-                ) : isDriveView ? (
-                    (() => {
-                        const items = acView === 'sharing' ? (driveAlerts?.sharing ?? []) : acView === 'sensitive' ? (driveAlerts?.sensitive ?? []) : (driveAlerts?.storage ?? [])
-                        const icon = acView === 'sharing' ? Share2 : acView === 'sensitive' ? FileWarning : HardDrive
-                        const title = acView === 'sharing' ? 'Engagements with sharing alerts' : acView === 'sensitive' ? 'Engagements with sensitive files' : 'Engagements with large files'
-                        return items.length > 0 ? (
-                            <SectionBlock title={title} icon={icon}>
-                                {items.map((item) => (
-                                    <DriveAlertRow key={item.engagementId} item={item} groupSlug={groupSlug} firmSlug={firmSlug} />
-                                ))}
-                            </SectionBlock>
-                        ) : (
-                            <AllClear>No alerts — all engagements look good</AllClear>
-                        )
-                    })()
-                ) : null}
+                )}
             </div>
         </div>
     )

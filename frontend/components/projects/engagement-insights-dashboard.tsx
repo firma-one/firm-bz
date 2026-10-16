@@ -59,7 +59,7 @@ import { InsightCard } from '@/components/dashboard/insight-card'
 import { StatTile } from '@/components/ui/stat-tile'
 import { Button } from '@/components/ui/button'
 import { Hint, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { ListGroup } from '@/components/ui/list-row'
+import { ActionSection, type ActionItem } from '@/components/dashboard/action-list'
 import { DocumentIcon } from '@/components/ui/document-icon'
 import type { EngagementInsightsResponse, UnansweredThreadItem, DocumentDueDateItem, RecentDocumentItem, SensitiveFileItem, DeliverableProgress, DeliverableStage, EngagementHealthScore, PlanningHygiene, CommentThreads, EngagementPace, FirstTimeRight } from '@/app/api/projects/[projectId]/insights/route'
 import { updateEngagementInsightsSummary, approveEngagementAiSummary, dismissEngagementAiSummary } from '@/lib/actions/project'
@@ -1196,77 +1196,9 @@ function scrollToRing(ringId: string) {
     window.setTimeout(() => el.classList.remove('ring-pulse'), 1400)
 }
 
-type ActionSeverity = 'critical' | 'warning' | 'info' | 'ok'
-
-interface ActionRowItem {
-    key: string
-    label: string
-    count: number
-    sub?: string
-    href?: string                   // link to the entity (opens in engagement)
-    ringId?: string                 // if set, shows a small "→ RingName" chip
+interface ActionRowItem extends ActionItem {
+    ringId?: string                 // if set, the row gets a hover-only "show in …" button
     ringLabel?: string
-    severity: ActionSeverity        // drives the color accent
-    icon: React.ElementType
-    onDrilldown?: () => void        // if set, title click opens inline drill-down instead of href
-}
-
-/**
- * One Action Center row, Linear-style: the whole row opens the work (or its drill-down), severity
- * shows only in the icon's color, and the description sits under the label in muted text. A row
- * tied to a ring on the left gets a hover-only "show in …" button in a fixed slot, so the counts
- * stay aligned down the column.
- */
-function ACRowV2({ item, engagementBase }: { item: ActionRowItem; engagementBase: string }) {
-    const Icon = item.icon
-    const active = item.count > 0
-    const iconColor = !active ? 'text-fg-subtle'
-        : item.severity === 'critical' ? 'text-red-600'
-        : item.severity === 'warning' ? 'text-amber-600'
-        : 'text-fg-muted'
-    const drillable = !!item.onDrilldown && active
-    const linkable = !drillable && !!item.href && active
-    const href = linkable
-        ? (item.href!.startsWith('http') || !engagementBase ? item.href! : `${engagementBase}${item.href}`)
-        : undefined
-
-    const body = (
-        <>
-            <Icon className={`h-4 w-4 shrink-0 ${iconColor}`} />
-            <span className="flex min-w-0 flex-1 flex-col">
-                <span className={`truncate text-ui ${active ? 'text-fg' : 'text-fg-muted'}`}>{item.label}</span>
-                {active && item.sub && <span className="truncate text-small text-fg-subtle">{item.sub}</span>}
-            </span>
-            <span className={`shrink-0 tabular-nums text-ui ${active ? 'font-medium text-fg' : 'text-fg-subtle'}`}>{item.count}</span>
-        </>
-    )
-    const rowClass = 'flex min-w-0 flex-1 items-center gap-2.5 rounded-control px-2 py-1.5 text-left transition-colors'
-
-    return (
-        <div className="group/row flex items-center gap-0.5">
-            {drillable ? (
-                <button type="button" onClick={item.onDrilldown} className={`${rowClass} hover:bg-surface-hover`}>{body}</button>
-            ) : linkable ? (
-                <a href={href} target="_blank" rel="noopener noreferrer" className={`${rowClass} hover:bg-surface-hover`}>{body}</a>
-            ) : (
-                <div className={rowClass}>{body}</div>
-            )}
-            <span className="flex w-6 shrink-0 justify-center">
-                {item.ringId && active && (
-                    <Hint label={`Show in ${item.ringLabel ?? 'the overview'}`}>
-                        <button
-                            type="button"
-                            onClick={() => scrollToRing(item.ringId!)}
-                            aria-label={`Show in ${item.ringLabel ?? 'the overview'}`}
-                            className="flex h-6 w-6 items-center justify-center rounded-control text-fg-subtle opacity-0 transition-opacity hover:bg-surface-hover hover:text-fg focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action/30 group-hover/row:opacity-100"
-                        >
-                            <LocateFixed className="h-3.5 w-3.5" />
-                        </button>
-                    </Hint>
-                )}
-            </span>
-        </div>
-    )
 }
 
 // ─── Duplicate files drill-down panel ─────────────────────────────────────────
@@ -1332,58 +1264,39 @@ function DuplicatesDrilldown({ groups, engagementBase, onBack }: {
     )
 }
 
-const SEVERITY_ORDER: Record<ActionSeverity, number> = { critical: 0, warning: 1, info: 2, ok: 3 }
-
 /**
- * A Linear-style list group: the header carries a plain count of what needs attention (no
- * badges), the rows that need attention follow — most severe, then largest, first — and
- * everything at zero folds into one "nothing to do" line instead of a column of zeros.
+ * The engagement's Action Center group (the shared ActionSection, also on the firm Overview).
+ * Links resolve against the engagement, and a row tied to a ring on the left gets a hover-only
+ * "show in …" button in a fixed slot, so the counts stay aligned down the column.
  */
-function ACSectionV2({ title, icon: Icon, items, engagementBase, headerAction }: {
+function ACSectionV2({ title, icon, items, engagementBase }: {
     title: string
     icon: React.ElementType
     items: ActionRowItem[]
     engagementBase: string
-    headerAction?: React.ReactNode
 }) {
-    const [showClear, setShowClear] = useState(false)
-    const active = items
-        .filter((i) => i.count > 0)
-        .sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity] || b.count - a.count)
-    const clear = items.filter((i) => i.count === 0)
-
+    const resolved = items.map((it) => ({
+        ...it,
+        href: it.href && !it.href.startsWith('http') && engagementBase ? `${engagementBase}${it.href}` : it.href,
+    }))
     return (
-        <ListGroup
+        <ActionSection
             title={title}
-            icon={<Icon className="h-3.5 w-3.5 text-fg-subtle" />}
-            count={active.length > 0 ? active.length : undefined}
-            action={
-                <>
-                    {active.length === 0 && (
-                        <span className="inline-flex items-center gap-1 text-small text-fg-subtle">
-                            <CheckCircle2 className="h-3.5 w-3.5" /> All clear
-                        </span>
-                    )}
-                    {headerAction}
-                </>
-            }
-        >
-            <div className="flex flex-col pt-1">
-                {active.map((it) => <ACRowV2 key={it.key} item={it} engagementBase={engagementBase} />)}
-                {clear.length > 0 && (
+            icon={icon}
+            items={resolved}
+            aside={(it) => it.ringId && it.count > 0 ? (
+                <Hint label={`Show in ${it.ringLabel ?? 'the overview'}`}>
                     <button
                         type="button"
-                        onClick={() => setShowClear((v) => !v)}
-                        aria-expanded={showClear}
-                        className="flex h-8 items-center gap-1.5 rounded-control px-2 text-left text-small text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg-muted"
+                        onClick={() => scrollToRing(it.ringId!)}
+                        aria-label={`Show in ${it.ringLabel ?? 'the overview'}`}
+                        className="flex h-6 w-6 items-center justify-center rounded-control text-fg-subtle opacity-0 transition-opacity hover:bg-surface-hover hover:text-fg focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action/30 group-hover/row:opacity-100"
                     >
-                        <ChevronRight className={`h-3.5 w-3.5 shrink-0 transition-transform ${showClear ? 'rotate-90' : ''}`} />
-                        {clear.length} with nothing to do
+                        <LocateFixed className="h-3.5 w-3.5" />
                     </button>
-                )}
-                {showClear && clear.map((it) => <ACRowV2 key={it.key} item={it} engagementBase={engagementBase} />)}
-            </div>
-        </ListGroup>
+                </Hint>
+            ) : null}
+        />
     )
 }
 
@@ -1477,7 +1390,7 @@ function EngagementActionCenterV2({ data, loading, engagementBase, setRefreshTic
           gatingRing: 'folder.poorly_named' },
         { key: 'duplicates', label: 'Duplicate files', count: duplicatesCount, severity: 'warning', icon: FileWarning,
           sub: duplicatesCount > 0 ? '≥90% name match, same extension' : undefined,
-          onDrilldown: duplicatesCount > 0 ? () => setDrilldown('duplicates') : undefined,
+          onSelect: duplicatesCount > 0 ? () => setDrilldown('duplicates') : undefined,
           gatingRing: 'folder.duplicates' },
         { key: 'stale', label: 'Stale files', count: staleCount, severity: 'warning', icon: Archive,
           sub: staleCount > 0 ? 'not modified in 6+ months' : undefined,

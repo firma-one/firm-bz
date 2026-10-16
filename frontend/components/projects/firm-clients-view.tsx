@@ -549,8 +549,10 @@ export function FirmClientsView({ clients, groupSlug, orgSlug, orgId, firmSandbo
 
                     {canViewOrgAudit && (orgId ?? (clients[0]?.firmId ?? clients[0]?.firmId)) && (
                         <TabsContent value="analytics" className="m-0">
-                            <div data-print-overview style={{ display: 'grid', gridTemplateColumns: '1fr 22rem', gap: '1.5rem', paddingBottom: '1.5rem' }}>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', minWidth: 0 }}>
+                            {/* The engagement Overview's layout: flat sections on the left, the Action
+                                Center in a ruled column on the right. Print stacks the two. */}
+                            <div data-print-overview className="grid grid-cols-1 gap-8 pb-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
+                                <div className="flex min-w-0 flex-col gap-10">
                                     <ErrorBoundary context="FirmInsightsTab">
                                         <FirmBusinessInsights
                                             firmId={orgId ?? clients[0]?.firmId ?? clients[0]?.firmId ?? ''}

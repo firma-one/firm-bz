@@ -1,13 +1,14 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { RefreshCw } from 'lucide-react'
+import { AlertCircle, Newspaper, RefreshCw } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
 import { formatRelativeTime } from '@/lib/utils'
 import { ASSISTANT, ASSISTANT_POLICY } from '@/lib/ai/assistant'
 import { Brio } from '@/components/ui/brio'
-import { Button } from '@/components/ui/button'
+import { Hint } from '@/components/ui/tooltip'
 import { ShimmerBar } from '@/components/ui/shimmer'
+import { InsightCard } from '@/components/dashboard/insight-card'
 import { BrioSections } from '@/components/ui/brio-sections'
 import { fetchWithTimeout, AI_TIMEOUT_MS, AiTimeoutError } from '@/lib/ai/fetch-timeout'
 
@@ -82,55 +83,51 @@ export function AiFirmBrief({ firmId }: { firmId: string }) {
 
     if (!configured) return null
 
-    if (loading) {
-        return (
-            <div className="mb-6 rounded-card border border-line bg-surface p-5">
-                <div className="mb-3 flex items-center gap-1.5">
-                    <span className="text-small font-medium text-fg-muted">Today&apos;s brief</span>
-                    <Brio className="text-small" />
-                </div>
-                <div className="space-y-2" aria-busy="true">
-                    <ShimmerBar className="w-full" />
-                    <ShimmerBar className="w-[92%]" />
-                    <ShimmerBar className="w-[78%]" />
-                </div>
-            </div>
-        )
-    }
+    // The same flat section as the rest of the Overview: a heading row whose height matches the
+    // Action Center's, so the two headings line up across the page.
+    const rewriteLabel = `Ask ${ASSISTANT.name} to rewrite this`
+    const rewrite = (
+        <Hint label={rewriteLabel}>
+            <button
+                type="button"
+                onClick={refresh}
+                disabled={loading || refreshing}
+                className="rounded-control p-1.5 text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg disabled:opacity-50 print:hidden"
+                aria-label={rewriteLabel}
+            >
+                <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+            </button>
+        </Hint>
+    )
 
-    if (!brief) return null
+    if (!loading && !brief) return null
 
     return (
-        <div className="mb-6 rounded-card border border-line bg-surface p-5">
-            <div className="mb-3 flex items-start justify-between gap-4">
-                <div className="flex items-center gap-1.5">
-                    <span className="text-small font-medium text-fg-muted">Today&apos;s brief</span>
-                    <Brio className="text-small" />
-                </div>
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={refresh}
-                    disabled={refreshing}
-                    className="h-7 w-7 shrink-0"
-                    title={`Ask ${ASSISTANT.name} to rewrite this`}
-                    aria-label={`Ask ${ASSISTANT.name} to rewrite this`}
-                >
-                    <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
-                </Button>
+        <InsightCard title="Today's brief" icon={Newspaper} theme="blue" titleAddon={<Brio className="text-small" />} headerExtra={rewrite}>
+            <div className="pt-4">
+                {loading || !brief ? (
+                    <div className="space-y-2" aria-busy="true">
+                        <ShimmerBar className="w-full" />
+                        <ShimmerBar className="w-[92%]" />
+                        <ShimmerBar className="w-[78%]" />
+                    </div>
+                ) : (
+                    <>
+                        {refreshError && (
+                            <p role="status" className="mb-3 flex items-center gap-1.5 text-small text-fg-muted">
+                                <AlertCircle className="h-3.5 w-3.5 shrink-0 text-amber-600" />
+                                {refreshError}
+                            </p>
+                        )}
+
+                        <BrioSections content={brief.content} className="text-fg-muted" />
+
+                        <p className="mt-3 text-caption text-fg-subtle">
+                            Written by <Brio /> {formatRelativeTime(brief.generatedAt)} from your current data. {ASSISTANT_POLICY.short}
+                        </p>
+                    </>
+                )}
             </div>
-
-            {refreshError && (
-                <p role="status" className="mb-3 rounded-control bg-tag-yellow-bg px-2.5 py-1.5 text-small text-tag-yellow-fg">
-                    {refreshError}
-                </p>
-            )}
-
-            <BrioSections content={brief.content} className="text-fg-muted" />
-
-            <p className="mt-3 text-caption text-fg-subtle">
-                Written by <Brio /> {formatRelativeTime(brief.generatedAt)} from your current data. {ASSISTANT_POLICY.short}
-            </p>
-        </div>
+        </InsightCard>
     )
 }

@@ -22,6 +22,8 @@ interface InsightCardProps {
     className?: string
     action?: React.ReactNode
     headerExtra?: React.ReactNode
+    /** Inline after the title, e.g. the Brio mark on an AI-written section. */
+    titleAddon?: React.ReactNode
 }
 
 export function InsightCard({
@@ -33,7 +35,8 @@ export function InsightCard({
     children,
     className,
     action,
-    headerExtra
+    headerExtra,
+    titleAddon
 }: InsightCardProps) {
     // Notion section, not a card: a heading row and the content below it — no border, shadow or
     // colored icon chip. `theme` is kept for callers but no longer colors anything.
@@ -45,6 +48,7 @@ export function InsightCard({
                 <div className="flex min-w-0 items-center gap-2">
                     <Icon className="h-4 w-4 shrink-0 text-fg-subtle" />
                     <h3 className="truncate text-h3 text-fg">{title}</h3>
+                    {titleAddon}
                     {count !== undefined && <span className="text-small tabular-nums text-fg-subtle">{count}</span>}
                     {subtext && <span className="truncate text-small text-fg-muted">· {subtext}</span>}
                 </div>
