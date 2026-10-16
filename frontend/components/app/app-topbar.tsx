@@ -613,13 +613,13 @@ export function AppTopbar() {
 
       {/* Right: Utility actions — w-64, justify-end */}
       <div className="w-64 shrink-0 flex items-center justify-end gap-1 pr-4">
-        <Tip label="View product demo" position="bottom">
+        <Tip label="Take a tour" position="bottom">
           <a
             href="/tour"
             target="_blank"
             rel="noopener noreferrer"
             className="w-10 h-10 flex items-center justify-center rounded-xl text-primary hover:bg-primary/10 transition-colors"
-            aria-label="View product demo"
+            aria-label="Take a tour"
           >
             <MapIcon className="h-5 w-5" />
           </a>

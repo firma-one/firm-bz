@@ -5,7 +5,7 @@ import { CalendarDays, MessageSquareMore, Play } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { WatchPreviewButton } from "@/components/marketing/WatchPreviewButton"
+import { TakeTourButton } from "@/components/marketing/TakeTourButton"
 
 /**
  * Primary marketing hero CTAs — same treatment as `landing-page.tsx` (Contact Us + Book a Demo).
@@ -25,7 +25,7 @@ export function LandingHeroPrimaryCtas({ className }: { className?: string }) {
                     />
                 </Button>
             </Link>
-            <WatchPreviewButton className="w-full sm:w-auto" />
+            <TakeTourButton className="w-full sm:w-auto" />
             <Link
                 href="https://calendly.com/firmaone/firma-connect"
                 target="_blank"

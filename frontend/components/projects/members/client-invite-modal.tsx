@@ -1,10 +1,11 @@
 'use client'
 
 import React, { useState } from 'react'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
+import { AtSign, ShieldCheck } from 'lucide-react'
+import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import { PropertyList, PropertyRow, PROPERTY_FIELD_CLASS, PROPERTY_HINT_CLASS } from '@/components/ui/property-list'
+import { CreateDialogFooter, CreateDialogHeader, CreateDialogNotice } from '@/components/ui/create-dialog'
 import { inviteClientMember } from '@/lib/actions/client-members'
 
 interface ClientInviteModalProps {
@@ -43,39 +44,42 @@ export function ClientInviteModal({ firmId, clientId, open, onOpenChange, onSucc
 
     return (
         <Dialog open={open} onOpenChange={handleOpenChange}>
-            <DialogContent className="sm:max-w-[500px]">
-                <DialogHeader>
-                    <DialogTitle>Invite Client Administrator</DialogTitle>
-                </DialogHeader>
-                <form onSubmit={handleSubmit} className="space-y-6 pt-4">
-                    <p className="text-sm text-fg-muted">
-                        Invite someone to join this client as a Client Administrator. They will be able to manage client settings and members.
-                    </p>
-                    <div className="space-y-2">
-                        <Label htmlFor="client-invite-email">
-                            Email Address
-                        </Label>
-                        <Input
-                            id="client-invite-email"
-                            type="email"
-                            placeholder="admin@example.com"
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            required
-                            className="disabled:cursor-not-allowed disabled:opacity-60"
-                        />
+            <DialogContent className="max-h-[90vh] gap-0 overflow-y-auto p-0 sm:max-w-[600px]">
+                <CreateDialogHeader title="Invite client administrator" description="Send an invitation to manage this client." />
+
+                <form onSubmit={handleSubmit}>
+                    <div className="flex flex-col gap-3 px-5 pb-5 pt-2">
+                        {error && <CreateDialogNotice message={error} />}
+
+                        <PropertyList>
+                            <PropertyRow label={<label htmlFor="client-invite-email">Email</label>} icon={<AtSign />}>
+                                <Input
+                                    id="client-invite-email"
+                                    type="email"
+                                    placeholder="admin@example.com"
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
+                                    required
+                                    autoFocus
+                                    className={PROPERTY_FIELD_CLASS}
+                                />
+                            </PropertyRow>
+                            <PropertyRow label="Role" icon={<ShieldCheck />}>
+                                <div className="flex w-full flex-col gap-1">
+                                    <span className="px-2 text-ui text-fg">Client administrator</span>
+                                    <p className={PROPERTY_HINT_CLASS}>Can manage this client&apos;s settings and members.</p>
+                                </div>
+                            </PropertyRow>
+                        </PropertyList>
                     </div>
-                    {error && (
-                        <p className="text-sm text-danger bg-tag-red-bg p-2 rounded">{error}</p>
-                    )}
-                    <div className="flex justify-end gap-3">
-                        <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>
-                            Cancel
-                        </Button>
-                        <Button type="submit" variant="blackCta" disabled={isSubmitting || !email.trim()}>
-                            {isSubmitting ? 'Sending...' : 'Send Invitation'}
-                        </Button>
-                    </div>
+
+                    <CreateDialogFooter
+                        onCancel={() => handleOpenChange(false)}
+                        cancelDisabled={isSubmitting}
+                        submitDisabled={isSubmitting || !email.trim()}
+                        submitting={isSubmitting}
+                        submitLabel="Send invitation"
+                    />
                 </form>
             </DialogContent>
         </Dialog>
