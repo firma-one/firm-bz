@@ -144,8 +144,10 @@
   /* rounded = rounded-sm = 4px, rounded-md = 6px, rounded-lg = 8px */
   --radius: 0.5rem;
 
-  /* Fixed emerald chrome. !important beats the per-firm inline override that the root layout's
-     pre-paint script and AppTopbar write onto <html>; the firm brand stays on --brand-accent. */
+  /* Emerald by default. !important keeps out the raw per-firm color that the root layout's
+     pre-paint script and AppTopbar write onto <html>. The firm's (or client's) brand still reaches
+     the accent: the New UI shell sets a contrast-checked version inline with !important, which
+     outranks this (components/shell/use-brand-accent.ts). */
   --primary: 163 94% 24% !important;
   --primary-foreground: 0 0% 100% !important;
   --primary-rgb: 4, 120, 87 !important;

@@ -10,6 +10,7 @@ import { HeaderBar } from "./header-bar"
 import { ShellDataProvider } from "./shell-data-context"
 import { SidebarV2 } from "./sidebar-v2"
 import { useRecordVisits } from "./use-record-visits"
+import { useBrandAccent } from "./use-brand-accent"
 import { CommandMenu } from "./command-menu"
 import { ShortcutsDialog } from "./shortcuts-dialog"
 import { useShellShortcuts } from "./use-shell-shortcuts"
@@ -70,6 +71,7 @@ export function AppShellV2({
     }, [pathname])
 
     useRecordVisits()
+    useBrandAccent()
 
     // Persist outside the state updater. React runs updaters while rendering (twice in Strict
     // Mode), and a server action called there updates the Router mid-render — "Cannot update a

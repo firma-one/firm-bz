@@ -355,7 +355,9 @@ Mechanics:
   Phase 6.
 - **The per-firm `--primary` override** still applies in v1. In v2, `--primary` and `--ring` are
   pinned to emerald-700 with `!important`, which beats the inline style the pre-paint script and
-  AppTopbar write; the firm brand stays on `--brand-accent`.
+  AppTopbar write. *Superseded 2026-10-16:* Deepak expects the firm's brand color on the accent, so
+  the v2 shell now applies it through `useBrandAccent`. It's contrast-checked and set inline with
+  `!important`, which outranks the pin; see "Firm branding on the New UI accent" below.
 - **The `.d-app` `!important` slate remaps** stay untouched until Phase 6 replaces the classes they
   target.
 
@@ -1140,6 +1142,20 @@ white. Navigation should never be as bright as the content; Notion and Linear bo
 frame and keep the page white. A white sidebar would compete with the page and need a heavier
 border to separate them. The lighter tone brightens the window and keeps the separation, with the
 existing hairline edge and translucent hover/selected tints. Muted text is 4.85:1 on it (was 4.76).
+
+**Firm branding on the New UI accent (2026-10-16):** the firm's brand color had stopped reaching
+anything once v1 was retired. Only the legacy AppTopbar applied it, and v2 pinned the accent to
+emerald. Deepak expects it on buttons, links, the Brio pill and deliverable icons.
+- **How it works:** `useBrandAccent` (in AppShellV2) reads `useBranding()`: the firm's branding, or
+  the client's on `/c/{client}` pages. It sets `--ui-action`, `--ui-action-hover`,
+  `--ui-action-fg`, `--primary(-foreground/-rgb)` and `--ring` inline with `!important`.
+- **Contrast check:** `brandAccentTokens` darkens a brand color that falls under 4.5:1 against
+  white, keeping its hue, so white button text and links on white stay legible. Hover is a step
+  darker.
+- **What stays as it is:** semantic greens (copy-success ticks) and file-type colors (spreadsheets).
+  Pages with no firm in the URL (the cross-firm Home and Inbox) keep emerald.
+- **Known gap:** first paint shows emerald for a moment before the brand applies (the pre-paint
+  script only knows the v1 payload).
 
 **Next:** Phase 7 sign-off: visual review of everything above in a signed-in browser, then
 cleanup (delete the v1 shell, the `setUiShell` action and `uiPrefs.shell`, `DueSoonSection`, the
