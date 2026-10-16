@@ -50,13 +50,16 @@ import {
     Pencil,
     Sparkles,
     Copy,
+    Inbox,
+    LocateFixed,
 } from 'lucide-react'
 import { getFileTypeLabel, formatRelativeTime, formatDateTimeWithTZ, formatFileSize } from '@/lib/utils'
 import { engagementPath, firmSettingsPath } from '@/lib/navigation/firm-paths'
 import { InsightCard } from '@/components/dashboard/insight-card'
 import { StatTile } from '@/components/ui/stat-tile'
 import { Button } from '@/components/ui/button'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { Hint, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { ListGroup } from '@/components/ui/list-row'
 import { DocumentIcon } from '@/components/ui/document-icon'
 import type { EngagementInsightsResponse, UnansweredThreadItem, DocumentDueDateItem, RecentDocumentItem, SensitiveFileItem, DeliverableProgress, DeliverableStage, EngagementHealthScore, PlanningHygiene, CommentThreads, EngagementPace, FirstTimeRight } from '@/app/api/projects/[projectId]/insights/route'
 import { updateEngagementInsightsSummary, approveEngagementAiSummary, dismissEngagementAiSummary } from '@/lib/actions/project'
@@ -1189,58 +1192,60 @@ interface ActionRowItem {
     onDrilldown?: () => void        // if set, title click opens inline drill-down instead of href
 }
 
+/**
+ * One Action Center row, Linear-style: the whole row opens the work (or its drill-down), severity
+ * shows only in the icon's color, and the description sits under the label in muted text. A row
+ * tied to a ring on the left gets a hover-only "show in …" button in a fixed slot, so the counts
+ * stay aligned down the column.
+ */
 function ACRowV2({ item, engagementBase }: { item: ActionRowItem; engagementBase: string }) {
     const Icon = item.icon
-    const sev = item.count === 0 ? 'ok' : item.severity
-    const dot = sev === 'critical' ? 'bg-red-500' : sev === 'warning' ? 'bg-amber-500' : sev === 'info' ? 'bg-primary' : 'bg-gray-300'
-    const numText = sev === 'critical' ? 'text-red-600' : sev === 'warning' ? 'text-amber-600' : sev === 'info' ? 'text-primary' : 'text-fg-subtle'
-    const iconTint = sev === 'critical' ? 'bg-red-50 text-red-600' : sev === 'warning' ? 'bg-amber-50 text-amber-600' : sev === 'info' ? 'bg-primary/10 text-primary' : 'bg-surface-subtle text-fg-subtle'
-    const drillable = !!item.onDrilldown && item.count > 0
-    const linkable = !drillable && !!item.href && item.count > 0
+    const active = item.count > 0
+    const iconColor = !active ? 'text-fg-subtle'
+        : item.severity === 'critical' ? 'text-red-600'
+        : item.severity === 'warning' ? 'text-amber-600'
+        : 'text-fg-muted'
+    const drillable = !!item.onDrilldown && active
+    const linkable = !drillable && !!item.href && active
+    const href = linkable
+        ? (item.href!.startsWith('http') || !engagementBase ? item.href! : `${engagementBase}${item.href}`)
+        : undefined
 
-    const TitleTag: 'a' | 'button' | 'span' = drillable ? 'button' : linkable ? 'a' : 'span'
-    const titleProps: Record<string, unknown> = drillable
-        ? { type: 'button', onClick: item.onDrilldown }
-        : linkable
-            ? { href: item.href!.startsWith('http') || !engagementBase ? item.href : `${engagementBase}${item.href}`, target: '_blank', rel: 'noopener noreferrer' }
-            : {}
+    const body = (
+        <>
+            <Icon className={`h-4 w-4 shrink-0 ${iconColor}`} />
+            <span className="flex min-w-0 flex-1 flex-col">
+                <span className={`truncate text-ui ${active ? 'text-fg' : 'text-fg-muted'}`}>{item.label}</span>
+                {active && item.sub && <span className="truncate text-small text-fg-subtle">{item.sub}</span>}
+            </span>
+            <span className={`shrink-0 tabular-nums text-ui ${active ? 'font-medium text-fg' : 'text-fg-subtle'}`}>{item.count}</span>
+        </>
+    )
+    const rowClass = 'flex min-w-0 flex-1 items-center gap-2.5 rounded-control px-2 py-1.5 text-left transition-colors'
 
     return (
-        <div className="flex items-center gap-2.5 px-3 py-2 rounded-md hover:bg-surface-hover transition-colors">
-            <div className={`p-1.5 rounded-md shrink-0 ${iconTint}`}>
-                <Icon className="h-3.5 w-3.5" />
-            </div>
-            <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5">
-                    <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${dot}`} />
-                    <TitleTag
-                        {...titleProps as any}
-                        className={`text-xs font-medium truncate inline-flex items-center gap-0.5 ${drillable || linkable ? 'text-fg hover:text-primary cursor-pointer group/title' : 'text-fg-muted'}`}
-                    >
-                        <span className="truncate">{item.label}</span>
-                        {drillable && (
-                            <ChevronRight className="h-2.5 w-2.5 text-fg-subtle group-hover/title:text-primary group-hover/title:translate-x-0.5 transition-all shrink-0" />
-                        )}
-                        {linkable && (
-                            <ArrowUpRight className="h-2.5 w-2.5 text-fg-subtle group-hover/title:text-primary group-hover/title:translate-x-0.5 group-hover/title:-translate-y-0.5 transition-all shrink-0" />
-                        )}
-                    </TitleTag>
-                </div>
-                {item.sub && (
-                    <p className="text-[10px] text-fg-subtle truncate mt-0.5 pl-3">{item.sub}</p>
+        <div className="group/row flex items-center gap-0.5">
+            {drillable ? (
+                <button type="button" onClick={item.onDrilldown} className={`${rowClass} hover:bg-surface-hover`}>{body}</button>
+            ) : linkable ? (
+                <a href={href} target="_blank" rel="noopener noreferrer" className={`${rowClass} hover:bg-surface-hover`}>{body}</a>
+            ) : (
+                <div className={rowClass}>{body}</div>
+            )}
+            <span className="flex w-6 shrink-0 justify-center">
+                {item.ringId && active && (
+                    <Hint label={`Show in ${item.ringLabel ?? 'the overview'}`}>
+                        <button
+                            type="button"
+                            onClick={() => scrollToRing(item.ringId!)}
+                            aria-label={`Show in ${item.ringLabel ?? 'the overview'}`}
+                            className="flex h-6 w-6 items-center justify-center rounded-control text-fg-subtle opacity-0 transition-opacity hover:bg-surface-hover hover:text-fg focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action/30 group-hover/row:opacity-100"
+                        >
+                            <LocateFixed className="h-3.5 w-3.5" />
+                        </button>
+                    </Hint>
                 )}
-                {item.ringId && item.count > 0 && (
-                    <button
-                        type="button"
-                        onClick={() => scrollToRing(item.ringId!)}
-                        className="mt-1 ml-3 inline-flex items-center gap-0.5 text-[10px] font-medium text-fg-subtle hover:text-primary transition-colors group/chip"
-                    >
-                        {item.ringLabel ?? 'View ring'}
-                        <ArrowRight className="h-2.5 w-2.5 group-hover/chip:translate-x-0.5 transition-transform" />
-                    </button>
-                )}
-            </div>
-            <span className={`text-sm font-bold tabular-nums shrink-0 ${numText}`}>{item.count}</span>
+            </span>
         </div>
     )
 }
@@ -1266,7 +1271,7 @@ function DuplicatesDrilldown({ groups, engagementBase, onBack }: {
                 </button>
                 <span className="text-fg-subtle text-xs">·</span>
                 <span className="text-xs font-semibold text-fg-muted">Duplicate files</span>
-                <span className="ml-auto text-[10px] font-medium text-amber-600 bg-amber-50 border border-amber-100 px-1.5 py-0.5 rounded-full">
+                <span className="ml-auto text-small tabular-nums text-fg-subtle">
                     {groups.reduce((s, g) => s + g.files.length, 0)} files · {groups.length} {groups.length === 1 ? 'group' : 'groups'}
                 </span>
             </div>
@@ -1277,16 +1282,8 @@ function DuplicatesDrilldown({ groups, engagementBase, onBack }: {
                     <div key={g.baseKey} className="py-2.5 flex flex-col gap-1.5">
                         {/* Group label */}
                         <div className="flex items-center gap-1.5 px-1">
-                            <span className="text-[9px] font-semibold uppercase tracking-wide text-fg-subtle">
-                                Group {gi + 1}
-                            </span>
-                            <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full border ${
-                                g.type === 'exact'
-                                    ? 'text-red-600 bg-red-50 border-red-100'
-                                    : 'text-amber-600 bg-amber-50 border-amber-100'
-                            }`}>
-                                {g.type === 'exact' ? 'Exact match' : 'Name match'}
-                            </span>
+                            <span className="text-small font-medium text-fg-muted">Group {gi + 1}</span>
+                            <span className="text-small text-fg-subtle">· {g.type === 'exact' ? 'Exact match' : 'Name match'}</span>
                         </div>
                         {/* Files in group */}
                         {g.files.map((f) => (
@@ -1316,6 +1313,13 @@ function DuplicatesDrilldown({ groups, engagementBase, onBack }: {
     )
 }
 
+const SEVERITY_ORDER: Record<ActionSeverity, number> = { critical: 0, warning: 1, info: 2, ok: 3 }
+
+/**
+ * A Linear-style list group: the header carries a plain count of what needs attention (no
+ * badges), the rows that need attention follow — most severe, then largest, first — and
+ * everything at zero folds into one "nothing to do" line instead of a column of zeros.
+ */
 function ACSectionV2({ title, icon: Icon, items, engagementBase, headerAction }: {
     title: string
     icon: React.ElementType
@@ -1323,30 +1327,44 @@ function ACSectionV2({ title, icon: Icon, items, engagementBase, headerAction }:
     engagementBase: string
     headerAction?: React.ReactNode
 }) {
-    // Non-zero items on top, zeros at the bottom.
-    const sorted = [...items].sort((a, b) => (b.count > 0 ? 1 : 0) - (a.count > 0 ? 1 : 0) || b.count - a.count)
-    const attentionCount = items.filter((i) => i.count > 0).length
+    const [showClear, setShowClear] = useState(false)
+    const active = items
+        .filter((i) => i.count > 0)
+        .sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity] || b.count - a.count)
+    const clear = items.filter((i) => i.count === 0)
 
     return (
-        <div>
-            <div className="flex items-center gap-2 py-1.5 border-b border-line">
-                <Icon className="h-3.5 w-3.5 text-fg-subtle" />
-                <span className="text-small font-medium text-fg-muted flex-1">{title}</span>
-                {attentionCount > 0 ? (
-                    <span className="text-[10px] font-medium text-amber-600 bg-amber-50 border border-amber-100 px-1.5 py-0.5 rounded-full">
-                        {attentionCount} to review
-                    </span>
-                ) : (
-                    <span className="inline-flex items-center gap-1 text-[10px] font-medium text-green-600">
-                        <CheckCircle2 className="h-3 w-3" /> All clear
-                    </span>
+        <ListGroup
+            title={title}
+            icon={<Icon className="h-3.5 w-3.5 text-fg-subtle" />}
+            count={active.length > 0 ? active.length : undefined}
+            action={
+                <>
+                    {active.length === 0 && (
+                        <span className="inline-flex items-center gap-1 text-small text-fg-subtle">
+                            <CheckCircle2 className="h-3.5 w-3.5" /> All clear
+                        </span>
+                    )}
+                    {headerAction}
+                </>
+            }
+        >
+            <div className="flex flex-col pt-1">
+                {active.map((it) => <ACRowV2 key={it.key} item={it} engagementBase={engagementBase} />)}
+                {clear.length > 0 && (
+                    <button
+                        type="button"
+                        onClick={() => setShowClear((v) => !v)}
+                        aria-expanded={showClear}
+                        className="flex h-8 items-center gap-1.5 rounded-control px-2 text-left text-small text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg-muted"
+                    >
+                        <ChevronRight className={`h-3.5 w-3.5 shrink-0 transition-transform ${showClear ? 'rotate-90' : ''}`} />
+                        {clear.length} with nothing to do
+                    </button>
                 )}
-                {headerAction}
+                {showClear && clear.map((it) => <ACRowV2 key={it.key} item={it} engagementBase={engagementBase} />)}
             </div>
-            <div className="p-1 flex flex-col">
-                {sorted.map((it) => <ACRowV2 key={it.key} item={it} engagementBase={engagementBase} />)}
-            </div>
-        </div>
+        </ListGroup>
     )
 }
 
@@ -1469,20 +1487,30 @@ function EngagementActionCenterV2({ data, loading, engagementBase, setRefreshTic
         (r.gatingSection ? sectionVisible(r.gatingSection) : true)
     )
     const housekeeping = allHousekeeping.filter(r => r.gatingRing ? ringVisible(r.gatingRing) : true)
+    const attentionTotal = [...delivery, ...housekeeping].filter((r) => r.count > 0).length
 
     return (
         <div className="sticky top-0">
             <div className="flex flex-col gap-6 xl:border-l xl:border-line xl:pl-6">
-                {/* Header — mirrors the Engagement Insights card header */}
-                <div className="flex items-center justify-between">
-                    <h2 className="text-lg font-bold text-fg">Action Center</h2>
-                    <button
-                        onClick={() => setRefreshTick((t) => t + 1)}
-                        className="p-1.5 rounded-lg bg-surface-muted hover:bg-surface-hover transition-colors"
-                        title="Refresh"
-                    >
-                        <RefreshCw className={`h-4 w-4 text-fg-muted ${loading ? 'animate-spin' : ''}`} />
-                    </button>
+                {/* Header — the same shape as the Engagement Health heading on the left, so the two
+                    line up: icon, title, a plain count of items needing attention, a quiet refresh. */}
+                <div className="flex items-center justify-between gap-3 border-b border-line pb-2">
+                    <div className="flex min-w-0 items-center gap-2">
+                        <Inbox className="h-4 w-4 shrink-0 text-fg-subtle" />
+                        <h2 className="truncate text-h3 text-fg">Action Center</h2>
+                        {!loading && data && attentionTotal > 0 && (
+                            <span className="text-small tabular-nums text-fg-subtle">{attentionTotal}</span>
+                        )}
+                    </div>
+                    <Hint label="Refresh">
+                        <button
+                            onClick={() => setRefreshTick((t) => t + 1)}
+                            className="rounded-control p-1.5 text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg print:hidden"
+                            aria-label="Refresh"
+                        >
+                            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                        </button>
+                    </Hint>
                 </div>
 
                 {(loading || !data) ? (
@@ -1499,7 +1527,7 @@ function EngagementActionCenterV2({ data, loading, engagementBase, setRefreshTic
                 ) : (
                     <div className="flex flex-col gap-4">
                         {delivery.length > 0 && (
-                            <ACSectionV2 title="Delivery Actions" icon={Package} items={delivery} engagementBase={engagementBase} />
+                            <ACSectionV2 title="Delivery" icon={Package} items={delivery} engagementBase={engagementBase} />
                         )}
                         {housekeeping.length > 0 && (
                             <ACSectionV2 title="Housekeeping" icon={Archive} items={housekeeping} engagementBase={engagementBase} />
@@ -1947,6 +1975,40 @@ function DeliveryTimeline({ deliverables, engagementCreatedAt, kickoffDate, enga
 }
 
 // ─── File Organization card body ─────────────────────────────────────────────
+/**
+ * What lowered a score below 100, worst first: each issue with its severity and the points it
+ * cost. It sits directly under its score ring, beside the "100 − x = score" sum it explains.
+ * Shared by Engagement Health and File Organization.
+ */
+function ScoreDeductions({ penalties, emptyText, className = '' }: {
+    penalties: { label: string; points: number }[]
+    emptyText: string
+    className?: string
+}) {
+    // Severity as plain colored text — a tinted chip here read as decoration rather than meaning.
+    const severity = (pts: number) => pts >= 15 ? { text: 'High', cls: 'text-red-600' } : pts >= 8 ? { text: 'Medium', cls: 'text-amber-600' } : { text: 'Low', cls: 'text-fg-subtle' }
+    const deductClass = (pts: number) => pts >= 15 ? 'text-red-600 font-bold' : pts >= 8 ? 'text-amber-600 font-semibold' : 'text-fg-subtle font-medium'
+    if (penalties.length === 0) {
+        return <p className={`pt-3 border-t border-line text-[11px] text-green-600 font-medium text-center ${className}`}>{emptyText}</p>
+    }
+    return (
+        <div className={`pt-3 border-t border-line flex flex-col gap-2 ${className}`}>
+            <p className="text-[11px] font-medium text-fg-subtle">What lowered the score</p>
+            {penalties.map((p) => {
+                const sev = severity(p.points)
+                return (
+                    <div key={p.label} className="flex items-center gap-1.5 text-[11px]">
+                        <span className={`h-2 w-2 rounded-full shrink-0 ${p.points >= 15 ? 'bg-red-400' : p.points >= 8 ? 'bg-amber-400' : 'bg-slate-300'}`} />
+                        <span className="text-fg-muted truncate flex-1">{p.label}</span>
+                        <span className={`shrink-0 text-[11px] font-medium ${sev.cls}`}>{sev.text}</span>
+                        <span className={`tabular-nums shrink-0 ${deductClass(p.points)}`}>−{p.points}</span>
+                    </div>
+                )
+            })}
+        </div>
+    )
+}
+
 function FolderHealthRing({ label, tooltip, icon: Icon, segments, centerTop, centerBottom }: {
     label: string
     tooltip: string
@@ -2007,8 +2069,6 @@ function FolderHealthBody({ storageHealth, folderHealth, hiddenRings = [] }: {
     const penalties = [...(folderHealth.penalties ?? [])].sort((a, b) => b.points - a.points)
     const totalDeducted = penalties.reduce((s, p) => s + p.points, 0)
 
-    const severityLabel = (pts: number) => pts >= 15 ? { text: 'HIGH', cls: 'bg-red-50 text-red-600 border-red-100' } : pts >= 8 ? { text: 'MED', cls: 'bg-amber-50 text-amber-600 border-amber-100' } : { text: 'LOW', cls: 'bg-surface-subtle text-fg-muted border-line' }
-    const deductClass = (pts: number) => pts >= 15 ? 'text-red-600 font-bold' : pts >= 8 ? 'text-amber-600 font-semibold' : 'text-fg-subtle font-medium'
 
     const totalArtifacts = storageHealth.totalFiles + folderHealth.totalFolders
     const totalFiles = storageHealth.totalFiles
@@ -2126,12 +2186,20 @@ function FolderHealthBody({ storageHealth, folderHealth, hiddenRings = [] }: {
     const [expanded, setExpanded] = useState(false)
     const gridRef = useRef<HTMLDivElement>(null)
     const [fullHeight, setFullHeight] = useState<number | null>(null)
+    // Collapsed, the grid shows all of row 1 (the score ring with what lowered it, beside the first
+    // rings) plus a short peek of row 2 under the fade. A fixed height used to cut row 1 short, and
+    // the fade covered its lower half.
+    const [row1Height, setRow1Height] = useState<number | null>(null)
+    const PEEK = 56
 
     useEffect(() => {
-        if (gridRef.current) {
-            setFullHeight(gridRef.current.scrollHeight)
-        }
-    }, [rings.length, showScoreRing])
+        const grid = gridRef.current
+        if (!grid) return
+        setFullHeight(grid.scrollHeight)
+        const row1 = Array.from(grid.children).slice(0, 3) as HTMLElement[]
+        if (row1.length) setRow1Height(Math.max(...row1.map((cell) => cell.offsetHeight)))
+    }, [rings.length, showScoreRing, penalties.length])
+    const collapsedHeight = row1Height != null ? row1Height + PEEK : 220
 
     return (
         <div className="p-6 flex flex-col gap-6">
@@ -2140,7 +2208,7 @@ function FolderHealthBody({ storageHealth, folderHealth, hiddenRings = [] }: {
                 <div
                     ref={gridRef}
                     className="grid grid-cols-3 gap-8 overflow-hidden transition-[max-height] duration-700 [transition-timing-function:cubic-bezier(0.65,0,0.35,1)]"
-                    style={{ maxHeight: !expanded && hasMoreRows ? 220 : (fullHeight ?? 1200) }}
+                    style={{ maxHeight: !expanded && hasMoreRows ? collapsedHeight : (fullHeight ?? 1200) }}
                 >
                     {/* Score ring — cell 1 */}
                     {showScoreRing && <div className="flex flex-col items-center gap-3">
@@ -2166,6 +2234,8 @@ function FolderHealthBody({ storageHealth, folderHealth, hiddenRings = [] }: {
                                 <p className="text-xs text-fg-subtle tabular-nums">100 − <span className="text-red-500 font-medium">{totalDeducted}</span> = <span className={`font-semibold ${scoreTextClass}`}>{score}</span></p>
                             )}
                         </div>
+                        {/* What lowered the score — directly under it, as in Engagement Health. */}
+                        <ScoreDeductions penalties={penalties} emptyText="All clear — no issues found" className="w-full max-w-[220px]" />
                     </div>}
                     {/* 8 KPI rings */}
                     {rings.map((r, i) => (
@@ -2189,8 +2259,10 @@ function FolderHealthBody({ storageHealth, folderHealth, hiddenRings = [] }: {
                     ))}
                 </div>
                 <div
-                    className="pointer-events-none absolute inset-x-0 h-28 bg-gradient-to-t from-white via-white/90 to-transparent transition-opacity duration-500 ease-in-out"
-                    style={{ bottom: '2.5rem', opacity: !expanded && hasMoreRows ? 1 : 0 }}
+                    className="pointer-events-none absolute inset-x-0 bg-gradient-to-t from-white via-white/90 to-transparent transition-opacity duration-500 ease-in-out"
+                    style={row1Height != null
+                        ? { top: row1Height, height: PEEK, opacity: !expanded && hasMoreRows ? 1 : 0 }
+                        : { bottom: '2.5rem', height: '7rem', opacity: !expanded && hasMoreRows ? 1 : 0 }}
                 />
                 {hasMoreRows && (
                     <div className="relative flex justify-center mt-3">
@@ -2206,25 +2278,8 @@ function FolderHealthBody({ storageHealth, folderHealth, hiddenRings = [] }: {
                 )}
             </div>
 
-            {/* Factors list */}
-            {penalties.length > 0 ? (
-                <div className="pt-4 border-t border-line flex flex-col gap-2">
-                    <p className="text-[10px] font-semibold uppercase tracking-wide text-fg-subtle">Factors</p>
-                    {penalties.map((p) => {
-                        const sev = severityLabel(p.points)
-                        return (
-                            <div key={p.label} className="flex items-center gap-1.5 text-[11px]">
-                                <span className={`h-2 w-2 rounded-full shrink-0 ${p.points >= 15 ? 'bg-red-400' : p.points >= 8 ? 'bg-amber-400' : 'bg-slate-300'}`} />
-                                <span className="text-fg-muted truncate flex-1">{p.label}</span>
-                                <span className={`text-[9px] font-semibold px-1 py-0.5 rounded border shrink-0 ${sev.cls}`}>{sev.text}</span>
-                                <span className={`tabular-nums shrink-0 ${deductClass(p.points)}`}>−{p.points}</span>
-                            </div>
-                        )
-                    })}
-                </div>
-            ) : (
-                <p className="pt-4 border-t border-line text-[11px] text-green-600 font-medium text-center">All clear — no issues found</p>
-            )}
+            {/* Without the score ring there is nothing for the list to sit under, so it ends the section. */}
+            {!showScoreRing && <ScoreDeductions penalties={penalties} emptyText="All clear — no issues found" />}
         </div>
     )
 }
@@ -2300,8 +2355,6 @@ function EngagementHealthBody({ health, deliverables, planningHygiene, commentTh
     const ftrTotal = firstTimeRight?.totalApproved ?? 0
     const ftrPct = ftrTotal > 0 ? Math.round(((firstTimeRight!.firstTime) / ftrTotal) * 100) : 0
 
-    const severityLabel = (pts: number) => pts >= 15 ? { text: 'HIGH', cls: 'bg-red-50 text-red-600 border-red-100' } : pts >= 8 ? { text: 'MED', cls: 'bg-amber-50 text-amber-600 border-amber-100' } : { text: 'LOW', cls: 'bg-surface-subtle text-fg-muted border-line' }
-    const deductClass = (pts: number) => pts >= 15 ? 'text-red-600 font-bold' : pts >= 8 ? 'text-amber-600 font-semibold' : 'text-fg-subtle font-medium'
 
     return (
         <div className="p-6 flex flex-col gap-6">
@@ -2327,25 +2380,9 @@ function EngagementHealthBody({ health, deliverables, planningHygiene, commentTh
                                 <p className="text-[11px] text-fg-subtle mt-0.5">100 − <span className="text-red-500 font-medium">{totalDeducted}</span> = <span className={`font-semibold ${healthTextClass}`}>{health.score}</span></p>
                             )}
                         </div>
-                        {/* Factors — directly under the Health Score ring */}
-                        {penalties.length > 0 ? (
-                            <div className="w-full max-w-[260px] pt-3 border-t border-line flex flex-col gap-2">
-                                <p className="text-[10px] font-semibold uppercase tracking-wide text-fg-subtle">Factors</p>
-                                {penalties.map((p) => {
-                                    const sev = severityLabel(p.points)
-                                    return (
-                                        <div key={p.label} className="flex items-center gap-1.5 text-[11px]">
-                                            <span className={`h-2 w-2 rounded-full shrink-0 ${p.points >= 15 ? 'bg-red-400' : p.points >= 8 ? 'bg-amber-400' : 'bg-slate-300'}`} />
-                                            <span className="text-fg-muted truncate flex-1">{p.label}</span>
-                                            <span className={`text-[9px] font-semibold px-1 py-0.5 rounded border shrink-0 ${sev.cls}`}>{sev.text}</span>
-                                            <span className={`tabular-nums shrink-0 ${deductClass(p.points)}`}>−{p.points}</span>
-                                        </div>
-                                    )
-                                })}
-                            </div>
-                        ) : (
-                            <p className="w-full max-w-[260px] pt-3 border-t border-line text-[11px] text-green-600 font-medium text-center">All clear — no risks</p>
-                        )}
+                        {/* What lowered the score — directly under the Health Score ring. It stays the
+                            ring's last child: the PDF capture widens `#ring-health > :last-child`. */}
+                        <ScoreDeductions penalties={penalties} emptyText="All clear — no risks" className="w-full max-w-[260px]" />
                     </div>
                 )}
                 {/* Ring 2 — Delivery Status */}
@@ -2921,17 +2958,6 @@ export function EngagementInsightsDashboard({
             {/* Left: insights — flat sections, no outer card. The page header above already shows
                 the engagement's name, status and due date. */}
             <div className="flex min-w-0 flex-col gap-8">
-                <div className="-mb-4 flex items-center justify-end">
-                    <button
-                        onClick={() => setRefreshTick((t) => t + 1)}
-                        className="flex items-center gap-1.5 rounded-control px-2 py-1 text-small text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg"
-                        title="Refresh insights"
-                    >
-                        <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
-                        Refresh
-                    </button>
-                </div>
-
                 {/* Engagement Health — Health Score · Delivery Status · Delivery Schedule (Phase 7 & 8) */}
                 {!loading && data && (() => {
                     const inFlightIds = new Set((data.deliverables ?? []).filter((d) => d.stage !== 'approved').map((d) => d.id))
@@ -2945,6 +2971,23 @@ export function EngagementInsightsDashboard({
                             subtext={`Overall Health ${data.healthScore?.score ?? '—'}/100 · ${data.deliverables?.length ?? 0} deliverable${(data.deliverables?.length ?? 0) === 1 ? '' : 's'}`}
                             headerExtra={
                                 <div className="flex items-center gap-1">
+                                    {/* Refresh sits with the section's other actions rather than on a
+                                        row of its own, so Engagement Health lines up with the Action
+                                        Center heading. While it reloads, the page shows its skeleton. */}
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <button
+                                                onClick={() => setRefreshTick((t) => t + 1)}
+                                                // A screen-only control: never in a printout or the exported PDF.
+                                                data-no-export=""
+                                                className="rounded-control p-1.5 text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg print:hidden"
+                                                aria-label="Refresh insights"
+                                            >
+                                                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                                            </button>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="bottom" className="text-xs">Refresh insights</TooltipContent>
+                                    </Tooltip>
                                     {isFirmAdmin && (
                                         <>
                                         <Tooltip>

@@ -1105,6 +1105,22 @@ track, darkening to `--ui-fg-subtle` on hover. The standard `scrollbar-width`/`s
 only to Firefox, since Chrome and Edge ignore `::-webkit-scrollbar` when those are set. Reuse it on
 other in-page scrollers.
 
+**Engagement Overview: header, score deductions, Action Center (2026-10-16):**
+- **Refresh** is an icon in the Engagement Health header (`print:hidden`, `data-no-export`), so
+  that heading lines up with the Action Center heading.
+- **Score deductions** ("Factors") sit directly under their score ring in both Engagement Health
+  and File Organization, via one `ScoreDeductions` component headed "What lowered the score".
+  Severity is plain colored text (High, Medium, Low). Collapsed, the File Organization grid shows
+  all of row 1 plus a short peek, with the fade moved onto the peek.
+- **Action Center, Linear-style:**
+  - The heading has the same shape as Engagement Health's: icon, title, attention count, quiet
+    refresh.
+  - The sections ("Delivery", "Housekeeping") are `ListGroup`s with a plain count and no pale
+    "N to review" chips.
+  - Rows that need attention come first (severity, then count), each one clickable as a whole, with
+    severity only in the icon color. A hover-only button jumps to the related ring.
+  - Zero rows fold into "N with nothing to do". The Duplicates drill-down lost its pale chips too.
+
 **Next:** Phase 7 sign-off: visual review of everything above in a signed-in browser, then
 cleanup (delete the v1 shell, the `setUiShell` action and `uiPrefs.shell`, `DueSoonSection`, the
 old Bookmarks table and personal Recent/Reminders/Notifications pages, and the unused onboarding
