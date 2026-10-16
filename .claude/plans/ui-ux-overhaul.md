@@ -1083,6 +1083,22 @@ on it, so the rows still add up.
   sections for Sort by, Direction and Folders.
 - **"Clear all"** became a plain "Clear" text button.
 
+**Audit pages: filters and file names (2026-10-16):**
+- **Filters:** the firm and engagement Audit pages (`components/audit/audit-with-filters.tsx`) use
+  the shared filter pills. Scope, Type, Client, Engagement and Actor stay multi-select, with
+  checkbox rows that stay open and "Any …" first. Client, Engagement and Actor get a search box
+  past 7 entries. The From/To dates stay inline, shaped as pills. The always-on × clear icon became
+  a "Clear" text button that shows only when a filter is set. "Projects" now reads "Engagement".
+- **Bug — "File · Opened" rows showed raw JSON:**
+  - **Cause:** the preview route recorded `{ externalId, mimeType }` with no name and no document
+    link. The download-share route named the file `filename`, which the table didn't read, and one
+    of its opens recorded no name. `eventDetails()` then printed `JSON.stringify(metadata)`.
+  - **New events:** every open and download records `fileName` and links its document.
+  - **Older events:** both audit APIs fill in names via `withResolvedFileNames`
+    (`lib/audit/file-names.ts`), matching only files in the event's own engagement and firm.
+  - **Table:** reads `filename` too and never prints JSON. A file event with no name says "File name
+    not recorded"; other events show their plain values without ids.
+
 **Next:** Phase 7 sign-off: visual review of everything above in a signed-in browser, then
 cleanup (delete the v1 shell, the `setUiShell` action and `uiPrefs.shell`, `DueSoonSection`, the
 old Bookmarks table and personal Recent/Reminders/Notifications pages, and the unused onboarding

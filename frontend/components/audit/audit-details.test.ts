@@ -60,3 +60,21 @@ describe('eventDetails — agent attribution', () => {
             .toBe('Report.docx')
     })
 })
+
+describe('eventDetails — file names, never raw JSON', () => {
+    /** The download-share route recorded the name as `filename` before it also wrote `fileName`. */
+    it('reads a name recorded under `filename`', () => {
+        expect(eventDetails(row({ fileId: 'drive-1', filename: 'Report.pdf', usedPdf: true }))).toBe('Report.pdf')
+    })
+
+    it('says the name is missing for a file event that has none, instead of printing its metadata', () => {
+        const opened = { ...row({ externalId: 'drive-1', mimeType: 'application/json' }), eventType: 'DOCUMENT_OPENED' }
+        expect(eventDetails(opened)).toBe('File name not recorded')
+    })
+
+    it('shows other events\' plain values, without ids or JSON', () => {
+        const other = { ...row({ clientId: 'c1', region: 'EMEA', seats: 5 }), eventType: 'FIRM_SETTINGS_CHANGED' }
+        expect(eventDetails(other)).toBe('Region: EMEA · Seats: 5')
+    })
+})
+

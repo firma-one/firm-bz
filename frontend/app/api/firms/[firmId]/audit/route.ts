@@ -6,6 +6,7 @@ import { findFirmInPermissions } from '@/lib/permission-helpers'
 import { createClient as createSupabaseAdmin } from '@supabase/supabase-js'
 import { type Prisma } from '@prisma/client'
 import { isValidAuditEventType } from '@/lib/audit-event-types'
+import { withResolvedFileNames } from '@/lib/audit/file-names'
 
 function firmPrivileges(scopes: Record<string, string[]> | undefined): string[] {
   if (!scopes) return []
@@ -71,6 +72,7 @@ export async function GET(
         eventType: true,
         eventAt: true,
         actorUserId: true,
+        engagementId: true,
         projectDocumentId: true,
         metadata: true,
         client: { select: { name: true } },
@@ -104,7 +106,11 @@ export async function GET(
       )
     }
 
-    const eventsWithEmail = items.map((e) => ({
+    // Older file events were recorded without a file name; look those up so the page shows the
+    // name rather than the raw metadata.
+    const named = await withResolvedFileNames(items, firmId)
+
+    const eventsWithEmail = named.map((e) => ({
       id: e.id,
       eventType: e.eventType,
       eventAt: e.eventAt.toISOString(),

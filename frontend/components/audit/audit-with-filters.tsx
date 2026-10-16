@@ -5,7 +5,6 @@ import {
   Briefcase,
   Building2,
   Check,
-  ChevronDown,
   ClipboardList,
   Copy,
   Download,
@@ -13,6 +12,9 @@ import {
   FileText,
   FileUp,
   FolderLock,
+  Layers,
+  Activity,
+  User,
   Loader2,
   Lock,
   MessageSquare,
@@ -43,6 +45,7 @@ import {
 } from '@/components/ui/tooltip'
 import { RelativeDateTime } from '@/components/ui/relative-date-time'
 import { DateTimePicker } from '@/components/ui/date-time-picker'
+import { FilterMenuLabel, FilterMenuRow, FilterMenuSearch, FilterPill, summarizePicks } from '@/components/ui/filter-pill'
 import { UserAvatarWithTooltip } from '@/components/ui/user-avatar-with-tooltip'
 
 export type AuditWithFiltersMode = 'project' | 'org'
@@ -61,6 +64,9 @@ export type AuditEventRow = {
 }
 
 type FilterOption = { id: string; name: string; clientId?: string }
+
+/** Client, Engagement and Actor menus get a search box once their list is longer than this. */
+const MENU_SEARCH_THRESHOLD = 7
 
 const EVENT_TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: '', label: 'All types' },
@@ -276,7 +282,8 @@ export function eventDetails(ev: AuditEventRow): string {
   const m = ev.metadata as Record<string, unknown> | undefined
   if (!m || typeof m !== 'object') return ''
   const approval = approvalSuffix(m)
-  const fileName = m.fileName as string | undefined
+  // `filename` is how the download-share route named the file before it also recorded `fileName`.
+  const fileName = (m.fileName as string | undefined) || (m.filename as string | undefined)
   const description = m.description as string | undefined
   const name = m.name as string | undefined
   const action = m.action as string | undefined
@@ -301,7 +308,21 @@ export function eventDetails(ev: AuditEventRow): string {
   if (changedFields?.length) return `Changed: ${changedFields.join(', ')}${approval}`
   if (m.newStatus) return `Status: ${m.oldStatus ?? '—'} → ${m.newStatus}${approval}`
   if (approval) return approval.replace(/^ · /, '')
-  return Object.keys(m).length ? JSON.stringify(m) : ''
+  // Never raw JSON: a file event whose name could not be found says so, and anything else shows
+  // its plain values — ids left out, since they mean nothing to a reader.
+  if (ev.eventType.startsWith('DOCUMENT_')) return 'File name not recorded'
+  return readableMetadata(m)
+}
+
+/** "Key value · Key value" for an event's simple values, leaving out ids. */
+function readableMetadata(m: Record<string, unknown>): string {
+  return Object.entries(m)
+    .filter(([key, value]) => !/id$/i.test(key) && ['string', 'number', 'boolean'].includes(typeof value) && value !== '')
+    .map(([key, value]) => {
+      const label = key.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase()
+      return `${label.charAt(0).toUpperCase()}${label.slice(1)}: ${String(value)}`
+    })
+    .join(' · ')
 }
 
 function EventIcon({ eventType }: { eventType: string }) {
@@ -509,29 +530,9 @@ export function AuditWithFilters({
     return projects.filter((p) => p.name.toLowerCase().includes(q))
   }, [projects, projectSearch])
 
-  const selectedClientLabel = useMemo(() => {
-    if (clientIdsFilter.length === 0) return 'All clients'
-    if (clientIdsFilter.length === 1) return clients.find((c) => c.id === clientIdsFilter[0])?.name ?? '1 client'
-    return `${clientIdsFilter.length} clients`
-  }, [clientIdsFilter, clients])
 
-  const selectedProjectLabel = useMemo(() => {
-    if (projectIdsFilter.length === 0) return 'All projects'
-    if (projectIdsFilter.length === 1) return projects.find((p) => p.id === projectIdsFilter[0])?.name ?? '1 project'
-    return `${projectIdsFilter.length} projects`
-  }, [projectIdsFilter, projects])
 
-  const selectedScopeLabel = useMemo(() => {
-    if (scopeFilter.length === 0) return 'All scopes'
-    if (scopeFilter.length === 1) return SCOPE_OPTIONS.find((o) => o.value === scopeFilter[0])?.label ?? '1 scope'
-    return `${scopeFilter.length} scopes`
-  }, [scopeFilter])
 
-  const selectedActionLabel = useMemo(() => {
-    if (actionFilter.length === 0) return 'All types'
-    if (actionFilter.length === 1) return EVENT_ACTION_OPTIONS.find((o) => o.value === actionFilter[0])?.label ?? '1 type'
-    return `${actionFilter.length} types`
-  }, [actionFilter])
 
   // Load dropdown options for firm mode
   useEffect(() => {
@@ -666,14 +667,6 @@ export function AuditWithFilters({
     return uniqueActors.filter((a) => a.name.toLowerCase().includes(q) || a.email.toLowerCase().includes(q))
   }, [uniqueActors, actorSearch])
 
-  const selectedActorLabel = useMemo(() => {
-    if (actorFilter.length === 0) return 'All actors'
-    if (actorFilter.length === 1) {
-      const a = uniqueActors.find((a) => a.id === actorFilter[0])
-      return a?.name ?? '1 actor'
-    }
-    return `${actorFilter.length} actors`
-  }, [actorFilter, uniqueActors])
 
   const visibleEvents = useMemo(() => {
     let list = events
@@ -704,395 +697,269 @@ export function AuditWithFilters({
   return (
     <div className="flex flex-col h-full min-h-0">
       
+      {/* Filters — Notion's filter-bar pills and menus, the same parts as Doc Search and the
+          Files toolbar (components/ui/filter-pill.tsx). Every list filter here is multi-select:
+          checkbox rows that stay open. The dates stay inline, shaped as pills. */}
       <div className="mb-3 flex flex-wrap items-center gap-1.5">
-        <div className="flex">
-          <DateTimePicker
-            key={`from-${pickerResetKey}`}
-            value={fromDate}
-            defaultTime="23:59"
-            allowFutureDateTimes={false}
-            placeholder="From date"
-            className="h-7 w-[176px] border-line text-small"
-            onChange={(iso) => {
-              setFromDate(iso)
-              if (iso && toDate && new Date(iso) > new Date(toDate)) {
-                setDateRangeError('From must be before To')
-              } else {
-                setDateRangeError(null)
-              }
-            }}
-          />
-        </div>
-
-        <div className="flex">
-          <DateTimePicker
-            key={`to-${pickerResetKey}`}
-            value={toDate}
-            defaultTime="23:59"
-            placeholder="To date"
-            className="h-7 w-[176px] border-line text-small"
-            onChange={(iso) => {
-              if (iso && fromDate && new Date(iso) < new Date(fromDate)) {
-                setDateRangeError('To must be after From')
-                return
-              }
+        <DateTimePicker
+          key={`from-${pickerResetKey}`}
+          value={fromDate}
+          defaultTime="23:59"
+          allowFutureDateTimes={false}
+          placeholder="From date"
+          className="h-7 w-[168px] rounded-full border-line px-2.5 text-small"
+          onChange={(iso) => {
+            setFromDate(iso)
+            if (iso && toDate && new Date(iso) > new Date(toDate)) {
+              setDateRangeError('From must be before To')
+            } else {
               setDateRangeError(null)
-              setToDate(iso)
-            }}
-          />
-        </div>
+            }
+          }}
+        />
+        <DateTimePicker
+          key={`to-${pickerResetKey}`}
+          value={toDate}
+          defaultTime="23:59"
+          placeholder="To date"
+          className="h-7 w-[168px] rounded-full border-line px-2.5 text-small"
+          onChange={(iso) => {
+            if (iso && fromDate && new Date(iso) < new Date(fromDate)) {
+              setDateRangeError('To must be after From')
+              return
+            }
+            setDateRangeError(null)
+            setToDate(iso)
+          }}
+        />
 
         {dateRangeError && (
           <p className="text-small text-danger">{dateRangeError}</p>
         )}
 
-        <div className="flex">
-          <DropdownMenu open={scopeMenuOpen} onOpenChange={setScopeMenuOpen}>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                aria-label="Event scope filter"
-                className="inline-flex h-7 max-w-[220px] items-center gap-1.5 rounded-control border border-line bg-surface px-2 text-small text-fg-muted transition-colors hover:bg-surface-hover data-[state=open]:bg-surface-hover"
-              >
-                <span className="truncate">{selectedScopeLabel}</span>
-                <ChevronDown className="h-3.5 w-3.5 shrink-0 text-fg-subtle" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-[200px] p-0">
-              <div className="max-h-[280px] overflow-y-auto p-1">
-                <button
-                  type="button"
-                  className="flex h-7 w-full items-center gap-2 rounded-control px-2 text-small text-fg hover:bg-surface-hover"
-                  onClick={(e) => { e.preventDefault(); setScopeFilter([]) }}
-                >
-                  <span className="h-4 w-4 flex items-center justify-center rounded-[3px] border border-line-strong bg-surface">
-                    <Check className={`h-3 w-3 ${scopeFilter.length === 0 ? 'text-fg' : 'text-fg-subtle'}`} strokeWidth={2.5} />
-                  </span>
-                  All scopes
-                </button>
-                {SCOPE_OPTIONS.map((o) => {
-                  const checked = scopeFilter.includes(o.value)
-                  return (
-                    <button
-                      key={o.value}
-                      type="button"
-                      className="flex h-7 w-full items-center gap-2 rounded-control px-2 text-small text-fg hover:bg-surface-hover"
-                      onClick={(e) => { e.preventDefault(); setScopeFilter(toggleId(scopeFilter, o.value)) }}
-                    >
-                      <span className="h-4 w-4 flex items-center justify-center rounded-[3px] border border-line-strong bg-surface">
-                        <Check className={`h-3 w-3 ${checked ? 'text-fg' : 'text-fg-subtle'}`} strokeWidth={2.5} />
-                      </span>
-                      <span>{o.label}</span>
-                    </button>
-                  )
-                })}
-              </div>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+        <DropdownMenu open={scopeMenuOpen} onOpenChange={setScopeMenuOpen}>
+          <DropdownMenuTrigger asChild>
+            <FilterPill
+              icon={<Layers />}
+              label="Scope"
+              value={scopeFilter.length
+                ? summarizePicks(SCOPE_OPTIONS.filter((o) => scopeFilter.includes(o.value)).map((o) => o.label))
+                : undefined}
+              onClear={() => setScopeFilter([])}
+            />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-[220px] p-1">
+            <FilterMenuLabel>Scope</FilterMenuLabel>
+            <FilterMenuRow multi selected={scopeFilter.length === 0} onSelect={() => setScopeFilter([])}>
+              Any scope
+            </FilterMenuRow>
+            <DropdownMenuSeparator className="mx-0 my-1" />
+            {SCOPE_OPTIONS.map((o) => (
+              <FilterMenuRow key={o.value} multi selected={scopeFilter.includes(o.value)} onSelect={() => setScopeFilter(toggleId(scopeFilter, o.value))}>
+                {o.label}
+              </FilterMenuRow>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
 
-        <div className="flex">
-          <DropdownMenu open={actionMenuOpen} onOpenChange={setActionMenuOpen}>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                aria-label="Event type filter"
-                className="inline-flex h-7 max-w-[220px] items-center gap-1.5 rounded-control border border-line bg-surface px-2 text-small text-fg-muted transition-colors hover:bg-surface-hover data-[state=open]:bg-surface-hover"
-              >
-                <span className="truncate">{selectedActionLabel}</span>
-                <ChevronDown className="h-3.5 w-3.5 shrink-0 text-fg-subtle" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-[200px] p-0">
-              <div className="max-h-[280px] overflow-y-auto p-1">
-                <button
-                  type="button"
-                  className="flex h-7 w-full items-center gap-2 rounded-control px-2 text-small text-fg hover:bg-surface-hover"
-                  onClick={(e) => { e.preventDefault(); setActionFilter([]) }}
-                >
-                  <span className="h-4 w-4 flex items-center justify-center rounded-[3px] border border-line-strong bg-surface">
-                    <Check className={`h-3 w-3 ${actionFilter.length === 0 ? 'text-fg' : 'text-fg-subtle'}`} strokeWidth={2.5} />
-                  </span>
-                  All types
-                </button>
-                {EVENT_ACTION_OPTIONS.map((o) => {
-                  const checked = actionFilter.includes(o.value)
-                  return (
-                    <button
-                      key={o.value}
-                      type="button"
-                      className="flex h-7 w-full items-center gap-2 rounded-control px-2 text-small text-fg hover:bg-surface-hover"
-                      onClick={(e) => { e.preventDefault(); setActionFilter(toggleId(actionFilter, o.value)) }}
-                    >
-                      <span className="h-4 w-4 flex items-center justify-center rounded-[3px] border border-line-strong bg-surface">
-                        <Check className={`h-3 w-3 ${checked ? 'text-fg' : 'text-fg-subtle'}`} strokeWidth={2.5} />
-                      </span>
-                      <span>{o.label}</span>
-                    </button>
-                  )
-                })}
-              </div>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+        <DropdownMenu open={actionMenuOpen} onOpenChange={setActionMenuOpen}>
+          <DropdownMenuTrigger asChild>
+            <FilterPill
+              icon={<Activity />}
+              label="Type"
+              value={actionFilter.length
+                ? summarizePicks(EVENT_ACTION_OPTIONS.filter((o) => actionFilter.includes(o.value)).map((o) => o.label))
+                : undefined}
+              onClear={() => setActionFilter([])}
+            />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-[220px] p-1">
+            <FilterMenuLabel>Type</FilterMenuLabel>
+            <FilterMenuRow multi selected={actionFilter.length === 0} onSelect={() => setActionFilter([])}>
+              Any type
+            </FilterMenuRow>
+            <DropdownMenuSeparator className="mx-0 my-1" />
+            <div className="max-h-[280px] overflow-y-auto overflow-x-hidden">
+              {EVENT_ACTION_OPTIONS.map((o) => (
+                <FilterMenuRow key={o.value} multi selected={actionFilter.includes(o.value)} onSelect={() => setActionFilter(toggleId(actionFilter, o.value))}>
+                  {o.label}
+                </FilterMenuRow>
+              ))}
+            </div>
+          </DropdownMenuContent>
+        </DropdownMenu>
 
         {showClientProjectFilters && (
           <>
-            <div className="flex">
-              <DropdownMenu open={clientMenuOpen} onOpenChange={setClientMenuOpen}>
-                <DropdownMenuTrigger asChild>
-                  <button
-                    type="button"
-                    aria-label="Client filter"
-                className="inline-flex h-7 max-w-[220px] items-center gap-1.5 rounded-control border border-line bg-surface px-2 text-small text-fg-muted transition-colors hover:bg-surface-hover data-[state=open]:bg-surface-hover"
-                  >
-                    <span className="truncate">{selectedClientLabel}</span>
-                    <ChevronDown className="h-3.5 w-3.5 shrink-0 text-fg-subtle" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-[280px] p-0">
-                  <div className="flex items-center gap-2 border-b border-line p-1.5">
-                    <input
-                      value={clientSearch}
-                      onChange={(e) => setClientSearch(e.target.value)}
-                      onKeyDown={(e) => e.stopPropagation()}
-                      placeholder="Search clients…"
-                      className="h-7 flex-1 rounded-control border border-line bg-surface px-2 text-small text-fg outline-none placeholder:text-fg-subtle focus:border-action/60"
-                    />
-                    <Button
-                      size="sm"
-                      
-                      onClick={(e) => {
-                        e.preventDefault()
-                        setClientMenuOpen(false)
+            <DropdownMenu open={clientMenuOpen} onOpenChange={setClientMenuOpen}>
+              <DropdownMenuTrigger asChild>
+                <FilterPill
+                  icon={<Users />}
+                  label="Client"
+                  value={clientIdsFilter.length
+                    ? summarizePicks(clientIdsFilter.map((id) => clients.find((c) => c.id === id)?.name ?? 'Client'))
+                    : undefined}
+                  onClear={() => {
+                    setClientIdsFilter([])
+                    setProjectIdsFilter([])
+                  }}
+                />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-[260px] p-1">
+                <FilterMenuLabel>Client</FilterMenuLabel>
+                {clients.length > MENU_SEARCH_THRESHOLD && (
+                  <FilterMenuSearch
+                    value={clientSearch}
+                    onChange={(e) => setClientSearch(e.target.value)}
+                    placeholder="Search clients…"
+                    aria-label="Search clients"
+                  />
+                )}
+                <FilterMenuRow
+                  multi
+                  selected={clientIdsFilter.length === 0}
+                  onSelect={() => {
+                    setClientIdsFilter([])
+                    setProjectIdsFilter([])
+                  }}
+                >
+                  Any client
+                </FilterMenuRow>
+                <DropdownMenuSeparator className="mx-0 my-1" />
+                <div className="max-h-[280px] overflow-y-auto overflow-x-hidden">
+                  {filteredClients.map((c) => (
+                    <FilterMenuRow
+                      key={c.id}
+                      multi
+                      selected={clientIdsFilter.includes(c.id)}
+                      onSelect={() => {
+                        const next = toggleId(clientIdsFilter, c.id)
+                        setClientIdsFilter(next)
+                        // changing client selection invalidates engagement selection
+                        setProjectIdsFilter((prev) =>
+                          prev.filter((pid) => projects.find((p) => p.id === pid && next.includes(p.clientId ?? '')))
+                        )
                       }}
                     >
-                      Done
-                    </Button>
-                  </div>
-                  <button
-                    type="button"
-                    className="flex h-7 w-full items-center gap-2 rounded-control px-2 text-small text-fg hover:bg-surface-hover"
-                    onClick={(e) => {
-                      e.preventDefault()
-                      setClientIdsFilter([])
-                      setProjectIdsFilter([])
-                    }}
-                  >
-                    <span className="h-4 w-4 flex items-center justify-center rounded-[3px] border border-line-strong bg-surface">
-                      <Check className={`h-3 w-3 ${clientIdsFilter.length === 0 ? 'text-fg' : 'text-fg-subtle'}`} strokeWidth={2.5} />
-                    </span>
-                    All clients
-                  </button>
-                  {filteredClients.map((c) => {
-                    const checked = clientIdsFilter.includes(c.id)
-                    return (
-                      <button
-                        key={c.id}
-                        type="button"
-                        className="flex h-7 w-full items-center gap-2 rounded-control px-2 text-small text-fg hover:bg-surface-hover"
-                        onClick={(e) => {
-                          e.preventDefault()
-                          const next = toggleId(clientIdsFilter, c.id)
-                          setClientIdsFilter(next)
-                          // changing client selection invalidates project selection
-                          setProjectIdsFilter((prev) =>
-                            prev.filter((pid) => projects.find((p) => p.id === pid && next.includes(p.clientId ?? '')))
-                          )
-                        }}
-                      >
-                        <span className="h-4 w-4 flex items-center justify-center rounded-[3px] border border-line-strong bg-surface">
-                          <Check className={`h-3 w-3 ${checked ? 'text-fg' : 'text-fg-subtle'}`} strokeWidth={2.5} />
-                        </span>
-                        <span className="truncate">{c.name}</span>
-                      </button>
-                    )
-                  })}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
+                      {c.name}
+                    </FilterMenuRow>
+                  ))}
+                  {filteredClients.length === 0 && <p className="px-2 py-1.5 text-small text-fg-subtle">No matches</p>}
+                </div>
+              </DropdownMenuContent>
+            </DropdownMenu>
 
-            <div className="flex">
-              <DropdownMenu open={projectMenuOpen} onOpenChange={setProjectMenuOpen}>
-                <DropdownMenuTrigger asChild>
-                  <button
-                    type="button"
-                    aria-label="Engagement filter"
-                className="inline-flex h-7 max-w-[220px] items-center gap-1.5 rounded-control border border-line bg-surface px-2 text-small text-fg-muted transition-colors hover:bg-surface-hover data-[state=open]:bg-surface-hover"
-                  >
-                    <span className="truncate">{selectedProjectLabel}</span>
-                    <ChevronDown className="h-3.5 w-3.5 shrink-0 text-fg-subtle" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-[280px] p-0">
-                  <div className="flex items-center gap-2 border-b border-line p-1.5">
-                    <input
-                      value={projectSearch}
-                      onChange={(e) => setProjectSearch(e.target.value)}
-                      onKeyDown={(e) => e.stopPropagation()}
-                      placeholder="Search projects…"
-                      className="h-7 flex-1 rounded-control border border-line bg-surface px-2 text-small text-fg outline-none placeholder:text-fg-subtle focus:border-action/60"
-                    />
-                    <Button
-                      size="sm"
-                      
-                      onClick={(e) => {
-                        e.preventDefault()
-                        setProjectMenuOpen(false)
-                      }}
-                    >
-                      Done
-                    </Button>
-                  </div>
-                  <button
-                    type="button"
-                    className="flex h-7 w-full items-center gap-2 rounded-control px-2 text-small text-fg hover:bg-surface-hover"
-                    onClick={(e) => {
-                      e.preventDefault()
-                      setProjectIdsFilter([])
-                    }}
-                  >
-                    <span className="h-4 w-4 flex items-center justify-center rounded-[3px] border border-line-strong bg-surface">
-                      <Check className={`h-3 w-3 ${projectIdsFilter.length === 0 ? 'text-fg' : 'text-fg-subtle'}`} strokeWidth={2.5} />
-                    </span>
-                    All projects
-                  </button>
-                  {filteredProjects.map((p) => {
-                    const checked = projectIdsFilter.includes(p.id)
-                    return (
-                      <button
-                        key={p.id}
-                        type="button"
-                        className="flex h-7 w-full items-center gap-2 rounded-control px-2 text-small text-fg hover:bg-surface-hover"
-                        onClick={(e) => {
-                          e.preventDefault()
-                          setProjectIdsFilter(toggleId(projectIdsFilter, p.id))
-                        }}
-                      >
-                        <span className="h-4 w-4 flex items-center justify-center rounded-[3px] border border-line-strong bg-surface">
-                          <Check className={`h-3 w-3 ${checked ? 'text-fg' : 'text-fg-subtle'}`} strokeWidth={2.5} />
-                        </span>
-                        <span className="truncate">{p.name}</span>
-                      </button>
-                    )
-                  })}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
+            <DropdownMenu open={projectMenuOpen} onOpenChange={setProjectMenuOpen}>
+              <DropdownMenuTrigger asChild>
+                <FilterPill
+                  icon={<Briefcase />}
+                  label="Engagement"
+                  value={projectIdsFilter.length
+                    ? summarizePicks(projectIdsFilter.map((id) => projects.find((p) => p.id === id)?.name ?? 'Engagement'))
+                    : undefined}
+                  onClear={() => setProjectIdsFilter([])}
+                />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-[260px] p-1">
+                <FilterMenuLabel>Engagement</FilterMenuLabel>
+                {projects.length > MENU_SEARCH_THRESHOLD && (
+                  <FilterMenuSearch
+                    value={projectSearch}
+                    onChange={(e) => setProjectSearch(e.target.value)}
+                    placeholder="Search engagements…"
+                    aria-label="Search engagements"
+                  />
+                )}
+                <FilterMenuRow multi selected={projectIdsFilter.length === 0} onSelect={() => setProjectIdsFilter([])}>
+                  Any engagement
+                </FilterMenuRow>
+                <DropdownMenuSeparator className="mx-0 my-1" />
+                <div className="max-h-[280px] overflow-y-auto overflow-x-hidden">
+                  {filteredProjects.map((p) => (
+                    <FilterMenuRow key={p.id} multi selected={projectIdsFilter.includes(p.id)} onSelect={() => setProjectIdsFilter(toggleId(projectIdsFilter, p.id))}>
+                      {p.name}
+                    </FilterMenuRow>
+                  ))}
+                  {filteredProjects.length === 0 && <p className="px-2 py-1.5 text-small text-fg-subtle">No matches</p>}
+                </div>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </>
         )}
 
-        <div className="flex">
-          <DropdownMenu open={actorMenuOpen} onOpenChange={setActorMenuOpen}>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                aria-label="Actor filter"
-                className="inline-flex h-7 max-w-[220px] items-center gap-1.5 rounded-control border border-line bg-surface px-2 text-small text-fg-muted transition-colors hover:bg-surface-hover data-[state=open]:bg-surface-hover"
-              >
-                <span className="truncate">{selectedActorLabel}</span>
-                <ChevronDown className="h-3.5 w-3.5 shrink-0 text-fg-subtle" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-[280px] p-0">
-              <div className="flex items-center gap-2 border-b border-line p-1.5">
-                <input
-                  value={actorSearch}
-                  onChange={(e) => setActorSearch(e.target.value)}
-                  onKeyDown={(e) => e.stopPropagation()}
-                  placeholder="Search actors…"
-                  className="h-7 flex-1 rounded-control border border-line bg-surface px-2 text-small text-fg outline-none placeholder:text-fg-subtle focus:border-action/60"
-                />
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={(e) => {
-                    e.preventDefault()
-                    setActorMenuOpen(false)
-                  }}
+        <DropdownMenu open={actorMenuOpen} onOpenChange={setActorMenuOpen}>
+          <DropdownMenuTrigger asChild>
+            <FilterPill
+              icon={<User />}
+              label="Actor"
+              value={actorFilter.length
+                ? summarizePicks(actorFilter.map((id) => uniqueActors.find((a) => a.id === id)?.name ?? 'Someone'))
+                : undefined}
+              onClear={() => setActorFilter([])}
+            />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-[260px] p-1">
+            <FilterMenuLabel>Actor</FilterMenuLabel>
+            {uniqueActors.length > MENU_SEARCH_THRESHOLD && (
+              <FilterMenuSearch
+                value={actorSearch}
+                onChange={(e) => setActorSearch(e.target.value)}
+                placeholder="Search people…"
+                aria-label="Search people"
+              />
+            )}
+            <FilterMenuRow multi selected={actorFilter.length === 0} onSelect={() => setActorFilter([])}>
+              Anyone
+            </FilterMenuRow>
+            <DropdownMenuSeparator className="mx-0 my-1" />
+            <div className="max-h-[280px] overflow-y-auto overflow-x-hidden">
+              {uniqueActors.length === 0 && (
+                <p className="px-2 py-1.5 text-small text-fg-subtle">No one in the loaded events yet</p>
+              )}
+              {filteredActors.map((actor) => (
+                <FilterMenuRow
+                  key={actor.id}
+                  multi
+                  selected={actorFilter.includes(actor.id)}
+                  onSelect={() => setActorFilter(toggleId(actorFilter, actor.id))}
+                  icon={<UserAvatarWithTooltip displayName={actor.name} email={actor.email} avatarSize="sm" showRole={false} />}
                 >
-                  Done
-                </Button>
-              </div>
-              <div className="max-h-[280px] overflow-y-auto p-1">
-                <button
-                  type="button"
-                  className="flex h-7 w-full items-center gap-2 rounded-control px-2 text-small text-fg hover:bg-surface-hover"
-                  onClick={(e) => {
-                    e.preventDefault()
-                    setActorFilter([])
-                  }}
-                >
-                  <span className="h-4 w-4 flex items-center justify-center rounded-[3px] border border-line-strong bg-surface">
-                    <Check className={`h-3 w-3 ${actorFilter.length === 0 ? 'text-fg' : 'text-fg-subtle'}`} strokeWidth={2.5} />
-                  </span>
-                  All actors
-                </button>
-                {filteredActors.length === 0 && (
-                  <p className="px-2 py-1.5 text-small text-fg-subtle">No actors in loaded events</p>
-                )}
-                {filteredActors.map((actor) => {
-                  const checked = actorFilter.includes(actor.id)
-                  return (
-                    <button
-                      key={actor.id}
-                      type="button"
-                      className="flex h-7 w-full items-center gap-2 rounded-control px-2 text-small text-fg hover:bg-surface-hover"
-                      onClick={(e) => {
-                        e.preventDefault()
-                        setActorFilter(toggleId(actorFilter, actor.id))
-                      }}
-                    >
-                      <span className="h-4 w-4 flex items-center justify-center rounded-[3px] border border-line-strong bg-surface shrink-0">
-                        <Check className={`h-3 w-3 ${checked ? 'text-fg' : 'text-fg-subtle'}`} strokeWidth={2.5} />
-                      </span>
-                      <UserAvatarWithTooltip
-                        displayName={actor.name}
-                        email={actor.email}
-                        avatarSize="sm"
-                        showRole={false}
-                      />
-                      <span className="truncate">{actor.name}</span>
-                    </button>
-                  )
-                })}
-              </div>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+                  {actor.name}
+                </FilterMenuRow>
+              ))}
+              {uniqueActors.length > 0 && filteredActors.length === 0 && (
+                <p className="px-2 py-1.5 text-small text-fg-subtle">No matches</p>
+              )}
+            </div>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        {(fromDate || toDate || scopeFilter.length > 0 || actionFilter.length > 0 || clientIdsFilter.length > 0 || projectIdsFilter.length > 0 || actorFilter.length > 0) && (
+          <button
+            type="button"
+            onClick={() => {
+              setFromDate('')
+              setToDate('')
+              setDateRangeError(null)
+              setPickerResetKey((k) => k + 1)
+              setScopeFilter([])
+              setActionFilter([])
+              setClientIdsFilter([])
+              setProjectIdsFilter([])
+              setActorFilter([])
+              setActorSearch('')
+              setClientSearch('')
+              setProjectSearch('')
+              setNextCursor(null)
+              setClearThenReload(true)
+            }}
+            className="ml-0.5 h-7 rounded-full px-2 text-small text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg"
+          >
+            Clear
+          </button>
+        )}
 
         <div className="ml-auto flex items-center gap-0.5">
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7"
-                  onClick={() => {
-                    setFromDate('')
-                    setToDate('')
-                    setDateRangeError(null)
-                    setPickerResetKey((k) => k + 1)
-                    setScopeFilter([])
-                    setActionFilter([])
-                    setClientIdsFilter([])
-                    setProjectIdsFilter([])
-                    setActorFilter([])
-                    setActorSearch('')
-                    setClientSearch('')
-                    setProjectSearch('')
-                    setNextCursor(null)
-                    setClearThenReload(true)
-                  }}
-                >
-                  <X className="h-3.5 w-3.5" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">Clear filters</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
