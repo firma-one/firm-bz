@@ -28,14 +28,16 @@ const demoMono = JetBrains_Mono({ subsets: ['latin'], weight: ['500'], variable:
  */
 export default function DemoLayout({ children }: { children: React.ReactNode }) {
     return (
-        <div className={`demo-tokens contents ${demoMono.variable}`}>
+        <div className={`contents ${demoMono.variable}`}>
         <TooltipProvider delayDuration={400}>
         <DemoTourProvider>
             <DemoCursor />
             <Suspense fallback={null}>
                 <DemoTourShell />
             </Suspense>
-            <div className="demo-app h-screen flex flex-col overflow-hidden bg-[#f9f9fb]">
+            {/* The old dashboard look (demo.css) applies to the replica shell only. The tour,
+                its dialogs and the Brio panel sit outside it and use the app's design tokens. */}
+            <div className="demo-tokens demo-app h-screen flex flex-col overflow-hidden bg-[#f9f9fb]">
                 {/* Header — matches real app-topbar.tsx shell */}
                 <header
                     className="w-full bg-white border-b border-[#e5e7eb] flex items-center shrink-0 z-50"

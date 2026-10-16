@@ -1,5 +1,6 @@
 'use client'
 
+import { useMemo } from 'react'
 import Link from 'next/link'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import {
@@ -28,6 +29,8 @@ import { DemoEngagementBoard } from '@/components/demo/demo-engagement-board'
 import { DemoEngagementComments } from '@/components/demo/demo-engagement-comments'
 import { DemoEngagementAudit } from '@/components/demo/demo-engagement-audit'
 import { DemoEngagementMembers } from '@/components/demo/demo-engagement-members'
+import { DemoBrioChat } from '@/components/demo/demo-brio-chat'
+import { filesChat, overviewChat } from '@/lib/demo/demo-brio'
 
 interface DemoEngagementWorkspaceProps {
     client: DemoClient
@@ -44,6 +47,10 @@ export function DemoEngagementWorkspace({ client, engagement }: DemoEngagementWo
 
     const tabParam = searchParams.get('tab') || 'analytics'
     const currentTab = VALID_TABS.has(tabParam) ? tabParam : 'analytics'
+
+    // Brio's prompt hints for this engagement, as on the real Overview and Files pages.
+    const overviewTurns = useMemo(() => overviewChat(client, engagement), [client, engagement])
+    const filesTurns = useMemo(() => filesChat(engagement), [engagement])
 
     const handleTabChange = (value: string) => {
         const params = new URLSearchParams(searchParams.toString())
@@ -221,6 +228,18 @@ export function DemoEngagementWorkspace({ client, engagement }: DemoEngagementWo
                     </TabsContent>
                 </div>
             </Tabs>
+
+            {/* One panel per page, keyed so each keeps its own conversation. */}
+            {currentTab === 'analytics' && <DemoBrioChat key="overview" turns={overviewTurns} />}
+            {currentTab === 'files' && (
+                <DemoBrioChat
+                    key="files"
+                    title="Files"
+                    turns={filesTurns}
+                    placeholder="Ask Brio about the deliverables, folders & files…"
+                    capabilityNote={<>Ask about these files and how the engagement&apos;s deliverables are organized.</>}
+                />
+            )}
         </div>
     )
 }

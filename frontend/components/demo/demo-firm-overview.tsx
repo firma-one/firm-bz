@@ -2,6 +2,7 @@ import { Users, Briefcase, MailOpen, TrendingUp } from 'lucide-react'
 import { StatTile } from '@/components/ui/stat-tile'
 import { DemoFirm } from '@/lib/demo/static-demo-data'
 import { DemoFirmActionCenter } from '@/components/demo/demo-firm-action-center'
+import { DemoFirmBrief } from '@/components/demo/demo-firm-brief'
 import { DemoPipelineBar } from '@/components/demo/demo-pipeline-bar'
 
 function formatValue(val: number): string {
@@ -31,6 +32,7 @@ export function DemoFirmOverview({ firm }: { firm: DemoFirm }) {
     return (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 22rem', gap: '1.5rem', paddingBottom: '1.5rem' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', minWidth: 0 }}>
+                <DemoFirmBrief firm={firm} />
                 <div className="bg-white border border-[#e5e7eb] rounded p-6 shadow-sm">
                     <div className="flex items-center justify-between mb-6">
                         <div>

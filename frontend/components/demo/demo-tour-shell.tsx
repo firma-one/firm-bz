@@ -19,10 +19,13 @@ export function DemoTourShell() {
 
     useEffect(() => {
         if (hasTriggered.current) return
-        hasTriggered.current = true
         if (typeof window === 'undefined') return
         if (hasOptedOutOfTour()) return
+        // Marked as triggered when the timer fires, not before: React's development double-run of
+        // effects clears the first timer, and a guard set up front would stop the second run from
+        // starting another, so the intro never opened in development.
         const timer = setTimeout(() => {
+            hasTriggered.current = true
             openIntroModal()
         }, 800)
         return () => clearTimeout(timer)
