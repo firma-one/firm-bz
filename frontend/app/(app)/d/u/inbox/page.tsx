@@ -3,7 +3,6 @@ import { createClient } from "@/utils/supabase/server"
 import { getHomeFirms } from "@/lib/home/home-firms"
 import { InboxView } from "@/components/inbox/inbox-view"
 
-export const metadata = { title: "Inbox" }
 
 /**
  * The cross-firm Inbox (.claude/plans/cross-firm-home-inbox.md): the caller's own reminders and

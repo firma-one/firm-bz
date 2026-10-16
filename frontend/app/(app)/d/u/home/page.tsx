@@ -8,7 +8,6 @@ import { loadCalendarData } from "@/lib/calendar/calendar-data"
 import { getUserReminders } from "@/lib/actions/user-reminders"
 import { HomeView } from "@/components/home/home-view"
 
-export const metadata = { title: "Home" }
 
 /**
  * The cross-firm Home (.claude/plans/cross-firm-home-inbox.md): one page across every firm the
