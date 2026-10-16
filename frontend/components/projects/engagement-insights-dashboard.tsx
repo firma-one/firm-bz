@@ -315,7 +315,7 @@ function TeamStatusBody({ data }: { data: EngagementInsightsResponse }) {
 // ─── Donut primitive ──────────────────────────────────────────────────────────
 // Reusable SVG donut. Segments stack clockwise from top. Pass `total` to render a
 // gauge (single arc over a fixed 0–total scale); omit it to size arcs by their sum.
-function Donut({ segments, total, size = 120, thickness = 14, trackColor = '#f1f5f9', centerTop, centerBottom }: {
+function Donut({ segments, total, size = 120, thickness = 14, trackColor = 'rgba(55, 53, 47, 0.07)', centerTop, centerBottom }: {
     segments: { value: number; hex: string }[]
     total?: number
     size?: number
@@ -324,27 +324,46 @@ function Donut({ segments, total, size = 120, thickness = 14, trackColor = '#f1f
     centerTop?: React.ReactNode
     centerBottom?: React.ReactNode
 }) {
+    // useId can contain ':' or '«»', which an SVG url(#…) reference may not resolve; keep it plain.
+    const plateId = `donut-plate-${React.useId().replace(/[^a-zA-Z0-9_-]/g, '')}`
     const sum = total ?? segments.reduce((s, x) => s + x.value, 0)
     const R = (size - thickness) / 2
     const c = size / 2
     const C = 2 * Math.PI * R
+    const visible = sum > 0 ? segments.filter((s) => s.value > 0) : []
+    // Several segments get a 2px gap at each join so they read as separate parts; a single arc
+    // (a gauge) gets rounded ends instead.
+    const joinGap = visible.length > 1 ? 2 : 0
     let acc = 0
-    const arcs = sum > 0
-        ? segments.filter((s) => s.value > 0).map((s) => {
-            const frac = s.value / sum
-            const arc = { hex: s.hex, len: frac * C, offset: -acc * C }
-            acc += frac
-            return arc
-        })
-        : []
+    const arcs = visible.map((s) => {
+        const frac = s.value / sum
+        const arc = { hex: s.hex, len: Math.max(0, frac * C - joinGap), offset: -acc * C }
+        acc += frac
+        return arc
+    })
+    const plateR = R - thickness / 2 - 3
     return (
-        <div className="relative shrink-0" style={{ width: size, height: size, filter: 'drop-shadow(0 2px 3px rgba(15,23,42,0.13))' }}>
+        <div className="relative shrink-0" style={{ width: size, height: size }}>
             <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90">
+                <defs>
+                    {/* A faint dish in the middle, so the ring reads as a dial rather than a sticker. */}
+                    <radialGradient id={plateId} cx="50%" cy="50%" r="50%">
+                        <stop offset="70%" stopColor="#ffffff" />
+                        <stop offset="100%" stopColor="#f6f5f3" />
+                    </radialGradient>
+                </defs>
+                {plateR > 0 && (
+                    <circle cx={c} cy={c} r={plateR} fill={`url(#${plateId})`} stroke="rgba(55, 53, 47, 0.06)" strokeWidth={1} />
+                )}
                 <circle cx={c} cy={c} r={R} fill="none" stroke={trackColor} strokeWidth={thickness} />
-                {arcs.map((a, i) => (
-                    <circle key={i} cx={c} cy={c} r={R} fill="none" stroke={a.hex} strokeWidth={thickness}
-                        strokeDasharray={`${a.len} ${C - a.len}`} strokeDashoffset={a.offset} />
-                ))}
+                {/* Only the colored arcs lift, softly; the track stays flat. */}
+                <g style={{ filter: 'drop-shadow(0 1px 1.5px rgba(15, 23, 42, 0.16))' }}>
+                    {arcs.map((a, i) => (
+                        <circle key={i} cx={c} cy={c} r={R} fill="none" stroke={a.hex} strokeWidth={thickness}
+                            strokeLinecap={arcs.length === 1 && a.len < C - 1 ? 'round' : 'butt'}
+                            strokeDasharray={`${a.len} ${C - a.len}`} strokeDashoffset={a.offset} />
+                    ))}
+                </g>
             </svg>
             {(centerTop || centerBottom) && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center">
@@ -1604,9 +1623,9 @@ function ConcentricRings({ rings, size = 128, centerTop, centerBottom }: {
                     const arc = Math.max(0, Math.min(1, r.pct / 100)) * C
                     return (
                         <g key={i}>
-                            <circle cx={c} cy={c} r={R} fill="none" stroke="#e9ecf1" strokeWidth={thickness} />
+                            <circle cx={c} cy={c} r={R} fill="none" stroke="rgba(55, 53, 47, 0.07)" strokeWidth={thickness} />
                             {arc > 0 && (
-                                <circle cx={c} cy={c} r={R} fill="none" stroke={r.hex} strokeWidth={thickness} strokeDasharray={`${arc} ${C}`} strokeLinecap="round" style={{ filter: 'drop-shadow(0 0 1.5px rgba(15,23,42,0.28))' }} />
+                                <circle cx={c} cy={c} r={R} fill="none" stroke={r.hex} strokeWidth={thickness} strokeDasharray={`${arc} ${C}`} strokeLinecap="round" style={{ filter: 'drop-shadow(0 1px 1.5px rgba(15, 23, 42, 0.16))' }} />
                             )}
                         </g>
                     )
@@ -2207,7 +2226,8 @@ function FolderHealthBody({ storageHealth, folderHealth, hiddenRings = [] }: {
             <div className="relative">
                 <div
                     ref={gridRef}
-                    className="grid grid-cols-3 gap-8 overflow-hidden transition-[max-height] duration-700 [transition-timing-function:cubic-bezier(0.65,0,0.35,1)]"
+                    data-cols="3-fixed"
+                    className="ring-rows grid grid-cols-3 overflow-hidden transition-[max-height] duration-700 [transition-timing-function:cubic-bezier(0.65,0,0.35,1)]"
                     style={{ maxHeight: !expanded && hasMoreRows ? collapsedHeight : (fullHeight ?? 1200) }}
                 >
                     {/* Score ring — cell 1 */}
@@ -2358,7 +2378,8 @@ function EngagementHealthBody({ health, deliverables, planningHygiene, commentTh
 
     return (
         <div className="p-6 flex flex-col gap-6">
-            <div className={`grid grid-cols-1 ${health ? 'md:grid-cols-3' : 'md:grid-cols-2'} gap-8`}>
+            {/* .ring-rows (globals.css) draws a full-width hairline between rows of rings. */}
+            <div className={`ring-rows grid grid-cols-1 ${health ? 'md:grid-cols-3' : 'md:grid-cols-2'}`} data-cols={health ? '3' : '2'}>
                 {/* Ring 1 — Health Score (internal only; stripped from external responses) */}
                 {health && show('engagement.health_score') && (
                     <div id="ring-health" className="flex flex-col items-center gap-3 scroll-mt-24">
@@ -2520,7 +2541,7 @@ function EngagementHealthBody({ health, deliverables, planningHygiene, commentTh
                                 </div>
                             )}
                             {(inFlightWithRework ?? 0) > 0 && (
-                                <p className="text-[11px] text-amber-600 font-medium bg-amber-50 border border-amber-100 rounded px-2 py-1 max-w-[240px] text-center">
+                                <p className="text-[11px] text-amber-600 font-medium max-w-[240px] text-center">
                                     <AlertTriangle className="inline h-3 w-3 mr-1 -mt-0.5" />
                                     {inFlightWithRework} in-flight deliverable{inFlightWithRework === 1 ? '' : 's'} already reworked — this % may drop.
                                 </p>
@@ -2957,7 +2978,7 @@ export function EngagementInsightsDashboard({
         <div className="grid grid-cols-1 gap-8 pb-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
             {/* Left: insights — flat sections, no outer card. The page header above already shows
                 the engagement's name, status and due date. */}
-            <div className="flex min-w-0 flex-col gap-8">
+            <div className="flex min-w-0 flex-col gap-10">
                 {/* Engagement Health — Health Score · Delivery Status · Delivery Schedule (Phase 7 & 8) */}
                 {!loading && data && (() => {
                     const inFlightIds = new Set((data.deliverables ?? []).filter((d) => d.stage !== 'approved').map((d) => d.id))
@@ -3444,7 +3465,7 @@ export function EngagementInsightsDashboard({
                         ))}
                     </div>
                 ) : (
-                    <div className="flex flex-col gap-6">
+                    <div className="flex flex-col gap-10">
                         {/* Team Status */}
                         {showSection('team_status') && (
                             <InsightCard

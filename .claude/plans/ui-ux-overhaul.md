@@ -1121,6 +1121,19 @@ other in-page scrollers.
     severity only in the icon color. A hover-only button jumps to the related ring.
   - Zero rows fold into "N with nothing to do". The Duplicates drill-down lost its pale chips too.
 
+**Overview rings polish (2026-10-16):**
+- **Depth:** `Donut` lifts only its colored arcs (a soft drop-shadow on the arc group, instead of a
+  heavier one on the whole ring). It has a warm `rgba(55,53,47,0.07)` track and a faintly dished
+  center plate (a radial gradient). A single gauge arc gets rounded ends; multi-segment rings get a
+  2px gap at each join. `ConcentricRings` gets the same track and lift.
+- **Rows:** `.ring-rows` (globals.css) draws a full-width hairline between rows of rings on both
+  Engagement Health and File Organization, including a short last row. `data-cols` sets the
+  pattern: "3"/"2" from md up, one column below, or "3-fixed". `col-span-full` children (the
+  delivery timeline) keep their own rule. html2canvas renders the `::before` lines, so the PDF
+  gets them too; it ignores CSS filters, so the export stays flat.
+- **Sections:** the Overview's sections are 2.5rem apart (was 1.5–2rem). The First-Time-Right
+  "already reworked" note is plain amber text, no pale box.
+
 **Next:** Phase 7 sign-off: visual review of everything above in a signed-in browser, then
 cleanup (delete the v1 shell, the `setUiShell` action and `uiPrefs.shell`, `DueSoonSection`, the
 old Bookmarks table and personal Recent/Reminders/Notifications pages, and the unused onboarding
