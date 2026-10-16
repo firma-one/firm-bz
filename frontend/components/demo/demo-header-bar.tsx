@@ -34,20 +34,20 @@ const ENGAGEMENT_TABS: Record<string, Crumb> = {
 function useDemoCrumbs(): Crumb[] {
     const pathname = usePathname() ?? ''
     const tab = useSearchParams()?.get('tab') ?? null
-    if (pathname === '/demo/home') return [{ label: 'Home', icon: <Home /> }]
-    if (pathname === '/demo/inbox') return [{ label: 'Inbox', icon: <Inbox /> }]
+    if (pathname === '/tour/home') return [{ label: 'Home', icon: <Home /> }]
+    if (pathname === '/tour/inbox') return [{ label: 'Inbox', icon: <Inbox /> }]
 
-    const firm: Crumb = { label: DEMO_FIRM.name, href: '/demo', icon: <Building2 /> }
+    const firm: Crumb = { label: DEMO_FIRM.name, href: '/tour', icon: <Building2 /> }
     const view = demoFirmView(pathname, tab)
     if (view) return [firm, FIRM_VIEWS[view] ?? FIRM_VIEWS.clients]
 
     const [, , clientSlug, engagementSlug] = pathname.split('/')
     const client = clientSlug ? getDemoClient(clientSlug) : undefined
     if (!client) return [firm]
-    const crumbs: Crumb[] = [firm, { label: client.name, href: `/demo/${client.slug}`, icon: <Users /> }]
+    const crumbs: Crumb[] = [firm, { label: client.name, href: `/tour/${client.slug}`, icon: <Users /> }]
     const engagement = engagementSlug ? client.engagements.find((e) => e.slug === engagementSlug) : undefined
     if (!engagement) return crumbs
-    crumbs.push({ label: engagement.name, href: `/demo/${client.slug}/${engagement.slug}`, icon: <Briefcase /> })
+    crumbs.push({ label: engagement.name, href: `/tour/${client.slug}/${engagement.slug}`, icon: <Briefcase /> })
     if (tab && ENGAGEMENT_TABS[tab]) crumbs.push(ENGAGEMENT_TABS[tab])
     return crumbs
 }
@@ -105,10 +105,10 @@ export function DemoHeaderBar({ onOpenMobileNav, inboxCount }: { onOpenMobileNav
                 <DemoTourSignupButton />
                 <DemoTourTopbarButton />
                 <Link
-                    href="/demo/inbox"
+                    href="/tour/inbox"
                     className={cn(
                         'relative flex h-7 w-7 items-center justify-center rounded-control text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg',
-                        pathname === '/demo/inbox' && 'bg-surface-selected text-fg',
+                        pathname === '/tour/inbox' && 'bg-surface-selected text-fg',
                     )}
                     aria-label={inboxCount > 0 ? `Inbox, ${inboxCount} unread` : 'Inbox'}
                 >

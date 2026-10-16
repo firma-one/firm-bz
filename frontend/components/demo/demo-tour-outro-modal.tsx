@@ -6,8 +6,8 @@ import { useDemoTour } from '@/lib/demo/demo-tour-context'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { Button, buttonVariants } from '@/components/ui/button'
 
-/** Static counterpart to demo-tour-outro-modal.tsx. Built on the app's Dialog, so it portals out
- * of the demo shell and uses the app's design tokens. */
+/** The modal shown when the guided tour ends. Built on the app's Dialog, so it portals out of the
+ * tour's shell and uses the app's design tokens. */
 export function DemoTourOutroModal() {
     const { showOutroModal, endTour, restartTour } = useDemoTour()
     const close = () => endTour(false)

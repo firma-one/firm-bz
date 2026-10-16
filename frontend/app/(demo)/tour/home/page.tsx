@@ -23,7 +23,7 @@ export default function DemoHomePage() {
             calendarEvents={demoCalendarEvents()}
             work={demoWork(now)}
             bookmarks={demoBookmarks()}
-            calendarHref="/demo?tab=calendar"
+            calendarHref="/tour?tab=calendar"
             readOnly
         />
     )

@@ -2251,7 +2251,7 @@ const handleRefresh = async () => {
                     (!isAtProjectRoot && !currentFolderIsApprovedDeliverable && (canEdit || (restrictToSharedOnly && currentFolderIsDeliverable))) ? (
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <Button data-demo-tour="engagement-upload-btn" size="sm" title="New file or folder" disabled={loading || isLoadingFolders || isUploading || isUploadInitiating}>
+                                <Button size="sm" title="New file or folder" disabled={loading || isLoadingFolders || isUploading || isUploadInitiating}>
                                     <Plus className="h-3.5 w-3.5" />
                                     New
                                     <ChevronDown className="h-3.5 w-3.5 opacity-70" />

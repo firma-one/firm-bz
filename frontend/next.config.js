@@ -44,6 +44,9 @@ const nextConfig = {
       { source: '/d/u/bookmarks', destination: '/d/u/home', permanent: false },
       { source: '/d/u/reminders', destination: '/d/u/inbox?tab=reminders', permanent: false },
       { source: '/d/u/notifications', destination: '/d/u/inbox?tab=notifications', permanent: false },
+      // The public product tour moved from /demo to /tour (2026-10-16); old links keep working.
+      { source: '/demo', destination: '/tour', permanent: true },
+      { source: '/demo/:path*', destination: '/tour/:path*', permanent: true },
       { source: '/solutions', destination: '/', permanent: true },
       { source: '/solutions/consulting', destination: '/', permanent: true },
       { source: '/solutions/accounting', destination: '/', permanent: true },

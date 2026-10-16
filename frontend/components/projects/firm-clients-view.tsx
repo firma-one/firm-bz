@@ -215,7 +215,7 @@ export function FirmClientsView({ clients, groupSlug, orgSlug, orgId, firmSandbo
                                 firmId={orgId}
                                 onSaved={() => startRefresh(() => router.refresh())}
                                 trigger={
-                                    <Button size="sm" type="button" data-demo-tour="firm-add-client-btn">
+                                    <Button size="sm" type="button">
                                         <Plus className="h-3.5 w-3.5" />
                                         New client
                                     </Button>

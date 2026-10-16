@@ -6,7 +6,7 @@ import { useEffect, useRef } from 'react'
  * Large dot cursor overlay, styled after the pointer used in recorded product demos
  * (Loom/Arcade/Supademo-style walkthroughs) — replaces the native cursor with a
  * bigger, more visible one that shrinks slightly on click for tactile feedback.
- * Scoped to the /demo route only via demo/layout.tsx.
+ * Scoped to the /tour route only, via its layout.
  *
  * Position and scale are combined into a single `transform` string set entirely
  * from JS (rather than mixing an imperative transform with a CSS `scale` class

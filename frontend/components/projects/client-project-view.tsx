@@ -158,7 +158,7 @@ export function ClientProjectView({ clients, groupSlug, firmSlug, firmName, firm
                                             </TabsTrigger>
                                         )}
                                         {canManageClient && (
-                                            <TabsTrigger value="settings" data-demo-tour="client-settings-form" className="relative gap-1.5">
+                                            <TabsTrigger value="settings" className="relative gap-1.5">
                                                 <Settings className="h-4 w-4" />
                                                 Settings
                                                 <AccessLock label="Client managers only — partners and firm admins" />
@@ -175,7 +175,7 @@ export function ClientProjectView({ clients, groupSlug, firmSlug, firmName, firm
                                             clientSlug={selectedClient.slug}
                                             onSaved={() => startRefresh(() => router.refresh())}
                                             trigger={
-                                                <Button size="sm" type="button" data-demo-tour="engagement-add-btn">
+                                                <Button size="sm" type="button">
                                                     <Plus className="h-3.5 w-3.5" />
                                                     New engagement
                                                 </Button>

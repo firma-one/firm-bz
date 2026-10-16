@@ -14,8 +14,6 @@ import { Tip } from "@/components/ui/tip"
 import { formatRelativeTime } from "@/lib/utils"
 import { RemindersPanel } from "@/components/app/reminders-panel"
 import { CommandPalette } from "@/components/app/command-palette"
-import { useSidebarFirms } from "@/lib/sidebar-firms-context"
-import { useDemoTour } from "@/lib/demo-tour-context"
 
 // --- Typewriter trigger text ---
 const TYPEWRITER_PHRASES = [
@@ -197,27 +195,9 @@ function injectBrandCssVars(branding: OrganizationBranding | null): SessionBrand
   return payload
 }
 
-function DemoTourTopbarButton({ firmSlug, groupSlug }: { firmSlug: string; groupSlug: string }) {
-  const { run, restartTour } = useDemoTour()
-  return (
-    <Tip label={run ? "Tour in progress" : "Start guided tour"} position="bottom">
-      <button
-        type="button"
-        onClick={() => { if (!run) void restartTour(firmSlug, groupSlug) }}
-        disabled={run}
-        className="w-10 h-10 flex items-center justify-center rounded-xl text-primary hover:bg-primary/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-        aria-label="Start guided tour"
-      >
-        <MapIcon className="h-5 w-5" />
-      </button>
-    </Tip>
-  )
-}
-
 export function AppTopbar() {
   const { user } = useAuth()
   const pathname = usePathname()
-  const firms = useSidebarFirms()
   const [, setFirmName] = useState<string>('')
   const [branding, setBranding] = useState<OrganizationBranding | null>(null)
   const [, setLoading] = useState(true)
@@ -269,8 +249,7 @@ export function AppTopbar() {
     const match = pathname?.match(/^\/d\/([^/]+)\/f\/([^/]+)/)
     return match ? { groupSlug: match[1], firmSlug: match[2] } : { groupSlug: null, firmSlug: null }
   }
-  const { groupSlug, firmSlug: slug } = getSlug()
-  const isDemoFirm = slug ? (firms?.find((f) => f.slug === slug)?.sandboxOnly === true) : false
+  const { firmSlug: slug } = getSlug()
 
   const [recentItems, setRecentItems] = useState<{ type: string; name: string; href: string; visitedAt: number }[]>([])
   useEffect(() => {
@@ -613,7 +592,6 @@ export function AppTopbar() {
           return (
             <button
               type="button"
-              data-demo-tour="command-palette"
               onClick={() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true, bubbles: true }))}
               className="flex items-center gap-2.5 w-full max-w-sm bg-[#f9f9fb] border border-[#e5e7eb] rounded-sm px-3 py-2 text-sm text-[#45474c]/60 hover:border-primary/40 hover:bg-white transition-colors group"
               aria-label="Open command palette"
@@ -635,10 +613,9 @@ export function AppTopbar() {
 
       {/* Right: Utility actions — w-64, justify-end */}
       <div className="w-64 shrink-0 flex items-center justify-end gap-1 pr-4">
-        {isDemoFirm && slug && groupSlug && <DemoTourTopbarButton firmSlug={slug} groupSlug={groupSlug} />}
         <Tip label="View product demo" position="bottom">
           <a
-            href="/demo"
+            href="/tour"
             target="_blank"
             rel="noopener noreferrer"
             className="w-10 h-10 flex items-center justify-center rounded-xl text-primary hover:bg-primary/10 transition-colors"
@@ -745,7 +722,6 @@ export function AppTopbar() {
           <Tip label="Bookmarks" position="bottom">
           <button
             type="button"
-            data-demo-tour="topbar-bookmarks"
             className="w-10 h-10 flex items-center justify-center rounded-xl text-[#5A78FF] hover:bg-[#5A78FF]/10 transition-colors relative"
             aria-label="Bookmarks"
             onClick={() => {
@@ -871,7 +847,7 @@ export function AppTopbar() {
           ) : null}
         </div>
 
-        <div data-demo-tour="topbar-reminders">
+        <div>
           <RemindersPanel />
         </div>
         <div className="relative notifications-container">

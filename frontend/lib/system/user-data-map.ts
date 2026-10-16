@@ -305,7 +305,7 @@ export async function buildUserDataMap(identifier: string): Promise<UserDataMapR
         // repoint the firm at a new empty group, orphaning it from its own subscription.
         //
         // Sandbox firms are also no longer a concept: the demo is the unauthenticated
-        // /demo experience, which creates no account and no firm. So the old test could never
+        // /tour experience, which creates no account and no firm. So the old test could never
         // pass for a real firm.
         const group = await prisma.group.findUnique({
             where: { id: groupId },

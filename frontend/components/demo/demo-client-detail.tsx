@@ -116,7 +116,7 @@ export function DemoClientDetail({ client }: { client: DemoClient }) {
                         clientSlug={client.slug}
                         clientStatus={client.status}
                         memberSummaries={leads}
-                        hrefFor={(p) => `/demo/${client.slug}/${p.slug}`}
+                        hrefFor={(p) => `/tour/${client.slug}/${p.slug}`}
                     />
                 </TabsContent>
             </Tabs>

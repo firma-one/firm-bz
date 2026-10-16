@@ -64,7 +64,7 @@ export function DemoEngagementWorkspace({ client, engagement }: DemoEngagementWo
                 orgSlug=""
                 clientSlug={client.slug}
                 clientName={client.name}
-                clientHref={`/demo/${client.slug}`}
+                clientHref={`/tour/${client.slug}`}
                 name={engagement.name}
                 description={`${engagement.contractType ?? 'Client'} engagement · ${countFilesInEngagement(engagement)} files across ${engagement.folders.length} folders`}
                 status="ACTIVE"

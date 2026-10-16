@@ -44,9 +44,9 @@ import { DEMO_FIRM } from '@/lib/demo/static-demo-data'
 const ADMIN_ONLY = 'Firm admins only — hidden from other members'
 const NOT_IN_DEMO = 'Not available in this demo'
 
-/** The firm view a demo URL shows: `?tab=` on /demo, All clients when there is none. */
+/** The firm view a tour URL shows: `?tab=` on /tour, All clients when there is none. */
 export function demoFirmView(pathname: string, tab: string | null): string | null {
-    if (pathname !== '/demo') return null
+    if (pathname !== '/tour') return null
     return tab ?? 'clients'
 }
 
@@ -104,14 +104,14 @@ export function DemoSidebar({ inboxCount }: { inboxCount: number }) {
                     </Hint>
                 </div>
                 <div data-demo-tour="sidebar-home">
-                    <SidebarItem href="/demo/home" icon={<Home />} label="Home" active={pathname === '/demo/home'} />
+                    <SidebarItem href="/tour/home" icon={<Home />} label="Home" active={pathname === '/tour/home'} />
                 </div>
                 <div data-demo-tour="sidebar-inbox">
                     <SidebarItem
-                        href="/demo/inbox"
+                        href="/tour/inbox"
                         icon={<Inbox />}
                         label="Inbox"
-                        active={pathname === '/demo/inbox'}
+                        active={pathname === '/tour/inbox'}
                         trailing={inboxCount > 0 ? <CountBadge count={inboxCount} /> : undefined}
                     />
                 </div>
@@ -127,7 +127,7 @@ export function DemoSidebar({ inboxCount }: { inboxCount: number }) {
                             defaultOpen={true}
                         >
                             {client.engagements.map((e) => {
-                                const href = `/demo/${client.slug}/${e.slug}`
+                                const href = `/tour/${client.slug}/${e.slug}`
                                 return (
                                     <SidebarItem
                                         key={e.slug}
@@ -151,29 +151,29 @@ export function DemoSidebar({ inboxCount }: { inboxCount: number }) {
                     ))}
                     <div data-demo-tour="firm-clients-tab">
                         <SidebarItem
-                            href="/demo?tab=clients"
+                            href="/tour?tab=clients"
                             icon={<FolderOpen />}
                             label="All clients"
-                            active={view === 'clients' || (pathname.startsWith('/demo/') && pathname.split('/').length === 3 && !['/demo/home', '/demo/inbox'].includes(pathname))}
+                            active={view === 'clients' || (pathname.startsWith('/tour/') && pathname.split('/').length === 3 && !['/tour/home', '/tour/inbox'].includes(pathname))}
                         />
                     </div>
                 </SidebarSection>
 
                 <SidebarSection id="demo_firm" title="Firm">
                     <div data-demo-tour="firm-overview-tab">
-                        <SidebarItem href="/demo?tab=analytics" icon={<BarChart3 />} label="Overview" active={view === 'analytics'} trailing={<AccessLock label={ADMIN_ONLY} side="right" />} />
+                        <SidebarItem href="/tour?tab=analytics" icon={<BarChart3 />} label="Overview" active={view === 'analytics'} trailing={<AccessLock label={ADMIN_ONLY} side="right" />} />
                     </div>
                     <div data-demo-tour="firm-calendar-tab">
-                        <SidebarItem href="/demo?tab=calendar" icon={<CalendarDays />} label="Calendar" active={view === 'calendar'} />
+                        <SidebarItem href="/tour?tab=calendar" icon={<CalendarDays />} label="Calendar" active={view === 'calendar'} />
                     </div>
                     <div data-demo-tour="firm-doc-search-tab">
-                        <SidebarItem href="/demo?tab=doc-search" icon={<Search />} label="Doc Search" active={view === 'doc-search'} />
+                        <SidebarItem href="/tour?tab=doc-search" icon={<Search />} label="Doc Search" active={view === 'doc-search'} />
                     </div>
                     <div data-demo-tour="firm-members-tab">
-                        <SidebarItem href="/demo?tab=members" icon={<Users />} label="Members" active={view === 'members'} trailing={<AccessLock label={ADMIN_ONLY} side="right" />} />
+                        <SidebarItem href="/tour?tab=members" icon={<Users />} label="Members" active={view === 'members'} trailing={<AccessLock label={ADMIN_ONLY} side="right" />} />
                     </div>
                     <div data-demo-tour="firm-audit-tab">
-                        <SidebarItem href="/demo?tab=audit" icon={<ClipboardList />} label="Audit" active={view === 'audit'} trailing={<AccessLock label={ADMIN_ONLY} side="right" />} />
+                        <SidebarItem href="/tour?tab=audit" icon={<ClipboardList />} label="Audit" active={view === 'audit'} trailing={<AccessLock label={ADMIN_ONLY} side="right" />} />
                     </div>
                     <Hint label={NOT_IN_DEMO} side="right">
                         <span className="block"><SidebarItem icon={<Settings />} label="Settings" onClick={() => {}} className="cursor-default opacity-60" trailing={<AccessLock label={ADMIN_ONLY} side="right" />} /></span>

@@ -217,7 +217,6 @@ export function ProfileSection({
                     <Link
                       href={billingHref}
                       onClick={() => setIsProfileOpen(false)}
-                      data-demo-tour="profile-billing"
                       className="text-[0.8125rem] flex w-full items-center gap-2 rounded px-3 py-2.5 text-[#45474c] transition-colors hover:bg-surface-hover hover:text-[#1b1b1d]"
                     >
                       <CreditCard className="h-4 w-4 shrink-0" />
@@ -228,7 +227,6 @@ export function ProfileSection({
                     <Link
                       href={supportHref}
                       onClick={() => setIsProfileOpen(false)}
-                      data-demo-tour="profile-support"
                       className="text-[0.8125rem] flex w-full items-center gap-2 rounded px-3 py-2.5 text-[#45474c] transition-colors hover:bg-surface-hover hover:text-[#1b1b1d]"
                     >
                       <LifeBuoy className="h-4 w-4 shrink-0" />
@@ -258,7 +256,6 @@ export function ProfileSection({
                   <button
                     type="button"
                     onClick={() => signOut()}
-                    data-demo-tour="profile-signout"
                     className="text-[0.8125rem] flex w-full items-center gap-2 rounded px-3 py-2.5 text-left text-red-600 transition-colors hover:bg-surface-hover hover:text-red-700"
                   >
                     <LogOut className="h-4 w-4 shrink-0" />
