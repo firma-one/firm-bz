@@ -1,8 +1,9 @@
 import Link from "next/link"
-import { Play } from "lucide-react"
+import { MapPinned } from "lucide-react"
 import { cn } from "@/lib/utils"
 
-export function WatchPreviewButton({ className }: { className?: string }) {
+/** Opens the public product tour (/tour) in a new tab. */
+export function TakeTourButton({ className }: { className?: string }) {
   return (
     <Link
       href="/tour"
@@ -13,8 +14,8 @@ export function WatchPreviewButton({ className }: { className?: string }) {
         className,
       )}
     >
-      <Play className="mr-2 h-4 w-4 fill-white stroke-none" />
-      See Live Demo
+      <MapPinned className="mr-2 h-5 w-5" strokeWidth={2} />
+      Take a Tour
     </Link>
   )
 }
