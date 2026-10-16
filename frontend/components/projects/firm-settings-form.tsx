@@ -144,6 +144,13 @@ export interface FirmSettingsFormProps {
 
 type Section = 'main' | 'branding' | 'appsettings' | 'storage' | 'danger'
 
+/**
+ * The second brand color is hidden: the New UI has one accent (the brand color, on buttons, links
+ * and selected states), and the nav stripe and tab underlines this colored were legacy-UI only.
+ * A saved value still loads and is saved back unchanged.
+ */
+const SHOW_ACCENT_COLOR = false
+
 export function FirmSettingsForm({
     orgSlug,
     orgId: orgIdProp,
@@ -608,15 +615,19 @@ export function FirmSettingsForm({
                         <PropertyRow label={<label htmlFor="firm-brand-subtext">Tagline</label>} icon={<Type />}>
                             <Input id="firm-brand-subtext" value={brandSubtext} onChange={(e) => { setBrandSubtext(e.target.value); setBrandDirty(true) }} placeholder="Empty" className={PROPERTY_FIELD_CLASS} />
                         </PropertyRow>
-                        <PropertyRow label={<label htmlFor="firm-brand-primary">Primary color</label>} icon={<Palette />}>
-                            <div className="flex w-full items-center gap-1.5">
-                                <input id="firm-brand-primary" type="color" value={brandPrimaryColor || FIRMA_COLOR} onChange={(e) => { setBrandPrimaryColor(e.target.value); setBrandDirty(true) }} className="h-7 w-8 shrink-0 cursor-pointer rounded-control border border-line bg-surface" />
-                                <Input value={brandPrimaryColor} onChange={(e) => { setBrandPrimaryColor(e.target.value); setBrandDirty(true) }} aria-label="Primary color hex" placeholder={`Empty — uses the Firma default (${FIRMA_COLOR})`} className={`font-mono ${PROPERTY_FIELD_CLASS}`} />
-                                <Button type="button" variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => { setBrandPrimaryColor(''); setBrandDirty(true) }} disabled={!brandPrimaryColor} title="Clear" aria-label="Clear primary color">
-                                    <RotateCcw className="h-3.5 w-3.5" />
-                                </Button>
+                        <PropertyRow label={<label htmlFor="firm-brand-primary">{SHOW_ACCENT_COLOR ? 'Primary color' : 'Brand color'}</label>} icon={<Palette />}>
+                            <div className="flex w-full flex-col gap-1">
+                                <div className="flex items-center gap-1.5">
+                                    <input id="firm-brand-primary" type="color" value={brandPrimaryColor || FIRMA_COLOR} onChange={(e) => { setBrandPrimaryColor(e.target.value); setBrandDirty(true) }} className="h-7 w-8 shrink-0 cursor-pointer rounded-control border border-line bg-surface" />
+                                    <Input value={brandPrimaryColor} onChange={(e) => { setBrandPrimaryColor(e.target.value); setBrandDirty(true) }} aria-label="Brand color hex" placeholder={`Empty — uses the Firma default (${FIRMA_COLOR})`} className={`font-mono ${PROPERTY_FIELD_CLASS}`} />
+                                    <Button type="button" variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => { setBrandPrimaryColor(''); setBrandDirty(true) }} disabled={!brandPrimaryColor} title="Clear" aria-label="Clear brand color">
+                                        <RotateCcw className="h-3.5 w-3.5" />
+                                    </Button>
+                                </div>
+                                <p className={PROPERTY_HINT_CLASS}>Buttons, links and selected states. A light color is darkened to stay readable.</p>
                             </div>
                         </PropertyRow>
+                        {SHOW_ACCENT_COLOR && (
                         <PropertyRow label={<label htmlFor="firm-brand-accent">Accent color</label>} icon={<Palette />}>
                             <div className="flex w-full flex-col gap-1">
                                 <div className="flex items-center gap-1.5">
@@ -632,6 +643,7 @@ export function FirmSettingsForm({
                                 <p className={PROPERTY_HINT_CLASS}>Nav stripe and tab underlines</p>
                             </div>
                         </PropertyRow>
+                        )}
                         <PropertyRow label="Logo" icon={<ImageIcon />}>
                             <div className="flex w-full flex-col gap-2 px-2 py-1">
                                 <div className="flex items-center gap-1.5" role="group" aria-label="Logo shape">
@@ -705,7 +717,8 @@ export function FirmSettingsForm({
                         <Button onClick={() => void handleSaveBrand()} disabled={savingBrand || !brandDirty} variant="greenCta">
                             {savingBrand ? 'Saving…' : 'Save branding'}
                         </Button>
-                        {(brandPrimaryColor || brandSecondaryColor) && (
+                        {/* With one color, the row's own reset does this. */}
+                        {SHOW_ACCENT_COLOR && (brandPrimaryColor || brandSecondaryColor) && (
                             <Button type="button" variant="ghost" onClick={() => { setBrandPrimaryColor(''); setBrandSecondaryColor(''); setBrandDirty(true) }}>
                                 <RotateCcw className="h-3.5 w-3.5" />
                                 Reset colors

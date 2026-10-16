@@ -177,13 +177,13 @@ export function InviteMemberModal({ projectId, open, onOpenChange, personas, pre
                                     <SelectValue placeholder="Select a role" />
                                 </SelectTrigger>
                                 <SelectContent className="rounded border border-line bg-surface shadow-md py-0.5 min-w-[var(--radix-select-trigger-width)]">
-                                    <SelectItem value="owner" className="cursor-pointer rounded-none px-2.5 text-fg-muted outline-none focus:bg-surface-hover data-[state=checked]:bg-surface-muted data-[state=checked]:border-l-2 data-[state=checked]:border-brand-accent data-[state=checked]:text-primary data-[state=checked]:font-semibold data-[highlighted]:bg-surface-hover">
+                                    <SelectItem value="owner" className="cursor-pointer rounded-none px-2.5 text-fg-muted outline-none focus:bg-surface-hover data-[state=checked]:bg-surface-muted data-[state=checked]:border-l-2 data-[state=checked]:border-action data-[state=checked]:text-primary data-[state=checked]:font-semibold data-[highlighted]:bg-surface-hover">
                                         Owner
                                     </SelectItem>
-                                    <SelectItem value="contributor" className="cursor-pointer rounded-none px-2.5 text-fg-muted outline-none focus:bg-surface-hover data-[state=checked]:bg-surface-muted data-[state=checked]:border-l-2 data-[state=checked]:border-brand-accent data-[state=checked]:text-primary data-[state=checked]:font-semibold data-[highlighted]:bg-surface-hover">
+                                    <SelectItem value="contributor" className="cursor-pointer rounded-none px-2.5 text-fg-muted outline-none focus:bg-surface-hover data-[state=checked]:bg-surface-muted data-[state=checked]:border-l-2 data-[state=checked]:border-action data-[state=checked]:text-primary data-[state=checked]:font-semibold data-[highlighted]:bg-surface-hover">
                                         Contributor
                                     </SelectItem>
-                                    <SelectItem value="reviewer" className="cursor-pointer rounded-none px-2.5 text-fg-muted outline-none focus:bg-surface-hover data-[state=checked]:bg-surface-muted data-[state=checked]:border-l-2 data-[state=checked]:border-brand-accent data-[state=checked]:text-primary data-[state=checked]:font-semibold data-[highlighted]:bg-surface-hover">
+                                    <SelectItem value="reviewer" className="cursor-pointer rounded-none px-2.5 text-fg-muted outline-none focus:bg-surface-hover data-[state=checked]:bg-surface-muted data-[state=checked]:border-l-2 data-[state=checked]:border-action data-[state=checked]:text-primary data-[state=checked]:font-semibold data-[highlighted]:bg-surface-hover">
                                         Reviewer
                                     </SelectItem>
                                 </SelectContent>
