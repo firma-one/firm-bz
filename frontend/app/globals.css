@@ -436,6 +436,42 @@
   background-clip: content-box;
 }
 
+/* Slim, light scrollbar for scrollers inside the page, like the engagement Board's lanes: a 6px
+   rounded thumb in the hairline color on a clear track, darkening on hover. Enough to show there is
+   more to the side, quiet enough not to read as chrome.
+
+   Chrome and Edge ignore the ::-webkit-scrollbar rules whenever scrollbar-width or scrollbar-color
+   is set, so the standard properties go only to browsers without those pseudo-elements (Firefox),
+   and Chrome, Edge and Safari get the exact 6px bar. */
+.subtle-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.subtle-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.subtle-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--ui-line-strong);
+  border-radius: 9999px;
+}
+
+.subtle-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--ui-fg-subtle);
+}
+
+.subtle-scrollbar::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+@supports not selector(::-webkit-scrollbar) {
+  .subtle-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: var(--ui-line-strong) transparent;
+  }
+}
+
 /* Document Action Menu Modal - Ensure it's at document level */
 .document-action-modal {
   position: fixed !important;

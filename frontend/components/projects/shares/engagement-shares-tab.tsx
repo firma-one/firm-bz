@@ -2381,7 +2381,7 @@ export function EngagementSharesTab({
                 onDragStart={handleDragStart}
                 onDragEnd={handleDragEnd}
               >
-                <div className="overflow-x-auto min-h-[360px]">
+                <div className="subtle-scrollbar overflow-x-auto min-h-[360px] pb-1">
                 <div
                   className="grid gap-4 min-h-[360px] items-start"
                   style={{ gridTemplateColumns: approvedCollapsed ? 'minmax(240px, 1fr) minmax(240px, 1fr) minmax(240px, 1fr) 36px' : 'repeat(4, minmax(240px, 1fr))' }}

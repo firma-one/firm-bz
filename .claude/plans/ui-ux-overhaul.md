@@ -1099,6 +1099,12 @@ on it, so the rows still add up.
   - **Table:** reads `filename` too and never prints JSON. A file event with no name says "File name
     not recorded"; other events show their plain values without ids.
 
+**Board scrollbar (2026-10-16):** the engagement Board's lanes scroll sideways with a new
+`.subtle-scrollbar` (`app/globals.css`). It's a 6px rounded thumb in `--ui-line-strong` on a clear
+track, darkening to `--ui-fg-subtle` on hover. The standard `scrollbar-width`/`scrollbar-color` go
+only to Firefox, since Chrome and Edge ignore `::-webkit-scrollbar` when those are set. Reuse it on
+other in-page scrollers.
+
 **Next:** Phase 7 sign-off: visual review of everything above in a signed-in browser, then
 cleanup (delete the v1 shell, the `setUiShell` action and `uiPrefs.shell`, `DueSoonSection`, the
 old Bookmarks table and personal Recent/Reminders/Notifications pages, and the unused onboarding
