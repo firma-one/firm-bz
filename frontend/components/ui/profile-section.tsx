@@ -134,7 +134,7 @@ export function ProfileSection({
                 aria-expanded={isProfileOpen}
                 aria-haspopup="menu"
                 onClick={() => setIsProfileOpen(!isProfileOpen)}
-                className="flex w-full min-w-0 max-w-full items-center justify-center rounded px-0 py-2 text-[#45474c] transition-colors hover:bg-[#f3f4f6] hover:text-[#1b1b1d]"
+                className="flex w-full min-w-0 max-w-full items-center justify-center rounded px-0 py-2 text-[#45474c] transition-colors hover:bg-surface-hover hover:text-[#1b1b1d]"
               >
                 <ProfileBubble
                   name={getUserDisplayName()}
@@ -144,7 +144,7 @@ export function ProfileSection({
               </button>
             </TooltipTrigger>
             <TooltipContent side="right" sideOffset={8}>
-              <p className="font-medium text-slate-900">{getUserDisplayName()}</p>
+              <p className="font-medium text-fg">{getUserDisplayName()}</p>
               <p className="text-xs text-slate-500">{secondaryLine()}</p>
             </TooltipContent>
           </Tooltip>
@@ -155,7 +155,7 @@ export function ProfileSection({
             aria-expanded={isProfileOpen}
             aria-haspopup="menu"
             onClick={() => setIsProfileOpen(!isProfileOpen)}
-            className="flex items-center gap-2 w-full px-2 py-1.5 rounded hover:bg-[#f3f4f6] transition-colors text-left"
+            className="flex items-center gap-2 w-full px-2 py-1.5 rounded hover:bg-surface-hover transition-colors text-left"
           >
             <ProfileBubble
               name={getUserDisplayName()}
@@ -182,7 +182,7 @@ export function ProfileSection({
         {isProfileOpen && popupPosition && typeof document !== 'undefined' && createPortal(
           <div
             data-profile-popup=""
-            className={`d-app fixed bg-white rounded shadow-lg border border-[#e5e7eb] overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-200 ${typeof window !== 'undefined' && (window as any).__demoTourActive ? 'z-[10055]' : 'z-[200]'}`}
+            className={`fixed bg-white rounded shadow-lg border border-[#e5e7eb] overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-200 ${typeof window !== 'undefined' && (window as any).__demoTourActive ? 'z-[10055]' : 'z-[200]'}`}
             style={{
               top: popupPosition.top,
               left: popupPosition.left,
@@ -208,7 +208,7 @@ export function ProfileSection({
                   <Link
                     href="/d/u/profile"
                     onClick={() => setIsProfileOpen(false)}
-                    className="d-sidebar-nav flex w-full items-center gap-2 rounded px-3 py-2.5 text-[#45474c] transition-colors hover:bg-[#f3f4f6] hover:text-[#1b1b1d]"
+                    className="text-[0.8125rem] flex w-full items-center gap-2 rounded px-3 py-2.5 text-[#45474c] transition-colors hover:bg-surface-hover hover:text-[#1b1b1d]"
                   >
                     <UserCircle className="h-4 w-4 shrink-0" />
                     Profile
@@ -218,7 +218,7 @@ export function ProfileSection({
                       href={billingHref}
                       onClick={() => setIsProfileOpen(false)}
                       data-demo-tour="profile-billing"
-                      className="d-sidebar-nav flex w-full items-center gap-2 rounded px-3 py-2.5 text-[#45474c] transition-colors hover:bg-[#f3f4f6] hover:text-[#1b1b1d]"
+                      className="text-[0.8125rem] flex w-full items-center gap-2 rounded px-3 py-2.5 text-[#45474c] transition-colors hover:bg-surface-hover hover:text-[#1b1b1d]"
                     >
                       <CreditCard className="h-4 w-4 shrink-0" />
                       Billing
@@ -229,7 +229,7 @@ export function ProfileSection({
                       href={supportHref}
                       onClick={() => setIsProfileOpen(false)}
                       data-demo-tour="profile-support"
-                      className="d-sidebar-nav flex w-full items-center gap-2 rounded px-3 py-2.5 text-[#45474c] transition-colors hover:bg-[#f3f4f6] hover:text-[#1b1b1d]"
+                      className="text-[0.8125rem] flex w-full items-center gap-2 rounded px-3 py-2.5 text-[#45474c] transition-colors hover:bg-surface-hover hover:text-[#1b1b1d]"
                     >
                       <LifeBuoy className="h-4 w-4 shrink-0" />
                       Support
@@ -239,7 +239,7 @@ export function ProfileSection({
                     <Link
                       href="/system"
                       onClick={() => setIsProfileOpen(false)}
-                      className="d-sidebar-nav flex w-full items-center gap-2 rounded px-3 py-2.5 text-[#45474c] transition-colors hover:bg-[#f3f4f6] hover:text-[#1b1b1d]"
+                      className="text-[0.8125rem] flex w-full items-center gap-2 rounded px-3 py-2.5 text-[#45474c] transition-colors hover:bg-surface-hover hover:text-[#1b1b1d]"
                     >
                       <MonitorCheck className="h-4 w-4 shrink-0" />
                       Sys Admin
@@ -249,7 +249,7 @@ export function ProfileSection({
                     <Link
                       href="/d/"
                       onClick={() => setIsProfileOpen(false)}
-                      className="d-sidebar-nav flex w-full items-center gap-2 rounded px-3 py-2.5 text-[#45474c] transition-colors hover:bg-[#f3f4f6] hover:text-[#1b1b1d]"
+                      className="text-[0.8125rem] flex w-full items-center gap-2 rounded px-3 py-2.5 text-[#45474c] transition-colors hover:bg-surface-hover hover:text-[#1b1b1d]"
                     >
                       <Building2 className="h-4 w-4 shrink-0" aria-hidden />
                       Switch Workspace
@@ -259,7 +259,7 @@ export function ProfileSection({
                     type="button"
                     onClick={() => signOut()}
                     data-demo-tour="profile-signout"
-                    className="d-sidebar-nav flex w-full items-center gap-2 rounded px-3 py-2.5 text-left text-red-600 transition-colors hover:bg-[#f3f4f6] hover:text-red-700"
+                    className="text-[0.8125rem] flex w-full items-center gap-2 rounded px-3 py-2.5 text-left text-red-600 transition-colors hover:bg-surface-hover hover:text-red-700"
                   >
                     <LogOut className="h-4 w-4 shrink-0" />
                     Sign Out

@@ -277,11 +277,11 @@ function AppLayoutContent({ children, isSystemAdmin }: { children: React.ReactNo
               The onboarding frame (the legacy layout, kept for onboarding only):
               flex-col → [full-width header] + [flex-row → steps sidebar | main | right-pane]
             */}
-            <div className="d-app h-screen flex flex-col overflow-hidden bg-[#f9f9fb] v2:bg-surface print:h-auto print:overflow-visible print:block">
+            <div className="d-app h-screen flex flex-col overflow-hidden print:h-auto print:overflow-visible print:block bg-surface">
 
                 {/* ── Header: full-width, border-b only ── */}
                 <header
-                    className="w-full bg-white border-b border-[#e5e7eb] v2:bg-surface v2:border-line flex items-center shrink-0 z-50"
+                    className="w-full border-b flex items-center shrink-0 z-50 bg-surface border-line"
                     style={{ height: TOP_BAR_HEIGHT }}
                 >
                     <AppTopbar />
@@ -302,14 +302,14 @@ function AppLayoutContent({ children, isSystemAdmin }: { children: React.ReactNo
 
                     {/* ── Left sidebar: border-r only, animates width ── */}
                     <div
-                        className="bg-white border-r border-[#e5e7eb] v2:bg-surface-sidebar v2:border-line flex flex-col shrink-0 overflow-visible transition-all duration-300 relative z-20"
+                        className="border-r flex flex-col shrink-0 overflow-visible transition-all duration-300 relative z-20 bg-surface-sidebar border-line"
                         style={{ width: sidebarWidth }}
                     >
                         <OnboardingSidebar />
                     </div>
 
                     {/* ── Main content: pearl bg, architectural dot pattern ── */}
-                    <main className="flex-1 min-w-0 flex flex-col overflow-hidden bg-[#f9f9fb] v2:bg-surface relative print:overflow-visible print:block">
+                    <main className="flex-1 min-w-0 flex flex-col overflow-hidden relative print:overflow-visible print:block bg-surface">
                         <div className="relative z-10 flex-1 min-h-0 overflow-y-auto overflow-x-hidden print:overflow-visible print:flex-none print:h-auto">
                             <div className="w-full px-6 pt-6 pb-6 min-h-full flex flex-col print:min-h-0">{children}</div>
                         </div>

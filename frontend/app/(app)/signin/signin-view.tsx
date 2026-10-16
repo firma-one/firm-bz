@@ -59,7 +59,7 @@ export function SigninView({ microsoftSignInEnabled = false }: { microsoftSignIn
 
   return (
     <div
-      className={`relative min-h-screen w-full max-w-[100vw] overflow-x-hidden bg-[#f0edee] text-[#1b1b1d] selection:bg-[#72ff70]/40 selection:text-[#002203] md:h-[100dvh] md:min-h-0 md:overflow-hidden ${B}`}
+      className={`marketing-site relative min-h-screen w-full max-w-[100vw] overflow-x-hidden bg-[#f0edee] text-[#1b1b1d] selection:bg-[#72ff70]/40 selection:text-[#002203] md:h-[100dvh] md:min-h-0 md:overflow-hidden ${B}`}
     >
       <style>{`
         @keyframes signinFadeSlideIn {

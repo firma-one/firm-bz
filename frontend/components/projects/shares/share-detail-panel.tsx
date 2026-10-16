@@ -56,7 +56,7 @@ export function ShareDetailPanel({
         )}
         style={{ width: '100%' }}
       >
-        <header className="flex items-center justify-between gap-2 px-4 py-3 border-b border-slate-200/60 bg-slate-50/80 shrink-0 rounded-t-2xl">
+        <header className="flex items-center justify-between gap-2 px-4 py-3 border-b border-slate-200/60 bg-surface-subtle shrink-0 rounded-t-2xl">
           <h2 className="text-sm font-semibold text-fg truncate flex-1 min-w-0" title={title}>
             {title}
           </h2>
@@ -92,7 +92,7 @@ export function ShareDetailPanel({
         )}
         style={{ visibility: isExpanded ? 'visible' : 'hidden' }}
       >
-        <header className="flex items-center justify-between gap-4 px-6 py-4 border-b border-slate-200/60 bg-slate-50/80 shrink-0">
+        <header className="flex items-center justify-between gap-4 px-6 py-4 border-b border-slate-200/60 bg-surface-subtle shrink-0">
           <h2 className="text-lg font-semibold text-fg truncate flex-1 min-w-0" title={title}>
             {title}
           </h2>

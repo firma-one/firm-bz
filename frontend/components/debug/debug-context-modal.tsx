@@ -60,13 +60,13 @@ export function DebugContextModal({ open, onOpenChange }: DebugContextModalProps
             <>
               <section>
                 <h3 className="text-sm font-semibold mb-2">JWT (grants)</h3>
-                <pre className="text-xs overflow-auto max-h-[50vh] rounded border bg-slate-50 p-3 whitespace-pre-wrap break-all">
+                <pre className="text-xs overflow-auto max-h-[50vh] rounded border bg-surface-subtle p-3 whitespace-pre-wrap break-all">
                   {JSON.stringify(data.jwt, null, 2)}
                 </pre>
               </section>
               <section>
                 <h3 className="text-sm font-semibold mb-2">UserSettingsPlus</h3>
-                <pre className="text-xs overflow-auto max-h-[50vh] rounded border bg-slate-50 p-3 whitespace-pre-wrap break-all">
+                <pre className="text-xs overflow-auto max-h-[50vh] rounded border bg-surface-subtle p-3 whitespace-pre-wrap break-all">
                   {JSON.stringify(data.userSettingsPlus, null, 2)}
                 </pre>
               </section>

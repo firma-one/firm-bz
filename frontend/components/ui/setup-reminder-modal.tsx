@@ -66,7 +66,7 @@ interface SetupReminderModalProps {
   hint?: string
 }
 
-const TOOLTIP_CLASS = 'z-[999999] max-w-[220px] p-3 text-xs bg-white text-slate-900 border border-slate-200 shadow-xl break-words'
+const TOOLTIP_CLASS = 'z-[999999] max-w-[220px] p-3 text-xs bg-white text-fg border border-slate-200 shadow-xl break-words'
 
 /** Circular avatar with photo or initials fallback */
 function MemberAvatar({ name, avatarUrl, selected }: { name: string; avatarUrl?: string | null; selected: boolean }) {
@@ -211,7 +211,7 @@ export function SetupReminderModal({
         {/* Header */}
         <div className="flex items-center gap-2">
           <AlarmClock className="h-4 w-4 shrink-0" style={{ color: '#C4572B' }} />
-          <h2 className="text-sm font-semibold text-slate-900">Setup Reminder</h2>
+          <h2 className="text-sm font-semibold text-fg">Setup Reminder</h2>
         </div>
 
         {/* Entity name */}
@@ -231,7 +231,7 @@ export function SetupReminderModal({
 
         {/* Content preview (e.g. comment text) */}
         {contentPreview && (
-          <p className="text-xs text-slate-500 bg-slate-50 rounded border border-slate-100 px-3 py-2 leading-relaxed break-words">
+          <p className="text-xs text-slate-500 bg-surface-subtle rounded border border-line px-3 py-2 leading-relaxed break-words">
             {contentPreview.length > 80 ? contentPreview.slice(0, 80) + '…' : contentPreview}
           </p>
         )}
@@ -266,7 +266,7 @@ export function SetupReminderModal({
                           'flex items-center gap-2.5 px-2.5 py-2 rounded text-left transition-colors w-full',
                           selected
                             ? 'bg-primary/10 text-primary ring-1 ring-primary/30'
-                            : 'hover:bg-slate-50 text-slate-800'
+                            : 'hover:bg-surface-hover text-slate-800'
                         )}
                       >
                         <MemberAvatar name={currentUser.name || currentUser.email || 'Me'} avatarUrl={currentUser.avatarUrl} selected={selected} />
@@ -287,7 +287,7 @@ export function SetupReminderModal({
 
                   {/* Divider between self and others */}
                   {currentUser && members.length > 0 && (
-                    <div className="border-t border-slate-100 my-0.5" />
+                    <div className="border-t border-line my-0.5" />
                   )}
 
                   {members.map((m) => {
@@ -303,7 +303,7 @@ export function SetupReminderModal({
                           'flex items-center gap-2.5 px-2.5 py-2 rounded text-left transition-colors w-full',
                           selected
                             ? 'bg-primary/10 text-primary ring-1 ring-primary/30'
-                            : 'hover:bg-slate-50 text-slate-800'
+                            : 'hover:bg-surface-hover text-slate-800'
                         )}
                       >
                         <MemberAvatar name={m.name || m.email || '?'} avatarUrl={m.avatarUrl} selected={selected} />

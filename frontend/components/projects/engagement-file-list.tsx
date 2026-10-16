@@ -3469,7 +3469,7 @@ const handleRefresh = async () => {
                             </div>
 
                             {conflictItems.map((item) => (
-                                <div key={item.file.name} className="flex items-start space-x-3 p-3 rounded-lg border border-line bg-slate-50/50">
+                                <div key={item.file.name} className="flex items-start space-x-3 p-3 rounded-lg border border-line bg-surface-subtle">
                                     <Checkbox
                                         id={`overwrite-${item.file.name}`}
                                         checked={overwriteSelections.has(item.file.name)}

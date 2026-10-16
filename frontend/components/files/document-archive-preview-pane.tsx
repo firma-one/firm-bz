@@ -128,7 +128,7 @@ export function DocumentArchivePreviewPane({ document, projectId, onFallback }: 
                 {entries.map((entry) => (
                     <div
                         key={entry.path}
-                        className="flex items-center gap-2 px-3 py-1 text-[12px] text-slate-700 hover:bg-slate-50"
+                        className="flex items-center gap-2 px-3 py-1 text-[12px] text-slate-700 hover:bg-surface-hover"
                         style={{ paddingLeft: 12 + entry.depth * 14 }}
                     >
                         {entry.isFolder

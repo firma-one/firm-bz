@@ -30,7 +30,7 @@ export function DownloadProgressPanel() {
       style={{ bottom: 'calc(1rem + var(--ai-chat-corner-offset, 0px))' }}>
       {/* Header */}
       <div
-        className="flex items-center justify-between px-3 py-2 bg-slate-100 border-b border-slate-200 text-slate-900 rounded-t-lg cursor-pointer"
+        className="flex items-center justify-between px-3 py-2 bg-slate-100 border-b border-slate-200 text-fg rounded-t-lg cursor-pointer"
         onClick={() => setIsOpen(v => !v)}
       >
         <span className="text-[11px] font-medium">{headerLabel}</span>
@@ -49,7 +49,7 @@ export function DownloadProgressPanel() {
       {isOpen && (
         <div className="flex-1 overflow-y-auto overflow-x-hidden p-0 custom-scrollbar">
           {tasks.map((task) => (
-            <div key={task.id} className="flex flex-col gap-1 px-3 py-1.5 border-b border-slate-100 last:border-0 hover:bg-slate-50">
+            <div key={task.id} className="flex flex-col gap-1 px-3 py-1.5 border-b border-line last:border-0 hover:bg-surface-hover">
               <div className="flex items-center gap-2">
                 <div className="flex-shrink-0">
                   <DocumentIcon mimeType="application/pdf" className="h-3.5 w-3.5" />
@@ -65,7 +65,7 @@ export function DownloadProgressPanel() {
                     <Loader2 className="h-3.5 w-3.5 text-slate-400 animate-spin" />
                   )}
                   {task.status === 'complete' && (
-                    <CheckCircle2 className="h-3.5 w-3.5 text-slate-900" />
+                    <CheckCircle2 className="h-3.5 w-3.5 text-fg" />
                   )}
                   {task.status === 'error' && (
                     <XCircle className="h-3.5 w-3.5 text-red-500" />

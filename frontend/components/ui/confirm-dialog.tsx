@@ -89,7 +89,7 @@ export function ConfirmDialog({
               onClick={onConfirm}
               disabled={loading}
               variant={confirmVariant === 'red' ? 'destructive' : 'default'}
-              className={cn('min-w-[5.5rem]', confirmVariant === 'amber' && 'bg-tag-orange-fg text-white hover:opacity-90 v2:bg-tag-orange-fg v2:hover:bg-tag-orange-fg')}
+              className={cn('min-w-[5.5rem]', confirmVariant === 'amber' && 'bg-tag-orange-fg text-white hover:bg-tag-orange-fg hover:opacity-90')}
             >
               {loading ? <LoadingSpinner size="sm" /> : confirmLabel}
             </Button>

@@ -35,11 +35,11 @@ export function DocumentHeader({
     return (
         <div className="bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between shrink-0">
             <div className="flex items-center gap-3 min-w-0">
-                <div className="w-9 h-9 bg-slate-50 rounded-lg flex items-center justify-center shrink-0 border border-slate-100">
+                <div className="w-9 h-9 bg-surface-subtle rounded-lg flex items-center justify-center shrink-0 border border-line">
                     <DocumentIcon mimeType={document.mimeType} className="h-5 w-5" />
                 </div>
                 <div className="min-w-0">
-                    <h3 className="text-sm font-semibold text-slate-900 truncate" title={document.name}>
+                    <h3 className="text-sm font-semibold text-fg truncate" title={document.name}>
                         {document.name}
                     </h3>
                     <p className="flex items-center text-[11px] text-slate-500 gap-1.5 leading-none mt-1">

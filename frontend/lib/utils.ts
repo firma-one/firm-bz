@@ -20,28 +20,6 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-const V2_PREFIX = "v2:"
-
-/**
- * `cn` for primitives that carry `v2:` classes (New UI — see the `v2` variant in tailwind.config.js).
- *
- * A `v2:` class outranks a plain class on specificity, so a caller's `className="h-10"` would lose to
- * the primitive's `v2:h-8` in the new UI. This drops every `v2:` class whose property the caller's
- * className overrides, so caller overrides win in both shells. v1 classes are never touched.
- */
-export function cnV2(classes: ClassValue, className?: ClassValue): string {
-  const caller = clsx(className)
-  if (!caller) return twMerge(clsx(classes))
-  const kept = clsx(classes)
-    .split(/\s+/)
-    .filter((cls) => {
-      if (!cls.startsWith(V2_PREFIX)) return true
-      const bare = cls.slice(V2_PREFIX.length)
-      return twMerge(bare, caller).split(" ").includes(bare)
-    })
-  return twMerge(kept.join(" "), caller)
-}
-
 export function formatFileSize(bytes: number | string | null | undefined): string {
   if (bytes === undefined || bytes === null || bytes === '') return 'Unknown size'
   const numBytes = typeof bytes === 'string' ? parseFloat(bytes) : bytes

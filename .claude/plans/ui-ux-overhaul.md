@@ -1208,9 +1208,8 @@ and billing leftovers).
   - **Features the New UI never got:** What's New (`whats-new-modal.tsx`, `use-whats-new.ts`,
     `content/releases-meta.json`) lived only in the v1 sidebar, and Broadcast only on the old
     Notifications page. The files stay so they can be re-homed.
-  - **Tokens, `.d-app` remaps, the `v2:` variant (322 uses) and the font `@import`:** the
-    onboarding frame and pages outside `/d` (sign-in, share links, marketing) still use the legacy
-    values. Flattening changes how those look, so it's its own decision.
+  - **Tokens, `.d-app` remaps, the `v2:` variant and the font `@import`:** retired the same day
+    with Deepak's go-ahead — see `retire-legacy-tokens.md`.
   - **Ask Brio search code:** hidden, not dead.
 
 **Original list:**

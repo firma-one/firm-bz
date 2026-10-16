@@ -629,7 +629,7 @@ function ShareCardContent({
                 <TooltipTrigger asChild>
                   <button
                     type="button"
-                    className="p-1 rounded hover:bg-[#f3f4f6] text-fg-subtle hover:text-fg-muted transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                    className="p-1 rounded hover:bg-surface-hover text-fg-subtle hover:text-fg-muted transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                     onClick={(e) => {
                       e.stopPropagation()
                       if (isPending || !deeplinkBase || !share.documentId) return
@@ -653,7 +653,7 @@ function ShareCardContent({
                       <TooltipTrigger asChild>
                         <button
                           type="button"
-                          className="p-1 rounded hover:bg-[#f3f4f6] text-fg-subtle hover:text-fg-muted transition-colors"
+                          className="p-1 rounded hover:bg-surface-hover text-fg-subtle hover:text-fg-muted transition-colors"
                           onClick={(e) => { e.stopPropagation(); onOpenInFilesForFolder(share) }}
                         >
                           <FolderOpen className="h-3.5 w-3.5" />
@@ -669,7 +669,7 @@ function ShareCardContent({
                       <TooltipTrigger asChild>
                         <button
                           type="button"
-                          className="p-1 rounded hover:bg-[#f3f4f6] text-fg-subtle hover:text-fg-muted transition-colors"
+                          className="p-1 rounded hover:bg-surface-hover text-fg-subtle hover:text-fg-muted transition-colors"
                           onClick={(e) => { e.stopPropagation(); onOpenPreview?.(share) }}
                         >
                           <ScanEye className="h-3.5 w-3.5" />

@@ -93,31 +93,26 @@ function AnimatedTick() {
 // ── Config ───────────────────────────────────────────────────────
 const TOAST_CONFIG: Record<ToastType, {
   icon: ReactNode
-  accentClass: string
   iconBgClass: string
   iconColorClass: string
 }> = {
   success: {
     icon: <AnimatedTick />,
-    accentClass: 'border-l-[3px] border-l-primary',
     iconBgClass: 'bg-primary/10',
     iconColorClass: 'text-primary',
   },
   error: {
     icon: <AlertCircle className="h-4 w-4" />,
-    accentClass: 'border-l-[3px] border-l-red-500',
     iconBgClass: 'bg-red-50',
     iconColorClass: 'text-red-600',
   },
   warning: {
     icon: <AlertTriangle className="h-4 w-4" />,
-    accentClass: 'border-l-[3px] border-l-amber-500',
     iconBgClass: 'bg-amber-50',
     iconColorClass: 'text-amber-600',
   },
   info: {
     icon: <Info className="h-4 w-4" />,
-    accentClass: 'border-l-[3px] border-l-[#d1d5db]',
     iconBgClass: 'bg-[#f3f4f6]',
     iconColorClass: 'text-[#45474c]',
   },
@@ -147,12 +142,12 @@ function ToastContainer({ toasts, removeToast }: { toasts: Toast[], removeToast:
         className="flex items-center justify-between mb-2 transition-all duration-200"
         style={{ opacity: expanded ? 1 : 0, pointerEvents: expanded ? 'auto' : 'none', height: expanded ? 'auto' : 0, marginBottom: expanded ? 8 : 0 }}
       >
-        <span className="font-mono text-[10px] font-bold uppercase tracking-widest text-[#9a9ba0] v2:[font-family:var(--font-ui)] v2:text-caption v2:normal-case v2:tracking-normal v2:text-fg-muted">
+        <span className="font-bold [font-family:var(--font-ui)] text-caption normal-case tracking-normal text-fg-muted">
           {toasts.length} notifications
         </span>
         <button
           onClick={() => toasts.forEach(t => removeToast(t.id))}
-          className="text-[11px] font-medium text-[#9a9ba0] hover:text-[#45474c] transition-colors v2:text-caption v2:text-fg-muted v2:hover:text-fg"
+          className="font-medium transition-colors text-caption text-fg-muted hover:text-fg"
         >
           Clear all
         </button>
@@ -195,7 +190,7 @@ function ToastContainer({ toasts, removeToast }: { toasts: Toast[], removeToast:
 
       {/* Collapsed hint */}
       {!expanded && toasts.length > 1 && (
-        <p className="text-center mt-3 text-[10px] font-mono text-[#9a9ba0] tracking-wider select-none v2:[font-family:var(--font-ui)] v2:text-caption v2:tracking-normal v2:text-fg-subtle">
+        <p className="text-center mt-3 select-none [font-family:var(--font-ui)] text-caption tracking-normal text-fg-subtle">
           +{toasts.length - 1} more · hover to expand
         </p>
       )}
@@ -208,28 +203,23 @@ function ToastItem({ toast, onRemove }: { toast: Toast, onRemove: (id: string) =
   const cfg = TOAST_CONFIG[toast.type]
 
   return (
-    <div className={`
-      flex items-start gap-3 w-full bg-white border border-[#e5e7eb] ${cfg.accentClass}
-      shadow-[0_4px_24px_-4px_rgba(0,0,0,0.12),0_1px_4px_rgba(0,0,0,0.06)]
-      px-3.5 py-3
-      v2:rounded-card v2:border-0 v2:shadow-popover v2:px-3 v2:py-2.5
-    `}>
-      <div className={`shrink-0 h-7 w-7 flex items-center justify-center ${cfg.iconBgClass} ${cfg.iconColorClass} v2:rounded-control`}>
+    <div className="flex w-full items-start gap-3 rounded-card bg-white px-3 py-2.5 shadow-popover">
+      <div className={`shrink-0 h-7 w-7 flex items-center justify-center rounded-control ${cfg.iconBgClass} ${cfg.iconColorClass}`}>
         {cfg.icon}
       </div>
       <div className="flex-1 min-w-0 pt-0.5">
-        <p className="font-headline font-bold text-[0.8125rem] text-[#1b1b1d] leading-tight v2:text-ui v2:font-medium v2:text-fg">
+        <p className="font-headline text-ui font-medium text-fg">
           {toast.title}
         </p>
         {toast.message && (
-          <p className="mt-0.5 text-xs text-[#45474c] leading-snug v2:text-small v2:text-fg-muted">
+          <p className="mt-0.5 text-small text-fg-muted">
             {toast.message}
           </p>
         )}
       </div>
       <button
         onClick={() => onRemove(toast.id)}
-        className="shrink-0 h-6 w-6 flex items-center justify-center border border-transparent hover:border-[#e5e7eb] hover:bg-[#f3f4f6] text-[#9a9ba0] hover:text-[#45474c] transition-all focus:outline-none v2:rounded-control v2:border-0 v2:text-fg-subtle v2:hover:bg-surface-hover v2:hover:text-fg"
+        className="shrink-0 h-6 w-6 flex items-center justify-center transition-all focus:outline-none rounded-control text-fg-subtle hover:bg-surface-hover hover:text-fg"
         aria-label="Dismiss"
       >
         <X className="h-3 w-3" />

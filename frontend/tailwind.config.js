@@ -1,4 +1,3 @@
-const plugin = require('tailwindcss/plugin')
 
 /** @type {import('tailwindcss').Config} */
 module.exports = {
@@ -128,8 +127,7 @@ module.exports = {
 				'ki-primary-glow': 'rgba(6,150,104,0.15)',
 
 				/**
-				 * UI token layer — app/ui-tokens.css. Legacy values in :root (pixel-identical to the
-				 * literals they replace), Notion-style values under [data-ui="v2"].
+				 * UI token layer — app/ui-tokens.css (one scope, Notion-style values on :root).
 				 * Neutrals are full colors (some rgba), so they take no /opacity modifier;
 				 * action and danger are HSL channels and do (bg-action/10).
 				 */
@@ -184,15 +182,5 @@ module.exports = {
 		require('tailwind-scrollbar'),
 		require("tailwindcss-animate"),
 		require('@tailwindcss/container-queries'),
-		/**
-		 * `v2:` — applies under <html data-ui="v2">, set on every /d route (lib/ui-shell.ts).
-		 * Shared primitives keep their legacy classes for pages outside /d and layer `v2:` classes
-		 * on top for the app. The extra attribute selector also gives `v2:` classes the
-		 * specificity to beat the v1 class for the same property. Use `cnV2` (lib/utils.ts) in
-		 * primitives so a caller's className still overrides the v2 look.
-		 */
-		plugin(({ addVariant }) => {
-			addVariant('v2', '[data-ui="v2"] &')
-		}),
 	],
 }

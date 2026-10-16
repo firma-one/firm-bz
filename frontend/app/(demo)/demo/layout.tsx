@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { Suspense } from 'react'
+import { JetBrains_Mono } from 'next/font/google'
 import { Search } from 'lucide-react'
 import Logo from '@/components/Logo'
 import { TooltipProvider } from '@/components/ui/tooltip'
@@ -11,23 +12,30 @@ import { DemoTourShell } from '@/components/demo/demo-tour-shell'
 import { DemoTourTopbarButton } from '@/components/demo/demo-tour-topbar-button'
 import { DemoTourSignupButton } from '@/components/demo/demo-tour-signup-button'
 
+import './demo.css'
+
 const TOP_BAR_HEIGHT = 64
+
+/** The old dashboard's monospace face; only the demo still uses it (demo.css). */
+const demoMono = JetBrains_Mono({ subsets: ['latin'], weight: ['500'], variable: '--font-demo-mono', display: 'swap' })
 
 /**
  * Static, unauthenticated shell replicating the real app chrome
  * (frontend/app/(app)/d/d-layout-client.tsx + app-sidebar.tsx + app-topbar.tsx)
  * with all live-data widgets (search results, notifications, firm switcher, etc.)
- * removed or rendered inert — visuals only, no fetching, no auth.
+ * removed or rendered inert — visuals only, no fetching, no auth. It keeps the old dashboard look
+ * through demo.css until the demo is redesigned.
  */
 export default function DemoLayout({ children }: { children: React.ReactNode }) {
     return (
+        <div className={`demo-tokens contents ${demoMono.variable}`}>
         <TooltipProvider delayDuration={400}>
         <DemoTourProvider>
             <DemoCursor />
             <Suspense fallback={null}>
                 <DemoTourShell />
             </Suspense>
-            <div className="d-app h-screen flex flex-col overflow-hidden bg-[#f9f9fb]">
+            <div className="demo-app h-screen flex flex-col overflow-hidden bg-[#f9f9fb]">
                 {/* Header — matches real app-topbar.tsx shell */}
                 <header
                     className="w-full bg-white border-b border-[#e5e7eb] flex items-center shrink-0 z-50"
@@ -77,5 +85,6 @@ export default function DemoLayout({ children }: { children: React.ReactNode }) 
             </div>
         </DemoTourProvider>
         </TooltipProvider>
+        </div>
     )
 }

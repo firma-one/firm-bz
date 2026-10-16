@@ -122,7 +122,7 @@ export function UploadProgressPanel() {
               key={item.id}
               data-uploading={item.status === 'uploading' ? 'true' : undefined}
               className={cn(
-                "flex items-center gap-2 px-3 py-1.5 min-h-[32px] border-b border-slate-100 last:border-0 hover:bg-slate-50 group transition-opacity duration-300",
+                "flex items-center gap-2 px-3 py-1.5 min-h-[32px] border-b border-line last:border-0 hover:bg-surface-hover group transition-opacity duration-300",
                 item.status === 'pending' && "opacity-40"
               )}
             >

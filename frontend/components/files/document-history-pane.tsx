@@ -50,7 +50,7 @@ export function DocumentHistoryPane({ document }: DocumentHistoryPaneProps) {
 
     return (
         <div className="flex flex-col h-full min-h-0 p-4 min-w-0">
-            <div className="inline-flex max-w-full items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 mb-4">
+            <div className="inline-flex max-w-full items-center gap-2 rounded-xl border border-slate-200 bg-surface-subtle px-3 py-2 mb-4">
                 <span className="truncate text-xs font-medium text-slate-700" title={document.name}>
                     {document.name}
                 </span>
@@ -98,7 +98,7 @@ export function DocumentHistoryPane({ document }: DocumentHistoryPaneProps) {
                                 }`}
                             >
                                 <div className="flex items-start justify-between gap-2 mb-2">
-                                    <span className={`text-xs font-semibold ${isCurrent ? 'text-slate-900' : 'text-slate-700'}`}>
+                                    <span className={`text-xs font-semibold ${isCurrent ? 'text-fg' : 'text-slate-700'}`}>
                                         {isCurrent ? 'Current Version' : `Version ${versionNumber}`}
                                     </span>
                                     <Button

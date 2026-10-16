@@ -10,8 +10,7 @@ import {
 } from "@/lib/ui/status-colors"
 
 /*
- * New UI (v2) primitives — Notion-style tags. Token-based, so outside data-ui="v2" they fall back
- * to the legacy token values; use them on v2 surfaces only.
+ * Notion-style tags, built on the UI tokens (app/ui-tokens.css).
  */
 
 export interface TagProps extends React.HTMLAttributes<HTMLSpanElement> {

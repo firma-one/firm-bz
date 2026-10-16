@@ -1,10 +1,10 @@
 import * as React from "react"
 import { cva, type VariantProps } from "class-variance-authority"
 
-import { cnV2 } from "@/lib/utils"
+import { cn } from "@/lib/utils"
 
 const badgeVariants = cva(
-    "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 v2:rounded-control v2:px-1.5 v2:text-caption v2:font-medium v2:focus:ring-action/30 v2:focus:ring-offset-0",
+    "inline-flex items-center border py-0.5 transition-colors focus:outline-none focus:ring-2 rounded-control px-1.5 text-caption font-medium focus:ring-action/30 focus:ring-offset-0",
     {
         variants: {
             variant: {
@@ -29,7 +29,7 @@ export interface BadgeProps
 
 function Badge({ className, variant, ...props }: BadgeProps) {
     return (
-        <div className={cnV2(badgeVariants({ variant }), className)} {...props} />
+        <div className={cn(badgeVariants({ variant }), className)} {...props} />
     )
 }
 

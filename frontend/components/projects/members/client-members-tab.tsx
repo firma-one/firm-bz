@@ -149,7 +149,7 @@ export function ClientMembersTab({ firmId, clientId, orgSlug, clientSlug, canMan
                                 const bIsPartner = b.persona?.slug === 'client_admin' ? -1 : 1
                                 return aIsPartner - bIsPartner
                             }).map((member) => (
-                                <div key={member.id} className="flex items-center gap-3 px-3 py-2.5 hover:bg-[#f3f4f6] transition-colors">
+                                <div key={member.id} className="flex items-center gap-3 px-3 py-2.5 hover:bg-surface-hover transition-colors">
                                     <Avatar className="h-8 w-8 shrink-0 border border-line">
                                         <AvatarImage src={member.user?.avatarUrl} />
                                         <AvatarFallback className="bg-surface-muted text-xs font-medium text-fg-muted">
@@ -170,7 +170,7 @@ export function ClientMembersTab({ firmId, clientId, orgSlug, clientSlug, canMan
                                 </div>
                             ))}
                             {invitations.map((inv) => (
-                                <div key={inv.id} className="flex items-center gap-3 px-3 py-2.5 hover:bg-[#f3f4f6] transition-colors">
+                                <div key={inv.id} className="flex items-center gap-3 px-3 py-2.5 hover:bg-surface-hover transition-colors">
                                     <div className="h-8 w-8 shrink-0 rounded bg-surface-muted flex items-center justify-center">
                                         <Mail className="h-4 w-4 text-fg-muted" />
                                     </div>

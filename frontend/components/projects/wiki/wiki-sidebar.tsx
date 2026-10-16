@@ -147,7 +147,7 @@ export function WikiSidebar({ pages, selectedId, canEdit, onSelect, onNewSection
     }
 
     return (
-        <div className="flex flex-col h-full border-r border-line bg-slate-50/60">
+        <div className="flex flex-col h-full border-r border-line bg-surface-subtle">
             {/* Header */}
             <div className="px-4 py-3 border-b border-line flex items-center justify-between">
                 <span className="text-[11px] font-bold text-fg-muted uppercase tracking-wider">Pages</span>

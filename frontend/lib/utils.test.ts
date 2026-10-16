@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { getFileTypeLabel, formatFileSize, cn, cnV2 } from './utils'
+import { getFileTypeLabel, formatFileSize, cn } from './utils'
 
 describe('getFileTypeLabel', () => {
     it.each([
@@ -77,35 +77,5 @@ describe('cn — UI token scales', () => {
         expect(cn('rounded-md', 'rounded-control')).toBe('rounded-control')
         expect(cn('shadow-md', 'shadow-popover')).toBe('shadow-popover')
         expect(cn('shadow-popover', 'shadow-red-500')).toBe('shadow-popover shadow-red-500')
-    })
-})
-
-describe('cnV2', () => {
-    const base = 'h-9 px-4 bg-blue-600 v2:h-8 v2:px-3 v2:bg-action v2:hover:bg-action-hover'
-
-    it('keeps every class when the caller passes nothing', () => {
-        expect(cnV2(base)).toBe(base)
-    })
-
-    it('never drops v1 classes on account of v2 ones', () => {
-        expect(cnV2(base, 'mt-2')).toBe(`${base} mt-2`)
-    })
-
-    it('drops the v2 class for a property the caller overrides, so the caller wins in v2 too', () => {
-        expect(cnV2(base, 'h-10')).toBe('px-4 bg-blue-600 v2:px-3 v2:bg-action v2:hover:bg-action-hover h-10')
-    })
-
-    it('matches overrides modifier-for-modifier', () => {
-        // A plain bg override leaves the v2 hover color alone; a hover override drops it.
-        expect(cnV2(base, 'bg-primary')).toBe('h-9 px-4 v2:h-8 v2:px-3 v2:hover:bg-action-hover bg-primary')
-        expect(cnV2(base, 'hover:bg-primary/90')).toBe('h-9 px-4 bg-blue-600 v2:h-8 v2:px-3 v2:bg-action hover:bg-primary/90')
-    })
-
-    it('treats shorthand overrides as overriding the v2 longhand', () => {
-        expect(cnV2(base, 'p-0')).toBe('h-9 bg-blue-600 v2:h-8 v2:bg-action v2:hover:bg-action-hover p-0')
-    })
-
-    it('lets a caller v2 class replace the primitive v2 class', () => {
-        expect(cnV2(base, 'v2:h-10')).toBe('h-9 px-4 bg-blue-600 v2:px-3 v2:bg-action v2:hover:bg-action-hover v2:h-10')
     })
 })

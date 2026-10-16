@@ -424,7 +424,7 @@ export function CreateSupportRequestModal({ firmSlug, trigger }: CreateSupportRe
                           <button
                             type="button"
                             onClick={() => setAttachments(prev => prev.filter(att => att.id !== a.id))}
-                            className="p-0.5 rounded hover:bg-[#f3f4f6] text-fg-muted hover:text-danger transition-colors"
+                            className="p-0.5 rounded hover:bg-surface-hover text-fg-muted hover:text-danger transition-colors"
                           >
                             <X className="h-3.5 w-3.5" />
                           </button>
@@ -442,7 +442,7 @@ export function CreateSupportRequestModal({ firmSlug, trigger }: CreateSupportRe
                 type="button"
                 onClick={() => setOpen(false)}
                 disabled={isLoading}
-                className="px-4 py-2 text-[0.8125rem] font-medium text-fg-muted bg-surface border border-line rounded hover:bg-[#f3f4f6] hover:text-fg transition-colors disabled:opacity-50"
+                className="px-4 py-2 text-[0.8125rem] font-medium text-fg-muted bg-surface border border-line rounded hover:bg-surface-hover hover:text-fg transition-colors disabled:opacity-50"
               >
                 Cancel
               </button>

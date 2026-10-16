@@ -137,7 +137,7 @@ export function DocumentTextPreviewPane({ document, projectId, kind, onFallback 
                             <button
                                 type="button"
                                 onClick={() => setFormatted((f) => !f)}
-                                className={`h-6 w-6 rounded inline-flex items-center justify-center hover:bg-slate-100 ${formatted ? 'text-slate-900 bg-slate-100' : 'text-slate-500 hover:text-slate-700'}`}
+                                className={`h-6 w-6 rounded inline-flex items-center justify-center hover:bg-slate-100 ${formatted ? 'text-fg bg-slate-100' : 'text-slate-500 hover:text-slate-700'}`}
                                 aria-label={formatted ? 'Show the original text' : 'Format and indent'}
                                 aria-pressed={Boolean(formatted)}
                             >
@@ -157,7 +157,7 @@ export function DocumentTextPreviewPane({ document, projectId, kind, onFallback 
                         <button
                             type="button"
                             onClick={() => setWrap((w) => !w)}
-                            className={`h-6 w-6 rounded inline-flex items-center justify-center hover:bg-slate-100 ${wrap ? 'text-slate-900 bg-slate-100' : 'text-slate-500 hover:text-slate-700'}`}
+                            className={`h-6 w-6 rounded inline-flex items-center justify-center hover:bg-slate-100 ${wrap ? 'text-fg bg-slate-100' : 'text-slate-500 hover:text-slate-700'}`}
                             aria-label={wrap ? 'Stop wrapping lines' : 'Wrap long lines'}
                             aria-pressed={wrap}
                         >

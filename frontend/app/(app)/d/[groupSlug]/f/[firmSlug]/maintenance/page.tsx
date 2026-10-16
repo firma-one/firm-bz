@@ -67,12 +67,12 @@ export default function MaintenancePage() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-white px-6 py-16 text-center">
       <div className="mx-auto max-w-md space-y-6">
-        <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 mx-auto">
+        <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-slate-200 bg-surface-subtle mx-auto">
           <Wrench className="h-7 w-7 text-slate-600" strokeWidth={1.75} />
         </div>
         <div className="space-y-2">
           <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">{BRAND_NAME}</p>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Workspace under maintenance</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-fg">Workspace under maintenance</h1>
           <p className="text-slate-500">
             Files are being migrated to a new workspace folder. This page will refresh automatically when done.
           </p>

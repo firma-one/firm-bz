@@ -7,7 +7,7 @@ import { KINETIC_COLORS } from '@/config/kinetic-institution'
 export default function MarketingLayout({ children }: { children: React.ReactNode }) {
   return (
     <div
-      className="relative min-h-screen overflow-x-hidden font-sans antialiased [font-family:var(--font-kinetic-body),system-ui,sans-serif] selection:bg-[#72ff70] selection:text-[#002203]"
+      className="marketing-site relative min-h-screen overflow-x-hidden font-sans antialiased [font-family:var(--font-kinetic-body),system-ui,sans-serif] selection:bg-[#72ff70] selection:text-[#002203]"
       style={{
         backgroundColor: KINETIC_COLORS.surface,
         color: KINETIC_COLORS.onSurface,

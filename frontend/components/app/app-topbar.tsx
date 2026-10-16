@@ -676,7 +676,7 @@ export function AppTopbar() {
                   )}
                 </div>
                 <button type="button" onClick={() => setShowRecentsDropdown(false)} aria-label="Close"
-                  className="p-1 rounded hover:bg-[#f3f4f6] text-[#45474c] hover:text-[#1b1b1d] transition-colors">
+                  className="p-1 rounded hover:bg-surface-hover text-[#45474c] hover:text-[#1b1b1d] transition-colors">
                   <SquareX className="h-4 w-4" />
                 </button>
               </div>
@@ -772,7 +772,7 @@ export function AppTopbar() {
                     ) : null}
                   </div>
                   <button type="button" onClick={() => setShowBookmarksDropdown(false)} aria-label="Close"
-                    className="p-1 rounded hover:bg-[#f3f4f6] text-[#45474c] hover:text-[#1b1b1d] transition-colors">
+                    className="p-1 rounded hover:bg-surface-hover text-[#45474c] hover:text-[#1b1b1d] transition-colors">
                     <X className="h-4 w-4" />
                   </button>
                 </div>
@@ -827,7 +827,7 @@ export function AppTopbar() {
                           </button>
                           <button
                             type="button"
-                            className="p-1 rounded hover:bg-[#f3f4f6] text-[#45474c] hover:text-[#1b1b1d] opacity-0 group-hover:opacity-100 transition-opacity"
+                            className="p-1 rounded hover:bg-surface-hover text-[#45474c] hover:text-[#1b1b1d] opacity-0 group-hover:opacity-100 transition-opacity"
                             title="Remove"
                             onClick={async () => {
                               try {
@@ -904,7 +904,7 @@ export function AppTopbar() {
                   </div>
                   <div className="flex items-center gap-1">
                     <button type="button" onClick={() => setShowNotificationsDropdown(false)} aria-label="Close"
-                      className="p-1 rounded hover:bg-[#f3f4f6] text-[#45474c] hover:text-[#1b1b1d] transition-colors">
+                      className="p-1 rounded hover:bg-surface-hover text-[#45474c] hover:text-[#1b1b1d] transition-colors">
                       <X className="h-4 w-4" />
                     </button>
                   </div>

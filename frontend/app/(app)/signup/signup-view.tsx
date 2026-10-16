@@ -24,7 +24,7 @@ export function SignupView({ microsoftSignInEnabled = false }: { microsoftSignIn
 
   return (
     <div
-      className={`relative min-h-screen w-full max-w-[100vw] overflow-x-hidden overflow-y-hidden bg-[#f0edee] text-[#1b1b1d] selection:bg-[#72ff70]/40 selection:text-[#002203] md:h-[100dvh] md:min-h-0 md:overflow-hidden ${B}`}
+      className={`marketing-site relative min-h-screen w-full max-w-[100vw] overflow-x-hidden overflow-y-hidden bg-[#f0edee] text-[#1b1b1d] selection:bg-[#72ff70]/40 selection:text-[#002203] md:h-[100dvh] md:min-h-0 md:overflow-hidden ${B}`}
     >
       <div
         className="pointer-events-none fixed -bottom-40 -left-40 z-0 h-96 w-96 rounded-full bg-[#72ff70]/5 blur-[120px]"

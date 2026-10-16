@@ -567,7 +567,7 @@ export function DocumentSheetPreviewPane({ document, projectId, onFallback, onVi
                             onClick={() => { setActiveSheet(i); scrollRef.current?.scrollTo({ top: 0, left: 0 }) }}
                             className={`shrink-0 px-2 h-6 rounded text-[11px] ${
                                 i === activeSheet
-                                    ? 'bg-white text-slate-900 font-medium shadow-sm border border-[#d8d8dc]'
+                                    ? 'bg-white text-fg font-medium shadow-sm border border-[#d8d8dc]'
                                     : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/60'
                             }`}
                         >

@@ -415,7 +415,7 @@ function ACRow({ href, isExternal, children }: { href: string; isExternal?: bool
             href={href}
             target={isExternal ? '_blank' : undefined}
             rel={isExternal ? 'noopener noreferrer' : undefined}
-            className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-[#f3f4f6] hover: transition-all duration-200 rounded border border-line bg-white"
+            className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-surface-hover hover: transition-all duration-200 rounded border border-line bg-white"
         >
             {children}
         </Link>
@@ -1005,7 +1005,7 @@ function FilterDropdown({ label, allLabel, options, value, onChange, formatOptio
             {open && <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />}
             <button
                 onClick={() => setOpen(!open)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 border text-xs font-medium rounded transition-colors ${hasActive ? 'bg-gray-900 border-gray-900 text-white' : 'bg-white border-line hover:bg-[#f3f4f6] text-fg-muted'}`}
+                className={`flex items-center gap-1.5 px-3 py-1.5 border text-xs font-medium rounded transition-colors ${hasActive ? 'bg-gray-900 border-gray-900 text-white' : 'bg-white border-line hover:bg-surface-hover text-fg-muted'}`}
             >
                 <span>{value ? (formatOption ? formatOption(value) : value) : label}</span>
                 <ChevronDown className={`h-3 w-3 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />

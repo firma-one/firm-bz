@@ -38,7 +38,7 @@ export function FilePreviewSheet({
 
     return (
         <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
-            <SheetContent className="w-full sm:max-w-xl md:max-w-2xl p-0 flex flex-col h-full bg-slate-50">
+            <SheetContent className="w-full sm:max-w-xl md:max-w-2xl p-0 flex flex-col h-full bg-surface-subtle">
                 {/* Header */}
                 <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between shadow-sm z-10">
                     <div className="flex items-center space-x-3 overflow-hidden">
@@ -72,7 +72,7 @@ export function FilePreviewSheet({
                             variant="outline"
                             size="sm"
                             onClick={() => window.open(getPreviewUrl(), '_blank')}
-                            className="hidden sm:flex items-center space-x-2 border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-800"
+                            className="hidden sm:flex items-center space-x-2 border-slate-200 text-slate-600 hover:bg-surface-hover hover:text-slate-800"
                             title="Open original file in a new tab"
                         >
                             <ExternalLink className="h-4 w-4" />

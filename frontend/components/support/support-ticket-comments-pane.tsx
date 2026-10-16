@@ -108,7 +108,7 @@ export function SupportTicketCommentsPane({
                     </span>
                   )}
                 </div>
-                <p className="text-slate-900 whitespace-pre-wrap break-words leading-relaxed">
+                <p className="text-fg whitespace-pre-wrap break-words leading-relaxed">
                   {comment.content}
                 </p>
               </div>
@@ -119,14 +119,14 @@ export function SupportTicketCommentsPane({
       </div>
 
       {/* Input */}
-      <div className="border-t border-slate-200/60 px-4 py-3 bg-slate-50/50 shrink-0">
+      <div className="border-t border-slate-200/60 px-4 py-3 bg-surface-subtle shrink-0">
         <textarea
           value={commentText}
           onChange={(e) => setCommentText(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="Add a comment… (⌘↵ to post)"
           rows={3}
-          className="w-full px-3 py-2.5 rounded border border-slate-200 bg-white text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 resize-none transition-colors"
+          className="w-full px-3 py-2.5 rounded border border-slate-200 bg-white text-sm text-fg placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 resize-none transition-colors"
           disabled={isSubmitting}
         />
         <div className="flex justify-end mt-2">
