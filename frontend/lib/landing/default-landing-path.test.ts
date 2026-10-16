@@ -11,7 +11,6 @@ vi.mock('@/utils/supabase/server', () => ({
 }))
 vi.mock('@/lib/firm-service', () => ({ FirmService: { getUserFirms } }))
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), error: vi.fn() } }))
-vi.mock('@/lib/ui-prefs', () => ({ getUserUiPrefs: async () => ({ shell: 'v2' }) }))
 vi.mock('@/lib/onboarding/auto-provision', () => ({ autoProvisionFirstFirm }))
 
 import { resolveDefaultFirmLandingPath } from './default-landing-path'

@@ -185,9 +185,9 @@ module.exports = {
 		require("tailwindcss-animate"),
 		require('@tailwindcss/container-queries'),
 		/**
-		 * `v2:` — applies only under the New UI toggle (<html data-ui="v2">, lib/ui-shell.ts).
-		 * Shared primitives keep their v1 classes untouched and layer `v2:` classes on top, so v1
-		 * renders exactly as before. The extra attribute selector also gives `v2:` classes the
+		 * `v2:` — applies under <html data-ui="v2">, set on every /d route (lib/ui-shell.ts).
+		 * Shared primitives keep their legacy classes for pages outside /d and layer `v2:` classes
+		 * on top for the app. The extra attribute selector also gives `v2:` classes the
 		 * specificity to beat the v1 class for the same property. Use `cnV2` (lib/utils.ts) in
 		 * primitives so a caller's className still overrides the v2 look.
 		 */

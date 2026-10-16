@@ -201,23 +201,6 @@
     font-size: 0.8125rem;
   }
 
-  /* View As + Firm Selector dropdowns — match font size to sidebar nav */
-  [data-view-as-select] [role="option"],
-  [data-firm-selector] [role="option"] {
-    font-size: 0.8125rem;
-  }
-  [data-firm-selector] [role="option"][data-highlighted],
-  [data-firm-selector] [role="option"]:focus {
-    background-color: #f9f9fb !important;
-    color: #1b1b1d !important;
-  }
-  /* Add Firm CTA item uses brand primary on hover */
-  [data-firm-selector] [data-value="__create__"][data-highlighted],
-  [data-firm-selector] [data-value="__create__"]:focus {
-    background-color: hsl(var(--primary) / 0.1) !important;
-    color: hsl(var(--primary)) !important;
-  }
-
   /* Tree branch L-connector on each sub-nav item */
   .d-app .d-tree-link {
     position: relative;

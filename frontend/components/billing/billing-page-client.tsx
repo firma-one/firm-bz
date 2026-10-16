@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { Building2, CreditCard, ExternalLink, HelpCircle, Info, Lock, Receipt, Rows3 } from 'lucide-react'
+import { ExternalLink, HelpCircle, Info, Lock, Receipt, Rows3 } from 'lucide-react'
 import { getUserFirms } from '@/lib/actions/firms'
 import { firmPath } from '@/lib/navigation/firm-paths'
 import { validateCheckoutReturnTo } from '@/lib/billing/checkout-return-path'
@@ -13,12 +13,10 @@ import { CurrentPlanSummary } from '@/components/billing/current-plan-summary'
 import { PolarPlansPicker, type BillingCurrentPlanState } from '@/components/billing/polar-plans-picker'
 import { fetchBillingCurrentPlan } from '@/lib/billing/fetch-billing-current-plan'
 import { shouldShowSandboxUpgradeMarketing } from '@/lib/billing/subscription-display'
-import { PageBreadcrumb } from '@/components/ui/page-breadcrumb'
 import { PageHeading } from '@/components/ui/page-heading'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { EmptyPanel } from '@/components/ui/empty-panel'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
-import { useUiShell } from '@/lib/ui-shell-context'
 import { cn } from '@/lib/utils'
 
 /*
@@ -57,7 +55,6 @@ export function BillingPageClient({
     const pathname = usePathname()
     const router = useRouter()
     const searchParams = useSearchParams()
-    const uiShell = useUiShell()
     const firmSlugParam = searchParams.get('firmSlug')?.trim() || ''
     const returnToParam = searchParams.get('returnTo')
     const paidPlanIntent = searchParams.get('paid_plan') === 'true'
@@ -272,22 +269,6 @@ export function BillingPageClient({
 
     return (
         <div className="relative mx-auto w-full max-w-4xl space-y-10 pb-10" data-demo-tour="billing-page">
-            {/* The old breadcrumb shows in v1 only; v2 has the shell's header bar. */}
-            {uiShell === 'v1' && !isOnboardingSubscribe && selectedFirm ? (
-                <PageBreadcrumb
-                    items={[
-                        {
-                            label: selectedFirm.name,
-                            href:
-                                selectedFirm.slug && selectedFirm.groupSlug
-                                    ? firmPath(selectedFirm.groupSlug, selectedFirm.slug)
-                                    : returnPath,
-                            icon: <Building2 className="h-4 w-4" />,
-                        },
-                        { label: 'Billing & plans', icon: <CreditCard className="h-4 w-4" /> },
-                    ]}
-                />
-            ) : null}
 
             <div className="space-y-3">
                 <PageHeading

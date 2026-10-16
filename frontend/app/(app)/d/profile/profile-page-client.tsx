@@ -15,7 +15,7 @@ import { Label } from '@/components/ui/label'
 import { useToast } from '@/components/ui/toast'
 import { initialsOf } from '@/lib/initials'
 import { PropertyList, PropertyRow, PROPERTY_FIELD_CLASS, PROPERTY_HINT_CLASS, SETTINGS_SECTION_HEADING_CLASS } from '@/components/ui/property-list'
-import { PushNotificationToggle } from '@/app/(app)/d/u/notifications/push-notification-toggle'
+import { PushNotificationToggle } from '@/components/notifications/push-notification-toggle'
 
 export function ProfilePageClient({
     displayName,

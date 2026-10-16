@@ -7,8 +7,7 @@ import { EngagementInsightsDashboard } from './engagement-insights-dashboard'
 import { EngagementFileList } from './engagement-file-list'
 import { type BreadcrumbItem } from '@/lib/files-folder-session'
 import { EngagementSettingsForm } from './engagement-settings-form'
-import { Building2, ChevronRight, Users, Briefcase, Home, LayoutGrid, List } from 'lucide-react'
-import Link from 'next/link'
+import { LayoutGrid, List } from 'lucide-react'
 import { usePathname, useRouter } from 'next/navigation'
 import { EngagementMembersTab } from './members/engagement-members-tab'
 import { EngagementSharesTab } from './shares/engagement-shares-tab'
@@ -19,11 +18,8 @@ import { EngagementAuditPane } from './engagement-audit-pane'
 import { EngagementCommentsTab } from './engagement-comments-tab'
 import { EngagementWikiTab } from './wiki/engagement-wiki-tab'
 import type { LwCrmEngagementStatus } from '@/lib/actions/project'
-import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
-import { firmPath, clientPath, groupFirmListPath } from '@/lib/navigation/firm-paths'
 import { EngagementHeader } from './engagement-header'
 import { EngagementTabsList, engagementChromeKey, rememberEngagementChrome, type EngagementTabsConfig } from './engagement-tabs'
-import { useUiShell } from '@/lib/ui-shell-context'
 
 export interface ProjectPathSegments {
     tab: string
@@ -145,7 +141,6 @@ export function EngagementWorkspace({
     useEffect(() => { setLiveFileCount(fileCount) }, [fileCount])
     const [filesNavSlot, setFilesNavSlot] = useState<HTMLDivElement | null>(null)
     const [pendingTab, setPendingTab] = useState<string | null>(null)
-    const uiShell = useUiShell()
 
     const slugFromPath = pathname?.split('/e/')[1]?.split('/')[0] ?? pathname?.split('/p/')[1]?.split('/')[0] ?? ''
     const projectSlug = engagementSlug ?? slugFromPath
@@ -225,64 +220,6 @@ export function EngagementWorkspace({
 
     return (
         <div className="flex flex-col flex-1 min-h-0">
-            {/* The new shell's header bar already shows these breadcrumbs; keep them for the legacy shell. */}
-            {uiShell === 'v1' && (
-                <nav className="flex items-center gap-1.5 mb-4">
-                <Link href={groupFirmListPath(groupSlug)} className="hover:opacity-80">
-                    <Home className="h-4 w-4 text-fg" />
-                </Link>
-                <ChevronRight className="h-3.5 w-3.5 text-line-strong" />
-                <Tooltip>
-                    <TooltipTrigger asChild>
-                        <Link
-                            href={firmPath(groupSlug, orgSlug)}
-                            className="flex items-center gap-1.5 hover:opacity-100"
-                        >
-                            <Building2 className="h-4 w-4 text-fg-muted opacity-60" />
-                            <span className="font-mono text-[11px] text-fg-muted opacity-60 uppercase tracking-tighter transition-opacity">
-                                {orgName || 'Organization'}
-                            </span>
-                        </Link>
-                    </TooltipTrigger>
-                    <TooltipContent>Firm</TooltipContent>
-                </Tooltip>
-                {clientName && (
-                    <>
-                        <ChevronRight className="h-3.5 w-3.5 text-line-strong" />
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <Link
-                                    href={clientPath(groupSlug, orgSlug, clientSlug)}
-                                    className="flex items-center gap-1.5 hover:opacity-100"
-                                >
-                                    <Users className="h-4 w-4 text-fg-muted opacity-60" />
-                                    <span className="font-mono text-[11px] text-fg-muted opacity-60 uppercase tracking-tighter transition-opacity">
-                                        {clientName}
-                                    </span>
-                                </Link>
-                            </TooltipTrigger>
-                            <TooltipContent>Client</TooltipContent>
-                        </Tooltip>
-                    </>
-                )}
-                {projectName && (
-                    <>
-                        <ChevronRight className="h-3.5 w-3.5 text-line-strong" />
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <span className="flex items-center gap-1.5">
-                                    <Briefcase className="h-4 w-4 text-primary" />
-                                    <span className="font-mono text-[11px] font-bold text-fg uppercase tracking-tighter">
-                                        {projectName}
-                                    </span>
-                                </span>
-                            </TooltipTrigger>
-                            <TooltipContent>Engagement</TooltipContent>
-                        </Tooltip>
-                    </>
-                )}
-            </nav>
-            )}
 
             <EngagementHeader
                 projectId={projectId}

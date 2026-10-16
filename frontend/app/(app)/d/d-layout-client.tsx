@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { usePathname } from 'next/navigation'
 import { AuthGuard } from '@/components/auth/auth-guard'
-import { AppSidebar } from '@/components/app/app-sidebar'
 import { AppTopbar } from '@/components/app/app-topbar'
 import { useViewAs, RBAC_PERSONAS } from '@/lib/view-as-context'
 import { LayoutRightPanel, RIGHT_PANEL_DOCKED_WIDTH_PX } from '@/components/app/layout-right-panel'
@@ -33,9 +32,8 @@ import { DemoTour } from '@/components/app/demo-tour'
 import { DemoTourIntroModal } from '@/components/app/demo-tour-intro-modal'
 import { DemoTourOutroModal } from '@/components/app/demo-tour-outro-modal'
 import { DemoTourButton } from '@/components/app/demo-tour-button'
-import { UiShellProvider, useUiShell } from '@/lib/ui-shell-context'
+import { UiShellProvider } from '@/lib/ui-shell-context'
 import { AppShellV2 } from '@/components/shell/app-shell-v2'
-import type { UiShell } from '@/lib/ui-shell'
 
 const TOP_BAR_HEIGHT = 64
 
@@ -92,7 +90,6 @@ function AppLayoutContent({ children, isSystemAdmin }: { children: React.ReactNo
     const { session } = useAuth()
     const accessToken = session?.access_token ?? null
     const firms = useSidebarFirms()
-    const uiShell = useUiShell()
 
     const showOnboardingSidebar =
         pathname === '/d/onboarding' || (pathname?.startsWith('/d/onboarding/') ?? false)
@@ -178,9 +175,9 @@ function AppLayoutContent({ children, isSystemAdmin }: { children: React.ReactNo
         return () => clearInterval(id)
     }, [platformStatus])
 
-    // New UI (data-ui="v2"): same banners, panels and right pane, in the v2 frame. Onboarding keeps
-    // the legacy frame — its own sidebar drives the steps.
-    if (uiShell === 'v2' && !showOnboardingSidebar) {
+    // The app frame: banners, panels and the right pane. Onboarding has its own frame below — its
+    // own sidebar drives the steps.
+    if (!showOnboardingSidebar) {
         const graceStrip = platformStatus?.pendingGrace && graceCountdown !== null ? (
             <AppShellHintStrip
                 accent="slate"
@@ -277,10 +274,8 @@ function AppLayoutContent({ children, isSystemAdmin }: { children: React.ReactNo
     return (
         <AuthGuard>
             {/*
-              Kinetic Institution layout — matches code.html structure:
-              flex-col → [full-width header] + [flex-row → sidebar | main | right-pane]
-              No floating cards on the chrome. Header: border-b. Sidebar: border-r.
-              Main content: pearl bg-[#f9f9fb]. Right pane: m-4 rounded-xl shadow-xl.
+              The onboarding frame (the legacy layout, kept for onboarding only):
+              flex-col → [full-width header] + [flex-row → steps sidebar | main | right-pane]
             */}
             <div className="d-app h-screen flex flex-col overflow-hidden bg-[#f9f9fb] v2:bg-surface print:h-auto print:overflow-visible print:block">
 
@@ -310,13 +305,11 @@ function AppLayoutContent({ children, isSystemAdmin }: { children: React.ReactNo
                         className="bg-white border-r border-[#e5e7eb] v2:bg-surface-sidebar v2:border-line flex flex-col shrink-0 overflow-visible transition-all duration-300 relative z-20"
                         style={{ width: sidebarWidth }}
                     >
-                        {showOnboardingSidebar ? <OnboardingSidebar /> : <AppSidebar variant="inline" isSystemAdmin={isSystemAdmin} />}
+                        <OnboardingSidebar />
                     </div>
 
                     {/* ── Main content: pearl bg, architectural dot pattern ── */}
                     <main className="flex-1 min-w-0 flex flex-col overflow-hidden bg-[#f9f9fb] v2:bg-surface relative print:overflow-visible print:block">
-                        {/* In the New UI this frame only hosts onboarding: plain surface, no dot pattern. */}
-                        <div className="absolute inset-0 architectural-dot opacity-[0.15] pointer-events-none v2:hidden" />
                         <div className="relative z-10 flex-1 min-h-0 overflow-y-auto overflow-x-hidden print:overflow-visible print:flex-none print:h-auto">
                             <div className="w-full px-6 pt-6 pb-6 min-h-full flex flex-col print:min-h-0">{children}</div>
                         </div>
@@ -396,17 +389,15 @@ export function DLayoutClient({
     children,
     initialFirms,
     isSystemAdmin,
-    uiShell,
     sidebarCollapsed,
 }: {
     children: React.ReactNode
     initialFirms: { id: string; name: string; slug: string; isDefault: boolean; createdAt: string; sandboxOnly?: boolean; groupSlug?: string | null }[]
     isSystemAdmin?: boolean
-    uiShell: UiShell
     sidebarCollapsed?: boolean
 }) {
     return (
-        <UiShellProvider shell={uiShell} sidebarCollapsed={sidebarCollapsed}>
+        <UiShellProvider sidebarCollapsed={sidebarCollapsed}>
         <DemoTourProvider>
         <OnboardingProvider>
             <SidebarFirmsProvider firms={initialFirms}>

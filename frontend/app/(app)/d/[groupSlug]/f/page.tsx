@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter, usePathname, useParams } from 'next/navigation'
-import { Building2, ArrowRight, Loader2, Plus, Home, ChevronRight, Users } from 'lucide-react'
+import { Building2, ArrowRight, Loader2, Plus, Users } from 'lucide-react'
 import { getDomainOnboardingOptionsForCurrentUser, joinOrganizationByDomain, type DomainOnboardingOptions, type DomainOrgOption } from '@/lib/actions/domain-onboarding'
 import { getUserFirms, getIsGroupAdmin, type FirmOption } from '@/lib/actions/firms'
 import { BRAND_NAME } from '@/config/brand'
@@ -15,14 +15,12 @@ import { Tag } from '@/components/ui/tag'
 import { WorkspaceCard } from '@/components/projects/workspace-card'
 import { WorkspaceTable } from '@/components/projects/workspace-table'
 import { ViewModeToggle, useViewMode } from '@/components/ui/view-mode-toggle'
-import { useUiShell } from '@/lib/ui-shell-context'
 import { AddFirmModal } from '@/components/projects/add-firm-modal'
 import { FirmSwitchDialog } from '@/components/projects/firm-switch-dialog'
 import { firmPath } from '@/lib/navigation/firm-paths'
 
 export default function WorkspacePickerPage() {
     const router = useRouter()
-    const uiShell = useUiShell()
     const pathname = usePathname()
     const { groupSlug } = useParams<{ groupSlug: string }>()
     const [firms, setFirms] = useState<FirmOption[]>([])
@@ -93,15 +91,6 @@ export default function WorkspacePickerPage() {
     return (
         <TooltipProvider>
         <div className="flex flex-col h-full overflow-y-auto">
-            {/* v1 only: the New UI's header bar carries the breadcrumb. */}
-            {uiShell === 'v1' && (
-                <nav className="flex items-center gap-1.5 mb-4">
-                    <Home className="h-4 w-4 text-[#45474c] opacity-60" />
-                    <ChevronRight className="h-3.5 w-3.5 text-[#d1d5db]" />
-                    <Building2 className="h-4 w-4 text-primary" />
-                    <span className="font-mono text-[11px] font-bold text-[#1b1b1d] uppercase tracking-tighter">Firms</span>
-                </nav>
-            )}
 
             <PageHeading
                 icon={<Building2 />}

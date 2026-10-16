@@ -2,11 +2,11 @@
  * UI token layer — .claude/plans/ui-ux-overhaul.md (Phase 0).
  *
  * Two scopes:
- *   :root           Legacy (v1) values. Each one equals the literal it will replace in components
- *                   (`#45474c` → fg-muted, `#e5e7eb` → line, …), so moving a class onto a token
- *                   never changes the v1 UI.
- *   [data-ui="v2"]  Notion-style values. Set on <html> by the per-user New UI toggle
- *                   (lib/ui-shell.ts) — only ever on /d routes.
+ *   :root           Legacy values, still used by the onboarding frame and pages outside /d
+ *                   (sign-in, share links, marketing). Each one equals the literal it replaced
+ *                   (`#45474c` → fg-muted, `#e5e7eb` → line, …).
+ *   [data-ui="v2"]  Notion-style values. Set on <html> on every /d route (lib/ui-shell.ts); the
+ *                   New UI is the only app UI.
  *
  * Text tokens are solid colors picked to clear WCAG AA (4.5:1) on both the canvas and the sidebar;
  * hover / selected / line use alpha so they read the same on any surface. Tag text is darkened

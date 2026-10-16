@@ -1188,6 +1188,32 @@ and billing leftovers).
 
 ### Phase 7 — Sign-off and cutover
 
+**Cleanup, first pass (2026-10-16, Deepak's go-ahead):**
+- **Shell switch gone.** `lib/ui-shell.ts` only marks `<html data-ui="v2">` (`applyNewUi` /
+  `clearNewUi`). `setUiShell`, the `fm_ui_shell` cookie, `UiShell` and `useUiShell` are deleted;
+  `uiPrefs` keeps only `sidebarCollapsed` (an old `shell` key in a row is ignored). The landing
+  resolver and the engagement default tab no longer check the shell.
+- **Legacy frame:** `d-layout-client.tsx` renders the New UI frame everywhere except onboarding,
+  which keeps the old frame with its own steps sidebar and `AppTopbar` (so `AppTopbar`,
+  `command-palette.tsx` and `sidebar-context` stay). The v1 `AppSidebar` (with its localStorage
+  recents) and the v1-only `FirmSelector` are deleted, with their CSS.
+- **v1-only blocks removed** from the firm view (old breadcrumb, identity header, tab strip,
+  skeleton, logo read), client view, engagement workspace, billing, both pickers and `/d/u`.
+- **Retired pages deleted:** `/d/u/{bookmarks,recent,reminders,notifications}` (next.config.js
+  still redirects the URLs), `MovedPage`, the `/d/u` slot context, `FirmHome` with
+  `DueSoonSection`, and `lib/actions/user-bookmarks.ts`. The push toggle and Broadcast dialog
+  moved to `components/notifications/`.
+- **Upload bar** uses the brand accent, so the hidden second brand color affects nothing.
+- **Kept on purpose, needing a decision:**
+  - **Features the New UI never got:** What's New (`whats-new-modal.tsx`, `use-whats-new.ts`,
+    `content/releases-meta.json`) lived only in the v1 sidebar, and Broadcast only on the old
+    Notifications page. The files stay so they can be re-homed.
+  - **Tokens, `.d-app` remaps, the `v2:` variant (322 uses) and the font `@import`:** the
+    onboarding frame and pages outside `/d` (sign-in, share links, marketing) still use the legacy
+    values. Flattening changes how those look, so it's its own decision.
+  - **Ask Brio search code:** hidden, not dead.
+
+**Original list:**
 - Make v2 the default for everyone, and keep the toggle for a while.
 - **After Deepak signs off,** a separate cleanup PR deletes:
   - the legacy shell and the dead files listed above

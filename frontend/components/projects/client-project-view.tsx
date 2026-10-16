@@ -6,7 +6,7 @@ import { getProjectMemberSummaries, type ProjectMemberSummary } from '@/lib/acti
 import { ProjectList } from './engagement-list'
 import { ClientSettingsForm } from './client-settings-form'
 import type { LwCrmClientStatus } from '@/lib/actions/client'
-import { Plus, ChevronRight, Building2, Users, Briefcase, Home, Settings, UserCog, Contact } from 'lucide-react'
+import { Plus, Users, Briefcase, Settings, UserCog, Contact } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { AddEngagementModal } from './add-engagement-modal'
@@ -14,9 +14,7 @@ import { ClientDetailsModal } from './client-details-modal'
 import { ClientContactsTab } from './client-contacts-tab'
 import { ClientMembersTab } from './members/client-members-tab'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import Link from 'next/link'
-import { firmPath, firmTabPath, groupFirmListPath } from '@/lib/navigation/firm-paths'
-import { useUiShell } from '@/lib/ui-shell-context'
+import { firmTabPath } from '@/lib/navigation/firm-paths'
 import { ClientHeader } from './client-header'
 import { AccessLock } from '@/components/ui/access-lock'
 import { EmptyPanel } from '@/components/ui/empty-panel'
@@ -51,7 +49,6 @@ export function ClientProjectView({ clients, groupSlug, firmSlug, firmName, firm
     const [isFirmOwner, setIsFirmOwner] = useState(false)
     const [isPendingRefresh, startRefresh] = useTransition()
     const [pendingTab, setPendingTab] = useState<string | null>(null)
-    const uiShell = useUiShell()
 
     const tabParam = searchParams.get('tab') || 'projects'
     const currentTab =
@@ -121,21 +118,6 @@ export function ClientProjectView({ clients, groupSlug, firmSlug, firmName, firm
 
     return (
         <div className="flex flex-col h-full">
-            {/* The New UI header bar carries the breadcrumb; the legacy one stays for the v1 opt-out. */}
-            {uiShell === 'v1' && (
-                <nav className="flex items-center gap-1.5 mb-4">
-                    <Link href={groupFirmListPath(groupSlug)} className="hover:opacity-80">
-                        <Home className="h-4 w-4 text-fg" />
-                    </Link>
-                    <ChevronRight className="h-3.5 w-3.5 text-line-strong" />
-                    <Building2 className="h-4 w-4 text-fg-muted opacity-60" />
-                    <Link href={firmPath(groupSlug, firmSlug)} className="text-small text-fg-muted hover:text-fg">
-                        {firmName || 'Firm'}
-                    </Link>
-                    <ChevronRight className="h-3.5 w-3.5 text-line-strong" />
-                    <span className="text-small font-medium text-fg">{selectedClient ? selectedClient.name : 'Client'}</span>
-                </nav>
-            )}
 
             <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
                 {selectedClient ? (

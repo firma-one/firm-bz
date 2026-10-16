@@ -15,7 +15,7 @@ vi.mock('next/link', () => ({
 vi.mock('@/lib/auth-context', () => ({
     useAuth: () => ({ user: { email: 'pat@acme.test', user_metadata: { full_name: 'Pat Lee' } }, signOut: vi.fn() }),
 }))
-vi.mock('@/lib/actions/user-ui-prefs', () => ({ setUiShell: vi.fn(), setSidebarCollapsed: vi.fn() }))
+vi.mock('@/lib/actions/user-ui-prefs', () => ({ setSidebarCollapsed: vi.fn() }))
 vi.mock('@/lib/actions/firms', () => ({ switchFirm: vi.fn() }))
 vi.mock('@/components/app/ai-credits-indicator', () => ({ AiCreditsIndicator: () => null }))
 vi.mock('@/lib/actions/user-reminders', () => ({ checkDailyReminderDigest: vi.fn(async () => ({ notify: false, count: 0, overdue: 0 })) }))

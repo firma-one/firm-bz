@@ -13,15 +13,11 @@ import { firmPath, groupFirmListPath } from '@/lib/navigation/firm-paths'
  */
 
 /**
- * v2 landing: the cross-firm Home (.claude/plans/cross-firm-home-inbox.md) for anyone with a firm
- * to land in. Null — fall through to the v1 pickers — for v1 users and users with no landable firm.
+ * The cross-firm Home (.claude/plans/cross-firm-home-inbox.md) for anyone with a firm to land in.
+ * Null — fall through to the pickers — for users with no landable firm.
  * (Before Home spanned firms, this picked the last-visited or default firm's Home.)
  */
-async function resolveV2LandingPath(userId: string, firms: Awaited<ReturnType<typeof FirmService.getUserFirms>>): Promise<string | null> {
-    const { getUserUiPrefs } = await import('@/lib/ui-prefs')
-    const { shell } = await getUserUiPrefs(userId)
-    if (shell !== 'v2') return null
-
+function resolveHomeLandingPath(firms: Awaited<ReturnType<typeof FirmService.getUserFirms>>): string | null {
     const landable = firms.filter((f) => f.slug && f.groupSlug)
     if (landable.length === 0) return null
 
@@ -75,10 +71,11 @@ export async function resolveDefaultFirmLandingPath(userId: string): Promise<str
         }
     }
 
-    // New UI (v2): a returning user lands on the cross-firm Home — no group or firm picker. A brand
-    // new user (auto-provisioned above) still lands in their new firm. v1 keeps the rules below.
-    const v2Path = await resolveV2LandingPath(userId, allFirms)
-    if (v2Path) return v2Path
+    // A returning user lands on the cross-firm Home — no group or firm picker. A brand new user
+    // (auto-provisioned above) still lands in their new firm. The rules below cover only users
+    // whose firms have no slug yet.
+    const homePath = resolveHomeLandingPath(allFirms)
+    if (homePath) return homePath
 
     const distinctGroupSlugs = Array.from(new Set(allFirms.map((f) => f.groupSlug).filter((s): s is string => Boolean(s))))
     if (distinctGroupSlugs.length === 0) return null
