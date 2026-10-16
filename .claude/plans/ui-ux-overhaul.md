@@ -1134,6 +1134,13 @@ other in-page scrollers.
 - **Sections:** the Overview's sections are 2.5rem apart (was 1.5–2rem). The First-Time-Right
   "already reworked" note is plain amber text, no pale box.
 
+**Sidebar tone (2026-10-16):** Deepak asked whether the sidebar should be white; he left the call
+to me. Decided: a lighter warm tint, `--ui-surface-sidebar: #f9f9f8` (was Notion's `#f7f7f5`), not
+white. Navigation should never be as bright as the content; Notion and Linear both tint the
+frame and keep the page white. A white sidebar would compete with the page and need a heavier
+border to separate them. The lighter tone brightens the window and keeps the separation, with the
+existing hairline edge and translucent hover/selected tints. Muted text is 4.85:1 on it (was 4.76).
+
 **Next:** Phase 7 sign-off: visual review of everything above in a signed-in browser, then
 cleanup (delete the v1 shell, the `setUiShell` action and `uiPrefs.shell`, `DueSoonSection`, the
 old Bookmarks table and personal Recent/Reminders/Notifications pages, and the unused onboarding

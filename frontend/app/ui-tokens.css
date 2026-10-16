@@ -90,13 +90,16 @@
 [data-ui='v2'] {
   /* Surfaces */
   --ui-surface: #ffffff;
-  --ui-surface-sidebar: #f7f7f5;
+  /* A step lighter than Notion's #f7f7f5: still a frame around the white page (navigation should
+     never be as bright as the content), but the window as a whole reads brighter. The hairline
+     edge and the translucent hover/selected tints keep the separation on the lighter tone. */
+  --ui-surface-sidebar: #f9f9f8;
   --ui-surface-subtle: #fbfbfa;
   --ui-surface-muted: #f1f1ef;
   --ui-surface-hover: rgba(55, 53, 47, 0.06);
   --ui-surface-selected: rgba(55, 53, 47, 0.09);
 
-  /* Text — fg-muted is 5.1:1 on canvas, 4.8:1 on sidebar */
+  /* Text — fg-muted is 5.1:1 on canvas, 4.85:1 on sidebar */
   --ui-fg: #37352f;
   --ui-fg-muted: #6f6e69;
   --ui-fg-subtle: #a5a4a1; /* placeholders, disabled, decorative icons only — not body copy */
