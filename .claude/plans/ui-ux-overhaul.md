@@ -975,6 +975,10 @@ passes the firm from the URL.
   the Upgrade link), and a sticky footer with ghost Cancel and accent Create. The dialogs are 600px
   wide, single column.
 - **Default triggers:** "New firm", "New client" and "New engagement", each with a plus icon.
+- **Invite dialogs (2026-10-16):** the engagement, firm and client invites moved onto the same
+  frame. Email and Role are property rows, and a contributor's access level is a Full/Limited
+  toggle. One muted line says what the role can do, replacing the bordered persona card. The
+  button reads "Send invitation". Tests: `invite-member-modal.test.tsx`.
 
 - **Profile menu (`sidebar-v2.tsx`):** adds "View changelog" (`/resources/changelog`) and a "Learn
   more" submenu with "Privacy policy" (`/privacy`) and "Terms of service" (`/terms`). These are the
