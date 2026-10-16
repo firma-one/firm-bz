@@ -43,6 +43,7 @@ export function EngagementHeader({
     membersHref,
     personaDisplayName,
     fetchPeople = true,
+    clientHref,
 }: {
     projectId: string
     groupSlug: string
@@ -62,6 +63,8 @@ export function EngagementHeader({
     personaDisplayName?: string | null
     /** False in the page's loading state: show the cached people only, don't fetch them again. */
     fetchPeople?: boolean
+    /** Where the Client property links; defaults to the client's firm page. The public demo passes its own. */
+    clientHref?: string
 }) {
     const router = useRouter()
     const { addToast } = useToast()
@@ -176,7 +179,7 @@ export function EngagementHeader({
                 {clientName && (
                     <Prop label="Client">
                         <Link
-                            href={clientPath(groupSlug, orgSlug, clientSlug)}
+                            href={clientHref ?? clientPath(groupSlug, orgSlug, clientSlug)}
                             className="inline-flex h-7 items-center gap-1.5 rounded-control px-1.5 text-small text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg"
                         >
                             <FolderOpen className="h-3.5 w-3.5" />

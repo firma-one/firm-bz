@@ -121,6 +121,8 @@ export function HomeView({
     calendarEvents,
     work,
     bookmarks,
+    calendarHref: calendarHrefOverride,
+    readOnly = false,
 }: {
     firstName: string | null
     /** Every firm the viewer may open — the filter's options. */
@@ -132,6 +134,10 @@ export function HomeView({
     calendarEvents: CalendarEvent[]
     work: MyWork
     bookmarks: HomeBookmark[]
+    /** Where "Open calendar" goes, when it isn't the one firm's calendar page (the public demo). */
+    calendarHref?: string
+    /** No write actions: bookmarks can't be removed (the public demo). */
+    readOnly?: boolean
 }) {
     const shownFirms = selectedFirm ? [selectedFirm] : firms
     const multiFirm = shownFirms.length > 1
@@ -160,7 +166,8 @@ export function HomeView({
         date: d.dueDate,
     }))
     // One firm on screen has one calendar to open; a cross-firm week has none.
-    const calendarHref = shownFirms.length === 1 ? firmTabPath(shownFirms[0].groupSlug, shownFirms[0].slug, "calendar") : undefined
+    const calendarHref =
+        calendarHrefOverride ?? (shownFirms.length === 1 ? firmTabPath(shownFirms[0].groupSlug, shownFirms[0].slug, "calendar") : undefined)
 
     return (
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 pb-10">
@@ -193,7 +200,7 @@ export function HomeView({
                         firmNames={multiFirm ? Object.fromEntries(firmName) : undefined}
                     />
 
-                    <HomeBookmarks bookmarks={bookmarks.map((b) => ({ ...b, context: label(b.firmId, b.context) }))} />
+                    <HomeBookmarks bookmarks={bookmarks.map((b) => ({ ...b, context: label(b.firmId, b.context) }))} readOnly={readOnly} />
                 </>
             )}
         </div>

@@ -1,108 +1,125 @@
-import Link from 'next/link'
-import { Briefcase, Building2, ChevronRight, Contact, Home, Settings, SquarePlus, Users } from 'lucide-react'
-import { DemoClient, DEMO_FIRM } from '@/lib/demo/static-demo-data'
-import { DemoEngagementGrid } from '@/components/demo/demo-engagement-grid'
-import { DemoDeadTab } from '@/components/demo/demo-dead-tab'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+'use client'
 
-interface DemoClientDetailProps {
-    client: DemoClient
+import { Briefcase, Contact, Plus, Settings } from 'lucide-react'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { AccessLock } from '@/components/ui/access-lock'
+import { Button } from '@/components/ui/button'
+import { Hint } from '@/components/ui/tooltip'
+import { ClientHeader } from '@/components/projects/client-header'
+import { ProjectList } from '@/components/projects/engagement-list'
+import type { HierarchyClient } from '@/lib/actions/hierarchy'
+import type { ProjectMemberSummary } from '@/lib/actions/members'
+import type { DemoClient } from '@/lib/demo/static-demo-data'
+import { DELIVERABLE_ACTORS } from '@/lib/demo/demo-deliverables'
+
+const NOT_IN_DEMO = 'Not available in this demo'
+
+const daysBefore = (iso: string | undefined, days: number) => {
+    if (!iso) return null
+    const d = new Date(iso)
+    d.setDate(d.getDate() - days)
+    return d.toISOString()
 }
 
-/** Static counterpart to client-project-view.tsx. Full tab strip visible to Firm Admin/Engagement Lead is replicated; only Engagements is navigable, the rest render inert. */
-export function DemoClientDetail({ client }: DemoClientDetailProps) {
+/** The sample client in the shape the app's ClientHeader and ProjectList render. */
+function toHierarchyClient(client: DemoClient): HierarchyClient {
+    return {
+        id: client.slug,
+        name: client.name,
+        slug: client.slug,
+        status: client.status ?? 'ACTIVE',
+        industry: client.industry ?? null,
+        description: null,
+        website: null,
+        brandLogoUrl: null,
+        tags: [],
+        clientSinceDate: client.clientSinceDate ?? null,
+        expectedCloseDate: null,
+        followUpDate: client.followUpDate ?? null,
+        engagements: client.engagements.map((e, i) => ({
+            id: e.slug,
+            slug: e.slug,
+            name: e.name,
+            description: `${e.contractType ?? 'Client'} engagement`,
+            status: 'ACTIVE',
+            members: [{ role: 'eng_admin' }],
+            kickoffDate: daysBefore(e.dueDate, 90),
+            dueDate: e.dueDate ?? null,
+            updatedAt: new Date(Date.now() - (i + 1) * 5 * 3600_000).toISOString(),
+        })),
+    } as unknown as HierarchyClient
+}
+
+/**
+ * Static counterpart to client-project-view.tsx: the app's ClientHeader (read-only) and underline
+ * tabs, with the engagements in the app's ProjectList. Contacts and Settings are shown but inert.
+ */
+export function DemoClientDetail({ client }: { client: DemoClient }) {
+    const hierarchyClient = toHierarchyClient(client)
+    const leads: Record<string, ProjectMemberSummary> = Object.fromEntries(
+        client.engagements.map((e, i) => [
+            e.slug,
+            { projectLeads: [{ name: DELIVERABLE_ACTORS[i % DELIVERABLE_ACTORS.length], email: '' }], teamMembers: [], external: [] },
+        ]),
+    )
+
     return (
-        <TooltipProvider>
-        <div className="flex flex-col h-full">
-            {/* Breadcrumbs — monospace architectural style */}
-            <nav className="flex items-center gap-1.5 mb-4">
-                <Home className="h-4 w-4 text-[#45474c] opacity-60" />
-                <ChevronRight className="h-3.5 w-3.5 text-[#d1d5db]" />
-                <Building2 className="h-4 w-4 text-[#45474c] opacity-60" />
-                <Link
-                    href="/demo"
-                    className="font-mono text-[11px] text-[#45474c] opacity-60 uppercase tracking-tighter hover:opacity-100 transition-opacity"
-                >
-                    {DEMO_FIRM.name}
-                </Link>
-                <ChevronRight className="h-3.5 w-3.5 text-[#d1d5db]" />
-                <Users className="h-4 w-4 text-primary" />
-                <span className="font-mono text-[11px] font-bold text-[#1b1b1d] uppercase tracking-tighter">
-                    {client.name}
-                </span>
-            </nav>
+        <div className="flex flex-col">
+            <ClientHeader client={hierarchyClient} firmSlug="" canManage={false} />
 
-            {/* Client Identity Header — sits directly on pearl bg */}
-            <div className="flex items-start justify-between gap-6 mb-6">
-                <div className="flex items-center gap-6">
-                    <div className="w-16 h-16 bg-white border border-[#e5e7eb] flex items-center justify-center rounded shadow-sm shrink-0 overflow-hidden">
-                        <Users className="h-10 w-10 text-[#1b1b1d]" />
-                    </div>
-                    <div>
-                        <div className="flex items-center gap-3 flex-wrap">
-                            <h1 className="font-headline text-3xl md:text-4xl font-bold tracking-tight text-[#1b1b1d]">
-                                {client.name}
-                            </h1>
-                            {client.status && (
-                                <span className={`px-2 py-0.5 rounded font-mono text-[10px] tracking-tight uppercase shrink-0 border ${
-                                    client.status === 'ACTIVE' ? 'bg-[#f0edee] text-[#45474c] border-[#e5e7eb]' :
-                                    client.status === 'PROSPECT' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                                    client.status === 'ON_HOLD' ? 'bg-amber-50 text-amber-700 border-amber-200' :
-                                    client.status === 'PAST' ? 'bg-slate-100 text-slate-500 border-slate-200' :
-                                    'bg-[#f0edee] text-[#45474c] border-[#e5e7eb]'
-                                }`}>
-                                    {client.status === 'ON_HOLD' ? 'On Hold' : client.status.charAt(0) + client.status.slice(1).toLowerCase()}
-                                </span>
-                            )}
-                        </div>
-                        <div className="flex items-center gap-2 mt-1 flex-wrap">
-                            <p className="text-sm text-[#45474c]">Manage engagements and client settings.</p>
-                        </div>
+            <Tabs value="projects" className="flex flex-col">
+                <div className="mb-4 flex shrink-0 items-end justify-between gap-3 border-b border-line">
+                    <TabsList className="min-w-max border-b-0">
+                        <span data-demo-tour="client-engagements-tab" className="inline-flex">
+                            <TabsTrigger value="projects" className="relative gap-1.5">
+                                <Briefcase className="h-4 w-4" />
+                                Engagements
+                                <span className="text-small tabular-nums text-fg-subtle">{client.engagements.length}</span>
+                            </TabsTrigger>
+                        </span>
+                        <Hint label={NOT_IN_DEMO} side="bottom">
+                            <span className="inline-flex">
+                                <TabsTrigger value="contacts" disabled className="relative gap-1.5">
+                                    <Contact className="h-4 w-4" />
+                                    Contacts
+                                    <AccessLock label="Firm admins only — hidden from other members" />
+                                </TabsTrigger>
+                            </span>
+                        </Hint>
+                        <Hint label={NOT_IN_DEMO} side="bottom">
+                            <span className="inline-flex">
+                                <TabsTrigger value="settings" disabled className="relative gap-1.5">
+                                    <Settings className="h-4 w-4" />
+                                    Settings
+                                    <AccessLock label="Client managers only — partners and firm admins" />
+                                </TabsTrigger>
+                            </span>
+                        </Hint>
+                    </TabsList>
+                    <div className="shrink-0 pb-1.5">
+                        <Hint label={NOT_IN_DEMO} side="bottom">
+                            <span data-demo-tour="engagement-add-btn" className="inline-flex">
+                                <Button size="sm" type="button" disabled>
+                                    <Plus className="h-3.5 w-3.5" />
+                                    New engagement
+                                </Button>
+                            </span>
+                        </Hint>
                     </div>
                 </div>
-            </div>
 
-            {/* Tab strip — full-width white with border-b, all Firm Admin/Engagement Lead tabs shown; only Engagements is navigable */}
-            <div className="bg-white border border-[#e5e7eb] rounded mb-6 shrink-0 flex items-center h-14 overflow-hidden">
-                <div className="flex-1 min-w-0 h-full pr-4">
-                    <div className="h-full p-0 bg-transparent rounded-none inline-flex justify-start gap-0 border-0">
-                        <div data-demo-tour="client-engagements-tab" className="relative h-full px-4 rounded-none font-medium text-sm border-b-2 border-brand-accent text-[#1b1b1d] font-bold bg-transparent inline-flex items-center">
-                            <Briefcase className="w-4 h-4 mr-2" />
-                            Engagements
-                            {client.engagements.length > 0 && (
-                                <span className="ml-2 font-mono text-[10px] font-bold bg-primary text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
-                                    {client.engagements.length}
-                                </span>
-                            )}
-                        </div>
-                        <DemoDeadTab icon={Contact} label="Contacts" />
-                        <DemoDeadTab icon={Settings} label="Settings" />
-                    </div>
-                </div>
-                <div className="shrink-0 px-3 border-l border-[#e5e7eb] flex items-center">
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <button
-                                type="button"
-                                disabled
-                                data-demo-tour="engagement-add-btn"
-                                className="h-auto px-4 py-1.5 rounded bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase opacity-60 cursor-not-allowed inline-flex items-center gap-1.5"
-                            >
-                                <SquarePlus className="h-3.5 w-3.5" />
-                                Add Engagement
-                            </button>
-                        </TooltipTrigger>
-                        <TooltipContent side="bottom" className="text-xs">Not available in this demo</TooltipContent>
-                    </Tooltip>
-                </div>
-            </div>
-
-            <div className="flex-1 overflow-y-auto custom-scrollbar">
-                <div className="py-1">
-                    <DemoEngagementGrid client={client} engagements={client.engagements} />
-                </div>
-            </div>
+                <TabsContent value="projects" className="m-0">
+                    <ProjectList
+                        projects={hierarchyClient.engagements}
+                        groupSlug=""
+                        orgSlug=""
+                        clientSlug={client.slug}
+                        clientStatus={client.status}
+                        memberSummaries={leads}
+                        hrefFor={(p) => `/demo/${client.slug}/${p.slug}`}
+                    />
+                </TabsContent>
+            </Tabs>
         </div>
-        </TooltipProvider>
     )
 }

@@ -29,6 +29,8 @@ interface ProjectListProps {
     isRefreshing?: boolean
     /** Per-engagement people, from getProjectMemberSummaries — fills the Lead column. */
     memberSummaries?: Record<string, ProjectMemberSummary>
+    /** Where an engagement opens; defaults to its firm page. The public demo passes its own. */
+    hrefFor?: (project: HierarchyClient['engagements'][number]) => string
 }
 
 /** The current user's role on the engagement, as a short label. */
@@ -57,7 +59,7 @@ function isOverdue(due: string | null, status: string): boolean {
  * A client's engagements as a Notion table (.claude/plans/ui-ux-overhaul.md, Phase 6): one row
  * each — name, status, lead, dates, your role, last update. The whole row opens the engagement.
  */
-export function ProjectList({ projects, groupSlug, orgSlug, clientSlug, clientStatus, isRefreshing = false, memberSummaries }: ProjectListProps) {
+export function ProjectList({ projects, groupSlug, orgSlug, clientSlug, clientStatus, isRefreshing = false, memberSummaries, hrefFor }: ProjectListProps) {
     const router = useRouter()
 
     if (projects.length === 0 && !isRefreshing) {
@@ -97,7 +99,7 @@ export function ProjectList({ projects, groupSlug, orgSlug, clientSlug, clientSt
                     </tr>
                 )}
                 {projects.map((project) => {
-                    const href = engagementPath(groupSlug, orgSlug, clientSlug, project.slug)
+                    const href = hrefFor ? hrefFor(project) : engagementPath(groupSlug, orgSlug, clientSlug, project.slug)
                     const myRole = project.members.find((m) => m.role)?.role
                     const leads = memberSummaries?.[project.id]?.projectLeads ?? []
                     const start = day(project.kickoffDate)

@@ -13,7 +13,7 @@ export function DemoTourTopbarButton() {
                 type="button"
                 onClick={() => { if (!run) restartTour() }}
                 disabled={run}
-                className="flex h-8 w-8 items-center justify-center rounded-control text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg disabled:cursor-not-allowed disabled:opacity-40"
+                className="flex h-7 w-7 items-center justify-center rounded-control text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg disabled:cursor-not-allowed disabled:opacity-40"
                 aria-label="Start the guided tour"
             >
                 <MapPinned className="h-4 w-4" />

@@ -26,6 +26,8 @@ interface ClientListProps {
     orgSlug: string
     viewMode?: 'grid' | 'list'
     isRefreshing?: boolean
+    /** Where a client opens; defaults to the client's firm page. The public demo passes its own. */
+    hrefFor?: (client: ClientSummary) => string
 }
 
 /** Follow-up due within two days either side, as a tag — else nothing. */
@@ -72,7 +74,8 @@ function ClientMark({ client, accent, size = 'sm' }: { client: ClientSummary; ac
  * The firm's clients (.claude/plans/ui-ux-overhaul.md, Phase 6): a Notion table by default, or a
  * gallery of flat cards. Rows and cards open the client.
  */
-export function ClientList({ clients, groupSlug, orgSlug, viewMode = 'list', isRefreshing = false }: ClientListProps) {
+export function ClientList({ clients, groupSlug, orgSlug, viewMode = 'list', isRefreshing = false, hrefFor }: ClientListProps) {
+    const linkFor = (c: ClientSummary) => (hrefFor ? hrefFor(c) : clientPath(groupSlug, orgSlug, c.slug))
     const router = useRouter()
     const firmBranding = useBranding()
     const firmAccent = firmBranding?.themeColor && /^#[0-9A-Fa-f]{6}$/.test(firmBranding.themeColor) ? firmBranding.themeColor : null
@@ -102,7 +105,7 @@ export function ClientList({ clients, groupSlug, orgSlug, viewMode = 'list', isR
                         </tr>
                     )}
                     {clients.map((client) => {
-                        const href = clientPath(groupSlug, orgSlug, client.slug)
+                        const href = linkFor(client)
                         const follow = followUpTag(client.followUpDate ?? null)
                         return (
                             <NotionTableRow key={client.id} onClick={() => router.push(href)}>
@@ -148,7 +151,7 @@ export function ClientList({ clients, groupSlug, orgSlug, viewMode = 'list', isR
                 return (
                     <Link
                         key={client.id}
-                        href={clientPath(groupSlug, orgSlug, client.slug)}
+                        href={linkFor(client)}
                         className={`group flex h-36 flex-col rounded-card border bg-surface p-3.5 transition-colors hover:border-line-strong hover:bg-surface-hover ${
                             client.status === 'PROSPECT' ? 'border-dashed border-line-strong' : 'border-line'
                         }`}

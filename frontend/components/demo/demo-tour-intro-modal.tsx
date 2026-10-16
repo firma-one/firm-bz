@@ -6,14 +6,15 @@ import { useDemoTour } from '@/lib/demo/demo-tour-context'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Brio } from '@/components/ui/brio'
 
-const TOPICS = [
-    'Firm, clients and engagements',
-    'Brio: the firm brief and engagement Q&A',
-    'Calendar and Doc Search',
-    'Files, uploads and document actions',
-    'Board, comments, audit and members',
-    'Reminders, bookmarks and your profile',
+const TOPICS: { key: string; label: React.ReactNode }[] = [
+    { key: 'firm', label: 'Firm, clients and engagements' },
+    { key: 'brio', label: <><Brio />: the firm brief and engagement Q&amp;A</> },
+    { key: 'calendar', label: 'Calendar and Doc Search' },
+    { key: 'files', label: 'Files, uploads and document actions' },
+    { key: 'board', label: 'Board, comments, audit and members' },
+    { key: 'home', label: 'Home, Inbox and your profile' },
 ]
 
 /** Static counterpart to demo-tour-intro-modal.tsx — same resume-progress behavior, backed by
@@ -45,9 +46,9 @@ export function DemoTourIntroModal() {
                     {!hasProgress && (
                         <ul className="mt-4 space-y-1.5">
                             {TOPICS.map((topic) => (
-                                <li key={topic} className="flex items-start gap-2 text-small text-fg-muted">
+                                <li key={topic.key} className="flex items-start gap-2 text-small text-fg-muted">
                                     <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-action" />
-                                    {topic}
+                                    <span>{topic.label}</span>
                                 </li>
                             ))}
                         </ul>

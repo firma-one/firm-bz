@@ -5,6 +5,7 @@ import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import { Joyride, EVENTS, STATUS, type EventData, type Controls, type TooltipRenderProps } from 'react-joyride'
 import { X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Brio } from '@/components/ui/brio'
 import { DEMO_FIRM } from '@/lib/demo/static-demo-data'
 import { useDemoTour } from '@/lib/demo/demo-tour-context'
 
@@ -19,7 +20,7 @@ const eng = firstClient && firstEngagement ? `/demo/${firstClient.slug}/${firstE
 
 interface TourStep {
     target: string
-    title: string
+    title: React.ReactNode
     content: React.ReactNode
     route: string
     placement?: 'top' | 'bottom' | 'left' | 'right'
@@ -34,32 +35,32 @@ interface TourStep {
     skipScroll?: boolean
 }
 
-/** Static counterpart to components/app/demo-tour.tsx — same react-joyride config, same step
- * sequence/copy, adapted to the demo's own routes (?tab= for firm-level, path segments are not
- * used at engagement-level here since the demo keeps everything under ?tab=). Settings-page steps
- * (Firm/Client/Engagement Settings) and the View As step are omitted — those surfaces don't exist
- * in this static demo. */
+/** Static counterpart to components/app/demo-tour.tsx — same react-joyride config and step
+ * sequence, adapted to the demo's New UI shell: firm views are sidebar items (?tab= on /demo), and
+ * the old Recent, Reminders and Bookmarks sidebar sections are now Home and the Inbox. Settings-page
+ * steps (Firm/Client/Engagement Settings) and the View As step are omitted — those surfaces don't
+ * exist in this static demo. */
 const STEPS: TourStep[] = [
     {
         target: '[data-demo-tour="command-palette"]',
         title: 'Command palette',
         content: <p>Press ⌘K (or Ctrl K) to instantly jump anywhere — clients, engagements, settings, reminders, and more.</p>,
         route: firm,
-        placement: 'bottom',
+        placement: 'right',
         disableBeacon: true,
     },
     {
         target: '[data-demo-tour="firm-overview-tab"]',
         title: 'Firm overview',
-        content: <p>The Overview tab shows business insights — active engagements, recent activity, and key metrics across all clients.</p>,
+        content: <p>Overview shows business insights — revenue pipeline, engagement health, and what needs attention across all clients.</p>,
         route: `${firm}?tab=analytics`,
-        placement: 'bottom',
+        placement: 'right',
         skipScroll: true,
     },
     {
         target: '[data-demo-tour="firm-brief"]',
         title: "Today's brief",
-        content: <p><strong>Brio</strong>, Firma&apos;s AI assistant, writes a daily brief from your firm&apos;s own data: where things stand, what needs attention and what&apos;s worth watching.</p>,
+        content: <p><Brio />, Firma&apos;s AI assistant, writes a daily brief from your firm&apos;s own data: where things stand, what needs attention and what&apos;s worth watching.</p>,
         route: `${firm}?tab=analytics`,
         placement: 'bottom',
         skipScroll: true,
@@ -69,7 +70,7 @@ const STEPS: TourStep[] = [
         title: 'Calendar',
         content: <p>See deadlines and events across every client and engagement in your firm in one calendar — switch between Month, Week, Day, and Agenda views.</p>,
         route: `${firm}?tab=calendar`,
-        placement: 'bottom',
+        placement: 'right',
         skipScroll: true,
     },
     {
@@ -77,7 +78,7 @@ const STEPS: TourStep[] = [
         title: 'Doc search',
         content: <p>Search every document across your firm by filename or topic — powered by AI semantic search, with filters for file type, client, and engagement.</p>,
         route: `${firm}?tab=doc-search`,
-        placement: 'bottom',
+        placement: 'right',
         skipScroll: true,
     },
     {
@@ -85,7 +86,7 @@ const STEPS: TourStep[] = [
         title: 'Firm members',
         content: <p>As the firm owner, you&apos;re an administrator by default. Invite more administrators here if you&apos;d like help managing the firm. Per-engagement access and roles are set separately in each engagement&apos;s Members tab.</p>,
         route: `${firm}?tab=members`,
-        placement: 'bottom',
+        placement: 'right',
         skipScroll: true,
     },
     {
@@ -93,7 +94,7 @@ const STEPS: TourStep[] = [
         title: 'Firm audit log',
         content: <p>A complete activity log across all clients and engagements in your firm — searchable and exportable.</p>,
         route: `${firm}?tab=audit`,
-        placement: 'bottom',
+        placement: 'right',
         skipScroll: true,
     },
     {
@@ -101,7 +102,7 @@ const STEPS: TourStep[] = [
         title: 'Clients',
         content: <p>Every client workspace for your firm lives here — each with its own branding, contacts, and engagements.</p>,
         route: `${firm}?tab=clients`,
-        placement: 'bottom',
+        placement: 'right',
         skipScroll: true,
     },
     {
@@ -149,8 +150,8 @@ const STEPS: TourStep[] = [
         },
         {
             target: '[data-demo-tour="ask-brio"]',
-            title: 'Ask Brio',
-            content: <p>Ask <strong>Brio</strong> about this engagement: what&apos;s due, what&apos;s waiting on the client, where things stand. Prompt hints get you started, and Brio is on the Files tab too.</p>,
+            title: <>Ask <Brio /></>,
+            content: <p>Ask <Brio /> about this engagement: what&apos;s due, what&apos;s waiting on the client, where things stand. Prompt hints get you started, and <Brio noIcon /> is on the Files tab too.</p>,
             route: `${eng}?tab=analytics`,
             placement: 'top' as const,
             skipScroll: true,
@@ -228,46 +229,28 @@ const STEPS: TourStep[] = [
         placement: 'right',
     },
     {
-        target: '[data-demo-tour="sidebar-support"]',
-        title: 'Support',
-        content: (
-            <div className="space-y-2">
-                <p>No more chasing support over email. Firma has a built-in support module — raise a request, track its status, and get responses, all without leaving the app.</p>
-                <ul className="space-y-1.5">
-                    <li><strong>Contextual</strong> — requests are tied to your firm, so our team has full context from the start.</li>
-                    <li><strong>Trackable</strong> — see open, in-progress, and resolved tickets in one place.</li>
-                    <li><strong>Always accessible</strong> — one click away in the sidebar, wherever you are in the app.</li>
-                </ul>
-            </div>
-        ),
-        route: firm,
+        target: '[data-demo-tour="sidebar-home"]',
+        title: 'Home',
+        content: <p>Home picks up where you left off: recent pages, this week&apos;s agenda, what needs you, your engagements and your bookmarks.</p>,
+        route: `${firm}/home`,
         placement: 'right',
     },
     {
-        target: '[data-demo-tour="sidebar-recent"]',
-        title: 'Recent',
-        content: <p>Quickly jump back to recently visited clients and engagements. The last 10 are tracked automatically.</p>,
-        route: firm,
-        placement: 'right',
-    },
-    {
-        target: '[data-demo-tour="sidebar-reminders"]',
-        title: 'Reminders',
-        content: <p>Auto reminders are set based on follow-up dates, due dates or assignments. They surface here so nothing slips through the cracks.</p>,
-        route: firm,
-        placement: 'right',
-    },
-    {
-        target: '[data-demo-tour="sidebar-bookmarks"]',
-        title: 'Bookmarks',
-        content: <p>Bookmark any document or engagement for fast access. Your bookmarks are always one click away.</p>,
-        route: firm,
+        target: '[data-demo-tour="sidebar-inbox"]',
+        title: 'Inbox',
+        content: <p>Reminders from due dates, follow-ups, review requests and @mentions land here with your notifications, so nothing slips through the cracks.</p>,
+        route: `${firm}/inbox`,
         placement: 'right',
     },
     {
         target: '[data-demo-tour="profile-menu"]',
         title: 'Profile menu',
-        content: <p>Access billing, plan usage, firm switcher and sign-out from here.</p>,
+        content: (
+            <div className="space-y-2">
+                <p>Your profile, billing, plan usage and sign-out live here.</p>
+                <p>So does <strong>Support</strong>: raise a request, track its status and get answers without leaving the app. Requests are tied to your firm, so our team has the context from the start.</p>
+            </div>
+        ),
         route: firm,
         placement: 'right',
     },
@@ -276,7 +259,7 @@ const STEPS: TourStep[] = [
 /**
  * The tour's step card, in the app's design system: a popover-style card with the step title, its
  * copy in muted text, a step counter and Skip on the left, Back and Next on the right. Joyride
- * portals it to the body, outside the demo shell's legacy token scope (demo.css).
+ * portals it to the body, outside the demo shell.
  *
  * Joyride's button props carry a `title`, which would show the browser's native tooltip; it is
  * dropped in favor of the visible labels.

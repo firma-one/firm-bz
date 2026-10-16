@@ -63,7 +63,8 @@ export function openCommandPalette() {
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true, bubbles: true }))
 }
 
-function SidebarItem({
+/** One sidebar row: icon, label, optional trailing count or lock. Shared with the public demo. */
+export function SidebarItem({
     href,
     onClick,
     icon,
@@ -108,7 +109,8 @@ function SidebarItem({
     )
 }
 
-function SidebarSection({
+/** A collapsible sidebar group with a quiet caption title. Shared with the public demo. */
+export function SidebarSection({
     id,
     title,
     children,
@@ -442,7 +444,8 @@ export function SidebarV2({
     )
 }
 
-function ClientGroup({ name, defaultOpen, storageId, children }: { name: string; defaultOpen: boolean; storageId: string; children: ReactNode }) {
+/** A client in the engagement tree, expandable to its engagements. Shared with the public demo. */
+export function ClientGroup({ name, defaultOpen, storageId, children }: { name: string; defaultOpen: boolean; storageId: string; children: ReactNode }) {
     const key = `fm_v2_sidebar_client_${storageId}`
     const [open, setOpen] = useState(defaultOpen)
     useEffect(() => {

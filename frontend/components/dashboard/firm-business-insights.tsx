@@ -110,7 +110,8 @@ function EngagementDrillBar({ engagements, clientTotal, symbol, onBack, clientNa
     )
 }
 
-function PipelineBar({ items, total, symbol }: { items: ClientPipelineItem[]; total: number; symbol: string }) {
+/** The client pipeline bar with its drill-down. Shared with the public demo's Overview. */
+export function PipelineBar({ items, total, symbol }: { items: ClientPipelineItem[]; total: number; symbol: string }) {
     const [hovered, setHovered] = useState<string | null>(null)
     const [drillClient, setDrillClient] = useState<{ item: ClientPipelineItem; colorIndex: number } | null>(null)
     const isDrilled = drillClient !== null
@@ -201,7 +202,7 @@ function PipelineBar({ items, total, symbol }: { items: ClientPipelineItem[]; to
  * One block of the Business overview. A full-width hairline sets it apart from the block above,
  * as between the ring rows on the engagement Overview.
  */
-function SubSection({ title, trailing, children }: { title: string; trailing?: React.ReactNode; children: React.ReactNode }) {
+export function SubSection({ title, trailing, children }: { title: string; trailing?: React.ReactNode; children: React.ReactNode }) {
     return (
         <div className="mt-5 border-t border-line pt-4">
             <div className="mb-3 flex items-baseline justify-between gap-3">

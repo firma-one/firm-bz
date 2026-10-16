@@ -51,6 +51,52 @@ type Section = { id: string; title: string; icon: React.ReactNode; items: InboxI
 
 type InboxFirm = { id: string; slug: string; name: string }
 
+/** Where the Inbox reads and writes. The app uses the live one; the public demo passes static data. */
+export type InboxSource = {
+    load: () => Promise<{ reminders: ReminderWithContext[]; notifications: ApiNotification[] }>
+    markRead: (notificationId: string) => Promise<void>
+    dismiss: (notificationId: string) => Promise<void>
+    markDone: (reminderId: string) => Promise<void>
+    hide: (reminderId: string) => Promise<void>
+    /** Every firm's notifications, or one firm's. */
+    markAllRead: (firmId: string | null) => Promise<void>
+}
+
+const LIVE_SOURCE: InboxSource = {
+    load: async () => {
+        const [reminders, res] = await Promise.all([
+            getAllUserReminders().catch(() => [] as ReminderWithContext[]),
+            fetch("/api/notifications?firms=all")
+                .then((r) => (r.ok ? r.json() : { notifications: [] }))
+                .catch(() => ({ notifications: [] })),
+        ])
+        return { reminders, notifications: (res.notifications ?? []) as ApiNotification[] }
+    },
+    markRead: async (id) => {
+        await fetch("/api/notifications", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ids: [id] }),
+        }).catch(() => {})
+    },
+    dismiss: async (id) => {
+        await fetch("/api/notifications?firms=all", {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ids: [id] }),
+        })
+    },
+    markDone: (id) => markReminderDone(id),
+    hide: (id) => hideReminder(id),
+    markAllRead: async (firmId) => {
+        await fetch(firmId ? `/api/notifications?firmId=${encodeURIComponent(firmId)}` : "/api/notifications?firms=all", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ markAllRead: true }),
+        }).catch(() => {})
+    },
+}
+
 /**
  * The New UI's unified Inbox at `/d/u/inbox`, across every firm the caller may open
  * (.claude/plans/cross-firm-home-inbox.md) or the one picked with `?firm={slug}`: reminders
@@ -59,7 +105,15 @@ type InboxFirm = { id: string; slug: string; name: string }
  * its firm. Keyboard: j/k or arrows to move, Enter to open, e to mark done or dismiss, h to hide a
  * reminder.
  */
-export function InboxView({ firms, unavailable = [] }: { firms: InboxFirm[]; unavailable?: UnavailableFirm[] }) {
+export function InboxView({
+    firms,
+    unavailable = [],
+    source = LIVE_SOURCE,
+}: {
+    firms: InboxFirm[]
+    unavailable?: UnavailableFirm[]
+    source?: InboxSource
+}) {
     const router = useRouter()
     const searchParams = useSearchParams()
     const selectedFirm = firms.find((f) => f.slug === searchParams?.get("firm")) ?? null
@@ -85,16 +139,11 @@ export function InboxView({ firms, unavailable = [] }: { firms: InboxFirm[]; una
     const listRef = useRef<HTMLDivElement>(null)
 
     const load = useCallback(async () => {
-        const [rem, res] = await Promise.all([
-            getAllUserReminders().catch(() => [] as ReminderWithContext[]),
-            fetch("/api/notifications?firms=all")
-                .then((r) => (r.ok ? r.json() : { notifications: [] }))
-                .catch(() => ({ notifications: [] })),
-        ])
-        setReminders(rem)
-        setNotifications((res.notifications ?? []) as ApiNotification[])
+        const data = await source.load()
+        setReminders(data.reminders)
+        setNotifications(data.notifications)
         setLoading(false)
-    }, [])
+    }, [source])
 
     useEffect(() => {
         void load()
@@ -137,13 +186,9 @@ export function InboxView({ firms, unavailable = [] }: { firms: InboxFirm[]; una
     const markRead = useCallback(async (item: InboxItem) => {
         if (item.source !== "notification" || !item.unread) return
         setNotifications((prev) => prev.map((n) => (n.id === item.sourceId ? { ...n, readAt: new Date().toISOString() } : n)))
-        await fetch("/api/notifications", {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ ids: [item.sourceId] }),
-        }).catch(() => {})
+        await source.markRead(item.sourceId)
         notifyChanged()
-    }, [])
+    }, [source])
 
     const select = useCallback(
         (item: InboxItem) => {
@@ -185,14 +230,10 @@ export function InboxView({ firms, unavailable = [] }: { firms: InboxFirm[]; una
             const next = flat[idx + 1] ?? flat[idx - 1] ?? null
             try {
                 if (item.source === "reminder") {
-                    await markReminderDone(item.sourceId)
+                    await source.markDone(item.sourceId)
                     setReminders((prev) => prev.filter((r) => r.id !== item.sourceId))
                 } else {
-                    await fetch("/api/notifications?firms=all", {
-                        method: "DELETE",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ ids: [item.sourceId] }),
-                    })
+                    await source.dismiss(item.sourceId)
                     setNotifications((prev) => prev.filter((n) => n.id !== item.sourceId))
                 }
                 setSelectedKey(next?.key ?? null)
@@ -201,7 +242,7 @@ export function InboxView({ firms, unavailable = [] }: { firms: InboxFirm[]; una
                 setBusy(false)
             }
         },
-        [flat]
+        [flat, source]
     )
 
     const hide = useCallback(
@@ -211,7 +252,7 @@ export function InboxView({ firms, unavailable = [] }: { firms: InboxFirm[]; una
             const idx = flat.findIndex((i) => i.key === item.key)
             const next = flat[idx + 1] ?? flat[idx - 1] ?? null
             try {
-                await hideReminder(item.sourceId)
+                await source.hide(item.sourceId)
                 setReminders((prev) => prev.map((r) => (r.id === item.sourceId ? { ...r, hiddenAt: new Date().toISOString() } : r)))
                 setSelectedKey(next?.key ?? null)
                 notifyChanged()
@@ -219,7 +260,7 @@ export function InboxView({ firms, unavailable = [] }: { firms: InboxFirm[]; una
                 setBusy(false)
             }
         },
-        [flat]
+        [flat, source]
     )
 
     // Marks what the list shows: every firm, or only the picked one's.
@@ -228,13 +269,9 @@ export function InboxView({ firms, unavailable = [] }: { firms: InboxFirm[]; una
         setNotifications((prev) =>
             prev.map((n) => (n.readAt || (selectedFirm && n.firmId !== selectedFirm.id) ? n : { ...n, readAt: now }))
         )
-        await fetch(selectedFirm ? `/api/notifications?firmId=${encodeURIComponent(selectedFirm.id)}` : "/api/notifications?firms=all", {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ markAllRead: true }),
-        }).catch(() => {})
+        await source.markAllRead(selectedFirm?.id ?? null)
         notifyChanged()
-    }, [selectedFirm])
+    }, [selectedFirm, source])
 
     // The shell's "G then <letter>" navigation shares h/i/… with this list; a key straight after G
     // belongs to the shell, not the Inbox.

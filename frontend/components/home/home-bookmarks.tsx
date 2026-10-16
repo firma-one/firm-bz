@@ -16,7 +16,7 @@ const COLLAPSED_COUNT = 8
  * engagements the viewer can see here arrive (getShellSidebarData). The section shows even when
  * empty, saying how to add one, since a hidden section can't be discovered.
  */
-export function HomeBookmarks({ bookmarks }: { bookmarks: ShellFavorite[] }) {
+export function HomeBookmarks({ bookmarks, readOnly = false }: { bookmarks: ShellFavorite[]; readOnly?: boolean }) {
     const [items, setItems] = useState(bookmarks)
     const [removing, setRemoving] = useState<string | null>(null)
     const [expanded, setExpanded] = useState(false)
@@ -59,19 +59,21 @@ export function HomeBookmarks({ bookmarks }: { bookmarks: ShellFavorite[] }) {
                         leading={b.kind === "document" ? <FileText /> : <Briefcase />}
                         title={b.label}
                         meta={b.context ?? undefined}
-                        className="pr-10"
+                        className={readOnly ? undefined : "pr-10"}
                     />
-                    <Hint label="Remove from bookmarks">
-                        <button
-                            type="button"
-                            onClick={() => remove(b.id)}
-                            disabled={removing === b.id}
-                            aria-label={`Remove ${b.label} from bookmarks`}
-                            className="absolute right-1.5 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-control text-fg-subtle opacity-0 transition-opacity hover:bg-surface-selected hover:text-fg focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action/30 disabled:opacity-50 group-hover/bookmark:opacity-100"
-                        >
-                            <X className="h-3.5 w-3.5" />
-                        </button>
-                    </Hint>
+                    {!readOnly && (
+                        <Hint label="Remove from bookmarks">
+                            <button
+                                type="button"
+                                onClick={() => remove(b.id)}
+                                disabled={removing === b.id}
+                                aria-label={`Remove ${b.label} from bookmarks`}
+                                className="absolute right-1.5 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-control text-fg-subtle opacity-0 transition-opacity hover:bg-surface-selected hover:text-fg focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action/30 disabled:opacity-50 group-hover/bookmark:opacity-100"
+                            >
+                                <X className="h-3.5 w-3.5" />
+                            </button>
+                        </Hint>
+                    )}
                 </div>
             ))}
             {hidden > 0 && (

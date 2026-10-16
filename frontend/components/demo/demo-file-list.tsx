@@ -1,12 +1,36 @@
 'use client'
 
 import { useState } from 'react'
-import { Briefcase, ChevronDown, ChevronRight, Copy, Download, Filter, Folder, Info, Link2, MoreVertical, PackageCheck, PackagePlus, RefreshCw, ScanEye, Share2, Trash2 } from 'lucide-react'
+import {
+    ArrowDownUp,
+    Briefcase,
+    ChevronRight,
+    Clock3,
+    Copy,
+    Download,
+    FileText,
+    Flag,
+    Folder,
+    HardDrive,
+    Hash,
+    Info,
+    Link2,
+    MoreVertical,
+    PackageCheck,
+    PackagePlus,
+    RefreshCw,
+    ScanEye,
+    Share2,
+    Trash2,
+    Type,
+    User,
+    UserRound,
+} from 'lucide-react'
 import { DocumentIcon } from '@/components/ui/document-icon'
-import { ProfileBubbleWithPopup } from '@/components/ui/profile-bubble-popup'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Button } from '@/components/ui/button'
+import { FilterPill } from '@/components/ui/filter-pill'
+import { Hint } from '@/components/ui/tooltip'
+import { RelativeDateTime } from '@/components/ui/relative-date-time'
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -14,10 +38,18 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { RelativeDateTime } from '@/components/ui/relative-date-time'
+import {
+    DATE_MODIFIED_COL_CLASS,
+    DUE_DATE_COL_CLASS,
+    FILE_SIZE_COL_CLASS,
+    FILE_TABLE_CONTAINER_CLASS,
+    FILE_TABLE_GRID_COLS_CLASS,
+    OWNER_COL_CLASS,
+} from '@/components/projects/engagement-file-table-grid'
 import { cn, formatFileSize } from '@/lib/utils'
-import { DemoFolder, DemoFile } from '@/lib/demo/static-demo-data'
-import { DeliverableStatus } from '@/lib/demo/demo-deliverables'
+import { initialsOf } from '@/lib/initials'
+import type { DemoFolder, DemoFile } from '@/lib/demo/static-demo-data'
+import type { DeliverableStatus } from '@/lib/demo/demo-deliverables'
 
 const MIME_BY_TYPE: Record<string, string> = {
     pdf: 'application/pdf',
@@ -31,65 +63,60 @@ const MIME_BY_TYPE: Record<string, string> = {
     jpg: 'image/jpeg',
     jpeg: 'image/jpeg',
     png: 'image/png',
-    gif: 'image/gif',
-    webp: 'image/webp',
     zip: 'application/zip',
 }
 
-const PREVIEW_OWNER = { name: 'Alex Jordan', email: 'alex@example.com' }
+const OWNER = 'Alex Jordan'
+const NOT_IN_DEMO = 'Not available in this demo'
 
-// Matches the real EngagementFileRow grid exactly: checkbox, ID, Name, Quick (x2), Owner, Date modified, Due date, File size.
-const GRID_COLS = '24px 72px minmax(0, 1fr) minmax(124px, 10%) 10% 14% 12% 10% 8%'
-
-function TableHeader({ label }: { label: string }) {
+function TableHeader({ label, icon }: { label: string; icon: React.ReactNode }) {
     return (
-        <div className="flex items-center gap-1 text-[0.8125rem] font-medium text-[#45474c] select-none">
+        <span className="flex select-none items-center gap-1.5 text-small text-fg-muted [&_svg]:h-3.5 [&_svg]:w-3.5 [&_svg]:text-fg-subtle">
+            {icon}
             {label}
-        </div>
+        </span>
     )
 }
 
-function InertFilterButton({ label }: { label: string }) {
+/** A ghost icon button with the app's hint; inert in the demo. */
+function QuickAction({ icon, label }: { icon: React.ReactNode; label: string }) {
     return (
-        <Tooltip>
-            <TooltipTrigger asChild>
-                <Button disabled variant="outline" size="sm" className="h-8 gap-1.5 text-xs bg-white rounded border-slate-200 text-slate-600 opacity-70 cursor-not-allowed">
-                    <Filter className="h-3 w-3 opacity-60" />
-                    {label}
-                    <ChevronDown className="h-3 w-3 opacity-50" />
-                </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" className="text-xs">Not available in this demo</TooltipContent>
-        </Tooltip>
+        <Hint label={`${label} (not in this demo)`}>
+            <button
+                type="button"
+                onClick={(e) => e.stopPropagation()}
+                className="inline-flex h-7 w-7 items-center justify-center rounded-control text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg [&_svg]:h-4 [&_svg]:w-4"
+                aria-label={label}
+            >
+                {icon}
+            </button>
+        </Hint>
     )
 }
 
 function RowActionMenu({ fileName }: { fileName: string }) {
-    const [open, setOpen] = useState(false)
     return (
-        <DropdownMenu open={open} onOpenChange={setOpen}>
+        <DropdownMenu>
             <DropdownMenuTrigger asChild>
                 <button
                     type="button"
                     data-demo-tour="document-action-trigger"
-                    className={cn(
-                        'h-7 w-7 rounded-md inline-flex items-center justify-center',
-                        open ? 'text-slate-700 bg-slate-100' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'
-                    )}
+                    onClick={(e) => e.stopPropagation()}
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-control text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg data-[state=open]:bg-surface-hover data-[state=open]:text-fg"
                     aria-label={`Actions for ${fileName}`}
                 >
                     <MoreVertical className="h-4 w-4" />
                 </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-[220px] py-1 text-xs rounded">
-                <DropdownMenuItem disabled className="text-xs py-1.5 gap-2"><Download className="h-3.5 w-3.5" /> Download</DropdownMenuItem>
-                <DropdownMenuItem disabled className="text-xs py-1.5 gap-2"><Share2 className="h-3.5 w-3.5" /> Share</DropdownMenuItem>
-                <DropdownMenuItem disabled className="text-xs py-1.5 gap-2"><Link2 className="h-3.5 w-3.5" /> Copy link</DropdownMenuItem>
+            <DropdownMenuContent align="end" className="w-[220px]">
+                <DropdownMenuItem disabled className="gap-2"><Download className="h-3.5 w-3.5" /> Download</DropdownMenuItem>
+                <DropdownMenuItem disabled className="gap-2"><Share2 className="h-3.5 w-3.5" /> Share</DropdownMenuItem>
+                <DropdownMenuItem disabled className="gap-2"><Link2 className="h-3.5 w-3.5" /> Copy link</DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem disabled className="text-xs py-1.5 gap-2"><Copy className="h-3.5 w-3.5" /> Duplicate</DropdownMenuItem>
-                <DropdownMenuItem disabled className="text-xs py-1.5 gap-2"><Info className="h-3.5 w-3.5" /> View details</DropdownMenuItem>
+                <DropdownMenuItem disabled className="gap-2"><Copy className="h-3.5 w-3.5" /> Duplicate</DropdownMenuItem>
+                <DropdownMenuItem disabled className="gap-2"><Info className="h-3.5 w-3.5" /> View details</DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem disabled className="text-xs py-1.5 gap-2 text-red-500"><Trash2 className="h-3.5 w-3.5" /> Move to Bin</DropdownMenuItem>
+                <DropdownMenuItem disabled className="gap-2 text-danger"><Trash2 className="h-3.5 w-3.5" /> Move to Bin</DropdownMenuItem>
             </DropdownMenuContent>
         </DropdownMenu>
     )
@@ -97,227 +124,162 @@ function RowActionMenu({ fileName }: { fileName: string }) {
 
 type Entry = { kind: 'folder'; folder: DemoFolder } | { kind: 'file'; file: DemoFile }
 
-/** Static counterpart to engagement-file-row.tsx — single unified row for both folders and files, matching the real component: checkbox, ID, name, quick icons (Preview file-only, Copy link + ⋮ menu always), Owner, Date modified, Due date, File size all present for both kinds. */
+/** Static counterpart to engagement-file-row.tsx: the same grid, cells and quick actions. */
 function EntryRow({ entry, onOpenFolder, deliverableStatus }: { entry: Entry; onOpenFolder?: () => void; deliverableStatus?: DeliverableStatus }) {
     const isFolder = entry.kind === 'folder'
     const docId = isFolder ? entry.folder.docId : entry.file.docId
     const name = isFolder ? entry.folder.name.replace(/_+/g, ' ').trim() : entry.file.name
-    const modifiedTime = isFolder ? undefined : entry.file.modifiedTime
-    const size = isFolder ? undefined : entry.file.size
-    const isApproved = deliverableStatus === 'approved'
+    const approved = deliverableStatus === 'approved'
 
     return (
         <div
             onClick={isFolder ? onOpenFolder : undefined}
-            style={{ gridTemplateColumns: GRID_COLS }}
-            className={cn(
-                'group grid gap-4 h-10 pl-3 pr-2 items-center text-[0.8125rem] hover:bg-[#f9f9fb]',
-                isFolder ? 'cursor-pointer' : 'cursor-default'
-            )}
+            className={`${FILE_TABLE_GRID_COLS_CLASS} ${cn(
+                'group relative grid h-9 items-center gap-4 pl-1 pr-2 text-ui transition-colors',
+                approved ? 'bg-action/5 hover:bg-action/10' : 'hover:bg-surface-hover',
+                isFolder ? 'cursor-pointer' : 'cursor-default',
+            )}`}
         >
-            <div className="flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
-                <Checkbox checked={false} className="h-4 w-4 pointer-events-none opacity-0 group-hover:opacity-100" />
+            <div className="flex h-4 w-4 flex-shrink-0 items-center justify-center" onClick={(e) => e.stopPropagation()}>
+                <Checkbox checked={false} className="pointer-events-none h-4 w-4" />
             </div>
 
-            <div className="flex items-center min-w-0">
-                <span className="text-[11px] font-bold font-mono text-primary tracking-wide truncate">{docId}</span>
+            <div className="flex min-w-0 items-center">
+                <span className="truncate text-small tabular-nums text-fg-subtle">{docId}</span>
             </div>
 
-            <div className="flex items-center gap-3 min-w-0">
-                {isFolder ? (
-                    <Folder className="h-4 w-4 fill-primary/20 text-primary flex-shrink-0" />
-                ) : (
-                    <DocumentIcon mimeType={MIME_BY_TYPE[entry.file.type] ?? 'application/octet-stream'} className="h-4 w-4 flex-shrink-0" />
-                )}
-                <span className={cn('text-[0.8125rem] font-medium truncate', isFolder ? 'text-[#1b1b1d]' : 'text-[#45474c]')}>{name}</span>
+            <div className="flex min-w-0 items-center gap-3">
+                <span className="flex h-4 w-4 flex-shrink-0 items-center justify-center">
+                    {isFolder ? (
+                        <Folder className="h-4 w-4 fill-surface-muted text-fg-muted" />
+                    ) : (
+                        <DocumentIcon mimeType={MIME_BY_TYPE[entry.file.type] ?? 'application/octet-stream'} className="h-4 w-4" />
+                    )}
+                </span>
+                <span className="min-w-0 truncate text-fg">{name}</span>
                 {deliverableStatus && (
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <span className={cn(
-                                'inline-flex items-center shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium border',
-                                isApproved ? 'bg-primary text-white/70 border-primary' : 'bg-primary/10 text-primary border-primary/30'
-                            )}>
-                                {isApproved ? <PackageCheck className="h-3.5 w-3.5" /> : <PackagePlus className="h-3.5 w-3.5" />}
-                            </span>
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className="text-xs">
-                            {isApproved ? 'Deliverable — Approved' : 'Promoted as Deliverable'}
-                        </TooltipContent>
-                    </Tooltip>
+                    <Hint label={approved ? 'Deliverable — approved' : 'Deliverable'}>
+                        <span className={cn('inline-flex shrink-0 items-center', approved ? 'text-action' : 'text-fg-subtle')}>
+                            {approved ? <PackageCheck className="h-3.5 w-3.5" /> : <PackagePlus className="h-3.5 w-3.5" />}
+                        </span>
+                    </Hint>
                 )}
             </div>
 
-            <div />
-
-            <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
-                {!isFolder && (
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <button type="button" className="h-7 w-7 rounded-md inline-flex items-center justify-center text-slate-500 hover:text-slate-700 hover:bg-slate-100" aria-label="Preview">
-                                <ScanEye className="h-4 w-4" />
-                            </button>
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className="text-xs">Preview (not available in this demo)</TooltipContent>
-                    </Tooltip>
-                )}
-                <Tooltip>
-                    <TooltipTrigger asChild>
-                        <button type="button" className="h-7 w-7 rounded-md inline-flex items-center justify-center text-slate-500 hover:text-slate-700 hover:bg-slate-100" aria-label="Copy link">
-                            <Link2 className="h-4 w-4" />
-                        </button>
-                    </TooltipTrigger>
-                    <TooltipContent side="top" className="text-xs">Copy link (not available in this demo)</TooltipContent>
-                </Tooltip>
+            <div className="col-span-2 flex items-center justify-end gap-0.5">
+                {!isFolder && <QuickAction icon={<ScanEye />} label="Preview" />}
+                <QuickAction icon={<Link2 />} label="Copy link" />
                 <RowActionMenu fileName={name} />
             </div>
 
-            <div className="min-w-0">
-                <div className="flex items-center gap-1.5 min-w-0">
-                    <ProfileBubbleWithPopup name={PREVIEW_OWNER.name} email={PREVIEW_OWNER.email} avatarUrl={null} />
-                    <span className="text-[0.8125rem] text-[#45474c] truncate">{PREVIEW_OWNER.name}</span>
-                </div>
+            <div className={`min-w-0 items-center gap-1.5 ${OWNER_COL_CLASS}`}>
+                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-surface-muted text-[9px] font-medium text-fg-muted">{initialsOf(OWNER)}</span>
+                <span className="truncate text-fg-muted">{OWNER}</span>
             </div>
 
-            <div>
-                {modifiedTime ? (
-                    <RelativeDateTime
-                        date={modifiedTime}
-                        textClassName="text-[0.8125rem] text-[#45474c]"
-                        iconClassName="text-[#e5e7eb] hover:text-[#45474c]"
-                        tooltipSide="top"
-                    />
+            <div className={`items-center ${DATE_MODIFIED_COL_CLASS}`}>
+                {!isFolder ? (
+                    <RelativeDateTime date={entry.file.modifiedTime} textClassName="text-ui text-fg-muted" iconClassName="hidden" tooltipSide="top" />
                 ) : (
-                    <span className="text-[0.8125rem] text-[#45474c]">—</span>
+                    <span className="text-fg-subtle">—</span>
                 )}
             </div>
 
-            <div><span className="text-[0.8125rem] text-[#45474c]/40">—</span></div>
+            <div className={`items-center ${DUE_DATE_COL_CLASS}`}>
+                <span className="text-fg-subtle">—</span>
+            </div>
 
-            <div className="text-left">
-                {size ? (
-                    <span className="text-[0.8125rem] text-[#45474c] font-mono">{formatFileSize(size)}</span>
+            <div className={`items-center ${FILE_SIZE_COL_CLASS}`}>
+                {!isFolder && entry.file.size ? (
+                    <span className="tabular-nums text-fg-muted">{formatFileSize(entry.file.size)}</span>
                 ) : (
-                    <span className="text-[0.8125rem] text-[#45474c]/40">—</span>
+                    <span className="text-fg-subtle">—</span>
                 )}
             </div>
         </div>
     )
 }
 
-/** Static counterpart to engagement-file-list.tsx + engagement-file-row.tsx — same breadcrumb, filter/sort bar, item-count bar, 9-column sticky table header (with docId), and 3-icon quick actions per row (Preview/Copy link/⋮ menu), all inert. Top-level folders carry the same Deliverable badge shown on the Board tab. */
+/**
+ * Static counterpart to engagement-file-list.tsx + engagement-file-row.tsx: the same breadcrumb,
+ * filter pills, item count and table (shared grid, collapsing columns), all inert except folder
+ * navigation. Top-level deliverable folders carry the marker the Board tab also shows.
+ */
 export function DemoFileList({ folders, deliverableStatusByFolderId }: { folders: DemoFolder[]; deliverableStatusByFolderId?: Record<string, DeliverableStatus> }) {
     const [path, setPath] = useState<DemoFolder[]>([])
 
     const currentFolders = path.length === 0 ? folders : path[path.length - 1].subfolders
     const currentFiles = path.length === 0 ? [] : path[path.length - 1].files
-
     const itemCount = currentFolders.length + currentFiles.length
 
     return (
-        <div className="flex flex-col h-full overflow-hidden">
-            {/* Top Bar: Breadcrumbs */}
-            <div className="px-0 pt-1 pb-2 flex items-center gap-2.5 shrink-0">
-                <div className="flex items-center text-xs font-medium text-slate-700 min-w-0 overflow-x-auto whitespace-nowrap custom-scrollbar">
-                    <button
-                        type="button"
-                        onClick={() => setPath([])}
-                        className={cn(
-                            'flex items-center hover:bg-slate-100 px-1.5 py-1 rounded transition-colors',
-                            path.length === 0 ? 'text-slate-900 bg-slate-50' : 'hover:text-slate-900'
-                        )}
-                        title="Files root"
-                    >
-                        <Briefcase className="h-3.5 w-3.5 text-primary flex-shrink-0" />
-                    </button>
-                    {path.map((folder, i) => (
-                        <div key={folder.id} className="flex items-center flex-shrink-0">
-                            <ChevronRight className="h-3.5 w-3.5 mx-1 text-slate-400 flex-shrink-0" />
-                            <button
-                                type="button"
-                                onClick={() => setPath(path.slice(0, i + 1))}
-                                className={cn(
-                                    'flex items-center min-w-0 hover:bg-slate-100 px-2 py-1 rounded transition-colors max-w-[180px]',
-                                    i === path.length - 1 ? 'text-slate-900 bg-slate-50' : 'hover:text-slate-900'
-                                )}
-                                title={folder.name.replace(/_+/g, ' ').trim()}
-                            >
-                                <Folder className="h-3.5 w-3.5 mr-1.5 text-slate-400 flex-shrink-0" />
-                                <span className="truncate min-w-0">{folder.name.replace(/_+/g, ' ').trim()}</span>
-                            </button>
-                        </div>
-                    ))}
+        <div className="flex min-h-0 flex-1 flex-col">
+            {/* Breadcrumb */}
+            <div className="flex shrink-0 items-center pb-2 text-ui">
+                <button
+                    type="button"
+                    onClick={() => setPath([])}
+                    className={cn('flex items-center rounded-control px-1.5 py-1 transition-colors hover:bg-surface-hover', path.length === 0 ? 'text-fg' : 'text-fg-muted')}
+                    aria-label="Files root"
+                >
+                    <Briefcase className="h-3.5 w-3.5 text-fg-subtle" />
+                </button>
+                {path.map((folder, i) => (
+                    <div key={folder.id} className="flex min-w-0 items-center">
+                        <ChevronRight className="mx-0.5 h-3.5 w-3.5 shrink-0 text-fg-subtle" />
+                        <button
+                            type="button"
+                            onClick={() => setPath(path.slice(0, i + 1))}
+                            className={cn(
+                                'flex min-w-0 max-w-[200px] items-center gap-1.5 rounded-control px-1.5 py-1 transition-colors hover:bg-surface-hover',
+                                i === path.length - 1 ? 'font-medium text-fg' : 'text-fg-muted',
+                            )}
+                        >
+                            <Folder className="h-3.5 w-3.5 shrink-0 text-fg-subtle" />
+                            <span className="truncate">{folder.name.replace(/_+/g, ' ').trim()}</span>
+                        </button>
+                    </div>
+                ))}
+            </div>
+
+            {/* Toolbar */}
+            <div className="flex shrink-0 items-center justify-between gap-4 pb-3">
+                <Hint label="Filters aren't available in this demo" side="bottom">
+                    <div className="flex items-center gap-1.5">
+                        <FilterPill icon={<FileText />} label="Type" />
+                        <FilterPill icon={<User />} label="People" />
+                        <FilterPill icon={<Clock3 />} label="Modified" />
+                        <FilterPill icon={<ArrowDownUp />} label="Sort" />
+                    </div>
+                </Hint>
+                <div className="flex items-center gap-0.5">
+                    <QuickAction icon={<Download />} label="Download selected" />
+                    <QuickAction icon={<Trash2 />} label="Move selected to Bin" />
+                    <QuickAction icon={<RefreshCw />} label="Refresh" />
                 </div>
             </div>
 
-            {/* Toolbar: Filters + right-side actions */}
-            <div className="flex items-center justify-between gap-4 pb-2 shrink-0">
-                <div className="flex items-center gap-2">
-                    <InertFilterButton label="Type" />
-                    <InertFilterButton label="People" />
-                    <InertFilterButton label="Modified" />
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <Button disabled variant="outline" size="sm" className="h-8 gap-1.5 text-xs bg-white rounded border-slate-200 text-slate-600 opacity-70 cursor-not-allowed">
-                                Sort
-                            </Button>
-                        </TooltipTrigger>
-                        <TooltipContent side="bottom" className="text-xs">Not available in this demo</TooltipContent>
-                    </Tooltip>
-                </div>
-                <div className="flex items-center gap-2">
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <Button disabled variant="outline" size="sm" className="h-9 w-9 p-0 rounded-full border-slate-200 text-slate-400 opacity-70 cursor-not-allowed">
-                                <Download className="h-4 w-4" />
-                            </Button>
-                        </TooltipTrigger>
-                        <TooltipContent side="bottom" className="text-xs">Select files to download</TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <Button disabled variant="outline" size="sm" className="h-9 w-9 p-0 rounded-full border-slate-200 text-slate-400 opacity-70 cursor-not-allowed">
-                                <Trash2 className="h-4 w-4" />
-                            </Button>
-                        </TooltipTrigger>
-                        <TooltipContent side="bottom" className="text-xs">Select files to move to Bin</TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <Button disabled variant="outline" size="sm" className="h-9 w-9 p-0 rounded-full border-slate-200 text-slate-400 opacity-70 cursor-not-allowed">
-                                <RefreshCw className="h-4 w-4" />
-                            </Button>
-                        </TooltipTrigger>
-                        <TooltipContent side="bottom" className="text-xs">Not available in this demo</TooltipContent>
-                    </Tooltip>
-                </div>
-            </div>
-
-            {/* Content card — header, item count, and rows all live inside this bordered card, matching engagement-file-list.tsx exactly */}
-            <div className="flex-1 overflow-hidden flex flex-col relative bg-white rounded border border-[#e5e7eb]">
-                {/* Item count */}
+            <div className={`flex min-h-0 flex-1 flex-col ${FILE_TABLE_CONTAINER_CLASS}`}>
                 {itemCount > 0 && (
-                    <div className="px-4 py-1.5 border-b border-[#f0f0f2] bg-[#fafafa]">
-                        <span className="text-[10px] font-medium text-[#9a9ba0]">
-                            Showing {itemCount} {itemCount === 1 ? 'item' : 'items'}
-                        </span>
+                    <div className="px-1 pb-1.5">
+                        <span className="text-caption tabular-nums text-fg-subtle">{itemCount} {itemCount === 1 ? 'item' : 'items'}</span>
                     </div>
                 )}
 
-                {/* Fixed Table Header */}
-                <div className="sticky top-0 bg-white border-b border-[#e5e7eb] pl-3 pr-2 py-2.5 shrink-0 z-10">
-                    <div className="grid gap-4 items-center" style={{ gridTemplateColumns: GRID_COLS }}>
-                        <div />
-                        <div className="flex items-center"><TableHeader label="ID" /></div>
-                        <div className="flex items-center"><TableHeader label="Name" /></div>
-                        <div className="col-span-2 flex items-center justify-center"><TableHeader label="Quick" /></div>
-                        <div className="flex items-center"><TableHeader label="Owner" /></div>
-                        <div className="flex items-center"><TableHeader label="Date modified" /></div>
-                        <div className="flex items-center"><TableHeader label="Due date" /></div>
-                        <div className="flex items-center"><TableHeader label="File size" /></div>
+                <div className="sticky top-0 z-10 flex h-8 shrink-0 flex-col justify-center border-b border-line bg-surface pl-1 pr-2">
+                    <div className={`grid items-center gap-4 ${FILE_TABLE_GRID_COLS_CLASS}`}>
+                        <div className="flex h-4 w-4 items-center justify-center"><Checkbox checked={false} className="pointer-events-none h-4 w-4" /></div>
+                        <div className="flex items-center"><TableHeader label="ID" icon={<Hash />} /></div>
+                        <div className="flex items-center"><TableHeader label="Name" icon={<Type />} /></div>
+                        <div className="col-span-2" aria-hidden />
+                        <div className={`items-center ${OWNER_COL_CLASS}`}><TableHeader label="Owner" icon={<UserRound />} /></div>
+                        <div className={`items-center ${DATE_MODIFIED_COL_CLASS}`}><TableHeader label="Modified" icon={<Clock3 />} /></div>
+                        <div className={`items-center ${DUE_DATE_COL_CLASS}`}><TableHeader label="Due" icon={<Flag />} /></div>
+                        <div className={`items-center ${FILE_SIZE_COL_CLASS}`}><TableHeader label="Size" icon={<HardDrive />} /></div>
                     </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto custom-scrollbar divide-y divide-[#e5e7eb]">
+                <div className="flex-1 divide-y divide-line overflow-y-auto">
                     {currentFolders.map((folder) => (
                         <EntryRow
                             key={folder.id}
@@ -330,11 +292,9 @@ export function DemoFileList({ folders, deliverableStatusByFolderId }: { folders
                         <EntryRow key={file.id} entry={{ kind: 'file', file }} />
                     ))}
                     {itemCount === 0 && (
-                        <div className="flex flex-col items-center justify-center h-64 text-center px-3">
-                            <div className="h-16 w-16 bg-slate-50 rounded-full flex items-center justify-center mb-4">
-                                <Folder className="h-8 w-8 text-slate-300" />
-                            </div>
-                            <h3 className="text-sm font-medium text-slate-900 mb-1">Folder is empty</h3>
+                        <div className="flex h-48 flex-col items-center justify-center gap-2 text-center">
+                            <Folder className="h-6 w-6 text-fg-subtle" />
+                            <p className="text-small text-fg-muted">This folder is empty</p>
                         </div>
                     )}
                 </div>
