@@ -186,7 +186,7 @@ export function ClientContactsTab({
             <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
           </Button>
           {canManage && (
-            <Button size="sm" data-demo-tour="client-add-contact-btn" onClick={openAdd}>
+            <Button size="sm" onClick={openAdd}>
               <Plus className="h-3.5 w-3.5" />
               New contact
             </Button>

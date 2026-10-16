@@ -107,7 +107,7 @@ export function DemoFirmDashboard({ firm }: { firm: DemoFirm }) {
                     groupSlug=""
                     orgSlug=""
                     viewMode={viewMode}
-                    hrefFor={(c) => `/demo/${c.slug}`}
+                    hrefFor={(c) => `/tour/${c.slug}`}
                 />
             )}
             {view === 'calendar' && <DemoCalendarView firm={firm} />}

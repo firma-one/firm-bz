@@ -82,5 +82,23 @@ the Brio pieces were already moved over in `aff94e30`.
 - The sample data resolves its relative dates (`today+45`) once, when `static-demo-data.ts`
   loads. A long-lived server can therefore drift from the browser by a day. This predates this
   work.
-- The in-app tour at `/d` (`components/app/demo-tour.tsx`) still targets the old top bar's
-  elements, which the New UI no longer renders.
+
+## Renamed to /tour, and the in-app tour removed (2026-10-16)
+
+Deepak: "we don't need the tour inside /d anymore … /demo page should be called /tour".
+
+- **Route:** `app/(demo)/demo` → `app/(demo)/tour`. Every link in the tour, the homepage hero, the
+  `WatchPreviewButton` calls to action and the onboarding top bar point at `/tour`.
+  - `robots.ts` disallows `/tour/`, and the pre-paint script in `app/layout.tsx` matches `/tour`.
+  - `next.config.js` redirects `/demo` and `/demo/*` to `/tour` permanently, so links already out
+    there keep working.
+  - `/tour` no longer starts with `/d`, so `proxy.ts` stops treating it as an app route for
+    signed-in visitors (no maintenance or deployment-cookie checks on the public tour).
+- **In-app tour deleted.** It only ran for `sandboxOnly` firms, which no longer exist.
+  - Removed: `components/app/demo-tour*.tsx`, `lib/demo-tour-context.tsx`, the tour button in the
+    onboarding top bar, and `/api/hierarchy` (only the tour called it).
+  - The `data-demo-tour` markers it alone used are removed from the app's components. The public
+    tour's markers on `EngagementHeader` and `EngagementTabsList` stay.
+- **Left alone:** `components/layouts/app-layout.tsx` and the pages it pulls in
+  (`navigation/sidebar`, `ui/top-bar`) still link to `/demo/documents`. Nothing imports them, and
+  those URLs were already 404s.

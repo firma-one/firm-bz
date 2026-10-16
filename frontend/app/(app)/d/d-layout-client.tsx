@@ -27,42 +27,10 @@ import { useFirmMaintenanceStatus } from '@/lib/hooks/use-firm-maintenance-statu
 import { usePlatformMaintenanceStatus } from '@/lib/hooks/use-platform-maintenance-status'
 import { useAuth } from '@/lib/auth-context'
 import { Megaphone, Info } from 'lucide-react'
-import { DemoTourProvider, useDemoTour, readDemoTourSeen, loadTourProgress } from '@/lib/demo-tour-context'
-import { DemoTour } from '@/components/app/demo-tour'
-import { DemoTourIntroModal } from '@/components/app/demo-tour-intro-modal'
-import { DemoTourOutroModal } from '@/components/app/demo-tour-outro-modal'
-import { DemoTourButton } from '@/components/app/demo-tour-button'
 import { UiShellProvider } from '@/lib/ui-shell-context'
 import { AppShellV2 } from '@/components/shell/app-shell-v2'
 
 const TOP_BAR_HEIGHT = 64
-
-function DemoTourShell({ firmSlug, groupSlug }: { firmSlug: string; groupSlug: string }) {
-    const { openIntroModal } = useDemoTour()
-    const hasOpenedRef = useRef(false)
-
-    useEffect(() => {
-        if (hasOpenedRef.current) return
-        const tourSeen = readDemoTourSeen()
-        const savedProgress = loadTourProgress()
-        // If tour is marked seen but there's saved mid-tour progress (manual restart was in-flight),
-        // offer to resume. Otherwise don't auto-prompt.
-        if (tourSeen && !savedProgress) return
-        // Either: tour not yet seen (first time), OR seen + has in-progress step to resume
-        hasOpenedRef.current = true
-        const timer = setTimeout(() => { void openIntroModal(firmSlug, groupSlug) }, 800)
-        return () => clearTimeout(timer)
-    }, [firmSlug, groupSlug, openIntroModal])
-
-    return (
-        <>
-            <DemoTour />
-            <DemoTourIntroModal />
-            <DemoTourOutroModal />
-            <DemoTourButton firmSlug={firmSlug} groupSlug={groupSlug} />
-        </>
-    )
-}
 
 function ViewAsBanner() {
     const { isViewAsActive, viewAsPersonaSlug, setViewAsPersonaSlug } = useViewAs()
@@ -99,7 +67,6 @@ function AppLayoutContent({ children, isSystemAdmin }: { children: React.ReactNo
     const sidebarWidth = isCollapsed ? 64 : 256
 
     const routeMatch = pathname?.match(/^\/d\/([^/]+)\/f\/([^/]+)/)
-    const currentGroupSlug = routeMatch?.[1] ?? null
     const currentSlug = routeMatch?.[2] ?? null
     const currentFirm = currentSlug ? (firms?.find((f) => f.slug === currentSlug) ?? null) : null
     const currentFirmId = currentFirm?.id ?? null
@@ -252,7 +219,6 @@ function AppLayoutContent({ children, isSystemAdmin }: { children: React.ReactNo
                         <>
                             <OnboardingExitGuardBanner />
                             <DebugFloatingTrigger />
-                            {isDemoFirm && currentSlug && currentGroupSlug && <DemoTourShell firmSlug={currentSlug} groupSlug={currentGroupSlug} />}
                             <MigrationProgressPanel
                                 status={maintenanceStatus}
                                 migrationStartedAt={migrationStartedAt}
@@ -370,7 +336,6 @@ function AppLayoutContent({ children, isSystemAdmin }: { children: React.ReactNo
 
                 <OnboardingExitGuardBanner />
                 <DebugFloatingTrigger />
-                {isDemoFirm && currentSlug && currentGroupSlug && <DemoTourShell firmSlug={currentSlug} groupSlug={currentGroupSlug} />}
                 <MigrationProgressPanel
                     status={maintenanceStatus}
                     migrationStartedAt={migrationStartedAt}
@@ -398,7 +363,6 @@ export function DLayoutClient({
 }) {
     return (
         <UiShellProvider sidebarCollapsed={sidebarCollapsed}>
-        <DemoTourProvider>
         <OnboardingProvider>
             <SidebarFirmsProvider firms={initialFirms}>
                 <SidebarProvider>
@@ -420,7 +384,6 @@ export function DLayoutClient({
                 </SidebarProvider>
             </SidebarFirmsProvider>
         </OnboardingProvider>
-        </DemoTourProvider>
         </UiShellProvider>
     )
 }

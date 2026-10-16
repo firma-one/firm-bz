@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils"
 export function WatchPreviewButton({ className }: { className?: string }) {
   return (
     <Link
-      href="/demo"
+      href="/tour"
       target="_blank"
       rel="noopener noreferrer"
       className={cn(

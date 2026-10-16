@@ -503,7 +503,6 @@ export function DocumentActionMenu({
             variant="ghost"
             size="sm"
             disabled={disabled}
-            data-demo-tour="document-action-trigger"
             className="text-fg-muted hover:text-fg hover:bg-surface-hover h-8 w-8 p-0 disabled:opacity-30 disabled:cursor-not-allowed"
             title="More actions"
           >

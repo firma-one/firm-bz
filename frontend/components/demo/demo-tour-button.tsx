@@ -4,7 +4,7 @@ import { MapPinned } from 'lucide-react'
 import { useDemoTour } from '@/lib/demo/demo-tour-context'
 import { Hint } from '@/components/ui/tooltip'
 
-/** Static counterpart to demo-tour-button.tsx — a quiet floating button in the bottom-right corner
+/** A quiet floating button in the bottom-right corner
  * that replays the tour, hidden while the tour is running. */
 export function DemoTourButton() {
     const { restartTour, run } = useDemoTour()

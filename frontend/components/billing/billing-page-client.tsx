@@ -268,7 +268,7 @@ export function BillingPageClient({
     )
 
     return (
-        <div className="relative mx-auto w-full max-w-4xl space-y-10 pb-10" data-demo-tour="billing-page">
+        <div className="relative mx-auto w-full max-w-4xl space-y-10 pb-10">
 
             <div className="space-y-3">
                 <PageHeading

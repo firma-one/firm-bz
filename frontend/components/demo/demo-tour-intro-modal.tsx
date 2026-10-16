@@ -17,9 +17,9 @@ const TOPICS: { key: string; label: React.ReactNode }[] = [
     { key: 'home', label: 'Home, Inbox and your profile' },
 ]
 
-/** Static counterpart to demo-tour-intro-modal.tsx — same resume-progress behavior, backed by
- * localStorage instead of a server-resolved firm/client/engagement slug set. Built on the app's
- * Dialog, so it portals out of the demo shell and uses the app's design tokens. */
+/** The modal that opens the guided tour, or offers to resume it (progress lives in
+ * localStorage). Built on the app's Dialog, so it portals out of the tour's shell and uses the
+ * app's design tokens. */
 export function DemoTourIntroModal() {
     const { showIntroModal, closeIntroModal, startTour, resumeTour, resumableStepIndex } = useDemoTour()
     const [neverShowAgain, setNeverShowAgain] = useState(false)

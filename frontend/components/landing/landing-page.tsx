@@ -577,7 +577,7 @@ export function LandingPage({
                         <ArrowRight className="h-5 w-5 transition-transform duration-200 group-hover:translate-x-0.5" strokeWidth={2} />
                   </Button>
                 </Link>
-                <Link href="/demo" target="_blank" rel="noopener noreferrer" className="w-full sm:w-auto">
+                <Link href="/tour" target="_blank" rel="noopener noreferrer" className="w-full sm:w-auto">
                       <div className="group h-14 px-8 rounded-md bg-[#5a78ff] text-white text-base font-bold tracking-widest border border-transparent flex items-center justify-center cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#4a68ef] hover:shadow-[0_10px_24px_-12px_rgba(90,120,255,0.55)] active:translate-y-0 active:scale-95 [font-family:var(--font-kinetic-headline),system-ui,sans-serif]">
                         <PlayCircle className="w-5 h-5 mr-2 fill-white stroke-[#5a78ff]" />
                     See Live Demo

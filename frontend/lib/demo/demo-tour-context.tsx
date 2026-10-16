@@ -86,9 +86,9 @@ interface DemoTourContextValue {
 
 const DemoTourContext = createContext<DemoTourContextValue | null>(null)
 
-/** Lightweight counterpart to lib/demo-tour-context.tsx — local React state, with mid-tour
- * progress persisted to localStorage (same key/shape convention) so a visitor who navigates
- * away or closes the tour can resume from the intro modal next time, matching the real app. */
+/** The guided tour's state — local React state, with mid-tour progress persisted to
+ * localStorage so a visitor who navigates away or closes the tour can resume from the intro modal
+ * next time. */
 export function DemoTourProvider({ children }: { children: ReactNode }) {
     const [run, setRun] = useState(false)
     const [stepIndex, setStepIndex] = useState(0)

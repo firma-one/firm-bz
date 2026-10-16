@@ -21,7 +21,7 @@ const pairs: { client: DemoClient; engagement: DemoEngagement }[] = DEMO_FIRM.cl
     client.engagements.map((engagement) => ({ client, engagement })),
 )
 
-const engagementHref = (client: DemoClient, engagement: DemoEngagement) => `/demo/${client.slug}/${engagement.slug}`
+const engagementHref = (client: DemoClient, engagement: DemoEngagement) => `/tour/${client.slug}/${engagement.slug}`
 
 /** The one firm the demo user is in. */
 export const DEMO_HOME_FIRM: HomeFirm = { id: 'demo', name: DEMO_FIRM.name, slug: 'demo', groupSlug: 'demo' }
@@ -144,7 +144,7 @@ export function demoReminders(now: Date): ReminderWithContext[] {
                 action: 'Follow-up',
                 entityName: client.name,
                 note: 'Check in on the next phase of work.',
-                ctaUrl: `/demo/${client.slug}`,
+                ctaUrl: `/tour/${client.slug}`,
                 date: client.followUpDate,
             }, now),
         )
@@ -218,7 +218,7 @@ export function demoRecents(now: Date): RecentVisit[] {
     const [first, second, third] = pairs
     if (first) add({ id: 'rv-1', entityType: 'engagement', entityId: first.engagement.slug, path: engagementHref(first.client, first.engagement), title: first.engagement.name, context: first.client.name }, 4)
     const otherClient = DEMO_FIRM.clients[1]
-    if (otherClient) add({ id: 'rv-2', entityType: 'client', entityId: otherClient.slug, path: `/demo/${otherClient.slug}`, title: otherClient.name, context: null }, 22)
+    if (otherClient) add({ id: 'rv-2', entityType: 'client', entityId: otherClient.slug, path: `/tour/${otherClient.slug}`, title: otherClient.name, context: null }, 22)
     if (second) add({ id: 'rv-3', entityType: 'engagement', entityId: second.engagement.slug, path: `${engagementHref(second.client, second.engagement)}?tab=files`, title: second.engagement.name, context: second.client.name }, 55)
     if (third) add({ id: 'rv-4', entityType: 'engagement', entityId: third.engagement.slug, path: `${engagementHref(third.client, third.engagement)}?tab=board`, title: third.engagement.name, context: third.client.name }, 180)
     return visits
@@ -247,7 +247,7 @@ export function demoCalendarEvents(): CalendarEvent[] {
             type: e.type,
             title: e.title,
             date: noonUtc(e.date),
-            ctaUrl: eng ? `/demo/${eng.clientSlug}/${eng.slug}` : null,
+            ctaUrl: eng ? `/tour/${eng.clientSlug}/${eng.slug}` : null,
             clientName: e.clientName,
             engagementName: e.engagementName,
             engagementStatus: 'ACTIVE',
@@ -308,7 +308,7 @@ export function demoWork(now: Date): MyWork {
             firmId: r.firmId,
             title: r.entityName,
             context: r.note ?? r.action,
-            href: r.ctaUrl ?? '/demo',
+            href: r.ctaUrl ?? '/tour',
             dueDate: r.dateValue!,
             overdue: (r.delta ?? 0) < 0,
             status: null,

@@ -7,12 +7,11 @@ import { DemoTourIntroModal } from '@/components/demo/demo-tour-intro-modal'
 import { DemoTourOutroModal } from '@/components/demo/demo-tour-outro-modal'
 import { DemoTourButton } from '@/components/demo/demo-tour-button'
 
-/** Static counterpart to DemoTourShell in d-layout-client.tsx — auto-opens the intro modal ~800ms
- * after every visit to /demo (not just the first), and renders the tour overlay + both modals +
- * the floating restart FAB. Auto-opening is skipped only if the visitor explicitly opted out via
- * the "Don't show this again" checkbox on Skip (see demo-tour-context.tsx). Mid-tour progress is
- * tracked separately via localStorage, so the intro modal correctly offers "Resume Tour" whenever
- * a visitor reopens the demo with unfinished progress saved, matching the real app's behavior. */
+/** Auto-opens the intro modal ~800ms after every visit to /tour (not just the first), and renders
+ * the tour overlay, both modals and the floating restart button. Auto-opening is skipped only if
+ * the visitor opted out with "Don't show this again" on Skip (see demo-tour-context.tsx). Mid-tour
+ * progress is kept in localStorage, so the intro modal offers "Resume tour" whenever a visitor
+ * comes back with unfinished progress saved. */
 export function DemoTourShell() {
     const { openIntroModal } = useDemoTour()
     const hasTriggered = useRef(false)

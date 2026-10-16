@@ -14,9 +14,9 @@ const JoyrideAny = Joyride as any
 const firstClient = DEMO_FIRM.clients[0]
 const firstEngagement = firstClient?.engagements[0]
 
-const firm = '/demo'
-const client = firstClient ? `/demo/${firstClient.slug}` : firm
-const eng = firstClient && firstEngagement ? `/demo/${firstClient.slug}/${firstEngagement.slug}` : client
+const firm = '/tour'
+const client = firstClient ? `/tour/${firstClient.slug}` : firm
+const eng = firstClient && firstEngagement ? `/tour/${firstClient.slug}/${firstEngagement.slug}` : client
 
 interface TourStep {
     target: string
@@ -35,11 +35,9 @@ interface TourStep {
     skipScroll?: boolean
 }
 
-/** Static counterpart to components/app/demo-tour.tsx — same react-joyride config and step
- * sequence, adapted to the demo's New UI shell: firm views are sidebar items (?tab= on /demo), and
- * the old Recent, Reminders and Bookmarks sidebar sections are now Home and the Inbox. Settings-page
- * steps (Firm/Client/Engagement Settings) and the View As step are omitted — those surfaces don't
- * exist in this static demo. */
+/** The guided tour's steps, over the public tour's New UI shell: firm views are sidebar items
+ * (?tab= on /tour), and Home and the Inbox stand for recents, reminders and bookmarks. Settings
+ * pages and View As don't exist in this static copy, so they have no steps. */
 const STEPS: TourStep[] = [
     {
         target: '[data-demo-tour="command-palette"]',
@@ -302,9 +300,8 @@ function sleep(ms: number) {
     return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-/** Static counterpart to components/app/demo-tour.tsx — the same step sequence, driving router
- * navigation across the demo's own pages/tabs as it advances, with the step card in the app's
- * design system (TourTooltip). */
+/** The guided tour: steps through STEPS, driving router navigation across the tour's pages and
+ * tabs as it advances, with the step card in the app's design system (TourTooltip). */
 export function DemoTour() {
     const router = useRouter()
     const pathname = usePathname()
