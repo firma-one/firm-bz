@@ -12,7 +12,7 @@ import { renderInviteEmail } from '@/lib/email-templates/invite'
 import { maybeProvisionInviteeAccount } from '@/lib/actions/account-provisioning'
 import { canManageOrganization } from '@/lib/permission-helpers'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
-import { upsertFollowUpReminder, removeRemindersByEntity } from '@/lib/actions/user-reminders'
+import { upsertFollowUpReminder, removeRemindersByEntity } from '@/lib/reminders/reminder-service'
 import { getAvatarUrlFromSupabaseUser } from '@/lib/supabase-user-helpers'
 import { firmSettingsPath } from '@/lib/navigation/firm-paths'
 
@@ -26,19 +26,36 @@ export async function getFirmMembers(firmId: string) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) throw new Error('Unauthorized')
 
+    // Names, emails and roles of a whole firm. This only checked sign-in, so anyone could list any
+    // firm. Callers are the firm Members tab (firm admins) and the client-settings owner picker
+    // (firm admins and Client Partners) — a guest's firm_member row doesn't qualify.
+    // (.claude/plans/access-gates.md, P0 #12)
+    const isFirmAdmin = !!(await prisma.firmMember.findFirst({
+        where: { firmId, userId: user.id, role: 'firm_admin' },
+        select: { id: true },
+    }))
+    const isClientPartner = !isFirmAdmin && !!(await prisma.clientMember.findFirst({
+        where: { userId: user.id, client: { firmId }, persona: { slug: 'client_admin' } },
+        select: { id: true },
+    }))
+    if (!isFirmAdmin && !isClientPartner) throw new Error('Insufficient permissions')
+
     const members = await prisma.firmMember.findMany({
         where: { firmId },
         orderBy: { id: 'asc' }
     })
 
-    const invitations = await prisma.firmInvitation.findMany({
-        where: {
-            firmId,
-            status: { in: [InvitationStatus.PENDING, InvitationStatus.ACCEPTED, InvitationStatus.ERROR] }
-        },
-        include: { persona: true },
-        orderBy: { createdAt: 'desc' }
-    })
+    // Pending invitations are for firm admins only, and the invite token never leaves the server.
+    const invitations = isFirmAdmin
+        ? (await prisma.firmInvitation.findMany({
+            where: {
+                firmId,
+                status: { in: [InvitationStatus.PENDING, InvitationStatus.ACCEPTED, InvitationStatus.ERROR] }
+            },
+            include: { persona: true },
+            orderBy: { createdAt: 'desc' }
+        })).map(({ token: _token, ...rest }) => rest)
+        : []
 
     // Find all connector userIds for this firm so we can flag connector owners
     const connectors = await prisma.connector.findMany({

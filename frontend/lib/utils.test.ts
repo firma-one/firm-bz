@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { getFileTypeLabel, formatFileSize } from './utils'
+import { getFileTypeLabel, formatFileSize, cn } from './utils'
 
 describe('getFileTypeLabel', () => {
     it.each([
@@ -64,5 +64,18 @@ describe('formatFileSize', () => {
 
     it.each([undefined, null, '', 'not-a-number'])('returns Unknown size for %s', (input) => {
         expect(formatFileSize(input as never)).toBe('Unknown size')
+    })
+})
+
+describe('cn — UI token scales', () => {
+    it('treats text-ui / text-caption as font sizes, not colors', () => {
+        expect(cn('text-ui', 'text-white')).toBe('text-ui text-white')
+        expect(cn('text-sm', 'text-caption')).toBe('text-caption')
+    })
+
+    it('merges custom radii and shadows with the stock scale', () => {
+        expect(cn('rounded-md', 'rounded-control')).toBe('rounded-control')
+        expect(cn('shadow-md', 'shadow-popover')).toBe('shadow-popover')
+        expect(cn('shadow-popover', 'shadow-red-500')).toBe('shadow-popover shadow-red-500')
     })
 })

@@ -21,7 +21,7 @@ const SheetOverlay = React.forwardRef<
 >(({ className, ...props }, ref) => (
     <SheetPrimitive.Overlay
         className={cn(
-            "fixed inset-0 z-[120] bg-black/80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+            "fixed inset-0 z-[120] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 bg-scrim",
             className
         )}
         {...props}
@@ -31,7 +31,7 @@ const SheetOverlay = React.forwardRef<
 SheetOverlay.displayName = SheetPrimitive.Overlay.displayName
 
 const sheetVariants = cva(
-    "fixed z-[121] gap-4 bg-white p-0 shadow-lg transition ease-in-out data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:duration-300 data-[state=open]:duration-500",
+    "fixed z-[121] gap-4 bg-white p-0 transition ease-in-out data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:duration-300 data-[state=open]:duration-500 shadow-dialog border-line text-fg",
     {
         variants: {
             side: {
@@ -51,24 +51,29 @@ const sheetVariants = cva(
 
 interface SheetContentProps
     extends React.ComponentPropsWithoutRef<typeof SheetPrimitive.Content>,
-    VariantProps<typeof sheetVariants> { }
+    VariantProps<typeof sheetVariants> {
+    /** Omit the built-in close button — for content that supplies its own (e.g. a nav drawer). */
+    hideClose?: boolean
+}
 
 const SheetContent = React.forwardRef<
     React.ElementRef<typeof SheetPrimitive.Content>,
     SheetContentProps
->(({ side = "right", className, children, ...props }, ref) => (
+>(({ side = "right", className, children, hideClose, ...props }, ref) => (
     <SheetPortal>
         <SheetOverlay />
         <SheetPrimitive.Content
             ref={ref}
-            className={cn(sheetVariants({ side }), "flex flex-col", className)}
+            className={cn([sheetVariants({ side }), "flex flex-col"], className)}
             {...props}
         >
             {children}
-            <SheetPrimitive.Close className="absolute right-4 top-4 z-10 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none">
+            {!hideClose && (
+            <SheetPrimitive.Close className="absolute z-10 ring-offset-background hover:opacity-100 focus:outline-none focus:ring-2 disabled:pointer-events-none right-3 top-3 rounded-control p-1 text-fg-muted opacity-100 transition-colors hover:bg-surface-hover hover:text-fg focus:ring-action/30 focus:ring-offset-0">
                 <X className="h-4 w-4" />
                 <span className="sr-only">Close</span>
             </SheetPrimitive.Close>
+            )}
         </SheetPrimitive.Content>
     </SheetPortal>
 ))
@@ -108,7 +113,7 @@ const SheetTitle = React.forwardRef<
 >(({ className, ...props }, ref) => (
     <SheetPrimitive.Title
         ref={ref}
-        className={cn("text-lg font-semibold text-foreground", className)}
+        className={cn("font-semibold text-h3 text-fg", className)}
         {...props}
     />
 ))
@@ -120,7 +125,7 @@ const SheetDescription = React.forwardRef<
 >(({ className, ...props }, ref) => (
     <SheetPrimitive.Description
         ref={ref}
-        className={cn("text-sm text-muted-foreground", className)}
+        className={cn("text-sm text-fg-muted", className)}
         {...props}
     />
 ))

@@ -9,7 +9,7 @@ import { createClient as createSupabaseAdmin } from '@supabase/supabase-js'
 import { requireEngagementMember, externalMemberCanAccessDocument, isExternalEngagementRole } from '@/lib/engagement-access'
 import { loadAnchorForCaps, effectiveCommentHistoryDays } from '@/lib/billing/effective-billing-caps'
 import { engagementDocCommentPath } from '@/lib/navigation/firm-paths'
-import { getFirmReminderConfig } from '@/lib/actions/firms'
+import { getFirmReminderConfig } from '@/lib/firm-reminder-config'
 import { createEventNotifications, sendEventEmailToUser, buildAbsoluteUrl } from '@/lib/notify-event'
 import { renderClientCommentEmail } from '@/lib/email-templates/client-comment'
 
@@ -257,7 +257,7 @@ export async function POST(
     // Create reminder for tagged recipient
     if (isReminder && recipientId) {
       try {
-        const { upsertFollowUpReminder } = await import('@/lib/actions/user-reminders')
+        const { upsertFollowUpReminder } = await import('@/lib/reminders/reminder-service')
         const engDetails = await prisma.engagement.findUnique({
           where: { id: projectId },
           select: { slug: true, client: { select: { slug: true, firm: { select: { slug: true, group: { select: { slug: true } } } } } } },
@@ -355,7 +355,7 @@ export async function PATCH(
     if (!message) return NextResponse.json({ error: 'Comment not found' }, { status: 404 })
 
     try {
-      const { upsertFollowUpReminder } = await import('@/lib/actions/user-reminders')
+      const { upsertFollowUpReminder } = await import('@/lib/reminders/reminder-service')
       const engDetails = await prisma.engagement.findUnique({
         where: { id: projectId },
         select: { slug: true, client: { select: { slug: true, firm: { select: { slug: true, group: { select: { slug: true } } } } } } },

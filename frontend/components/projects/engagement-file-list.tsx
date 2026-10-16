@@ -7,9 +7,11 @@ import { FilesAgentPanel, type FilesAgentReview } from '@/components/projects/fi
 import type { ChatThreadApi } from '@/components/projects/engagement-ai-chat'
 import { FilesScaffoldPanel, FilesScaffoldTrigger } from '@/components/projects/files-scaffold-panel'
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
+import { LoadingAnnouncement, ShimmerBar, ShimmerBlock } from "@/components/ui/shimmer"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
+import { FilterMenuLabel, FilterMenuRow, FilterPill, summarizePicks } from "@/components/ui/filter-pill"
 import { CoffeeIcon, type CoffeeIconHandle } from "@/components/ui/coffee-icon"
-import { SquarePlus, Upload, FolderUp, X, Folder, File as FileIcon, ArrowUp, ArrowDown, ChevronRight, Search, List as ListIcon, LayoutGrid, Filter, ChevronDown, User, FileText, FileSpreadsheet, Presentation, ListChecks, PenTool, Map as MapIcon, LayoutTemplate, FileCode, AlertCircle, ShieldCheck, Maximize2, Minimize2, CheckCircle2, XCircle, Trash2, Layout, Code, Laptop, RefreshCw, Info, Share2, Layers, Building2, Users, Briefcase, Lock, FolderLock, Inbox, Sparkles, Link2, ExternalLink, MessagesSquare, CircleChevronLeft, Download, MoreVertical, Clock, Copy, FolderInput, Loader2, Pencil } from 'lucide-react'
+import { SquarePlus, Upload, FolderUp, X, Folder, File as FileIcon, ArrowUp, ArrowDown, ChevronRight, Search, List as ListIcon, LayoutGrid, ChevronDown, User, FileText, FileSpreadsheet, Presentation, ListChecks, PenTool, Map as MapIcon, LayoutTemplate, FileCode, AlertCircle, ShieldCheck, Maximize2, Minimize2, CheckCircle2, XCircle, Trash2, Layout, Code, Laptop, RefreshCw, Info, Share2, Layers, Building2, Users, Briefcase, Lock, FolderLock, Inbox, Sparkles, Link2, ExternalLink, MessagesSquare, CircleChevronLeft, Download, MoreVertical, Clock, Copy, FolderInput, Loader2, Pencil, Hash, Type, UserRound, Clock3, Flag, HardDrive, Plus } from 'lucide-react'
 import Fuse from 'fuse.js'
 import { config } from "@/lib/config"
 import { DocumentIcon } from '@/components/ui/document-icon'
@@ -52,8 +54,6 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
     DropdownMenuSeparator,
-    DropdownMenuLabel,
-    DropdownMenuCheckboxItem,
     DropdownMenuSub,
     DropdownMenuSubTrigger,
     DropdownMenuSubContent
@@ -116,6 +116,33 @@ interface EngagementFileListProps {
 }
 
 type SortByOption = 'name' | 'modifiedTime' | 'modifiedTimeByMe' | 'viewedByMeTime'
+
+// Toolbar filter options, in menu order. The labels also name a set filter on its pill.
+const FILE_TYPE_FILTERS: Array<[string, string]> = [
+    ['folder', 'Folders'],
+    ['document', 'Documents'],
+    ['spreadsheet', 'Spreadsheets'],
+    ['presentation', 'Presentations'],
+    ['image', 'Images'],
+    ['other', 'Other'],
+]
+const OWNER_FILTER_LABEL = { me: 'Owned by me', 'not-me': 'Owned by others', 'private-me': 'Private to me' } as const
+const MODIFIED_FILTER_LABEL = { '7d': 'Last 7 days', '30d': 'Last 30 days', year: 'This year' } as const
+const SORT_BY_LABEL: Record<SortByOption, string> = {
+    name: 'Name',
+    modifiedTime: 'Date modified',
+    modifiedTimeByMe: 'Date modified by me',
+    viewedByMeTime: 'Date opened by me',
+}
+
+/** The sort control's icon (three shortening bars), shared by the pill and nothing else. */
+function SortBarsIcon() {
+    return (
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" fill="currentColor" aria-hidden>
+            <path d="M120-240v-80h240v80H120Zm0-200v-80h480v80H120Zm0-200v-80h720v80H120Z" />
+        </svg>
+    )
+}
 type SortConfig = {
     sortBy: SortByOption
     direction: 'asc' | 'desc'
@@ -195,22 +222,22 @@ function BusyLabel({ busy, children }: { busy: boolean; children: React.ReactNod
 /** Header strip shared by this file's themed dialogs (see components/ui/confirm-dialog.tsx). */
 function ThemedDialogHeader({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
     return (
-        <div className="px-5 py-4 border-b border-[#e5e7eb] bg-white flex items-start gap-3">
+        <div className="px-5 py-4 border-b border-line bg-white flex items-start gap-3">
             <div className="mt-0.5 h-7 w-7 rounded flex items-center justify-center shrink-0 bg-primary/10 ring-1 ring-primary/20 text-primary">
                 {icon}
             </div>
             <DialogHeader className="space-y-0.5 text-left min-w-0">
-                <DialogTitle className="text-[11px] font-headline font-bold tracking-widest uppercase text-[#1b1b1d] leading-tight">
+                <DialogTitle className="text-[11px] font-headline font-bold tracking-widest uppercase text-fg leading-tight">
                     {title}
                 </DialogTitle>
-                <DialogDescription className="text-xs text-[#45474c]">{children}</DialogDescription>
+                <DialogDescription className="text-xs text-fg-muted">{children}</DialogDescription>
             </DialogHeader>
         </div>
     )
 }
 
-const THEMED_DIALOG_CONTENT = 'sm:max-w-md border-[#e5e7eb] p-0 gap-0 rounded bg-[#f9f9fb]'
-const THEMED_CANCEL_BTN = 'rounded text-[10px] font-headline font-bold tracking-widest uppercase border-[#e5e7eb] text-[#45474c] hover:bg-[#f9f9fb]'
+const THEMED_DIALOG_CONTENT = 'sm:max-w-md border-line p-0 gap-0 rounded bg-surface-subtle'
+const THEMED_CANCEL_BTN = 'rounded text-[10px] font-headline font-bold tracking-widest uppercase border-line text-fg-muted hover:bg-surface-hover'
 const THEMED_PRIMARY_BTN = 'relative rounded text-[10px] font-headline font-bold tracking-widest uppercase bg-primary text-white hover:bg-primary hover:brightness-105 shadow-sm'
 
 /** Per-row submit button in the Copy/Move modal — fixed footprint while submitting. */
@@ -222,12 +249,36 @@ function CopyMoveSubmitButton({ label, submitting, disabled, onClick }: { label:
             disabled={disabled}
             className={cn(
                 'relative h-7 px-3 flex-shrink-0 rounded text-[10px] font-headline font-bold tracking-widest uppercase shadow-none transition-colors',
-                'bg-white border border-[#e5e7eb] text-[#45474c] hover:bg-primary hover:border-primary hover:text-white',
+                'bg-white border border-line text-fg-muted hover:bg-primary hover:border-primary hover:text-white',
                 submitting && 'bg-primary border-primary text-white disabled:opacity-100',
             )}
         >
             <BusyLabel busy={submitting}>{label}</BusyLabel>
         </Button>
+    )
+}
+
+/** Loading placeholder for the Files table: 36px rows on the table's own grid. */
+function FileTableSkeleton({ rows = 8 }: { rows?: number }) {
+    return (
+        <div aria-busy="true">
+            <LoadingAnnouncement label="Loading files" />
+            {Array.from({ length: rows }).map((_, i) => (
+                <div key={i} className={`grid h-9 items-center gap-4 pl-1 pr-2 ${FILE_TABLE_GRID_COLS_CLASS}`} style={{ opacity: 1 - i * 0.09 }}>
+                    <ShimmerBlock className="h-3.5 w-3.5" />
+                    <ShimmerBar className="w-10" />
+                    <span className="flex min-w-0 items-center gap-2">
+                        <ShimmerBlock />
+                        <ShimmerBar style={{ width: `${38 + ((i * 23) % 40)}%` }} />
+                    </span>
+                    <span className="col-span-2" />
+                    <span className={`items-center ${OWNER_COL_CLASS}`}><ShimmerBar className="w-20" /></span>
+                    <span className={`items-center ${DATE_MODIFIED_COL_CLASS}`}><ShimmerBar className="w-16" /></span>
+                    <span className={`items-center ${DUE_DATE_COL_CLASS}`}><ShimmerBar className="w-12" /></span>
+                    <span className={`items-center ${FILE_SIZE_COL_CLASS}`}><ShimmerBar className="w-8" /></span>
+                </div>
+            ))}
+        </div>
     )
 }
 
@@ -412,7 +463,7 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
                             if (projectId && file?.id) evictPreview(projectId, file.id)
                             renderPreviewRef.current(file, ++previewKeyRef.current)
                         }}
-                        className="h-8 w-8 rounded inline-flex items-center justify-center text-[#45474c] hover:text-[#1b1b1d] bg-[#f4f4f5] hover:bg-[#e9e9eb]"
+                        className="h-8 w-8 rounded inline-flex items-center justify-center text-fg-muted hover:text-fg bg-[#f4f4f5] hover:bg-[#e9e9eb]"
                         aria-label="Reload preview"
                     >
                         <RefreshCw className="h-4 w-4" />
@@ -1210,7 +1261,7 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
                     variant="ghost"
                     size="icon"
                     onClick={() => openSearchPanelRef.current()}
-                    className="h-8 w-8 rounded-lg text-slate-500 hover:text-slate-700 hover:bg-slate-100"
+                    className="h-8 w-8 rounded-lg text-fg-muted hover:text-fg-muted hover:bg-surface-hover"
                     aria-label="Search engagement files"
                 >
                     <Search className="h-4 w-4" />
@@ -2053,8 +2104,10 @@ const handleRefresh = async () => {
         return result.sort(cmp)
     }, [files, sortConfig, filterTypes, filterOwner, filterModified, session?.user?.email, breadcrumbs])
 
-    const TableHeader = ({ label }: { label: string }) => (
-        <div className="flex items-center gap-1 text-[0.8125rem] font-medium text-[#45474c] select-none">
+    /** Notion-style column header: muted small text with a column-type icon. */
+    const TableHeader = ({ label, icon }: { label: string; icon?: React.ReactNode }) => (
+        <div className="flex items-center gap-1.5 text-small font-normal text-fg-muted select-none [&_svg]:h-3.5 [&_svg]:w-3.5 [&_svg]:text-fg-subtle">
+            {icon}
             {label}
         </div>
     )
@@ -2068,7 +2121,7 @@ const handleRefresh = async () => {
             {/* Top Bar: Breadcrumbs & Actions — renders on background, outside the content card */}
             <div className="px-0 pt-1 pb-2 flex flex-col gap-2.5 shrink-0 z-20">
                 {/* Breadcrumbs: root always visible (as dropdown when canManage); truncate middle */}
-                <div className="flex items-center text-xs font-medium text-slate-700 min-w-0">
+                <div className="flex items-center text-xs font-medium text-fg-muted min-w-0">
                     <div className="flex items-center min-w-0 overflow-x-auto whitespace-nowrap custom-scrollbar">
                         {(() => {
                             const ROOT_INDEX = 0
@@ -2095,24 +2148,24 @@ const handleRefresh = async () => {
                                 <>
                                     {displayItems.map(({ item, index, isEllipsis, isRoot }, i) => (
                                         <div key={`breadcrumb-${i}`} className="flex items-center flex-shrink-0">
-                                            {i > 0 && <ChevronRight className="h-3.5 w-3.5 mx-1 text-slate-400 flex-shrink-0" />}
+                                            {i > 0 && <ChevronRight className="h-3.5 w-3.5 mx-1 text-fg-subtle flex-shrink-0" />}
                                             {isRoot && showRootDropdown ? (
                                                 <DropdownMenu>
                                                     <DropdownMenuTrigger asChild>
                                                         <button
                                                             type="button"
                                                             className={cn(
-                                                                "flex items-center min-w-0 hover:bg-slate-100 px-2 py-1 rounded transition-colors max-w-[180px] border-0 bg-transparent cursor-pointer",
-                                                                index === breadcrumbs.length - 1 ? "text-slate-900 bg-slate-50" : "hover:text-slate-900"
+                                                                "flex items-center min-w-0 hover:bg-surface-hover px-2 py-1 rounded transition-colors max-w-[180px] border-0 bg-transparent cursor-pointer",
+                                                                index === breadcrumbs.length - 1 ? "text-fg bg-surface-subtle" : "hover:text-fg"
                                                             )}
                                                             title={`Switch root: ${currentRootLabel}`}
                                                         >
                                                             {currentFolderType === 'general' && <Folder className="h-3.5 w-3.5 mr-1.5 text-primary flex-shrink-0" />}
                                                             {currentFolderType === 'confidential' && <FolderLock className="h-3.5 w-3.5 mr-1.5 text-red-500 flex-shrink-0" />}
                                                             {currentFolderType === 'staging' && <Inbox className="h-3.5 w-3.5 mr-1.5 text-amber-500 flex-shrink-0" />}
-                                                            {!currentFolderType && <Folder className="h-3.5 w-3.5 mr-1.5 text-slate-400 flex-shrink-0" />}
+                                                            {!currentFolderType && <Folder className="h-3.5 w-3.5 mr-1.5 text-fg-subtle flex-shrink-0" />}
                                                             <span className="truncate min-w-0 capitalize">{currentRootLabel}</span>
-                                                            <ChevronDown className="h-3.5 w-3.5 ml-1 text-slate-400 flex-shrink-0" />
+                                                            <ChevronDown className="h-3.5 w-3.5 ml-1 text-fg-subtle flex-shrink-0" />
                                                         </button>
                                                     </DropdownMenuTrigger>
                                                     <DropdownMenuContent align="start" className="min-w-[140px]">
@@ -2120,7 +2173,7 @@ const handleRefresh = async () => {
                                                             <DropdownMenuItem
                                                                 key={type}
                                                                 onClick={() => handleSwitchToRoot(type)}
-                                                                className={cn("capitalize", currentFolderType === type && "bg-slate-50")}
+                                                                className={cn("capitalize", currentFolderType === type && "bg-surface-subtle")}
                                                             >
                                                                 {type === 'general' && <Folder className="h-3.5 w-3.5 mr-2 text-primary" />}
                                                                 {type === 'confidential' && <FolderLock className="h-3.5 w-3.5 mr-2 text-red-500" />}
@@ -2135,8 +2188,8 @@ const handleRefresh = async () => {
                                                     type="button"
                                                     onClick={() => handleBreadcrumbClick(index, item.id)}
                                                     className={cn(
-                                                        "flex items-center hover:bg-slate-100 px-1.5 py-1 rounded transition-colors",
-                                                        index === breadcrumbs.length - 1 ? "text-slate-900 bg-slate-50" : "hover:text-slate-900"
+                                                        "flex items-center hover:bg-surface-hover px-1.5 py-1 rounded transition-colors",
+                                                        index === breadcrumbs.length - 1 ? "text-fg bg-surface-subtle" : "hover:text-fg"
                                                     )}
                                                     title="Files root"
                                                 >
@@ -2146,17 +2199,17 @@ const handleRefresh = async () => {
                                                 <button
                                                     type="button"
                                                     onClick={() => item.clickable !== false ? handleBreadcrumbClick(index, item.id) : handleBreadcrumbClick(ROOT_INDEX, breadcrumbs[ROOT_INDEX].id)}
-                                                    className="flex items-center hover:bg-slate-100 px-2 py-1 rounded transition-colors text-slate-500 hover:text-slate-900"
+                                                    className="flex items-center hover:bg-surface-hover px-2 py-1 rounded transition-colors text-fg-muted hover:text-fg"
                                                     title={`Go up to ${item.clickable !== false ? item.name : 'root'}`}
                                                 >
-                                                    <span className="text-slate-400">…</span>
+                                                    <span className="text-fg-subtle">…</span>
                                                 </button>
                                             ) : item.clickable === false ? (
-                                                <div className="flex items-center px-2 py-1 text-slate-500 cursor-default">
-                                                    {index === 0 && <Building2 className="h-3.5 w-3.5 mr-1.5 text-slate-400 flex-shrink-0" />}
-                                                    {index === 1 && <Users className="h-3.5 w-3.5 mr-1.5 text-slate-400 flex-shrink-0" />}
-                                                    {index === 2 && <Briefcase className="h-3.5 w-3.5 mr-1.5 text-slate-400 flex-shrink-0" />}
-                                                    {index > 2 && <Folder className="h-3.5 w-3.5 mr-1.5 text-slate-400 flex-shrink-0" />}
+                                                <div className="flex items-center px-2 py-1 text-fg-muted cursor-default">
+                                                    {index === 0 && <Building2 className="h-3.5 w-3.5 mr-1.5 text-fg-subtle flex-shrink-0" />}
+                                                    {index === 1 && <Users className="h-3.5 w-3.5 mr-1.5 text-fg-subtle flex-shrink-0" />}
+                                                    {index === 2 && <Briefcase className="h-3.5 w-3.5 mr-1.5 text-fg-subtle flex-shrink-0" />}
+                                                    {index > 2 && <Folder className="h-3.5 w-3.5 mr-1.5 text-fg-subtle flex-shrink-0" />}
                                                     <span className="truncate max-w-[140px]" title={item.name}>{item.name}</span>
                                                 </div>
                                             ) : item.isEngagementRoot ? (
@@ -2164,8 +2217,8 @@ const handleRefresh = async () => {
                                                     type="button"
                                                     onClick={() => handleBreadcrumbClick(index, item.id)}
                                                     className={cn(
-                                                        "flex items-center hover:bg-slate-100 px-1.5 py-1 rounded transition-colors",
-                                                        index === breadcrumbs.length - 1 ? "text-slate-900 bg-slate-50" : "hover:text-slate-900"
+                                                        "flex items-center hover:bg-surface-hover px-1.5 py-1 rounded transition-colors",
+                                                        index === breadcrumbs.length - 1 ? "text-fg bg-surface-subtle" : "hover:text-fg"
                                                     )}
                                                     title="Files root"
                                                 >
@@ -2176,12 +2229,12 @@ const handleRefresh = async () => {
                                                     type="button"
                                                     onClick={() => handleBreadcrumbClick(index, item.id)}
                                                     className={cn(
-                                                        "flex items-center min-w-0 hover:bg-slate-100 px-2 py-1 rounded transition-colors max-w-[180px]",
-                                                        index === breadcrumbs.length - 1 ? "text-slate-900 bg-slate-50" : "hover:text-slate-900"
+                                                        "flex items-center min-w-0 hover:bg-surface-hover px-2 py-1 rounded transition-colors max-w-[180px]",
+                                                        index === breadcrumbs.length - 1 ? "text-fg bg-surface-subtle" : "hover:text-fg"
                                                     )}
                                                     title={item.name}
                                                 >
-                                                    <Folder className="h-3.5 w-3.5 mr-1.5 text-slate-400 flex-shrink-0" />
+                                                    <Folder className="h-3.5 w-3.5 mr-1.5 text-fg-subtle flex-shrink-0" />
                                                     <span className="truncate min-w-0">{item.name}</span>
                                                 </button>
                                             )}
@@ -2198,14 +2251,15 @@ const handleRefresh = async () => {
                     (!isAtProjectRoot && !currentFolderIsApprovedDeliverable && (canEdit || (restrictToSharedOnly && currentFolderIsDeliverable))) ? (
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <Button data-demo-tour="engagement-upload-btn" disabled={loading || isLoadingFolders || isUploading || isUploadInitiating} className="h-auto px-4 py-1.5 rounded bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:bg-primary hover:brightness-105 hover:text-white shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all border-0 inline-flex items-center gap-1.5">
-                                    <Upload className="h-3.5 w-3.5" />
-                                    New File / Folder
+                                <Button data-demo-tour="engagement-upload-btn" size="sm" title="New file or folder" disabled={loading || isLoadingFolders || isUploading || isUploadInitiating}>
+                                    <Plus className="h-3.5 w-3.5" />
+                                    New
+                                    <ChevronDown className="h-3.5 w-3.5 opacity-70" />
                                 </Button>
                             </DropdownMenuTrigger>
-                                <DropdownMenuContent align="start" className="w-[280px] py-1 rounded">
-                                    <DropdownMenuItem onClick={() => openCreateDialog('folder')} className="text-xs py-1.5">
-                                        <Folder className="mr-2 h-3.5 w-3.5 text-slate-500" />
+                                <DropdownMenuContent align="start" className="w-[280px]">
+                                    <DropdownMenuItem onClick={() => openCreateDialog('folder')}>
+                                        <Folder className="mr-2 h-3.5 w-3.5 text-fg-muted" />
                                         New folder
                                     </DropdownMenuItem>
                                     <DropdownMenuSeparator />
@@ -2216,28 +2270,28 @@ const handleRefresh = async () => {
                                         tabIndex={0}
                                         onClick={() => setFromComputerExpanded(!fromComputerExpanded)}
                                         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setFromComputerExpanded(!fromComputerExpanded) } }}
-                                        className="flex items-center justify-between px-2 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-sm cursor-pointer select-none"
+                                        className="flex cursor-pointer select-none items-center justify-between rounded-control px-2 py-1.5 text-ui font-medium text-fg-muted hover:bg-surface-hover"
                                     >
                                         <span className="flex items-center gap-2">
-                                            <Laptop className="h-3.5 w-3.5 text-slate-500" />
+                                            <Laptop className="h-3.5 w-3.5 text-fg-muted" />
                                             Upload from your computer
                                         </span>
-                                        <ChevronDown className={cn("h-3.5 w-3.5 text-slate-400 transition-transform duration-200", fromComputerExpanded && "rotate-180")} />
+                                        <ChevronDown className={cn("h-3.5 w-3.5 text-fg-subtle transition-transform duration-200", fromComputerExpanded && "rotate-180")} />
                                     </div>
                                     <div className={cn("grid transition-[grid-template-rows] duration-200 ease-out", fromComputerExpanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]")}>
                                         <div className="overflow-hidden">
                                             <DropdownMenuItem
                                                 onClick={() => fileInputRef.current?.click()}
-                                                className="text-xs py-1.5 pl-8"
+                                                className="pl-8"
                                             >
-                                                <Upload className="mr-2 h-3.5 w-3.5 text-slate-500" />
+                                                <Upload className="mr-2 h-3.5 w-3.5 text-fg-muted" />
                                                 Upload files
                                             </DropdownMenuItem>
                                             <DropdownMenuItem
                                                 onClick={() => setIsFolderUploadModalOpen(true)}
-                                                className="text-xs py-1.5 pl-8"
+                                                className="pl-8"
                                             >
-                                                <FolderUp className="mr-2 h-3.5 w-3.5 text-slate-500" />
+                                                <FolderUp className="mr-2 h-3.5 w-3.5 text-fg-muted" />
                                                 Upload folder
                                             </DropdownMenuItem>
                                         </div>
@@ -2257,7 +2311,7 @@ const handleRefresh = async () => {
                                             tabIndex={0}
                                             onClick={() => setFromDriveExpanded(!fromDriveExpanded)}
                                             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setFromDriveExpanded(!fromDriveExpanded) } }}
-                                            className="flex items-center justify-between px-2 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-sm cursor-pointer select-none"
+                                            className="flex cursor-pointer select-none items-center justify-between rounded-control px-2 py-1.5 text-ui font-medium text-fg-muted hover:bg-surface-hover"
                                         >
                                             <span className="flex items-center gap-2">
                                                 <svg className="h-3.5 w-3.5" viewBox="0 0 24 24">
@@ -2268,16 +2322,16 @@ const handleRefresh = async () => {
                                                 </svg>
                                                 Import from Google Drive
                                             </span>
-                                            <ChevronDown className={cn("h-3.5 w-3.5 text-slate-400 transition-transform", fromDriveExpanded && "rotate-180")} />
+                                            <ChevronDown className={cn("h-3.5 w-3.5 text-fg-subtle transition-transform", fromDriveExpanded && "rotate-180")} />
                                         </div>
                                         {fromDriveExpanded && (
                                             <>
-                                                <DropdownMenuItem onClick={handleGoogleDrivePicker} className="text-xs py-1.5 pl-8">
-                                                    <Upload className="mr-2 h-3.5 w-3.5 text-slate-500" />
+                                                <DropdownMenuItem onClick={handleGoogleDrivePicker} className="pl-8">
+                                                    <Upload className="mr-2 h-3.5 w-3.5 text-fg-muted" />
                                                     Upload files
                                                 </DropdownMenuItem>
-                                                <DropdownMenuItem disabled className="text-xs py-1.5 pl-8 text-slate-400">
-                                                    <FolderUp className="mr-2 h-3.5 w-3.5 text-slate-400" />
+                                                <DropdownMenuItem disabled className="text-xs py-1.5 pl-8 text-fg-subtle">
+                                                    <FolderUp className="mr-2 h-3.5 w-3.5 text-fg-subtle" />
                                                     Upload folder
                                                     <span className="ml-1 text-[10px]">(coming later)</span>
                                                 </DropdownMenuItem>
@@ -2294,73 +2348,73 @@ const handleRefresh = async () => {
                                         tabIndex={0}
                                         onClick={() => setNewFileExpanded(!newFileExpanded)}
                                         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setNewFileExpanded(!newFileExpanded) } }}
-                                        className="flex items-center justify-between px-2 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-sm cursor-pointer select-none"
+                                        className="flex cursor-pointer select-none items-center justify-between rounded-control px-2 py-1.5 text-ui font-medium text-fg-muted hover:bg-surface-hover"
                                     >
                                         <span className="flex items-center gap-2">
-                                            <SquarePlus className="h-3.5 w-3.5 text-slate-500" />
+                                            <SquarePlus className="h-3.5 w-3.5 text-fg-muted" />
                                             New Document
                                         </span>
-                                        <ChevronDown className={cn("h-3.5 w-3.5 text-slate-400 transition-transform duration-200", newFileExpanded && "rotate-180")} />
+                                        <ChevronDown className={cn("h-3.5 w-3.5 text-fg-subtle transition-transform duration-200", newFileExpanded && "rotate-180")} />
                                     </div>
                                     <div className={cn("grid transition-[grid-template-rows] duration-200 ease-out", newFileExpanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]")}>
                                         <div className="overflow-hidden">
                                         {isOneDriveClient ? (
                                             <>
-                                                <DropdownMenuItem onClick={() => openCreateDialog('word')} className="text-xs py-1.5 pl-8">
+                                                <DropdownMenuItem onClick={() => openCreateDialog('word')} className="pl-8">
                                                     <FileText className="mr-2 h-3.5 w-3.5 text-blue-600" />
                                                     Word Document
                                                 </DropdownMenuItem>
-                                                <DropdownMenuItem onClick={() => openCreateDialog('excel')} className="text-xs py-1.5 pl-8">
+                                                <DropdownMenuItem onClick={() => openCreateDialog('excel')} className="pl-8">
                                                     <FileSpreadsheet className="mr-2 h-3.5 w-3.5 text-green-600" />
                                                     Excel Workbook
                                                 </DropdownMenuItem>
-                                                <DropdownMenuItem onClick={() => openCreateDialog('powerpoint')} className="text-xs py-1.5 pl-8">
+                                                <DropdownMenuItem onClick={() => openCreateDialog('powerpoint')} className="pl-8">
                                                     <Presentation className="mr-2 h-3.5 w-3.5 text-orange-600" />
                                                     PowerPoint Presentation
                                                 </DropdownMenuItem>
                                             </>
                                         ) : (
                                         <>
-                                            <DropdownMenuItem onClick={() => openCreateDialog('doc')} className="text-xs py-1.5 pl-8">
+                                            <DropdownMenuItem onClick={() => openCreateDialog('doc')} className="pl-8">
                                                 <FileText className="mr-2 h-3.5 w-3.5 text-blue-500" />
                                                 Google Doc
                                             </DropdownMenuItem>
-                                            <DropdownMenuItem onClick={() => openCreateDialog('sheet')} className="text-xs py-1.5 pl-8">
+                                            <DropdownMenuItem onClick={() => openCreateDialog('sheet')} className="pl-8">
                                                 <FileSpreadsheet className="mr-2 h-3.5 w-3.5 text-green-500" />
                                                 Google Sheet
                                             </DropdownMenuItem>
-                                            <DropdownMenuItem onClick={() => openCreateDialog('slide')} className="text-xs py-1.5 pl-8">
+                                            <DropdownMenuItem onClick={() => openCreateDialog('slide')} className="pl-8">
                                                 <Presentation className="mr-2 h-3.5 w-3.5 text-yellow-500" />
                                                 Google Slide
                                             </DropdownMenuItem>
-                                            <DropdownMenuItem onClick={() => openCreateDialog('form')} className="text-xs py-1.5 pl-8">
+                                            <DropdownMenuItem onClick={() => openCreateDialog('form')} className="pl-8">
                                                 <ListChecks className="mr-2 h-3.5 w-3.5 text-purple-600" />
                                                 Google Form
                                             </DropdownMenuItem>
                                             <DropdownMenuSub>
-                                                <DropdownMenuSubTrigger className="text-xs py-1.5 pl-8">More</DropdownMenuSubTrigger>
+                                                <DropdownMenuSubTrigger className="pl-8">More</DropdownMenuSubTrigger>
                                                 <DropdownMenuSubContent className="w-[200px] py-1">
-                                                    <DropdownMenuItem onClick={() => openCreateDialog('drawing')} className="text-xs py-1.5">
+                                                    <DropdownMenuItem onClick={() => openCreateDialog('drawing')}>
                                                         <PenTool className="mr-2 h-3.5 w-3.5 text-red-500" />
                                                         Google Drawing
                                                     </DropdownMenuItem>
-                                                    <DropdownMenuItem onClick={() => openCreateDialog('map')} className="text-xs py-1.5">
+                                                    <DropdownMenuItem onClick={() => openCreateDialog('map')}>
                                                         <MapIcon className="mr-2 h-3.5 w-3.5 text-orange-500" />
                                                         Google My Map
                                                     </DropdownMenuItem>
-                                                    <DropdownMenuItem onClick={() => openCreateDialog('site')} className="text-xs py-1.5">
+                                                    <DropdownMenuItem onClick={() => openCreateDialog('site')}>
                                                         <Layout className="mr-2 h-3.5 w-3.5 text-blue-600" />
                                                         Google Site
                                                     </DropdownMenuItem>
-                                                    <DropdownMenuItem onClick={() => openCreateDialog('script')} className="text-xs py-1.5">
-                                                        <Code className="mr-2 h-3.5 w-3.5 text-slate-600" />
+                                                    <DropdownMenuItem onClick={() => openCreateDialog('script')}>
+                                                        <Code className="mr-2 h-3.5 w-3.5 text-fg-muted" />
                                                         Google Apps Script
                                                     </DropdownMenuItem>
                                                 </DropdownMenuSubContent>
                                             </DropdownMenuSub>
                                         </>
                                         )}
-                                        <DropdownMenuItem onClick={() => openCreateDialog('link')} className="text-xs py-1.5 pl-8">
+                                        <DropdownMenuItem onClick={() => openCreateDialog('link')} className="pl-8">
                                             <ExternalLink className="mr-2 h-3.5 w-3.5 text-purple-600" />
                                             External Link
                                         </DropdownMenuItem>
@@ -2375,159 +2429,118 @@ const handleRefresh = async () => {
 
                 {/* Toolbar: Filters + right-side actions */}
                 <div className="flex items-center justify-between gap-4">
-                    {/* Left: Filters */}
-                    <div className="flex items-center gap-2">
+                    {/* Left: Filters — Notion's filter-bar pills and menus, the same parts as Doc
+                        Search (components/ui/filter-pill.tsx). Empty: a quiet outlined pill. Set:
+                        filled in the accent and reading "Type: Folders, Documents", with an x.
+                        Sort always has a value, so it stays neutral. */}
+                    <div className="flex flex-wrap items-center gap-1.5">
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <Button disabled={loading} variant="outline" size="sm" className="h-8 gap-1.5 text-xs bg-white rounded border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
-                                    <Filter className="h-3 w-3 opacity-60" />
-                                    Type
-                                    {filterTypes.size > 0 && <span className="ml-0.5 bg-slate-200 text-slate-800 px-1.5 rounded-full text-[10px] font-medium">{filterTypes.size}</span>}
-                                    <ChevronDown className="h-3 w-3 opacity-50" />
-                                </Button>
+                                <FilterPill
+                                    disabled={loading}
+                                    icon={<FileText />}
+                                    label="Type"
+                                    value={filterTypes.size > 0
+                                        ? summarizePicks(FILE_TYPE_FILTERS.filter(([key]) => filterTypes.has(key)).map(([, label]) => label))
+                                        : undefined}
+                                    onClear={() => setFilterTypes(new Set())}
+                                />
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start" className="w-[200px] py-1 text-xs rounded">
-                                <div className="flex items-center justify-between px-2 py-1.5 border-b border-slate-100">
-                                    <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-slate-400 p-0 font-medium">Type</DropdownMenuLabel>
-                                    <DropdownMenuItem className="text-xs rounded bg-slate-900 text-white hover:bg-slate-800 hover:text-white focus:bg-slate-800 focus:text-white p-1.5 px-2 cursor-pointer">
-                                        Done
-                                    </DropdownMenuItem>
-                                </div>
-                                <DropdownMenuCheckboxItem checked={filterTypes.size === 0 ? true : (filterTypes.size < 5 ? ('indeterminate' as const) : false)} onCheckedChange={() => setFilterTypes(new Set())} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
+                            <DropdownMenuContent align="start" className="w-[220px] p-1">
+                                <FilterMenuLabel>Type</FilterMenuLabel>
+                                <FilterMenuRow multi selected={filterTypes.size === 0} onSelect={() => setFilterTypes(new Set())}>
                                     Any type
-                                </DropdownMenuCheckboxItem>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuCheckboxItem checked={filterTypes.has('folder')} onCheckedChange={() => toggleFilterType('folder')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
-                                    Folders
-                                </DropdownMenuCheckboxItem>
-                                <DropdownMenuCheckboxItem checked={filterTypes.has('document')} onCheckedChange={() => toggleFilterType('document')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
-                                    Documents
-                                </DropdownMenuCheckboxItem>
-                                <DropdownMenuCheckboxItem checked={filterTypes.has('spreadsheet')} onCheckedChange={() => toggleFilterType('spreadsheet')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
-                                    Spreadsheets
-                                </DropdownMenuCheckboxItem>
-                                <DropdownMenuCheckboxItem checked={filterTypes.has('presentation')} onCheckedChange={() => toggleFilterType('presentation')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
-                                    Presentations
-                                </DropdownMenuCheckboxItem>
-                                <DropdownMenuCheckboxItem checked={filterTypes.has('image')} onCheckedChange={() => toggleFilterType('image')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
-                                    Images
-                                </DropdownMenuCheckboxItem>
-                                <DropdownMenuCheckboxItem checked={filterTypes.has('other')} onCheckedChange={() => toggleFilterType('other')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
-                                    Other
-                                </DropdownMenuCheckboxItem>
+                                </FilterMenuRow>
+                                <DropdownMenuSeparator className="mx-0 my-1" />
+                                {FILE_TYPE_FILTERS.map(([key, label]) => (
+                                    <FilterMenuRow key={key} multi selected={filterTypes.has(key)} onSelect={() => toggleFilterType(key)}>
+                                        {label}
+                                    </FilterMenuRow>
+                                ))}
                             </DropdownMenuContent>
                         </DropdownMenu>
 
-                        {/* ... Other Filters (unchanged) ... */}
                         <DropdownMenu open={peopleFilterOpen} onOpenChange={setPeopleFilterOpen}>
                             <DropdownMenuTrigger asChild>
-                                <Button disabled={loading} variant="outline" size="sm" className={cn("h-8 gap-1.5 text-xs bg-white rounded border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors", filterOwner !== 'any' && "border-slate-400 ring-1 ring-slate-300")}>
-                                    <Filter className="h-3 w-3 opacity-60" />
-                                    People
-                                    {filterOwner !== 'any' && <span className="ml-0.5 bg-slate-200 text-slate-800 px-1.5 rounded-full text-[10px] font-medium">1</span>}
-                                    <ChevronDown className="h-3 w-3 opacity-50" />
-                                </Button>
+                                <FilterPill
+                                    disabled={loading}
+                                    icon={<User />}
+                                    label="People"
+                                    value={filterOwner !== 'any' ? OWNER_FILTER_LABEL[filterOwner] : undefined}
+                                    onClear={() => setFilterOwner('any')}
+                                />
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start" className="w-[200px] py-1 text-xs rounded">
-                                <div className="flex items-center justify-between px-2 py-1.5 border-b border-slate-100">
-                                    <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-slate-400 p-0 font-medium">People</DropdownMenuLabel>
-                                    <DropdownMenuItem onSelect={() => setPeopleFilterOpen(false)} className="text-xs rounded bg-slate-900 text-white hover:bg-slate-800 hover:text-white focus:bg-slate-800 focus:text-white p-1.5 px-2 cursor-pointer">
-                                        Done
-                                    </DropdownMenuItem>
-                                </div>
-                                <DropdownMenuCheckboxItem checked={filterOwner === 'any'} onCheckedChange={() => setFilterOwner('any')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
-                                    <User className="h-3.5 w-3.5 mr-2" />
+                            <DropdownMenuContent align="start" className="w-[220px] p-1">
+                                <FilterMenuLabel>People</FilterMenuLabel>
+                                <FilterMenuRow selected={filterOwner === 'any'} onSelect={() => setFilterOwner('any')}>
                                     Anyone
-                                </DropdownMenuCheckboxItem>
-                                <DropdownMenuSeparator />
-                                <div className="px-2 pt-1.5 pb-0.5">
-                                    <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-slate-400 p-0 font-medium">Owner</DropdownMenuLabel>
-                                </div>
-                                <DropdownMenuCheckboxItem checked={filterOwner === 'me'} onCheckedChange={() => setFilterOwner(filterOwner === 'me' ? 'any' : 'me')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
-                                    <User className="h-3.5 w-3.5 mr-2" />
-                                    Owned by me
-                                </DropdownMenuCheckboxItem>
-                                <DropdownMenuCheckboxItem checked={filterOwner === 'not-me'} onCheckedChange={() => setFilterOwner(filterOwner === 'not-me' ? 'any' : 'not-me')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
-                                    <User className="h-3.5 w-3.5 mr-2" />
-                                    Owned by others
-                                </DropdownMenuCheckboxItem>
-                                <DropdownMenuCheckboxItem checked={filterOwner === 'private-me'} onCheckedChange={() => setFilterOwner(filterOwner === 'private-me' ? 'any' : 'private-me')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
-                                    <User className="h-3.5 w-3.5 mr-2" />
-                                    Private to me
-                                </DropdownMenuCheckboxItem>
+                                </FilterMenuRow>
+                                <DropdownMenuSeparator className="mx-0 my-1" />
+                                {(Object.keys(OWNER_FILTER_LABEL) as Array<keyof typeof OWNER_FILTER_LABEL>).map((key) => (
+                                    <FilterMenuRow key={key} selected={filterOwner === key} onSelect={() => setFilterOwner(key)}>
+                                        {OWNER_FILTER_LABEL[key]}
+                                    </FilterMenuRow>
+                                ))}
                             </DropdownMenuContent>
                         </DropdownMenu>
 
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <Button disabled={loading} variant="outline" size="sm" className={cn("h-8 gap-1.5 text-xs bg-white rounded border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors", filterModified !== 'any' && "border-slate-400 ring-1 ring-slate-300")}>
-                                    <Filter className="h-3 w-3 opacity-60" />
-                                    Modified
-                                    {filterModified !== 'any' && <span className="ml-0.5 bg-slate-200 text-slate-800 px-1.5 rounded-full text-[10px] font-medium">1</span>}
-                                    <ChevronDown className="h-3 w-3 opacity-50" />
-                                </Button>
+                                <FilterPill
+                                    disabled={loading}
+                                    icon={<Clock />}
+                                    label="Modified"
+                                    value={filterModified !== 'any' ? MODIFIED_FILTER_LABEL[filterModified] : undefined}
+                                    onClear={() => setFilterModified('any')}
+                                />
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start" className="w-[180px] py-1 text-xs rounded">
-                                <div className="flex items-center justify-between px-2 py-1.5 border-b border-slate-100">
-                                    <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-slate-400 p-0 font-medium">Modified</DropdownMenuLabel>
-                                    <DropdownMenuItem className="text-xs rounded bg-slate-900 text-white hover:bg-slate-800 hover:text-white focus:bg-slate-800 focus:text-white p-1.5 px-2 cursor-pointer">
-                                        Done
-                                    </DropdownMenuItem>
-                                </div>
-                                <DropdownMenuCheckboxItem checked={filterModified === 'any'} onCheckedChange={() => setFilterModified('any')} className="text-xs py-1.5 pl-8">
+                            <DropdownMenuContent align="start" className="w-[200px] p-1">
+                                <FilterMenuLabel>Modified</FilterMenuLabel>
+                                <FilterMenuRow selected={filterModified === 'any'} onSelect={() => setFilterModified('any')}>
                                     Any time
-                                </DropdownMenuCheckboxItem>
-                                <DropdownMenuCheckboxItem checked={filterModified === '7d'} onCheckedChange={() => setFilterModified('7d')} className="text-xs py-1.5 pl-8">
-                                    Last 7 days
-                                </DropdownMenuCheckboxItem>
-                                <DropdownMenuCheckboxItem checked={filterModified === '30d'} onCheckedChange={() => setFilterModified('30d')} className="text-xs py-1.5 pl-8">
-                                    Last 30 days
-                                </DropdownMenuCheckboxItem>
-                                <DropdownMenuCheckboxItem checked={filterModified === 'year'} onCheckedChange={() => setFilterModified('year')} className="text-xs py-1.5 pl-8">
-                                    This year
-                                </DropdownMenuCheckboxItem>
+                                </FilterMenuRow>
+                                <DropdownMenuSeparator className="mx-0 my-1" />
+                                {(Object.keys(MODIFIED_FILTER_LABEL) as Array<keyof typeof MODIFIED_FILTER_LABEL>).map((key) => (
+                                    <FilterMenuRow key={key} selected={filterModified === key} onSelect={() => setFilterModified(key)}>
+                                        {MODIFIED_FILTER_LABEL[key]}
+                                    </FilterMenuRow>
+                                ))}
                             </DropdownMenuContent>
                         </DropdownMenu>
 
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <Button disabled={loading} variant="outline" size="sm" className="h-8 gap-1.5 text-xs bg-white rounded border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
-                                    <svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24" fill="currentColor" className="h-3.5 w-3.5">
-                                        <path d="M120-240v-80h240v80H120Zm0-200v-80h480v80H120Zm0-200v-80h720v80H120Z" />
-                                    </svg>
-                                    Sort
-                                </Button>
+                                <FilterPill
+                                    disabled={loading}
+                                    neutral
+                                    icon={<SortBarsIcon />}
+                                    label="Sort"
+                                    value={SORT_BY_LABEL[sortConfig.sortBy]}
+                                />
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start" className="w-[220px] py-1 text-xs rounded">
-                                <DropdownMenuLabel className="text-xs uppercase tracking-wider text-slate-400">Sort by</DropdownMenuLabel>
-                                <DropdownMenuCheckboxItem className="text-xs" checked={sortConfig.sortBy === 'name'} onCheckedChange={() => setSortBy('name')}>
-                                    Name
-                                </DropdownMenuCheckboxItem>
-                                <DropdownMenuCheckboxItem className="text-xs" checked={sortConfig.sortBy === 'modifiedTime'} onCheckedChange={() => setSortBy('modifiedTime')}>
-                                    Date modified
-                                </DropdownMenuCheckboxItem>
-                                <DropdownMenuCheckboxItem className="text-xs" checked={sortConfig.sortBy === 'modifiedTimeByMe'} onCheckedChange={() => setSortBy('modifiedTimeByMe')}>
-                                    Date modified by me
-                                </DropdownMenuCheckboxItem>
-                                <DropdownMenuCheckboxItem className="text-xs" checked={sortConfig.sortBy === 'viewedByMeTime'} onCheckedChange={() => setSortBy('viewedByMeTime')}>
-                                    Date opened by me
-                                </DropdownMenuCheckboxItem>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuLabel className="text-xs uppercase tracking-wider text-slate-400">Sort direction</DropdownMenuLabel>
-                                <DropdownMenuCheckboxItem className="text-xs" checked={sortConfig.direction === 'asc'} onCheckedChange={() => setSortDirection('asc')}>
+                            <DropdownMenuContent align="start" className="w-[220px] p-1">
+                                <FilterMenuLabel>Sort by</FilterMenuLabel>
+                                {(Object.keys(SORT_BY_LABEL) as SortByOption[]).map((key) => (
+                                    <FilterMenuRow key={key} selected={sortConfig.sortBy === key} onSelect={() => setSortBy(key)}>
+                                        {SORT_BY_LABEL[key]}
+                                    </FilterMenuRow>
+                                ))}
+                                <DropdownMenuSeparator className="mx-0 my-1" />
+                                <FilterMenuLabel>Direction</FilterMenuLabel>
+                                <FilterMenuRow selected={sortConfig.direction === 'asc'} onSelect={() => setSortDirection('asc')}>
                                     A to Z
-                                </DropdownMenuCheckboxItem>
-                                <DropdownMenuCheckboxItem className="text-xs" checked={sortConfig.direction === 'desc'} onCheckedChange={() => setSortDirection('desc')}>
+                                </FilterMenuRow>
+                                <FilterMenuRow selected={sortConfig.direction === 'desc'} onSelect={() => setSortDirection('desc')}>
                                     Z to A
-                                </DropdownMenuCheckboxItem>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuLabel className="text-xs uppercase tracking-wider text-slate-400">Folders</DropdownMenuLabel>
-                                <DropdownMenuCheckboxItem className="text-xs" checked={sortConfig.foldersFirst} onCheckedChange={(c) => c === true && setFoldersFirst(true)}>
+                                </FilterMenuRow>
+                                <DropdownMenuSeparator className="mx-0 my-1" />
+                                <FilterMenuLabel>Folders</FilterMenuLabel>
+                                <FilterMenuRow selected={sortConfig.foldersFirst} onSelect={() => setFoldersFirst(true)}>
                                     On top
-                                </DropdownMenuCheckboxItem>
-                                <DropdownMenuCheckboxItem className="text-xs" checked={!sortConfig.foldersFirst} onCheckedChange={(c) => c === true && setFoldersFirst(false)}>
+                                </FilterMenuRow>
+                                <FilterMenuRow selected={!sortConfig.foldersFirst} onSelect={() => setFoldersFirst(false)}>
                                     Mixed with files
-                                </DropdownMenuCheckboxItem>
+                                </FilterMenuRow>
                             </DropdownMenuContent>
                         </DropdownMenu>
 
@@ -2539,9 +2552,9 @@ const handleRefresh = async () => {
                                     setFilterOwner('any')
                                     setFilterModified('any')
                                 }}
-                                className="h-8 px-2.5 text-xs rounded border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-900 transition-colors"
+                                className="ml-0.5 h-7 rounded-full px-2 text-small text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg"
                             >
-                                Clear all
+                                Clear
                             </button>
                         )}
                     </div>
@@ -2562,7 +2575,7 @@ const handleRefresh = async () => {
                                         "h-9 w-9 p-0 rounded-full transition-colors",
                                         selectedFileIds.size > 0
                                             ? "bg-slate-900 text-white border-slate-900 hover:bg-slate-700 hover:border-slate-700"
-                                            : "border-slate-200 text-slate-400 bg-white disabled:opacity-40"
+                                            : "border-line text-fg-subtle bg-white disabled:opacity-40"
                                     )}
                                 >
                                     <Download className="h-4 w-4" />
@@ -2584,7 +2597,7 @@ const handleRefresh = async () => {
                                         "h-9 w-9 p-0 rounded-full transition-colors",
                                         selectedFileIds.size > 0
                                             ? "bg-red-600 text-white border-red-600 hover:bg-red-700 hover:border-red-700"
-                                            : "border-slate-200 text-slate-400 bg-white disabled:opacity-40"
+                                            : "border-line text-fg-subtle bg-white disabled:opacity-40"
                                     )}
                                 >
                                     <Trash2 className="h-4 w-4" />
@@ -2604,7 +2617,7 @@ const handleRefresh = async () => {
                                     size="sm"
                                     disabled={loading || isRefreshing}
                                     onClick={handleRefresh}
-                                    className="h-9 w-9 p-0 rounded-full border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                                    className="h-9 w-9 p-0 rounded-full border-line text-fg-muted hover:bg-surface-hover hover:text-fg"
                                 >
                                     <RefreshCw className={cn("h-4 w-4", isRefreshing ? "animate-spin" : files.some(f => f.indexingStatus === 'PROCESSING') && "animate-pulse")} />
                                 </Button>
@@ -2620,7 +2633,7 @@ const handleRefresh = async () => {
                                     variant="outline"
                                     size="sm"
                                     onClick={openSearchPanel}
-                                    className="h-9 w-9 p-0 rounded-full border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                                    className="h-9 w-9 p-0 rounded-full border-line text-fg-muted hover:bg-surface-hover hover:text-fg"
                                     aria-label="Search engagement files"
                                 >
                                     <Search className="h-4 w-4" />
@@ -2634,17 +2647,17 @@ const handleRefresh = async () => {
                 </div>
             </div >
 
-            {/* Content Area - Styled as a Card */}
-            <div className={cn("flex-1 overflow-hidden flex flex-col relative bg-white rounded border border-[#e5e7eb]", FILE_TABLE_CONTAINER_CLASS)}>
+            {/* Content area — a Notion table: no card, the header's hairline is the only frame */}
+            <div className={cn("flex-1 overflow-hidden flex flex-col relative", FILE_TABLE_CONTAINER_CLASS)}>
                 {/* Download Progress Panel — portaled to body, stacked above upload panel */}
                 {downloadQueue.length > 0 && typeof document !== 'undefined' && document.body && createPortal(
                     <div className={cn(
-                        "fixed right-4 bg-white rounded-lg shadow-xl border border-slate-200 z-[101] flex flex-col transition-all duration-300 w-[360px]",
+                        "fixed right-4 bg-white rounded-lg shadow-xl border border-line z-[101] flex flex-col transition-all duration-300 w-[360px]",
                         isDownloadPanelOpen ? "h-auto max-h-[300px]" : "h-10"
                     )}
                     style={{ bottom: uploadQueue.length > 0 ? 'calc(1rem + 160px)' : '1rem' }}>
                         <div
-                            className="flex items-center justify-between px-3 py-2 bg-slate-100 border-b border-slate-200 text-slate-900 rounded-t-lg cursor-pointer"
+                            className="flex items-center justify-between px-3 py-2 bg-surface-muted border-b border-line text-fg rounded-t-lg cursor-pointer"
                             onClick={() => setIsDownloadPanelOpen(!isDownloadPanelOpen)}
                         >
                             <span className="text-[11px] font-medium">
@@ -2653,11 +2666,11 @@ const handleRefresh = async () => {
                                     : `Download${downloadQueue.length > 1 ? 's' : ''} complete`
                                 } {downloadQueue.filter(i => i.status === 'done').length}/{downloadQueue.length}
                             </span>
-                            <div className="flex items-center gap-2 text-slate-500">
+                            <div className="flex items-center gap-2 text-fg-muted">
                                 {isDownloadPanelOpen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
                                 <button
                                     onClick={(e) => { e.stopPropagation(); setDownloadQueue([]) }}
-                                    className="hover:bg-slate-200 rounded p-0.5 transition-colors"
+                                    className="hover:bg-surface-hover rounded p-0.5 transition-colors"
                                 >
                                     <X className="h-3.5 w-3.5" />
                                 </button>
@@ -2666,16 +2679,16 @@ const handleRefresh = async () => {
                         {isDownloadPanelOpen && (
                             <div className="flex-1 overflow-y-auto p-0">
                                 {downloadQueue.map((item) => (
-                                    <div key={item.id} className="flex items-center gap-2 px-3 py-2 border-b border-slate-100 last:border-0">
-                                        <Download className="h-3.5 w-3.5 flex-shrink-0 text-slate-400" />
-                                        <p className="text-[11px] text-slate-700 truncate flex-1">{item.name}</p>
+                                    <div key={item.id} className="flex items-center gap-2 px-3 py-2 border-b border-line last:border-0">
+                                        <Download className="h-3.5 w-3.5 flex-shrink-0 text-fg-subtle" />
+                                        <p className="text-[11px] text-fg-muted truncate flex-1">{item.name}</p>
                                         {item.status === 'preparing' && (
-                                            <svg className="animate-spin h-3.5 w-3.5 text-slate-400 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                            <svg className="animate-spin h-3.5 w-3.5 text-fg-subtle flex-shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                                                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                                                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                                             </svg>
                                         )}
-                                        {item.status === 'done' && <CheckCircle2 className="h-3.5 w-3.5 text-slate-900 flex-shrink-0" />}
+                                        {item.status === 'done' && <CheckCircle2 className="h-3.5 w-3.5 text-fg flex-shrink-0" />}
                                         {item.status === 'error' && <XCircle className="h-3.5 w-3.5 text-red-500 flex-shrink-0" />}
                                     </div>
                                 ))}
@@ -2688,7 +2701,7 @@ const handleRefresh = async () => {
                 {/* Bulk Trash Progress Panel — stacks above download panel if both visible */}
                 {trashQueue.length > 0 && typeof document !== 'undefined' && document.body && createPortal(
                     <div className={cn(
-                        "fixed right-4 bg-white rounded-lg shadow-xl border border-slate-200 z-[102] flex flex-col transition-all duration-300 w-[360px]",
+                        "fixed right-4 bg-white rounded-lg shadow-xl border border-line z-[102] flex flex-col transition-all duration-300 w-[360px]",
                         isTrashPanelOpen ? "h-auto max-h-[300px]" : "h-10"
                     )}
                     style={{ bottom: downloadQueue.length > 0
@@ -2696,7 +2709,7 @@ const handleRefresh = async () => {
                         : uploadQueue.length > 0 ? 'calc(1rem + 160px)' : '1rem'
                     }}>
                         <div
-                            className="flex items-center justify-between px-3 py-2 bg-red-50 border-b border-red-100 text-slate-900 rounded-t-lg cursor-pointer"
+                            className="flex items-center justify-between px-3 py-2 bg-red-50 border-b border-red-100 text-fg rounded-t-lg cursor-pointer"
                             onClick={() => setIsTrashPanelOpen(!isTrashPanelOpen)}
                         >
                             <span className="text-[11px] font-medium">
@@ -2705,7 +2718,7 @@ const handleRefresh = async () => {
                                     : `Moved to Bin ${trashQueue.filter(i => i.status === 'done').length}/${trashQueue.length}`
                                 }
                             </span>
-                            <div className="flex items-center gap-2 text-slate-500">
+                            <div className="flex items-center gap-2 text-fg-muted">
                                 {isTrashPanelOpen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
                                 <button
                                     onClick={(e) => { e.stopPropagation(); setTrashQueue([]) }}
@@ -2718,16 +2731,16 @@ const handleRefresh = async () => {
                         {isTrashPanelOpen && (
                             <div className="flex-1 overflow-y-auto p-0">
                                 {trashQueue.map((item) => (
-                                    <div key={item.id} className="flex items-center gap-2 px-3 py-2 border-b border-slate-100 last:border-0">
-                                        <Trash2 className="h-3.5 w-3.5 flex-shrink-0 text-slate-400" />
-                                        <p className="text-[11px] text-slate-700 truncate flex-1">{item.name}</p>
+                                    <div key={item.id} className="flex items-center gap-2 px-3 py-2 border-b border-line last:border-0">
+                                        <Trash2 className="h-3.5 w-3.5 flex-shrink-0 text-fg-subtle" />
+                                        <p className="text-[11px] text-fg-muted truncate flex-1">{item.name}</p>
                                         {item.status === 'pending' && (
-                                            <svg className="animate-spin h-3.5 w-3.5 text-slate-400 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                            <svg className="animate-spin h-3.5 w-3.5 text-fg-subtle flex-shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                                                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                                                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                                             </svg>
                                         )}
-                                        {item.status === 'done' && <CheckCircle2 className="h-3.5 w-3.5 text-slate-900 flex-shrink-0" />}
+                                        {item.status === 'done' && <CheckCircle2 className="h-3.5 w-3.5 text-fg flex-shrink-0" />}
                                         {item.status === 'error' && <span title={item.error}><XCircle className="h-3.5 w-3.5 text-red-500 flex-shrink-0" /></span>}
                                     </div>
                                 ))}
@@ -2758,8 +2771,8 @@ const handleRefresh = async () => {
                 {
                     isDragging && (
                         <div className="absolute inset-0 z-50 bg-slate-100/90 border-2 border-dashed border-slate-400 flex flex-col items-center justify-center pointer-events-none">
-                            <Upload className="h-16 w-16 text-slate-500 mb-4" />
-                            <h3 className="text-xl font-medium text-slate-700">Drop files to upload</h3>
+                            <Upload className="h-16 w-16 text-fg-muted mb-4" />
+                            <h3 className="text-xl font-medium text-fg-muted">Drop files to upload</h3>
                         </div>
                     )
                 }
@@ -2771,7 +2784,7 @@ const handleRefresh = async () => {
                             <Layers className="h-5 w-5 text-indigo-400" />
                             <div>
                                 <p className="text-sm font-semibold">Moving "{draggedItem?.name}"</p>
-                                <p className="text-[10px] text-slate-400 opacity-90">Drop on any folder to move it there</p>
+                                <p className="text-[10px] text-fg-subtle opacity-90">Drop on any folder to move it there</p>
                             </div>
                             <div className="ml-4 h-6 w-px bg-slate-700" />
                             <button
@@ -2786,15 +2799,15 @@ const handleRefresh = async () => {
 
                 {/* Item count */}
                 {files.length > 0 && (
-                    <div className="px-4 py-1.5 border-b border-[#f0f0f2] bg-[#fafafa]">
-                        <span className="text-[10px] font-medium text-[#9a9ba0]">
-                            Showing {files.length} {files.length === 1 ? 'item' : 'items'}
+                    <div className="px-1 pb-1.5">
+                        <span className="text-caption font-normal text-fg-subtle tabular-nums">
+                            {files.length} {files.length === 1 ? 'item' : 'items'}
                         </span>
                     </div>
                 )}
 
                 {/* Fixed Table Header (Compact) */}
-                <div className="sticky top-0 bg-white border-b border-[#e5e7eb] pl-3 pr-2 py-2.5 shrink-0 z-10 group">
+                <div className="sticky top-0 bg-surface border-b border-line pl-1 pr-2 h-8 flex flex-col justify-center shrink-0 z-10 group">
                     <div className={`grid gap-4 items-center ${FILE_TABLE_GRID_COLS_CLASS}`}>
                         {/* Select-all checkbox column */}
                         <div
@@ -2811,57 +2824,42 @@ const handleRefresh = async () => {
                             />
                         </div>
                         <div className="flex items-center">
-                            <TableHeader label="ID" />
+                            <TableHeader label="ID" icon={<Hash />} />
                         </div>
                         <div className="flex items-center">
-                            <TableHeader label="Name" />
+                            <TableHeader label="Name" icon={<Type />} />
                         </div>
-                        <div className="col-span-2 flex items-center justify-center"><TableHeader label="Quick" /></div>
-                        <div className={`items-center ${OWNER_COL_CLASS}`}><TableHeader label="Owner" /></div>
-                        <div className={`items-center ${DATE_MODIFIED_COL_CLASS}`}><TableHeader label="Date modified" /></div>
-                        <div className={`items-center ${DUE_DATE_COL_CLASS}`}><TableHeader label="Due date" /></div>
-                        <div className={`items-center ${FILE_SIZE_COL_CLASS}`}><TableHeader label="File size" /></div>
+                        {/* Quick actions column: no label, Notion-style */}
+                        <div className="col-span-2" aria-hidden />
+                        <div className={`items-center ${OWNER_COL_CLASS}`}><TableHeader label="Owner" icon={<UserRound />} /></div>
+                        <div className={`items-center ${DATE_MODIFIED_COL_CLASS}`}><TableHeader label="Modified" icon={<Clock3 />} /></div>
+                        <div className={`items-center ${DUE_DATE_COL_CLASS}`}><TableHeader label="Due" icon={<Flag />} /></div>
+                        <div className={`items-center ${FILE_SIZE_COL_CLASS}`}><TableHeader label="Size" icon={<HardDrive />} /></div>
                     </div>
                 </div>
 
                 {/* File List */}
                 <div className="flex-1 overflow-y-auto custom-scrollbar relative">
-                    {deeplinkResolving ? (
-                        <div className="divide-y divide-[#e5e7eb] animate-pulse">
-                            {Array.from({ length: 7 }).map((_, i) => (
-                                <div key={i} className="grid items-center px-4 py-2.5" style={{ gridTemplateColumns: '1fr 80px 120px 160px 80px 36px' }}>
-                                    <div className="flex items-center gap-2.5 min-w-0">
-                                        <div className="h-4 w-4 rounded bg-slate-200 flex-shrink-0" />
-                                        <div className={`h-3 rounded bg-slate-200`} style={{ width: `${40 + (i * 17) % 45}%` }} />
-                                    </div>
-                                    <div className="h-3 w-8 rounded bg-slate-100" />
-                                    <div className="h-3 w-16 rounded bg-slate-100" />
-                                    <div className="h-3 w-20 rounded bg-slate-100" />
-                                    <div className="h-3 w-8 rounded bg-slate-100" />
-                                    <div className="h-3 w-4 rounded bg-slate-100" />
-                                </div>
-                            ))}
-                        </div>
-                    ) : loading || isLoadingFolders ? (
-                        <div className="flex h-64 items-center justify-center">
-                            <LoadingSpinner size="md" />
-                        </div>
+                    {deeplinkResolving || loading || isLoadingFolders ? (
+                        // Rows shaped like the table that is coming (same grid as the header and
+                        // FileRow), so nothing jumps when the files arrive.
+                        <FileTableSkeleton />
                     ) : error ? (
                         <div className="flex flex-col items-center justify-center h-64 text-center px-3">
                             <AlertCircle className="h-10 w-10 text-red-500 mb-3" />
-                            <p className="text-sm text-slate-600">{error}</p>
-                            <Button variant="link" onClick={() => window.location.reload()} className="h-auto p-0 mt-2 text-slate-700 hover:text-slate-900 text-xs">Try Refreshing</Button>
+                            <p className="text-sm text-fg-muted">{error}</p>
+                            <Button variant="link" onClick={() => window.location.reload()} className="h-auto p-0 mt-2 text-fg-muted hover:text-fg text-xs">Try Refreshing</Button>
                         </div>
                     ) : !connectorRootFolderId && !deeplinkResolving ? (
                         clientConnectorId ? (
                         <div className="flex flex-col items-center justify-center h-64 text-center px-6">
-                            <div className="h-12 w-12 bg-[#f3f4f6] rounded-full flex items-center justify-center mb-4">
-                                <Folder className="h-6 w-6 text-[#9a9ba0]" />
+                            <div className="h-12 w-12 bg-surface-muted rounded-full flex items-center justify-center mb-4">
+                                <Folder className="h-6 w-6 text-fg-subtle" />
                             </div>
-                            <h3 className="text-[0.8125rem] font-semibold text-[#1b1b1d] mb-1">Storage folder not set up</h3>
+                            <h3 className="text-[0.8125rem] font-semibold text-fg mb-1">Storage folder not set up</h3>
                             {workspaceRootLocation === 'SHARED' ? (
                                 <>
-                                    <p className="text-xs text-[#45474c] max-w-[280px] mx-auto mb-4">
+                                    <p className="text-xs text-fg-muted max-w-[280px] mx-auto mb-4">
                                         This workspace uses a Shared Drive. Go to <strong>Client Settings → Document Storage</strong> and use <strong>Migrate</strong> to re-select your workspace folder and create the folder structure.
                                     </p>
                                     {groupSlug && orgSlug && clientSlug && (
@@ -2875,7 +2873,7 @@ const handleRefresh = async () => {
                                 </>
                             ) : (
                                 <>
-                                    <p className="text-xs text-[#45474c] max-w-[260px] mx-auto mb-4">
+                                    <p className="text-xs text-fg-muted max-w-[260px] mx-auto mb-4">
                                         This engagement was created before {storageProviderName} was connected. Set up the folder to start managing files.
                                     </p>
                                     <button
@@ -2891,11 +2889,11 @@ const handleRefresh = async () => {
                         </div>
                         ) : (
                         <div className="flex flex-col items-center justify-center h-64 text-center px-6">
-                            <div className="h-12 w-12 bg-[#f3f4f6] rounded-full flex items-center justify-center mb-4">
-                                <Folder className="h-6 w-6 text-[#9a9ba0]" />
+                            <div className="h-12 w-12 bg-surface-muted rounded-full flex items-center justify-center mb-4">
+                                <Folder className="h-6 w-6 text-fg-subtle" />
                             </div>
-                            <h3 className="text-[0.8125rem] font-semibold text-[#1b1b1d] mb-1">No document storage connected</h3>
-                            <p className="text-xs text-[#45474c] max-w-[260px] mx-auto mb-4">
+                            <h3 className="text-[0.8125rem] font-semibold text-fg mb-1">No document storage connected</h3>
+                            <p className="text-xs text-fg-muted max-w-[260px] mx-auto mb-4">
                                 Connect Google Drive or OneDrive (Beta) to this client to start uploading and managing engagement files.
                             </p>
                             {groupSlug && orgSlug && (
@@ -2910,11 +2908,11 @@ const handleRefresh = async () => {
                         )
                     ) : !currentFolderId && !deeplinkResolving ? (
                         <div className="flex flex-col items-center justify-center h-64 text-center px-3">
-                            <div className="h-16 w-16 bg-slate-50 rounded-full flex items-center justify-center mb-4">
-                                <Folder className="h-8 w-8 text-slate-300" />
+                            <div className="h-16 w-16 bg-surface-subtle rounded-full flex items-center justify-center mb-4">
+                                <Folder className="h-8 w-8 text-fg-subtle" />
                             </div>
-                            <h3 className="text-sm font-medium text-slate-900 mb-1">Storage not connected</h3>
-                            <p className="text-sm text-slate-500 max-w-[280px] mx-auto mb-3">
+                            <h3 className="text-sm font-medium text-fg mb-1">Storage not connected</h3>
+                            <p className="text-sm text-fg-muted max-w-[280px] mx-auto mb-3">
                                 {canManage
                                     ? 'This client is not linked to a storage connector. Go to Firm Settings → Document Storage to link this client.'
                                     : 'This client is not linked to a storage connector. Contact your firm administrator to set up Document Storage.'}
@@ -2930,16 +2928,16 @@ const handleRefresh = async () => {
                         </div>
                     ) : sortedFiles.length === 0 ? (
                         <div className="flex flex-col items-center justify-center h-64 text-center px-3">
-                            <div className="h-16 w-16 bg-slate-50 rounded-full flex items-center justify-center mb-4">
-                                <Folder className="h-8 w-8 text-slate-300" />
+                            <div className="h-16 w-16 bg-surface-subtle rounded-full flex items-center justify-center mb-4">
+                                <Folder className="h-8 w-8 text-fg-subtle" />
                             </div>
-                            <h3 className="text-sm font-medium text-slate-900 mb-1">Folder is empty</h3>
-                            <p className="text-sm text-slate-500 max-w-[280px] mx-auto">
+                            <h3 className="text-sm font-medium text-fg mb-1">Folder is empty</h3>
+                            <p className="text-sm text-fg-muted max-w-[280px] mx-auto">
                                 Drop folders or files here from your computer.
                             </p>
                         </div>
                     ) : (
-                        <div className={cn("divide-y divide-[#e5e7eb]", isUploading && "opacity-50 transition-opacity")}>
+                        <div className={cn("divide-y divide-line", isUploading && "opacity-50 transition-opacity")}>
                             {sortedFiles.map((file) => (
                                 <EngagementFileRow
                                     key={file.id}
@@ -3040,14 +3038,14 @@ const handleRefresh = async () => {
                             icon={copyMoveAction === 'copy' ? <Copy className="h-3.5 w-3.5" /> : <FolderInput className="h-3.5 w-3.5" />}
                             title={copyMoveAction === 'copy' ? 'Copy to folder' : 'Move to folder'}
                         >
-                            <span className="font-medium text-[#1b1b1d]">{copyMoveTarget?.name}</span> will be {copyMoveAction === 'copy' ? 'copied' : 'moved'} to the folder you pick in {currentPath[0]?.name || 'the project'}.
+                            <span className="font-medium text-fg">{copyMoveTarget?.name}</span> will be {copyMoveAction === 'copy' ? 'copied' : 'moved'} to the folder you pick in {currentPath[0]?.name || 'the project'}.
                         </ThemedDialogHeader>
 
                         {/* Body */}
                         <div className="p-5 space-y-4">
                             <div className="space-y-2">
-                                <p className="text-[10px] font-headline font-bold tracking-widest uppercase text-[#45474c]">If the name already exists</p>
-                                <div className="flex rounded border border-[#e5e7eb] p-0.5 bg-white">
+                                <p className="text-[10px] font-headline font-bold tracking-widest uppercase text-fg-muted">If the name already exists</p>
+                                <div className="flex rounded border border-line p-0.5 bg-white">
                                     {([
                                         { keepBoth: true, label: 'Keep both' },
                                         { keepBoth: false, label: 'Replace' },
@@ -3060,7 +3058,7 @@ const handleRefresh = async () => {
                                                 'flex-1 rounded-sm px-3 py-1.5 text-xs font-medium transition-colors',
                                                 copyMoveKeepBoth === opt.keepBoth
                                                     ? 'bg-primary/10 text-primary ring-1 ring-primary/20'
-                                                    : 'text-[#45474c] hover:text-[#1b1b1d] hover:bg-[#f9f9fb]'
+                                                    : 'text-fg-muted hover:text-fg hover:bg-surface-hover'
                                             )}
                                         >
                                             {opt.label}
@@ -3084,7 +3082,7 @@ const handleRefresh = async () => {
                                                         onClick={() => handleCopyMoveBreadcrumbClick(i)}
                                                         className={cn(
                                                             'flex items-center px-1.5 py-1 rounded transition-colors max-w-[160px] hover:bg-white',
-                                                            i === currentPath.length - 1 ? 'text-[#1b1b1d]' : 'text-[#45474c] hover:text-[#1b1b1d]'
+                                                            i === currentPath.length - 1 ? 'text-fg' : 'text-fg-muted hover:text-fg'
                                                         )}
                                                         title={seg.name}
                                                     >
@@ -3106,13 +3104,13 @@ const handleRefresh = async () => {
                                     </div>
                                 )}
 
-                                <div className="max-h-64 overflow-y-auto rounded border border-[#e5e7eb] bg-white divide-y divide-[#e5e7eb]">
+                                <div className="max-h-64 overflow-y-auto rounded border border-line bg-white divide-y divide-line">
                                     {loadingDestinations ? (
                                         <div className="flex items-center justify-center py-8">
                                             <Loader2 className="h-5 w-5 animate-spin text-[#45474c]/50" />
                                         </div>
                                     ) : destinationFolders.length === 0 ? (
-                                        <p className="text-xs text-[#45474c] py-6 px-4 text-center leading-relaxed">
+                                        <p className="text-xs text-fg-muted py-6 px-4 text-center leading-relaxed">
                                             No subfolders here. Use the breadcrumb to go back, or {copyMoveAction === 'copy' ? 'copy' : 'move'} into the current folder.
                                         </p>
                                     ) : (
@@ -3122,7 +3120,7 @@ const handleRefresh = async () => {
                                             return (
                                                 <div
                                                     key={f.id}
-                                                    className="flex items-center justify-between gap-3 pl-3 pr-2 h-10 hover:bg-[#f9f9fb] transition-colors"
+                                                    className="flex items-center justify-between gap-3 pl-3 pr-2 h-10 hover:bg-surface-hover transition-colors"
                                                 >
                                                     <Tooltip>
                                                         <TooltipTrigger asChild>
@@ -3130,7 +3128,7 @@ const handleRefresh = async () => {
                                                                 type="button"
                                                                 onClick={() => !isEmpty && !isChecking && handleNavigateIntoFolder(f)}
                                                                 className={cn(
-                                                                    'flex items-center gap-2 min-w-0 flex-1 text-left text-[0.8125rem] text-[#1b1b1d]',
+                                                                    'flex items-center gap-2 min-w-0 flex-1 text-left text-[0.8125rem] text-fg',
                                                                     isEmpty || isChecking ? 'cursor-default' : 'cursor-pointer'
                                                                 )}
                                                                 disabled={isChecking}
@@ -3165,7 +3163,7 @@ const handleRefresh = async () => {
                         </div>
 
                         {/* Footer */}
-                        <div className="px-5 py-3 border-t border-[#e5e7eb] bg-white flex items-center justify-end">
+                        <div className="px-5 py-3 border-t border-line bg-white flex items-center justify-end">
                             <Button
                                 variant="outline"
                                 onClick={() => setCopyMoveModalOpen(false)}
@@ -3181,16 +3179,16 @@ const handleRefresh = async () => {
                 <Dialog open={crossEngagementModalOpen} onOpenChange={(open) => { setCrossEngagementModalOpen(open); if (!open) { setCrossEngagementTarget(null); setCrossEngagementFirmName(null) } }}>
                     <DialogContent className={THEMED_DIALOG_CONTENT}>
                         <ThemedDialogHeader icon={<Copy className="h-3.5 w-3.5" />} title="Copy to another engagement">
-                            Pick the engagement to copy <span className="font-medium text-[#1b1b1d]">{crossEngagementTarget?.name}</span> to. It lands in that engagement&apos;s General folder.
+                            Pick the engagement to copy <span className="font-medium text-fg">{crossEngagementTarget?.name}</span> to. It lands in that engagement&apos;s General folder.
                         </ThemedDialogHeader>
                         <div className="p-5">
-                        <div className="max-h-64 overflow-y-auto rounded border border-[#e5e7eb] bg-white p-2">
+                        <div className="max-h-64 overflow-y-auto rounded border border-line bg-white p-2">
                             {crossEngagementLoading ? (
                                 <div className="flex items-center justify-center py-8">
                                     <Loader2 className="h-5 w-5 animate-spin text-[#45474c]/50" />
                                 </div>
                             ) : crossEngagementEngagements.length === 0 ? (
-                                <p className="text-xs text-[#45474c] py-6 px-3 text-center">No other engagements available.</p>
+                                <p className="text-xs text-fg-muted py-6 px-3 text-center">No other engagements available.</p>
                             ) : (() => {
                                 const groups = crossEngagementEngagements.reduce<Record<string, { clientName: string; engagements: typeof crossEngagementEngagements }>>((acc, e) => {
                                     if (!acc[e.clientId]) acc[e.clientId] = { clientName: e.clientName, engagements: [] }
@@ -3203,12 +3201,12 @@ const handleRefresh = async () => {
                                         {/* Firm level */}
                                         {crossEngagementFirmName && (
                                             <div className="flex items-center gap-1.5 px-2 pb-1">
-                                                <Building2 className="h-3.5 w-3.5 flex-shrink-0 text-slate-400" />
-                                                <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{crossEngagementFirmName}</span>
+                                                <Building2 className="h-3.5 w-3.5 flex-shrink-0 text-fg-subtle" />
+                                                <span className="text-[10px] font-bold uppercase tracking-widest text-fg-subtle">{crossEngagementFirmName}</span>
                                             </div>
                                         )}
                                         {/* Client + Engagement tree */}
-                                        <div className="ml-3.5 border-l border-slate-200">
+                                        <div className="ml-3.5 border-l border-line">
                                             {sortedGroups.map(([clientId, group], gi) => {
                                                 const isLastClient = gi === sortedGroups.length - 1
                                                 const sortedEngagements = group.engagements.sort((a, b) => a.name.localeCompare(b.name))
@@ -3216,15 +3214,15 @@ const handleRefresh = async () => {
                                                     <div key={clientId} className={isLastClient ? 'pb-0' : 'pb-1'}>
                                                         {/* Client row */}
                                                         <div className="flex items-center gap-1.5 relative pl-4 py-1">
-                                                            <span className="absolute left-0 top-1/2 w-3 border-t border-slate-200" />
-                                                            <Users className="h-3.5 w-3.5 flex-shrink-0 text-slate-400" />
-                                                            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">{group.clientName}</span>
+                                                            <span className="absolute left-0 top-1/2 w-3 border-t border-line" />
+                                                            <Users className="h-3.5 w-3.5 flex-shrink-0 text-fg-subtle" />
+                                                            <span className="text-[10px] font-semibold uppercase tracking-wider text-fg-muted">{group.clientName}</span>
                                                         </div>
                                                         {/* Engagement rows */}
-                                                        <div className="ml-4 border-l border-slate-100">
+                                                        <div className="ml-4 border-l border-line">
                                                             {sortedEngagements.map((e, ei) => (
                                                                 <div key={e.id} className="relative">
-                                                                    <span className="absolute left-0 top-1/2 w-3 border-t border-slate-100" />
+                                                                    <span className="absolute left-0 top-1/2 w-3 border-t border-line" />
                                                                     <button
                                                                         type="button"
                                                                         onClick={() => setCrossEngagementSelectedId(e.id)}
@@ -3232,10 +3230,10 @@ const handleRefresh = async () => {
                                                                             'w-full flex items-center gap-2 text-left pl-4 pr-3 py-1.5 rounded-md text-sm transition-colors',
                                                                             crossEngagementSelectedId === e.id
                                                                                 ? 'bg-primary/10 text-primary font-medium'
-                                                                                : 'hover:bg-[#f9f9fb] text-[#1b1b1d]'
+                                                                                : 'hover:bg-surface-hover text-fg'
                                                                         )}
                                                                     >
-                                                                        <Briefcase className="h-3.5 w-3.5 flex-shrink-0 text-slate-400" />
+                                                                        <Briefcase className="h-3.5 w-3.5 flex-shrink-0 text-fg-subtle" />
                                                                         <span className="truncate">{e.name}</span>
                                                                     </button>
                                                                 </div>
@@ -3250,7 +3248,7 @@ const handleRefresh = async () => {
                             })()}
                         </div>
                         </div>
-                        <div className="px-5 py-3 border-t border-[#e5e7eb] bg-white flex items-center justify-end gap-2">
+                        <div className="px-5 py-3 border-t border-line bg-white flex items-center justify-end gap-2">
                             <Button variant="outline" className={THEMED_CANCEL_BTN} onClick={() => setCrossEngagementModalOpen(false)}>Cancel</Button>
                             <Button
                                 className={THEMED_PRIMARY_BTN}
@@ -3267,21 +3265,21 @@ const handleRefresh = async () => {
                 <Dialog open={renameModalOpen} onOpenChange={(open) => { setRenameModalOpen(open); if (!open) setRenameTarget(null) }}>
                     <DialogContent className={THEMED_DIALOG_CONTENT}>
                         <ThemedDialogHeader icon={<Pencil className="h-3.5 w-3.5" />} title="Rename">
-                            Enter a new name for <span className="font-medium text-[#1b1b1d]">{renameTarget?.name ?? 'this item'}</span>.
+                            Enter a new name for <span className="font-medium text-fg">{renameTarget?.name ?? 'this item'}</span>.
                         </ThemedDialogHeader>
                         <div className="p-5 flex items-center gap-1.5">
                             <Input
                                 value={renameNewName}
                                 onChange={(e) => setRenameNewName(e.target.value)}
                                 placeholder="New name"
-                                className="rounded border-[#e5e7eb] bg-white text-[0.8125rem]"
+                                className="rounded border-line bg-white text-[0.8125rem]"
                                 onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleConfirmRename())}
                             />
                             {renameExtension && (
-                                <span className="shrink-0 text-[#45474c] text-xs">{renameExtension}</span>
+                                <span className="shrink-0 text-fg-muted text-xs">{renameExtension}</span>
                             )}
                         </div>
-                        <div className="px-5 py-3 border-t border-[#e5e7eb] bg-white flex items-center justify-end gap-2">
+                        <div className="px-5 py-3 border-t border-line bg-white flex items-center justify-end gap-2">
                             <Button variant="outline" className={THEMED_CANCEL_BTN} onClick={() => setRenameModalOpen(false)}>Cancel</Button>
                             <Button
                                 className={THEMED_PRIMARY_BTN}
@@ -3296,41 +3294,41 @@ const handleRefresh = async () => {
 
                 {/* Folder upload confirmation modal (in-app, avoids browser "trust this site" wording) */}
                 <Dialog open={isFolderUploadModalOpen} onOpenChange={setIsFolderUploadModalOpen}>
-                    <DialogContent className="sm:max-w-[440px] border-[#e5e7eb] p-0 gap-0 rounded">
+                    <DialogContent className="sm:max-w-[440px] border-line p-0 gap-0 rounded">
                         <VisuallyHidden><DialogTitle>Upload a folder</DialogTitle></VisuallyHidden>
 
                         {/* Header */}
-                        <div className="px-5 py-4 border-b border-[#e5e7eb] bg-[#f9f9fb] flex items-start gap-3">
+                        <div className="px-5 py-4 border-b border-line bg-surface-subtle flex items-start gap-3">
                             <div className="mt-0.5 h-7 w-7 rounded bg-primary/10 flex items-center justify-center shrink-0">
                                 <FolderUp className="h-3.5 w-3.5 text-primary" />
                             </div>
                             <div>
-                                <p className="text-sm font-semibold text-[#1b1b1d] leading-tight">Upload a folder</p>
-                                <p className="text-xs text-[#45474c] mt-0.5">Choose a folder from your computer. All files inside will be:</p>
+                                <p className="text-sm font-semibold text-fg leading-tight">Upload a folder</p>
+                                <p className="text-xs text-fg-muted mt-0.5">Choose a folder from your computer. All files inside will be:</p>
                             </div>
                         </div>
 
                         {/* Body */}
                         <div className="p-5 space-y-4">
-                            <ul className="list-disc list-inside space-y-1.5 pl-1 text-xs text-[#45474c] leading-relaxed">
+                            <ul className="list-disc list-inside space-y-1.5 pl-1 text-xs text-fg-muted leading-relaxed">
                                 <li>Uploaded to this engagement folder in your {storageProviderName}</li>
                                 <li>Folder structure preserved</li>
                                 <li>Sent directly to your {storageProviderName} and never pass through our servers</li>
                             </ul>
-                            <div className="flex items-start gap-2 rounded border border-[#e5e7eb] bg-[#f9f9fb] px-3 py-2.5">
-                                <Info className="h-4 w-4 shrink-0 text-[#45474c] mt-0.5" />
-                                <p className="text-xs text-[#1b1b1d] font-medium leading-relaxed">
+                            <div className="flex items-start gap-2 rounded border border-line bg-surface-subtle px-3 py-2.5">
+                                <Info className="h-4 w-4 shrink-0 text-fg-muted mt-0.5" />
+                                <p className="text-xs text-fg font-medium leading-relaxed">
                                     Your browser may prompt you to confirm the folder selection.
                                 </p>
                             </div>
                         </div>
 
                         {/* Footer */}
-                        <div className="px-5 py-3 border-t border-[#e5e7eb] flex items-center justify-end gap-3">
+                        <div className="px-5 py-3 border-t border-line flex items-center justify-end gap-3">
                             <Button
                                 type="button"
                                 variant="outline"
-                                className="!rounded text-[10px] font-headline font-bold tracking-widest uppercase border-gray-300"
+                                className="!rounded text-[10px] font-headline font-bold tracking-widest uppercase border-line-strong"
                                 onClick={() => setIsFolderUploadModalOpen(false)}
                             >
                                 Cancel
@@ -3351,20 +3349,20 @@ const handleRefresh = async () => {
 
                 {/* Create Item Dialog */}
                 <Dialog open={isCreateItemOpen} onOpenChange={(open) => { if (!loading) setIsCreateItemOpen(open) }}>
-                    <DialogContent className="sm:max-w-[440px] border-[#e5e7eb] p-0 gap-0 rounded">
+                    <DialogContent className="sm:max-w-[440px] border-line p-0 gap-0 rounded">
                         <VisuallyHidden><DialogTitle>
                             {createItemDialogTitle(createItemType)}
                         </DialogTitle></VisuallyHidden>
                         {/* Header */}
-                        <div className="px-5 py-4 border-b border-[#e5e7eb] bg-white flex items-start gap-3">
+                        <div className="px-5 py-4 border-b border-line bg-white flex items-start gap-3">
                             <div className="mt-0.5 h-7 w-7 rounded bg-primary/10 flex items-center justify-center shrink-0">
                                 {createItemType === 'folder' ? <Folder className="h-3.5 w-3.5 text-primary" /> : createItemType === 'link' ? <ExternalLink className="h-3.5 w-3.5 text-purple-600" /> : createItemType === 'sheet' || createItemType === 'excel' ? <FileSpreadsheet className="h-3.5 w-3.5 text-primary" /> : createItemType === 'slide' || createItemType === 'powerpoint' ? <Presentation className="h-3.5 w-3.5 text-primary" /> : createItemType === 'form' ? <ListChecks className="h-3.5 w-3.5 text-primary" /> : createItemType === 'drawing' ? <PenTool className="h-3.5 w-3.5 text-primary" /> : createItemType === 'map' ? <MapIcon className="h-3.5 w-3.5 text-primary" /> : createItemType === 'script' ? <FileCode className="h-3.5 w-3.5 text-primary" /> : <FileText className="h-3.5 w-3.5 text-primary" />}
                             </div>
                             <div>
-                                <p className="text-sm font-semibold text-[#1b1b1d] leading-tight">
+                                <p className="text-sm font-semibold text-fg leading-tight">
                                     {createItemDialogTitle(createItemType)}
                                 </p>
-                                <p className="text-xs text-[#45474c] mt-0.5">
+                                <p className="text-xs text-fg-muted mt-0.5">
                                     {createItemType === 'link'
                                         ? 'Paste a link and give it a name. It will appear in this folder — clicking Open will launch it in a new tab.'
                                         : `Enter a name to create this ${createItemType === 'folder' ? 'folder' : 'file'} in the current location.`}
@@ -3372,9 +3370,9 @@ const handleRefresh = async () => {
                             </div>
                         </div>
                         {/* Body */}
-                        <div className="px-5 py-4 bg-[#f9f9fb] space-y-3">
+                        <div className="px-5 py-4 bg-surface-subtle space-y-3">
                             <div>
-                                <label className="font-mono text-[9px] font-bold uppercase tracking-widest text-[#45474c] block mb-1">
+                                <label className="font-mono text-[9px] font-bold uppercase tracking-widest text-fg-muted block mb-1">
                                     {createItemType === 'folder' ? 'Folder Name' : createItemType === 'link' ? 'Link Name' : 'Document Name'}
                                 </label>
                                 <div className="flex items-center gap-1">
@@ -3384,20 +3382,20 @@ const handleRefresh = async () => {
                                         value={newItemName}
                                         onChange={(e) => setNewItemName(e.target.value)}
                                         onKeyDown={(e) => { if (e.key === 'Enter' && createItemType !== 'link') handleCreateItem() }}
-                                        className="border-[#e5e7eb] text-[#1b1b1d] text-xs font-normal placeholder:text-[#9a9ba0] rounded focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                                        className="border-line text-fg text-xs font-normal placeholder:text-fg-subtle rounded focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
                                     />
                                     {CREATE_ITEM_EXTENSIONS[createItemType] && (
-                                        <span className="shrink-0 text-[#45474c] text-xs">{CREATE_ITEM_EXTENSIONS[createItemType]}</span>
+                                        <span className="shrink-0 text-fg-muted text-xs">{CREATE_ITEM_EXTENSIONS[createItemType]}</span>
                                     )}
                                 </div>
                             </div>
                             {createItemType === 'link' && (
                                 <div>
-                                    <label className="font-mono text-[9px] font-bold uppercase tracking-widest text-[#45474c] mb-1 flex items-center gap-1">
+                                    <label className="font-mono text-[9px] font-bold uppercase tracking-widest text-fg-muted mb-1 flex items-center gap-1">
                                         URL
                                         <Tooltip>
                                             <TooltipTrigger asChild>
-                                                <button type="button" className="inline-flex text-slate-400 hover:text-slate-600" aria-label="URL format help">
+                                                <button type="button" className="inline-flex text-fg-subtle hover:text-fg-muted" aria-label="URL format help">
                                                     <Info className="h-3 w-3" />
                                                 </button>
                                             </TooltipTrigger>
@@ -3413,10 +3411,10 @@ const handleRefresh = async () => {
                                         onChange={(e) => setNewItemUrl(e.target.value)}
                                         onKeyDown={(e) => { if (e.key === 'Enter' && isValidWebUrl(newItemUrl)) handleCreateLink() }}
                                         className={cn(
-                                            "text-[#1b1b1d] text-xs font-normal placeholder:text-[#9a9ba0] rounded focus:outline-none focus:ring-1 focus:border-primary",
+                                            "text-fg text-xs font-normal placeholder:text-fg-subtle rounded focus:outline-none focus:ring-1 focus:border-primary",
                                             newItemUrl.trim() && !isValidWebUrl(newItemUrl)
                                                 ? "border-red-300 focus:ring-red-300"
-                                                : "border-[#e5e7eb] focus:ring-primary"
+                                                : "border-line focus:ring-primary"
                                         )}
                                     />
                                     {newItemUrl.trim() && !isValidWebUrl(newItemUrl) && (
@@ -3426,7 +3424,7 @@ const handleRefresh = async () => {
                             )}
                         </div>
                         {/* Footer */}
-                        <div className="px-5 py-3 border-t border-[#e5e7eb] bg-white flex items-center justify-end gap-3">
+                        <div className="px-5 py-3 border-t border-line bg-white flex items-center justify-end gap-3">
                             <Button type="button" variant="outline" className="rounded w-24 text-[10px] font-headline font-bold tracking-widest uppercase" onClick={() => setIsCreateItemOpen(false)} disabled={loading}>Cancel</Button>
                             {createItemType === 'link' ? (
                                 <Button type="button" variant="greenCta" className="min-w-[7rem] text-[10px] font-headline font-bold tracking-widest uppercase" onClick={handleCreateLink} disabled={!newItemName.trim() || !isValidWebUrl(newItemUrl) || loading}>
@@ -3453,7 +3451,7 @@ const handleRefresh = async () => {
 
                         <div className="py-4 flex flex-col gap-3 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
                             {/* Select All Header */}
-                            <div className="flex items-center space-x-3 px-3 pb-2 border-b border-slate-100">
+                            <div className="flex items-center space-x-3 px-3 pb-2 border-b border-line">
                                 <Checkbox
                                     id="select-all-conflicts"
                                     checked={conflictItems.length > 0 && overwriteSelections.size === conflictItems.length}
@@ -3465,13 +3463,13 @@ const handleRefresh = async () => {
                                         }
                                     }}
                                 />
-                                <label htmlFor="select-all-conflicts" className="text-sm font-medium text-slate-700 cursor-pointer select-none">
+                                <label htmlFor="select-all-conflicts" className="text-sm font-medium text-fg-muted cursor-pointer select-none">
                                     Select all / Unselect all
                                 </label>
                             </div>
 
                             {conflictItems.map((item) => (
-                                <div key={item.file.name} className="flex items-start space-x-3 p-3 rounded-lg border border-slate-100 bg-slate-50/50">
+                                <div key={item.file.name} className="flex items-start space-x-3 p-3 rounded-lg border border-line bg-surface-subtle">
                                     <Checkbox
                                         id={`overwrite-${item.file.name}`}
                                         checked={overwriteSelections.has(item.file.name)}
@@ -3491,7 +3489,7 @@ const handleRefresh = async () => {
                                         >
                                             Overwrite "{item.file.name}"
                                         </label>
-                                        <p className="text-xs text-slate-500">
+                                        <p className="text-xs text-fg-muted">
                                             {overwriteSelections.has(item.file.name)
                                                 ? "Existing file will be replaced."
                                                 : "New file will be renamed."}
@@ -3520,7 +3518,7 @@ const handleRefresh = async () => {
                     iconVariant="red"
                     title="Move to Bin"
                     subtitle={`This file will be moved to ${storageBinName}.`}
-                    description={<><span className="font-semibold text-[#1b1b1d]">{trashConfirmTarget?.name}</span>{' '}will be moved to your {storageBinName}. Items there are permanently deleted after 30 days.</>}
+                    description={<><span className="font-semibold text-fg">{trashConfirmTarget?.name}</span>{' '}will be moved to your {storageBinName}. Items there are permanently deleted after 30 days.</>}
                     confirmLabel="Move to Bin"
                     confirmVariant="red"
                     onCancel={() => setTrashConfirmTarget(null)}
@@ -3551,7 +3549,7 @@ const handleRefresh = async () => {
                     iconVariant="primary"
                     title="Return to Draft"
                     subtitle="Unlock this document for further edits."
-                    description={<><span className="font-semibold text-[#1b1b1d]">{unlockConfirmFile?.name}</span>{' '}will be unlocked. All collaborators will regain their prior access level based on their role and sharing settings.</>}
+                    description={<><span className="font-semibold text-fg">{unlockConfirmFile?.name}</span>{' '}will be unlocked. All collaborators will regain their prior access level based on their role and sharing settings.</>}
                     confirmLabel="Return to Draft"
                     confirmVariant="primary"
                     onCancel={() => setUnlockConfirmFile(null)}
@@ -3561,32 +3559,32 @@ const handleRefresh = async () => {
 
                 {/* Revoke external access confirmation */}
                 <Dialog open={!!unshareConfirmFile} onOpenChange={(open) => { if (!open) setUnshareConfirmFile(null) }}>
-                    <DialogContent className="sm:max-w-sm border-[#e5e7eb] p-0 gap-0 rounded bg-[#f9f9fb]">
+                    <DialogContent className="sm:max-w-sm border-line p-0 gap-0 rounded bg-surface-subtle">
                         <VisuallyHidden><DialogTitle>Revoke external access</DialogTitle></VisuallyHidden>
                         {/* Header */}
-                        <div className="px-5 py-4 border-b border-[#e5e7eb] bg-white flex items-start gap-3">
+                        <div className="px-5 py-4 border-b border-line bg-white flex items-start gap-3">
                             <div className="mt-0.5 h-7 w-7 rounded bg-red-50 ring-1 ring-red-200 flex items-center justify-center shrink-0">
                                 <Link2 className="h-3.5 w-3.5 text-red-500" />
                             </div>
                             <div>
-                                <p className="text-[11px] font-headline font-bold tracking-widest uppercase text-[#1b1b1d] leading-tight">Revoke external access</p>
-                                <p className="text-xs text-[#45474c] mt-0.5">Remove sharing for all external collaborators.</p>
+                                <p className="text-[11px] font-headline font-bold tracking-widest uppercase text-fg leading-tight">Revoke external access</p>
+                                <p className="text-xs text-fg-muted mt-0.5">Remove sharing for all external collaborators.</p>
                             </div>
                         </div>
                         {/* Body */}
                         <div className="p-5">
-                            <p className="text-xs text-[#45474c] leading-relaxed">
-                                <span className="font-semibold text-[#1b1b1d]">{unshareConfirmFile?.name}</span>
+                            <p className="text-xs text-fg-muted leading-relaxed">
+                                <span className="font-semibold text-fg">{unshareConfirmFile?.name}</span>
                                 {' '}will be unshared. All external collaborators and viewers will lose access, and any secure links sent by email will no longer work.
                             </p>
                         </div>
                         {/* Footer */}
-                        <div className="px-5 py-3 border-t border-[#e5e7eb] bg-white flex items-center justify-end gap-2">
+                        <div className="px-5 py-3 border-t border-line bg-white flex items-center justify-end gap-2">
                             <Button
                                 variant="outline"
                                 onClick={() => setUnshareConfirmFile(null)}
                                 disabled={unshareInProgress}
-                                className="rounded text-[10px] font-headline font-bold tracking-widest uppercase border-[#e5e7eb] text-[#45474c] hover:bg-[#f9f9fb]"
+                                className="rounded text-[10px] font-headline font-bold tracking-widest uppercase border-line text-fg-muted hover:bg-surface-hover"
                             >
                                 Cancel
                             </Button>

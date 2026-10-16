@@ -6,6 +6,7 @@ import { createClient } from '@/utils/supabase/server'
 import { validateCheckoutReturnTo } from '@/lib/billing/checkout-return-path'
 import { resolveGroupId } from '@/lib/billing/billing-group'
 import { polarServer } from '@/lib/billing/polar-client'
+import { fetchBillingCatalogPlans } from '@/lib/billing/polar-catalog'
 
 async function checkoutHandler(request: NextRequest) {
     const accessToken = process.env.POLAR_ACCESS_TOKEN
@@ -37,26 +38,31 @@ async function checkoutHandler(request: NextRequest) {
         }
         userId = user.id
     } else {
+        // getUser() verifies the session with Supabase; getSession() trusted the cookie as is.
         const supabase = await createClient()
         const {
-            data: { session },
-        } = await supabase.auth.getSession()
-        if (!session?.user?.id) {
+            data: { user },
+        } = await supabase.auth.getUser()
+        if (!user?.id) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
         }
-        userId = session.user.id
+        userId = user.id
     }
 
+    // Starting a checkout changes the whole billing group's subscription: firm admins only (the
+    // same rule as cancel and the customer portal). Any member — guests included — could before.
+    // (.claude/plans/access-gates.md, P0 #11)
     const membership = await prisma.firmMember.findFirst({
         where: {
             firmId,
             userId,
+            role: 'firm_admin',
             firm: { deletedAt: null },
         },
         select: { id: true },
     })
     if (!membership) {
-        return NextResponse.json({ error: 'Forbidden: user is not a member of firm' }, { status: 403 })
+        return NextResponse.json({ error: 'Forbidden: only firm admins can start a checkout' }, { status: 403 })
     }
 
     const explicitProducts = reqUrl.searchParams
@@ -77,22 +83,31 @@ async function checkoutHandler(request: NextRequest) {
             { status: 400 }
         )
     }
-    reqUrl.searchParams.delete('products')
+    // Caller-chosen products must be in the public, non-archived catalog — no hidden or archived
+    // product ids. (The env fallback is server configuration and needs no check.)
+    if (explicitProducts.length > 0) {
+        const catalogIds = new Set((await fetchBillingCatalogPlans()).map((p) => p.id))
+        if (explicitProducts.some((pid) => !catalogIds.has(pid))) {
+            return NextResponse.json({ error: 'Unknown product' }, { status: 400 })
+        }
+    }
+
+    // Rebuild the query from scratch: everything else the Polar helper reads (customerExternalId,
+    // metadata, customerId, customerEmail, discountId, seats…) used to pass straight through, so a
+    // checkout could be pointed at another billing group and replace its subscription. The customer
+    // and metadata are always this firm's group, set here.
+    const returnToRaw = reqUrl.searchParams.get('returnTo')
+    const groupId = await resolveGroupId(firmId)
+    for (const key of Array.from(new Set(reqUrl.searchParams.keys()))) {
+        reqUrl.searchParams.delete(key)
+    }
+    reqUrl.searchParams.set('firmId', firmId)
     for (const pid of productIds) {
         reqUrl.searchParams.append('products', pid)
     }
+    reqUrl.searchParams.set('customerExternalId', groupId)
+    reqUrl.searchParams.set('metadata', JSON.stringify({ groupId }))
 
-    if (!reqUrl.searchParams.get('customerExternalId')) {
-        const groupId = await resolveGroupId(firmId)
-        reqUrl.searchParams.set('customerExternalId', groupId)
-    }
-
-    if (!reqUrl.searchParams.get('metadata')) {
-        const groupId = await resolveGroupId(firmId)
-        reqUrl.searchParams.set('metadata', JSON.stringify({ groupId }))
-    }
-
-    const returnToRaw = reqUrl.searchParams.get('returnTo')
     const returnTo = validateCheckoutReturnTo(returnToRaw)
     let successUrl = successUrlEnv.trim()
     try {

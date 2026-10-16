@@ -74,7 +74,7 @@ export function DemoTourIntroModal() {
               <button
                 type="button"
                 onClick={startTour}
-                className="flex-1 h-9 rounded border border-[#e5e7eb] text-[10px] font-headline font-bold tracking-widest uppercase text-[#45474c] hover:bg-[#f3f4f6] transition-colors"
+                className="flex-1 h-9 rounded border border-[#e5e7eb] text-[10px] font-headline font-bold tracking-widest uppercase text-[#45474c] hover:bg-surface-hover transition-colors"
               >
                 Start over
               </button>
@@ -91,7 +91,7 @@ export function DemoTourIntroModal() {
               <button
                 type="button"
                 onClick={handleSkip}
-                className="flex-1 h-9 rounded border border-[#e5e7eb] text-[10px] font-headline font-bold tracking-widest uppercase text-[#45474c] hover:bg-[#f3f4f6] transition-colors flex items-center justify-center gap-1.5"
+                className="flex-1 h-9 rounded border border-[#e5e7eb] text-[10px] font-headline font-bold tracking-widest uppercase text-[#45474c] hover:bg-surface-hover transition-colors flex items-center justify-center gap-1.5"
               >
                 <Square className="h-3.5 w-3.5" /> Skip
               </button>

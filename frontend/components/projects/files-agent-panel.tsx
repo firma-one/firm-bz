@@ -225,16 +225,16 @@ function ProposalRow({ proposal }: { proposal: Proposal }) {
     if (proposal.kind === 'rename') {
         return (
             <>
-                <span className="block text-[10px] font-medium uppercase tracking-wider text-gray-400">
+                <span className="block text-caption font-medium text-fg-subtle">
                     {KIND_LABEL.rename}
                 </span>
-                <span className="mt-0.5 block truncate text-gray-400" title={proposal.currentName}>
+                <span className="mt-0.5 block truncate text-fg-subtle" title={proposal.currentName}>
                     {proposal.currentName}
                 </span>
-                <span className="block truncate font-medium text-gray-900" title={proposal.proposedName}>
+                <span className="block truncate font-medium text-fg" title={proposal.proposedName}>
                     → {proposal.proposedName}
                 </span>
-                <span className="mt-0.5 block text-[10px] leading-snug text-gray-400">{proposal.reason}</span>
+                <span className="mt-0.5 block text-caption leading-snug text-fg-subtle">{proposal.reason}</span>
             </>
         )
     }
@@ -242,29 +242,29 @@ function ProposalRow({ proposal }: { proposal: Proposal }) {
     if (proposal.kind === 'move') {
         return (
             <>
-                <span className="block text-[10px] font-medium uppercase tracking-wider text-gray-400">
+                <span className="block text-caption font-medium text-fg-subtle">
                     {KIND_LABEL.move}
                 </span>
-                <span className="mt-0.5 block truncate font-medium text-gray-900" title={proposal.fileName}>
+                <span className="mt-0.5 block truncate font-medium text-fg" title={proposal.fileName}>
                     {proposal.fileName}
                 </span>
-                <span className="block truncate text-gray-600" title={proposal.destinationName}>
+                <span className="block truncate text-fg-muted" title={proposal.destinationName}>
                     → {proposal.destinationName}
                 </span>
-                <span className="mt-0.5 block text-[10px] leading-snug text-gray-400">{proposal.reason}</span>
+                <span className="mt-0.5 block text-caption leading-snug text-fg-subtle">{proposal.reason}</span>
             </>
         )
     }
 
     return (
         <>
-            <span className="block text-[10px] font-medium uppercase tracking-wider text-gray-400">
+            <span className="block text-caption font-medium text-fg-subtle">
                 {KIND_LABEL.folder}
             </span>
-            <span className="mt-0.5 block truncate font-medium text-gray-900" title={proposal.name}>
+            <span className="mt-0.5 block truncate font-medium text-fg" title={proposal.name}>
                 {proposal.name}
             </span>
-            <span className="mt-0.5 block text-[10px] leading-snug text-gray-400">{proposal.reason}</span>
+            <span className="mt-0.5 block text-caption leading-snug text-fg-subtle">{proposal.reason}</span>
         </>
     )
 }
@@ -532,7 +532,7 @@ export function FilesAgentPanel({
         }
     }, [review, apply, decisions, onThreadTurn])
 
-    // The trigger: one more chip in the suggestion row, in the primary color because unlike its
+    // The trigger: one more chip in the suggestion row, in the accent color because unlike its
     // neighbours it does not ask a question — it starts work that ends in file changes, and that
     // difference is worth seeing before you click.
     if (render === 'trigger') {
@@ -558,7 +558,7 @@ export function FilesAgentPanel({
                     onClick={() => void runReview()}
                     disabled={state === 'reviewing' || !token}
                     title="Check this engagement's folders and files — inconsistent naming, duplicates, files in the wrong place, and folders this kind of work usually has — then propose fixes for you to approve."
-                    className="inline-flex max-w-full shrink-0 items-center gap-1.5 truncate rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-white transition-all hover:brightness-105 disabled:opacity-60"
+                    className="inline-flex max-w-full shrink-0 items-center gap-1.5 truncate rounded-control bg-action px-2.5 py-1 text-small font-medium text-action-fg hover:bg-action-hover transition-all hover:brightness-105 disabled:opacity-60"
                 >
                     {state === 'reviewing'
                         ? <><Loader2 className="h-3 w-3 shrink-0 animate-spin" /> Reviewing…</>
@@ -608,7 +608,7 @@ export function FilesAgentPanel({
                 />
             )}
             {review.needsEngagementKind && !outcome && (
-                <p className="text-[10px] leading-relaxed text-gray-400">
+                <p className="text-caption leading-relaxed text-fg-subtle">
                     Brio will check for folders this kind of work usually keeps. Nothing is created
                     without your approval.
                 </p>
@@ -619,7 +619,7 @@ export function FilesAgentPanel({
                 while the user is deciding — telling them afterwards would be telling them about
                 something they can no longer choose. */}
             {review.proposals.length > 0 && !allAnswered && !outcome && (
-                <p className="text-[10px] leading-relaxed text-gray-400">
+                <p className="text-caption leading-relaxed text-fg-subtle">
                     Your answers apply directly to your Drive, recorded in the audit trail as Brio,
                     your Executive Assistant, with your name as the approver. Nothing is deleted —
                     a file that is renamed or moved keeps its contents, its sharing and its history,
@@ -676,10 +676,10 @@ export function FilesAgentPanel({
             {outcome && (
                 <div className="flex items-start gap-2">
                     {outcome.ok
-                        ? <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
+                        ? <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-action" aria-hidden />
                         : <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" aria-hidden />}
                     <p className={`min-w-0 flex-1 whitespace-pre-line text-xs leading-relaxed ${
-                        outcome.ok ? 'text-gray-700' : 'text-amber-800'
+                        outcome.ok ? 'text-fg-muted' : 'text-amber-800'
                     }`}>
                         {outcome.message}
                     </p>
@@ -695,14 +695,14 @@ export function FilesAgentPanel({
                 // a second idiom for "working".
                 <div className="space-y-1">
                     <div className="flex items-center gap-2">
-                        <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-primary" />
-                        <p className="min-w-0 flex-1 text-xs text-gray-700">
+                        <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-action" />
+                        <p className="min-w-0 flex-1 text-xs text-fg-muted">
                             Completing {acceptedCount} {taskWord(review.proposals, decisions)}
                             <span className="animate-search-dots">.</span>
                             <span className="animate-search-dots animate-search-dots-delay-1">.</span>
                             <span className="animate-search-dots animate-search-dots-delay-2">.</span>
                         </p>
-                        <ElapsedTime className="shrink-0 text-[10px] text-gray-400" />
+                        <ElapsedTime className="shrink-0 text-caption text-fg-subtle" />
                     </div>
                     {/* Commentary, for a TASK rather than a question: these are changes to the
                         user's own Drive, so the wait is more tolerable when it says what is being
@@ -720,7 +720,7 @@ export function FilesAgentPanel({
                                 return d != null && d !== DECLINE
                             })
                             .map((p) => (
-                                <li key={proposalKey(p)} className="truncate text-[10px] text-gray-400">
+                                <li key={proposalKey(p)} className="truncate text-caption text-fg-subtle">
                                     {commentaryFor(p, decisions[proposalKey(p)])}
                                 </li>
                             ))}
@@ -729,7 +729,7 @@ export function FilesAgentPanel({
             )}
 
             {review.dropped > 0 && (
-                <p className="border-t border-gray-100 px-3 py-1.5 text-[10px] text-gray-400">
+                <p className="border-t border-line px-3 py-1.5 text-caption text-fg-subtle">
                     {review.dropped} suggestion{review.dropped === 1 ? '' : 's'} discarded as unsafe.
                 </p>
             )}

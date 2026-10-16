@@ -48,7 +48,7 @@ export function ClientInviteModal({ firmId, clientId, open, onOpenChange, onSucc
                     <DialogTitle>Invite Client Administrator</DialogTitle>
                 </DialogHeader>
                 <form onSubmit={handleSubmit} className="space-y-6 pt-4">
-                    <p className="text-sm text-slate-500">
+                    <p className="text-sm text-fg-muted">
                         Invite someone to join this client as a Client Administrator. They will be able to manage client settings and members.
                     </p>
                     <div className="space-y-2">
@@ -66,7 +66,7 @@ export function ClientInviteModal({ firmId, clientId, open, onOpenChange, onSucc
                         />
                     </div>
                     {error && (
-                        <p className="text-sm text-red-500 bg-red-50 p-2 rounded">{error}</p>
+                        <p className="text-sm text-danger bg-tag-red-bg p-2 rounded">{error}</p>
                     )}
                     <div className="flex justify-end gap-3">
                         <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>

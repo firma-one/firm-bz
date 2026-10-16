@@ -3,19 +3,16 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Brio } from '@/components/ui/brio'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
-import {
-    Dialog,
-    DialogContent,
-    DialogTitle,
-} from "@/components/ui/dialog"
-import { VisuallyHidden } from "@radix-ui/react-visually-hidden"
+import { Dialog, DialogContent } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { SquarePlus, Activity, AlignLeft, Banknote, CalendarCheck, CalendarClock, FileText, Lock } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import { StatusProperty } from "@/components/ui/property-cells"
+import { PropertyList, PropertyRow, PROPERTY_FIELD_CLASS, PROPERTY_HINT_CLASS, PROPERTY_TEXTAREA_CLASS } from "@/components/ui/property-list"
+import { CreateDialogFooter, CreateDialogHeader, CreateDialogNotice } from "@/components/ui/create-dialog"
+import { Plus, Activity, AlignLeft, Banknote, CalendarCheck, CalendarClock, FileText, Lock } from "lucide-react"
 import { SelectWithCustomEntry } from '@/components/ui/select-with-custom-entry'
 import { OptionalFieldsSection } from "@/components/ui/optional-fields-toggle"
-import { LoadingSpinner } from "@/components/ui/loading-spinner"
 import { DateTimePicker } from "@/components/ui/date-time-picker"
 import { createProject, type LwCrmEngagementStatus } from '@/lib/actions/project'
 import { clientTabPath } from '@/lib/navigation/firm-paths'
@@ -28,8 +25,7 @@ interface AddEngagementModalProps {
     onSaved?: () => void
 }
 
-const fieldLabel = 'font-mono text-[9px] font-bold uppercase tracking-widest text-[#45474c] block mb-1'
-const inputCls = 'border-[#e5e7eb] text-[#1b1b1d] text-xs font-normal placeholder:text-[#9a9ba0] rounded focus-visible:ring-1 focus-visible:ring-primary focus-visible:border-primary disabled:opacity-50 disabled:cursor-not-allowed'
+const ENGAGEMENT_STATUSES: LwCrmEngagementStatus[] = ['PLANNED', 'ACTIVE', 'PAUSED', 'COMPLETED']
 
 export function AddEngagementModal({ groupSlug, firmSlug, clientSlug, trigger, onSaved }: AddEngagementModalProps) {
     const [open, setOpen] = useState(false)
@@ -182,222 +178,128 @@ export function AddEngagementModal({ groupSlug, firmSlug, clientSlug, trigger, o
         <>
             {wrapTrigger(
                 trigger || (
-                    <Button variant="greenCta" type="button" size="sm" className="gap-2" disabled={capBlocked}>
-                        <SquarePlus className="h-4 w-4" />
-                        New Engagement
+                    <Button type="button" size="sm" disabled={capBlocked}>
+                        <Plus className="h-3.5 w-3.5" />
+                        New engagement
                     </Button>
                 ),
             )}
             <Dialog open={open} onOpenChange={setOpen}>
-                <DialogContent className="sm:max-w-[860px] border-[#e5e7eb] max-h-[90vh] overflow-y-auto p-0 gap-0 rounded">
-                    <VisuallyHidden><DialogTitle>New Engagement</DialogTitle></VisuallyHidden>
-
-                    {/* Header */}
-                    <div className="px-5 py-4 border-b border-[#e5e7eb] bg-white flex items-start gap-3 sticky top-0 z-10">
-                        <div className="mt-0.5 h-7 w-7 rounded bg-primary/10 flex items-center justify-center shrink-0">
-                            <SquarePlus className="h-3.5 w-3.5 text-primary" />
-                        </div>
-                        <div>
-                            <p className="text-sm font-semibold text-[#1b1b1d] leading-tight">New Engagement</p>
-                            <p className="text-xs text-[#45474c] mt-0.5">Create a new engagement for this client.</p>
-                        </div>
-                    </div>
+                <DialogContent className="max-h-[90vh] gap-0 overflow-y-auto p-0 sm:max-w-[600px]">
+                    <CreateDialogHeader title="New engagement" description="Create a new engagement for this client." />
 
                     <form onSubmit={handleSubmit}>
-                        <div className="p-5 space-y-3 bg-[#f9f9fb]">
-                            {error && (
-                                <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs px-3 py-2 rounded">
-                                    {error}
-                                </div>
-                            )}
-                            {capBlocked && capMessage && (
-                                <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs px-3 py-2 rounded mb-3 flex items-center gap-2">
-                                    <Lock className="h-3.5 w-3.5 shrink-0 text-rose-500" />
-                                    <span>
-                                        {capMessage.split('Upgrade')[0]}
-                                        <Link href="/d/billing" className="font-semibold underline underline-offset-2 hover:text-rose-900">Upgrade</Link>
-                                        {capMessage.split('Upgrade')[1]}
-                                    </span>
-                                </div>
-                            )}
+                        <div className="flex flex-col gap-3 px-5 pb-5 pt-2">
+                            {error && <CreateDialogNotice message={error} />}
+                            {capBlocked && capMessage && <CreateDialogNotice message={capMessage} limit />}
 
-                            {/* DETAILS — always visible, mandatory fields */}
-                            <div className="bg-white rounded border border-[#e5e7eb] p-4 space-y-3">
-                                <p className={fieldLabel}>Details</p>
-
-                                {/* Name + Status */}
-                                <div className="grid grid-cols-[3fr_1fr] gap-3">
-                                    <div>
-                                        <label htmlFor="eng-name" className={fieldLabel}>
-                                            <span className="inline-flex items-center gap-1">
-                                                <FileText className="h-3 w-3" /> Name <span className="text-red-500 normal-case tracking-normal font-sans">*</span>
-                                            </span>
-                                        </label>
-                                        <input
-                                            id="eng-name"
-                                            value={name}
-                                            onChange={(e) => setName(e.target.value)}
-                                            placeholder="e.g. Q1 Audit"
-                                            required
-                                            disabled={isDisabled}
-                                            className={`flex h-9 w-full rounded border border-[#e5e7eb] bg-white px-3 py-2 text-xs font-normal text-[#1b1b1d] placeholder:text-[#9a9ba0] focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed`}
-                                        />
-                                    </div>
-                                    <div>
-                                        <label htmlFor="eng-status" className={fieldLabel}>
-                                            <span className="inline-flex items-center gap-1">
-                                                <Activity className="h-3 w-3" /> Status <span className="text-red-500 normal-case tracking-normal font-sans">*</span>
-                                            </span>
-                                        </label>
-                                        <Select value={status} onValueChange={(v) => setStatus(v as LwCrmEngagementStatus)} disabled={isDisabled}>
-                                            <SelectTrigger id="eng-status" className={inputCls}>
-                                                <SelectValue placeholder="Select status" />
-                                            </SelectTrigger>
-                                            <SelectContent side="bottom" align="start" sideOffset={6} className="border border-[#e5e7eb] bg-white shadow-sm rounded py-0.5 min-w-[var(--radix-select-trigger-width)]">
-                                                <SelectItem value="PLANNED">Planned</SelectItem>
-                                                <SelectItem value="ACTIVE">Active</SelectItem>
-                                                <SelectItem value="PAUSED">Paused</SelectItem>
-                                                <SelectItem value="COMPLETED">Completed</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                </div>
-
-                                {/* Description — optional, but visible by default */}
-                                <div>
-                                    <label htmlFor="eng-description" className={fieldLabel}>
-                                        <span className="inline-flex items-center gap-1"><AlignLeft className="h-3 w-3" /> Description</span>
-                                    </label>
-                                    <textarea
-                                        id="eng-description"
-                                        value={description}
-                                        onChange={(e) => setDescription(e.target.value)}
-                                        placeholder="Brief engagement description"
-                                        rows={2}
+                            {/* Same property rows as Engagement Settings: create and edit look alike. */}
+                            <PropertyList>
+                                <PropertyRow label={<label htmlFor="eng-name">Name <span className="text-danger">*</span></label>} icon={<FileText />}>
+                                    <Input
+                                        id="eng-name"
+                                        value={name}
+                                        onChange={(e) => setName(e.target.value)}
+                                        placeholder="e.g. Q1 Audit"
+                                        required
+                                        autoFocus
                                         disabled={isDisabled}
-                                        className="flex w-full rounded border border-[#e5e7eb] bg-white px-3 py-2 text-xs font-normal text-[#1b1b1d] placeholder:text-[#9a9ba0] focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                                        className={PROPERTY_FIELD_CLASS}
                                     />
-                                    {/* Says the field is READ, which is the only thing that
-                                        changes what someone writes here. "Q2 GTM" and "Q2 GTM
-                                        positioning for a Series B fintech entering the UK" are
-                                        both valid labels; only the second is useful context, and
-                                        nothing otherwise signals that the longer one is worth
-                                        typing.
-
-                                        The Brio component, not the word: one mark for the
-                                        assistant everywhere it is named. */}
-                                    <p className="mt-1 text-[10px] leading-snug text-[#6b6d73]">
-                                        <Brio className="text-[10px]" /> uses this for context when
-                                        answering questions about this engagement.
-                                    </p>
-                                </div>
-                            </div>
+                                </PropertyRow>
+                                <PropertyRow label="Status" icon={<Activity />}>
+                                    <StatusProperty
+                                        kind="engagement"
+                                        value={status}
+                                        options={ENGAGEMENT_STATUSES}
+                                        onChange={(v) => setStatus(v as LwCrmEngagementStatus)}
+                                        disabled={isDisabled}
+                                    />
+                                </PropertyRow>
+                                <PropertyRow label={<label htmlFor="eng-description">Description</label>} icon={<AlignLeft />}>
+                                    <div className="flex w-full flex-col gap-1">
+                                        <Textarea
+                                            id="eng-description"
+                                            value={description}
+                                            onChange={(e) => setDescription(e.target.value)}
+                                            placeholder="Brief engagement description"
+                                            rows={2}
+                                            disabled={isDisabled}
+                                            className={PROPERTY_TEXTAREA_CLASS}
+                                        />
+                                        {/* Says the field is READ, which is the only thing that
+                                            changes what someone writes here. "Q2 GTM" and "Q2 GTM
+                                            positioning for a Series B fintech entering the UK" are
+                                            both valid labels; only the second is useful context. */}
+                                        <p className={PROPERTY_HINT_CLASS}>
+                                            <Brio className="text-caption" /> uses this for context when answering questions about this engagement.
+                                        </p>
+                                    </div>
+                                </PropertyRow>
+                            </PropertyList>
 
                             <OptionalFieldsSection open={showOptional} onToggle={() => setShowOptional((v) => !v)}>
-                            <div className="grid grid-cols-3 gap-3 items-stretch">
-
-                                {/* COMMERCIAL — col-span-1 */}
-                                <div className="space-y-3">
-                                    <p className={fieldLabel}>Commercial</p>
-
-                                    {/* Contract type */}
-                                    <div>
-                                        <label htmlFor="ctype" className={fieldLabel}>
-                                            <span className="inline-flex items-center gap-1"><FileText className="h-3 w-3" /> Contract type</span>
-                                        </label>
+                                <PropertyList>
+                                    <PropertyRow label={<label htmlFor="ctype">Contract type</label>} icon={<FileText />}>
                                         <SelectWithCustomEntry
                                             id="ctype"
                                             value={contractType}
                                             onChange={setContractType}
                                             options={['Fixed Price','Retainer','Time & Material','Case Management','Milestone-Based','Strategic Advisory','Success Fee','Subscription / Recurring']}
-                                            placeholder="Select type…"
+                                            placeholder="Empty"
                                             customEntryHint="Other…"
                                             disabled={isDisabled}
+                                            className={PROPERTY_FIELD_CLASS}
                                         />
-                                    </div>
-
-                                    {/* Contract value */}
-                                    <div>
-                                        <label htmlFor="eng-rate" className={fieldLabel}>
-                                            <span className="inline-flex items-center gap-1"><Banknote className="h-3 w-3" /> Contract value</span>
-                                        </label>
-                                        <div className={`flex items-center rounded border border-[#e5e7eb] bg-white focus-within:ring-1 focus-within:ring-primary focus-within:border-primary ${isDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                                            {currencySymbol && (
-                                                <span className="pl-3 pr-1 text-xs text-[#45474c] shrink-0 select-none">{currencySymbol}</span>
-                                            )}
-                                            <input
-                                                id="eng-rate"
-                                                value={rateOrValue}
-                                                onChange={(e) => setRateOrValue(e.target.value)}
-                                                placeholder="Total value"
+                                    </PropertyRow>
+                                    <PropertyRow label={<label htmlFor="eng-rate">Contract value</label>} icon={<Banknote />}>
+                                        <div className="flex w-full flex-col gap-1">
+                                            <div className={`flex h-8 items-center rounded-control border border-transparent transition-colors hover:bg-surface-hover focus-within:border-action/60 focus-within:bg-surface focus-within:ring-2 focus-within:ring-action/20 ${isDisabled ? 'pointer-events-none opacity-50' : ''}`}>
+                                                {currencySymbol && (
+                                                    <span className="shrink-0 select-none pl-2 text-ui text-fg-muted">{currencySymbol}</span>
+                                                )}
+                                                <input
+                                                    id="eng-rate"
+                                                    value={rateOrValue}
+                                                    onChange={(e) => setRateOrValue(e.target.value)}
+                                                    placeholder="Empty"
+                                                    disabled={isDisabled}
+                                                    className="h-full min-w-0 flex-1 bg-transparent px-2 text-ui tabular-nums text-fg outline-none placeholder:text-fg-subtle disabled:cursor-not-allowed"
+                                                />
+                                            </div>
+                                            {contractValueHint && <p className={PROPERTY_HINT_CLASS}>{contractValueHint}</p>}
+                                        </div>
+                                    </PropertyRow>
+                                    <PropertyRow label="Start date" icon={<CalendarClock />}>
+                                        <DateTimePicker value={startDate} onChange={setStartDate} placeholder="Empty" defaultTime="09:00" disabled={isDisabled} className={PROPERTY_FIELD_CLASS} />
+                                    </PropertyRow>
+                                    <PropertyRow label="End date" icon={<CalendarCheck />}>
+                                        <DateTimePicker value={endDate} onChange={setEndDate} placeholder="Empty" defaultTime="17:00" disabled={isDisabled} className={PROPERTY_FIELD_CLASS} />
+                                    </PropertyRow>
+                                    <PropertyRow label={<label htmlFor="eng-internal-memo">Internal memo</label>} icon={<Lock />}>
+                                        <div className="flex w-full flex-col gap-1">
+                                            <Textarea
+                                                id="eng-internal-memo"
+                                                value={internalMemo}
+                                                onChange={(e) => setInternalMemo(e.target.value)}
+                                                placeholder="Private notes, call summaries, context…"
+                                                rows={2}
                                                 disabled={isDisabled}
-                                                className="flex-1 h-9 px-3 text-xs text-[#1b1b1d] bg-transparent outline-none placeholder:text-[#9a9ba0] disabled:cursor-not-allowed"
+                                                className={PROPERTY_TEXTAREA_CLASS}
                                             />
+                                            <p className={PROPERTY_HINT_CLASS}>Only your firm sees this.</p>
                                         </div>
-                                        {contractValueHint && (
-                                            <p className="mt-1 text-[10px] text-[#9a9ba0]">{contractValueHint}</p>
-                                        )}
-                                    </div>
-                                </div>
-
-                                {/* TRACKING — col-span-2: dates + internal memo */}
-                                <div className="col-span-2 space-y-3">
-                                    <p className={fieldLabel}>Tracking</p>
-
-                                    {/* Start date + End date */}
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <div>
-                                            <label className={fieldLabel}>
-                                                <span className="inline-flex items-center gap-1"><CalendarClock className="h-3 w-3" /> Start date</span>
-                                            </label>
-                                            <DateTimePicker value={startDate} onChange={setStartDate} placeholder="Select date" defaultTime="09:00" disabled={isDisabled} />
-                                        </div>
-                                        <div>
-                                            <label className={fieldLabel}>
-                                                <span className="inline-flex items-center gap-1"><CalendarCheck className="h-3 w-3" /> End date</span>
-                                            </label>
-                                            <DateTimePicker value={endDate} onChange={setEndDate} placeholder="Select date" defaultTime="17:00" disabled={isDisabled} />
-                                        </div>
-                                    </div>
-
-                                    {/* Internal Memo */}
-                                    <div>
-                                        <label htmlFor="eng-internal-memo" className={fieldLabel}>
-                                            <span className="inline-flex items-center gap-1">
-                                                <Lock className="h-3 w-3" /> Internal memo
-                                                <span className="inline-flex items-center gap-0.5 normal-case tracking-normal font-sans text-[#9a9ba0]">— internal only</span>
-                                            </span>
-                                        </label>
-                                        <textarea
-                                            id="eng-internal-memo"
-                                            value={internalMemo}
-                                            onChange={(e) => setInternalMemo(e.target.value)}
-                                            placeholder="Private notes, call summaries, context…"
-                                            rows={2}
-                                            disabled={isDisabled}
-                                            className="flex w-full rounded border border-[#e5e7eb] bg-white px-3 py-2 text-xs font-normal text-[#1b1b1d] placeholder:text-[#9a9ba0] focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
-                                        />
-                                    </div>
-                                </div>
-
-                            </div>
+                                    </PropertyRow>
+                                </PropertyList>
                             </OptionalFieldsSection>
                         </div>
 
-                        {/* Footer */}
-                        <div className="px-5 py-3 border-t border-[#e5e7eb] bg-white flex items-center justify-end gap-3 sticky bottom-0 z-10">
-                            <Button type="button" variant="outline" className="rounded w-32 text-[10px] font-headline font-bold tracking-widest uppercase" onClick={() => setOpen(false)} disabled={isLoading}>
-                                Cancel
-                            </Button>
-                            <Button
-                                variant="greenCta"
-                                type="submit"
-                                disabled={isDisabled || !name.trim()}
-                                className="rounded min-w-[8rem] text-[10px] font-headline font-bold tracking-widest uppercase text-white"
-                            >
-                                {isLoading ? <LoadingSpinner size="sm" /> : 'Create'}
-                            </Button>
-                        </div>
+                        <CreateDialogFooter
+                            onCancel={() => setOpen(false)}
+                            cancelDisabled={isLoading}
+                            submitDisabled={isDisabled || !name.trim()}
+                            submitting={isLoading}
+                        />
                     </form>
                 </DialogContent>
             </Dialog>

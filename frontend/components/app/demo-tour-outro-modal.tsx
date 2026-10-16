@@ -59,7 +59,7 @@ export function DemoTourOutroModal() {
               closeOutroModal()
               if (slugs?.firmSlug && slugs?.groupSlug) void restartTour(slugs.firmSlug, slugs.groupSlug)
             }}
-            className="flex-1 h-9 rounded border border-[#e5e7eb] text-[10px] font-headline font-bold tracking-widest uppercase text-[#45474c] hover:bg-[#f3f4f6] transition-colors flex items-center justify-center gap-1.5"
+            className="flex-1 h-9 rounded border border-[#e5e7eb] text-[10px] font-headline font-bold tracking-widest uppercase text-[#45474c] hover:bg-surface-hover transition-colors flex items-center justify-center gap-1.5"
           >
             <Play className="h-3.5 w-3.5" /> Replay
           </button>

@@ -246,7 +246,7 @@ export function CreateSupportRequestModal({ firmSlug, trigger }: CreateSupportRe
       {wrapTrigger(trigger || (
         <button
           type="button"
-          className="h-auto px-4 py-1.5 rounded bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:brightness-105 shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all inline-flex items-center gap-1.5"
+          className="h-auto px-4 py-1.5 rounded bg-primary text-white shadow-sm transition-all inline-flex items-center gap-1.5"
         >
           <LifeBuoy className="h-3.5 w-3.5" />
           New Request
@@ -254,22 +254,22 @@ export function CreateSupportRequestModal({ firmSlug, trigger }: CreateSupportRe
       ))}
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-[500px] p-0 border-[#e5e7eb] !rounded overflow-hidden max-h-[90vh] flex flex-col gap-0">
+        <DialogContent className="sm:max-w-[500px] p-0 overflow-hidden max-h-[90vh] flex flex-col gap-0">
           <VisuallyHidden>
             <DialogTitle>New Support Request</DialogTitle>
           </VisuallyHidden>
 
           {/* Modal header */}
-          <div className="border-b border-[#e5e7eb] px-6 py-5 shrink-0">
+          <div className="border-b border-line px-6 py-5 shrink-0">
             <div className="flex items-center gap-3 mb-1">
-              <div className="w-8 h-8 bg-[#f3f4f6] border border-[#e5e7eb] rounded flex items-center justify-center shrink-0">
-                <LifeBuoy className="h-4 w-4 text-[#1b1b1d]" />
+              <div className="w-8 h-8 bg-surface-muted border border-line rounded flex items-center justify-center shrink-0">
+                <LifeBuoy className="h-4 w-4 text-fg" />
               </div>
-              <h2 className="font-headline text-lg font-bold tracking-tight text-[#1b1b1d]">
+              <h2 className="font-headline text-lg font-bold tracking-tight text-fg">
                 New Support Request
               </h2>
             </div>
-            <p className="text-[0.8125rem] text-[#45474c] pl-11">
+            <p className="text-[0.8125rem] text-fg-muted pl-11">
               Report issues, request features, or ask questions. We&apos;ll review and get back to you.
             </p>
           </div>
@@ -283,7 +283,7 @@ export function CreateSupportRequestModal({ firmSlug, trigger }: CreateSupportRe
             <div className="px-6 py-5 space-y-5">
 
               {error && (
-                <div className="flex items-start gap-2 bg-rose-50 border border-rose-200 text-rose-700 text-xs px-3 py-2.5 rounded">
+                <div className="flex items-start gap-2 bg-tag-red-bg border border-tag-red-bg text-tag-red-fg text-xs px-3 py-2.5 rounded">
                   <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-px" />
                   {error}
                 </div>
@@ -291,8 +291,8 @@ export function CreateSupportRequestModal({ firmSlug, trigger }: CreateSupportRe
 
               {/* Request type — visual card picker */}
               <div className="space-y-2">
-                <Label className="text-xs font-medium text-[#45474c] uppercase tracking-wider">
-                  Request Type <span className="text-rose-400">*</span>
+                <Label className="text-small font-medium text-fg-muted">
+                  Request Type <span className="text-danger">*</span>
                 </Label>
                 <div className="grid grid-cols-3 gap-2">
                   {REQUEST_TYPES.map(type => {
@@ -331,10 +331,10 @@ export function CreateSupportRequestModal({ firmSlug, trigger }: CreateSupportRe
 
               {/* Description */}
               <div className="space-y-1.5">
-                <Label htmlFor="description" className="text-xs font-medium text-[#45474c] uppercase tracking-wider">
-                  Description <span className="text-rose-400">*</span>
+                <Label htmlFor="description" className="text-small font-medium text-fg-muted">
+                  Description <span className="text-danger">*</span>
                 </Label>
-                <p className="text-[0.8125rem] text-[#45474c]">
+                <p className="text-[0.8125rem] text-fg-muted">
                   {selectedTypeInfo.label} — Provide as much detail as possible to help us assist you better.
                 </p>
                 <Textarea
@@ -342,7 +342,7 @@ export function CreateSupportRequestModal({ firmSlug, trigger }: CreateSupportRe
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder={placeholders[selectedType]}
-                  className="border-[#e5e7eb] rounded text-[0.8125rem] text-[#1b1b1d] placeholder:text-[#45474c]/50 focus:border-primary focus:ring-primary/20 disabled:opacity-60 min-h-32 resize-none"
+                  className="border-line rounded text-[0.8125rem] text-fg placeholder:text-[#45474c]/50 focus:border-action focus:ring-primary/20 disabled:opacity-60 min-h-32 resize-none"
                   disabled={isLoading}
                   required
                 />
@@ -351,7 +351,7 @@ export function CreateSupportRequestModal({ firmSlug, trigger }: CreateSupportRe
               {/* Attachments */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <Label className="text-xs font-medium text-[#45474c] uppercase tracking-wider">
+                  <Label className="text-small font-medium text-fg-muted">
                     Attachments
                     <span className="ml-1 font-normal normal-case tracking-normal text-[#45474c]/60">(optional)</span>
                   </Label>
@@ -383,12 +383,12 @@ export function CreateSupportRequestModal({ firmSlug, trigger }: CreateSupportRe
                     "border border-dashed rounded px-4 py-5 text-center transition-colors cursor-pointer",
                     isDragOver
                       ? "border-primary bg-[#f0faf6]"
-                      : "border-[#d1d5db] bg-[#f9f9fb] hover:border-primary/50 hover:bg-[#f9f9fb]"
+                      : "border-line-strong bg-surface-subtle hover:border-primary/50 hover:bg-surface-hover"
                   )}
                   onClick={() => fileInputRef.current?.click()}
                 >
                   <Paperclip className="h-4 w-4 text-[#45474c]/50 mx-auto mb-1.5" />
-                  <p className="text-[0.8125rem] text-[#45474c]">
+                  <p className="text-[0.8125rem] text-fg-muted">
                     Drop files here, click to browse, or paste a screenshot
                   </p>
                 </div>
@@ -398,33 +398,33 @@ export function CreateSupportRequestModal({ firmSlug, trigger }: CreateSupportRe
                     {attachments.map((a) => (
                       <div
                         key={a.id}
-                        className="flex items-center gap-2 px-3 py-2 bg-[#f9f9fb] rounded border border-[#e5e7eb]"
+                        className="flex items-center gap-2 px-3 py-2 bg-surface-subtle rounded border border-line"
                       >
-                        <FileIcon className="h-3.5 w-3.5 text-[#45474c] shrink-0" />
+                        <FileIcon className="h-3.5 w-3.5 text-fg-muted shrink-0" />
                         <div className="flex-1 min-w-0">
-                          <p className="text-[0.8125rem] text-[#1b1b1d] truncate font-medium">{a.displayName}</p>
+                          <p className="text-[0.8125rem] text-fg truncate font-medium">{a.displayName}</p>
                           {a.status === 'uploading' && (
                             <div className="flex items-center gap-2 mt-1">
-                              <div className="flex-1 h-0.5 bg-[#e5e7eb] rounded overflow-hidden">
+                              <div className="flex-1 h-0.5 bg-line rounded overflow-hidden">
                                 <div className="h-full bg-primary transition-all" style={{ width: `${a.progress}%` }} />
                               </div>
-                              <span className="text-[10px] text-[#45474c] tabular-nums">{a.progress}%</span>
+                              <span className="text-caption text-fg-muted tabular-nums">{a.progress}%</span>
                             </div>
                           )}
                           {a.status === 'done' && (
-                            <p className="text-[10px] text-primary flex items-center gap-1 mt-0.5 font-medium">
+                            <p className="text-caption text-primary flex items-center gap-1 mt-0.5 font-medium">
                               <CheckCircle2 className="h-3 w-3" /> Uploaded
                             </p>
                           )}
                           {a.status === 'error' && (
-                            <p className="text-[10px] text-rose-600 mt-0.5">{a.error}</p>
+                            <p className="text-caption text-tag-red-fg mt-0.5">{a.error}</p>
                           )}
                         </div>
                         {(a.status === 'pending' || a.status === 'error') && (
                           <button
                             type="button"
                             onClick={() => setAttachments(prev => prev.filter(att => att.id !== a.id))}
-                            className="p-0.5 rounded hover:bg-[#f3f4f6] text-[#45474c] hover:text-rose-600 transition-colors"
+                            className="p-0.5 rounded hover:bg-surface-hover text-fg-muted hover:text-danger transition-colors"
                           >
                             <X className="h-3.5 w-3.5" />
                           </button>
@@ -437,19 +437,19 @@ export function CreateSupportRequestModal({ firmSlug, trigger }: CreateSupportRe
             </div>
 
             {/* Footer */}
-            <div className="shrink-0 border-t border-[#e5e7eb] px-6 py-4 flex items-center justify-end gap-2 bg-[#f9f9fb]">
+            <div className="shrink-0 border-t border-line px-6 py-4 flex items-center justify-end gap-2">
               <button
                 type="button"
                 onClick={() => setOpen(false)}
                 disabled={isLoading}
-                className="px-4 py-2 text-[0.8125rem] font-medium text-[#45474c] bg-white border border-[#e5e7eb] rounded hover:bg-[#f3f4f6] hover:text-[#1b1b1d] transition-colors disabled:opacity-50"
+                className="px-4 py-2 text-[0.8125rem] font-medium text-fg-muted bg-surface border border-line rounded hover:bg-surface-hover hover:text-fg transition-colors disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={!description.trim() || isLoading}
-                className="group inline-flex items-center gap-2 px-4 py-2 rounded bg-[#1a5c3a] hover:bg-[#164f32] text-white text-xs font-headline font-bold tracking-widest uppercase transition-all shadow-[0_1px_2px_rgba(0,0,0,0.25),inset_0_1px_0_rgba(255,255,255,0.08)] hover:shadow-[0_4px_8px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.08)] hover:-translate-y-px active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none disabled:translate-y-0"
+                className="group inline-flex items-center gap-2 px-4 py-2 rounded bg-[#1a5c3a] hover:bg-[#164f32] text-white text-xs transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isLoading ? (
                   <>

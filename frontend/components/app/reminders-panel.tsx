@@ -304,14 +304,14 @@ export function RemindersPanel({ onCountChange }: Props) {
                                 <button
                                     type="button"
                                     onClick={() => setShowHidden((v) => !v)}
-                                    className="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium text-[#45474c] hover:text-[#1b1b1d] hover:bg-[#f3f4f6] transition-colors"
+                                    className="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium text-[#45474c] hover:text-[#1b1b1d] hover:bg-surface-hover transition-colors"
                                 >
                                     {showHidden ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
                                     {`Hidden · ${hidden.length}`}
                                 </button>
                             ) : null}
                             <button type="button" onClick={() => setOpen(false)} aria-label="Close"
-                                className="p-1 rounded hover:bg-[#f3f4f6] text-[#45474c] hover:text-[#1b1b1d] transition-colors">
+                                className="p-1 rounded hover:bg-surface-hover text-[#45474c] hover:text-[#1b1b1d] transition-colors">
                                 <SquareX className="h-4 w-4" />
                             </button>
                         </div>

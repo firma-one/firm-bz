@@ -4,6 +4,9 @@ import { useCallback, useEffect, useState } from 'react'
 import { Download, Loader2, ShieldAlert, Check } from 'lucide-react'
 import { useToast } from '@/components/ui/toast'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { Button } from '@/components/ui/button'
+import { Tag } from '@/components/ui/tag'
+import { SETTINGS_SECTION_HEADING_CLASS } from '@/components/ui/property-list'
 
 /**
  * Export and deletion, the two rights the privacy policy says live in settings.
@@ -90,36 +93,30 @@ export function DataPrivacyCard() {
     }, [addToast])
 
     return (
-        <div className="space-y-4 rounded border border-[#e5e7eb] bg-white p-4">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-[#45474c]">
-                Your data
-            </p>
+        <section>
+            <h3 className={SETTINGS_SECTION_HEADING_CLASS}>Your data</h3>
 
-            <div className="flex flex-wrap items-start justify-between gap-3">
+            {/* Linear-style rows: what it does on the left, one button on the right — no card. */}
+            <div className="flex flex-col gap-3 py-2 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
                 <div className="min-w-0 flex-1">
-                    <p className="text-[0.8125rem] font-semibold text-[#1b1b1d]">Download your data</p>
-                    <p className="mt-0.5 text-xs leading-relaxed text-[#45474c]">
+                    <p className="text-ui font-medium text-fg">Download your data</p>
+                    <p className="mt-0.5 text-small text-fg-muted">
                         Your profile, memberships, activity and AI usage, as a JSON file. Your
                         documents stay in your own storage and are not part of this.
                     </p>
                 </div>
-                <button
-                    type="button"
-                    onClick={() => void exportData()}
-                    disabled={exporting}
-                    className="inline-flex shrink-0 items-center gap-1.5 rounded border border-[#e5e7eb] bg-white px-3 py-1.5 text-xs font-medium text-[#1b1b1d] transition-colors hover:bg-[#f9f9fb] disabled:opacity-60"
-                >
+                <Button type="button" variant="outline" size="sm" onClick={() => void exportData()} disabled={exporting} className="shrink-0">
                     {exporting
                         ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Preparing…</>
                         : <><Download className="h-3.5 w-3.5" /> Download</>}
-                </button>
+                </Button>
             </div>
 
-            <div className="border-t border-[#e5e7eb] pt-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="border-t border-line">
+                <div className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
                     <div className="min-w-0 flex-1">
-                        <p className="text-[0.8125rem] font-semibold text-[#1b1b1d]">Delete your account</p>
-                        <p className="mt-0.5 text-xs leading-relaxed text-[#45474c]">
+                        <p className="text-ui font-medium text-fg">Delete your account</p>
+                        <p className="mt-0.5 text-small text-fg-muted">
                             {/* The exceptions are stated HERE, not only in the policy. Someone
                                 about to delete their account is the one person who needs to know
                                 what survives it, and sending them to a legal page to find out is
@@ -137,20 +134,15 @@ export function DataPrivacyCard() {
                         // most likely to want their account gone — would be redirected away from
                         // the only place their ticket was visible. A right that leaves the holder
                         // unable to see whether it is being honoured is not much of a right.
-                        <span className="inline-flex shrink-0 items-center gap-1.5 rounded border border-[#e5e7eb] bg-[#f9f9fb] px-3 py-1.5 text-xs text-[#45474c]">
-                            <Check className="h-3.5 w-3.5 text-primary" />
+                        <Tag color="gray" className="shrink-0" icon={<Check />}>
                             {openRequest.status === 'IN_PROGRESS' ? 'In progress' : 'Requested'}
                             {' · '}{openRequest.ticketNumber}
-                        </span>
+                        </Tag>
                     ) : (
-                        <button
-                            type="button"
-                            onClick={() => setConfirming(true)}
-                            className="inline-flex shrink-0 items-center gap-1.5 rounded border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-50"
-                        >
+                        <Button type="button" variant="outline" size="sm" onClick={() => setConfirming(true)} className="shrink-0 text-danger hover:text-danger">
                             <ShieldAlert className="h-3.5 w-3.5" />
                             Request deletion
-                        </button>
+                        </Button>
                     )}
                 </div>
             </div>
@@ -175,6 +167,6 @@ export function DataPrivacyCard() {
                 onCancel={() => setConfirming(false)}
                 onConfirm={() => void requestDeletion()}
             />
-        </div>
+        </section>
     )
 }

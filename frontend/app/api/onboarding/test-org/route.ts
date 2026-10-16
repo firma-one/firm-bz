@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getManageableConnector, isFirmAdmin } from '@/lib/connectors/connector-access'
 import { logger } from '@/lib/logger'
 import { createTestOrganization } from '@/lib/services/test-org-generator'
 import { createGoogleDriveAdapter } from '@/lib/connectors/adapters/google-drive-adapter'
 import { googleDriveConnector } from '@/lib/google-drive-connector'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { prisma } from '@/lib/prisma'
-import { invalidateUserSettingsPlus } from '@/lib/actions/user-settings'
+import { invalidateUserSettingsPlus } from '@/lib/permissions/invalidate-user-settings'
 import { ClientService } from '@/lib/services/client.service'
 import { projectService } from '@/lib/services/project.service'
 
@@ -37,12 +38,10 @@ export async function POST(request: NextRequest) {
 
         logger.info('Creating test data (V2)', { userId, connectionId, firmId: resolvedFirmId })
 
-        // 1. Verify membership (V2)
-        const membership = await (prisma as any).firmMember.findFirst({
-            where: { userId, firmId: resolvedFirmId }
-        })
-
-        if (!membership) {
+        // 1. Sample data goes into this firm and this connector's Drive: a firm admin of the firm,
+        //    using a connector they manage. Any membership used to be enough, with any connector id.
+        //    (.claude/plans/access-gates.md, P0 #6)
+        if (!(await isFirmAdmin(userId, resolvedFirmId)) || !(await getManageableConnector(userId, connectionId))) {
             return NextResponse.json({ error: 'Firm not found or access denied' }, { status: 404 })
         }
 

@@ -40,3 +40,14 @@ export function getEngagementColor(engagementId: string): EngagementColor {
 export function getEngagementColorHex(engagementId: string): { bg: string; border: string; text: string } {
   return ENGAGEMENT_COLOR_HEX[hashToIndex(engagementId, ENGAGEMENT_COLOR_HEX.length)]
 }
+
+/**
+ * Notion tag color for an engagement — the firm calendar's events and its sidebar swatches. Red is
+ * left out so no engagement reads as overdue, and gray so none reads as disabled.
+ */
+const ENGAGEMENT_TAG_COLORS = ['blue', 'purple', 'green', 'orange', 'pink', 'yellow', 'brown'] as const
+export type EngagementTagColor = (typeof ENGAGEMENT_TAG_COLORS)[number]
+
+export function getEngagementTagColor(engagementId: string): EngagementTagColor {
+  return ENGAGEMENT_TAG_COLORS[hashToIndex(engagementId, ENGAGEMENT_TAG_COLORS.length)]
+}

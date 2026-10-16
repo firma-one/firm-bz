@@ -1,4 +1,14 @@
-'use server'
+import 'server-only'
+
+/*
+ * Creates engagement/client/firm membership rows for a given user from an invitation object.
+ * Server-only rather than 'use server': as a server action it was registered as a callable endpoint
+ * that took the user id AND the invitation from the caller. Only the invitation actions
+ * (lib/actions/invitations.ts, lib/actions/hierarchy.ts), which validate the invite token and the
+ * session first, call it.
+ *
+ * Lives under lib/actions/ for history; it is not a server action.
+ */
 
 import { prisma } from "@/lib/prisma"
 import { logger } from '@/lib/logger'
@@ -7,15 +17,15 @@ import { BRAND_NAME } from '@/config/brand'
 import { renderAddedToEngagementEmail } from '@/lib/email-templates/added-to-engagement'
 import { safeInngestSend } from '@/lib/inngest/client'
 import { grantEngagementDriveFolderAccess } from '@/lib/grant-engagement-drive-folder-access'
-import { invalidateUserSettingsPlus } from '@/lib/actions/user-settings'
-import { removeRemindersByEntity } from '@/lib/actions/user-reminders'
+import { invalidateUserSettingsPlus } from '@/lib/permissions/invalidate-user-settings'
+import { removeRemindersByEntity } from '@/lib/reminders/reminder-service'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { mergeLeanAppMetadata } from '@/lib/auth/supabase-jwt-metadata'
 import { getPermissionAdapter } from '@/lib/connectors/registry'
 import { resolveEngagementConnectorId } from '@/lib/connectors/resolve-client-connector'
 import { Prisma } from '@prisma/client'
 import { engagementPath } from '@/lib/navigation/firm-paths'
-import { getFirmReminderConfig } from '@/lib/actions/firms'
+import { getFirmReminderConfig } from '@/lib/firm-reminder-config'
 import { createEventNotifications, sendEventEmailToUser, buildAbsoluteUrl } from '@/lib/notify-event'
 import { renderInviteAcceptedEmail } from '@/lib/email-templates/invite-accepted'
 

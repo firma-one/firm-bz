@@ -8,6 +8,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { NextRequest } from 'next/server'
+import { peekOAuthState, signOAuthState, verifyOAuthState } from '@/lib/connectors/oauth-state'
 
 // ── Mocks ──────────────────────────────────────────────────────────────────
 
@@ -66,6 +67,19 @@ vi.mock('@supabase/supabase-js', () => ({
   createClient: () => ({ auth: {} }),
 }))
 
+// The state is signed (lib/connectors/oauth-state.ts) and must belong to the signed-in user.
+process.env.OAUTH_STATE_SECRET = 'test-oauth-state-secret'
+const session = vi.hoisted(() => ({ userId: 'user-1' as string | null }))
+vi.mock('@/utils/supabase/server', () => ({
+  createClient: async () => ({ auth: { getUser: async () => ({ data: { user: session.userId ? { id: session.userId } : null } }) } }),
+}))
+const rights = vi.hoisted(() => ({ firmAdmin: true, clientManager: true, connectorManager: true }))
+vi.mock('@/lib/connectors/connector-access', () => ({
+  isFirmAdmin: async () => rights.firmAdmin,
+  isClientManager: async () => rights.clientManager,
+  getManageableConnector: async (_u: string, id: string) => (rights.connectorManager ? { id } : null),
+}))
+
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 function makeState(overrides: Record<string, unknown> = {}) {
@@ -76,7 +90,12 @@ function makeState(overrides: Record<string, unknown> = {}) {
     next: '/d/f/acme/connectors',
     ...overrides,
   }
-  return Buffer.from(JSON.stringify(state)).toString('base64')
+  return signOAuthState(state)
+}
+
+/** The old, unsigned format — what a forger can still produce. */
+function makeUnsignedState(overrides: Record<string, unknown> = {}) {
+  return Buffer.from(JSON.stringify({ userId: 'user-1', organizationId: 'firm-1', flow: 'redirect', ...overrides })).toString('base64')
 }
 
 async function callCallback(state: string, code = 'oauth-code') {
@@ -107,6 +126,8 @@ describe('Google Drive OAuth callback — replace-connector flow', () => {
     mockConnectorUpdate.mockResolvedValue({})
     mockFirmMemberFindUnique.mockResolvedValue({ firm: { id: 'firm-1' } })
     mockFirmMemberFindFirst.mockResolvedValue(null)
+    session.userId = 'user-1'
+    Object.assign(rights, { firmAdmin: true, clientManager: true, connectorManager: true })
   })
 
   it('revokes the old connector before storeConnection when replaceConnectorId is in state', async () => {
@@ -199,15 +220,73 @@ describe('Google Drive OAuth callback — state decoding', () => {
     mockFirmMemberFindFirst.mockResolvedValue(null)
   })
 
-  it('decodes replaceConnectorId correctly from base64 state', async () => {
+  it('decodes replaceConnectorId correctly from signed state', async () => {
     const state = makeState({ replaceConnectorId: 'connector-to-replace' })
-    const decoded = JSON.parse(Buffer.from(state, 'base64').toString('utf-8'))
-    expect(decoded.replaceConnectorId).toBe('connector-to-replace')
+    expect(verifyOAuthState(state)?.replaceConnectorId).toBe('connector-to-replace')
+    expect(peekOAuthState(state).replaceConnectorId).toBe('connector-to-replace')
   })
 
   it('handles missing replaceConnectorId in state gracefully (undefined)', () => {
     const state = makeState()
-    const decoded = JSON.parse(Buffer.from(state, 'base64').toString('utf-8'))
-    expect(decoded.replaceConnectorId).toBeUndefined()
+    expect(verifyOAuthState(state)?.replaceConnectorId).toBeUndefined()
+  })
+})
+
+// ── Forged and foreign state (.claude/plans/access-gates.md, P0 #4) ─────────
+
+describe('Google Drive OAuth callback — state must be ours and the caller\'s', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockStoreConnection.mockResolvedValue({ id: 'new-conn', settings: {} })
+    mockConnectorUpdate.mockResolvedValue({})
+    mockFirmMemberFindUnique.mockResolvedValue({ firm: { id: 'firm-1' } })
+    mockFirmMemberFindFirst.mockResolvedValue(null)
+    session.userId = 'user-1'
+    Object.assign(rights, { firmAdmin: true, clientManager: true, connectorManager: true })
+  })
+
+  const location = (res: Response) => res.headers.get('location') ?? ''
+
+  it('rejects an unsigned state without exchanging the code or storing anything', async () => {
+    const { fetchWithTimeoutRetry } = await import('@/lib/fetch-with-timeout-retry')
+    const res = await callCallback(makeUnsignedState({ organizationId: 'victim-firm' }))
+    expect(location(res)).toContain('error=invalid_state')
+    expect(mockStoreConnection).not.toHaveBeenCalled()
+    expect(vi.mocked(fetchWithTimeoutRetry)).not.toHaveBeenCalledWith(expect.stringContaining('token'), expect.anything(), expect.anything())
+  })
+
+  it('rejects a tampered state', async () => {
+    const [payload, sig] = makeState().split('.')
+    const forged = Buffer.from(JSON.stringify({ ...JSON.parse(Buffer.from(payload, 'base64url').toString()), organizationId: 'victim-firm' })).toString('base64url')
+    const res = await callCallback(`${forged}.${sig}`)
+    expect(location(res)).toContain('error=invalid_state')
+    expect(mockStoreConnection).not.toHaveBeenCalled()
+  })
+
+  it('rejects a valid state that belongs to someone other than the signed-in user', async () => {
+    session.userId = 'attacker'
+    const res = await callCallback(makeState())
+    expect(location(res)).toContain('error=session_mismatch')
+    expect(mockStoreConnection).not.toHaveBeenCalled()
+  })
+
+  it('rejects linking to a firm the user does not administer', async () => {
+    rights.firmAdmin = false
+    const res = await callCallback(makeState())
+    expect(location(res)).toContain('error=forbidden')
+    expect(mockStoreConnection).not.toHaveBeenCalled()
+  })
+
+  it('refuses to revoke a connector the user cannot manage', async () => {
+    rights.connectorManager = false
+    const res = await callCallback(makeState({ replaceConnectorId: 'someone-elses' }))
+    expect(location(res)).toContain('error=forbidden')
+    expect(mockConnectorUpdate).not.toHaveBeenCalled()
+    expect(mockStoreConnection).not.toHaveBeenCalled()
+  })
+
+  it('never redirects off-site through `next`', async () => {
+    const res = await callCallback(makeState({ next: '//evil.example/steal' }))
+    expect(location(res)).not.toContain('evil.example')
   })
 })

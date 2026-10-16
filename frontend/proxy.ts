@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { getDeploymentVersion, DEPLOYMENT_VERSION_COOKIE, isDeploymentVersionValid } from "@/lib/deployment-version";
 import { logger } from "@/lib/logger";
+import { isSystemAdminEmail } from "@/lib/system/admin-check";
 
 /** Forward pathname to Server Components (e.g. `/d` layout entry redirect). */
 const INVOKE_PATH_HEADER = "x-invoke-path";
@@ -221,6 +222,19 @@ export async function proxy(request: NextRequest) {
         const url = request.nextUrl.clone()
         url.pathname = '/d'
         return NextResponse.rewrite(url)
+    }
+
+    // /system is for system admins (SYSTEM_ADMIN_EMAILS) only. Its layout checks this in the browser,
+    // which can't stop a server action POSTed to a /system page — the action runs before anything
+    // renders — so refuse here too. Each admin action also checks for itself.
+    const isSystemRoute = pathname === '/system' || pathname.startsWith('/system/')
+    if (isSystemRoute && !isSystemAdminEmail(user?.email)) {
+        if (!user) {
+            const loginUrl = new URL('/signin', request.url)
+            loginUrl.searchParams.set('redirect', pathname + request.nextUrl.search)
+            return NextResponse.redirect(loginUrl)
+        }
+        return NextResponse.redirect(new URL('/d', request.url))
     }
 
     // Protect all /d routes

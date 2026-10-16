@@ -99,29 +99,29 @@ export function ReGrantEditorAccessButton({ projectId, documentId, isGuest }: { 
         className="gap-2 hidden sm:flex"
         title="Click if your storage provider is asking you to sign in"
       >
-        {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <MailCheck className="h-4 w-4 text-green-600" />}
+        {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <MailCheck className="h-4 w-4 text-tag-green-fg" />}
         Authenticate Editor Access
       </Button>
 
       <Dialog open={showSuccessModal} onOpenChange={setShowSuccessModal}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-green-100 mb-4">
-              <ShieldCheck className="h-6 w-6 text-green-600" />
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-tag-green-bg mb-4">
+              <ShieldCheck className="h-6 w-6 text-tag-green-fg" />
             </div>
             <DialogTitle className="text-center text-xl">Secure Edit Link Sent!</DialogTitle>
           </DialogHeader>
           <div className="flex flex-col items-center text-center space-y-4 py-4">
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-fg-muted">
               A new encrypted edit link has just been sent to your inbox.
             </p>
-            <div className="bg-slate-50 border border-slate-100 rounded-lg p-4 w-full flex items-center justify-center space-x-3">
-              <Mail className="h-5 w-5 text-slate-400" />
-              <span className="text-sm font-medium text-slate-700">Please click the link in that email to begin editing safely.</span>
+            <div className="bg-surface-subtle border border-line rounded-lg p-4 w-full flex items-center justify-center space-x-3">
+              <Mail className="h-5 w-5 text-fg-subtle" />
+              <span className="text-sm font-medium text-fg-muted">Please click the link in that email to begin editing safely.</span>
             </div>
           </div>
           <div className="flex justify-center mt-2">
-            <Button onClick={() => setShowSuccessModal(false)} className="w-full sm:w-auto bg-green-600 hover:bg-green-700 text-white">
+            <Button onClick={() => setShowSuccessModal(false)} className="w-full sm:w-auto bg-action hover:bg-action-hover text-white">
               Got it, checking my email
             </Button>
           </div>
@@ -134,12 +134,12 @@ export function ReGrantEditorAccessButton({ projectId, documentId, isGuest }: { 
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-blue-100 mb-4">
-              <ExternalLink className="h-6 w-6 text-blue-600" />
+              <ExternalLink className="h-6 w-6 text-action" />
             </div>
             <DialogTitle className="text-center text-xl">Your access is ready</DialogTitle>
           </DialogHeader>
           <div className="flex flex-col items-center text-center space-y-4 py-4">
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-fg-muted">
               Editor access has been granted, but your browser blocked the new tab.
             </p>
           </div>
@@ -239,7 +239,7 @@ export function DocumentEditPanelContent({ document }: { document: any }) {
   if (!document) return null
   const editUrl = getDocumentEditUrl(document)
   return (
-    <div className="flex-1 min-h-0 relative bg-gray-100 flex flex-col" style={{ minHeight: 0 }}>
+    <div className="flex-1 min-h-0 relative bg-surface-muted flex flex-col" style={{ minHeight: 0 }}>
       <DocumentHeader
         document={document}
         onOpenInBrowser={() => window.open(editUrl, '_blank')}
@@ -253,8 +253,8 @@ export function DocumentEditPanelContent({ document }: { document: any }) {
           allowFullScreen
         />
       </div>
-      <div className="absolute inset-x-0 bottom-0 bg-white/90 backdrop-blur border-t border-gray-200 p-3 text-center text-sm text-gray-500 sm:hidden">
-        <Button size="sm" className="bg-green-600 text-white hover:bg-green-700" onClick={() => window.open(editUrl, '_blank')}>
+      <div className="absolute inset-x-0 bottom-0 bg-white/90 backdrop-blur border-t border-line p-3 text-center text-sm text-fg-muted sm:hidden">
+        <Button size="sm" className="bg-action text-white hover:bg-action-hover" onClick={() => window.open(editUrl, '_blank')}>
           Open in new tab
         </Button>
       </div>
@@ -287,7 +287,7 @@ export function DocumentPreviewPanelContent({ document }: { document: any }) {
   }
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col bg-gray-100 overflow-hidden" style={{ minHeight: 0 }}>
+    <div className="flex-1 min-h-0 flex flex-col bg-surface-muted overflow-hidden" style={{ minHeight: 0 }}>
       <DocumentHeader
         document={document}
         onDownload={document.projectId ? handleDownload : undefined}
@@ -302,8 +302,8 @@ export function DocumentPreviewPanelContent({ document }: { document: any }) {
           allowFullScreen
         />
       </div>
-      <div className="absolute inset-x-0 bottom-0 bg-white/90 backdrop-blur border-t border-gray-200 p-3 text-center text-sm text-gray-500 sm:hidden">
-        <Button size="sm" className="bg-green-600 text-white hover:bg-green-700" onClick={switchToEdit}>
+      <div className="absolute inset-x-0 bottom-0 bg-white/90 backdrop-blur border-t border-line p-3 text-center text-sm text-fg-muted sm:hidden">
+        <Button size="sm" className="bg-action text-white hover:bg-action-hover" onClick={switchToEdit}>
           Edit
         </Button>
       </div>
@@ -328,17 +328,17 @@ export function DocumentEditSheet({
 
   return (
     <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <SheetContent className="w-full sm:max-w-4xl md:max-w-5xl p-0 flex flex-col h-full bg-slate-50">
-        <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between shadow-sm z-10">
+      <SheetContent className="w-full sm:max-w-4xl md:max-w-5xl p-0 flex flex-col h-full bg-surface-subtle">
+        <div className="bg-surface border-b border-line px-6 py-4 flex items-center justify-between shadow-sm z-10">
           <div className="flex items-center space-x-3 overflow-hidden">
-            <div className="w-10 h-10 bg-green-50 rounded-lg flex items-center justify-center flex-shrink-0">
+            <div className="w-10 h-10 bg-tag-green-bg rounded-lg flex items-center justify-center flex-shrink-0">
               <DocumentIcon mimeType={document.mimeType} className="h-5 w-5" />
             </div>
             <div className="min-w-0">
-              <SheetTitle className="text-base font-semibold text-gray-900 truncate" title={document.name}>
+              <SheetTitle className="text-base font-semibold text-fg truncate" title={document.name}>
                 {document.name}
               </SheetTitle>
-              <SheetDescription className="flex items-center text-xs text-gray-500 space-x-2">
+              <SheetDescription className="flex items-center text-xs text-fg-muted space-x-2">
                 <span>{formatFileSize(document.size)}</span>
                 <span>•</span>
                 <span>Edited {formatSmartDateTime(document.modifiedTime)}</span>
@@ -358,7 +358,7 @@ export function DocumentEditSheet({
                 size="icon"
                 onClick={() => onDownload(document)}
                 title="Download"
-                className="text-gray-500 hover:text-gray-900"
+                className="text-fg-muted hover:text-fg"
               >
                 <Download className="h-5 w-5" />
               </Button>
@@ -367,7 +367,7 @@ export function DocumentEditSheet({
               variant="ghost"
               size="icon"
               onClick={onClose}
-              className="text-gray-400 hover:text-gray-600"
+              className="text-fg-subtle hover:text-fg-muted"
               title="Close"
             >
               <X className="h-5 w-5" />
@@ -375,7 +375,7 @@ export function DocumentEditSheet({
           </div>
         </div>
 
-        <div className="flex-1 overflow-hidden relative bg-gray-100 flex flex-col min-h-0">
+        <div className="flex-1 overflow-hidden relative bg-surface-muted flex flex-col min-h-0">
           <iframe
             src={editUrl}
             className="w-full h-full border-0 flex-1 min-h-[400px]"
@@ -383,9 +383,9 @@ export function DocumentEditSheet({
             allowFullScreen
           />
           {/* Fallback for small screens or if iframe is blocked */}
-          <div className="absolute inset-x-0 bottom-0 bg-white/90 backdrop-blur border-t border-gray-200 p-4 text-center text-sm text-gray-500 sm:hidden">
+          <div className="absolute inset-x-0 bottom-0 bg-white/90 backdrop-blur border-t border-line p-4 text-center text-sm text-fg-muted sm:hidden">
             <Button
-              className="w-full bg-green-600 text-white hover:bg-green-700"
+              className="w-full bg-action text-white hover:bg-action-hover"
               onClick={() => window.open(editUrl, '_blank')}
             >
               Open in new tab

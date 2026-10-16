@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { usePathname } from 'next/navigation'
 import { AuthGuard } from '@/components/auth/auth-guard'
-import { AppSidebar } from '@/components/app/app-sidebar'
 import { AppTopbar } from '@/components/app/app-topbar'
 import { useViewAs, RBAC_PERSONAS } from '@/lib/view-as-context'
 import { LayoutRightPanel, RIGHT_PANEL_DOCKED_WIDTH_PX } from '@/components/app/layout-right-panel'
@@ -33,6 +32,8 @@ import { DemoTour } from '@/components/app/demo-tour'
 import { DemoTourIntroModal } from '@/components/app/demo-tour-intro-modal'
 import { DemoTourOutroModal } from '@/components/app/demo-tour-outro-modal'
 import { DemoTourButton } from '@/components/app/demo-tour-button'
+import { UiShellProvider } from '@/lib/ui-shell-context'
+import { AppShellV2 } from '@/components/shell/app-shell-v2'
 
 const TOP_BAR_HEIGHT = 64
 
@@ -174,19 +175,113 @@ function AppLayoutContent({ children, isSystemAdmin }: { children: React.ReactNo
         return () => clearInterval(id)
     }, [platformStatus])
 
+    // The app frame: banners, panels and the right pane. Onboarding has its own frame below — its
+    // own sidebar drives the steps.
+    if (!showOnboardingSidebar) {
+        const graceStrip = platformStatus?.pendingGrace && graceCountdown !== null ? (
+            <AppShellHintStrip
+                accent="slate"
+                noShadow
+                leading={
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-red-100 ring-1 ring-red-300">
+                        <Megaphone className="h-3.5 w-3.5 text-red-600 fill-red-200" />
+                    </div>
+                }
+                title={
+                    <span className="text-sm inline-flex items-baseline gap-1.5">
+                        Platform maintenance begins in{' '}
+                        <span className="font-mono tabular-nums font-bold text-red-600">{graceCountdown}</span>
+                        {' '}— please save any open work
+                    </span>
+                }
+                description="All active sessions will be signed out automatically. You can sign back in once maintenance is complete."
+            />
+        ) : null
+
+        return (
+            <AuthGuard>
+                <AppShellV2
+                    isSystemAdmin={isSystemAdmin}
+                    banners={
+                        <>
+                            <ViewAsBanner />
+                            {isDemoFirm && (
+                                <div className="flex items-center gap-2 px-4 py-2 bg-rose-50 border-b border-rose-200 text-rose-950 shrink-0">
+                                    <Info className="h-3.5 w-3.5 shrink-0 text-rose-600" />
+                                    <span className="text-[0.75rem] font-medium">
+                                        This is a demo firm — sample data is shown for preview only. Sign up for a paid plan to manage real client files.
+                                    </span>
+                                </div>
+                            )}
+                        </>
+                    }
+                    mainFooter={
+                        <>
+                            <StandardCheckoutIntentBanner />
+                            {graceStrip}
+                        </>
+                    }
+                    rightPaneWide={paneSize === 'medium'}
+                    rightPane={
+                        rightPaneContent ? (
+                            <LayoutRightPanel
+                                title={rightPaneTitle || 'Document'}
+                                icon={headerIcon}
+                                iconTooltip={iconTooltip || undefined}
+                                subtitle={headerSubtitle || undefined}
+                                onClose={clearPane}
+                                headerActions={rightPaneHeaderActions}
+                                embedContent={true}
+                            >
+                                <AnimatePresence mode="wait" initial={false}>
+                                    <motion.div
+                                        key={rightPaneContentKey}
+                                        initial={{ opacity: 0, y: 6 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        exit={{ opacity: 0, y: -6 }}
+                                        transition={{ duration: 0.15, ease: 'easeInOut' }}
+                                        className="flex-1 min-h-0 flex flex-col"
+                                    >
+                                        {rightPaneContent}
+                                    </motion.div>
+                                </AnimatePresence>
+                            </LayoutRightPanel>
+                        ) : null
+                    }
+                    overlays={
+                        <>
+                            <OnboardingExitGuardBanner />
+                            <DebugFloatingTrigger />
+                            {isDemoFirm && currentSlug && currentGroupSlug && <DemoTourShell firmSlug={currentSlug} groupSlug={currentGroupSlug} />}
+                            <MigrationProgressPanel
+                                status={maintenanceStatus}
+                                migrationStartedAt={migrationStartedAt}
+                                onMigrationStartedAtClear={() => setMigrationStartedAt(null)}
+                                firmId={currentFirmId}
+                                accessToken={accessToken}
+                                onCancelled={() => window.location.reload()}
+                                onRefresh={refreshMaintenanceStatus}
+                            />
+                        </>
+                    }
+                >
+                    {children}
+                </AppShellV2>
+            </AuthGuard>
+        )
+    }
+
     return (
         <AuthGuard>
             {/*
-              Kinetic Institution layout — matches code.html structure:
-              flex-col → [full-width header] + [flex-row → sidebar | main | right-pane]
-              No floating cards on the chrome. Header: border-b. Sidebar: border-r.
-              Main content: pearl bg-[#f9f9fb]. Right pane: m-4 rounded-xl shadow-xl.
+              The onboarding frame (the legacy layout, kept for onboarding only):
+              flex-col → [full-width header] + [flex-row → steps sidebar | main | right-pane]
             */}
-            <div className="d-app h-screen flex flex-col overflow-hidden bg-[#f9f9fb] print:h-auto print:overflow-visible print:block">
+            <div className="d-app h-screen flex flex-col overflow-hidden print:h-auto print:overflow-visible print:block bg-surface">
 
                 {/* ── Header: full-width, border-b only ── */}
                 <header
-                    className="w-full bg-white border-b border-[#e5e7eb] flex items-center shrink-0 z-50"
+                    className="w-full border-b flex items-center shrink-0 z-50 bg-surface border-line"
                     style={{ height: TOP_BAR_HEIGHT }}
                 >
                     <AppTopbar />
@@ -207,15 +302,14 @@ function AppLayoutContent({ children, isSystemAdmin }: { children: React.ReactNo
 
                     {/* ── Left sidebar: border-r only, animates width ── */}
                     <div
-                        className="bg-white border-r border-[#e5e7eb] flex flex-col shrink-0 overflow-visible transition-all duration-300 relative z-20"
+                        className="border-r flex flex-col shrink-0 overflow-visible transition-all duration-300 relative z-20 bg-surface-sidebar border-line"
                         style={{ width: sidebarWidth }}
                     >
-                        {showOnboardingSidebar ? <OnboardingSidebar /> : <AppSidebar variant="inline" isSystemAdmin={isSystemAdmin} />}
+                        <OnboardingSidebar />
                     </div>
 
                     {/* ── Main content: pearl bg, architectural dot pattern ── */}
-                    <main className="flex-1 min-w-0 flex flex-col overflow-hidden bg-[#f9f9fb] relative print:overflow-visible print:block">
-                        <div className="absolute inset-0 architectural-dot opacity-[0.15] pointer-events-none" />
+                    <main className="flex-1 min-w-0 flex flex-col overflow-hidden relative print:overflow-visible print:block bg-surface">
                         <div className="relative z-10 flex-1 min-h-0 overflow-y-auto overflow-x-hidden print:overflow-visible print:flex-none print:h-auto">
                             <div className="w-full px-6 pt-6 pb-6 min-h-full flex flex-col print:min-h-0">{children}</div>
                         </div>
@@ -295,12 +389,15 @@ export function DLayoutClient({
     children,
     initialFirms,
     isSystemAdmin,
+    sidebarCollapsed,
 }: {
     children: React.ReactNode
     initialFirms: { id: string; name: string; slug: string; isDefault: boolean; createdAt: string; sandboxOnly?: boolean; groupSlug?: string | null }[]
     isSystemAdmin?: boolean
+    sidebarCollapsed?: boolean
 }) {
     return (
+        <UiShellProvider sidebarCollapsed={sidebarCollapsed}>
         <DemoTourProvider>
         <OnboardingProvider>
             <SidebarFirmsProvider firms={initialFirms}>
@@ -324,5 +421,6 @@ export function DLayoutClient({
             </SidebarFirmsProvider>
         </OnboardingProvider>
         </DemoTourProvider>
+        </UiShellProvider>
     )
 }

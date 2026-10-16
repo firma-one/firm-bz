@@ -80,16 +80,16 @@ function StepProgress({ current, total, onStepClick }: { current: number; total:
         const dotClassName = cn(
           "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold transition-colors",
           step < current
-            ? "bg-[#9a9ba0] text-white"
+            ? "bg-fg-subtle text-white"
             : step === current
-              ? "bg-[#1b1b1d] text-white"
-              : "border border-[#e5e7eb] bg-white text-[#9a9ba0]",
-          clickable && "cursor-pointer hover:bg-[#1b1b1d]",
+              ? "bg-fg text-white"
+              : "border border-line bg-surface text-fg-subtle",
+          clickable && "cursor-pointer hover:bg-fg",
         )
         return (
           <div key={step} className="flex items-center">
             {i > 0 && (
-              <div className={cn("h-0.5 w-6 shrink-0", step <= current ? "bg-[#1b1b1d]" : "bg-[#e5e7eb]")} />
+              <div className={cn("h-0.5 w-6 shrink-0", step <= current ? "bg-fg" : "bg-line")} />
             )}
             {clickable ? (
               <button type="button" onClick={() => onStepClick(step)} className={dotClassName} aria-label={`Back to step ${step}`}>
@@ -568,19 +568,19 @@ export function GoogleDriveWorkspaceRoot({
             {/* Single clean row */}
             <div className="flex items-center gap-3 min-w-0">
               {/* Icon */}
-              <div className="shrink-0 flex h-9 w-9 items-center justify-center rounded border border-[#e5e7eb] bg-[#f9f9fb]" aria-hidden>
-                <HardDrive className="h-4.5 w-4.5 text-[#45474c]" strokeWidth={2} />
+              <div className="shrink-0 flex h-9 w-9 items-center justify-center rounded border border-line bg-surface-subtle" aria-hidden>
+                <HardDrive className="h-4.5 w-4.5 text-fg-muted" strokeWidth={2} />
               </div>
 
               {/* Label line + folder name + badge */}
               <div className="min-w-0 flex-1">
                 {sectionLabel && (
-                  <p className="text-[0.8125rem] font-bold text-[#1b1b1d] leading-snug">{sectionLabel}</p>
+                  <p className="text-[0.8125rem] font-bold text-fg leading-snug">{sectionLabel}</p>
                 )}
                 <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                  <span className="text-xs text-[#45474c] truncate" title={displayName}>{displayName}</span>
+                  <span className="text-xs text-fg-muted truncate" title={displayName}>{displayName}</span>
                   {breadcrumbRootLabel ? (
-                    <span className="inline-flex items-center gap-1 rounded-sm border border-[#e5e7eb] bg-[#f9f9fb] px-1.5 py-0.5 text-[10px] font-medium text-[#45474c] shrink-0">
+                    <span className="inline-flex items-center gap-1 rounded-sm border border-line bg-surface-subtle px-1.5 py-0.5 text-caption font-medium text-fg-muted shrink-0">
                       {workspaceRootLocation === "SHARED" ? (
                         <GoogleSharedDriveIcon size={11} className="shrink-0 opacity-80" aria-hidden />
                       ) : workspaceRootLocation === "PERSONAL" ? (
@@ -601,7 +601,7 @@ export function GoogleDriveWorkspaceRoot({
                         href={driveUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex h-8 w-[6.5rem] items-center justify-center gap-1.5 rounded text-xs font-medium text-[#45474c] bg-white border border-[#e5e7eb] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] transition-colors"
+                        className="inline-flex h-8 w-[6.5rem] items-center justify-center gap-1.5 rounded text-xs font-medium text-fg-muted bg-surface border border-line hover:bg-surface-hover hover:text-fg transition-colors"
                         aria-label="Open in Google Drive"
                       >
                         Open
@@ -621,7 +621,7 @@ export function GoogleDriveWorkspaceRoot({
                       <button
                         type="button"
                         className={cn(
-                          "inline-flex h-8 w-[6.5rem] items-center justify-center gap-1.5 rounded text-xs font-medium text-[#45474c] bg-white border border-[#e5e7eb] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] transition-colors",
+                          "inline-flex h-8 w-[6.5rem] items-center justify-center gap-1.5 rounded text-xs font-medium text-fg-muted bg-surface border border-line hover:bg-surface-hover hover:text-fg transition-colors",
                           (!accessToken || !connectorActive || WORKSPACE_MIGRATE_DISABLED || migrateDisabled) && "opacity-40 cursor-not-allowed",
                         )}
                         onClick={() => {
@@ -641,15 +641,15 @@ export function GoogleDriveWorkspaceRoot({
                         "Workspace migration is temporarily disabled."
                       ) : (
                         <>
-                          <p className="font-semibold text-[#1b1b1d]">How it works</p>
-                          <ol className="list-decimal list-inside space-y-1 text-[#45474c]">
+                          <p className="font-semibold text-fg">How it works</p>
+                          <ol className="list-decimal list-inside space-y-1 text-fg-muted">
                             <li>We suggest a unique folder name for your new workspace root.</li>
                             <li>You create that folder in Google Drive (My Drive or a Shared Drive).</li>
                             <li>You select it here — we point the app at it.</li>
                             <li>Everything in your current workspace is automatically moved into the new folder.</li>
                           </ol>
                           {firmSlug && (
-                            <p className="text-[#45474c] pt-0.5">
+                            <p className="text-fg-muted pt-0.5">
                               Need help?{' '}
                               <a
                                 href={`/d/support?firmSlug=${firmSlug}`}
@@ -674,20 +674,20 @@ export function GoogleDriveWorkspaceRoot({
           // to present — the workspace folder is created automatically (see the
           // autoPersonalRunRef effect above) as soon as this renders, no button/click needed.
           <div className="flex items-center gap-3 min-w-0">
-            <div className="shrink-0 flex h-9 w-9 items-center justify-center rounded border border-[#e5e7eb] bg-[#f9f9fb]" aria-hidden>
-              <RefreshCw className="h-4.5 w-4.5 text-[#45474c] animate-spin" strokeWidth={1.75} />
+            <div className="shrink-0 flex h-9 w-9 items-center justify-center rounded border border-line bg-surface-subtle" aria-hidden>
+              <RefreshCw className="h-4.5 w-4.5 text-fg-muted animate-spin" strokeWidth={1.75} />
             </div>
-            <p className="min-w-0 flex-1 text-[0.8125rem] text-[#45474c]">
+            <p className="min-w-0 flex-1 text-[0.8125rem] text-fg-muted">
               Setting up your workspace folder in My Drive…
             </p>
           </div>
         ) : (
           <TooltipProvider delayDuration={300}>
             <div className="flex items-center gap-3 min-w-0">
-              <div className="shrink-0 flex h-9 w-9 items-center justify-center rounded border border-[#e5e7eb] bg-[#f9f9fb]" aria-hidden>
-                <HardDrive className="h-4.5 w-4.5 text-[#45474c]" strokeWidth={1.75} />
+              <div className="shrink-0 flex h-9 w-9 items-center justify-center rounded border border-line bg-surface-subtle" aria-hidden>
+                <HardDrive className="h-4.5 w-4.5 text-fg-muted" strokeWidth={1.75} />
               </div>
-              <p className="min-w-0 flex-1 text-[0.8125rem] text-[#45474c]">
+              <p className="min-w-0 flex-1 text-[0.8125rem] text-fg-muted">
                 No storage location selected.
               </p>
               <Tooltip>
@@ -695,7 +695,7 @@ export function GoogleDriveWorkspaceRoot({
                   <button
                     type="button"
                     className={cn(
-                      "inline-flex items-center gap-1.5 rounded h-8 px-4 text-[10px] font-headline font-bold tracking-widest uppercase text-white bg-primary hover:bg-primary hover:brightness-105 shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all shrink-0",
+                      "inline-flex items-center gap-1.5 rounded h-8 px-4 text-white bg-primary hover:bg-primary shadow-sm transition-all shrink-0",
                       (!accessToken || !connectorActive || WORKSPACE_MIGRATE_DISABLED || migrateDisabled) && "opacity-40 cursor-not-allowed",
                     )}
                     onClick={() => {
@@ -726,9 +726,9 @@ export function GoogleDriveWorkspaceRoot({
           </TooltipProvider>
         )}
         {!accessToken ? (
-          <p className="text-xs text-amber-800 mt-3">Sign in to migrate your workspace folder.</p>
+          <p className="text-xs text-tag-yellow-fg mt-3">Sign in to migrate your workspace folder.</p>
         ) : !connectorActive ? (
-          <p className="text-xs text-amber-800 mt-3">Reconnect this account to manage the workspace folder.</p>
+          <p className="text-xs text-tag-yellow-fg mt-3">Reconnect this account to manage the workspace folder.</p>
         ) : null}
       </div>
 
@@ -744,18 +744,18 @@ export function GoogleDriveWorkspaceRoot({
         }}
       >
         <DialogContent
-          className="sm:max-w-2xl max-h-[90vh] overflow-y-auto rounded"
+          className="sm:max-w-2xl max-h-[90vh] overflow-y-auto"
           onInteractOutside={(e) => {
             // Block outside-click close on step 3 (confirmation) and while picker result is pending.
             if (wizardStep === 3 || pendingFolder !== null) e.preventDefault()
           }}
         >
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-[0.9375rem] font-bold text-[#1b1b1d]">
+            <DialogTitle className="flex items-center gap-2 text-[0.9375rem] font-bold text-fg">
               <GoogleDriveIcon size={18} />
               {dialogTitle}
             </DialogTitle>
-            <DialogDescription className="text-left text-xs text-[#45474c]">{dialogSubtitle}</DialogDescription>
+            <DialogDescription className="text-left text-xs text-fg-muted">{dialogSubtitle}</DialogDescription>
           </DialogHeader>
 
           <StepProgress
@@ -766,8 +766,8 @@ export function GoogleDriveWorkspaceRoot({
 
           {!previewDrive ? (
             <div className="space-y-4 py-1">
-              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#45474c]">Location</p>
-              <p className="text-xs text-[#45474c] leading-relaxed">
+              <p className="text-small font-medium text-fg-muted">Location</p>
+              <p className="text-xs text-fg-muted leading-relaxed">
                 All documents in your workspace will be stored in the location you choose below.
               </p>
               <div className="grid grid-cols-1 gap-2">
@@ -778,22 +778,22 @@ export function GoogleDriveWorkspaceRoot({
                   disabled={saving}
                   onClick={() => { setLocationChoice("My Drive"); setLocationCountdown(AUTO_ADVANCE_SECONDS) }}
                   className={cn(
-                    "group flex items-start gap-3 rounded border bg-white p-3.5 text-left transition-all active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none",
+                    "group flex items-start gap-3 rounded border bg-surface p-3.5 text-left transition-all active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none",
                     locationChoice === "My Drive"
                       ? "border-primary ring-1 ring-primary bg-primary/[0.03]"
-                      : "border-[#e5e7eb] hover:border-[#1b1b1d] hover:bg-[#f9f9fb]",
+                      : "border-line hover:border-fg hover:bg-surface-hover",
                   )}
                 >
                   <span className={cn(
                     "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 transition-colors",
-                    locationChoice === "My Drive" ? "border-primary" : "border-[#d1d5db]",
+                    locationChoice === "My Drive" ? "border-primary" : "border-line-strong",
                   )}>
                     {locationChoice === "My Drive" && <span className="h-2 w-2 rounded-full bg-primary" />}
                   </span>
                   <MyDriveIcon size={18} className="text-[#1A73E8] shrink-0 mt-px" />
                   <span>
-                    <p className="text-[0.8125rem] font-semibold text-[#1b1b1d]">My Drive</p>
-                    <p className="text-xs text-[#45474c] leading-relaxed mt-0.5">Personal storage tied to your Google account.</p>
+                    <p className="text-[0.8125rem] font-semibold text-fg">My Drive</p>
+                    <p className="text-xs text-fg-muted leading-relaxed mt-0.5">Personal storage tied to your Google account.</p>
                   </span>
                 </button>
                 <button
@@ -803,27 +803,27 @@ export function GoogleDriveWorkspaceRoot({
                   disabled={saving}
                   onClick={() => { setLocationChoice("Shared Drive"); setLocationCountdown(AUTO_ADVANCE_SECONDS) }}
                   className={cn(
-                    "group flex items-start gap-3 rounded border bg-white p-3.5 text-left transition-all active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none",
+                    "group flex items-start gap-3 rounded border bg-surface p-3.5 text-left transition-all active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none",
                     locationChoice === "Shared Drive"
                       ? "border-primary ring-1 ring-primary bg-primary/[0.03]"
-                      : "border-[#e5e7eb] hover:border-[#1b1b1d] hover:bg-[#f9f9fb]",
+                      : "border-line hover:border-fg hover:bg-surface-hover",
                   )}
                 >
                   <span className={cn(
                     "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 transition-colors",
-                    locationChoice === "Shared Drive" ? "border-primary" : "border-[#d1d5db]",
+                    locationChoice === "Shared Drive" ? "border-primary" : "border-line-strong",
                   )}>
                     {locationChoice === "Shared Drive" && <span className="h-2 w-2 rounded-full bg-primary" />}
                   </span>
                   <GoogleSharedDriveIcon size={18} className="shrink-0 mt-px" />
                   <span>
-                    <p className="text-[0.8125rem] font-semibold text-[#1b1b1d]">Shared Drive</p>
-                    <p className="text-xs text-[#45474c] leading-relaxed mt-0.5">Accessible to permitted users across your Google Workspace account.</p>
+                    <p className="text-[0.8125rem] font-semibold text-fg">Shared Drive</p>
+                    <p className="text-xs text-fg-muted leading-relaxed mt-0.5">Accessible to permitted users across your Google Workspace account.</p>
                   </span>
                 </button>
               </div>
               <Button type="button" variant="greenCta"
-                className="relative w-full h-8 overflow-hidden text-[11px] font-headline font-bold tracking-widest uppercase rounded"
+                className="relative w-full h-8 overflow-hidden rounded"
                 disabled={locationChoice === null || saving}
                 onClick={() => {
                   // Clicking while the countdown is running cancels back to no selection — it
@@ -856,7 +856,7 @@ export function GoogleDriveWorkspaceRoot({
             <div className="space-y-4 py-1">
               <div className="flex items-center gap-1.5">
                 <GoogleSharedDriveIcon size={14} className="shrink-0" />
-                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#45474c]">Shared Drive · Choose where Firma should work</p>
+                <p className="text-small font-medium text-fg-muted">Shared Drive · Choose where Firma should work</p>
               </div>
 
               <div className="space-y-3">
@@ -876,7 +876,7 @@ export function GoogleDriveWorkspaceRoot({
                   // behalf either: drive.file scope grants no access inside a Shared Drive until
                   // something in it has been picked, so there's nothing to create "into" yet).
                   <div className="space-y-3">
-                    <p className="text-xs text-[#45474c] leading-relaxed">
+                    <p className="text-xs text-fg-muted leading-relaxed">
                       Do you have a folder in Google Drive that you can use as the storage location for your files?
                     </p>
                     <div className="grid grid-cols-1 gap-2">
@@ -886,21 +886,21 @@ export function GoogleDriveWorkspaceRoot({
                         aria-checked={folderReadyChoice === true}
                         onClick={() => { setFolderReadyChoice(true); setFolderReadyCountdown(AUTO_ADVANCE_SECONDS) }}
                         className={cn(
-                          "group flex items-start gap-3 rounded border bg-white p-3.5 text-left transition-all active:scale-[0.99]",
+                          "group flex items-start gap-3 rounded border bg-surface p-3.5 text-left transition-all active:scale-[0.99]",
                           folderReadyChoice === true
                             ? "border-primary ring-1 ring-primary bg-primary/[0.03]"
-                            : "border-[#e5e7eb] hover:border-[#1b1b1d] hover:bg-[#f9f9fb]",
+                            : "border-line hover:border-fg hover:bg-surface-hover",
                         )}
                       >
                         <span className={cn(
                           "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 transition-colors",
-                          folderReadyChoice === true ? "border-primary" : "border-[#d1d5db]",
+                          folderReadyChoice === true ? "border-primary" : "border-line-strong",
                         )}>
                           {folderReadyChoice === true && <span className="h-2 w-2 rounded-full bg-primary" />}
                         </span>
                         <span>
-                          <p className="text-[0.8125rem] font-semibold text-[#1b1b1d]">Yes, I already have a folder I can use as Firma&rsquo;s storage location</p>
-                          <p className="text-xs text-[#45474c] leading-relaxed mt-0.5">We&rsquo;ll open the picker so you can select it.</p>
+                          <p className="text-[0.8125rem] font-semibold text-fg">Yes, I already have a folder I can use as Firma&rsquo;s storage location</p>
+                          <p className="text-xs text-fg-muted leading-relaxed mt-0.5">We&rsquo;ll open the picker so you can select it.</p>
                         </span>
                       </button>
                       <button
@@ -909,26 +909,26 @@ export function GoogleDriveWorkspaceRoot({
                         aria-checked={folderReadyChoice === false}
                         onClick={() => { setFolderReadyChoice(false); setFolderReadyCountdown(AUTO_ADVANCE_SECONDS) }}
                         className={cn(
-                          "group flex items-start gap-3 rounded border bg-white p-3.5 text-left transition-all active:scale-[0.99]",
+                          "group flex items-start gap-3 rounded border bg-surface p-3.5 text-left transition-all active:scale-[0.99]",
                           folderReadyChoice === false
                             ? "border-primary ring-1 ring-primary bg-primary/[0.03]"
-                            : "border-[#e5e7eb] hover:border-[#1b1b1d] hover:bg-[#f9f9fb]",
+                            : "border-line hover:border-fg hover:bg-surface-hover",
                         )}
                       >
                         <span className={cn(
                           "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 transition-colors",
-                          folderReadyChoice === false ? "border-primary" : "border-[#d1d5db]",
+                          folderReadyChoice === false ? "border-primary" : "border-line-strong",
                         )}>
                           {folderReadyChoice === false && <span className="h-2 w-2 rounded-full bg-primary" />}
                         </span>
                         <span>
-                          <p className="text-[0.8125rem] font-semibold text-[#1b1b1d]">No, let me create a new folder in Drive now</p>
-                          <p className="text-xs text-[#45474c] leading-relaxed mt-0.5">We&rsquo;ll open Google Drive in a new tab so you can create one first.</p>
+                          <p className="text-[0.8125rem] font-semibold text-fg">No, let me create a new folder in Drive now</p>
+                          <p className="text-xs text-fg-muted leading-relaxed mt-0.5">We&rsquo;ll open Google Drive in a new tab so you can create one first.</p>
                         </span>
                       </button>
                     </div>
                     <Button type="button" variant="greenCta"
-                      className="relative w-full h-8 overflow-hidden text-[11px] font-headline font-bold tracking-widest uppercase rounded"
+                      className="relative w-full h-8 overflow-hidden rounded"
                       disabled={folderReadyChoice === null}
                       onClick={() => {
                         // Clicking while the countdown is running cancels back to no selection —
@@ -958,7 +958,7 @@ export function GoogleDriveWorkspaceRoot({
                   </div>
                 ) : hasFolderReady === false ? (
                   <div className="space-y-3">
-                    <p className="text-xs text-[#45474c] leading-relaxed flex items-start gap-1.5">
+                    <p className="text-xs text-fg-muted leading-relaxed flex items-start gap-1.5">
                       <GoogleDriveIcon size={14} className="shrink-0 mt-px" aria-hidden />
                       Create a folder in Google Drive — any name works — then come back and continue.
                     </p>
@@ -977,14 +977,14 @@ export function GoogleDriveWorkspaceRoot({
                         target="_blank"
                         rel="noopener noreferrer"
                         onClick={() => setHasOpenedDrive(true)}
-                        className="relative flex w-full items-center justify-center gap-1.5 h-8 px-3 text-[11px] font-headline font-bold tracking-widest uppercase rounded border border-[#e5e7eb] bg-white text-[#45474c] hover:bg-[#f9f9fb] transition-colors"
+                        className="relative flex w-full items-center justify-center gap-1.5 h-8 px-3 rounded border border-line bg-surface text-fg-muted hover:bg-surface-hover transition-colors"
                       >
                         <GoogleDriveIcon size={14} className="shrink-0" aria-hidden />
                         Open Google Drive<ArrowUpRight className="h-3.5 w-3.5" />
                       </a>
                     </span>
                     <Button type="button" variant="greenCta"
-                      className="w-full h-8 text-[11px] font-headline font-bold tracking-widest uppercase rounded"
+                      className="w-full h-8 rounded"
                       disabled={!hasOpenedDrive}
                       onClick={() => { setWentThroughRedirect(true); setHasFolderReady(true) }}>
                       I&rsquo;ve created a folder — continue<ArrowRight className="h-3.5 w-3.5 ml-1.5" />
@@ -992,25 +992,25 @@ export function GoogleDriveWorkspaceRoot({
                   </div>
                 ) : (
                   <>
-                    <p className="text-xs text-[#45474c] leading-relaxed">
-                      Pick a shared drive, then a folder inside it. We&rsquo;ll create a <code className="text-[11px] font-mono">{FIRMA_PARENT_FOLDER_NAME}</code> folder there and keep everything inside it.
+                    <p className="text-xs text-fg-muted leading-relaxed">
+                      Pick a shared drive, then a folder inside it. We&rsquo;ll create a <code className="text-caption font-mono">{FIRMA_PARENT_FOLDER_NAME}</code> folder there and keep everything inside it.
                     </p>
 
-                    <div className="rounded border border-[#e5e7eb] bg-[#f9f9fb] px-3.5 py-3 flex gap-3">
-                      <ShieldCheck className="h-4 w-4 shrink-0 text-[#45474c] mt-0.5" aria-hidden />
+                    <div className="rounded border border-line bg-surface-subtle px-3.5 py-3 flex gap-3">
+                      <ShieldCheck className="h-4 w-4 shrink-0 text-fg-muted mt-0.5" aria-hidden />
                       <div>
-                        <p className="text-xs font-semibold text-[#1b1b1d]">Google only lets apps see folders you explicitly select</p>
-                        <p className="text-[11px] text-[#45474c] mt-0.5 leading-relaxed">
+                        <p className="text-xs font-semibold text-fg">Google only lets apps see folders you explicitly select</p>
+                        <p className="text-caption text-fg-muted mt-0.5 leading-relaxed">
                           Nothing else in your Drive is visible to Firma until you choose it here — a security boundary Google enforces on every app, not a Firma limitation.
                         </p>
                       </div>
                     </div>
 
                     {rootFolderId && estimateLoading && (
-                      <p className="text-xs text-[#45474c]">Estimating migration time…</p>
+                      <p className="text-xs text-fg-muted">Estimating migration time…</p>
                     )}
                     {rootFolderId && estimate && !estimateLoading && (
-                      <p className="text-xs text-[#45474c]">
+                      <p className="text-xs text-fg-muted">
                         ~{estimate.estimatedMinutes} min maintenance window · {estimate.itemCount} items
                       </p>
                     )}
@@ -1033,7 +1033,7 @@ export function GoogleDriveWorkspaceRoot({
                       onImport={(items) => { setPickerOpen(false); void handleFolderPicked(items as { id: string; name: string }[]) }}
                     >
                       <Button type="button" variant="greenCta"
-                        className="w-full justify-center h-8 text-[11px] font-headline font-bold tracking-widest uppercase rounded"
+                        className="w-full justify-center h-8 rounded"
                         disabled={saving}>
                         {saving
                           ? <><RefreshCw className="h-3.5 w-3.5 mr-1.5 shrink-0 animate-spin" />Applying…</>
@@ -1048,13 +1048,13 @@ export function GoogleDriveWorkspaceRoot({
             <div className="space-y-4 py-1">
               <div className="flex items-center gap-1.5">
                 <GoogleDriveIcon size={14} className="shrink-0" />
-                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#45474c]">My Drive · Setup</p>
+                <p className="text-small font-medium text-fg-muted">My Drive · Setup</p>
               </div>
 
               <div className="space-y-3">
                 {/* Generated name box */}
-                <div className="flex items-center justify-between gap-2 rounded border border-[#e5e7eb] bg-[#f9f9fb] px-3 py-2.5">
-                  <code className="min-w-0 break-all text-xs font-mono text-[#1b1b1d]">{generatedFolderName}</code>
+                <div className="flex items-center justify-between gap-2 rounded border border-line bg-surface-subtle px-3 py-2.5">
+                  <code className="min-w-0 break-all text-xs font-mono text-fg">{generatedFolderName}</code>
                   <div className="flex shrink-0 gap-1.5">
                     <span className={cn("relative inline-flex rounded", !hasCopied && "p-[1.5px] overflow-hidden")}>
                       {!hasCopied && (
@@ -1066,9 +1066,9 @@ export function GoogleDriveWorkspaceRoot({
                           aria-hidden
                         />
                       )}
-                      <Button size="sm" variant="outline" className="relative h-7 px-2.5 text-[11px] font-headline font-bold tracking-widest uppercase rounded border-[#e5e7eb]" onClick={() => void copyGeneratedFolderName()}>
+                      <Button size="sm" variant="outline" className="relative h-7 px-2.5 rounded border-line" onClick={() => void copyGeneratedFolderName()}>
                         {hasCopied ? (
-                          <><CheckCircle2 className="mr-1 h-3 w-3 text-emerald-600" />Copied</>
+                          <><CheckCircle2 className="mr-1 h-3 w-3 text-tag-green-fg" />Copied</>
                         ) : (
                           <><Copy className="mr-1 h-3 w-3" />Copy</>
                         )}
@@ -1079,24 +1079,24 @@ export function GoogleDriveWorkspaceRoot({
 
                 {/* Estimate — only relevant when migrating an existing folder */}
                 {rootFolderId && estimateLoading && (
-                  <p className="text-xs text-[#45474c]">Estimating migration time…</p>
+                  <p className="text-xs text-fg-muted">Estimating migration time…</p>
                 )}
                 {rootFolderId && estimate && !estimateLoading && (
-                  <p className="text-xs text-[#45474c]">
+                  <p className="text-xs text-fg-muted">
                     ~{estimate.estimatedMinutes} min maintenance window · {estimate.itemCount} items
                   </p>
                 )}
 
-                <ol className="space-y-1.5 pl-4 list-decimal text-xs text-[#45474c]">
+                <ol className="space-y-1.5 pl-4 list-decimal text-xs text-fg-muted">
                   <li>Copy the folder name above.</li>
-                  <li>Open My Drive and create a <span className="font-semibold text-[#1b1b1d]">New folder</span> with that name.</li>
-                  <li>Return here and click <span className="font-semibold text-[#1b1b1d]">Select Folder</span>.</li>
+                  <li>Open My Drive and create a <span className="font-semibold text-fg">New folder</span> with that name.</li>
+                  <li>Return here and click <span className="font-semibold text-fg">Select Folder</span>.</li>
                 </ol>
 
                 {/* Progressive actions: Copy -> Open Drive -> Select Folder */}
                 <div className="flex items-center gap-2 pt-1">
                   <Button type="button" variant="outline" size="sm"
-                    className="flex-1 justify-center h-8 px-3 text-[11px] font-headline font-bold tracking-widest uppercase rounded border-[#e5e7eb] text-[#45474c] hover:bg-[#f9f9fb]"
+                    className="flex-1 justify-center h-8 px-3 rounded border-line text-fg-muted hover:bg-surface-hover"
                     onClick={resetFlow}>
                     <ArrowRight className="h-3.5 w-3.5 rotate-180 mr-1" />Change location
                   </Button>
@@ -1117,7 +1117,7 @@ export function GoogleDriveWorkspaceRoot({
                       onClick={() => setHasOpenedDrive(true)}
                       aria-disabled={!hasCopied}
                       className={cn(
-                        "relative inline-flex w-full items-center justify-center gap-1.5 h-8 px-3 text-[11px] font-headline font-bold tracking-widest uppercase rounded border border-[#e5e7eb] bg-white text-[#45474c] hover:bg-[#f9f9fb] transition-colors",
+                        "relative inline-flex w-full items-center justify-center gap-1.5 h-8 px-3 rounded border border-line bg-surface text-fg-muted hover:bg-surface-hover transition-colors",
                         !hasCopied && "opacity-40 pointer-events-none",
                       )}
                     >
@@ -1145,7 +1145,7 @@ export function GoogleDriveWorkspaceRoot({
                       onImport={(items) => { setPickerOpen(false); void handleFolderPicked(items as { id: string; name: string }[]) }}
                     >
                       <Button type="button" variant="greenCta"
-                        className="relative w-full justify-center h-8 text-[11px] font-headline font-bold tracking-widest uppercase rounded"
+                        className="relative w-full justify-center h-8 rounded"
                         disabled={saving || !hasOpenedDrive}>
                         {saving
                           ? <><RefreshCw className="h-3.5 w-3.5 mr-1.5 shrink-0 animate-spin" />Applying…</>
@@ -1159,19 +1159,19 @@ export function GoogleDriveWorkspaceRoot({
           ) : null}
           {previewDrive && wizardStep === 3 && pendingFolder ? (
             <div className="space-y-4 py-1">
-              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#45474c]">
+              <p className="text-small font-medium text-fg-muted">
                 {isShared ? "Shared Drive" : "My Drive"} · Confirm
               </p>
 
               {/* Confirm migration */}
               <div className="space-y-3">
                 {/* From → To */}
-                <div className="rounded border border-[#e5e7eb] divide-y divide-[#e5e7eb] overflow-hidden">
+                <div className="rounded border border-line divide-y divide-line overflow-hidden">
                   <div className="px-4 py-3 flex items-start gap-3 bg-[#f9f9fb]/60">
-                    <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#45474c] w-10 shrink-0 pt-0.5">From</span>
+                    <span className="text-small font-medium text-fg-muted w-10 shrink-0 pt-0.5">From</span>
                     <div className="min-w-0">
-                      <p className="text-xs font-semibold text-[#1b1b1d] truncate">{rootFolderName || "Current workspace"}</p>
-                      <p className="text-[11px] text-[#45474c] mt-0.5 truncate">
+                      <p className="text-xs font-semibold text-fg truncate">{rootFolderName || "Current workspace"}</p>
+                      <p className="text-caption text-fg-muted mt-0.5 truncate">
                         {fromBreadcrumb
                           ? fromBreadcrumb.slice(0, -1).join(" › ") || fromBreadcrumb[0]
                           : breadcrumbRootLabel || (workspaceRootLocation === "PERSONAL" ? "My Drive" : workspaceRootLocation === "SHARED" ? "Shared Drive" : "Google Drive")}
@@ -1179,12 +1179,12 @@ export function GoogleDriveWorkspaceRoot({
                     </div>
                   </div>
                   <div className="px-4 py-3 flex items-start gap-3">
-                    <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#45474c] w-10 shrink-0 pt-0.5">To</span>
+                    <span className="text-small font-medium text-fg-muted w-10 shrink-0 pt-0.5">To</span>
                     <div className="min-w-0">
-                      <p className="text-xs font-semibold text-[#1b1b1d] truncate">
+                      <p className="text-xs font-semibold text-fg truncate">
                         A new {FIRMA_PARENT_FOLDER_NAME} workspace inside &ldquo;{pendingFolder.name}&rdquo;
                       </p>
-                      <p className="text-[11px] text-[#45474c] mt-0.5 truncate">
+                      <p className="text-caption text-fg-muted mt-0.5 truncate">
                         {toBreadcrumb
                           ? toBreadcrumb.join(" › ")
                           : isShared ? "Shared Drive" : "My Drive"}
@@ -1194,13 +1194,13 @@ export function GoogleDriveWorkspaceRoot({
                 </div>
 
                 {/* Maintenance warning */}
-                <div className="rounded border border-[#e5e7eb] bg-[#f9f9fb] px-3.5 py-3 flex gap-3">
+                <div className="rounded border border-line bg-surface-subtle px-3.5 py-3 flex gap-3">
                   <div className="w-0.5 shrink-0 rounded-full bg-[#45474c]/30 self-stretch" />
                   <div>
-                    <p className="text-xs font-semibold text-[#1b1b1d]">
+                    <p className="text-xs font-semibold text-fg">
                       {estimate ? `~${estimate.estimatedMinutes} min maintenance window` : "Maintenance window required"}
                     </p>
-                    <p className="text-[11px] text-[#45474c] mt-0.5 leading-relaxed">
+                    <p className="text-caption text-fg-muted mt-0.5 leading-relaxed">
                       {estimate && estimate.itemCount > 0
                         ? `${estimate.itemCount} items will be moved. `
                         : ""}
@@ -1212,18 +1212,18 @@ export function GoogleDriveWorkspaceRoot({
                 {/* Actions */}
                 <div className="flex items-center gap-2 pt-1">
                   <Button type="button" variant="outline" size="sm"
-                    className="h-8 px-3 text-xs rounded border-[#e5e7eb] text-[#45474c] hover:bg-[#f9f9fb]"
+                    className="h-8 px-3 text-xs rounded border-line text-fg-muted hover:bg-surface-hover"
                     onClick={() => { setPendingFolder(null); setWizardStep(1) }}>
                     <ArrowRight className="h-3.5 w-3.5 rotate-180 mr-1" />Back
                   </Button>
                   <Button type="button" variant="outline" size="sm"
-                    className="flex-1 h-8 text-xs font-headline font-bold tracking-widest rounded border-[#e5e7eb] text-[#45474c] hover:bg-[#f9f9fb]"
+                    className="flex-1 h-8 text-xs font-headline font-bold tracking-widest rounded border-line text-fg-muted hover:bg-surface-hover"
                     disabled={saving}
                     onClick={() => void confirmMigration(15)}>
                     {saving ? "Starting…" : "Notify & start in 15 min"}
                   </Button>
                   <Button type="button" variant="greenCta"
-                    className="flex-1 h-8 text-xs font-headline font-bold tracking-widest uppercase rounded"
+                    className="flex-1 h-8 text-xs rounded"
                     disabled={saving}
                     onClick={() => void confirmMigration(2)}>
                     {saving ? "Starting…" : "Start Now"}

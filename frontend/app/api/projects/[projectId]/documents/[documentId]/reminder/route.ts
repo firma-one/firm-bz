@@ -4,7 +4,7 @@ import { createClient } from '@/utils/supabase/server'
 import { prisma } from '@/lib/prisma'
 import { resolveProjectContext } from '@/lib/resolve-project-context'
 import { canViewProject } from '@/lib/permission-helpers'
-import { upsertFollowUpReminder } from '@/lib/actions/user-reminders'
+import { upsertFollowUpReminder } from '@/lib/reminders/reminder-service'
 import { engagementDocFilePath } from '@/lib/navigation/firm-paths'
 
 /**

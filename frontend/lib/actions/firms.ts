@@ -15,6 +15,7 @@ import {
 import { mergeLeanAppMetadata } from '@/lib/auth/supabase-jwt-metadata'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 import { firmPath, groupFirmListPath } from '@/lib/navigation/firm-paths'
+import { resolveDefaultFirmLandingPath } from '@/lib/landing/default-landing-path'
 
 export interface FirmOption {
     id: string
@@ -267,93 +268,8 @@ export async function getDefaultFirmWithOnboardingStatus(): Promise<{
     const slug = defaultFirm?.slug ?? null
 
     // Having any firm at all is now the onboarding-complete signal — see
-    // resolveDefaultFirmLandingPath's identical reasoning above.
+    // resolveDefaultFirmLandingPath's identical reasoning (lib/landing/default-landing-path.ts).
     return { slug, onboardingComplete: defaultFirm !== null }
-}
-
-/**
- * Where to send the user when entering the app at `/d` (and when auth callback has no explicit `next`).
- *
- * Groups are the top-level routing unit, firms are the second-level unit within a group
- * (see .claude/plans/sandbox-firm-removal.md, Step 6).
- *
- * Routing rules (in order):
- * 1. No firm memberships at all → silently auto-provision a real Group+Firm (see
- *    lib/onboarding/auto-provision.ts) and land directly in it — no onboarding wizard. The
- *    provisioning runs inline here (server-side redirect); `app/(app)/d/page.tsx`'s own
- *    inner Suspense boundary covers it, scoped to that one route only.
- * 2. 2+ distinct groups → `/d/` (group picker — one card per group)
- * 3. Exactly 1 group, 2+ firms in it → `/d/{groupSlug}/f/` (firm picker, scoped to that group)
- * 4. Exactly 1 group, exactly 1 firm → `/d/{groupSlug}/f/{firmSlug}` (go straight in) — having
- *    any firm at all is treated as onboarding-complete, no per-firm Drive/settings gate
- * 5. Admin with joinable/already-joined domain orgs → `/d/{groupSlug}/f/` instead of step 4
- *
- * Returns `null` only if the resolved firm/group has no slug (malformed data).
- */
-export async function resolveDefaultFirmLandingPath(userId: string): Promise<string | null> {
-    const allFirms = await FirmService.getUserFirms(userId)
-
-    logger.info('[resolveDefaultFirmLandingPath]', { userId, firmCount: allFirms.length, slugs: allFirms.map(f => f.slug) })
-
-    if (allFirms.length === 0) {
-        try {
-            const supabase = await createClient()
-            const { data: { user } } = await supabase.auth.getUser()
-            if (!user) return '/d/onboarding'
-
-            const { autoProvisionFirstFirm } = await import('@/lib/onboarding/auto-provision')
-            const { groupSlug, firmSlug } = await autoProvisionFirstFirm(user)
-            // `?landed=new` lets the destination firm page show a one-time "just landed"
-            // overlay (loading phase -> a closing welcome message) — the /d loader itself
-            // can't show this (it renders before we know a fresh auto-provision even
-            // happened, or even whether this is a first-time vs. returning landing at all),
-            // so the closing message lives on arrival instead. See resolveDefaultFirmLandingPath's
-            // other two `firmPath(...)` returns below for the `?landed=returning` counterpart.
-            return `${firmPath(groupSlug, firmSlug)}?landed=new`
-        } catch (err) {
-            // Auto-provisioning failure (e.g. DB down) shouldn't crash landing-path resolution —
-            // fall back to the old onboarding route, which will retry provisioning on next visit.
-            logger.error('[resolveDefaultFirmLandingPath] Auto-provisioning failed', err as Error, undefined, { userId })
-            return '/d/onboarding'
-        }
-    }
-
-    const distinctGroupSlugs = Array.from(new Set(allFirms.map((f) => f.groupSlug).filter((s): s is string => Boolean(s))))
-    if (distinctGroupSlugs.length === 0) return null
-
-    // 2+ distinct groups → group picker. Nothing about which firm to land in is decided yet.
-    if (distinctGroupSlugs.length > 1) return '/d/'
-
-    const groupSlug = distinctGroupSlugs[0]
-    const firmsInGroup = allFirms.filter((f) => f.groupSlug === groupSlug)
-
-    // Exactly 1 group, but 2+ firms in it → firm picker, scoped to this group.
-    if (firmsInGroup.length > 1) return groupFirmListPath(groupSlug)
-
-    const targetFirm = firmsInGroup[0]
-    if (!targetFirm?.slug) return null
-
-    const membership = targetFirm.members.find((m) => m.userId === userId)
-    const isFirmAdmin = membership?.role === 'firm_admin'
-
-    if (!isFirmAdmin) {
-        return `${firmPath(groupSlug, targetFirm.slug)}?landed=returning`
-    }
-
-    // Belonging to a group at all (checked at the top of this function) is now the only
-    // "onboarding complete" signal — no per-firm Drive/settings gate. A user who already has a
-    // firm never gets routed into /d/onboarding again.
-    const { getDomainOnboardingOptions } = await import('@/lib/actions/domain-onboarding')
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (user?.email) {
-        const domainOpts = await getDomainOnboardingOptions(userId, user.email)
-        if ((domainOpts.orgsToJoin.length + domainOpts.orgsAlreadyIn.length) > 0) {
-            return groupFirmListPath(groupSlug)
-        }
-    }
-
-    return `${firmPath(groupSlug, targetFirm.slug)}?landed=returning`
 }
 
 /**
@@ -435,7 +351,7 @@ export async function createFirm(data: CreateFirmData): Promise<FirmOption> {
         .fireAndForget()
 
     // Invalidate cache
-    const { invalidateUserSettingsPlus } = await import('@/lib/actions/user-settings')
+    const { invalidateUserSettingsPlus } = await import('@/lib/permissions/invalidate-user-settings')
     await invalidateUserSettingsPlus(user.id)
 
     revalidatePath('/d')
@@ -506,7 +422,7 @@ export async function switchFirm(firmSlug: string): Promise<void> {
     }
 
     // Invalidate cache
-    const { invalidateUserSettingsPlus } = await import('@/lib/actions/user-settings')
+    const { invalidateUserSettingsPlus } = await import('@/lib/permissions/invalidate-user-settings')
     await invalidateUserSettingsPlus(user.id)
 }
 
@@ -556,41 +472,9 @@ export type FirmReminderEmailConfig = {
     events?: FirmEventNotificationConfig
 }
 
-const EVENT_NOTIFICATION_DEFAULTS: FirmEventNotificationConfig = {
-    newDocumentIntake: { email: true, inApp: true },
-    statusChanged: { email: false, inApp: true },
-    documentRejected: { email: true, inApp: true },
-    externalClientComment: { email: true, inApp: true },
-    engagementInviteAccepted: { email: false, inApp: true },
-    deliverableOverdue: { email: true, inApp: true },
-    // email defaults true to preserve existing behavior — reminder emails already send.
-    reminders: { email: true, inApp: true },
-}
+// getFirmReminderConfig lives in lib/firm-reminder-config.ts (server-only): it reads any firm's
+// settings by id and is called from crons and webhooks with no session, so it can't be a server action.
 
-export async function getFirmReminderConfig(firmId: string): Promise<FirmReminderEmailConfig & { events: FirmEventNotificationConfig }> {
-    const firm = await prisma.firm.findUnique({ where: { id: firmId }, select: { settings: true } })
-    const raw = (firm?.settings as any)?.reminderEmailConfig ?? {}
-    const rawEvents = raw.events ?? {}
-    const events = {} as FirmEventNotificationConfig
-    for (const key of Object.keys(EVENT_NOTIFICATION_DEFAULTS) as (keyof FirmEventNotificationConfig)[]) {
-        const defaults = EVENT_NOTIFICATION_DEFAULTS[key]
-        const rawEvent = rawEvents[key] ?? {}
-        events[key] = {
-            email: rawEvent.email ?? defaults.email,
-            inApp: rawEvent.inApp ?? defaults.inApp,
-        }
-    }
-    return {
-        immediateOnCreate: raw.immediateOnCreate ?? true,
-        recurring: {
-            enabled: raw.recurring?.enabled ?? true,
-            frequencyDays: raw.recurring?.frequencyDays ?? 1,
-            startDaysBeforeDue: raw.recurring?.startDaysBeforeDue ?? 7,
-        },
-        mentionEmailOnCreate: raw.mentionEmailOnCreate ?? true,
-        events,
-    }
-}
 
 export async function updateFirm(
     firmSlug: string,
@@ -672,7 +556,7 @@ export async function updateFirm(
     await FirmService.updateFirm(firm.id, user.id, payload)
 
     if (data.betaFeatures !== undefined) {
-        const { invalidateUserSettingsPlus } = await import('@/lib/actions/user-settings')
+        const { invalidateUserSettingsPlus } = await import('@/lib/permissions/invalidate-user-settings')
         await invalidateUserSettingsPlus(user.id)
     }
 
@@ -732,10 +616,23 @@ export interface FirmConnectorRecord {
     documentCount: number
 }
 
-export async function getFirmConnectors(firmId: string): Promise<FirmConnectorRecord[]> {
+/**
+ * Firm Storage settings (FirmDriveSection) is a firm-admin screen. Every connector action below is a
+ * callable endpoint, so each requires firm can_manage on the firm that actually owns the connector or
+ * client — a firmId passed by the caller is never trusted on its own.
+ */
+async function requireFirmManager(firmId: string | null | undefined): Promise<{ userId: string }> {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) throw new Error('Unauthorized')
+    if (!firmId) throw new Error('Unauthorized')
+    const { canManageOrganization } = await import('@/lib/permission-helpers')
+    if (!(await canManageOrganization(firmId))) throw new Error('Unauthorized')
+    return { userId: user.id }
+}
+
+export async function getFirmConnectors(firmId: string): Promise<FirmConnectorRecord[]> {
+    await requireFirmManager(firmId)
 
     const connectors = await prisma.connector.findMany({
         where: { firmId },
@@ -790,16 +687,13 @@ export async function getFirmConnectors(firmId: string): Promise<FirmConnectorRe
 }
 
 export async function disconnectFirmConnector({ connectorId, firmId }: { connectorId: string; firmId: string }): Promise<void> {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('Unauthorized')
-
     const connector = await prisma.connector.findUnique({
         where: { id: connectorId },
         select: { firmId: true },
     })
     if (!connector) throw new Error('Connector not found')
     if (connector.firmId !== firmId) throw new Error('Unauthorized')
+    const user = { id: (await requireFirmManager(connector.firmId)).userId }
 
     await prisma.connector.update({
         where: { id: connectorId },
@@ -817,21 +711,21 @@ export async function disconnectFirmConnector({ connectorId, firmId }: { connect
 }
 
 export async function removeFirmConnector({ connectorId }: { connectorId: string; firmId?: string }): Promise<void> {
+    const connector = await prisma.connector.findUnique({ where: { id: connectorId }, select: { firmId: true } })
+    if (!connector) throw new Error('Connector not found')
+    await requireFirmManager(connector.firmId)
     const { removeConnector } = await import('@/lib/actions/connectors')
     await removeConnector({ connectorId })
 }
 
 export async function renameFirmConnector({ connectorId, firmId, name }: { connectorId: string; firmId: string; name: string }): Promise<void> {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('Unauthorized')
-
     const connector = await prisma.connector.findUnique({
         where: { id: connectorId },
         select: { firmId: true },
     })
     if (!connector) throw new Error('Connector not found')
     if (connector.firmId !== firmId) throw new Error('Unauthorized')
+    await requireFirmManager(connector.firmId)
 
     await prisma.connector.update({
         where: { id: connectorId },
@@ -847,9 +741,7 @@ export interface FirmClientRecord {
 }
 
 export async function getFirmAllClients(firmId: string): Promise<FirmClientRecord[]> {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('Unauthorized')
+    await requireFirmManager(firmId)
 
     const clients = await prisma.client.findMany({
         where: { firmId, deletedAt: null },
@@ -860,16 +752,13 @@ export async function getFirmAllClients(firmId: string): Promise<FirmClientRecor
 }
 
 export async function detachConnectorFromClient({ clientId, firmId }: { clientId: string; firmId: string }): Promise<void> {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('Unauthorized')
-
     const client = await prisma.client.findUnique({
         where: { id: clientId },
         select: { firmId: true, connectorId: true },
     })
     if (!client) throw new Error('Client not found')
     if (client.firmId !== firmId) throw new Error('Unauthorized')
+    await requireFirmManager(client.firmId)
 
     // Clear engagement + document connector references so re-linking uses the new workspace
     const engagements = await prisma.engagement.findMany({

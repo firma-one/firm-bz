@@ -1,6 +1,6 @@
 import { prisma, basePrisma } from './prisma'
 import { Connector, ConnectorStatus, ConnectorType, WorkspaceRootLocation } from '@prisma/client'
-import { upsertFollowUpReminder } from '@/lib/actions/user-reminders'
+import { upsertFollowUpReminder } from '@/lib/reminders/reminder-service'
 import { ignoreParser } from './ignore-parser'
 import { needsReEncryption, decrypt } from './encryption'
 import { createGoogleDriveAdapter, FIRMA_MANAGED_APP_PROPS, FIRMA_MANAGED_EXCLUDE_QUERY } from '@/lib/connectors/adapters/google-drive-adapter'

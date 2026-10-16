@@ -200,8 +200,11 @@ export async function GET(
             .firm(fileInfo.organizationId)
             .client(engagementClientId)
             .engagement(projectId)
+            // Linked to the document and named, so the audit trail can say which file was opened
+            // (these rows used to carry only ids, and the Audit page showed their raw JSON).
+            .document(fileInfo.id)
             .actor(user.id)
-            .meta({ externalId: fileInfo.externalId, mimeType: content.mimeType })
+            .meta({ fileName: fileInfo.fileName, externalId: fileInfo.externalId, mimeType: content.mimeType })
             .fireAndForget()
 
         const body = Buffer.isBuffer(content.stream) ? new Uint8Array(content.stream) : content.stream

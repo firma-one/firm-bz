@@ -53,7 +53,7 @@ const STATUS_COLORS: Record<string, string> = {
   NEW: 'bg-sky-50 text-sky-500 border-sky-200',
   IN_PROGRESS: 'bg-amber-50 text-amber-500 border-amber-200',
   RESOLVED: 'bg-emerald-50 text-emerald-500 border-emerald-200',
-  CLOSED: 'bg-slate-50 text-slate-400 border-slate-200',
+  CLOSED: 'bg-surface-subtle text-slate-400 border-slate-200',
 }
 
 const ALL_STATUSES = ['NEW', 'IN_PROGRESS', 'RESOLVED', 'CLOSED']
@@ -345,7 +345,7 @@ export function SupportRequestsList({ firmSlug }: SupportRequestsListProps) {
                 onKeyDown={e => e.key === 'Escape' && closeSearch()}
               />
               <button
-                className="h-8 w-8 flex items-center justify-center rounded hover:bg-[#f3f4f6] text-[#45474c] transition-colors"
+                className="h-8 w-8 flex items-center justify-center rounded hover:bg-surface-hover text-[#45474c] transition-colors"
                 onClick={closeSearch}
               >
                 <X className="h-3.5 w-3.5" />
@@ -403,7 +403,7 @@ export function SupportRequestsList({ firmSlug }: SupportRequestsListProps) {
                   <DropdownMenuTrigger asChild>
                     <button
                       type="button"
-                      className="inline-flex items-center justify-center h-6 w-6 rounded hover:bg-[#f3f4f6] text-[#45474c] transition-colors"
+                      className="inline-flex items-center justify-center h-6 w-6 rounded hover:bg-surface-hover text-[#45474c] transition-colors"
                       title="Sort"
                     >
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>

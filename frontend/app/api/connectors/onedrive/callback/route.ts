@@ -5,6 +5,9 @@ import { config, getRedirectUrl, getMicrosoftOAuthServerCredentials, isMicrosoft
 import { logger } from '@/lib/logger'
 import { fetchWithTimeoutRetry, isTransientNetworkError } from '@/lib/fetch-with-timeout-retry'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
+import { createClient as createCookieClient } from '@/utils/supabase/server'
+import { peekOAuthState, safeNextPath, verifyOAuthState } from '@/lib/connectors/oauth-state'
+import { getManageableConnector, isClientManager, isFirmAdmin } from '@/lib/connectors/connector-access'
 
 const oneDriveConnector = OneDriveConnector.getInstance()
 
@@ -30,7 +33,8 @@ function isPersonalMicrosoftAccount(idToken: string | undefined): boolean {
 function parseStateFlow(state: string | null): { flow?: string; nonce?: string; openerOrigin?: string; organizationId?: string; declaredAccountType?: 'personal' | 'work_school' } {
   if (!state) return {}
   try {
-    const decoded = JSON.parse(Buffer.from(state, 'base64').toString('utf-8'))
+    // Unverified read — only picks which popup to answer; nothing is linked from these fields.
+    const decoded = peekOAuthState(state) as Record<string, any>
     return {
       flow: decoded.flow,
       nonce: decoded.nonce,
@@ -47,15 +51,8 @@ function parseStateFlow(state: string | null): { flow?: string; nonce?: string; 
 
 function resolveOAuthFailureRedirectPath(state: string | null): string {
   if (!state) return '/d/onboarding'
-  try {
-    const decoded = JSON.parse(Buffer.from(state, 'base64').toString('utf-8')) as { next?: string | null }
-    if (typeof decoded.next === 'string' && decoded.next.startsWith('/')) {
-      return decoded.next.split('#')[0] || '/d/onboarding'
-    }
-  } catch {
-    /* ignore */
-  }
-  return '/d/onboarding'
+  const next = safeNextPath(peekOAuthState(state).next, '/d/onboarding')
+  return next.split('#')[0] || '/d/onboarding'
 }
 
 function appPathWithError(appPath: string, errorCode: string): string {
@@ -126,6 +123,22 @@ export async function GET(request: NextRequest) {
     }
 
     const oauthFailureBase = resolveOAuthFailureRedirectPath(state)
+    const fail = (errorCode: string) => isPopup
+      ? new NextResponse(popupHtml({ ok: false, error: errorCode, nonce: stateNonce }), { headers: { 'Content-Type': 'text/html; charset=utf-8' } })
+      : NextResponse.redirect(getRedirectUrl(appPathWithError(oauthFailureBase, errorCode)))
+
+    // Trust the state only if we signed it, it's fresh, and it belongs to whoever is signed in —
+    // checked before the code is exchanged. (.claude/plans/access-gates.md, P0 #4)
+    const verifiedState = verifyOAuthState<Record<string, any>>(state)
+    if (!verifiedState?.userId) {
+      logger.warn('OneDrive OAuth callback: state missing, unsigned or expired')
+      return fail('invalid_state')
+    }
+    const { data: { user: sessionUser } } = await (await createCookieClient()).auth.getUser()
+    if (!sessionUser || sessionUser.id !== verifiedState.userId) {
+      logger.warn('OneDrive OAuth callback: signed-in user does not match the state', { hasSession: !!sessionUser })
+      return fail('session_mismatch')
+    }
 
     let oauthClientId: string
     let clientSecret: string
@@ -240,7 +253,7 @@ export async function GET(request: NextRequest) {
 
     try {
       if (state) {
-        const decodedState = JSON.parse(Buffer.from(state, 'base64').toString('utf-8'))
+        const decodedState = verifiedState
         userId = decodedState.userId
         organizationId = decodedState.organizationId
         nextPath = decodedState.next || null
@@ -271,7 +284,22 @@ export async function GET(request: NextRequest) {
 
     let organization: { id: string } | null = null
     const firmId = organizationId
-    if (firmId) {
+
+    // Re-check rights now — same rules as initiate (lib/connectors/connector-access.ts).
+    if (clientId) {
+      const target = await prisma.client.findUnique({ where: { id: clientId }, select: { firmId: true } })
+      if (!target || (firmId && target.firmId !== firmId) || !(await isClientManager(userId, clientId))) {
+        return fail('forbidden')
+      }
+      organization = { id: target.firmId }
+    } else if (firmId && !(await isFirmAdmin(userId, firmId))) {
+      return fail('forbidden')
+    }
+    if (replaceConnectorId && !(await getManageableConnector(userId, replaceConnectorId))) {
+      return fail('forbidden')
+    }
+
+    if (firmId && !organization) {
       const membership = await prisma.firmMember.findUnique({
         where: { userId_firmId: { userId, firmId } },
         include: { firm: true },
@@ -279,12 +307,13 @@ export async function GET(request: NextRequest) {
       if (membership) organization = membership.firm
     }
     if (!organization) {
-      const membership = await prisma.firmMember.findFirst({ where: { userId, isDefault: true }, include: { firm: true } })
+      // Default firm only when the user administers it.
+      const membership = await prisma.firmMember.findFirst({ where: { userId, isDefault: true, role: 'firm_admin' }, include: { firm: true } })
       if (membership) organization = membership.firm
     }
 
     let redirectPath: string
-    if (nextPath && nextPath.startsWith('/')) {
+    if (nextPath && safeNextPath(nextPath, '') === nextPath) {
       redirectPath = nextPath
     } else {
       redirectPath = '/d/onboarding'

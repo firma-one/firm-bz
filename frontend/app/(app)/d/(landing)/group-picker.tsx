@@ -2,12 +2,17 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Building2, Loader2, SquarePlus, Home, ChevronRight, LayoutGrid } from 'lucide-react'
+import { Building2, LayoutGrid, Loader2, Plus } from 'lucide-react'
 import { getUserGroups, getUserFirms, createOwnWorkspace, type UserGroupOption } from '@/lib/actions/firms'
 import { BRAND_NAME } from '@/config/brand'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { TooltipProvider } from '@/components/ui/tooltip'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { PageHeading } from '@/components/ui/page-heading'
+import { EmptyPanel } from '@/components/ui/empty-panel'
+import { Tag } from '@/components/ui/tag'
+import { WorkspaceCard } from '@/components/projects/workspace-card'
+import { WorkspaceTable } from '@/components/projects/workspace-table'
+import { ViewModeToggle, useViewMode } from '@/components/ui/view-mode-toggle'
 import { groupFirmListPath } from '@/lib/navigation/firm-paths'
 import { useAuth } from '@/lib/auth-context'
 import { switchFirm } from '@/lib/actions/firms'
@@ -56,6 +61,8 @@ export function GroupPicker() {
     const [targetGroup, setTargetGroup] = useState<UserGroupOption | null>(null)
     const [isSwitching, setIsSwitching] = useState(false)
     const [switchError, setSwitchError] = useState<string | null>(null)
+    // Opens as a table, like All clients; the gallery is one click away and remembered.
+    const [viewMode, setViewMode] = useViewMode('fm-workspaces-view')
 
     useEffect(() => {
         async function load() {
@@ -150,152 +157,106 @@ export function GroupPicker() {
     return (
         <TooltipProvider>
         <div className="flex flex-col h-full overflow-y-auto">
-            {/* Breadcrumb */}
-            <nav className="flex items-center gap-1.5 mb-4">
-                <Home className="h-4 w-4 text-[#45474c] opacity-60" />
-                <ChevronRight className="h-3.5 w-3.5 text-[#d1d5db]" />
-                <Building2 className="h-4 w-4 text-primary" />
-                <span className="font-mono text-[11px] font-bold text-[#1b1b1d] uppercase tracking-tighter">Firm Groups</span>
-            </nav>
 
-            {/* Page header */}
-            <div className="flex items-start gap-6 mb-8">
-                <div className="w-16 h-16 bg-white border border-[#e5e7eb] flex items-center justify-center rounded shadow-sm shrink-0">
-                    <Building2 className="h-10 w-10 text-[#1b1b1d]" />
-                </div>
-                <div>
-                    <h1 className="font-headline text-3xl md:text-4xl font-bold tracking-tight text-[#1b1b1d]">
-                        Choose your firm group
-                    </h1>
-                    <p className="text-sm text-[#45474c] mt-1">Select a workspace to continue in {BRAND_NAME}</p>
-                </div>
-            </div>
-
-            <Tabs defaultValue="groups" className="flex-1 flex flex-col min-h-0">
-                <div className="bg-white border border-[#e5e7eb] rounded mb-6 shrink-0">
-                    <div className="flex items-center justify-between h-14 pr-4">
-                        <TabsList className="h-full p-0 bg-transparent rounded-none inline-flex justify-start gap-0 border-0">
-                            <TabsTrigger
-                                value="groups"
-                                className="h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
-                            >
-                                <LayoutGrid className="w-4 h-4 mr-2" />
-                                Firm Groups
-                                {groups.length > 0 && (
-                                    <span className="ml-2 font-mono text-[10px] font-bold bg-primary text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
-                                        {groups.length}
-                                    </span>
-                                )}
-                            </TabsTrigger>
-                        </TabsList>
+            <PageHeading
+                icon={<LayoutGrid />}
+                title={
+                    <span className="flex min-w-0 items-center gap-2">
+                        <span className="truncate">Choose your firm group</span>
+                        {groups.length > 0 && <span className="text-h3 font-normal tabular-nums text-fg-subtle">{groups.length}</span>}
+                    </span>
+                }
+                description={`Select a workspace to continue in ${BRAND_NAME}`}
+                actions={
+                    <>
+                        {groups.length > 0 && <ViewModeToggle value={viewMode} onChange={setViewMode} />}
                         {showCreateOwnWorkspace && (
-                        <button
-                            type="button"
-                            disabled={creating}
-                            className="h-auto px-4 py-1.5 rounded bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:brightness-105 shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all inline-flex items-center gap-1.5 disabled:opacity-50"
-                            onClick={handleCreateOwnWorkspace}
-                        >
-                            {creating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <SquarePlus className="h-3.5 w-3.5" />}
-                            Create Your Own Workspace
-                        </button>
+                            <Button size="sm" onClick={handleCreateOwnWorkspace} disabled={creating}>
+                                {creating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+                                Create your own workspace
+                            </Button>
                         )}
-                    </div>
+                    </>
+                }
+            />
+
+            {createError && <p className="mb-4 text-small text-danger">{createError}</p>}
+
+            {groups.length > 0 && viewMode === 'list' ? (
+                <WorkspaceTable
+                    countLabel="Firms"
+                    countIcon={<Building2 />}
+                    rows={groups.map((group) => ({
+                        key: group.id,
+                        name: group.name,
+                        icon: <LayoutGrid />,
+                        badge: group.id === currentGroupId ? <Tag color="green" dot>Current</Tag> : undefined,
+                        count: group.firmCount,
+                        trailing: <Tag color={group.isGroupAdmin ? 'purple' : 'gray'}>{group.isGroupAdmin ? 'Group admin' : 'Group member'}</Tag>,
+                        onClick: () => handleGroupClick(group),
+                    }))}
+                />
+            ) : groups.length > 0 ? (
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                    {groups.map((group) => (
+                        <WorkspaceCard
+                            key={group.id}
+                            name={group.name}
+                            icon={<LayoutGrid />}
+                            meta={`${group.firmCount} ${group.firmCount === 1 ? 'firm' : 'firms'}`}
+                            badge={group.id === currentGroupId ? <Tag color="green" dot>Current</Tag> : undefined}
+                            footer={<Tag color={group.isGroupAdmin ? 'purple' : 'gray'}>{group.isGroupAdmin ? 'Group admin' : 'Group member'}</Tag>}
+                            onClick={() => handleGroupClick(group)}
+                        />
+                    ))}
                 </div>
-
-                <TabsContent value="groups" className="flex-1 mt-0">
-                <div className="w-full">
-
-                {createError && (
-                    <p className="text-sm text-red-600 mb-4">{createError}</p>
-                )}
-
-                {groups.length > 0 && (
-                    <div className="grid grid-cols-1 gap-4 mb-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                        {groups.map((group) => (
-                            <button
-                                key={group.id}
-                                type="button"
-                                className="group relative flex flex-col gap-4 p-5 rounded border bg-white shadow-md hover:shadow-lg text-left transition-all overflow-hidden h-56 border-[#e5e7eb] hover:border-primary/40"
-                                onClick={() => handleGroupClick(group)}
-                            >
-                                {/* Brand corner decoration — groups have no theme color, plain primary accent */}
-                                <svg className="absolute bottom-0 right-0 pointer-events-none" width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                    <polygon points="48,0 48,48 0,48" fill="hsl(var(--primary))" fillOpacity="0.12" />
-                                    <polygon points="48,22 48,48 22,48" fill="hsl(var(--primary))" />
-                                </svg>
-                                <div className="flex items-start justify-between">
-                                    <div className="h-12 w-12 rounded flex items-center justify-center flex-shrink-0 overflow-hidden border">
-                                        <Building2 className="h-6 w-6 text-primary" />
-                                    </div>
-                                </div>
-                                <div>
-                                    <div className="flex items-center gap-1.5 mb-1">
-                                        <p className="font-bold text-[#1b1b1d] text-base leading-tight">{group.name}</p>
-                                    </div>
-                                    <p className="text-xs text-[#45474c]/70">
-                                        {group.firmCount} {group.firmCount === 1 ? 'firm' : 'firms'}
-                                    </p>
-                                </div>
-                                <div className="mt-auto pt-3 border-t border-[#e5e7eb]">
-                                    <p className="text-[11px] text-[#45474c]/70">
-                                        You are a <span className={`inline-flex items-center font-mono text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm ${group.isGroupAdmin ? 'text-primary bg-primary/10' : 'text-[#45474c] bg-[#f3f4f6]'}`}>
-                                            {group.isGroupAdmin ? 'Group Admin' : 'Group Member'}
-                                        </span>
-                                    </p>
-                                </div>
-                            </button>
-                        ))}
-                    </div>
-                )}
-
-                </div>
-                </TabsContent>
-            </Tabs>
+            ) : (
+                <EmptyPanel icon={<Building2 />} title="No workspaces yet" description="Create your own workspace to get started." />
+            )}
 
             <Dialog open={switchDialogOpen} onOpenChange={handleCancelSwitch}>
-                <DialogContent className="sm:max-w-[420px] border-[#e5e7eb] p-0 gap-0 rounded">
+                <DialogContent className="sm:max-w-[420px] p-0 gap-0">
                     <VisuallyHidden><DialogTitle>Switch Workspace</DialogTitle></VisuallyHidden>
 
-                    <div className="px-5 py-4 border-b border-[#e5e7eb] bg-[#f9f9fb] flex items-start gap-3">
-                        <div className="mt-0.5 h-7 w-7 rounded bg-primary/10 flex items-center justify-center shrink-0">
-                            <Building2 className="h-3.5 w-3.5 text-primary" />
+                    <div className="px-5 py-4 border-b border-line flex items-start gap-3">
+                        <div className="mt-0.5 h-7 w-7 rounded-control bg-surface-muted text-fg-muted flex items-center justify-center shrink-0">
+                            <Building2 className="h-3.5 w-3.5" />
                         </div>
                         <div>
-                            <p className="text-sm font-semibold text-[#1b1b1d] leading-tight">Switch Workspace</p>
-                            <p className="text-xs text-[#45474c] mt-0.5">You are switching to a different firm group.</p>
+                            <p className="text-ui font-semibold text-fg leading-tight">Switch workspace</p>
+                            <p className="text-small text-fg-muted mt-0.5">You are switching to a different firm group.</p>
                         </div>
                     </div>
 
                     <div className="p-5 space-y-4">
                         {switchError && (
-                            <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs px-3 py-2 rounded">
+                            <div className="rounded-control bg-tag-red-bg px-3 py-2 text-small text-tag-red-fg">
                                 {switchError}
                             </div>
                         )}
-                        <p className="text-sm text-[#45474c]">
+                        <p className="text-ui text-fg-muted">
                             {(() => {
                                 const currentGroupName = groups.find((g) => g.id === currentGroupId)?.name
                                 return currentGroupName ? (
                                     <>
-                                        You are about to switch from <span className="font-semibold text-[#1b1b1d]">{currentGroupName}</span> to <span className="font-semibold text-[#1b1b1d]">{targetGroup?.name}</span>.
+                                        You are about to switch from <span className="font-semibold text-fg">{currentGroupName}</span> to <span className="font-semibold text-fg">{targetGroup?.name}</span>.
                                     </>
                                 ) : (
                                     <>
-                                        You are about to switch to <span className="font-semibold text-[#1b1b1d]">{targetGroup?.name}</span>.
+                                        You are about to switch to <span className="font-semibold text-fg">{targetGroup?.name}</span>.
                                     </>
                                 )
                             })()}
                         </p>
-                        <p className="text-xs text-[#9a9ba0]">
+                        <p className="text-small text-fg-subtle">
                             Your permissions will be refreshed for this workspace.
                         </p>
                     </div>
 
-                    <div className="px-5 py-3 border-t border-[#e5e7eb] flex items-center justify-end gap-3">
+                    <div className="px-5 py-3 border-t border-line flex items-center justify-end gap-2">
                         <Button
                             type="button"
                             variant="outline"
-                            className="!rounded text-[10px] font-headline font-bold tracking-widest uppercase border-gray-300"
                             onClick={handleCancelSwitch}
                             disabled={isSwitching}
                         >
@@ -305,9 +266,9 @@ export function GroupPicker() {
                             variant="greenCta"
                             onClick={handleConfirmSwitch}
                             disabled={isSwitching}
-                            className="min-w-[8rem] text-[10px] font-headline font-bold tracking-widest uppercase"
+                            className="min-w-[8rem]"
                         >
-                            {isSwitching ? <LoadingSpinner size="sm" /> : 'Switch Workspace'}
+                            {isSwitching ? <LoadingSpinner size="sm" /> : 'Switch workspace'}
                         </Button>
                     </div>
                 </DialogContent>

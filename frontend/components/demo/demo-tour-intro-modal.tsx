@@ -1,111 +1,82 @@
 'use client'
 
 import { useState } from 'react'
-import { Clock3, FastForward, MapPinned, Play, Square } from 'lucide-react'
+import { Check, MapPinned } from 'lucide-react'
 import { useDemoTour } from '@/lib/demo/demo-tour-context'
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Brio } from '@/components/ui/brio'
+
+const TOPICS: { key: string; label: React.ReactNode }[] = [
+    { key: 'firm', label: 'Firm, clients and engagements' },
+    { key: 'brio', label: <><Brio />: the firm brief and engagement Q&amp;A</> },
+    { key: 'calendar', label: 'Calendar and Doc Search' },
+    { key: 'files', label: 'Files, uploads and document actions' },
+    { key: 'board', label: 'Board, comments, audit and members' },
+    { key: 'home', label: 'Home, Inbox and your profile' },
+]
 
 /** Static counterpart to demo-tour-intro-modal.tsx — same resume-progress behavior, backed by
- * localStorage instead of a server-resolved firm/client/engagement slug set. */
+ * localStorage instead of a server-resolved firm/client/engagement slug set. Built on the app's
+ * Dialog, so it portals out of the demo shell and uses the app's design tokens. */
 export function DemoTourIntroModal() {
     const { showIntroModal, closeIntroModal, startTour, resumeTour, resumableStepIndex } = useDemoTour()
     const [neverShowAgain, setNeverShowAgain] = useState(false)
-
-    if (!showIntroModal) return null
 
     const hasProgress = resumableStepIndex !== null && resumableStepIndex > 0
     const skip = () => closeIntroModal(neverShowAgain)
 
     return (
-        <div className="fixed inset-0 z-[10060] flex items-center justify-center">
-            <div className="absolute inset-0 bg-black/40" onClick={skip} />
-
-            <div className="relative bg-white rounded shadow-2xl border border-[#e5e7eb] w-full max-w-sm mx-4 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-                <div className="bg-primary/8 border-b border-[#e5e7eb] px-5 py-4 flex items-center gap-3">
-                    <div className="h-9 w-9 rounded bg-primary flex items-center justify-center shrink-0">
-                        <MapPinned className="h-4 w-4 text-white" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-[#1b1b1d] leading-tight">Welcome to the Demo Firm</p>
-                        <p className="text-xs text-[#45474c] mt-0.5">This is a demo firm with sample data</p>
-                    </div>
-                    <span className="shrink-0 flex items-center gap-1 px-2 py-1 rounded-full bg-primary/10 text-primary text-[10px] font-semibold">
-                        <Clock3 className="h-3 w-3" /> ~3 min
-                    </span>
-                </div>
-
-                <div className="px-5 py-4 space-y-3">
-                    {hasProgress ? (
-                        <p className="text-xs text-[#45474c] leading-relaxed">
-                            You were in the middle of the tour. Would you like to <strong className="text-[#1b1b1d]">pick up where you left off</strong> or start from the beginning?
-                        </p>
-                    ) : (
-                        <>
-                            <p className="text-xs text-[#45474c] leading-relaxed">
-                                Take a <strong className="text-[#1b1b1d]">guided tour</strong> to discover how Firma works — from managing clients and engagements to sharing documents and using the command palette.
-                            </p>
-                            <ul className="space-y-1.5 text-xs text-[#45474c]">
-                                <li className="flex items-center gap-2"><span className="h-1 w-1 rounded-full bg-primary shrink-0" />Firm, Clients &amp; Engagements</li>
-                                <li className="flex items-center gap-2"><span className="h-1 w-1 rounded-full bg-primary shrink-0" />Calendar &amp; AI-powered Doc Search</li>
-                                <li className="flex items-center gap-2"><span className="h-1 w-1 rounded-full bg-primary shrink-0" />File uploads &amp; document actions</li>
-                                <li className="flex items-center gap-2"><span className="h-1 w-1 rounded-full bg-primary shrink-0" />Board, Comments, Audit &amp; Members</li>
-                                <li className="flex items-center gap-2"><span className="h-1 w-1 rounded-full bg-primary shrink-0" />Reminders, Bookmarks &amp; Profile</li>
-                            </ul>
-                        </>
+        <Dialog open={showIntroModal} onOpenChange={(open) => { if (!open) skip() }}>
+            <DialogContent className="max-w-sm gap-0 p-0">
+                <div className="px-5 pt-5">
+                    <p className="flex items-center gap-1.5 text-caption text-fg-subtle">
+                        <MapPinned className="h-3.5 w-3.5" />
+                        Guided tour · about 3 minutes
+                    </p>
+                    <DialogTitle className="mt-2">
+                        {hasProgress ? 'Pick up where you left off?' : 'Welcome to the demo firm'}
+                    </DialogTitle>
+                    <DialogDescription className="mt-1.5 leading-relaxed">
+                        {hasProgress
+                            ? 'You were partway through the tour. Resume it, or start again from the beginning.'
+                            : 'Everything here is sample data. Take the tour to see how Firma works, or explore on your own.'}
+                    </DialogDescription>
+                    {!hasProgress && (
+                        <ul className="mt-4 space-y-1.5">
+                            {TOPICS.map((topic) => (
+                                <li key={topic.key} className="flex items-start gap-2 text-small text-fg-muted">
+                                    <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-action" />
+                                    <span>{topic.label}</span>
+                                </li>
+                            ))}
+                        </ul>
                     )}
                 </div>
 
-                {!hasProgress && (
-                    <div className="px-5 pb-2">
-                        <label className="flex items-center gap-1.5 text-[11px] text-[#45474c] cursor-pointer select-none">
-                            <input
-                                type="checkbox"
-                                checked={neverShowAgain}
-                                onChange={(e) => setNeverShowAgain(e.target.checked)}
-                                className="h-3 w-3 rounded border-[#e5e7eb] accent-primary"
-                            />
+                <div className="mt-5 flex items-center gap-2 border-t border-line px-5 py-3">
+                    {!hasProgress && (
+                        <label className="flex cursor-pointer select-none items-center gap-2 text-caption text-fg-muted">
+                            <Checkbox checked={neverShowAgain} onCheckedChange={(v) => setNeverShowAgain(v === true)} />
                             Don&apos;t show this again
                         </label>
-                    </div>
-                )}
-
-                <div className="px-5 pb-5 flex items-center gap-2">
-                    {hasProgress ? (
-                        <>
-                            <button
-                                type="button"
-                                onClick={resumeTour}
-                                className="group flex-1 h-9 rounded bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:brightness-105 transition-all flex items-center justify-center gap-1.5"
-                            >
-                                Resume Tour <FastForward className="h-3.5 w-3.5 transition-transform duration-200 group-hover:translate-x-0.5" />
-                            </button>
-                            <button
-                                type="button"
-                                onClick={startTour}
-                                className="flex-1 h-9 rounded border border-[#e5e7eb] text-[10px] font-headline font-bold tracking-widest uppercase text-[#45474c] hover:bg-[#f3f4f6] transition-colors"
-                            >
-                                Start over
-                            </button>
-                        </>
-                    ) : (
-                        <>
-                            <button
-                                type="button"
-                                onClick={startTour}
-                                className="group flex-1 h-9 rounded bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:brightness-105 transition-all flex items-center justify-center gap-1.5"
-                            >
-                                Start Tour <Play className="h-3.5 w-3.5 transition-transform duration-200 group-hover:translate-x-0.5" />
-                            </button>
-                            <button
-                                type="button"
-                                onClick={skip}
-                                className="flex-1 h-9 rounded border border-[#e5e7eb] text-[10px] font-headline font-bold tracking-widest uppercase text-[#45474c] hover:bg-[#f3f4f6] transition-colors flex items-center justify-center gap-1.5"
-                            >
-                                <Square className="h-3.5 w-3.5" /> Skip
-                            </button>
-                        </>
                     )}
+                    <div className="ml-auto flex items-center gap-2">
+                        {hasProgress ? (
+                            <>
+                                <Button variant="ghost" size="sm" onClick={startTour}>Start over</Button>
+                                <Button size="sm" onClick={resumeTour}>Resume tour</Button>
+                            </>
+                        ) : (
+                            <>
+                                <Button variant="ghost" size="sm" onClick={skip}>Skip</Button>
+                                <Button size="sm" onClick={startTour}>Start tour</Button>
+                            </>
+                        )}
+                    </div>
                 </div>
-            </div>
-        </div>
+            </DialogContent>
+        </Dialog>
     )
 }

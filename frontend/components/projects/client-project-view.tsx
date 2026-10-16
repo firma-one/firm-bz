@@ -6,7 +6,7 @@ import { getProjectMemberSummaries, type ProjectMemberSummary } from '@/lib/acti
 import { ProjectList } from './engagement-list'
 import { ClientSettingsForm } from './client-settings-form'
 import type { LwCrmClientStatus } from '@/lib/actions/client'
-import { SquarePlus, ChevronRight, Building2, Users, Briefcase, Home, Settings, UserCog, Lock, Contact } from 'lucide-react'
+import { Plus, Users, Briefcase, Settings, UserCog, Contact } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { AddEngagementModal } from './add-engagement-modal'
@@ -14,8 +14,18 @@ import { ClientDetailsModal } from './client-details-modal'
 import { ClientContactsTab } from './client-contacts-tab'
 import { ClientMembersTab } from './members/client-members-tab'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import Link from 'next/link'
-import { firmPath, firmTabPath, groupFirmListPath } from '@/lib/navigation/firm-paths'
+import { firmTabPath } from '@/lib/navigation/firm-paths'
+import { ClientHeader } from './client-header'
+import { AccessLock } from '@/components/ui/access-lock'
+import { EmptyPanel } from '@/components/ui/empty-panel'
+
+function PendingBar() {
+    return (
+        <span className="absolute -bottom-px left-0 right-0 h-0.5 overflow-hidden">
+            <span className="absolute inset-y-0 w-1/2 animate-[indeterminate-progress_1.5s_infinite_linear] rounded-full bg-fg" />
+        </span>
+    )
+}
 
 interface ClientProjectViewProps {
     clients: HierarchyClient[]
@@ -102,206 +112,117 @@ export function ClientProjectView({ clients, groupSlug, firmSlug, firmName, firm
 
     if (clients.length === 0) {
         return (
-            <div className="flex flex-col items-center justify-center p-12 text-center">
-                <h3 className="text-lg font-medium text-slate-900">No Clients Found</h3>
-                <p className="text-slate-500 mt-2">Get started by creating your first client workspace using the sidebar.</p>
-            </div>
+            <EmptyPanel icon={<Users />} title="No clients yet" description="Create your first client from the sidebar." />
         )
     }
 
     return (
         <div className="flex flex-col h-full">
-            {/* Breadcrumbs — monospace architectural style */}
-            <nav className="flex items-center gap-1.5 mb-4">
-                <Link href={groupFirmListPath(groupSlug)} className="hover:opacity-80">
-                    <Home className="h-4 w-4 text-[#1b1b1d]" />
-                </Link>
-                <ChevronRight className="h-3.5 w-3.5 text-[#d1d5db]" />
-                <Building2 className="h-4 w-4 text-[#45474c] opacity-60" />
-                <Link
-                    href={firmPath(groupSlug, firmSlug)}
-                    className="font-mono text-[11px] text-[#45474c] opacity-60 uppercase tracking-tighter hover:opacity-100 transition-opacity"
-                >
-                    {firmName || 'Firm'}
-                </Link>
-                <ChevronRight className="h-3.5 w-3.5 text-[#d1d5db]" />
-                <Users className="h-4 w-4 text-primary" />
-                <span className="font-mono text-[11px] font-bold text-[#1b1b1d] uppercase tracking-tighter">
-                    {selectedClient ? selectedClient.name : 'Client'}
-                </span>
-            </nav>
 
-            {/* Main Content Area */}
             <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
                 {selectedClient ? (
                     <>
-                        {/* Client Identity Header — sits directly on pearl bg */}
-                        <div className="flex items-start justify-between gap-6 mb-6">
-                            <div className="flex items-center gap-6">
-                                <div className="w-16 h-16 bg-white border border-[#e5e7eb] flex items-center justify-center rounded shadow-sm shrink-0 overflow-hidden">
-                                    {selectedClient.brandLogoUrl
-                                        ? <img src={selectedClient.brandLogoUrl} alt={selectedClient.name} className="h-full w-full object-contain p-1.5" />
-                                        : <Users className="h-10 w-10 text-[#1b1b1d]" />
-                                    }
-                                </div>
-                                <div>
-                                    <div className="flex items-center gap-3 flex-wrap">
-                                        <h1 className="font-headline text-3xl md:text-4xl font-bold tracking-tight text-[#1b1b1d]">
-                                            {selectedClient.name}
-                                        </h1>
-                                        {selectedClient.status && (
-                                            <span className={`px-2 py-0.5 rounded font-mono text-[10px] tracking-tight uppercase shrink-0 border ${
-                                                selectedClient.status === 'ACTIVE'   ? 'bg-[#f0edee] text-[#45474c] border-[#e5e7eb]' :
-                                                selectedClient.status === 'PROSPECT' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                                                selectedClient.status === 'ON_HOLD'  ? 'bg-amber-50 text-amber-700 border-amber-200' :
-                                                selectedClient.status === 'PAST'     ? 'bg-slate-100 text-slate-500 border-slate-200' :
-                                                'bg-[#f0edee] text-[#45474c] border-[#e5e7eb]'
-                                            }`}>
-                                                {selectedClient.status === 'ON_HOLD' ? 'On Hold' : selectedClient.status.charAt(0) + selectedClient.status.slice(1).toLowerCase()}
-                                            </span>
-                                        )}
-                                    </div>
-                                    <div className="flex items-center gap-2 mt-1 flex-wrap">
-                                        <p className="text-sm text-[#45474c]">Manage engagements and client settings.</p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                        <ClientHeader client={selectedClient} firmSlug={firmSlug} canManage={canManageClient} />
 
                         <Tabs value={currentTab} onValueChange={handleTabChange} className="flex-1 flex flex-col min-h-0">
-                            {/* Tab strip — full-width white with border-b */}
-                            <div className="bg-white border border-[#e5e7eb] rounded mb-6 shrink-0">
-                                <div className="flex items-center h-14 pr-4">
-                                    <TabsList className="h-full p-0 bg-transparent rounded-none inline-flex justify-start gap-0 border-0">
-                                        <TabsTrigger
-                                            value="projects"
-                                            className="relative h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
-                                        >
-                                            <Briefcase className="w-4 h-4 mr-2" />
+                            {/* Underline tabs (Linear/Notion); the page action sits at the right end of the row. */}
+                            <div className="mb-4 flex shrink-0 items-end justify-between gap-3 border-b border-line">
+                                <div className="min-w-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                                    <TabsList className="min-w-max border-b-0">
+                                        <TabsTrigger value="projects" className="relative gap-1.5">
+                                            <Briefcase className="h-4 w-4" />
                                             Engagements
-                                            {selectedClient && selectedClient.engagements.length > 0 && (
-                                                <span className="ml-2 font-mono text-[10px] font-bold bg-primary text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
-                                                    {selectedClient.engagements.length}
-                                                </span>
+                                            {selectedClient.engagements.length > 0 && (
+                                                <span className="text-small tabular-nums text-fg-subtle">{selectedClient.engagements.length}</span>
                                             )}
-                                            {pendingTab === 'projects' && <span className="absolute bottom-0 left-0 right-0 h-0.5 overflow-hidden"><span className="absolute inset-y-0 w-1/2 bg-brand-accent animate-[indeterminate-progress_1.5s_infinite_linear] rounded-full" /></span>}
+                                            {pendingTab === 'projects' && <PendingBar />}
                                         </TabsTrigger>
                                         {isFirmOwner && (
-                                        <TabsTrigger
-                                            value="contacts"
-                                            className="relative group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
-                                        >
-                                            <Contact className="w-4 h-4 mr-2" />
-                                            Contacts
-                                            <span title="Firm administrators only"><Lock className="w-2.5 h-2.5 ml-1 text-[#45474c]/40 group-hover/lock:text-[#45474c] transition-colors shrink-0" /></span>
-                                            {contactCount !== undefined && contactCount > 0 && (
-                                                <span className="ml-2 font-mono text-[10px] font-bold bg-primary text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
-                                                    {contactCount}
-                                                </span>
-                                            )}
-                                            {pendingTab === 'contacts' && <span className="absolute bottom-0 left-0 right-0 h-0.5 overflow-hidden"><span className="absolute inset-y-0 w-1/2 bg-brand-accent animate-[indeterminate-progress_1.5s_infinite_linear] rounded-full" /></span>}
-                                        </TabsTrigger>
+                                            <TabsTrigger value="contacts" className="relative gap-1.5">
+                                                <Contact className="h-4 w-4" />
+                                                Contacts
+                                                <AccessLock label="Firm admins only — hidden from other members" />
+                                                {contactCount !== undefined && contactCount > 0 && (
+                                                    <span className="text-small tabular-nums text-fg-subtle">{contactCount}</span>
+                                                )}
+                                                {pendingTab === 'contacts' && <PendingBar />}
+                                            </TabsTrigger>
                                         )}
                                         {false && canManageClient && (
-                                            <TabsTrigger
-                                                value="members"
-                                                className="relative group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
-                                            >
-                                                <UserCog className="w-4 h-4 mr-2" />
+                                            <TabsTrigger value="members" className="relative gap-1.5">
+                                                <UserCog className="h-4 w-4" />
                                                 Members
-                                                <span title="Internal only"><Lock className="w-2.5 h-2.5 ml-1 text-[#45474c]/40 group-hover/lock:text-[#45474c] transition-colors shrink-0" /></span>
-                                                {(memberCount ?? 0) > 0 && (
-                                                    <span className="ml-2 font-mono text-[10px] font-bold bg-primary text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
-                                                        {memberCount}
-                                                    </span>
-                                                )}
-                                                {pendingTab === 'members' && <span className="absolute bottom-0 left-0 right-0 h-0.5 overflow-hidden"><span className="absolute inset-y-0 w-1/2 bg-brand-accent animate-[indeterminate-progress_1.5s_infinite_linear] rounded-full" /></span>}
+                                                <AccessLock label="Client managers only" />
+                                                {(memberCount ?? 0) > 0 && <span className="text-small tabular-nums text-fg-subtle">{memberCount}</span>}
+                                                {pendingTab === 'members' && <PendingBar />}
                                             </TabsTrigger>
                                         )}
                                         {canManageClient && (
-                                            <TabsTrigger
-                                                value="settings"
-                                                data-demo-tour="client-settings-form"
-                                                className="relative group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
-                                            >
-                                                <Settings className="w-4 h-4 mr-2" />
+                                            <TabsTrigger value="settings" data-demo-tour="client-settings-form" className="relative gap-1.5">
+                                                <Settings className="h-4 w-4" />
                                                 Settings
-                                                <span title="Internal only"><Lock className="w-2.5 h-2.5 ml-1 text-[#45474c]/40 group-hover/lock:text-[#45474c] transition-colors shrink-0" /></span>
-                                                {pendingTab === 'settings' && <span className="absolute bottom-0 left-0 right-0 h-0.5 overflow-hidden"><span className="absolute inset-y-0 w-1/2 bg-brand-accent animate-[indeterminate-progress_1.5s_infinite_linear] rounded-full" /></span>}
+                                                <AccessLock label="Client managers only — partners and firm admins" />
+                                                {pendingTab === 'settings' && <PendingBar />}
                                             </TabsTrigger>
                                         )}
                                     </TabsList>
-                                    <div className="flex items-center gap-3 ml-auto">
-                                        {currentTab === 'projects' && (
-                                            <AddEngagementModal
-                                                groupSlug={groupSlug}
-                                                firmSlug={firmSlug}
-                                                clientSlug={selectedClient.slug}
-                                                onSaved={() => startRefresh(() => router.refresh())}
-                                                trigger={
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        type="button"
-                                                        data-demo-tour="engagement-add-btn"
-                                                        className="h-auto px-4 py-1.5 rounded bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:bg-primary hover:brightness-105 hover:text-white shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all border-0 inline-flex items-center gap-1.5"
-                                                    >
-                                                        <SquarePlus className="h-3.5 w-3.5" />
-                                                        Add Engagement
-                                                    </Button>
-                                                }
-                                            />
-                                        )}
-                                    </div>
                                 </div>
+                                {currentTab === 'projects' && (
+                                    <div className="shrink-0 pb-1.5">
+                                        <AddEngagementModal
+                                            groupSlug={groupSlug}
+                                            firmSlug={firmSlug}
+                                            clientSlug={selectedClient.slug}
+                                            onSaved={() => startRefresh(() => router.refresh())}
+                                            trigger={
+                                                <Button size="sm" type="button" data-demo-tour="engagement-add-btn">
+                                                    <Plus className="h-3.5 w-3.5" />
+                                                    New engagement
+                                                </Button>
+                                            }
+                                        />
+                                    </div>
+                                )}
                             </div>
 
                             <div className="flex-1 overflow-y-auto custom-scrollbar">
-                                <TabsContent value="projects" className="m-0 h-full">
-                                    <div className="py-1">
-                                        <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-                                            <ProjectList
-                                                projects={selectedClient.engagements}
-                                                groupSlug={groupSlug}
-                                                orgSlug={firmSlug}
-                                                clientSlug={selectedClient.slug}
-                                                clientStatus={selectedClient.status}
-                                                isRefreshing={isPendingRefresh}
-                                            />
-                                        </div>
-                                    </div>
+                                <TabsContent value="projects" className="m-0">
+                                    <ProjectList
+                                        projects={selectedClient.engagements}
+                                        groupSlug={groupSlug}
+                                        orgSlug={firmSlug}
+                                        clientSlug={selectedClient.slug}
+                                        clientStatus={selectedClient.status}
+                                        isRefreshing={isPendingRefresh}
+                                        memberSummaries={memberSummaries}
+                                    />
                                 </TabsContent>
 
                                 {isFirmOwner && (
-                                <TabsContent value="contacts" className="m-0 h-full">
-                                    <div className="w-full py-2">
-                                        <ClientContactsTab
-                                            orgSlug={firmSlug}
-                                            clientSlug={selectedClient.slug}
-                                            canManage={canManageClient}
-                                        />
-                                    </div>
+                                <TabsContent value="contacts" className="m-0">
+                                    <ClientContactsTab
+                                        orgSlug={firmSlug}
+                                        clientSlug={selectedClient.slug}
+                                        canManage={canManageClient}
+                                    />
                                 </TabsContent>
                                 )}
 
                                 {false && canManageClient && (
-                                    <TabsContent value="members" className="m-0 h-full">
-                                        <div className="w-full py-2">
-                                            <ClientMembersTab
-                                                firmId={firmId ?? selectedClient?.firmId ?? ''}
-                                                clientId={selectedClient?.id ?? ''}
-                                                orgSlug={firmSlug}
-                                                clientSlug={selectedClient?.slug ?? ''}
-                                                canManage={canManageClient}
-                                            />
-                                        </div>
+                                    <TabsContent value="members" className="m-0">
+                                        <ClientMembersTab
+                                            firmId={firmId ?? selectedClient?.firmId ?? ''}
+                                            clientId={selectedClient?.id ?? ''}
+                                            orgSlug={firmSlug}
+                                            clientSlug={selectedClient?.slug ?? ''}
+                                            canManage={canManageClient}
+                                        />
                                     </TabsContent>
                                 )}
 
                                 {canManageClient && (
-                                    <TabsContent value="settings" className="m-0 h-full">
-                                        <div className="w-full py-2">
-                                            <ClientSettingsForm
+                                    <TabsContent value="settings" className="m-0">
+                                        <ClientSettingsForm
                                             groupSlug={groupSlug}
                                             orgSlug={firmSlug}
                                             firmId={firmId ?? selectedClient.firmId}
@@ -324,15 +245,14 @@ export function ClientProjectView({ clients, groupSlug, firmSlug, firmName, firm
                                             initialCompanySizeBracket={selectedClient.companySizeBracket ?? undefined}
                                             initialBillingAddress={selectedClient.billingAddress ?? undefined}
                                             onSaved={() => router.refresh()}
-                                            />
-                                        </div>
+                                        />
                                     </TabsContent>
                                 )}
                             </div>
                         </Tabs>
                     </>
                 ) : (
-                    <div className="flex-1 flex items-center justify-center text-slate-400">Select a client to view projects</div>
+                    <EmptyPanel title="Select a client to see its engagements" />
                 )}
             </div>
 

@@ -1,0 +1,168 @@
+/*
+ * UI token layer — .claude/plans/ui-ux-overhaul.md and retire-legacy-tokens.md.
+ *
+ * One scope: the Notion-style values on :root, used by the app and by every shared primitive
+ * wherever it renders (sign-in, system admin, the resources pages). The marketing site keeps its
+ * own Kinetic colors, which it sets explicitly; the demo keeps the old dashboard values in its own
+ * stylesheet (app/(demo)/demo/demo.css).
+ *
+ * <html data-ui="v2"> (set on every /d route, lib/ui-shell.ts) now only switches the app's
+ * typography to Inter — see the end of this file.
+ *
+ * Text tokens are solid colors picked to clear WCAG AA (4.5:1) on both the canvas and the sidebar;
+ * hover / selected / line use alpha so they read the same on any surface. Tag text is darkened
+ * from Notion's originals to clear 4.5:1 on its own tag background.
+ *
+ * Tailwind names (tailwind.config.js): bg-surface[-sidebar|-subtle|-muted|-hover|-selected],
+ * text-fg[-muted|-subtle], border-line[-strong], bg-action / text-action-fg, text-danger,
+ * bg-tag-{color}-bg / text-tag-{color}-fg, bg-scrim, rounded-control|card|dialog,
+ * shadow-popover|dialog, text-caption|small|ui|body|h3|h2|h1.
+ *
+ * Not a cascade layer on purpose: these rules load after globals.css and must beat its
+ * `@layer base` :root on specificity alone.
+ */
+
+:root {
+  /* Surfaces */
+  --ui-surface: #ffffff;
+  /* A step lighter than Notion's #f7f7f5: still a frame around the white page (navigation should
+     never be as bright as the content), but the window as a whole reads brighter. The hairline
+     edge and the translucent hover/selected tints keep the separation on the lighter tone. */
+  --ui-surface-sidebar: #f9f9f8;
+  --ui-surface-subtle: #fbfbfa;
+  --ui-surface-muted: #f1f1ef;
+  --ui-surface-hover: rgba(55, 53, 47, 0.06);
+  --ui-surface-selected: rgba(55, 53, 47, 0.09);
+
+  /* Text — fg-muted is 5.1:1 on canvas, 4.85:1 on sidebar */
+  --ui-fg: #37352f;
+  --ui-fg-muted: #6f6e69;
+  --ui-fg-subtle: #a5a4a1; /* placeholders, disabled, decorative icons only — not body copy */
+  --ui-heading: #37352f;
+
+  /* Lines */
+  --ui-line: rgba(55, 53, 47, 0.09);
+  --ui-line-strong: rgba(55, 53, 47, 0.16);
+
+  /* Action + danger: HSL channels so Tailwind opacity modifiers (bg-action/10) work.
+     Action: emerald-700 (#047857) — 5.5:1 against white either way round. Firma's #069668 is only
+     3.8:1, so it is kept for large marks, not text or button fills. Inside /d the firm's brand
+     color replaces it (components/shell/use-brand-accent.ts). */
+  --ui-action: 163 94% 24%;
+  --ui-action-hover: 163 88% 20%; /* #065f46 */
+  --ui-action-fg: 0 0% 100%;
+  --ui-danger: 3 53% 50%; /* #c2413b — 5.1:1 */
+
+  /* Shape and depth */
+  --ui-radius-control: 4px;
+  --ui-radius-card: 6px;
+  --ui-radius-dialog: 10px;
+  --ui-shadow-popover: 0 0 0 1px rgba(15, 15, 15, 0.05), 0 3px 6px rgba(15, 15, 15, 0.1),
+    0 9px 24px rgba(15, 15, 15, 0.2);
+  --ui-shadow-dialog: 0 0 0 1px rgba(15, 15, 15, 0.05), 0 5px 10px rgba(15, 15, 15, 0.1),
+    0 15px 40px rgba(15, 15, 15, 0.2);
+  --ui-scrim: rgba(15, 15, 15, 0.6);
+
+  /* Tags and status pills */
+  --ui-tag-gray-bg: #e3e2e0;
+  --ui-tag-gray-fg: #656462;
+  --ui-tag-brown-bg: #eee0da;
+  --ui-tag-brown-fg: #855947;
+  --ui-tag-orange-bg: #fadec9;
+  --ui-tag-orange-fg: #9b520d;
+  --ui-tag-yellow-bg: #fdecc8;
+  --ui-tag-yellow-fg: #896222;
+  --ui-tag-green-bg: #dbeddb;
+  --ui-tag-green-fg: #3c7355;
+  --ui-tag-blue-bg: #d3e5ef;
+  --ui-tag-blue-fg: #2c698d;
+  --ui-tag-purple-bg: #e8deee;
+  --ui-tag-purple-fg: #785392;
+  --ui-tag-pink-bg: #f5e0e9;
+  --ui-tag-pink-fg: #a64276;
+  --ui-tag-red-bg: #ffe2dd;
+  --ui-tag-red-fg: #b1403b;
+
+  /* Chart series — filled bars, segments and legend swatches. The tag colors above are text
+     tones (too dark and muddy as fills); these are their vivid counterparts, picked to stay apart
+     from each other at small sizes. Use as var(--ui-chart-blue) etc. */
+  --ui-chart-blue: #4f7df3;
+  --ui-chart-orange: #ef7a3c;
+  --ui-chart-green: #3fae74;
+  --ui-chart-yellow: #e9b63b;
+  --ui-chart-purple: #9b6ce0;
+  --ui-chart-pink: #e2629a;
+  --ui-chart-teal: #34b3b0;
+
+  /* shadcn base variables, tuned to the warm neutrals so the token-based primitives (Select, Tabs,
+     Badge, Avatar, borders) match. */
+  --background: 0 0% 100%;
+  --foreground: 45 8% 20%;
+  --card: 0 0% 100%;
+  --card-foreground: 45 8% 20%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 45 8% 20%;
+  --muted: 60 7% 94%;
+  --muted-foreground: 50 3% 42%;
+  --accent: 60 4% 95%;
+  --accent-foreground: 45 8% 20%;
+  --destructive: 3 53% 50%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 60 3% 93%;
+  --input: 60 2% 87%;
+  /* rounded = rounded-sm = 4px, rounded-md = 6px, rounded-lg = 8px */
+  --radius: 0.5rem;
+
+  /* Emerald by default. !important keeps out the raw, unchecked per-firm color that the root
+     layout's pre-paint script and the onboarding top bar write onto <html>. The firm's (or
+     client's) brand still reaches the accent: the app shell sets a contrast-checked version inline
+     with !important, which outranks this (components/shell/use-brand-accent.ts). */
+  --primary: 163 94% 24% !important;
+  --primary-foreground: 0 0% 100% !important;
+  --primary-rgb: 4, 120, 87 !important;
+  --ring: 163 94% 24% !important;
+}
+
+/* Marketing pages keep the base values they were designed with: slate-800 headings, the cooler
+   neutral borders and the 0.625rem radius their rounded-sm/md corners derive from. Their brand
+   colors are set explicitly. Applied by the marketing and resources layouts and by sign-in and
+   sign-up, which are designed in the marketing brand. */
+.marketing-site {
+  --ui-heading: #1e293b;
+  --background: 0 0% 100%;
+  --foreground: 0 0% 3.9%;
+  --card: 0 0% 100%;
+  --card-foreground: 0 0% 3.9%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 0 0% 3.9%;
+  --muted: 0 0% 96.1%;
+  --muted-foreground: 0 0% 45.1%;
+  --accent: 0 0% 96.1%;
+  --accent-foreground: 0 0% 9%;
+  --border: 0 0% 89.8%;
+  --input: 0 0% 89.8%;
+  --radius: 0.625rem;
+}
+
+/* ── Typography ────────────────────────────────────────────────────────────────────────────────
+   Declared on body, not html: --font-inter is defined by next/font's class on <body>, and a custom
+   property resolves its var() references on the element that declares it. */
+body {
+  --font-ui: var(--font-inter), ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    Helvetica, Arial, sans-serif;
+  --font-mono-ui: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+}
+
+/* The app (/d) is Inter everywhere, while the marketing site keeps Space Grotesk and Work Sans. */
+[data-ui='v2'] body {
+  /* Every legacy headline reference (font-headline, arbitrary [font-family:var(...)]) resolves
+     through this alias. */
+  --font-kinetic-headline: var(--font-ui);
+  font-family: var(--font-ui);
+  color: var(--ui-fg);
+}
+
+[data-ui='v2'] .font-headline,
+[data-ui='v2'] .font-work-sans {
+  font-family: var(--font-ui);
+}

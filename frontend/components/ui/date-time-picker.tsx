@@ -14,7 +14,7 @@ function getUtcOffsetLabel() {
 
 export function TimezoneOffsetBadge({ className = '' }: { className?: string }) {
   return (
-    <span className={`text-[10px] font-semibold font-mono px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200 ${className}`}>
+    <span className={`rounded-control bg-surface-muted px-1 py-0.5 text-caption font-medium tabular-nums text-fg-subtle ${className}`}>
       {getUtcOffsetLabel()}
     </span>
   )
@@ -40,7 +40,7 @@ interface DateTimePickerProps {
 export function DateTimePicker({
   value,
   onChange,
-  placeholder = "SELECT DATE & TIME",
+  placeholder = "Select date & time",
   className = "",
   disabled = false,
   defaultTime,
@@ -203,13 +203,13 @@ export function DateTimePicker({
           type="button"
           variant="outline"
           disabled={disabled}
-          className={`w-full justify-start text-left !font-bold !font-mono !uppercase !tracking-widest !text-[10px] h-9 !py-0 !px-2 ${disabled ? '!bg-[#f9f9fb] cursor-not-allowed' : ''} ${className}`}
+          className={`h-8 w-full justify-start px-2.5 text-left text-ui font-normal ${value ? 'text-fg' : 'text-fg-subtle'} ${disabled ? 'cursor-not-allowed bg-surface-subtle' : ''} ${className}`}
         >
-          <Calendar className="mr-1.5 h-3 w-3 shrink-0" />
+          <Calendar className="h-3.5 w-3.5 shrink-0 text-fg-subtle" />
           <span className="flex-1 whitespace-nowrap overflow-hidden text-ellipsis">{formatDisplayValue()}</span>
           <span
             title={getUtcOffsetLabel()}
-            className="ml-2 shrink-0 text-[10px] font-semibold font-mono px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200"
+            className="ml-2 shrink-0 rounded-control bg-surface-muted px-1 text-caption font-medium text-fg-subtle"
           >
             TZ
           </span>
@@ -222,11 +222,11 @@ export function DateTimePicker({
           side="bottom"
           sideOffset={4}
           onOpenAutoFocus={(e) => e.preventDefault()}
-          className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 w-72 z-[1100000]"
+          className="z-[1100000] w-72 rounded-card border border-line bg-surface p-3 shadow-popover"
         >
           {/* Header */}
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-xs font-semibold text-gray-900">Select Date & Time</h3>
+            <h3 className="text-xs font-semibold text-fg">Select Date & Time</h3>
             <TimezoneOffsetBadge />
           </div>
 
@@ -235,18 +235,18 @@ export function DateTimePicker({
             {/* Month/year header */}
             <div className="flex items-center justify-between mb-2">
               {viewMode === 'calendar' && (
-                <button type="button" onClick={() => navigateMonth('prev')} className="p-1 hover:bg-gray-100 rounded text-sm leading-none">‹</button>
+                <button type="button" onClick={() => navigateMonth('prev')} className="p-1 hover:bg-surface-hover rounded text-sm leading-none">‹</button>
               )}
               <button
                 type="button"
                 onClick={() => setViewMode(v => v === 'calendar' ? 'month-year' : 'calendar')}
-                className="flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded hover:bg-gray-100 transition-colors mx-auto"
+                className="flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded hover:bg-surface-hover transition-colors mx-auto"
               >
                 {currentMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-                <ChevronDown className={`h-3 w-3 text-gray-400 transition-transform duration-150 ${viewMode === 'month-year' ? 'rotate-180' : ''}`} />
+                <ChevronDown className={`h-3 w-3 text-fg-subtle transition-transform duration-150 ${viewMode === 'month-year' ? 'rotate-180' : ''}`} />
               </button>
               {viewMode === 'calendar' && (
-                <button type="button" onClick={() => navigateMonth('next')} className="p-1 hover:bg-gray-100 rounded text-sm leading-none">›</button>
+                <button type="button" onClick={() => navigateMonth('next')} className="p-1 hover:bg-surface-hover rounded text-sm leading-none">›</button>
               )}
             </div>
 
@@ -268,7 +268,7 @@ export function DateTimePicker({
                     const isCurrentYear = y === currentMonth.getFullYear()
                     return (
                       <div key={y} id={`month-year-${y}`}>
-                        <div className={`text-xs font-semibold px-1 py-1.5 ${isCurrentYear ? 'text-gray-900' : 'text-gray-400'}`}>
+                        <div className={`text-xs font-semibold px-1 py-1.5 ${isCurrentYear ? 'text-fg' : 'text-fg-subtle'}`}>
                           {y}
                         </div>
                         <div className="grid grid-cols-4 gap-1 mb-2">
@@ -289,10 +289,10 @@ export function DateTimePicker({
                                 }}
                                 className={`
                                   text-xs py-1.5 rounded transition-colors
-                                  ${isSelected ? 'bg-gray-900 text-white font-semibold' : ''}
-                                  ${isToday && !isSelected ? 'ring-1 ring-gray-400 font-semibold text-gray-900' : ''}
-                                  ${!isSelected && !isToday && !isDisabled ? 'hover:bg-gray-100 text-gray-700' : ''}
-                                  ${isDisabled ? 'opacity-30 cursor-not-allowed text-gray-400' : 'cursor-pointer'}
+                                  ${isSelected ? 'bg-action text-action-fg font-medium'
+                                    : isToday ? 'font-medium text-action hover:bg-surface-hover'
+                                    : isDisabled ? 'text-fg-subtle' : 'text-fg-muted hover:bg-surface-hover'}
+                                  ${isDisabled ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'}
                                 `}
                               >
                                 {m}
@@ -310,7 +310,7 @@ export function DateTimePicker({
                 {/* Day headers */}
                 <div className="grid grid-cols-7 gap-1 mb-1">
                   {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(day => (
-                    <div key={day} className="text-xs text-gray-500 text-center p-1">{day}</div>
+                    <div key={day} className="text-xs text-fg-muted text-center p-1">{day}</div>
                   ))}
                 </div>
                 {/* Calendar days */}
@@ -323,10 +323,9 @@ export function DateTimePicker({
                       disabled={day.isDisabled}
                       className={`
                         text-xs p-2 rounded transition-colors
-                        ${day.isCurrentMonth ? 'text-gray-900' : 'text-gray-400'}
-                        ${day.isToday ? 'bg-gray-100 text-gray-900 font-semibold ring-2 ring-gray-300' : ''}
-                        ${day.isSelected ? 'bg-gray-900 text-white hover:bg-gray-800 font-semibold' : ''}
-                        ${!day.isSelected && !day.isToday ? 'hover:bg-gray-100' : ''}
+                        ${day.isSelected ? 'bg-action text-action-fg font-medium hover:bg-action-hover'
+                          : day.isToday ? 'font-medium text-action hover:bg-surface-hover'
+                          : day.isCurrentMonth ? 'text-fg hover:bg-surface-hover' : 'text-fg-subtle hover:bg-surface-hover'}
                         ${day.isDisabled ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'}
                       `}
                     >
@@ -338,7 +337,7 @@ export function DateTimePicker({
             )}
           </div>
 
-          <div className="border-t border-gray-100 my-2" />
+          <div className="border-t border-line my-2" />
 
           {/* Time picker */}
           <div className="mb-3">
@@ -347,16 +346,16 @@ export function DateTimePicker({
               onClick={() => setTimeExpanded((v) => !v)}
               className="flex items-center justify-between w-full mb-1.5 group"
             >
-              <span className="text-xs font-medium text-gray-700 flex items-center gap-1">
+              <span className="text-xs font-medium text-fg-muted flex items-center gap-1">
                 <Clock className="h-3 w-3" />
                 Time
                 {selectedTime && (
-                  <span className="ml-1 font-mono text-gray-500">{selectedTime}</span>
+                  <span className="ml-1 font-mono text-fg-muted">{selectedTime}</span>
                 )}
               </span>
               {timeExpanded
-                ? <ChevronUp className="h-3.5 w-3.5 text-gray-400" />
-                : <ChevronDown className="h-3.5 w-3.5 text-gray-400" />
+                ? <ChevronUp className="h-3.5 w-3.5 text-fg-subtle" />
+                : <ChevronDown className="h-3.5 w-3.5 text-fg-subtle" />
               }
             </button>
             {timeExpanded && (() => {
@@ -379,15 +378,15 @@ export function DateTimePicker({
               const cellCls = (active: boolean) =>
                 `text-xs p-1.5 rounded transition-colors w-full text-center ${
                   active
-                    ? 'bg-gray-100 text-gray-900 font-semibold outline outline-2 outline-gray-400'
-                    : 'text-gray-700 hover:bg-gray-100 cursor-pointer'
+                    ? 'bg-action text-action-fg font-medium'
+                    : 'text-fg-muted hover:bg-surface-hover cursor-pointer'
                 }`
 
               return (
                 <div className="flex gap-1 px-0.5">
                   {/* Hours 0–23 */}
                   <div className="flex-1 flex flex-col gap-0.5">
-                    <div className="text-[10px] font-medium text-gray-400 text-center pb-0.5">Hrs</div>
+                    <div className="pb-0.5 text-center text-caption text-fg-subtle">Hrs</div>
                     <div className="max-h-[120px] overflow-y-auto flex flex-col gap-0.5 p-0.5">
                       {HOURS.map((h) => (
                         <button key={h} type="button" className={cellCls(selH24 === h && !!selectedTime)} onClick={() => applyTime(h, selMin)}>
@@ -398,7 +397,7 @@ export function DateTimePicker({
                   </div>
                   {/* Minutes */}
                   <div className="flex-1 flex flex-col gap-0.5">
-                    <div className="text-[10px] font-medium text-gray-400 text-center pb-0.5">Mins</div>
+                    <div className="pb-0.5 text-center text-caption text-fg-subtle">Mins</div>
                     <div className="max-h-[120px] overflow-y-auto flex flex-col gap-0.5 p-0.5">
                       {MINUTES.map((m) => (
                         <button key={m} type="button" className={cellCls(selMin === m && !!selectedTime)} onClick={() => applyTime(selH24, m)}>
@@ -415,20 +414,20 @@ export function DateTimePicker({
           {/* Actions */}
           <div className="flex items-center justify-between pt-1">
             <div className="flex space-x-1.5">
-              <button type="button" onClick={setToday} className="px-2 h-7 text-xs bg-gray-100 hover:bg-gray-200 rounded text-gray-700 transition-colors">
+              <button type="button" onClick={setToday} className="px-2 h-7 text-xs bg-surface-muted hover:bg-surface-hover rounded text-fg-muted transition-colors">
                 Today
               </button>
-              <button type="button" onClick={() => { const n = new Date(); const d = `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`; setSelectedDate(d); setSelectedTime(nowTime()) }} className="px-2 h-7 text-xs bg-gray-100 hover:bg-gray-200 rounded text-gray-700 transition-colors">
+              <button type="button" onClick={() => { const n = new Date(); const d = `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`; setSelectedDate(d); setSelectedTime(nowTime()) }} className="px-2 h-7 text-xs bg-surface-muted hover:bg-surface-hover rounded text-fg-muted transition-colors">
                 Now
               </button>
             </div>
             <div className="flex space-x-1.5">
               {selectedDate && (
-                <button type="button" onClick={clearSelection} className="px-2 h-7 text-xs bg-gray-100 hover:bg-gray-200 rounded text-gray-700 transition-colors">
+                <button type="button" onClick={clearSelection} className="px-2 h-7 text-xs bg-surface-muted hover:bg-surface-hover rounded text-fg-muted transition-colors">
                   Clear
                 </button>
               )}
-              <Button type="button" size="sm" onClick={() => handleOpenChange(false)} className="text-xs h-7 px-3 bg-gray-900 hover:bg-gray-800 text-white">
+              <Button type="button" size="sm" onClick={() => handleOpenChange(false)} className="h-7 px-3 text-xs">
                 Done
               </Button>
             </div>

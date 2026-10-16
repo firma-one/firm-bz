@@ -1,10 +1,13 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
-import { Briefcase, CalendarClock, FileText, Folder, Package, Search, Sparkles, Users, X } from 'lucide-react'
+import React, { useMemo, useState } from 'react'
+import { ArrowUpRight, Briefcase, Building2, CalendarClock, FileText, Folder, Hash, Package, Search, Sparkles, Users, X } from 'lucide-react'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { FilterMenuLabel, FilterMenuRow, FilterPill } from '@/components/ui/filter-pill'
 import { DocumentIcon } from '@/components/ui/document-icon'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { EmptyPanel } from '@/components/ui/empty-panel'
+import { Hint } from '@/components/ui/tooltip'
+import { Tag } from '@/components/ui/tag'
 import { cn } from '@/lib/utils'
 import { DemoFirm, DemoFile, DemoFolder } from '@/lib/demo/static-demo-data'
 
@@ -20,31 +23,21 @@ const MIME_BY_TYPE: Record<string, string> = {
     jpg: 'image/jpeg',
     jpeg: 'image/jpeg',
     png: 'image/png',
-    gif: 'image/gif',
-    webp: 'image/webp',
     zip: 'application/zip',
 }
 
-const DOC_TYPE_OPTIONS = [
+const TYPE_OPTIONS = [
     { label: 'Documents', types: ['doc', 'docx', 'md'] },
     { label: 'Spreadsheets', types: ['sheet', 'xlsx'] },
     { label: 'Presentations', types: ['slide', 'pptx'] },
     { label: 'PDFs', types: ['pdf'] },
-    { label: 'Images', types: ['jpg', 'jpeg', 'png'] },
-    { label: 'Archives', types: ['zip'] },
 ]
 
-const DATE_RANGE_OPTIONS = [
+const TIME_OPTIONS = [
     { label: 'Last 7 days', days: 7 },
     { label: 'Last 30 days', days: 30 },
     { label: 'Last 90 days', days: 90 },
-    { label: 'Last 6 months', days: 180 },
-    { label: 'Last 12 months', days: 365 },
 ]
-
-/** Only the first option per stage is wired to actually filter results — the rest render in the
- * picker for visual richness but stay disabled, since result accuracy is not the point of the demo. */
-const SELECTABLE_OPTION_COUNT = 1
 
 interface SearchRow {
     file: DemoFile
@@ -54,351 +47,180 @@ interface SearchRow {
 }
 
 function collectFiles(folder: DemoFolder, clientName: string, engagementName: string): SearchRow[] {
-    const own = folder.files.map((file) => ({ file, clientName, engagementName, folderName: folder.name }))
-    const nested = folder.subfolders.flatMap((sub) => collectFiles(sub, clientName, engagementName))
-    return [...own, ...nested]
+    const own = folder.files.map((file) => ({ file, clientName, engagementName, folderName: folder.name.replace(/_+/g, ' ').trim() }))
+    return [...own, ...folder.subfolders.flatMap((sub) => collectFiles(sub, clientName, engagementName))]
 }
 
-const LITERAL_QUERY_TERMS = ['strategy']
-function matchTypeFor(fileName: string): 'name' | 'semantic' {
-    const lower = fileName.toLowerCase()
-    return LITERAL_QUERY_TERMS.some((term) => lower.includes(term)) ? 'name' : 'semantic'
-}
+/** The sample query names a strategy, so files with it in the name are a file match; the rest are topical. */
+const matchTypeFor = (fileName: string): 'name' | 'semantic' => (fileName.toLowerCase().includes('strategy') ? 'name' : 'semantic')
 
-// 5 stages in the real app's fixed order — Deliverable is permanently gated/disabled here (no deliverable-level
-// data modeled separately from files in the demo fixture), matching the real hierarchy-gating pattern exactly.
-type FilterStage = 'client' | 'engagement' | 'deliverable' | 'type' | 'dateRange'
-interface FilterState {
-    client: string | null
-    engagement: string | null
-    type: string | null
-    dateRange: string | null
-}
+type Stage = 'client' | 'engagement' | 'deliverable' | 'type' | 'time'
+const STAGES: { stage: Stage; label: string; icon: React.ReactNode }[] = [
+    { stage: 'client', label: 'Client', icon: <Users /> },
+    { stage: 'engagement', label: 'Engagement', icon: <Briefcase /> },
+    { stage: 'deliverable', label: 'Deliverable', icon: <Package /> },
+    { stage: 'type', label: 'Type', icon: <FileText /> },
+    { stage: 'time', label: 'Time', icon: <CalendarClock /> },
+]
 
-const STAGE_ORDER: FilterStage[] = ['client', 'engagement', 'deliverable', 'type', 'dateRange']
-const STAGE_ICON: Record<FilterStage, React.ElementType> = {
-    client: Users,
-    engagement: Briefcase,
-    deliverable: Package,
-    type: FileText,
-    dateRange: CalendarClock,
-}
-const STAGE_LABEL: Record<FilterStage, string> = {
-    client: 'Client',
-    engagement: 'Engagement',
-    deliverable: 'Deliverable',
-    type: 'Type',
-    dateRange: 'Time',
-}
-
-/** Static counterpart to global-search-view.tsx — same single bordered composer with a fixed 5-pill filter row (Deliverable permanently gated) + search input below, same picker panel with footer legend, matching the real look/feel exactly. Mouse-only: click a pill to open its picker, click an option or click outside to close. Result accuracy is illustrative only. */
+/**
+ * Static counterpart to GlobalSearchView (components/search/global-search-view.tsx): the same
+ * borderless search field, filter pills with Notion menus, and hairline result rows, over the
+ * sample firm's files. Client, Engagement, Type and Time filter for real; Deliverable is shown but
+ * not modelled in the sample data.
+ */
 export function DemoFirmDocSearch({ firm }: { firm: DemoFirm }) {
-    const [filters, setFilters] = useState<FilterState>({ client: null, engagement: null, type: null, dateRange: null })
-    const [pickerStage, setPickerStage] = useState<Exclude<FilterStage, 'deliverable'> | null>(null)
-    const [pickerPosition, setPickerPosition] = useState<{ top: number; left: number; width: number } | null>(null)
-    const composerRef = useRef<HTMLDivElement>(null)
-    const pickerRef = useRef<HTMLDivElement>(null)
-
-    // Recompute the portaled picker's position from the composer's live viewport rect whenever it
-    // opens, keeping it directly under the composer regardless of scroll/resize — matches the real
-    // global-search-view.tsx positioning exactly (fixed + portal, not absolute inside a small wrapper).
-    useEffect(() => {
-        if (!pickerStage) { setPickerPosition(null); return }
-        const updatePosition = () => {
-            const rect = composerRef.current?.getBoundingClientRect()
-            if (rect) setPickerPosition({ top: rect.bottom + 4, left: rect.left, width: rect.width })
-        }
-        updatePosition()
-        window.addEventListener('scroll', updatePosition, true)
-        window.addEventListener('resize', updatePosition)
-        return () => {
-            window.removeEventListener('scroll', updatePosition, true)
-            window.removeEventListener('resize', updatePosition)
-        }
-    }, [pickerStage])
-
-    // Mouse-only: close the picker on any click outside both the composer and the (portaled) picker panel.
-    useEffect(() => {
-        if (!pickerStage) return
-        const handleClickOutside = (e: MouseEvent) => {
-            const target = e.target as Node
-            if (composerRef.current?.contains(target)) return
-            if (pickerRef.current?.contains(target)) return
-            setPickerStage(null)
-        }
-        document.addEventListener('mousedown', handleClickOutside)
-        return () => document.removeEventListener('mousedown', handleClickOutside)
-    }, [pickerStage])
+    const [filters, setFilters] = useState<Partial<Record<Stage, string>>>({})
 
     const allRows = useMemo(() => firm.clients.flatMap((client) =>
         client.engagements.flatMap((engagement) =>
-            engagement.folders.flatMap((folder) => collectFiles(folder, client.name, engagement.name))
-        )
+            engagement.folders.flatMap((folder) => collectFiles(folder, client.name, engagement.name)),
+        ),
     ), [firm])
 
-    const clientOptions = useMemo(() => Array.from(new Set(allRows.map((r) => r.clientName))).sort(), [allRows])
-    const engagementOptions = useMemo(() => {
-        const scoped = filters.client ? allRows.filter((r) => r.clientName === filters.client) : allRows
-        return Array.from(new Set(scoped.map((r) => r.engagementName))).sort()
-    }, [allRows, filters.client])
+    const optionsFor = (stage: Stage): string[] => {
+        if (stage === 'client') return Array.from(new Set(allRows.map((r) => r.clientName))).sort()
+        if (stage === 'engagement') {
+            const scoped = filters.client ? allRows.filter((r) => r.clientName === filters.client) : allRows
+            return Array.from(new Set(scoped.map((r) => r.engagementName))).sort()
+        }
+        if (stage === 'type') return TYPE_OPTIONS.map((o) => o.label)
+        if (stage === 'time') return TIME_OPTIONS.map((o) => o.label)
+        return []
+    }
 
-    const now = Date.now()
     const rows = useMemo(() => {
+        const now = Date.now()
         return allRows.filter((row) => {
             if (filters.client && row.clientName !== filters.client) return false
             if (filters.engagement && row.engagementName !== filters.engagement) return false
             if (filters.type) {
-                const opt = DOC_TYPE_OPTIONS.find((o) => o.label === filters.type)
+                const opt = TYPE_OPTIONS.find((o) => o.label === filters.type)
                 if (opt && !opt.types.includes(row.file.type)) return false
             }
-            if (filters.dateRange) {
-                const opt = DATE_RANGE_OPTIONS.find((o) => o.label === filters.dateRange)
-                if (opt) {
-                    const ageMs = now - new Date(row.file.modifiedTime).getTime()
-                    if (ageMs > opt.days * 86400000) return false
-                }
+            if (filters.time) {
+                const opt = TIME_OPTIONS.find((o) => o.label === filters.time)
+                if (opt && now - new Date(row.file.modifiedTime).getTime() > opt.days * 86400000) return false
             }
             return true
         })
-    }, [allRows, filters, now])
+    }, [allRows, filters])
 
-    const setFilter = (stage: Exclude<FilterStage, 'deliverable'>, value: string) => {
+    const set = (stage: Stage, value: string | undefined) =>
         setFilters((prev) => {
             const next = { ...prev, [stage]: value }
-            if (stage === 'client') {
-                const stillValid = allRows.some((r) => r.clientName === value && r.engagementName === prev.engagement)
-                if (!stillValid) next.engagement = null
+            // A new client may not have the chosen engagement.
+            if (stage === 'client' && value && prev.engagement && !allRows.some((r) => r.clientName === value && r.engagementName === prev.engagement)) {
+                delete next.engagement
             }
             return next
         })
-    }
-    const removeFilter = (stage: Exclude<FilterStage, 'deliverable'>) => {
-        setFilters((prev) => ({ ...prev, [stage]: null }))
-    }
 
-    const optionsForStage = (stage: Exclude<FilterStage, 'deliverable'>): string[] => {
-        if (stage === 'client') return clientOptions
-        if (stage === 'engagement') return engagementOptions
-        if (stage === 'type') return DOC_TYPE_OPTIONS.map((o) => o.label)
-        return DATE_RANGE_OPTIONS.map((o) => o.label)
-    }
-
-    // Client/engagement lists are naturally short and fully wired; Type/Time show extra options for
-    // visual richness but only the first SELECTABLE_OPTION_COUNT entries are actually clickable.
-    const isOptionSelectable = (stage: Exclude<FilterStage, 'deliverable'>, index: number): boolean => {
-        if (stage === 'client' || stage === 'engagement') return true
-        return index < SELECTABLE_OPTION_COUNT
-    }
-
-    const togglePicker = (stage: Exclude<FilterStage, 'deliverable'>) => {
-        setPickerStage((prev) => (prev === stage ? null : stage))
-    }
-
-    const pickerOptions = pickerStage
-        ? optionsForStage(pickerStage).map((label, index) => ({ label, selectable: isOptionSelectable(pickerStage, index) }))
-        : []
+    const disabledReason = (stage: Stage): string | null =>
+        stage === 'deliverable' ? 'Not available in this demo' : stage === 'engagement' && !filters.client ? 'Pick a client first' : null
 
     return (
-        <TooltipProvider>
-            <div className="flex h-full min-h-0 bg-white rounded border border-[#e5e7eb]">
-                <div className="flex flex-col flex-1 min-w-0 min-h-0 p-6">
-                    <div>
-                        <h1 className="font-headline text-2xl font-semibold tracking-tight text-[#1b1b1d]">Document Search</h1>
-                        <p className="text-sm text-[#45474c] mt-1">
-                            Search documents across every client and engagement you have access to.
-                        </p>
-                        <p className="text-xs text-[#45474c] mt-1">
-                            Click a filter pill below to narrow results by client, engagement, doc-type, or time.
-                        </p>
-                    </div>
+        <div className="flex min-h-0 flex-col">
+            <div className="flex items-center gap-2.5 border-b border-line pb-2">
+                <Search className="h-[18px] w-[18px] shrink-0 text-fg-subtle" />
+                <input
+                    type="text"
+                    readOnly
+                    value="go-to-market strategy and positioning materials"
+                    className="min-w-[10rem] flex-1 border-0 bg-transparent py-1.5 text-body text-fg shadow-none focus:outline-none"
+                    aria-label="Document search"
+                />
+                <button
+                    type="button"
+                    onClick={() => setFilters({})}
+                    disabled={Object.values(filters).every((v) => !v)}
+                    className="rounded-full p-1 text-fg-muted hover:bg-surface-hover disabled:text-fg-subtle disabled:hover:bg-transparent"
+                    aria-label="Clear filters"
+                >
+                    <X className="h-4 w-4" />
+                </button>
+            </div>
 
-                    <div className="relative mt-4">
-                        <div ref={composerRef} className="rounded-md border border-[#e5e7eb] bg-white shadow-sm overflow-hidden transition-all focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/5">
-                            {/* Filter pill row — fixed slots in canonical order, always visible */}
-                            <div className="flex flex-wrap items-center gap-1.5 px-3 pt-2.5 pb-1.5 border-b border-[#e5e7eb]">
-                                {STAGE_ORDER.map((stage) => {
-                                    const Icon = STAGE_ICON[stage]
-                                    const isGated = stage === 'deliverable' || (stage === 'engagement' && !filters.client)
-                                    const value = stage === 'deliverable' ? null : filters[stage as Exclude<FilterStage, 'deliverable'>]
+            <div className="flex flex-wrap items-center gap-1.5 pt-3">
+                {STAGES.map(({ stage, label, icon }) => {
+                    const reason = disabledReason(stage)
+                    const value = filters[stage]
+                    const pill = (
+                        <DropdownMenu key={stage}>
+                            <DropdownMenuTrigger asChild>
+                                <FilterPill disabled={Boolean(reason)} icon={icon} label={label} value={value} onClear={() => set(stage, undefined)} />
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start" className="w-[240px] p-1">
+                                <FilterMenuLabel>{label}</FilterMenuLabel>
+                                <FilterMenuRow selected={!value} onSelect={() => set(stage, undefined)}>Any {label.toLowerCase()}</FilterMenuRow>
+                                <DropdownMenuSeparator className="mx-0 my-1" />
+                                {optionsFor(stage).map((o) => (
+                                    <FilterMenuRow key={o} selected={value === o} onSelect={() => set(stage, o)}>{o}</FilterMenuRow>
+                                ))}
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    )
+                    // A disabled pill gets no pointer events, so its reason sits on a wrapper.
+                    return reason ? (
+                        <Hint key={stage} label={reason} side="bottom"><span className="inline-flex">{pill}</span></Hint>
+                    ) : pill
+                })}
+            </div>
 
-                                    if (value) {
-                                        return (
-                                            <span
-                                                key={stage}
-                                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium border shrink-0 font-mono bg-primary/10 text-primary border-primary/20"
-                                            >
-                                                <Icon className="h-3 w-3" />
-                                                {value}
-                                                <button
-                                                    type="button"
-                                                    onClick={() => removeFilter(stage as Exclude<FilterStage, 'deliverable'>)}
-                                                    aria-label={`Remove ${STAGE_LABEL[stage]} filter`}
-                                                    className="ml-0.5 -mr-0.5 rounded hover:bg-primary/20"
-                                                >
-                                                    <X className="h-3 w-3" />
-                                                </button>
-                                            </span>
-                                        )
-                                    }
+            <div className="mt-6">
+                <div className="mb-2 flex items-center justify-between gap-4 text-small text-fg-muted">
+                    <span>Results for <span className="font-medium text-fg">go-to-market strategy and positioning materials</span></span>
+                    <span className="shrink-0 tabular-nums text-fg-subtle">{rows.length} {rows.length === 1 ? 'result' : 'results'}</span>
+                </div>
 
-                                    return (
-                                        <Tooltip key={stage}>
-                                            <TooltipTrigger asChild>
-                                                <button
-                                                    type="button"
-                                                    disabled={isGated}
-                                                    onClick={() => stage !== 'deliverable' && togglePicker(stage)}
-                                                    aria-label={`Filter by ${STAGE_LABEL[stage]}`}
-                                                    className={cn(
-                                                        'inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium border shrink-0 transition-colors focus:outline-none font-mono',
-                                                        isGated
-                                                            ? 'border-[#e5e7eb] text-[#c0c1c6] cursor-not-allowed opacity-50'
-                                                            : 'border-[#e5e7eb] text-[#45474c] bg-[#f9f9fb] hover:border-primary/40 hover:text-primary hover:bg-primary/10'
-                                                    )}
-                                                >
-                                                    <Icon className="h-3 w-3" />
-                                                    {STAGE_LABEL[stage]}
-                                                </button>
-                                            </TooltipTrigger>
-                                            <TooltipContent side="bottom">
-                                                {stage === 'deliverable'
-                                                    ? 'Not available in this demo'
-                                                    : isGated
-                                                        ? 'Select Client first'
-                                                        : `Filter by ${STAGE_LABEL[stage]}`}
-                                            </TooltipContent>
-                                        </Tooltip>
-                                    )
-                                })}
-                            </div>
-
-                            <div className="flex">
-                                <div className="flex flex-col justify-center py-3 pl-4 pr-2 shrink-0">
-                                    <Search className="h-4 w-4 text-primary" />
-                                </div>
-                                <div className="flex-1 min-w-0 flex items-center px-1 py-2.5">
-                                    <input
-                                        type="text"
-                                        readOnly
-                                        value="go-to-market strategy and positioning materials"
-                                        placeholder="Search by filename or topic, e.g. SEO strategy documents"
-                                        className="flex-1 min-w-[10rem] py-1 px-1 border-0 bg-transparent text-sm font-medium text-[#1b1b1d] shadow-none focus:outline-none focus:ring-0 cursor-text"
-                                        aria-label="Document search"
-                                    />
-                                </div>
-                                <div className="flex flex-col justify-center py-2 pl-1.5 pr-3 shrink-0">
-                                    <span className="p-1 rounded-full text-[#c0c1c6]">
-                                        <X className="h-4 w-4" />
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-
-                        {pickerStage && pickerPosition && createPortal(
-                            <div
-                                ref={pickerRef}
-                                style={{ position: 'fixed', top: pickerPosition.top, left: pickerPosition.left, width: pickerPosition.width, maxWidth: 320 }}
-                                className="z-50 rounded-md border border-[#e5e7eb] bg-white shadow-lg py-1"
-                            >
-                                <div className="px-2.5 py-1.5 border-b border-[#e5e7eb] flex items-center justify-between gap-2">
-                                    <span className="text-xs font-medium text-[#45474c]">Filter by {STAGE_LABEL[pickerStage]}</span>
-                                    <button
-                                        type="button"
-                                        onClick={() => setPickerStage(null)}
-                                        aria-label="Close"
-                                        className="rounded p-0.5 text-[#9a9ba0] hover:bg-[#f9f9fb] hover:text-[#45474c]"
-                                    >
-                                        <X className="h-3.5 w-3.5" />
-                                    </button>
-                                </div>
-                                <div className="max-h-56 overflow-y-auto">
-                                    {pickerOptions.map((o) => (
-                                        <Tooltip key={o.label}>
-                                            <TooltipTrigger asChild>
-                                                <button
-                                                    type="button"
-                                                    disabled={!o.selectable}
-                                                    onClick={() => {
-                                                        if (!o.selectable) return
-                                                        setFilter(pickerStage, o.label)
-                                                        setPickerStage(null)
-                                                    }}
-                                                    className={cn(
-                                                        'w-full text-left px-2.5 py-1.5 text-xs flex items-center gap-2',
-                                                        !o.selectable
-                                                            ? 'text-[#c0c1c6] cursor-not-allowed'
-                                                            : 'hover:bg-primary/10 hover:text-primary'
-                                                    )}
-                                                >
-                                                    {o.label}
-                                                </button>
-                                            </TooltipTrigger>
-                                            {!o.selectable && (
-                                                <TooltipContent side="right" className="text-xs">Not available in this demo</TooltipContent>
-                                            )}
-                                        </Tooltip>
-                                    ))}
-                                </div>
-                            </div>,
-                            document.body
-                        )}
-                    </div>
-
-                    <div className="flex-1 overflow-y-auto custom-scrollbar mt-4">
-                        <div className="flex items-center justify-end gap-2 mb-4">
-                            <span className="text-[10px] font-mono text-[#45474c] shrink-0">
-                                {rows.length} {rows.length === 1 ? 'Result' : 'Results'} found
-                            </span>
-                        </div>
-
-                        <div className="space-y-3">
-                            {rows.map((row) => {
-                                const matchType = matchTypeFor(row.file.name)
-                                return (
-                                    <div
-                                        key={row.file.id}
-                                        className="group w-full text-left bg-white border border-[#e5e7eb] p-4 rounded flex gap-4"
-                                    >
-                                        <div className="w-12 h-12 flex items-center justify-center rounded border border-[#e5e7eb] bg-[#f9f9fb] shrink-0">
-                                            <DocumentIcon mimeType={MIME_BY_TYPE[row.file.type] ?? 'application/octet-stream'} size={24} />
+                {rows.length > 0 ? (
+                    <div className="flex flex-col divide-y divide-line border-y border-line">
+                        {rows.map((row) => {
+                            const matchType = matchTypeFor(row.file.name)
+                            const crumbs = [
+                                { icon: Building2, label: row.clientName },
+                                { icon: Briefcase, label: row.engagementName },
+                                { icon: Folder, label: row.folderName },
+                            ]
+                            return (
+                                <div key={row.file.id} className="group flex w-full gap-3 px-2 py-3 text-left transition-colors hover:bg-surface-hover">
+                                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-control bg-surface-muted">
+                                        <DocumentIcon mimeType={MIME_BY_TYPE[row.file.type] ?? 'application/octet-stream'} size={20} />
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                        <h3 className="flex min-w-0 items-center gap-1.5 text-ui text-fg">
+                                            <span className="shrink-0 rounded-control bg-surface-muted px-1.5 py-0.5 font-mono text-caption text-fg-muted">{row.file.docId}</span>
+                                            <span className="truncate font-medium">{row.file.name}</span>
+                                        </h3>
+                                        <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                                            {crumbs.map((part, i) => {
+                                                const PartIcon = part.icon
+                                                return (
+                                                    <React.Fragment key={i}>
+                                                        {i > 0 && <span className="text-fg-subtle">/</span>}
+                                                        <span className="inline-flex items-center gap-1 text-caption text-fg-subtle">
+                                                            <PartIcon className="h-2.5 w-2.5 shrink-0" />
+                                                            {part.label}
+                                                        </span>
+                                                    </React.Fragment>
+                                                )
+                                            })}
                                         </div>
-                                        <div className="flex-1 min-w-0">
-                                            <h3 className="text-sm text-[#1b1b1d] min-w-0">
-                                                <span className="font-medium truncate">{row.file.name}</span>
-                                            </h3>
-                                            <div className="flex items-center flex-wrap gap-x-1.5 gap-y-0.5 mt-1">
-                                                <span className="inline-flex items-center gap-1 text-[10px] text-[#45474c] font-mono">
-                                                    <Users className="h-2.5 w-2.5 shrink-0" />
-                                                    {row.clientName}
-                                                </span>
-                                                <span className="text-[#d1d5db]">•</span>
-                                                <span className="inline-flex items-center gap-1 text-[10px] text-[#45474c] font-mono">
-                                                    <Briefcase className="h-2.5 w-2.5 shrink-0" />
-                                                    {row.engagementName}
-                                                </span>
-                                                <span className="text-[#d1d5db]">•</span>
-                                                <span className="inline-flex items-center gap-1 text-[10px] text-[#45474c] font-mono">
-                                                    <Folder className="h-2.5 w-2.5 shrink-0" />
-                                                    {row.folderName}
-                                                </span>
-                                            </div>
-                                            <div className="mt-2 inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase tracking-widest bg-primary/10 text-primary">
-                                                {matchType === 'semantic' ? <Sparkles className="h-2.5 w-2.5" /> : <Package className="h-2.5 w-2.5" />}
-                                                {matchType === 'semantic' ? 'Semantic Match' : 'File Match'}
-                                            </div>
+                                        <div className="mt-1.5">
+                                            <Tag color={matchType === 'semantic' ? 'purple' : 'gray'} icon={matchType === 'semantic' ? <Sparkles /> : <Hash />}>
+                                                {matchType === 'semantic' ? 'Semantic match' : 'File match'}
+                                            </Tag>
                                         </div>
                                     </div>
-                                )
-                            })}
-                            {rows.length === 0 && (
-                                <div className="py-8 text-center">
-                                    <p className="text-sm text-[#45474c]">No results match these filters.</p>
+                                    <ArrowUpRight className={cn('h-4 w-4 shrink-0 self-end text-fg-subtle opacity-0 transition-opacity group-hover:opacity-100')} />
                                 </div>
-                            )}
-                        </div>
+                            )
+                        })}
                     </div>
-                </div>
+                ) : (
+                    <EmptyPanel compact icon={<Search />} title="No results match these filters" />
+                )}
             </div>
-        </TooltipProvider>
+        </div>
     )
 }

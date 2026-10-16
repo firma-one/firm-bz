@@ -11,6 +11,7 @@ import { SharedFolderIcon } from '@/components/ui/folder-shared-icon'
 import { DocumentActionMenu } from '@/components/ui/document-action-menu'
 import { ProfileBubbleWithPopup } from '@/components/ui/profile-bubble-popup'
 import { RelativeDateTime } from '@/components/ui/relative-date-time'
+import { DateProperty } from '@/components/ui/property-cells'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
     Tooltip,
@@ -201,6 +202,7 @@ export function EngagementFileRow({
     const isFolderApproved = isFolder && file.isDeliverable && (file as any).deliverableStatus === 'approved'
     const canMutateFile = canEdit && !locked && !isIntakeRow && !isInsideApprovedDeliverable && !isFolderApproved
     const canOrganizeTree = canManage && !locked && !isIntakeRow && !isFolderApproved && !isInsideApprovedDeliverable
+    const canEditDueDate = canManage && !isFolder && !locked && !isIntakeRow
     const isIndexing = !isFolder && !!file.projectDocumentId && file.indexingStatus === 'PROCESSING'
 
     async function handleRemoveBookmark(e: React.MouseEvent) {
@@ -229,15 +231,15 @@ export function EngagementFileRow({
             onDragLeave={onDragLeave}
             onDrop={(e) => onDrop(e, file)}
             className={`${FILE_TABLE_GRID_COLS_CLASS} ${cn(
-                "group grid gap-4 h-10 pl-3 pr-2 transition-all items-center cursor-default relative text-[0.8125rem]",
+                "group grid gap-4 h-9 pl-1 pr-2 transition-colors items-center cursor-default relative text-ui",
                 isFolder && selectedFileIdsSize === 0 && "cursor-pointer",
                 (isFolderApproved || isInsideApprovedDeliverable) && "bg-primary/5 hover:bg-primary/10",
-                (isIntakeRow || file.lock?.type === 'finalize' || (file.isPrivate && !isFolder)) ? "hover:bg-[#f9f9fb] opacity-60" : !(isFolderApproved || isInsideApprovedDeliverable) && "hover:bg-[#f9f9fb]",
-                !isIntakeRow && isSelected && "bg-blue-50 hover:bg-blue-50",
-                !isIntakeRow && isActionMenuOpen && "bg-[#f3f4f6]",
-                !isIntakeRow && (file.id === activeCommentDocId || file.id === activeInfoDocId || file.id === activeActivityDocId || file.id === activeVersionDocId || file.id === activePreviewDocId) && "bg-[#f3f4f6]",
+                (isIntakeRow || file.lock?.type === 'finalize' || (file.isPrivate && !isFolder)) ? "hover:bg-surface-hover opacity-60" : !(isFolderApproved || isInsideApprovedDeliverable) && "hover:bg-surface-hover",
+                !isIntakeRow && isSelected && "bg-surface-selected hover:bg-surface-selected",
+                !isIntakeRow && isActionMenuOpen && "bg-surface-muted",
+                !isIntakeRow && (file.id === activeCommentDocId || file.id === activeInfoDocId || file.id === activeActivityDocId || file.id === activeVersionDocId || file.id === activePreviewDocId) && "bg-surface-muted",
                 draggedItem?.id === file.id && "opacity-40 grayscale",
-                dragOverFolderId === file.id && "bg-[#e5e7eb] ring-2 ring-inset ring-[#e5e7eb] z-[1]"
+                dragOverFolderId === file.id && "bg-line ring-2 ring-inset ring-line z-[1]"
             )}`}
             onMouseEnter={() => {
                 if (isDeeplinkHighlight) onClearHighlight()
@@ -269,7 +271,7 @@ export function EngagementFileRow({
             {/* ID Column */}
             <div className="flex items-center min-w-0">
                 {file.docId ? (
-                    <span className="text-[11px] font-bold font-mono text-primary tracking-wide truncate">
+                    <span className="text-small text-fg-subtle tabular-nums truncate">
                         {file.docId}
                     </span>
                 ) : (
@@ -286,7 +288,7 @@ export function EngagementFileRow({
                             tooltip={isAncestorShared ? 'contains-shared' : 'shared'}
                         />
                     ) : isFolder ? (
-                        <Folder className="h-4 w-4 fill-primary/20 text-primary flex-shrink-0" />
+                        <Folder className="h-4 w-4 fill-surface-muted text-fg-muted flex-shrink-0" />
                     ) : (
                         <DocumentIcon mimeType={file.mimeType} className="h-4 w-4" />
                     )}
@@ -299,10 +301,8 @@ export function EngagementFileRow({
                                     <div className="flex w-full min-w-0 items-center gap-3">
                                         <mark
                                             className={cn(
-                                                "file-deeplink-highlight block max-w-full min-w-0 text-[0.8125rem] font-medium text-left",
-                                                isFolder
-                                                    ? "text-[#1b1b1d] hover:text-[#45474c] cursor-pointer"
-                                                    : "text-[#45474c]"
+                                                "file-deeplink-highlight block max-w-full min-w-0 text-ui text-left",
+                                                isFolder ? "text-fg hover:underline cursor-pointer" : "text-fg"
                                             )}
                                         >
                                             <span className="block min-w-0 truncate">
@@ -319,8 +319,8 @@ export function EngagementFileRow({
                                     <div className="flex w-full min-w-0 items-center gap-3">
                                         <span
                                             className={cn(
-                                                "text-[0.8125rem] font-medium truncate min-w-0 flex-1",
-                                                "text-[#45474c]"
+                                                "text-ui truncate min-w-0 flex-1",
+                                                "text-fg-muted"
                                             )}
                                         >
                                             {file.name}
@@ -334,10 +334,8 @@ export function EngagementFileRow({
                                 ) : (
                                     <span
                                         className={cn(
-                                            "text-[0.8125rem] font-medium truncate",
-                                            isFolder
-                                                ? "text-[#1b1b1d] hover:text-[#45474c] cursor-pointer"
-                                                : "text-[#45474c]"
+                                            "text-ui truncate",
+                                            isFolder ? "text-fg hover:underline cursor-pointer" : "text-fg"
                                         )}
                                     >
                                         {file.name}
@@ -345,7 +343,7 @@ export function EngagementFileRow({
                                 )}
                             </div>
                         </TooltipTrigger>
-                        <TooltipContent side="top" className="max-w-[320px] p-3 text-xs bg-white text-slate-900 border border-slate-200 shadow-xl break-all">
+                        <TooltipContent side="top" className="max-w-[320px] p-3 text-xs bg-white text-fg border border-line shadow-xl break-all">
                             {file.name}
                         </TooltipContent>
                     </Tooltip>
@@ -407,12 +405,12 @@ export function EngagementFileRow({
                                     <button
                                         type="button"
                                         onClick={(e) => { e.stopPropagation(); onUnlockConfirm(file) }}
-                                        className="inline-flex items-center shrink-0 px-1.5 py-0.5 rounded text-[10px] font-normal bg-slate-50 text-slate-400 border border-slate-200 hover:bg-amber-50 hover:text-amber-600 hover:border-amber-200 transition-colors"
+                                        className="inline-flex items-center shrink-0 px-1.5 py-0.5 rounded text-[10px] font-normal bg-surface-subtle text-fg-subtle border border-line hover:bg-amber-50 hover:text-amber-600 hover:border-amber-200 transition-colors"
                                     >
                                         <Lock className="h-3 w-3" />
                                     </button>
                                 ) : (
-                                    <span className="inline-flex items-center shrink-0 px-1.5 py-0.5 rounded text-[10px] font-normal bg-slate-50 text-slate-400 border border-slate-200">
+                                    <span className="inline-flex items-center shrink-0 px-1.5 py-0.5 rounded text-[10px] font-normal bg-surface-subtle text-fg-subtle border border-line">
                                         <Lock className="h-3 w-3" />
                                     </span>
                                 )}
@@ -456,10 +454,10 @@ export function EngagementFileRow({
                                 <button
                                     type="button"
                                     className={cn(
-                                        'h-7 w-7 rounded-md inline-flex items-center justify-center disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-500',
+                                        'h-7 w-7 rounded-md inline-flex items-center justify-center disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-fg-muted',
                                         file.id === activePreviewDocId
-                                            ? 'text-slate-700 bg-slate-100'
-                                            : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'
+                                            ? 'text-fg-muted bg-surface-muted'
+                                            : 'text-fg-muted hover:text-fg-muted hover:bg-surface-hover'
                                     )}
                                     aria-label="Preview"
                                     aria-pressed={file.id === activePreviewDocId}
@@ -478,10 +476,10 @@ export function EngagementFileRow({
                             <button
                                 type="button"
                                 className={cn(
-                                    'h-7 w-7 rounded-md inline-flex items-center justify-center disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-500',
+                                    'h-7 w-7 rounded-md inline-flex items-center justify-center disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-fg-muted',
                                     file.id === highlightedFileId
-                                        ? 'text-slate-700 bg-slate-100'
-                                        : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'
+                                        ? 'text-fg-muted bg-surface-muted'
+                                        : 'text-fg-muted hover:text-fg-muted hover:bg-surface-hover'
                                 )}
                                 aria-label="Copy link"
                                 aria-pressed={file.id === highlightedFileId}
@@ -513,7 +511,7 @@ export function EngagementFileRow({
                     {isIndexing && (
                         <Tooltip>
                             <TooltipTrigger asChild>
-                                <span className="h-7 w-7 inline-flex items-center justify-center text-slate-400">
+                                <span className="h-7 w-7 inline-flex items-center justify-center text-fg-subtle">
                                     <Loader2 className="h-4 w-4 animate-spin" />
                                 </span>
                             </TooltipTrigger>
@@ -585,7 +583,7 @@ export function EngagementFileRow({
                     }
                     const personaName = file.ownerRole ? (ROLE_LABELS[file.ownerRole] ?? file.ownerRole) : undefined
                     if (!ownerName) return (
-                        <span className="text-[0.8125rem] text-[#45474c]">—</span>
+                        <span className="text-[0.8125rem] text-fg-muted">—</span>
                     )
                     return (
                         <div className="flex items-center gap-1.5 min-w-0">
@@ -595,7 +593,7 @@ export function EngagementFileRow({
                                 avatarUrl={ownerPhoto || null}
                                 personaName={personaName}
                             />
-                            <span className="text-[0.8125rem] text-[#45474c] truncate">
+                            <span className="text-[0.8125rem] text-fg-muted truncate">
                                 {isMe ? 'me' : ownerName}
                             </span>
                         </div>
@@ -608,50 +606,62 @@ export function EngagementFileRow({
                 {file.modifiedTime ? (
                     <RelativeDateTime
                         date={file.modifiedTime}
-                        textClassName="text-[0.8125rem] text-[#45474c]"
-                        iconClassName="text-[#e5e7eb] hover:text-[#45474c]"
+                        textClassName="text-[0.8125rem] text-fg-muted"
+                        iconClassName="text-line hover:text-fg-muted"
                         tooltipSide="top"
                     />
                 ) : (
-                    <span className="text-[0.8125rem] text-[#45474c]">—</span>
+                    <span className="text-[0.8125rem] text-fg-muted">—</span>
                 )}
             </div>
 
-            {/* Due Date Column */}
-            <div className={DUE_DATE_COL_CLASS}>
-                {!isFolder && file.dueDate ? (() => {
-                    const due = new Date(file.dueDate)
-                    const now = Date.now()
-                    const diffMs = due.getTime() - now
-                    const diffDays = diffMs / 86400000
-                    const isUrgent = diffDays >= 0 && diffDays <= 7
-                    const isOverdue = diffDays < 0
+            {/* Due Date Column — leads edit it in place (Notion-style); everyone else sees the relative date */}
+            <div className={DUE_DATE_COL_CLASS} onClick={(e) => { if (canEditDueDate) e.stopPropagation() }}>
+                {canEditDueDate ? (
+                    <FileDueDateCell
+                        projectId={projectId}
+                        documentId={(file as { projectDocumentId?: string }).projectDocumentId || file.id}
+                        dueDate={file.dueDate ?? null}
+                        onSaved={(next) => { file.dueDate = next ?? undefined }}
+                        onError={(message) => onAddToast({ type: 'error', title: "Couldn't set due date", message })}
+                    />
+                ) : (
+                    <>
+                    {!isFolder && file.dueDate ? (() => {
+                        const due = new Date(file.dueDate)
+                        const now = Date.now()
+                        const diffMs = due.getTime() - now
+                        const diffDays = diffMs / 86400000
+                        const isUrgent = diffDays >= 0 && diffDays <= 7
+                        const isOverdue = diffDays < 0
 
-                    let relativeLabel: string
-                    if (isOverdue) {
-                        const days = Math.floor(-diffDays)
-                        relativeLabel = days === 0 ? 'today' : days === 1 ? '1d overdue' : `${days}d overdue`
-                    } else {
-                        const days = Math.floor(diffDays)
-                        relativeLabel = days === 0 ? 'today' : days === 1 ? 'in 1d' : `in ${days}d`
-                    }
+                        let relativeLabel: string
+                        if (isOverdue) {
+                            const days = Math.floor(-diffDays)
+                            relativeLabel = days === 0 ? 'today' : days === 1 ? '1d overdue' : `${days}d overdue`
+                        } else {
+                            const days = Math.floor(diffDays)
+                            relativeLabel = days === 0 ? 'today' : days === 1 ? 'in 1d' : `in ${days}d`
+                        }
 
-                    const colorClass = isOverdue || isUrgent ? 'text-red-500' : 'text-[#45474c]'
-                    const iconColor = isOverdue || isUrgent ? 'text-red-300 hover:text-red-500' : 'text-[#e5e7eb] hover:text-[#45474c]'
+                        const colorClass = isOverdue || isUrgent ? 'text-red-500' : 'text-fg-muted'
+                        const iconColor = isOverdue || isUrgent ? 'text-red-300 hover:text-red-500' : 'text-line hover:text-fg-muted'
 
-                    return (
-                        <RelativeDateTime
-                            date={file.dueDate}
-                            displayFormat="short"
-                            textClassName={`text-[0.8125rem] ${colorClass}`}
-                            iconClassName={iconColor}
-                            tooltipSide="top"
-                            tooltipPrefix="Due on:"
-                            overrideDisplayText={relativeLabel}
-                        />
-                    )
-                })() : (
-                    <span className="text-[0.8125rem] text-[#45474c]/40">—</span>
+                        return (
+                            <RelativeDateTime
+                                date={file.dueDate}
+                                displayFormat="short"
+                                textClassName={`text-[0.8125rem] ${colorClass}`}
+                                iconClassName={iconColor}
+                                tooltipSide="top"
+                                tooltipPrefix="Due on:"
+                                overrideDisplayText={relativeLabel}
+                            />
+                        )
+                    })() : (
+                        <span className="text-[0.8125rem] text-[#45474c]/40">—</span>
+                    )}
+                    </>
                 )}
             </div>
 
@@ -660,7 +670,7 @@ export function EngagementFileRow({
                 {isFolder ? (
                     <span className="text-[0.8125rem] text-[#45474c]/40">—</span>
                 ) : file.size ? (
-                    <span className="text-[0.8125rem] text-[#45474c] font-mono">
+                    <span className="text-[0.8125rem] text-fg-muted font-mono">
                         {formatFileSize(Number(file.size))}
                     </span>
                 ) : (
@@ -676,5 +686,47 @@ export function EngagementFileRow({
                 </div>
             )}
         </div>
+    )
+}
+
+/** Inline due-date editor for one file — the same endpoint the row menu's "Set Due Date" uses. */
+function FileDueDateCell({
+    projectId,
+    documentId,
+    dueDate,
+    onSaved,
+    onError,
+}: {
+    projectId: string
+    documentId: string
+    dueDate: string | null
+    onSaved: (next: string | null) => void
+    onError: (message: string) => void
+}) {
+    const [value, setValue] = React.useState<string | null>(dueDate)
+    React.useEffect(() => { setValue(dueDate) }, [dueDate])
+    return (
+        <DateProperty
+            value={value}
+            placeholder="—"
+            highlightOverdue
+            onChange={async (next) => {
+                const { getSession } = await import('@/lib/supabase')
+                const session = await getSession()
+                const res = await fetch(`/api/projects/${projectId}/documents/${encodeURIComponent(documentId)}/due-date`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json', ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) },
+                    body: JSON.stringify({ dueDate: next }),
+                })
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}))
+                    onError(err.error ?? 'Failed to update due date')
+                    return
+                }
+                setValue(next)
+                onSaved(next)
+                window.dispatchEvent(new CustomEvent('pockett-notifications-updated'))
+            }}
+        />
     )
 }

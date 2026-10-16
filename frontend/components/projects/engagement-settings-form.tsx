@@ -5,13 +5,15 @@ import { Brio } from '@/components/ui/brio'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { PropertyList, PropertyRow, PROPERTY_FIELD_CLASS, PROPERTY_TEXTAREA_CLASS, SETTINGS_SECTION_HEADING_CLASS } from '@/components/ui/property-list'
+import { StatusProperty } from '@/components/ui/property-cells'
 import { updateProject, deleteProject } from '@/lib/actions/project'
 import type { LwCrmEngagementStatus } from '@/lib/actions/project'
 import { useRouter } from 'next/navigation'
 import { useToast } from '@/components/ui/toast'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { AlertTriangle, Activity, AlignLeft, Banknote, CalendarCheck, CalendarClock, ChevronDown, FileText, Lock } from 'lucide-react'
+import { AlertTriangle, Activity, AlignLeft, Banknote, CalendarCheck, CalendarClock, FileText, Lock, Trash2 } from 'lucide-react'
 import { SelectWithCustomEntry } from '@/components/ui/select-with-custom-entry'
 import { DateTimePicker } from '@/components/ui/date-time-picker'
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden'
@@ -36,10 +38,14 @@ export interface EngagementSettingsFormProps {
     onSaved?: () => void
 }
 
-const fieldLabel = 'font-mono text-[9px] font-bold uppercase tracking-widest text-[#45474c] block mb-1'
-const inputCls = 'border-[#e5e7eb] text-[#1b1b1d] text-xs font-normal placeholder:text-[#9a9ba0] rounded focus-visible:ring-1 focus-visible:ring-primary focus-visible:border-primary disabled:opacity-50 disabled:cursor-not-allowed'
-const textareaCls = 'flex w-full rounded border border-[#e5e7eb] bg-white px-3 py-2 text-xs font-normal text-[#1b1b1d] placeholder:text-[#9a9ba0] focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary disabled:bg-[#f9f9fb] disabled:cursor-not-allowed disabled:opacity-50'
-const selectItemCls = 'cursor-pointer rounded-none px-2.5 text-[#45474c] outline-none focus:bg-[#f9f9fb] data-[state=checked]:bg-primary/10 data-[state=checked]:border-l-2 data-[state=checked]:border-brand-accent data-[state=checked]:text-primary data-[state=checked]:font-semibold data-[highlighted]:bg-[#f9f9fb]'
+/** Notion property value: reads as plain text until hovered or focused. */
+const fieldCls = PROPERTY_FIELD_CLASS
+const textareaFieldCls = PROPERTY_TEXTAREA_CLASS
+const sectionHeading = SETTINGS_SECTION_HEADING_CLASS
+
+const STATUS_OPTIONS: LwCrmEngagementStatus[] = ['PLANNED', 'ACTIVE', 'PAUSED', 'COMPLETED']
+/** Stable default — a fresh `[]` per render would re-run the sync effect below on every render. */
+const NO_TAGS: string[] = []
 
 const CONTRACT_TYPES = ['Fixed Price', 'Retainer', 'Time & Material', 'Case Management', 'Milestone-Based', 'Strategic Advisory', 'Success Fee', 'Subscription / Recurring']
 
@@ -56,7 +62,7 @@ export function EngagementSettingsForm({
     initialStatus = 'ACTIVE',
     initialContractType = '',
     initialRateOrValue = null,
-    initialTags = [],
+    initialTags = NO_TAGS,
     initialInternalMemo = null,
     onCancel,
     onSaved,
@@ -78,7 +84,6 @@ export function EngagementSettingsForm({
     const tagInputRef = useRef<HTMLInputElement>(null)
     const [saving, setSaving] = useState(false)
     const [deleting, setDeleting] = useState(false)
-    const [dangerOpen, setDangerOpen] = useState(false)
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
 
     const isCompleted = status === 'COMPLETED'
@@ -178,213 +183,156 @@ export function EngagementSettingsForm({
         : null
 
     return (
-        <div className="flex flex-col gap-3">
+        <div className="mx-auto flex w-full max-w-2xl flex-col gap-8">
 
             {isCompleted && (
-                <div className="text-xs text-[#45474c] rounded border border-[#e5e7eb] bg-[#f9f9fb] px-3 py-2">
-                    This engagement is completed. Change status to edit other fields.
+                <div className="flex items-center gap-2 rounded-card bg-surface-subtle px-3 py-2 text-small text-fg-muted">
+                    <Lock className="h-3.5 w-3.5 shrink-0 text-fg-subtle" />
+                    This engagement is completed. Change its status to edit the other fields.
                 </div>
             )}
 
-            {/* Tile grid — 3 cols, all cards stretch to equal height */}
-            <div className="grid grid-cols-3 gap-3 items-stretch">
-
-                {/* DETAILS — col-span-2, row 1 */}
-                <div className="col-span-2 bg-white rounded border border-[#e5e7eb] p-4 space-y-3">
-                    <p className={fieldLabel}>Details</p>
-
-                    {/* Name + Status */}
-                    <div className="grid grid-cols-[3fr_1fr] gap-3">
-                        <div>
-                            <label htmlFor="project-name" className={fieldLabel}>
-                                <span className="inline-flex items-center gap-1">
-                                    <FileText className="h-3 w-3" /> Name <span className="text-red-500 normal-case tracking-normal font-sans">*</span>
-                                </span>
-                            </label>
-                            <Input
-                                id="project-name"
-                                value={name}
-                                onChange={(e) => setName(e.target.value)}
-                                placeholder="Engagement name"
-                                disabled={disabled}
-                                className={inputCls}
-                            />
-                        </div>
-                        <div>
-                            <label htmlFor="engagement-status" className={fieldLabel}>
-                                <span className="inline-flex items-center gap-1">
-                                    <Activity className="h-3 w-3" /> Status <span className="text-red-500 normal-case tracking-normal font-sans">*</span>
-                                </span>
-                            </label>
-                            <Select value={status} onValueChange={(v) => setStatus(v as LwCrmEngagementStatus)}>
-                                <SelectTrigger id="engagement-status" className={inputCls}>
-                                    <SelectValue placeholder="Select status" />
-                                </SelectTrigger>
-                                <SelectContent side="bottom" align="start" sideOffset={6} className="z-[70] border border-[#e5e7eb] bg-white shadow-sm rounded py-0.5 min-w-[var(--radix-select-trigger-width)]">
-                                    <SelectItem value="PLANNED" className={selectItemCls}>Planned</SelectItem>
-                                    <SelectItem value="ACTIVE" className={selectItemCls}>Active</SelectItem>
-                                    <SelectItem value="PAUSED" className={selectItemCls}>Paused</SelectItem>
-                                    <SelectItem value="COMPLETED" className={selectItemCls}>Completed</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-                    </div>
-
-                    {/* Description */}
-                    <div>
-                        <label htmlFor="project-description" className={fieldLabel}>
-                            <span className="inline-flex items-center gap-1"><AlignLeft className="h-3 w-3" /> Description</span>
-                        </label>
-                        <textarea
-                            id="project-description"
-                            value={description}
-                            onChange={(e) => setDescription(e.target.value)}
-                            placeholder="Brief description of this engagement"
-                            rows={2}
+            <section>
+                <h3 className={sectionHeading}>Details</h3>
+                <PropertyList>
+                    <PropertyRow label={<label htmlFor="project-name">Name</label>} icon={<FileText />}>
+                        <Input
+                            id="project-name"
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                            placeholder="Engagement name"
                             disabled={disabled}
-                            className={textareaCls}
+                            required
+                            className={fieldCls}
                         />
-                        {/* Same note as the New Engagement form. This is where a description
-                            actually gets improved — after someone has seen a vague answer and
-                            come looking for the reason. */}
-                        <p className="mt-1 text-[10px] leading-snug text-[#6b6d73]">
-                            <Brio className="text-[10px]" /> uses this for context when answering
-                            questions about this engagement.
-                        </p>
-                    </div>
-                </div>
+                    </PropertyRow>
+                    <PropertyRow label="Status" icon={<Activity />}>
+                        <StatusProperty
+                            kind="engagement"
+                            value={status}
+                            options={STATUS_OPTIONS}
+                            onChange={(v) => setStatus(v as LwCrmEngagementStatus)}
+                        />
+                    </PropertyRow>
+                    <PropertyRow label={<label htmlFor="project-description">Description</label>} icon={<AlignLeft />}>
+                        <div className="flex w-full flex-col gap-1">
+                            <Textarea
+                                id="project-description"
+                                value={description}
+                                onChange={(e) => setDescription(e.target.value)}
+                                placeholder="Brief description of this engagement"
+                                rows={3}
+                                disabled={disabled}
+                                className={textareaFieldCls}
+                            />
+                            {/* Same note as the New Engagement form. This is where a description
+                                actually gets improved — after someone has seen a vague answer and
+                                come looking for the reason. */}
+                            <p className="px-2 text-caption text-fg-subtle">
+                                <Brio className="text-caption" /> uses this for context when answering
+                                questions about this engagement.
+                            </p>
+                        </div>
+                    </PropertyRow>
+                </PropertyList>
+            </section>
 
-                {/* COMMERCIAL — col-span-1, row-span-2 */}
-                <div className="row-span-2 bg-white rounded border border-[#e5e7eb] p-4 space-y-3">
-                    <p className={fieldLabel}>Commercial</p>
-
-                    {/* Contract type */}
-                    <div>
-                        <label htmlFor="contract-type" className={fieldLabel}>
-                            <span className="inline-flex items-center gap-1"><FileText className="h-3 w-3" /> Contract type</span>
-                        </label>
+            <section>
+                <h3 className={sectionHeading}>Commercial</h3>
+                <PropertyList>
+                    <PropertyRow label={<label htmlFor="contract-type">Contract type</label>} icon={<FileText />}>
                         <SelectWithCustomEntry
                             id="contract-type"
                             value={contractType}
                             onChange={setContractType}
                             options={CONTRACT_TYPES}
-                            placeholder="Select type…"
+                            placeholder="Empty"
                             customEntryHint="Other…"
                             disabled={disabled}
+                            className={fieldCls}
                         />
-                    </div>
-
-                    {/* Contract value */}
-                    <div>
-                        <label htmlFor="rate-value" className={fieldLabel}>
-                            <span className="inline-flex items-center gap-1"><Banknote className="h-3 w-3" /> Contract value</span>
-                        </label>
-                        <div className={`flex items-center rounded border border-[#e5e7eb] bg-white focus-within:ring-1 focus-within:ring-primary focus-within:border-primary ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                            {currencySymbol && (
-                                <span className="pl-3 pr-1 text-xs text-[#45474c] shrink-0 select-none">{currencySymbol}</span>
+                    </PropertyRow>
+                    <PropertyRow label={<label htmlFor="rate-value">Contract value</label>} icon={<Banknote />}>
+                        <div className="flex w-full flex-col gap-1">
+                            <div className={`flex h-8 items-center rounded-control border border-transparent transition-colors hover:bg-surface-hover focus-within:border-action/60 focus-within:bg-surface focus-within:ring-2 focus-within:ring-action/20 ${disabled ? 'pointer-events-none opacity-50' : ''}`}>
+                                {currencySymbol && (
+                                    <span className="shrink-0 select-none pl-2 text-ui text-fg-muted">{currencySymbol}</span>
+                                )}
+                                <input
+                                    id="rate-value"
+                                    value={rateOrValue}
+                                    onChange={(e) => setRateOrValue(e.target.value)}
+                                    placeholder="Empty"
+                                    disabled={disabled}
+                                    className="h-full min-w-0 flex-1 bg-transparent px-2 text-ui tabular-nums text-fg outline-none placeholder:text-fg-subtle disabled:cursor-not-allowed"
+                                />
+                            </div>
+                            {contractValueHint && (
+                                <p className="px-2 text-caption text-fg-subtle">{contractValueHint}</p>
                             )}
-                            <input
-                                id="rate-value"
-                                value={rateOrValue}
-                                onChange={(e) => setRateOrValue(e.target.value)}
-                                placeholder="Total value"
+                        </div>
+                    </PropertyRow>
+                </PropertyList>
+            </section>
+
+            <section>
+                <h3 className={sectionHeading}>Tracking</h3>
+                <PropertyList>
+                    <PropertyRow label="Start date" icon={<CalendarClock />}>
+                        <DateTimePicker value={kickoffDate} onChange={setKickoffDate} placeholder="Empty" disabled={disabled} defaultTime="09:00" className={fieldCls} />
+                    </PropertyRow>
+                    <PropertyRow label="End date" icon={<CalendarCheck />}>
+                        <DateTimePicker value={dueDate} onChange={setDueDate} placeholder="Empty" disabled={disabled} defaultTime="17:00" className={fieldCls} />
+                    </PropertyRow>
+                    <PropertyRow label={<label htmlFor="engagement-internal-memo">Internal memo</label>} icon={<Lock />}>
+                        <div className="flex w-full flex-col gap-1">
+                            <Textarea
+                                id="engagement-internal-memo"
+                                value={internalMemo}
+                                onChange={(e) => setInternalMemo(e.target.value)}
+                                placeholder="Private notes, call summaries, context…"
+                                rows={3}
                                 disabled={disabled}
-                                className="flex-1 h-9 px-3 text-xs text-[#1b1b1d] bg-transparent outline-none placeholder:text-[#9a9ba0] disabled:cursor-not-allowed"
+                                className={textareaFieldCls}
                             />
+                            <p className="px-2 text-caption text-fg-subtle">Only your firm sees this.</p>
                         </div>
-                        {contractValueHint && (
-                            <p className="mt-1 text-[10px] text-[#9a9ba0]">{contractValueHint}</p>
-                        )}
-                    </div>
-                </div>
+                    </PropertyRow>
+                </PropertyList>
+            </section>
 
-                {/* TRACKING — col-span-2, row 2: dates + internal memo */}
-                <div className="col-span-2 bg-white rounded border border-[#e5e7eb] p-4 space-y-3">
-                    <p className={fieldLabel}>Tracking</p>
-
-                    {/* Start date + End date */}
-                    <div className="grid grid-cols-2 gap-3">
-                        <div>
-                            <label className={fieldLabel}>
-                                <span className="inline-flex items-center gap-1"><CalendarClock className="h-3 w-3" /> Start date</span>
-                            </label>
-                            <DateTimePicker value={kickoffDate} onChange={setKickoffDate} placeholder="Select date" disabled={disabled} defaultTime="09:00" />
-                        </div>
-                        <div>
-                            <label className={fieldLabel}>
-                                <span className="inline-flex items-center gap-1"><CalendarCheck className="h-3 w-3" /> End date</span>
-                            </label>
-                            <DateTimePicker value={dueDate} onChange={setDueDate} placeholder="Select date" disabled={disabled} defaultTime="17:00" />
-                        </div>
-                    </div>
-
-                    {/* Internal Memo */}
-                    <div>
-                        <label htmlFor="engagement-internal-memo" className={fieldLabel}>
-                            <span className="inline-flex items-center gap-1">
-                                <Lock className="h-3 w-3" /> Internal memo
-                                <span className="inline-flex items-center gap-0.5 normal-case tracking-normal font-sans text-[#9a9ba0]">— internal only</span>
-                            </span>
-                        </label>
-                        <textarea
-                            id="engagement-internal-memo"
-                            value={internalMemo}
-                            onChange={(e) => setInternalMemo(e.target.value)}
-                            placeholder="Private notes, call summaries, context…"
-                            rows={2}
-                            disabled={disabled}
-                            className={textareaCls}
-                        />
-                    </div>
-                </div>
-
-            </div>
-
-            {/* Actions bar */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+                <Button onClick={handleSaveProperties} disabled={saving || !name.trim()} variant="greenCta">
+                    {saving ? 'Saving…' : 'Save changes'}
+                </Button>
                 {onCancel && (
-                    <Button type="button" variant="outline" className="rounded w-32 text-[10px] font-headline font-bold tracking-widest uppercase" onClick={onCancel}>
+                    <Button type="button" variant="ghost" onClick={onCancel}>
                         Cancel
                     </Button>
                 )}
-                <Button
-                    onClick={handleSaveProperties}
-                    disabled={saving}
-                    variant="greenCta"
-                    className="rounded w-32 text-[10px] font-headline font-bold tracking-widest uppercase text-white"
-                >
-                    {saving ? 'Saving…' : 'Save'}
-                </Button>
             </div>
 
-            {/* Danger zone — collapsible */}
-            <section className="border border-red-200 rounded overflow-hidden">
-                <button
-                    type="button"
-                    onClick={() => setDangerOpen((v) => !v)}
-                    className="w-full px-4 py-3 flex items-center justify-between bg-red-50/60 hover:bg-red-50 transition-colors"
-                >
-                    <div className="flex items-center gap-2">
-                        <AlertTriangle className="h-3.5 w-3.5 text-red-500" aria-hidden />
-                        <span className="font-mono text-[9px] font-bold uppercase tracking-widest text-red-700">Danger zone</span>
-                    </div>
-                    <ChevronDown className={`h-3.5 w-3.5 text-red-500 transition-transform duration-200 ${dangerOpen ? 'rotate-180' : ''}`} />
-                </button>
-                {dangerOpen && (
-                    <div className="p-4 border-t border-red-200 bg-red-50/40 space-y-3">
-                        <p className="text-xs text-[#45474c]">
-                            Permanently removes this engagement. All members are removed and Drive access revoked. The engagement folder remains in Google Drive for the firm admin.
+            {/* Linear-style destructive row: say what happens, one button — no colored box. */}
+            <section>
+                <h3 className={sectionHeading}>Danger zone</h3>
+                <div className="flex flex-col gap-3 py-2 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+                    <div className="min-w-0">
+                        <p className="text-ui font-medium text-fg">Delete engagement</p>
+                        <p className="text-small text-fg-muted">
+                            Removes all members and revokes their Drive access. The folder stays in Google Drive for the firm admin.
                         </p>
-                        <Button
-                            type="button"
-                            onClick={() => setIsDeleteDialogOpen(true)}
-                            disabled={deleting}
-                            className="rounded bg-red-700 text-white hover:bg-red-800 border-0 text-[10px] font-headline font-bold tracking-widest uppercase"
-                        >
-                            {deleting ? 'Deleting…' : 'Delete engagement'}
-                        </Button>
                     </div>
-                )}
+                    <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setIsDeleteDialogOpen(true)}
+                        disabled={deleting}
+                        className="shrink-0 text-danger hover:text-danger"
+                    >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        {deleting ? 'Deleting…' : 'Delete engagement'}
+                    </Button>
+                </div>
             </section>
 
             <ConfirmDialog

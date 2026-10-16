@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { logger } from '@/lib/logger'
 import { createClient } from '@supabase/supabase-js'
 import { FirmService } from '@/lib/firm-service'
-import { invalidateUserSettingsPlus } from '@/lib/actions/user-settings'
+import { invalidateUserSettingsPlus } from '@/lib/permissions/invalidate-user-settings'
 import { googleDriveConnector } from '@/lib/google-drive-connector'
 import { createAdminClient } from '@/utils/supabase/admin'
 import {
@@ -55,6 +55,12 @@ export async function POST(request: NextRequest) {
 
         if (!connectionId) {
             return NextResponse.json({ error: 'Missing connectionId' }, { status: 400 })
+        }
+        // The new firm takes over this connector, so it must be one the caller connected — never
+        // someone else's connector id. (.claude/plans/access-gates.md, P0 #6)
+        const ownedConnector = await prisma.connector.findFirst({ where: { id: connectionId, userId }, select: { id: true } })
+        if (!ownedConnector) {
+            return NextResponse.json({ error: 'Connector not found' }, { status: 404 })
         }
 
         if (!name?.trim()) {

@@ -63,12 +63,12 @@ export function FirmList({ firms, viewMode = 'grid', activeOrgIdFromJWT }: FirmL
 
     if (firms.length === 0) {
         return (
-            <div className="flex flex-col items-center justify-center h-64 text-center border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/50">
-                <div className="h-12 w-12 bg-slate-100 rounded-full flex items-center justify-center mb-4 text-slate-400">
+            <div className="flex flex-col items-center justify-center h-64 text-center border border-dashed border-line-strong rounded-card bg-surface-subtle">
+                <div className="h-12 w-12 bg-surface-muted rounded-full flex items-center justify-center mb-4 text-fg-subtle">
                     <Building2 className="h-6 w-6" />
                 </div>
-                <h3 className="text-sm font-semibold text-slate-900">No firms found</h3>
-                <p className="text-xs text-slate-500 mt-1 max-w-[200px]">
+                <h3 className="text-sm font-semibold text-fg">No firms found</h3>
+                <p className="text-xs text-fg-muted mt-1 max-w-[200px]">
                     You don't belong to any firms yet.
                 </p>
             </div>
@@ -90,17 +90,17 @@ export function FirmList({ firms, viewMode = 'grid', activeOrgIdFromJWT }: FirmL
     if (viewMode === 'list') {
         return (
             <>
-                <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+                <div className="bg-surface border border-line rounded-card overflow-hidden">
                     <table className="w-full text-left text-sm">
                         <thead>
-                            <tr className="bg-slate-50 border-b border-slate-200">
-                                <th className="px-4 py-3 font-medium text-slate-500">Firm</th>
-                                <th className="px-4 py-3 font-medium text-slate-500 text-right">Created</th>
+                            <tr className="bg-surface-subtle border-b border-line">
+                                <th className="px-4 py-3 font-medium text-fg-muted">Firm</th>
+                                <th className="px-4 py-3 font-medium text-fg-muted text-right">Created</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-100">
+                        <tbody className="divide-y divide-line">
                             {firms.map((org) => (
-                                <tr key={org.id} className="group hover:bg-slate-50 transition-colors">
+                                <tr key={org.id} className="group hover:bg-surface-hover transition-colors">
                                     <td className="px-4 py-3">
                                         <Link
                                             href={firmHref(org)}
@@ -108,25 +108,25 @@ export function FirmList({ firms, viewMode = 'grid', activeOrgIdFromJWT }: FirmL
                                             onClick={(e) => handleOrgClick(e, org)}
                                             className="flex items-center gap-3"
                                         >
-                                            <div className="h-8 w-8 bg-slate-100 text-slate-700 rounded-lg flex items-center justify-center shrink-0">
+                                            <div className="h-8 w-8 bg-surface-muted text-fg-muted rounded-control flex items-center justify-center shrink-0">
                                                 <Building2 className="h-4 w-4" />
                                             </div>
                                             <div className="flex items-center gap-2 min-w-0">
                                                 {activeOrgSlug === org.slug && (
                                                     <ActiveIndicator />
                                                 )}
-                                                <span className="font-medium text-slate-900 group-hover:text-black transition-colors truncate">
+                                                <span className="font-medium text-fg group-hover:text-black transition-colors truncate">
                                                     {org.name}
                                                 </span>
                                                 {org.isDefault && (
-                                                    <span className="px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded text-[10px] font-medium shrink-0">
+                                                    <span className="px-1.5 py-0.5 bg-surface-muted text-fg-muted rounded text-[10px] font-medium shrink-0">
                                                         Default
                                                     </span>
                                                 )}
                                             </div>
                                         </Link>
                                     </td>
-                                    <td className="px-4 py-3 text-right text-slate-400">
+                                    <td className="px-4 py-3 text-right text-fg-subtle">
                                         <div className="flex items-center justify-end gap-1.5">
                                             <Clock className="h-3 w-3" />
                                             <span>{formatDistanceToNow(new Date(org.createdAt), { addSuffix: true })}</span>
@@ -160,10 +160,10 @@ export function FirmList({ firms, viewMode = 'grid', activeOrgIdFromJWT }: FirmL
                         href={firmHref(org)}
                         prefetch={false}
                         onClick={(e) => handleOrgClick(e, org)}
-                        className="group relative bg-white border border-slate-200 rounded-xl p-5 hover:shadow-lg hover:border-slate-300 hover:-translate-y-0.5 transition-all duration-200 flex flex-col h-48"
+                        className="group relative bg-surface border border-line rounded-card p-5 hover:border-line-strong transition-colors hover:bg-surface-hover flex flex-col h-48"
                     >
                         <div className="flex items-start justify-between mb-3">
-                            <div className="h-10 w-10 bg-slate-100 text-slate-700 rounded-lg flex items-center justify-center group-hover:scale-105 transition-transform shrink-0">
+                            <div className="h-10 w-10 bg-surface-muted text-fg-muted rounded-control flex items-center justify-center shrink-0">
                                 <Building2 className="h-5 w-5" />
                             </div>
                             <div className="flex items-center gap-2 shrink-0">
@@ -171,21 +171,21 @@ export function FirmList({ firms, viewMode = 'grid', activeOrgIdFromJWT }: FirmL
                                     <ActiveIndicator />
                                 )}
                                 {org.isDefault && (
-                                    <span className="px-2 py-1 bg-slate-100 text-slate-500 rounded-full text-[10px] font-medium">
+                                    <span className="px-2 py-1 bg-surface-muted text-fg-muted rounded-full text-[10px] font-medium">
                                         Default
                                     </span>
                                 )}
                             </div>
                         </div>
 
-                        <h3 className="text-sm font-semibold text-slate-900 mb-1 line-clamp-1 group-hover:text-black transition-colors">
+                        <h3 className="text-sm font-semibold text-fg mb-1 line-clamp-1 group-hover:text-black transition-colors">
                             {org.name}
                         </h3>
-                        <p className="text-xs text-slate-500 line-clamp-2 mb-auto">
+                        <p className="text-xs text-fg-muted line-clamp-2 mb-auto">
                             {org.isDefault ? 'Your default workspace' : 'Click to open workspace'}
                         </p>
 
-                        <div className="mt-auto pt-3 border-t border-slate-50 flex items-center justify-between text-[11px] text-slate-400">
+                        <div className="mt-auto pt-3 border-t border-line flex items-center justify-between text-[11px] text-fg-subtle">
                             <div className="flex items-center gap-1.5" title="Created">
                                 <Clock className="h-3 w-3" />
                                 <span>{formatDistanceToNow(new Date(org.createdAt), { addSuffix: true })}</span>

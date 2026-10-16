@@ -50,13 +50,17 @@ import {
     Pencil,
     Sparkles,
     Copy,
+    Inbox,
+    LocateFixed,
 } from 'lucide-react'
 import { getFileTypeLabel, formatRelativeTime, formatDateTimeWithTZ, formatFileSize } from '@/lib/utils'
 import { engagementPath, firmSettingsPath } from '@/lib/navigation/firm-paths'
 import { InsightCard } from '@/components/dashboard/insight-card'
 import { StatTile } from '@/components/ui/stat-tile'
 import { Button } from '@/components/ui/button'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { Hint, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { ActionSection, type ActionItem } from '@/components/dashboard/action-list'
+import { ConcentricRings, Donut, PlanningGapRow, RING, RingWithLegend, ScoreDeductions } from './insight-rings'
 import { DocumentIcon } from '@/components/ui/document-icon'
 import type { EngagementInsightsResponse, UnansweredThreadItem, DocumentDueDateItem, RecentDocumentItem, SensitiveFileItem, DeliverableProgress, DeliverableStage, EngagementHealthScore, PlanningHygiene, CommentThreads, EngagementPace, FirstTimeRight } from '@/app/api/projects/[projectId]/insights/route'
 import { updateEngagementInsightsSummary, approveEngagementAiSummary, dismissEngagementAiSummary } from '@/lib/actions/project'
@@ -132,7 +136,7 @@ function InfoTip({ text, ariaLabel }: { text: string; ariaLabel?: string }) {
                 <button
                     type="button"
                     aria-label={ariaLabel ?? 'More info'}
-                    className="text-gray-300 hover:text-gray-500 transition-colors inline-flex items-center"
+                    className="text-fg-subtle hover:text-fg-muted transition-colors inline-flex items-center"
                     onClick={(e) => e.preventDefault()}
                 >
                     <Info className="h-3 w-3" />
@@ -158,7 +162,7 @@ function TileWithTip({ text, ariaLabel, children }: { text: string; ariaLabel?: 
 }
 
 function getDocTypeBgColor(mimeType?: string): string {
-    if (!mimeType) return 'bg-gray-50'
+    if (!mimeType) return 'bg-surface-subtle'
     const m = mimeType.toLowerCase()
     if (m === 'application/vnd.google-apps.folder') return 'bg-[#5A78FF]/5'
     if (m === 'application/vnd.google-apps.spreadsheet') return 'bg-green-50'
@@ -172,7 +176,7 @@ function getDocTypeBgColor(mimeType?: string): string {
     if (m.includes('video')) return 'bg-red-50'
     if (m.includes('audio')) return 'bg-blue-50'
     if (m.includes('archive') || m.includes('zip')) return 'bg-yellow-50'
-    return 'bg-gray-50'
+    return 'bg-surface-subtle'
 }
 
 function formatEmailName(email: string): string {
@@ -204,7 +208,7 @@ function deltaColor(days: number): string {
     if (days === 0) return 'bg-amber-50 text-amber-700 border-amber-200'
     if (days <= 3) return 'bg-orange-50 text-orange-700 border-orange-200'
     if (days <= 7) return 'bg-amber-50 text-amber-700 border-amber-200'
-    return 'bg-slate-50 text-slate-600 border-slate-200'
+    return 'bg-surface-subtle text-fg-muted border-line'
 }
 
 function scoreLabel(score: number): string {
@@ -253,8 +257,8 @@ function TeamStatusBody({ data }: { data: EngagementInsightsResponse }) {
         <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-8">
             {/* Ring 1 — On team vs Invited */}
             <div className="flex flex-col items-center gap-3">
-                <p className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
-                    <Users className="h-4 w-4 text-gray-400" /> On Team vs Invited
+                <p className="text-sm font-semibold text-fg-muted flex items-center gap-1.5">
+                    <Users className="h-4 w-4 text-fg-subtle" /> On Team vs Invited
                     <InfoTip ariaLabel="About On Team vs Invited" text="Share of people already joined the engagement vs those still holding pending invitations. Center shows % joined." />
                 </p>
                 <RingWithLegend
@@ -262,32 +266,32 @@ function TeamStatusBody({ data }: { data: EngagementInsightsResponse }) {
                         { label: 'On team', hex: RING.green, value: joined },
                         { label: 'Invited', hex: RING.gray, value: invited },
                     ]}
-                    centerTop={<span className="text-xl font-bold text-gray-900 tabular-nums leading-none">{teamTotal > 0 ? `${joinedPct}%` : '—'}</span>}
-                    centerBottom={<span className="text-[10px] text-gray-400 mt-0.5">on team</span>}
+                    centerTop={<span className="text-xl font-bold text-fg tabular-nums leading-none">{teamTotal > 0 ? `${joinedPct}%` : '—'}</span>}
+                    centerBottom={<span className="text-[10px] text-fg-subtle mt-0.5">on team</span>}
                 />
             </div>
 
             {/* Ring 2 — Distribution by Role */}
             <div className="flex flex-col items-center gap-3">
-                <p className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
-                    <Users className="h-4 w-4 text-gray-400" /> Distribution by Role
+                <p className="text-sm font-semibold text-fg-muted flex items-center gap-1.5">
+                    <Users className="h-4 w-4 text-fg-subtle" /> Distribution by Role
                     <InfoTip ariaLabel="About Distribution by Role" text="Breakdown of joined engagement members by role: Admin (Engagement Lead) · Member · Collaborator (external) · Reviewer (external)." />
                 </p>
                 {rolesTotal > 0 ? (
                     <RingWithLegend
                         items={roleItems}
-                        centerTop={<span className="text-xl font-bold text-gray-900 tabular-nums leading-none">{rolesTotal}</span>}
-                        centerBottom={<span className="text-[10px] text-gray-400 mt-0.5">members</span>}
+                        centerTop={<span className="text-xl font-bold text-fg tabular-nums leading-none">{rolesTotal}</span>}
+                        centerBottom={<span className="text-[10px] text-fg-subtle mt-0.5">members</span>}
                     />
                 ) : (
-                    <p className="text-xs text-gray-400 py-8">No members yet</p>
+                    <p className="text-xs text-fg-subtle py-8">No members yet</p>
                 )}
             </div>
 
             {/* Ring 3 — Internal vs External mix */}
             <div className="flex flex-col items-center gap-3">
-                <p className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
-                    <Users className="h-4 w-4 text-gray-400" /> Internal vs External
+                <p className="text-sm font-semibold text-fg-muted flex items-center gap-1.5">
+                    <Users className="h-4 w-4 text-fg-subtle" /> Internal vs External
                     <InfoTip ariaLabel="About Internal vs External" text="Firm-side members (Admins + Team Members) vs client-side members (Collaborators + Reviewers). Signals whether the engagement is well-connected on both sides." />
                 </p>
                 {rolesTotal > 0 ? (
@@ -296,11 +300,11 @@ function TeamStatusBody({ data }: { data: EngagementInsightsResponse }) {
                             { label: 'Internal', hex: RING.green, value: internalCount },
                             { label: 'External', hex: RING.indigo, value: externalCount },
                         ]}
-                        centerTop={<span className="text-xl font-bold text-gray-900 tabular-nums leading-none">{internalPct}%</span>}
-                        centerBottom={<span className="text-[10px] text-gray-400 mt-0.5">internal</span>}
+                        centerTop={<span className="text-xl font-bold text-fg tabular-nums leading-none">{internalPct}%</span>}
+                        centerBottom={<span className="text-[10px] text-fg-subtle mt-0.5">internal</span>}
                     />
                 ) : (
-                    <p className="text-xs text-gray-400 py-8">No members yet</p>
+                    <p className="text-xs text-fg-subtle py-8">No members yet</p>
                 )}
             </div>
         </div>
@@ -309,59 +313,6 @@ function TeamStatusBody({ data }: { data: EngagementInsightsResponse }) {
 
 // ─── Shares Progress Card ────────────────────────────────────────────────────
 
-// ─── Donut primitive ──────────────────────────────────────────────────────────
-// Reusable SVG donut. Segments stack clockwise from top. Pass `total` to render a
-// gauge (single arc over a fixed 0–total scale); omit it to size arcs by their sum.
-function Donut({ segments, total, size = 120, thickness = 14, trackColor = '#f1f5f9', centerTop, centerBottom }: {
-    segments: { value: number; hex: string }[]
-    total?: number
-    size?: number
-    thickness?: number
-    trackColor?: string
-    centerTop?: React.ReactNode
-    centerBottom?: React.ReactNode
-}) {
-    const sum = total ?? segments.reduce((s, x) => s + x.value, 0)
-    const R = (size - thickness) / 2
-    const c = size / 2
-    const C = 2 * Math.PI * R
-    let acc = 0
-    const arcs = sum > 0
-        ? segments.filter((s) => s.value > 0).map((s) => {
-            const frac = s.value / sum
-            const arc = { hex: s.hex, len: frac * C, offset: -acc * C }
-            acc += frac
-            return arc
-        })
-        : []
-    return (
-        <div className="relative shrink-0" style={{ width: size, height: size, filter: 'drop-shadow(0 2px 3px rgba(15,23,42,0.13))' }}>
-            <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90">
-                <circle cx={c} cy={c} r={R} fill="none" stroke={trackColor} strokeWidth={thickness} />
-                {arcs.map((a, i) => (
-                    <circle key={i} cx={c} cy={c} r={R} fill="none" stroke={a.hex} strokeWidth={thickness}
-                        strokeDasharray={`${a.len} ${C - a.len}`} strokeDashoffset={a.offset} />
-                ))}
-            </svg>
-            {(centerTop || centerBottom) && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center">
-                    {centerTop}
-                    {centerBottom}
-                </div>
-            )}
-        </div>
-    )
-}
-
-// Soft, modern pastel palette shared by all rings, anchored on Firma brand green.
-const RING = {
-    amber:  '#fcd34d', // amber-300
-    blue:   '#5A78FF', // Firma brand blue
-    indigo: '#818cf8', // indigo-400
-    green:  '#069668', // Firma brand green (--primary)
-    red:    '#f87171', // red-400
-    gray:   '#cbd5e1', // slate-300
-}
 
 // Palette for role rings — leans on the shared RING palette so team rings match the health rings.
 const ROLE_META: Record<string, { label: string; hex: string }> = {
@@ -378,9 +329,9 @@ function SectionBlock({ title, icon: Icon, badge, children }: { title: string; i
     return (
         <div className="space-y-2">
             <div className="flex items-center gap-2">
-                <Icon className="h-4 w-4 text-gray-400" />
-                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{title}</span>
-                {badge && <span className="ml-auto text-[10px] font-medium text-gray-400">{badge}</span>}
+                <Icon className="h-4 w-4 text-fg-subtle" />
+                <span className="text-small font-medium text-fg-muted">{title}</span>
+                {badge && <span className="ml-auto text-[10px] font-medium text-fg-subtle">{badge}</span>}
             </div>
             {children}
         </div>
@@ -393,7 +344,7 @@ function ACRow({ href, isExternal, children }: { href: string; isExternal?: bool
             href={href}
             target={isExternal ? '_blank' : undefined}
             rel={isExternal ? 'noopener noreferrer' : undefined}
-            className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-[#f3f4f6] hover:shadow-lg transition-all duration-200 rounded border border-[#e5e7eb] bg-white shadow-md"
+            className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-surface-hover hover: transition-all duration-200 rounded border border-line bg-white"
         >
             {children}
         </Link>
@@ -407,12 +358,12 @@ function ACThreadRow({ item, engagementBase }: { item: UnansweredThreadItem; eng
     return (
         <ACRow href={`${engagementBase}/comments#doc-comment:${item.documentId}`} isExternal>
             <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-gray-900 truncate">{item.documentName}</p>
-                <p className="text-xs text-gray-400 truncate">{item.lastMessagePreview || 'Client left a comment'}</p>
+                <p className="text-sm font-semibold text-fg truncate">{item.documentName}</p>
+                <p className="text-xs text-fg-subtle truncate">{item.lastMessagePreview || 'Client left a comment'}</p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
-                <span className="text-[11px] text-gray-400">{timeAgo}</span>
-                <ArrowUpRight className="h-4 w-4 text-gray-400" />
+                <span className="text-[11px] text-fg-subtle">{timeAgo}</span>
+                <ArrowUpRight className="h-4 w-4 text-fg-subtle" />
             </div>
         </ACRow>
     )
@@ -422,13 +373,13 @@ function ACDocDueRow({ item, engagementBase }: { item: DocumentDueDateItem; enga
     return (
         <ACRow href={`${engagementBase}/files#doc-file:${item.documentId}`} isExternal>
             <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-gray-900 truncate">{item.documentName}</p>
+                <p className="text-sm font-semibold text-fg truncate">{item.documentName}</p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
                 <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full border ${deltaColor(item.daysUntil)}`}>
                     {deltaLabel(item.daysUntil)}
                 </span>
-                <ArrowUpRight className="h-4 w-4 text-gray-400" />
+                <ArrowUpRight className="h-4 w-4 text-fg-subtle" />
             </div>
         </ACRow>
     )
@@ -439,15 +390,15 @@ function ACInviteRow({ item, engagementBase }: { item: { email: string; daysUnti
         ? 'bg-red-50 text-red-700 border-red-200'
         : item.daysUntilExpiry <= 2
             ? 'bg-amber-50 text-amber-700 border-amber-200'
-            : 'bg-slate-50 text-slate-600 border-slate-200'
+            : 'bg-surface-subtle text-fg-muted border-line'
     return (
         <ACRow href={`${engagementBase}/members`} isExternal>
-            <p className="text-sm font-semibold text-gray-900 truncate flex-1">{item.email}</p>
+            <p className="text-sm font-semibold text-fg truncate flex-1">{item.email}</p>
             <div className="flex items-center gap-2 shrink-0">
                 <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full border ${labelClass}`}>
                     {item.daysUntilExpiry <= 0 ? 'Expired' : `Expires in ${item.daysUntilExpiry}d`}
                 </span>
-                <ArrowUpRight className="h-4 w-4 text-gray-400" />
+                <ArrowUpRight className="h-4 w-4 text-fg-subtle" />
             </div>
         </ACRow>
     )
@@ -460,17 +411,17 @@ function ACSensitiveRow({ item, engagementBase, onDismiss }: { item: SensitiveFi
             <div className="flex-1 min-w-0">
                 <ACRow href={href} isExternal={!!item.driveWebViewLink}>
                     <div className="min-w-0 flex-1">
-                        <p className="text-sm font-semibold text-gray-900 truncate">{item.fileName}</p>
-                        {item.driveWebViewLink && <p className="text-[10px] text-gray-400">Google Drive</p>}
+                        <p className="text-sm font-semibold text-fg truncate">{item.fileName}</p>
+                        {item.driveWebViewLink && <p className="text-[10px] text-fg-subtle">Google Drive</p>}
                     </div>
-                    <ArrowUpRight className="h-4 w-4 text-gray-400 shrink-0" />
+                    <ArrowUpRight className="h-4 w-4 text-fg-subtle shrink-0" />
                 </ACRow>
             </div>
             <button
                 type="button"
                 onClick={onDismiss}
                 title="Mark as reviewed"
-                className="shrink-0 p-1.5 rounded-lg text-gray-300 hover:text-green-600 hover:bg-green-50 transition-colors"
+                className="shrink-0 p-1.5 rounded-lg text-fg-subtle hover:text-green-600 hover:bg-green-50 transition-colors"
             >
                 <Check className="h-3.5 w-3.5" />
             </button>
@@ -480,9 +431,9 @@ function ACSensitiveRow({ item, engagementBase, onDismiss }: { item: SensitiveFi
 
 function ACStorageRow({ label, sub }: { label: string; sub: string }) {
     return (
-        <div className="flex items-center justify-between gap-2 px-4 py-3 rounded border border-[#d1d5db] bg-white shadow-sm">
-            <p className="text-sm font-semibold text-gray-900 truncate flex-1">{label}</p>
-            <span className="text-xs text-gray-400 shrink-0">{sub}</span>
+        <div className="flex items-center justify-between gap-2 px-4 py-3 rounded border border-line-strong bg-white">
+            <p className="text-sm font-semibold text-fg truncate flex-1">{label}</p>
+            <span className="text-xs text-fg-subtle shrink-0">{sub}</span>
         </div>
     )
 }
@@ -577,7 +528,7 @@ function EngagementActionCenter({ data, loading, engagementBase, projectId, setR
 
     return (
         <div
-            className="flex flex-col gap-3 border border-[#e5e7eb] rounded p-4 shadow-md"
+            className="flex flex-col gap-3 border border-line rounded p-4"
             style={{
                 backgroundColor: '#ffffff',
                 background: [
@@ -592,25 +543,25 @@ function EngagementActionCenter({ data, loading, engagementBase, projectId, setR
             <div className="flex items-center justify-between">
                 {acView === 'summary' ? (
                     <>
-                        <h3 className="text-sm font-bold text-gray-900 animate-in fade-in duration-150">Action Center</h3>
+                        <h3 className="text-sm font-bold text-fg animate-in fade-in duration-150">Action Center</h3>
                         <button
                             onClick={() => setRefreshTick((t: number) => t + 1)}
-                            className="p-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors"
+                            className="p-1.5 rounded-lg bg-surface-muted hover:bg-surface-hover transition-colors"
                             title="Refresh"
                         >
-                            <RefreshCw className={`h-3.5 w-3.5 text-gray-700 ${loading ? 'animate-spin' : ''}`} />
+                            <RefreshCw className={`h-3.5 w-3.5 text-fg-muted ${loading ? 'animate-spin' : ''}`} />
                         </button>
                     </>
                 ) : (
                     <div className="flex items-center gap-2 animate-in fade-in slide-in-from-left-2 duration-200">
                         <button
                             onClick={() => setAcView('summary')}
-                            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded bg-[#f3f4f6] hover:bg-[#e5e7eb] active:scale-95 transition-all duration-150 text-gray-700 font-medium text-xs"
+                            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded bg-surface-muted hover:bg-line active:scale-95 transition-all duration-150 text-fg-muted font-medium text-xs"
                         >
                             <ArrowLeft className="h-3.5 w-3.5" />
                             Back
                         </button>
-                        <span className="text-sm font-bold text-gray-900">
+                        <span className="text-sm font-bold text-fg">
                             {acView === 'overdue' ? 'Overdue' : acView === 'upcoming' ? 'Upcoming' : drillViewLabel[acView]}
                         </span>
                         <span className={`ml-auto text-xs font-bold px-2 py-0.5 rounded-full ${acView === 'overdue' ? 'bg-red-100 text-red-700' : acView === 'upcoming' ? 'bg-amber-100 text-amber-700' : drillViewBadge[acView]}`}>
@@ -626,7 +577,7 @@ function EngagementActionCenter({ data, loading, engagementBase, projectId, setR
                 className="flex flex-col gap-4 flex-1 min-h-0 overflow-y-auto px-0.5 py-0.5 animate-in fade-in slide-in-from-bottom-2 duration-200 [&::-webkit-scrollbar]:hidden [scrollbar-width:none]"
             >
                 {loading ? (
-                    [1, 2, 3].map((i) => <div key={i} className="h-14 rounded-xl bg-gray-200 animate-pulse" />)
+                    [1, 2, 3].map((i) => <div key={i} className="h-14 rounded-xl bg-surface-selected animate-pulse" />)
                 ) : acView === 'summary' ? (
                     <div className="flex flex-col gap-3">
                         {/* Overdue / Upcoming category cards */}
@@ -640,13 +591,13 @@ function EngagementActionCenter({ data, loading, engagementBase, projectId, setR
                                 {overdueCount > 0 && (
                                     <button
                                         onClick={() => setAcView('overdue')}
-                                        className="w-full flex items-center justify-between p-3 bg-white rounded border border-[#e5e7eb] shadow-md hover:shadow-lg hover:bg-red-50 hover:scale-[1.01] active:scale-[0.99] transition-all duration-150"
+                                        className="w-full flex items-center justify-between p-3 bg-white rounded border border-line hover: hover:bg-red-50 hover:scale-[1.01] active:scale-[0.99] transition-all duration-150"
                                     >
                                         <div className="flex items-center gap-3">
                                             <div className="p-2 rounded-lg bg-red-50"><AlertCircle className="h-4 w-4 text-red-600" /></div>
                                             <div className="text-left">
                                                 <p className="text-sm font-semibold text-red-700">Overdue</p>
-                                                <p className="text-xs text-gray-500">{overdueSubtitle()}</p>
+                                                <p className="text-xs text-fg-muted">{overdueSubtitle()}</p>
                                             </div>
                                         </div>
                                         <div className="flex items-center gap-1.5">
@@ -658,13 +609,13 @@ function EngagementActionCenter({ data, loading, engagementBase, projectId, setR
                                 {upcomingCount > 0 && (
                                     <button
                                         onClick={() => setAcView('upcoming')}
-                                        className="w-full flex items-center justify-between p-3 bg-white rounded border border-[#e5e7eb] shadow-md hover:shadow-lg hover:bg-amber-50 hover:scale-[1.01] active:scale-[0.99] transition-all duration-150"
+                                        className="w-full flex items-center justify-between p-3 bg-white rounded border border-line hover: hover:bg-amber-50 hover:scale-[1.01] active:scale-[0.99] transition-all duration-150"
                                     >
                                         <div className="flex items-center gap-3">
                                             <div className="p-2 rounded-lg bg-amber-50"><Clock className="h-4 w-4 text-amber-600" /></div>
                                             <div className="text-left">
                                                 <p className="text-sm font-semibold text-amber-700">Upcoming</p>
-                                                <p className="text-xs text-gray-500">{upcomingSubtitle()}</p>
+                                                <p className="text-xs text-fg-muted">{upcomingSubtitle()}</p>
                                             </div>
                                         </div>
                                         <div className="flex items-center gap-1.5">
@@ -679,35 +630,35 @@ function EngagementActionCenter({ data, loading, engagementBase, projectId, setR
                         {/* Document Alert cards */}
                         <div className="flex flex-col gap-2 pt-1">
                             <div className="flex items-center gap-2">
-                                <FolderOpen className="h-4 w-4 text-gray-400" />
-                                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Document Alerts</span>
+                                <FolderOpen className="h-4 w-4 text-fg-subtle" />
+                                <span className="text-small font-medium text-fg-muted">Document Alerts</span>
                             </div>
                             <div className="flex flex-col gap-2">
                                 {([
-                                    { key: 'threads' as const, icon: MessagesSquare, label: 'Threads', count: threadCount, sub: threadCount > 0 ? `${threadCount} unanswered thread${threadCount > 1 ? 's' : ''}` : 'No unanswered threads', active: { border: 'border-[#d1d5db]', hover: 'hover:bg-blue-50', text: 'text-blue-700', iconBg: 'bg-blue-50', iconText: 'text-blue-600', chevron: 'text-blue-400', num: 'text-blue-600' } },
-                                    { key: 'sharing' as const, icon: MailOpen, label: 'Invitations', count: sharingCount, sub: sharingCount > 0 ? `${sharingCount} invitation${sharingCount > 1 ? 's' : ''} pending` : 'No pending invites', active: { border: 'border-[#d1d5db]', hover: 'hover:bg-indigo-50', text: 'text-indigo-700', iconBg: 'bg-indigo-50', iconText: 'text-indigo-600', chevron: 'text-indigo-400', num: 'text-indigo-600' } },
-                                    { key: 'sensitive' as const, icon: FileWarning, label: 'Sensitive', count: sensitiveCount, sub: sensitiveCount > 0 ? `${sensitiveCount} file${sensitiveCount > 1 ? 's' : ''} flagged` : 'No sensitive files', active: { border: 'border-[#d1d5db]', hover: 'hover:bg-orange-50', text: 'text-orange-700', iconBg: 'bg-orange-50', iconText: 'text-orange-600', chevron: 'text-orange-400', num: 'text-orange-600' } },
-                                    { key: 'storage' as const, icon: HardDrive, label: 'Storage', count: storageCount, sub: storageCount > 0 ? [data?.storageHealth.staleCount ? `${data.storageHealth.staleCount} stale` : '', data?.storageHealth.largeCount ? `${data.storageHealth.largeCount} large` : '', duplicateCount ? `${duplicateCount} duplicate${duplicateCount > 1 ? 's' : ''}` : ''].filter(Boolean).join(' · ') : 'Storage looks healthy', active: { border: 'border-[#d1d5db]', hover: 'hover:bg-blue-50', text: 'text-[#5A78FF]', iconBg: 'bg-blue-50', iconText: 'text-[#5A78FF]', chevron: 'text-[#5A78FF]/50', num: 'text-[#5A78FF]' } },
+                                    { key: 'threads' as const, icon: MessagesSquare, label: 'Threads', count: threadCount, sub: threadCount > 0 ? `${threadCount} unanswered thread${threadCount > 1 ? 's' : ''}` : 'No unanswered threads', active: { border: 'border-line-strong', hover: 'hover:bg-blue-50', text: 'text-blue-700', iconBg: 'bg-blue-50', iconText: 'text-blue-600', chevron: 'text-blue-400', num: 'text-blue-600' } },
+                                    { key: 'sharing' as const, icon: MailOpen, label: 'Invitations', count: sharingCount, sub: sharingCount > 0 ? `${sharingCount} invitation${sharingCount > 1 ? 's' : ''} pending` : 'No pending invites', active: { border: 'border-line-strong', hover: 'hover:bg-indigo-50', text: 'text-indigo-700', iconBg: 'bg-indigo-50', iconText: 'text-indigo-600', chevron: 'text-indigo-400', num: 'text-indigo-600' } },
+                                    { key: 'sensitive' as const, icon: FileWarning, label: 'Sensitive', count: sensitiveCount, sub: sensitiveCount > 0 ? `${sensitiveCount} file${sensitiveCount > 1 ? 's' : ''} flagged` : 'No sensitive files', active: { border: 'border-line-strong', hover: 'hover:bg-orange-50', text: 'text-orange-700', iconBg: 'bg-orange-50', iconText: 'text-orange-600', chevron: 'text-orange-400', num: 'text-orange-600' } },
+                                    { key: 'storage' as const, icon: HardDrive, label: 'Storage', count: storageCount, sub: storageCount > 0 ? [data?.storageHealth.staleCount ? `${data.storageHealth.staleCount} stale` : '', data?.storageHealth.largeCount ? `${data.storageHealth.largeCount} large` : '', duplicateCount ? `${duplicateCount} duplicate${duplicateCount > 1 ? 's' : ''}` : ''].filter(Boolean).join(' · ') : 'Storage looks healthy', active: { border: 'border-line-strong', hover: 'hover:bg-blue-50', text: 'text-[#5A78FF]', iconBg: 'bg-blue-50', iconText: 'text-[#5A78FF]', chevron: 'text-[#5A78FF]/50', num: 'text-[#5A78FF]' } },
                                 ] as const).map(({ key, icon: Icon, label, count, sub, active }) => {
                                     const isAlert = count > 0
-                                    const border = isAlert ? active.border : 'border-[#d1d5db]'
+                                    const border = isAlert ? active.border : 'border-line-strong'
                                     const hover = isAlert ? active.hover : 'hover:bg-green-50'
-                                    const textColor = isAlert ? active.text : 'text-gray-700'
+                                    const textColor = isAlert ? active.text : 'text-fg-muted'
                                     const iconBg = isAlert ? active.iconBg : 'bg-green-50'
                                     const iconText = isAlert ? active.iconText : 'text-green-600'
-                                    const chevronColor = isAlert ? active.chevron : 'text-gray-400'
-                                    const numColor = isAlert ? active.num : 'text-gray-500'
+                                    const chevronColor = isAlert ? active.chevron : 'text-fg-subtle'
+                                    const numColor = isAlert ? active.num : 'text-fg-muted'
                                     return (
                                         <button
                                             key={key}
                                             onClick={() => setAcView(key)}
-                                            className={`w-full flex items-center justify-between p-3 bg-white rounded border ${border} shadow-md hover:shadow-lg ${hover} hover:scale-[1.01] active:scale-[0.99] transition-all duration-150`}
+                                            className={`w-full flex items-center justify-between p-3 bg-white rounded border ${border} hover: ${hover} hover:scale-[1.01] active:scale-[0.99] transition-all duration-150`}
                                         >
                                             <div className="flex items-center gap-3">
                                                 <div className={`p-2 rounded-lg ${iconBg}`}><Icon className={`h-4 w-4 ${iconText}`} /></div>
                                                 <div className="text-left">
                                                     <p className={`text-sm font-semibold ${textColor}`}>{label}</p>
-                                                    <p className="text-xs text-gray-500">{sub}</p>
+                                                    <p className="text-xs text-fg-muted">{sub}</p>
                                                 </div>
                                             </div>
                                             <div className="flex items-center gap-1.5">
@@ -720,24 +671,24 @@ function EngagementActionCenter({ data, loading, engagementBase, projectId, setR
                                 {/* Shares pending approval — links directly to Shares tab */}
                                 {(() => {
                                     const isAlert = pendingSharesCount > 0
-                                    const border = 'border-[#d1d5db]'
+                                    const border = 'border-line-strong'
                                     const hover = isAlert ? 'hover:bg-primary/10' : 'hover:bg-green-50'
-                                    const textColor = isAlert ? 'text-primary' : 'text-gray-700'
+                                    const textColor = isAlert ? 'text-primary' : 'text-fg-muted'
                                     const iconBg = isAlert ? 'bg-primary/10' : 'bg-green-50'
                                     const iconText = isAlert ? 'text-primary' : 'text-green-600'
-                                    const chevronColor = isAlert ? 'text-violet-400' : 'text-gray-400'
-                                    const numColor = isAlert ? 'text-primary' : 'text-gray-500'
+                                    const chevronColor = isAlert ? 'text-violet-400' : 'text-fg-subtle'
+                                    const numColor = isAlert ? 'text-primary' : 'text-fg-muted'
                                     const sub = isAlert ? `${pendingSharesCount} file${pendingSharesCount > 1 ? 's' : ''} pending approval` : 'No pending approvals'
                                     return (
                                         <Link
                                             href={`${engagementBase}/shares`}
-                                            className={`w-full flex items-center justify-between p-3 bg-white rounded border ${border} shadow-md hover:shadow-lg ${hover} hover:scale-[1.01] active:scale-[0.99] transition-all duration-150`}
+                                            className={`w-full flex items-center justify-between p-3 bg-white rounded border ${border} hover: ${hover} hover:scale-[1.01] active:scale-[0.99] transition-all duration-150`}
                                         >
                                             <div className="flex items-center gap-3">
                                                 <div className={`p-2 rounded-lg ${iconBg}`}><FileUp className={`h-4 w-4 ${iconText}`} /></div>
                                                 <div className="text-left">
                                                     <p className={`text-sm font-semibold ${textColor}`}>Intake</p>
-                                                    <p className="text-xs text-gray-500">{sub}</p>
+                                                    <p className="text-xs text-fg-muted">{sub}</p>
                                                 </div>
                                             </div>
                                             <div className="flex items-center gap-1.5">
@@ -771,8 +722,8 @@ function EngagementActionCenter({ data, loading, engagementBase, projectId, setR
                     <div className="flex flex-col gap-4">
                         {engagementDueSoon > 0 && data && (
                             <SectionBlock title="Engagement End Date" icon={CalendarClock}>
-                                <div className="flex items-center justify-between gap-2 px-4 py-3 rounded border border-[#d1d5db] bg-white shadow-sm">
-                                    <p className="text-sm font-semibold text-gray-900 flex-1 truncate">
+                                <div className="flex items-center justify-between gap-2 px-4 py-3 rounded border border-line-strong bg-white">
+                                    <p className="text-sm font-semibold text-fg flex-1 truncate">
                                         {data.engagementDueDate
                                             ? new Date(data.engagementDueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
                                             : 'Engagement end date'}
@@ -860,33 +811,33 @@ function EngagementActionCenter({ data, loading, engagementBase, projectId, setR
                                         >
                                             <div className="space-y-2">
                                                 {(showAllDuplicates ? duplicateGroups : duplicateGroups.slice(0, 5)).map(g => (
-                                                    <div key={g.baseKey} className="px-4 py-3 rounded border border-[#d1d5db] bg-white shadow-sm">
-                                                        <p className="text-xs font-semibold text-gray-500 mb-1.5">
+                                                    <div key={g.baseKey} className="px-4 py-3 rounded border border-line-strong bg-white">
+                                                        <p className="text-xs font-semibold text-fg-muted mb-1.5">
                                                             {g.type === 'exact' ? 'Exact size match' : `"${g.baseKey}"`}
-                                                            <span className="ml-1.5 font-normal text-gray-400">· {g.files.length} files</span>
+                                                            <span className="ml-1.5 font-normal text-fg-subtle">· {g.files.length} files</span>
                                                         </p>
                                                         <div className="space-y-1">
                                                             {g.files.slice(0, 4).map(f => (
                                                                 <div key={f.documentId} className="flex items-start justify-between gap-2">
                                                                     <div className="min-w-0 flex-1">
-                                                                        <p className="text-xs text-gray-700 truncate">{f.fileName}</p>
+                                                                        <p className="text-xs text-fg-muted truncate">{f.fileName}</p>
                                                                         {f.folderPath && (
-                                                                            <p className="flex items-center gap-1 text-[10px] text-gray-400 truncate">
-                                                                                <FolderOpen className="h-3 w-3 shrink-0 text-gray-300" />
+                                                                            <p className="flex items-center gap-1 text-[10px] text-fg-subtle truncate">
+                                                                                <FolderOpen className="h-3 w-3 shrink-0 text-fg-subtle" />
                                                                                 {f.folderPath}
                                                                             </p>
                                                                         )}
                                                                     </div>
                                                                     <button
                                                                         onClick={() => setDeleteTarget({ fileId: f.documentId, fileName: f.fileName, externalId: '' })}
-                                                                        className="p-1 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors shrink-0"
+                                                                        className="p-1 rounded-lg text-fg-subtle hover:text-red-600 hover:bg-red-50 transition-colors shrink-0"
                                                                         title="Delete file"
                                                                     >
                                                                         <Trash2 className="h-3.5 w-3.5" />
                                                                     </button>
                                                                 </div>
                                                             ))}
-                                                            {g.files.length > 4 && <p className="text-[10px] text-gray-400">+{g.files.length - 4} more</p>}
+                                                            {g.files.length > 4 && <p className="text-[10px] text-fg-subtle">+{g.files.length - 4} more</p>}
                                                         </div>
                                                     </div>
                                                 ))}
@@ -907,7 +858,7 @@ function EngagementActionCenter({ data, loading, engagementBase, projectId, setR
                                             <div className="space-y-2">
                                                 {staleItems.slice(0, 5).map(f => <ACStorageRow key={f.documentId} label={f.fileName} sub={`${f.monthsStale}mo old`} />)}
                                                 {(data?.storageHealth.staleCount ?? 0) > 5 && (
-                                                    <p className="text-[11px] text-gray-400 text-center py-1">Showing 5 of {data?.storageHealth.staleCount}</p>
+                                                    <p className="text-[11px] text-fg-subtle text-center py-1">Showing 5 of {data?.storageHealth.staleCount}</p>
                                                 )}
                                             </div>
                                         </SectionBlock>
@@ -917,7 +868,7 @@ function EngagementActionCenter({ data, loading, engagementBase, projectId, setR
                                             <div className="space-y-2">
                                                 {largeItems.slice(0, 5).map(f => <ACStorageRow key={f.documentId} label={f.fileName} sub={formatBytes(f.fileSize)} />)}
                                                 {(data?.storageHealth.largeCount ?? 0) > 5 && (
-                                                    <p className="text-[11px] text-gray-400 text-center py-1">Showing 5 of {data?.storageHealth.largeCount}</p>
+                                                    <p className="text-[11px] text-fg-subtle text-center py-1">Showing 5 of {data?.storageHealth.largeCount}</p>
                                                 )}
                                             </div>
                                         </SectionBlock>
@@ -938,15 +889,15 @@ function EngagementActionCenter({ data, loading, engagementBase, projectId, setR
             {deleteTarget && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setDeleteTarget(null)}>
                     <div className="bg-white rounded p-6 shadow-xl max-w-sm w-full mx-4" onClick={e => e.stopPropagation()}>
-                        <h3 className="text-base font-bold text-gray-900 mb-2">Move to Trash?</h3>
-                        <p className="text-sm text-gray-500 mb-1">
-                            &quot;<span className="font-medium text-gray-700">{deleteTarget.fileName}</span>&quot; will be moved to the Google Drive Trash.
+                        <h3 className="text-base font-bold text-fg mb-2">Move to Trash?</h3>
+                        <p className="text-sm text-fg-muted mb-1">
+                            &quot;<span className="font-medium text-fg-muted">{deleteTarget.fileName}</span>&quot; will be moved to the Google Drive Trash.
                         </p>
-                        <p className="text-xs text-gray-400 mb-4">It can be recovered from Trash for up to 30 days before Google permanently deletes it.</p>
+                        <p className="text-xs text-fg-subtle mb-4">It can be recovered from Trash for up to 30 days before Google permanently deletes it.</p>
                         <div className="flex gap-3">
                             <button
                                 onClick={() => setDeleteTarget(null)}
-                                className="flex-1 px-4 py-2 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                                className="flex-1 px-4 py-2 border border-line rounded-xl text-sm font-medium text-fg-muted hover:bg-surface-hover transition-colors"
                                 disabled={isDeleting}
                             >
                                 Cancel
@@ -983,15 +934,15 @@ function FilterDropdown({ label, allLabel, options, value, onChange, formatOptio
             {open && <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />}
             <button
                 onClick={() => setOpen(!open)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 border text-xs font-medium rounded transition-colors ${hasActive ? 'bg-gray-900 border-gray-900 text-white' : 'bg-white border-[#e5e7eb] hover:bg-[#f3f4f6] text-gray-700'}`}
+                className={`flex items-center gap-1.5 px-3 py-1.5 border text-xs font-medium rounded transition-colors ${hasActive ? 'bg-gray-900 border-gray-900 text-white' : 'bg-white border-line hover:bg-surface-hover text-fg-muted'}`}
             >
                 <span>{value ? (formatOption ? formatOption(value) : value) : label}</span>
                 <ChevronDown className={`h-3 w-3 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
             </button>
             {open && (
-                <div className="absolute right-0 top-full mt-1.5 w-52 bg-white border border-[#e5e7eb] rounded shadow-xl py-1 z-50 animate-in fade-in zoom-in-95 duration-100">
-                    <div className="px-3 py-2 border-b border-gray-100 mb-1 flex items-center justify-between bg-gray-50/50 rounded-t-xl">
-                        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{label}</span>
+                <div className="absolute right-0 top-full mt-1.5 w-52 bg-white border border-line rounded shadow-xl py-1 z-50 animate-in fade-in zoom-in-95 duration-100">
+                    <div className="px-3 py-2 border-b border-line mb-1 flex items-center justify-between bg-gray-50/50 rounded-t-xl">
+                        <span className="text-small font-medium text-fg-muted">{label}</span>
                         <button onClick={() => setOpen(false)} className="text-[10px] font-semibold text-white bg-gray-900 hover:bg-gray-800 px-2 py-0.5 rounded transition-colors">Done</button>
                     </div>
                     <div className="max-h-52 overflow-y-auto [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
@@ -1002,12 +953,12 @@ function FilterDropdown({ label, allLabel, options, value, onChange, formatOptio
                                 <button
                                     key={opt}
                                     onClick={() => { onChange(opt); setOpen(false) }}
-                                    className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3"
+                                    className="w-full text-left px-3 py-2 text-sm text-fg-muted hover:bg-surface-hover flex items-center gap-3"
                                 >
-                                    <div className={`shrink-0 w-4 h-4 rounded border flex items-center justify-center transition-colors ${selected ? 'bg-gray-900 border-gray-900' : 'bg-white border-gray-300'}`}>
+                                    <div className={`shrink-0 w-4 h-4 rounded border flex items-center justify-center transition-colors ${selected ? 'bg-gray-900 border-gray-900' : 'bg-white border-line-strong'}`}>
                                         {selected && <Check className="h-3 w-3 text-white" />}
                                     </div>
-                                    <span className={selected ? 'font-medium text-gray-900' : ''}>{display}</span>
+                                    <span className={selected ? 'font-medium text-fg' : ''}>{display}</span>
                                 </button>
                             )
                         })}
@@ -1072,13 +1023,13 @@ function DocActivitySection({ data, engagementBase }: { data: EngagementInsights
     const tabLabels: Record<ActivityTab, string> = { '24h': '24h', '1w': '1 wk', '1m': '1 mo' }
 
     return (
-        <div className="bg-white rounded border border-[#e5e7eb] shadow-md">
-            <div className="p-4 border-b border-gray-100 flex items-center justify-between gap-3 flex-wrap">
+        <div className="bg-white rounded border border-line">
+            <div className="p-4 border-b border-line flex items-center justify-between gap-3 flex-wrap">
                 <div className="flex items-center gap-2">
-                    <Activity className="h-4 w-4 text-gray-500" />
-                    <h3 className="text-sm font-semibold text-gray-900">Document Activity</h3>
+                    <Activity className="h-4 w-4 text-fg-muted" />
+                    <h3 className="text-sm font-semibold text-fg">Document Activity</h3>
                     {allRecent.length > 0 && (
-                        <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
+                        <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-surface-muted text-fg-muted">
                             Recent {allRecent.length}
                         </span>
                     )}
@@ -1103,12 +1054,12 @@ function DocActivitySection({ data, engagementBase }: { data: EngagementInsights
                             formatOption={formatEmailName}
                         />
                     )}
-                    <div className="flex bg-gray-100 p-0.5 rounded-lg">
+                    <div className="flex bg-surface-muted p-0.5 rounded-lg">
                         {(['24h', '1w', '1m'] as ActivityTab[]).map((t) => (
                             <button
                                 key={t}
                                 onClick={() => setTab(t)}
-                                className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${tab === t ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                                className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${tab === t ? 'bg-white text-fg' : 'text-fg-muted hover:text-fg-muted'}`}
                             >
                                 {tabLabels[t]}
                             </button>
@@ -1121,7 +1072,7 @@ function DocActivitySection({ data, engagementBase }: { data: EngagementInsights
                     <EmptyState message="No document changes in this period." />
                 </div>
             ) : (
-                <div ref={scrollContainerRef} className="overflow-y-auto max-h-[520px] divide-y divide-[#e5e7eb] [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
+                <div ref={scrollContainerRef} className="overflow-y-auto max-h-[520px] divide-y divide-line [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
                     {visibleList.map((doc) => {
                         const d = doc as RecentDocumentItem & { folderPath?: string | null; updatedByEmail?: string | null }
                             const href = engagementBase ? `${engagementBase}/files#doc-file:${d.id}` : '#'
@@ -1131,8 +1082,8 @@ function DocActivitySection({ data, engagementBase }: { data: EngagementInsights
                                         <DocumentIcon mimeType={d.mimeType ?? undefined} size={14} />
                                     </div>
                                     <div className="min-w-0 flex-1">
-                                        <p className="text-sm font-medium text-gray-900 truncate">{d.fileName}</p>
-                                        <p className="text-[11px] text-gray-400 truncate">
+                                        <p className="text-sm font-medium text-fg truncate">{d.fileName}</p>
+                                        <p className="text-[11px] text-fg-subtle truncate">
                                             {d.folderPath || (d.mimeType ? getFileTypeLabel(d.mimeType) : '')}
                                             {d.fileSize ? ` · ${formatFileSize(d.fileSize)}` : ''}
                                             {d.updatedByEmail ? ` · ${formatEmailName(d.updatedByEmail)}` : ''}
@@ -1143,18 +1094,18 @@ function DocActivitySection({ data, engagementBase }: { data: EngagementInsights
                                         href={href}
                                         target="_blank"
                                         rel="noopener noreferrer"
-                                        className="shrink-0 p-1 rounded-md hover:bg-gray-100 transition-colors"
+                                        className="shrink-0 p-1 rounded-md hover:bg-surface-hover transition-colors"
                                         onClick={e => e.stopPropagation()}
                                     >
-                                        <ArrowUpRight className="h-4 w-4 text-gray-400" />
+                                        <ArrowUpRight className="h-4 w-4 text-fg-subtle" />
                                     </Link>
                                 </div>
                             )
                         })
                     }
                     {hasMore && (
-                        <div className="h-8 flex items-center justify-center border-t border-gray-50">
-                            <span className="text-[11px] text-gray-400">{visibleCount} of {fullList.length}</span>
+                        <div className="h-8 flex items-center justify-center border-t border-line">
+                            <span className="text-[11px] text-fg-subtle">{visibleCount} of {fullList.length}</span>
                         </div>
                     )}
                 </div>
@@ -1174,75 +1125,9 @@ function scrollToRing(ringId: string) {
     window.setTimeout(() => el.classList.remove('ring-pulse'), 1400)
 }
 
-type ActionSeverity = 'critical' | 'warning' | 'info' | 'ok'
-
-interface ActionRowItem {
-    key: string
-    label: string
-    count: number
-    sub?: string
-    href?: string                   // link to the entity (opens in engagement)
-    ringId?: string                 // if set, shows a small "→ RingName" chip
+interface ActionRowItem extends ActionItem {
+    ringId?: string                 // if set, the row gets a hover-only "show in …" button
     ringLabel?: string
-    severity: ActionSeverity        // drives the color accent
-    icon: React.ElementType
-    onDrilldown?: () => void        // if set, title click opens inline drill-down instead of href
-}
-
-function ACRowV2({ item, engagementBase }: { item: ActionRowItem; engagementBase: string }) {
-    const Icon = item.icon
-    const sev = item.count === 0 ? 'ok' : item.severity
-    const dot = sev === 'critical' ? 'bg-red-500' : sev === 'warning' ? 'bg-amber-500' : sev === 'info' ? 'bg-primary' : 'bg-gray-300'
-    const numText = sev === 'critical' ? 'text-red-600' : sev === 'warning' ? 'text-amber-600' : sev === 'info' ? 'text-primary' : 'text-gray-400'
-    const iconTint = sev === 'critical' ? 'bg-red-50 text-red-600' : sev === 'warning' ? 'bg-amber-50 text-amber-600' : sev === 'info' ? 'bg-primary/10 text-primary' : 'bg-gray-50 text-gray-400'
-    const drillable = !!item.onDrilldown && item.count > 0
-    const linkable = !drillable && !!item.href && item.count > 0
-
-    const TitleTag: 'a' | 'button' | 'span' = drillable ? 'button' : linkable ? 'a' : 'span'
-    const titleProps: Record<string, unknown> = drillable
-        ? { type: 'button', onClick: item.onDrilldown }
-        : linkable
-            ? { href: item.href!.startsWith('http') || !engagementBase ? item.href : `${engagementBase}${item.href}`, target: '_blank', rel: 'noopener noreferrer' }
-            : {}
-
-    return (
-        <div className="flex items-center gap-2.5 px-3 py-2 rounded-md hover:bg-gray-50 transition-colors">
-            <div className={`p-1.5 rounded-md shrink-0 ${iconTint}`}>
-                <Icon className="h-3.5 w-3.5" />
-            </div>
-            <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5">
-                    <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${dot}`} />
-                    <TitleTag
-                        {...titleProps as any}
-                        className={`text-xs font-medium truncate inline-flex items-center gap-0.5 ${drillable || linkable ? 'text-gray-800 hover:text-primary cursor-pointer group/title' : 'text-gray-500'}`}
-                    >
-                        <span className="truncate">{item.label}</span>
-                        {drillable && (
-                            <ChevronRight className="h-2.5 w-2.5 text-gray-300 group-hover/title:text-primary group-hover/title:translate-x-0.5 transition-all shrink-0" />
-                        )}
-                        {linkable && (
-                            <ArrowUpRight className="h-2.5 w-2.5 text-gray-300 group-hover/title:text-primary group-hover/title:translate-x-0.5 group-hover/title:-translate-y-0.5 transition-all shrink-0" />
-                        )}
-                    </TitleTag>
-                </div>
-                {item.sub && (
-                    <p className="text-[10px] text-gray-400 truncate mt-0.5 pl-3">{item.sub}</p>
-                )}
-                {item.ringId && item.count > 0 && (
-                    <button
-                        type="button"
-                        onClick={() => scrollToRing(item.ringId!)}
-                        className="mt-1 ml-3 inline-flex items-center gap-0.5 text-[10px] font-medium text-gray-400 hover:text-primary transition-colors group/chip"
-                    >
-                        {item.ringLabel ?? 'View ring'}
-                        <ArrowRight className="h-2.5 w-2.5 group-hover/chip:translate-x-0.5 transition-transform" />
-                    </button>
-                )}
-            </div>
-            <span className={`text-sm font-bold tabular-nums shrink-0 ${numText}`}>{item.count}</span>
-        </div>
-    )
 }
 
 // ─── Duplicate files drill-down panel ─────────────────────────────────────────
@@ -1255,54 +1140,46 @@ function DuplicatesDrilldown({ groups, engagementBase, onBack }: {
     return (
         <div className="flex flex-col gap-0">
             {/* Panel header */}
-            <div className="flex items-center gap-2 pb-3 border-b border-gray-100">
+            <div className="flex items-center gap-2 pb-3 border-b border-line">
                 <button
                     type="button"
                     onClick={onBack}
-                    className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-gray-700 transition-colors group/back"
+                    className="inline-flex items-center gap-1 text-xs text-fg-subtle hover:text-fg-muted transition-colors group/back"
                 >
                     <ChevronLeft className="h-3.5 w-3.5 group-hover/back:-translate-x-0.5 transition-transform" />
                     Back
                 </button>
-                <span className="text-gray-300 text-xs">·</span>
-                <span className="text-xs font-semibold text-gray-700">Duplicate files</span>
-                <span className="ml-auto text-[10px] font-medium text-amber-600 bg-amber-50 border border-amber-100 px-1.5 py-0.5 rounded-full">
+                <span className="text-fg-subtle text-xs">·</span>
+                <span className="text-xs font-semibold text-fg-muted">Duplicate files</span>
+                <span className="ml-auto text-small tabular-nums text-fg-subtle">
                     {groups.reduce((s, g) => s + g.files.length, 0)} files · {groups.length} {groups.length === 1 ? 'group' : 'groups'}
                 </span>
             </div>
 
             {/* Groups list */}
-            <div className="flex flex-col divide-y divide-gray-50 mt-1">
+            <div className="flex flex-col divide-y divide-line mt-1">
                 {groups.map((g, gi) => (
                     <div key={g.baseKey} className="py-2.5 flex flex-col gap-1.5">
                         {/* Group label */}
                         <div className="flex items-center gap-1.5 px-1">
-                            <span className="text-[9px] font-semibold uppercase tracking-wide text-gray-400">
-                                Group {gi + 1}
-                            </span>
-                            <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full border ${
-                                g.type === 'exact'
-                                    ? 'text-red-600 bg-red-50 border-red-100'
-                                    : 'text-amber-600 bg-amber-50 border-amber-100'
-                            }`}>
-                                {g.type === 'exact' ? 'Exact match' : 'Name match'}
-                            </span>
+                            <span className="text-small font-medium text-fg-muted">Group {gi + 1}</span>
+                            <span className="text-small text-fg-subtle">· {g.type === 'exact' ? 'Exact match' : 'Name match'}</span>
                         </div>
                         {/* Files in group */}
                         {g.files.map((f) => (
-                            <div key={f.documentId} className="flex items-start gap-2 px-1 py-1 rounded hover:bg-gray-50 transition-colors group/file">
-                                <FileText className="h-3.5 w-3.5 text-gray-300 shrink-0 mt-0.5" />
+                            <div key={f.documentId} className="flex items-start gap-2 px-1 py-1 rounded hover:bg-surface-hover transition-colors group/file">
+                                <FileText className="h-3.5 w-3.5 text-fg-subtle shrink-0 mt-0.5" />
                                 <div className="min-w-0 flex-1">
-                                    <p className="text-[11px] font-medium text-gray-700 truncate" title={f.fileName}>{f.fileName}</p>
+                                    <p className="text-[11px] font-medium text-fg-muted truncate" title={f.fileName}>{f.fileName}</p>
                                     {f.folderPath && (
-                                        <p className="text-[9px] text-gray-400 truncate mt-0.5" title={f.folderPath}>{f.folderPath}</p>
+                                        <p className="text-[9px] text-fg-subtle truncate mt-0.5" title={f.folderPath}>{f.folderPath}</p>
                                     )}
                                 </div>
                                 <a
                                     href={`${engagementBase}/files`}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="shrink-0 inline-flex items-center gap-0.5 text-[10px] text-gray-300 hover:text-primary transition-colors opacity-0 group-hover/file:opacity-100"
+                                    className="shrink-0 inline-flex items-center gap-0.5 text-[10px] text-fg-subtle hover:text-primary transition-colors opacity-0 group-hover/file:opacity-100"
                                     title="View in Files"
                                 >
                                     <ArrowUpRight className="h-3 w-3" />
@@ -1316,37 +1193,39 @@ function DuplicatesDrilldown({ groups, engagementBase, onBack }: {
     )
 }
 
-function ACSectionV2({ title, icon: Icon, items, engagementBase, headerAction }: {
+/**
+ * The engagement's Action Center group (the shared ActionSection, also on the firm Overview).
+ * Links resolve against the engagement, and a row tied to a ring on the left gets a hover-only
+ * "show in …" button in a fixed slot, so the counts stay aligned down the column.
+ */
+function ACSectionV2({ title, icon, items, engagementBase }: {
     title: string
     icon: React.ElementType
     items: ActionRowItem[]
     engagementBase: string
-    headerAction?: React.ReactNode
 }) {
-    // Non-zero items on top, zeros at the bottom.
-    const sorted = [...items].sort((a, b) => (b.count > 0 ? 1 : 0) - (a.count > 0 ? 1 : 0) || b.count - a.count)
-    const attentionCount = items.filter((i) => i.count > 0).length
-
+    const resolved = items.map((it) => ({
+        ...it,
+        href: it.href && !it.href.startsWith('http') && engagementBase ? `${engagementBase}${it.href}` : it.href,
+    }))
     return (
-        <div className="border border-[#e5e7eb] rounded bg-white">
-            <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-100">
-                <Icon className="h-3.5 w-3.5 text-gray-400" />
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 flex-1">{title}</span>
-                {attentionCount > 0 ? (
-                    <span className="text-[10px] font-medium text-amber-600 bg-amber-50 border border-amber-100 px-1.5 py-0.5 rounded-full">
-                        {attentionCount} to review
-                    </span>
-                ) : (
-                    <span className="inline-flex items-center gap-1 text-[10px] font-medium text-green-600">
-                        <CheckCircle2 className="h-3 w-3" /> All clear
-                    </span>
-                )}
-                {headerAction}
-            </div>
-            <div className="p-1 flex flex-col">
-                {sorted.map((it) => <ACRowV2 key={it.key} item={it} engagementBase={engagementBase} />)}
-            </div>
-        </div>
+        <ActionSection
+            title={title}
+            icon={icon}
+            items={resolved}
+            aside={(it) => it.ringId && it.count > 0 ? (
+                <Hint label={`Show in ${it.ringLabel ?? 'the overview'}`}>
+                    <button
+                        type="button"
+                        onClick={() => scrollToRing(it.ringId!)}
+                        aria-label={`Show in ${it.ringLabel ?? 'the overview'}`}
+                        className="flex h-6 w-6 items-center justify-center rounded-control text-fg-subtle opacity-0 transition-opacity hover:bg-surface-hover hover:text-fg focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action/30 group-hover/row:opacity-100"
+                    >
+                        <LocateFixed className="h-3.5 w-3.5" />
+                    </button>
+                </Hint>
+            ) : null}
+        />
     )
 }
 
@@ -1440,7 +1319,7 @@ function EngagementActionCenterV2({ data, loading, engagementBase, setRefreshTic
           gatingRing: 'folder.poorly_named' },
         { key: 'duplicates', label: 'Duplicate files', count: duplicatesCount, severity: 'warning', icon: FileWarning,
           sub: duplicatesCount > 0 ? '≥90% name match, same extension' : undefined,
-          onDrilldown: duplicatesCount > 0 ? () => setDrilldown('duplicates') : undefined,
+          onSelect: duplicatesCount > 0 ? () => setDrilldown('duplicates') : undefined,
           gatingRing: 'folder.duplicates' },
         { key: 'stale', label: 'Stale files', count: staleCount, severity: 'warning', icon: Archive,
           sub: staleCount > 0 ? 'not modified in 6+ months' : undefined,
@@ -1469,26 +1348,36 @@ function EngagementActionCenterV2({ data, loading, engagementBase, setRefreshTic
         (r.gatingSection ? sectionVisible(r.gatingSection) : true)
     )
     const housekeeping = allHousekeeping.filter(r => r.gatingRing ? ringVisible(r.gatingRing) : true)
+    const attentionTotal = [...delivery, ...housekeeping].filter((r) => r.count > 0).length
 
     return (
         <div className="sticky top-0">
-            <div className="bg-white border border-[#e5e7eb] rounded p-6 flex flex-col gap-6 shadow-md">
-                {/* Header — mirrors the Engagement Insights card header */}
-                <div className="flex items-center justify-between">
-                    <h2 className="text-lg font-bold text-gray-900">Action Center</h2>
-                    <button
-                        onClick={() => setRefreshTick((t) => t + 1)}
-                        className="p-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors"
-                        title="Refresh"
-                    >
-                        <RefreshCw className={`h-4 w-4 text-gray-700 ${loading ? 'animate-spin' : ''}`} />
-                    </button>
+            <div className="flex flex-col gap-6 xl:border-l xl:border-line xl:pl-6">
+                {/* Header — the same shape as the Engagement Health heading on the left, so the two
+                    line up: icon, title, a plain count of items needing attention, a quiet refresh. */}
+                <div className="flex items-center justify-between gap-3 border-b border-line pb-2">
+                    <div className="flex min-w-0 items-center gap-2">
+                        <Inbox className="h-4 w-4 shrink-0 text-fg-subtle" />
+                        <h2 className="truncate text-h3 text-fg">Action Center</h2>
+                        {!loading && data && attentionTotal > 0 && (
+                            <span className="text-small tabular-nums text-fg-subtle">{attentionTotal}</span>
+                        )}
+                    </div>
+                    <Hint label="Refresh">
+                        <button
+                            onClick={() => setRefreshTick((t) => t + 1)}
+                            className="rounded-control p-1.5 text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg print:hidden"
+                            aria-label="Refresh"
+                        >
+                            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                        </button>
+                    </Hint>
                 </div>
 
                 {(loading || !data) ? (
                     <div className="flex flex-col gap-4">
-                        <div className="h-40 rounded-2xl bg-gray-100 animate-pulse" />
-                        <div className="h-32 rounded-2xl bg-gray-100 animate-pulse" />
+                        <div className="h-40 rounded-2xl bg-surface-muted animate-pulse" />
+                        <div className="h-32 rounded-2xl bg-surface-muted animate-pulse" />
                     </div>
                 ) : drilldown === 'duplicates' ? (
                     <DuplicatesDrilldown
@@ -1499,7 +1388,7 @@ function EngagementActionCenterV2({ data, loading, engagementBase, setRefreshTic
                 ) : (
                     <div className="flex flex-col gap-4">
                         {delivery.length > 0 && (
-                            <ACSectionV2 title="Delivery Actions" icon={Package} items={delivery} engagementBase={engagementBase} />
+                            <ACSectionV2 title="Delivery" icon={Package} items={delivery} engagementBase={engagementBase} />
                         )}
                         {housekeeping.length > 0 && (
                             <ACSectionV2 title="Housekeeping" icon={Archive} items={housekeeping} engagementBase={engagementBase} />
@@ -1528,81 +1417,6 @@ const DELIVERABLE_STAGE_META: Record<DeliverableStage, { label: string; hex: str
 }
 const DELIVERABLE_STAGES: DeliverableStage[] = ['to_do', 'in_progress', 'in_review', 'approved']
 
-// Donut + labelled legend + total row. Used for the Delivery Status / Schedule rings.
-function RingWithLegend({ items, total, centerTop, centerBottom, size = 108 }: {
-    items: { label: string; hex: string; value: number }[]
-    total?: number
-    centerTop: React.ReactNode
-    centerBottom: React.ReactNode
-    size?: number
-}) {
-    const sum = total ?? items.reduce((s, i) => s + i.value, 0)
-    return (
-        <div className="flex flex-col items-center gap-3 w-full">
-            <Donut size={size} segments={items.map((i) => ({ value: i.value, hex: i.hex }))} total={total} centerTop={centerTop} centerBottom={centerBottom} />
-            <div className="flex flex-col gap-1.5 w-full max-w-[220px]">
-                {items.map((i) => (
-                    <div key={i.label} className="flex items-center gap-2 text-xs">
-                        <span className="h-2.5 w-2.5 rounded-sm shrink-0" style={{ backgroundColor: i.hex }} />
-                        <span className="text-gray-600 truncate">{i.label}</span>
-                        <span className="ml-auto font-semibold text-gray-800 tabular-nums">{i.value}</span>
-                    </div>
-                ))}
-                <div className="flex items-center gap-2 text-xs pt-1.5 mt-0.5 border-t border-gray-100">
-                    <span className="text-gray-500">Total</span>
-                    <span className="ml-auto font-semibold text-gray-800 tabular-nums">{sum}</span>
-                </div>
-            </div>
-        </div>
-    )
-}
-
-// Concentric progress rings — each ring (outer→inner) fills to its coverage %.
-function ConcentricRings({ rings, size = 128, centerTop, centerBottom }: {
-    rings: { pct: number; hex: string }[]
-    size?: number
-    centerTop?: React.ReactNode
-    centerBottom?: React.ReactNode
-}) {
-    const c = size / 2
-    const thickness = 8
-    const gap = 7
-    return (
-        <div className="relative shrink-0" style={{ width: size, height: size }}>
-            <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90">
-                {rings.map((r, i) => {
-                    const R = size / 2 - thickness / 2 - i * (thickness + gap)
-                    const C = 2 * Math.PI * R
-                    const arc = Math.max(0, Math.min(1, r.pct / 100)) * C
-                    return (
-                        <g key={i}>
-                            <circle cx={c} cy={c} r={R} fill="none" stroke="#e9ecf1" strokeWidth={thickness} />
-                            {arc > 0 && (
-                                <circle cx={c} cy={c} r={R} fill="none" stroke={r.hex} strokeWidth={thickness} strokeDasharray={`${arc} ${C}`} strokeLinecap="round" style={{ filter: 'drop-shadow(0 0 1.5px rgba(15,23,42,0.28))' }} />
-                            )}
-                        </g>
-                    )
-                })}
-            </svg>
-            {(centerTop || centerBottom) && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center">
-                    {centerTop}
-                    {centerBottom}
-                </div>
-            )}
-        </div>
-    )
-}
-
-function PlanningGapRow({ hex, label, missing, total }: { hex: string; label: string; missing: number; total: number }) {
-    return (
-        <div className="flex items-center gap-2 text-xs">
-            <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: hex }} />
-            <span className="text-gray-600 truncate flex-1">{label}</span>
-            <span className={`shrink-0 font-medium tabular-nums ${missing > 0 ? 'text-amber-600' : 'text-gray-400'}`}>{missing}/{total} not set</span>
-        </div>
-    )
-}
 
 // ─── Delivery Timeline — 8th visual in Engagement Health ─────────────────────
 // Horizontal Gantt-style view: one row per deliverable, bar spans createdAt → dueDate,
@@ -1693,22 +1507,22 @@ function DeliveryTimeline({ deliverables, engagementCreatedAt, kickoffDate, enga
         : 0
 
     return (
-        <div className="col-span-full flex flex-col gap-4 pt-5 border-t border-gray-100">
+        <div className="col-span-full flex flex-col gap-4 pt-5 border-t border-line">
             <div className="flex items-center justify-between gap-2">
-                <p className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
-                    <CalendarClock className="h-4 w-4 text-gray-400" /> Delivery Timeline
+                <p className="text-sm font-semibold text-fg-muted flex items-center gap-1.5">
+                    <CalendarClock className="h-4 w-4 text-fg-subtle" /> Delivery Timeline
                     <InfoTip ariaLabel="About Delivery Timeline" text="Each bar spans from when the deliverable was created to its due date (or approved date). Bar fill shows stage progress: 25% To Do · 50% In Progress · 75% In Review · 100% Approved. Dashed bars have no due date set — they extend to today. The dashed vertical line is today; the solid vertical line is the engagement due date." />
                 </p>
                 {/* Zoom range selector — mirrors stock chart UX */}
-                <div className="flex items-center gap-0.5 rounded border border-gray-200 bg-gray-50 p-0.5">
+                <div className="flex items-center gap-0.5 rounded border border-line bg-surface-subtle p-0.5">
                     {(['30d', '90d', 'full'] as const).map((w) => (
                         <button
                             key={w}
                             onClick={() => setZoomWindow(w)}
                             className={`px-2.5 py-1 text-[11px] font-semibold rounded transition-colors ${
                                 zoomWindow === w
-                                    ? 'bg-white text-gray-900 shadow-sm border border-gray-200'
-                                    : 'text-gray-400 hover:text-gray-600'
+                                    ? 'bg-white text-fg border border-line'
+                                    : 'text-fg-subtle hover:text-fg-muted'
                             }`}
                         >
                             {w === 'full' ? 'All' : w.toUpperCase()}
@@ -1747,7 +1561,7 @@ function DeliveryTimeline({ deliverables, engagementCreatedAt, kickoffDate, enga
                                             {d.docId}
                                         </span>
                                     )}
-                                    <span className="text-xs text-gray-700 truncate" title={d.name}>{d.name}</span>
+                                    <span className="text-xs text-fg-muted truncate" title={d.name}>{d.name}</span>
                                 </div>
 
                                 {/* Bar track */}
@@ -1772,12 +1586,12 @@ function DeliveryTimeline({ deliverables, engagementCreatedAt, kickoffDate, enga
                                     )}
                                     {/* Today marker — dashed line */}
                                     <div
-                                        className="absolute top-0 bottom-0 border-l border-dashed border-gray-300 pointer-events-none z-10"
+                                        className="absolute top-0 bottom-0 border-l border-dashed border-line-strong pointer-events-none z-10"
                                         style={{ left: `${todayPct}%` }}
                                     />
                                     {/* Bar outer shell: full extent with tinted stage background */}
                                     <div
-                                        className={`absolute top-1.5 bottom-1.5 rounded overflow-hidden ${d.isOpenEnded ? 'border border-dashed border-amber-300' : 'border border-gray-200'}`}
+                                        className={`absolute top-1.5 bottom-1.5 rounded overflow-hidden ${d.isOpenEnded ? 'border border-dashed border-amber-300' : 'border border-line'}`}
                                         style={{
                                             left: `${barLeft}%`,
                                             width: `${barWidth}%`,
@@ -1811,11 +1625,11 @@ function DeliveryTimeline({ deliverables, engagementCreatedAt, kickoffDate, enga
                                 {/* Right meta */}
                                 <div className="w-32 shrink-0 text-right flex flex-col items-end gap-0">
                                     <span className={`text-[11px] font-semibold leading-tight ${
-                                        d.isOverdue ? 'text-red-600' : d.isOpenEnded ? 'text-amber-600' : 'text-gray-600'
+                                        d.isOverdue ? 'text-red-600' : d.isOpenEnded ? 'text-amber-600' : 'text-fg-muted'
                                     }`}>
                                         {meta.label}
                                     </span>
-                                    <span className={`text-[10px] leading-tight ${d.isOpenEnded ? 'text-amber-500' : 'text-gray-400'}`}>
+                                    <span className={`text-[10px] leading-tight ${d.isOpenEnded ? 'text-amber-500' : 'text-fg-subtle'}`}>
                                         {anchorLabel}
                                     </span>
                                 </div>
@@ -1852,14 +1666,14 @@ function DeliveryTimeline({ deliverables, engagementCreatedAt, kickoffDate, enga
                         return (
                             <div className="flex items-center gap-4 mt-1">
                                 <div className="w-44 shrink-0" />
-                                <div className={`relative flex-1 text-[10px] text-gray-400 ${anyCollision ? 'h-14' : 'h-10'}`}>
+                                <div className={`relative flex-1 text-[10px] text-fg-subtle ${anyCollision ? 'h-14' : 'h-10'}`}>
                                     {/* Row 0: interval ticks (suppressed near critical events) */}
                                     {filteredTickMs.map((ms, i) => {
                                         const p = pct(ms)
                                         return (
                                             <span
                                                 key={i}
-                                                className="absolute whitespace-nowrap text-gray-400"
+                                                className="absolute whitespace-nowrap text-fg-subtle"
                                                 style={{
                                                     top: ROW0,
                                                     left: p <= 2 ? '0%' : p >= 98 ? '100%' : `${p}%`,
@@ -1927,7 +1741,7 @@ function DeliveryTimeline({ deliverables, engagementCreatedAt, kickoffDate, enga
                     })()}
                 </div>
             ) : (
-                <p className="text-xs text-gray-400 py-2">No deliverables in this window.</p>
+                <p className="text-xs text-fg-subtle py-2">No deliverables in this window.</p>
             )}
 
             {/* Nudge: in-flight items without a due date */}
@@ -1947,6 +1761,7 @@ function DeliveryTimeline({ deliverables, engagementCreatedAt, kickoffDate, enga
 }
 
 // ─── File Organization card body ─────────────────────────────────────────────
+
 function FolderHealthRing({ label, tooltip, icon: Icon, segments, centerTop, centerBottom }: {
     label: string
     tooltip: string
@@ -1964,8 +1779,8 @@ function FolderHealthRing({ label, tooltip, icon: Icon, segments, centerTop, cen
 
     return (
         <div className="flex flex-col items-center gap-3">
-            <p className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
-                <Icon className="h-4 w-4 text-gray-400" />
+            <p className="text-sm font-semibold text-fg-muted flex items-center gap-1.5">
+                <Icon className="h-4 w-4 text-fg-subtle" />
                 {label}
                 <InfoTip ariaLabel={`About ${label}`} text={tooltip} />
             </p>
@@ -1981,13 +1796,13 @@ function FolderHealthRing({ label, tooltip, icon: Icon, segments, centerTop, cen
                 {segments.map((s) => (
                     <div key={s.legendLabel} className="flex items-center gap-2 text-xs">
                         <span className="h-2.5 w-2.5 rounded-sm shrink-0" style={{ backgroundColor: s.value === 0 && !s.isIssue ? RING.gray : s.hex }} />
-                        <span className="text-gray-600 truncate">{s.legendLabel}</span>
-                        <span className="ml-auto font-semibold text-gray-800 tabular-nums">{s.value}</span>
+                        <span className="text-fg-muted truncate">{s.legendLabel}</span>
+                        <span className="ml-auto font-semibold text-fg tabular-nums">{s.value}</span>
                     </div>
                 ))}
-                <div className="flex items-center gap-2 text-xs pt-1.5 mt-0.5 border-t border-gray-100">
-                    <span className="text-gray-500">Total</span>
-                    <span className="ml-auto font-semibold text-gray-800 tabular-nums">{total}</span>
+                <div className="flex items-center gap-2 text-xs pt-1.5 mt-0.5 border-t border-line">
+                    <span className="text-fg-muted">Total</span>
+                    <span className="ml-auto font-semibold text-fg tabular-nums">{total}</span>
                 </div>
             </div>
         </div>
@@ -2007,14 +1822,12 @@ function FolderHealthBody({ storageHealth, folderHealth, hiddenRings = [] }: {
     const penalties = [...(folderHealth.penalties ?? [])].sort((a, b) => b.points - a.points)
     const totalDeducted = penalties.reduce((s, p) => s + p.points, 0)
 
-    const severityLabel = (pts: number) => pts >= 15 ? { text: 'HIGH', cls: 'bg-red-50 text-red-600 border-red-100' } : pts >= 8 ? { text: 'MED', cls: 'bg-amber-50 text-amber-600 border-amber-100' } : { text: 'LOW', cls: 'bg-slate-50 text-slate-500 border-slate-200' }
-    const deductClass = (pts: number) => pts >= 15 ? 'text-red-600 font-bold' : pts >= 8 ? 'text-amber-600 font-semibold' : 'text-slate-400 font-medium'
 
     const totalArtifacts = storageHealth.totalFiles + folderHealth.totalFolders
     const totalFiles = storageHealth.totalFiles
     const totalFolders = folderHealth.totalFolders
 
-    const ragText = (n: number) => n > 0 ? 'text-amber-600' : 'text-gray-400'
+    const ragText = (n: number) => n > 0 ? 'text-amber-600' : 'text-fg-subtle'
 
     // 8 KPI rings — order determines grid position (score ring is cell 1, these fill cells 2–9)
     // Row 1: Score | Total Artifacts | Poorly Named
@@ -2030,8 +1843,8 @@ function FolderHealthBody({ storageHealth, folderHealth, hiddenRings = [] }: {
                 { legendLabel: 'Files', hex: RING.blue, value: totalFiles },
                 { legendLabel: 'Folders', hex: RING.indigo, value: totalFolders },
             ],
-            centerTop: <span className="text-xl font-bold leading-none text-gray-700 tabular-nums">{totalArtifacts}</span>,
-            centerBottom: <span className="text-[10px] text-gray-400 mt-0.5">total</span>,
+            centerTop: <span className="text-xl font-bold leading-none text-fg-muted tabular-nums">{totalArtifacts}</span>,
+            centerBottom: <span className="text-[10px] text-fg-subtle mt-0.5">total</span>,
         },
         {
             id: 'folder.poorly_named',
@@ -2043,7 +1856,7 @@ function FolderHealthBody({ storageHealth, folderHealth, hiddenRings = [] }: {
                 { legendLabel: 'OK', hex: RING.green, value: totalArtifacts - storageHealth.badlyNamedCount },
             ],
             centerTop: <span className={`text-xl font-bold leading-none tabular-nums ${ragText(storageHealth.badlyNamedCount)}`}>{storageHealth.badlyNamedCount}</span>,
-            centerBottom: <span className="text-[10px] text-gray-400 mt-0.5">/ {totalArtifacts}</span>,
+            centerBottom: <span className="text-[10px] text-fg-subtle mt-0.5">/ {totalArtifacts}</span>,
         },
         {
             id: 'folder.duplicates',
@@ -2055,7 +1868,7 @@ function FolderHealthBody({ storageHealth, folderHealth, hiddenRings = [] }: {
                 { legendLabel: 'OK', hex: RING.green, value: totalArtifacts - storageHealth.duplicateCount },
             ],
             centerTop: <span className={`text-xl font-bold leading-none tabular-nums ${ragText(storageHealth.duplicateCount)}`}>{storageHealth.duplicateCount}</span>,
-            centerBottom: <span className="text-[10px] text-gray-400 mt-0.5">/ {totalArtifacts}</span>,
+            centerBottom: <span className="text-[10px] text-fg-subtle mt-0.5">/ {totalArtifacts}</span>,
         },
         {
             id: 'folder.empty_folders',
@@ -2067,7 +1880,7 @@ function FolderHealthBody({ storageHealth, folderHealth, hiddenRings = [] }: {
                 { legendLabel: 'OK', hex: RING.green, value: totalFolders - folderHealth.emptyFolders },
             ],
             centerTop: <span className={`text-xl font-bold leading-none tabular-nums ${ragText(folderHealth.emptyFolders)}`}>{folderHealth.emptyFolders}</span>,
-            centerBottom: <span className="text-[10px] text-gray-400 mt-0.5">/ {totalFolders}</span>,
+            centerBottom: <span className="text-[10px] text-fg-subtle mt-0.5">/ {totalFolders}</span>,
         },
         {
             id: 'folder.deep_folders',
@@ -2079,7 +1892,7 @@ function FolderHealthBody({ storageHealth, folderHealth, hiddenRings = [] }: {
                 { legendLabel: 'OK', hex: RING.green, value: totalFolders - folderHealth.deeplyNestedFolders },
             ],
             centerTop: <span className={`text-xl font-bold leading-none tabular-nums ${ragText(folderHealth.deeplyNestedFolders)}`}>{folderHealth.deeplyNestedFolders}</span>,
-            centerBottom: <span className="text-[10px] text-gray-400 mt-0.5">/ {totalFolders}</span>,
+            centerBottom: <span className="text-[10px] text-fg-subtle mt-0.5">/ {totalFolders}</span>,
         },
         {
             id: 'folder.orphaned_files',
@@ -2091,7 +1904,7 @@ function FolderHealthBody({ storageHealth, folderHealth, hiddenRings = [] }: {
                 { legendLabel: 'OK', hex: RING.green, value: totalFiles - folderHealth.orphanedFiles },
             ],
             centerTop: <span className={`text-xl font-bold leading-none tabular-nums ${ragText(folderHealth.orphanedFiles)}`}>{folderHealth.orphanedFiles}</span>,
-            centerBottom: <span className="text-[10px] text-gray-400 mt-0.5">/ {totalFiles}</span>,
+            centerBottom: <span className="text-[10px] text-fg-subtle mt-0.5">/ {totalFiles}</span>,
         },
         {
             id: 'folder.stale_files',
@@ -2103,7 +1916,7 @@ function FolderHealthBody({ storageHealth, folderHealth, hiddenRings = [] }: {
                 { legendLabel: 'OK', hex: RING.green, value: totalFiles - storageHealth.staleCount },
             ],
             centerTop: <span className={`text-xl font-bold leading-none tabular-nums ${ragText(storageHealth.staleCount)}`}>{storageHealth.staleCount}</span>,
-            centerBottom: <span className="text-[10px] text-gray-400 mt-0.5">/ {totalFiles}</span>,
+            centerBottom: <span className="text-[10px] text-fg-subtle mt-0.5">/ {totalFiles}</span>,
         },
         {
             id: 'folder.large_files',
@@ -2115,7 +1928,7 @@ function FolderHealthBody({ storageHealth, folderHealth, hiddenRings = [] }: {
                 { legendLabel: 'OK', hex: RING.green, value: totalFiles - storageHealth.largeCount },
             ],
             centerTop: <span className={`text-xl font-bold leading-none tabular-nums ${ragText(storageHealth.largeCount)}`}>{storageHealth.largeCount}</span>,
-            centerBottom: <span className="text-[10px] text-gray-400 mt-0.5">/ {totalFiles}</span>,
+            centerBottom: <span className="text-[10px] text-fg-subtle mt-0.5">/ {totalFiles}</span>,
         },
     ]
     const rings = allRings.filter(r => show(r.id))
@@ -2126,12 +1939,20 @@ function FolderHealthBody({ storageHealth, folderHealth, hiddenRings = [] }: {
     const [expanded, setExpanded] = useState(false)
     const gridRef = useRef<HTMLDivElement>(null)
     const [fullHeight, setFullHeight] = useState<number | null>(null)
+    // Collapsed, the grid shows all of row 1 (the score ring with what lowered it, beside the first
+    // rings) plus a short peek of row 2 under the fade. A fixed height used to cut row 1 short, and
+    // the fade covered its lower half.
+    const [row1Height, setRow1Height] = useState<number | null>(null)
+    const PEEK = 56
 
     useEffect(() => {
-        if (gridRef.current) {
-            setFullHeight(gridRef.current.scrollHeight)
-        }
-    }, [rings.length, showScoreRing])
+        const grid = gridRef.current
+        if (!grid) return
+        setFullHeight(grid.scrollHeight)
+        const row1 = Array.from(grid.children).slice(0, 3) as HTMLElement[]
+        if (row1.length) setRow1Height(Math.max(...row1.map((cell) => cell.offsetHeight)))
+    }, [rings.length, showScoreRing, penalties.length])
+    const collapsedHeight = row1Height != null ? row1Height + PEEK : 220
 
     return (
         <div className="p-6 flex flex-col gap-6">
@@ -2139,13 +1960,14 @@ function FolderHealthBody({ storageHealth, folderHealth, hiddenRings = [] }: {
             <div className="relative">
                 <div
                     ref={gridRef}
-                    className="grid grid-cols-3 gap-8 overflow-hidden transition-[max-height] duration-700 ease-[cubic-bezier(0.65,0,0.35,1)]"
-                    style={{ maxHeight: !expanded && hasMoreRows ? 220 : (fullHeight ?? 1200) }}
+                    data-cols="3-fixed"
+                    className="ring-rows grid grid-cols-3 overflow-hidden transition-[max-height] duration-700 [transition-timing-function:cubic-bezier(0.65,0,0.35,1)]"
+                    style={{ maxHeight: !expanded && hasMoreRows ? collapsedHeight : (fullHeight ?? 1200) }}
                 >
                     {/* Score ring — cell 1 */}
                     {showScoreRing && <div className="flex flex-col items-center gap-3">
-                        <p className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
-                            <FolderOpen className="h-4 w-4 text-gray-400" />
+                        <p className="text-sm font-semibold text-fg-muted flex items-center gap-1.5">
+                            <FolderOpen className="h-4 w-4 text-fg-subtle" />
                             Overall Score
                             <InfoTip ariaLabel="About Folder Health Score" text="File organization quality (0–100). Penalizes badly named files, duplicates, stale files, large files, folders nested more than 5 deep, crowded folders, empty folders, and files left outside any folder. Uses the same rules as Review folder organization on the Files tab." />
                         </p>
@@ -2155,17 +1977,19 @@ function FolderHealthBody({ storageHealth, folderHealth, hiddenRings = [] }: {
                             thickness={13}
                             segments={[{ value: score, hex: scoreHex }]}
                             centerTop={<span className={`text-2xl font-bold leading-none tabular-nums ${scoreTextClass}`}>{score}</span>}
-                            centerBottom={<span className="text-[10px] text-gray-400 mt-0.5">/ 100</span>}
+                            centerBottom={<span className="text-[10px] text-fg-subtle mt-0.5">/ 100</span>}
                         />
                         <div className="flex flex-col gap-1.5 w-full max-w-[220px]">
                             <div className="flex items-center gap-2 text-xs">
                                 <span className="h-2.5 w-2.5 rounded-sm shrink-0" style={{ backgroundColor: scoreHex }} />
-                                <span className="text-gray-600 truncate">{label}</span>
+                                <span className="text-fg-muted truncate">{label}</span>
                             </div>
                             {totalDeducted > 0 && (
-                                <p className="text-xs text-gray-400 tabular-nums">100 − <span className="text-red-500 font-medium">{totalDeducted}</span> = <span className={`font-semibold ${scoreTextClass}`}>{score}</span></p>
+                                <p className="text-xs text-fg-subtle tabular-nums">100 − <span className="text-red-500 font-medium">{totalDeducted}</span> = <span className={`font-semibold ${scoreTextClass}`}>{score}</span></p>
                             )}
                         </div>
+                        {/* What lowered the score — directly under it, as in Engagement Health. */}
+                        <ScoreDeductions penalties={penalties} emptyText="All clear — no issues found" className="w-full max-w-[220px]" />
                     </div>}
                     {/* 8 KPI rings */}
                     {rings.map((r, i) => (
@@ -2189,15 +2013,17 @@ function FolderHealthBody({ storageHealth, folderHealth, hiddenRings = [] }: {
                     ))}
                 </div>
                 <div
-                    className="pointer-events-none absolute inset-x-0 h-28 bg-gradient-to-t from-white via-white/90 to-transparent transition-opacity duration-500 ease-in-out"
-                    style={{ bottom: '2.5rem', opacity: !expanded && hasMoreRows ? 1 : 0 }}
+                    className="pointer-events-none absolute inset-x-0 bg-gradient-to-t from-white via-white/90 to-transparent transition-opacity duration-500 ease-in-out"
+                    style={row1Height != null
+                        ? { top: row1Height, height: PEEK, opacity: !expanded && hasMoreRows ? 1 : 0 }
+                        : { bottom: '2.5rem', height: '7rem', opacity: !expanded && hasMoreRows ? 1 : 0 }}
                 />
                 {hasMoreRows && (
                     <div className="relative flex justify-center mt-3">
                         <button
                             type="button"
                             onClick={() => setExpanded(v => !v)}
-                            className="flex items-center gap-1.5 text-sm font-semibold text-gray-700 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 border border-gray-300 px-4 py-1.5 rounded-full transition-colors"
+                            className="flex items-center gap-1.5 text-sm font-semibold text-fg-muted hover:text-fg bg-surface-muted hover:bg-surface-hover border border-line-strong px-4 py-1.5 rounded-full transition-colors"
                         >
                             {expanded ? 'Show less' : 'Show more'}
                             <ChevronDown className={`h-4 w-4 transition-transform duration-300 ${expanded ? 'rotate-180' : ''}`} />
@@ -2206,25 +2032,8 @@ function FolderHealthBody({ storageHealth, folderHealth, hiddenRings = [] }: {
                 )}
             </div>
 
-            {/* Factors list */}
-            {penalties.length > 0 ? (
-                <div className="pt-4 border-t border-gray-100 flex flex-col gap-2">
-                    <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Factors</p>
-                    {penalties.map((p) => {
-                        const sev = severityLabel(p.points)
-                        return (
-                            <div key={p.label} className="flex items-center gap-1.5 text-[11px]">
-                                <span className={`h-2 w-2 rounded-full shrink-0 ${p.points >= 15 ? 'bg-red-400' : p.points >= 8 ? 'bg-amber-400' : 'bg-slate-300'}`} />
-                                <span className="text-gray-600 truncate flex-1">{p.label}</span>
-                                <span className={`text-[9px] font-semibold px-1 py-0.5 rounded border shrink-0 ${sev.cls}`}>{sev.text}</span>
-                                <span className={`tabular-nums shrink-0 ${deductClass(p.points)}`}>−{p.points}</span>
-                            </div>
-                        )
-                    })}
-                </div>
-            ) : (
-                <p className="pt-4 border-t border-gray-100 text-[11px] text-green-600 font-medium text-center">All clear — no issues found</p>
-            )}
+            {/* Without the score ring there is nothing for the list to sit under, so it ends the section. */}
+            {!showScoreRing && <ScoreDeductions penalties={penalties} emptyText="All clear — no issues found" />}
         </div>
     )
 }
@@ -2237,7 +2046,7 @@ function EngagementHealthBody({ health, deliverables, planningHygiene, commentTh
 
     // Ring 1 — Health Score gauge
     const healthHex = !health ? RING.gray : health.level === 'good' ? RING.green : health.level === 'warning' ? RING.amber : RING.red
-    const healthTextClass = !health ? 'text-gray-400' : health.level === 'good' ? 'text-green-600' : health.level === 'warning' ? 'text-amber-600' : 'text-red-600'
+    const healthTextClass = !health ? 'text-fg-subtle' : health.level === 'good' ? 'text-green-600' : health.level === 'warning' ? 'text-amber-600' : 'text-red-600'
     const healthLabel = !health ? '—' : health.level === 'good' ? 'Healthy' : health.level === 'warning' ? 'Needs attention' : 'Critical'
     const penalties = [...(health?.penalties ?? [])].sort((a, b) => b.points - a.points)
     const totalDeducted = penalties.reduce((s, p) => s + p.points, 0)
@@ -2300,17 +2109,16 @@ function EngagementHealthBody({ health, deliverables, planningHygiene, commentTh
     const ftrTotal = firstTimeRight?.totalApproved ?? 0
     const ftrPct = ftrTotal > 0 ? Math.round(((firstTimeRight!.firstTime) / ftrTotal) * 100) : 0
 
-    const severityLabel = (pts: number) => pts >= 15 ? { text: 'HIGH', cls: 'bg-red-50 text-red-600 border-red-100' } : pts >= 8 ? { text: 'MED', cls: 'bg-amber-50 text-amber-600 border-amber-100' } : { text: 'LOW', cls: 'bg-slate-50 text-slate-500 border-slate-200' }
-    const deductClass = (pts: number) => pts >= 15 ? 'text-red-600 font-bold' : pts >= 8 ? 'text-amber-600 font-semibold' : 'text-slate-400 font-medium'
 
     return (
         <div className="p-6 flex flex-col gap-6">
-            <div className={`grid grid-cols-1 ${health ? 'md:grid-cols-3' : 'md:grid-cols-2'} gap-8`}>
+            {/* .ring-rows (globals.css) draws a full-width hairline between rows of rings. */}
+            <div className={`ring-rows grid grid-cols-1 ${health ? 'md:grid-cols-3' : 'md:grid-cols-2'}`} data-cols={health ? '3' : '2'}>
                 {/* Ring 1 — Health Score (internal only; stripped from external responses) */}
                 {health && show('engagement.health_score') && (
                     <div id="ring-health" className="flex flex-col items-center gap-3 scroll-mt-24">
-                        <p className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
-                            <Heart className="h-4 w-4 text-gray-400" /> Overall Health Score
+                        <p className="text-sm font-semibold text-fg-muted flex items-center gap-1.5">
+                            <Heart className="h-4 w-4 text-fg-subtle" /> Overall Health Score
                             <InfoTip ariaLabel="About Overall Health Score" text="Composite score (0–100) starting at 100 and reduced by weighted factors: overdue engagement, planning gaps, pace behind schedule, unanswered comments, sensitive files, and reworked deliverables. 80+ healthy · 50–79 needs attention · <50 critical." />
                         </p>
                         <Donut
@@ -2319,74 +2127,58 @@ function EngagementHealthBody({ health, deliverables, planningHygiene, commentTh
                             thickness={13}
                             segments={[{ value: health.score, hex: healthHex }]}
                             centerTop={<span className={`text-2xl font-bold leading-none ${healthTextClass}`}>{health.score}</span>}
-                            centerBottom={<span className="text-[10px] text-gray-400 mt-0.5">/ 100</span>}
+                            centerBottom={<span className="text-[10px] text-fg-subtle mt-0.5">/ 100</span>}
                         />
                         <div className="text-center">
                             <p className={`text-xs font-medium ${healthTextClass}`}>{healthLabel}</p>
                             {totalDeducted > 0 && (
-                                <p className="text-[11px] text-gray-400 mt-0.5">100 − <span className="text-red-500 font-medium">{totalDeducted}</span> = <span className={`font-semibold ${healthTextClass}`}>{health.score}</span></p>
+                                <p className="text-[11px] text-fg-subtle mt-0.5">100 − <span className="text-red-500 font-medium">{totalDeducted}</span> = <span className={`font-semibold ${healthTextClass}`}>{health.score}</span></p>
                             )}
                         </div>
-                        {/* Factors — directly under the Health Score ring */}
-                        {penalties.length > 0 ? (
-                            <div className="w-full max-w-[260px] pt-3 border-t border-gray-100 flex flex-col gap-2">
-                                <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Factors</p>
-                                {penalties.map((p) => {
-                                    const sev = severityLabel(p.points)
-                                    return (
-                                        <div key={p.label} className="flex items-center gap-1.5 text-[11px]">
-                                            <span className={`h-2 w-2 rounded-full shrink-0 ${p.points >= 15 ? 'bg-red-400' : p.points >= 8 ? 'bg-amber-400' : 'bg-slate-300'}`} />
-                                            <span className="text-gray-600 truncate flex-1">{p.label}</span>
-                                            <span className={`text-[9px] font-semibold px-1 py-0.5 rounded border shrink-0 ${sev.cls}`}>{sev.text}</span>
-                                            <span className={`tabular-nums shrink-0 ${deductClass(p.points)}`}>−{p.points}</span>
-                                        </div>
-                                    )
-                                })}
-                            </div>
-                        ) : (
-                            <p className="w-full max-w-[260px] pt-3 border-t border-gray-100 text-[11px] text-green-600 font-medium text-center">All clear — no risks</p>
-                        )}
+                        {/* What lowered the score — directly under the Health Score ring. It stays the
+                            ring's last child: the PDF capture widens `#ring-health > :last-child`. */}
+                        <ScoreDeductions penalties={penalties} emptyText="All clear — no risks" className="w-full max-w-[260px]" />
                     </div>
                 )}
                 {/* Ring 2 — Delivery Status */}
                 {show('engagement.delivery_status') && (
                 <div id="ring-status" className="flex flex-col items-center gap-3 scroll-mt-24">
-                    <p className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
-                        <Package className="h-4 w-4 text-gray-400" /> Delivery Status
+                    <p className="text-sm font-semibold text-fg-muted flex items-center gap-1.5">
+                        <Package className="h-4 w-4 text-fg-subtle" /> Delivery Status
                         <InfoTip ariaLabel="About Delivery Status" text="Distribution of deliverables across workflow stages (To Do → In Progress → In Review → Approved). Center shows % of deliverables that have reached Approved." />
                     </p>
                     <RingWithLegend
                         items={statusItems}
-                        centerTop={<span className="text-xl font-bold text-gray-900 tabular-nums leading-none">{approvedPct}%</span>}
-                        centerBottom={<span className="text-[10px] text-gray-400 mt-0.5">approved</span>}
+                        centerTop={<span className="text-xl font-bold text-fg tabular-nums leading-none">{approvedPct}%</span>}
+                        centerBottom={<span className="text-[10px] text-fg-subtle mt-0.5">approved</span>}
                     />
                 </div>
                 )}
                 {/* Ring 3 — Delivery Schedule */}
                 {show('engagement.delivery_schedule') && (
                 <div id="ring-schedule" className="flex flex-col items-center gap-3 scroll-mt-24">
-                    <p className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
-                        <CalendarClock className="h-4 w-4 text-gray-400" /> Delivery Schedule
+                    <p className="text-sm font-semibold text-fg-muted flex items-center gap-1.5">
+                        <CalendarClock className="h-4 w-4 text-fg-subtle" /> Delivery Schedule
                         <InfoTip ariaLabel="About Delivery Schedule" text="Due-date adherence across deliverables. Completed = approved. On Track = has a due date and not late. Overdue = due date has passed and not yet approved. No Due Date = no target set. Center shows % on schedule." />
                     </p>
                     <RingWithLegend
                         items={scheduleItems}
-                        centerTop={<span className="text-xl font-bold text-gray-900 tabular-nums leading-none">{onSchedulePct}%</span>}
-                        centerBottom={<span className="text-[10px] text-gray-400 mt-0.5">on schedule</span>}
+                        centerTop={<span className="text-xl font-bold text-fg tabular-nums leading-none">{onSchedulePct}%</span>}
+                        centerBottom={<span className="text-[10px] text-fg-subtle mt-0.5">on schedule</span>}
                     />
                 </div>
                 )}
                 {/* Rings 4-7 — Planning Hygiene, Comment Responsiveness, Pace, First-Time-Right */}
                 {show('engagement.planning_hygiene') && (
                         <div id="ring-planning" className="flex flex-col items-center gap-3 scroll-mt-24">
-                            <p className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
-                                <ClipboardCheck className="h-4 w-4 text-gray-400" /> Planning Hygiene
+                            <p className="text-sm font-semibold text-fg-muted flex items-center gap-1.5">
+                                <ClipboardCheck className="h-4 w-4 text-fg-subtle" /> Planning Hygiene
                                 <InfoTip ariaLabel="About Planning Hygiene" text="Setup coverage for in-flight (non-approved) work: deliverable due dates, subtask due dates, and subtask assignees. Concentric rings show each dimension's coverage. Center shows the average % set up." />
                             </p>
                             {hygieneNoWork ? (
                                 <div className="flex flex-col items-center justify-center py-10 text-center">
-                                    <p className="text-sm text-gray-500">No in-flight deliverables</p>
-                                    <p className="text-xs text-gray-400 mt-0.5">Nothing to plan right now.</p>
+                                    <p className="text-sm text-fg-muted">No in-flight deliverables</p>
+                                    <p className="text-xs text-fg-subtle mt-0.5">Nothing to plan right now.</p>
                                 </div>
                             ) : (
                                 <>
@@ -2396,8 +2188,8 @@ function EngagementHealthBody({ health, deliverables, planningHygiene, commentTh
                                             { pct: docDueCov, hex: RING.blue },
                                             { pct: docAssigneeCov, hex: RING.indigo },
                                         ]}
-                                        centerTop={<span className="text-lg font-bold text-gray-900 tabular-nums leading-none">{hygieneOverallPct}%</span>}
-                                        centerBottom={<span className="text-[9px] text-gray-400">set up</span>}
+                                        centerTop={<span className="text-lg font-bold text-fg tabular-nums leading-none">{hygieneOverallPct}%</span>}
+                                        centerBottom={<span className="text-[9px] text-fg-subtle">set up</span>}
                                     />
                                     <div className="flex flex-col gap-1.5 w-full max-w-[240px]">
                                         <PlanningGapRow hex={RING.green} label="Deliverable due dates" missing={phDelivTotal - (ph?.deliverableWithDueDate ?? 0)} total={phDelivTotal} />
@@ -2410,8 +2202,8 @@ function EngagementHealthBody({ health, deliverables, planningHygiene, commentTh
                 )}
                 {show('engagement.comment_responsiveness') && (
                         <div id="ring-comments" className="flex flex-col items-center gap-3 scroll-mt-24">
-                            <p className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
-                                <MessagesSquare className="h-4 w-4 text-gray-400" /> Comment Responsiveness
+                            <p className="text-sm font-semibold text-fg-muted flex items-center gap-1.5">
+                                <MessagesSquare className="h-4 w-4 text-fg-subtle" /> Comment Responsiveness
                                 <InfoTip ariaLabel="About Comment Responsiveness" text="Share of document comment threads that are resolved — answered by the firm and not still flagged. A thread the firm replied to but that is marked Urgent or Looking counts as open, not resolved. Higher is better." />
                             </p>
                             <RingWithLegend
@@ -2420,15 +2212,15 @@ function EngagementHealthBody({ health, deliverables, planningHygiene, commentTh
                                     { label: 'Flagged open', hex: RING.amber, value: respFlaggedOpen },
                                     { label: 'Unanswered', hex: RING.red, value: commentThreads?.unanswered ?? 0 },
                                 ]}
-                                centerTop={<span className="text-xl font-bold text-gray-900 tabular-nums leading-none">{respPct}%</span>}
-                                centerBottom={<span className="text-[10px] text-gray-400 mt-0.5">resolved</span>}
+                                centerTop={<span className="text-xl font-bold text-fg tabular-nums leading-none">{respPct}%</span>}
+                                centerBottom={<span className="text-[10px] text-fg-subtle mt-0.5">resolved</span>}
                             />
                         </div>
                 )}
                 {show('engagement.pace') && (
                         <div id="ring-pace" className="flex flex-col items-center gap-3 scroll-mt-24">
-                            <p className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
-                                <Gauge className="h-4 w-4 text-gray-400" /> Pace
+                            <p className="text-sm font-semibold text-fg-muted flex items-center gap-1.5">
+                                <Gauge className="h-4 w-4 text-fg-subtle" /> Pace
                                 <InfoTip ariaLabel="About Pace" text="Delivery progress vs. time elapsed — % delivered ÷ % of engagement duration used. 100% = on pace. Below 100% = behind. Requires a kickoff date and due date." />
                             </p>
                             <Donut
@@ -2436,13 +2228,13 @@ function EngagementHealthBody({ health, deliverables, planningHygiene, commentTh
                                 size={108}
                                 thickness={14}
                                 segments={[{ value: paceScore, hex: paceHex }]}
-                                centerTop={<span className="text-xl font-bold text-gray-900 tabular-nums leading-none">{pace?.hasDeadline ? `${paceScore}%` : '—'}</span>}
-                                centerBottom={<span className="text-[10px] text-gray-400 mt-0.5">on pace</span>}
+                                centerTop={<span className="text-xl font-bold text-fg tabular-nums leading-none">{pace?.hasDeadline ? `${paceScore}%` : '—'}</span>}
+                                centerBottom={<span className="text-[10px] text-fg-subtle mt-0.5">on pace</span>}
                             />
                             <div className="text-center">
-                                <p className="text-xs font-medium text-gray-600">{paceStatus}</p>
+                                <p className="text-xs font-medium text-fg-muted">{paceStatus}</p>
                                 {pace?.hasDeadline && (
-                                    <p className="text-[11px] text-gray-400 mt-0.5">{pace.deliveredPct}% delivered · {pace.timePct}% elapsed</p>
+                                    <p className="text-[11px] text-fg-subtle mt-0.5">{pace.deliveredPct}% delivered · {pace.timePct}% elapsed</p>
                                 )}
                                 {projectedCompletionMs !== null && (
                                     <p className="text-[11px] text-[#5A78FF] font-medium mt-1.5 bg-[#5A78FF]/6 border border-[#5A78FF]/20 rounded px-2 py-0.5">
@@ -2455,10 +2247,16 @@ function EngagementHealthBody({ health, deliverables, planningHygiene, commentTh
                 {/* Ring 7 — First-Time-Right (approved deliverables only) */}
                 {show('engagement.first_time_right') && (
                         <div id="ring-ftr" className="flex flex-col items-center gap-3 scroll-mt-24">
-                            <p className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
-                                <Target className="h-4 w-4 text-gray-400" /> First-Time-Right
-                                <span className="text-[10px] font-medium text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded-full">approved only</span>
-                                <InfoTip ariaLabel="About First-Time-Right" text="Of the deliverables that reached Approved, the share that got there without ever being sent back for rework (zero backward status transitions). In-flight deliverables don't count until they're approved. Higher is better." />
+                            {/* The title and its info icon never break (the hyphens used to split it over
+                                two lines). "approved only" is plain muted text: as a grey pill it wrapped
+                                into a box that read as an empty card. In a narrow column it drops to its
+                                own line, as a subtitle. */}
+                            <p className="flex flex-wrap items-center justify-center gap-x-1.5 gap-y-0.5 text-sm font-semibold text-fg-muted">
+                                <span className="flex items-center gap-1.5 whitespace-nowrap">
+                                    <Target className="h-4 w-4 text-fg-subtle" /> First-Time-Right
+                                    <InfoTip ariaLabel="About First-Time-Right" text="Of the deliverables that reached Approved, the share that got there without ever being sent back for rework (zero backward status transitions). In-flight deliverables don't count until they're approved. Higher is better." />
+                                </span>
+                                <span className="whitespace-nowrap text-small font-normal text-fg-subtle">approved only</span>
                             </p>
                             {ftrTotal > 0 ? (
                                 <RingWithLegend
@@ -2466,18 +2264,18 @@ function EngagementHealthBody({ health, deliverables, planningHygiene, commentTh
                                         { label: 'Approved first pass', hex: RING.green, value: firstTimeRight?.firstTime ?? 0 },
                                         { label: 'Approved after rework', hex: RING.amber, value: firstTimeRight?.reworked ?? 0 },
                                     ]}
-                                    centerTop={<span className="text-xl font-bold text-gray-900 tabular-nums leading-none">{ftrPct}%</span>}
-                                    centerBottom={<span className="text-[10px] text-gray-400 mt-0.5 tabular-nums">{firstTimeRight!.firstTime}/{ftrTotal} approved</span>}
+                                    centerTop={<span className="text-xl font-bold text-fg tabular-nums leading-none">{ftrPct}%</span>}
+                                    centerBottom={<span className="text-[10px] text-fg-subtle mt-0.5 tabular-nums">{firstTimeRight!.firstTime}/{ftrTotal} approved</span>}
                                 />
                             ) : (
                                 <div className="flex flex-col items-center justify-center py-8 text-center">
                                     <Target className="h-8 w-8 text-gray-200 mb-2" />
-                                    <p className="text-xs text-gray-500">No approved deliverables yet</p>
-                                    <p className="text-[11px] text-gray-400 mt-0.5">Ring updates once a deliverable is approved.</p>
+                                    <p className="text-xs text-fg-muted">No approved deliverables yet</p>
+                                    <p className="text-[11px] text-fg-subtle mt-0.5">Ring updates once a deliverable is approved.</p>
                                 </div>
                             )}
                             {(inFlightWithRework ?? 0) > 0 && (
-                                <p className="text-[11px] text-amber-600 font-medium bg-amber-50 border border-amber-100 rounded px-2 py-1 max-w-[240px] text-center">
+                                <p className="text-[11px] text-amber-600 font-medium max-w-[240px] text-center">
                                     <AlertTriangle className="inline h-3 w-3 mr-1 -mt-0.5" />
                                     {inFlightWithRework} in-flight deliverable{inFlightWithRework === 1 ? '' : 's'} already reworked — this % may drop.
                                 </p>
@@ -2906,41 +2704,15 @@ export function EngagementInsightsDashboard({
         }
     }
 
-    const dueLabel = data?.engagementDaysUntilDue != null
-        ? deltaLabel(data.engagementDaysUntilDue)
-        : null
-
-    const dueBadgeColor = data?.engagementDaysUntilDue != null
-        ? deltaColor(data.engagementDaysUntilDue)
-        : ''
-
     const hiddenSections = data?.insightsConfig?.hiddenSections ?? []
     const showSection = (id: string) => !hiddenSections.includes(id)
 
     return (
         <TooltipProvider delayDuration={150}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 22rem', gap: '1.5rem', paddingBottom: '1.5rem', alignItems: 'stretch' }}>
-            {/* Left: outer card — all informational content */}
-            <div className="bg-white border border-[#e5e7eb] rounded p-6 flex flex-col gap-6 shadow-md">
-                {/* Header */}
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                        <h2 className="text-lg font-bold text-gray-900">Engagement Insights</h2>
-                        {dueLabel && (
-                            <span className={`text-[11px] font-medium px-2.5 py-0.5 rounded-full border ${dueBadgeColor}`}>
-                                Due: {dueLabel}
-                            </span>
-                        )}
-                    </div>
-                    <button
-                        onClick={() => setRefreshTick((t) => t + 1)}
-                        className="p-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors"
-                        title="Refresh"
-                    >
-                        <RefreshCw className={`h-4 w-4 text-gray-700 ${loading ? 'animate-spin' : ''}`} />
-                    </button>
-                </div>
-
+        <div className="grid grid-cols-1 gap-8 pb-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
+            {/* Left: insights — flat sections, no outer card. The page header above already shows
+                the engagement's name, status and due date. */}
+            <div className="flex min-w-0 flex-col gap-10">
                 {/* Engagement Health — Health Score · Delivery Status · Delivery Schedule (Phase 7 & 8) */}
                 {!loading && data && (() => {
                     const inFlightIds = new Set((data.deliverables ?? []).filter((d) => d.stage !== 'approved').map((d) => d.id))
@@ -2954,13 +2726,30 @@ export function EngagementInsightsDashboard({
                             subtext={`Overall Health ${data.healthScore?.score ?? '—'}/100 · ${data.deliverables?.length ?? 0} deliverable${(data.deliverables?.length ?? 0) === 1 ? '' : 's'}`}
                             headerExtra={
                                 <div className="flex items-center gap-1">
+                                    {/* Refresh sits with the section's other actions rather than on a
+                                        row of its own, so Engagement Health lines up with the Action
+                                        Center heading. While it reloads, the page shows its skeleton. */}
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <button
+                                                onClick={() => setRefreshTick((t) => t + 1)}
+                                                // A screen-only control: never in a printout or the exported PDF.
+                                                data-no-export=""
+                                                className="rounded-control p-1.5 text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg print:hidden"
+                                                aria-label="Refresh insights"
+                                            >
+                                                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                                            </button>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="bottom" className="text-xs">Refresh insights</TooltipContent>
+                                    </Tooltip>
                                     {isFirmAdmin && (
                                         <>
                                         <Tooltip>
                                             <TooltipTrigger asChild>
                                                 <Link
                                                     href={firmSettingsPath(groupSlug, orgSlug, 'appsettings')}
-                                                    className="p-1.5 rounded text-violet-400 hover:text-primary hover:bg-primary/10 transition-colors"
+                                                    className="rounded-control p-1.5 text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg"
                                                     aria-label="Display, Print & Sharing settings"
                                                 >
                                                     <Settings className="h-4 w-4" />
@@ -2975,10 +2764,10 @@ export function EngagementInsightsDashboard({
                                             <button
                                                 onClick={handleDownloadHealth}
                                                 disabled={dlState !== 'idle'}
-                                                className={`p-1.5 rounded transition-colors${dlState !== 'idle' ? ' cursor-wait opacity-50' : ' text-blue-400 hover:text-blue-600 hover:bg-blue-50'}`}
+                                                className={`rounded-control p-1.5 transition-colors${dlState !== 'idle' ? ' cursor-wait opacity-50' : ' text-fg-subtle hover:bg-surface-hover hover:text-fg'}`}
                                                 aria-label="Download PDF"
                                             >
-                                                {dlState === 'capturing' ? <RefreshCw className="h-4 w-4 animate-spin" /> : dlState === 'done' ? <Check className="h-4 w-4 text-green-600" /> : <Download className="h-4 w-4" />}
+                                                {dlState === 'capturing' ? <RefreshCw className="h-4 w-4 animate-spin" /> : dlState === 'done' ? <Check className="h-4 w-4 text-action" /> : <Download className="h-4 w-4" />}
                                             </button>
                                         </TooltipTrigger>
                                         <TooltipContent side="bottom" className="text-xs">Download health report as PDF</TooltipContent>
@@ -2988,10 +2777,10 @@ export function EngagementInsightsDashboard({
                                             <button
                                                 onClick={handleShareHealth}
                                                 disabled={shareState !== 'idle' && shareState !== 'error'}
-                                                className={`p-1.5 rounded transition-colors${shareState !== 'idle' && shareState !== 'error' ? ' cursor-wait opacity-50' : shareState === 'error' ? ' text-red-500' : ' text-emerald-400 hover:text-emerald-600 hover:bg-emerald-50'}`}
+                                                className={`rounded-control p-1.5 transition-colors${shareState !== 'idle' && shareState !== 'error' ? ' cursor-wait opacity-50' : shareState === 'error' ? ' text-danger' : ' text-fg-subtle hover:bg-surface-hover hover:text-fg'}`}
                                                 aria-label="Share PDF"
                                             >
-                                                {shareState === 'capturing' || shareState === 'sending' ? <RefreshCw className="h-4 w-4 animate-spin" /> : shareState === 'sent' ? <Check className="h-4 w-4 text-green-600" /> : shareState === 'error' ? <X className="h-4 w-4" /> : <Mail className="h-4 w-4" />}
+                                                {shareState === 'capturing' || shareState === 'sending' ? <RefreshCw className="h-4 w-4 animate-spin" /> : shareState === 'sent' ? <Check className="h-4 w-4 text-action" /> : shareState === 'error' ? <X className="h-4 w-4" /> : <Mail className="h-4 w-4" />}
                                             </button>
                                         </TooltipTrigger>
                                         <TooltipContent side="bottom" className="text-xs">
@@ -3011,9 +2800,9 @@ export function EngagementInsightsDashboard({
                                     animate={{ opacity: 1, height: 'auto' }}
                                     exit={{ opacity: 0, height: 0 }}
                                     transition={{ duration: 0.2, ease: 'easeOut' }}
-                                    className="mx-6 mt-5 bg-white border border-[#e5e7eb] rounded shadow-md p-4 flex flex-col gap-2 overflow-hidden"
+                                    className="mx-6 mt-4 flex flex-col gap-2 overflow-hidden rounded-card bg-surface-subtle p-3"
                                 >
-                                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                                    <span className="text-small font-medium text-fg-muted">
                                         Engagement Summary
                                     </span>
                                     <textarea
@@ -3024,27 +2813,19 @@ export function EngagementInsightsDashboard({
                                         placeholder="Add a summary for this engagement…"
                                         // Height set in CSS, not `rows`, so the textarea collapses with the
                                         // card's height animation instead of holding an intrinsic size.
-                                        className="w-full h-[6.5rem] text-sm text-gray-700 bg-white border border-gray-200 rounded px-3 py-2 leading-relaxed resize-none focus:outline-none focus:ring-1 focus:ring-primary/30 placeholder:text-gray-300 disabled:opacity-60"
+                                        className="h-[6.5rem] w-full resize-none rounded-control border border-line bg-surface px-3 py-2 text-ui leading-relaxed text-fg placeholder:text-fg-subtle focus:border-action/60 focus:outline-none focus:ring-2 focus:ring-action/20 disabled:opacity-60"
                                     />
-                                    <p className="text-[11px] text-gray-500">
+                                    <p className="text-caption text-fg-muted">
                                         Visible to the client and included in PDF and email exports.
                                     </p>
                                     <div className="flex items-center justify-end gap-2">
-                                        <button
-                                            onClick={() => setSummaryEditing(false)}
-                                            disabled={summarySaving}
-                                            className="rounded text-[10px] font-headline font-bold tracking-widest uppercase border border-gray-200 text-gray-500 hover:bg-white px-3 py-1.5 transition-colors disabled:opacity-50"
-                                        >
+                                        <Button size="sm" variant="ghost" onClick={() => setSummaryEditing(false)} disabled={summarySaving}>
                                             Cancel
-                                        </button>
-                                        <button
-                                            onClick={handleSummarySave}
-                                            disabled={summarySaving}
-                                            className="rounded text-[10px] font-headline font-bold tracking-widest uppercase bg-primary hover:brightness-105 text-white shadow-sm px-3 py-1.5 transition-colors disabled:opacity-50 flex items-center gap-1.5"
-                                        >
+                                        </Button>
+                                        <Button size="sm" onClick={handleSummarySave} disabled={summarySaving}>
                                             {summarySaving && <RefreshCw className="h-3 w-3 animate-spin" />}
                                             {summarySaving ? 'Saving…' : 'Save'}
-                                        </button>
+                                        </Button>
                                     </div>
                                 </motion.div>
                             )}
@@ -3059,10 +2840,10 @@ export function EngagementInsightsDashboard({
                                     animate={{ opacity: 1, height: 'auto' }}
                                     exit={{ opacity: 0, height: 0 }}
                                     transition={{ duration: 0.2, ease: 'easeOut' }}
-                                    className="mx-6 mt-5 bg-primary/5 border border-primary/30 rounded shadow-md p-4 flex flex-col gap-2 overflow-hidden"
+                                    className="mx-6 mt-4 flex flex-col gap-2 overflow-hidden rounded-card bg-surface-subtle p-3"
                                 >
                                     <div className="flex items-center gap-2">
-                                        <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary tracking-wide">
+                                        <span className="inline-flex items-center gap-1.5 text-small font-medium text-fg-muted">
                                             {aiStreaming ? (
                                                 <>
                                                     <Brio className={aiStreaming ? 'animate-pulse' : ''} />
@@ -3073,7 +2854,7 @@ export function EngagementInsightsDashboard({
                                             )}
                                         </span>
                                         {!aiStreaming && data?.insightsSummaryDraft && (
-                                            <span className="text-[11px] text-gray-400">
+                                            <span className="text-caption text-fg-subtle">
                                                 {formatRelativeTime(data.insightsSummaryDraft.generatedAt)}
                                             </span>
                                         )}
@@ -3087,17 +2868,17 @@ export function EngagementInsightsDashboard({
                                             initial={{ opacity: 0 }}
                                             animate={{ opacity: 1 }}
                                             transition={{ duration: 0.15 }}
-                                            className="hover-scrollbar w-full text-sm text-gray-700 bg-white border border-primary/20 rounded px-3 py-2 leading-relaxed whitespace-pre-wrap h-[19.5rem] overflow-y-auto"
+                                            className="hover-scrollbar h-[19.5rem] w-full overflow-y-auto whitespace-pre-wrap rounded-control border border-line bg-surface px-3 py-2 text-ui leading-relaxed text-fg"
                                         >
                                             <StreamingText text={aiStreamText} />
                                             {/* Block caret, terminal style. Sized in `em` so it tracks the
                                                 font rather than a fixed pixel width. */}
                                             <span
-                                                className="inline-block w-[0.5em] h-[1.05em] -mb-[0.15em] ml-0.5 translate-y-px bg-primary/100 align-baseline"
+                                                className="inline-block w-[0.5em] h-[1.05em] -mb-[0.15em] ml-0.5 translate-y-px bg-action align-baseline"
                                                 style={{ animation: 'fm-caret 1.3s ease-in-out infinite' }}
                                             />
                                             {!aiStreamText && (
-                                                <span className="text-gray-400"><Brio /> is reading this engagement…</span>
+                                                <span className="text-fg-subtle"><Brio /> is reading this engagement…</span>
                                             )}
                                         </motion.p>
                                     ) : (
@@ -3109,24 +2890,24 @@ export function EngagementInsightsDashboard({
                                             value={aiDraftEdit}
                                             onChange={(e) => setAiDraftEdit(e.target.value)}
                                             disabled={aiDraftBusy}
-                                            className="hover-scrollbar w-full text-sm text-gray-700 bg-white border border-primary/20 rounded px-3 py-2 leading-relaxed h-[19.5rem] resize-none overflow-y-scroll [scrollbar-gutter:stable] focus:outline-none focus:ring-1 focus:ring-primary/40 disabled:opacity-60"
+                                            className="hover-scrollbar h-[19.5rem] w-full resize-none overflow-y-scroll [scrollbar-gutter:stable] rounded-control border border-line bg-surface px-3 py-2 text-ui leading-relaxed text-fg focus:border-action/60 focus:outline-none focus:ring-2 focus:ring-action/20 disabled:opacity-60"
                                         />
                                     )}
 
                                     {aiGenerateNote && !aiStreaming && (
-                                        <p className="text-[11px] text-primary">{aiGenerateNote}</p>
+                                        <p className="text-caption text-action">{aiGenerateNote}</p>
                                     )}
 
                                     {!aiStreaming && (
                                         <>
                                             {unfilledSections.length > 0 && (
-                                                <p className="text-[11px] text-amber-700">
+                                                <p className="text-caption text-tag-orange-fg">
                                                     <strong>{unfilledSections.join(' and ')}</strong> are yours to
                                                     decide. <Brio /> reports what the data shows; it does not
                                                     commit your firm to a plan. Add your notes before publishing.
                                                 </p>
                                             )}
-                                            <p className="text-[11px] text-gray-500">
+                                            <p className="text-caption text-fg-muted">
                                                 Review and edit before publishing — once published this becomes the engagement
                                                 summary, visible to the client and included in PDF and email exports.
                                                 {data?.insightsSummary && (
@@ -3137,36 +2918,34 @@ export function EngagementInsightsDashboard({
                                                 )}
                                             </p>
                                             <div className="flex items-center justify-end gap-2">
-                                                <button
+                                                <Button
+                                                    size="sm"
+                                                    variant="ghost"
                                                     onClick={() => copySummary(aiDraftEdit, 'draft')}
                                                     disabled={!aiDraftEdit.trim()}
                                                     aria-label="Copy draft summary to clipboard"
-                                                    className="mr-auto rounded text-[10px] font-headline font-bold tracking-widest uppercase border border-gray-200 text-gray-500 hover:bg-white px-3 py-1.5 transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                                                    className="mr-auto"
                                                 >
                                                     {summaryCopied === 'draft'
-                                                        ? <Check className="h-3 w-3 text-primary" />
+                                                        ? <Check className="h-3 w-3 text-action" />
                                                         : <Copy className="h-3 w-3" />}
                                                     {summaryCopied === 'draft' ? 'Copied' : 'Copy'}
-                                                </button>
-                                                <button
-                                                    onClick={handleAiSummaryDismiss}
-                                                    disabled={aiDraftBusy}
-                                                    className="rounded text-[10px] font-headline font-bold tracking-widest uppercase border border-gray-200 text-gray-500 hover:bg-white px-3 py-1.5 transition-colors disabled:opacity-50 flex items-center gap-1.5"
-                                                >
+                                                </Button>
+                                                <Button size="sm" variant="outline" onClick={handleAiSummaryDismiss} disabled={aiDraftBusy}>
                                                     {aiDraftAction === 'dismiss' && <RefreshCw className="h-3 w-3 animate-spin" />}
                                                     Dismiss
-                                                </button>
-                                                <button
+                                                </Button>
+                                                <Button
+                                                    size="sm"
                                                     onClick={handleAiSummaryApprove}
                                                     disabled={aiDraftBusy || !aiDraftEdit.trim() || unfilledSections.length > 0}
                                                     title={unfilledSections.length > 0
                                                         ? `Complete: ${unfilledSections.join(', ')}`
                                                         : undefined}
-                                                    className="rounded text-[10px] font-headline font-bold tracking-widest uppercase bg-primary hover:brightness-105 text-white shadow-sm px-3 py-1.5 transition-colors disabled:opacity-50 flex items-center gap-1.5"
                                                 >
                                                     {aiDraftAction === 'publish' && <RefreshCw className="h-3 w-3 animate-spin" />}
                                                     Publish
-                                                </button>
+                                                </Button>
                                             </div>
                                         </>
                                     )}
@@ -3176,7 +2955,7 @@ export function EngagementInsightsDashboard({
 
                             {/* Generation feedback when there is no draft card to host it (AI off, or failure). */}
                             {isFirmAdmin && aiGenerateNote && !data?.insightsSummaryDraft && !aiStreamText && !aiStreaming && (
-                                <p className="mx-6 mt-4 text-[11px] text-gray-500">{aiGenerateNote}</p>
+                                <p className="mx-6 mt-4 text-caption text-fg-muted">{aiGenerateNote}</p>
                             )}
 
                             {/* Stale marker — firm users only, and outside healthCardRef so it never
@@ -3189,7 +2968,7 @@ export function EngagementInsightsDashboard({
                                     animate={{ opacity: 1 }}
                                     exit={{ opacity: 0 }}
                                     transition={{ duration: 0.18, ease: 'easeOut' }}
-                                    className="mx-6 mt-4 flex items-center gap-2 text-[11px] text-amber-700"
+                                    className="mx-6 mt-4 flex items-center gap-2 text-caption text-tag-orange-fg"
                                 >
                                     <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                                     <span>
@@ -3198,7 +2977,7 @@ export function EngagementInsightsDashboard({
                                     </span>
                                     <button
                                         onClick={handleGenerateSummary}
-                                        className="underline underline-offset-2 hover:text-amber-900 transition-colors"
+                                        className="underline underline-offset-2 transition-colors hover:text-fg"
                                     >
                                         Ask <Brio /> for an update
                                     </button>
@@ -3214,16 +2993,16 @@ export function EngagementInsightsDashboard({
                                     <div
                                         data-export-only=""
                                         style={{ display: 'none' }}
-                                        className="px-6 pt-5 pb-3 border-b border-gray-100 flex items-center justify-between gap-4 flex-wrap"
+                                        className="px-6 pt-5 pb-3 border-b border-line flex items-center justify-between gap-4 flex-wrap"
                                     >
                                         <div className="flex items-baseline gap-2 flex-wrap">
-                                            {firmName && <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{firmName}</span>}
-                                            {firmName && clientName && <span className="text-gray-300 text-xs">›</span>}
-                                            {clientName && <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{clientName}</span>}
-                                            {(firmName || clientName) && engagementName && <span className="text-gray-300 text-xs">›</span>}
-                                            {engagementName && <span className="text-sm font-bold text-gray-800">{engagementName}</span>}
+                                            {firmName && <span className="text-small font-medium text-fg-muted">{firmName}</span>}
+                                            {firmName && clientName && <span className="text-fg-subtle text-xs">›</span>}
+                                            {clientName && <span className="text-small font-medium text-fg-muted">{clientName}</span>}
+                                            {(firmName || clientName) && engagementName && <span className="text-fg-subtle text-xs">›</span>}
+                                            {engagementName && <span className="text-sm font-bold text-fg">{engagementName}</span>}
                                         </div>
-                                        <span className="text-[11px] text-gray-400 shrink-0">
+                                        <span className="text-[11px] text-fg-subtle shrink-0">
                                             Report date: {new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}{' '}
                                             {new Date().toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', timeZoneName: 'short' })}
                                         </span>
@@ -3254,17 +3033,17 @@ export function EngagementInsightsDashboard({
                                         animate={{ opacity: 1, height: 'auto' }}
                                         exit={{ opacity: 0, height: 0 }}
                                         transition={{ duration: 0.2, ease: 'easeOut' }}
-                                        className="mx-6 mt-5 bg-white border border-[#e5e7eb] rounded shadow-md flex flex-col overflow-hidden"
+                                        className="mx-6 mt-4 flex flex-col overflow-hidden rounded-card border border-line bg-surface"
                                     >
-                                        <div className="flex items-center justify-between gap-4 px-4 pt-3 pb-2 border-b border-gray-100">
+                                        <div className="flex items-center justify-between gap-4 px-4 pt-3 pb-2 border-b border-line">
                                             <div className="flex items-baseline gap-2 min-w-0">
-                                                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                                                <span className="text-small font-medium text-fg-muted">
                                                     Engagement Summary
                                                 </span>
                                                 {data.insightsSummaryPublishedAt && (
                                                     <Tooltip>
                                                         <TooltipTrigger asChild>
-                                                            <span className="inline-flex items-center gap-1 text-[11px] text-gray-400 shrink-0 cursor-default">
+                                                            <span className="inline-flex shrink-0 cursor-default items-center gap-1 text-caption text-fg-subtle">
                                                                 <Clock className="h-3 w-3" />
                                                                 {formatRelativeTime(data.insightsSummaryPublishedAt)}
                                                             </span>
@@ -3282,7 +3061,7 @@ export function EngagementInsightsDashboard({
                                                 {data.insightsSummaryPublishedAt && !data.insightsSummaryStale && (
                                                     <Tooltip>
                                                         <TooltipTrigger asChild>
-                                                            <span className="inline-flex items-center gap-1 text-[11px] text-gray-400 shrink-0 cursor-default">
+                                                            <span className="inline-flex shrink-0 cursor-default items-center gap-1 text-caption text-fg-subtle">
                                                                 <Check className="h-3 w-3" />
                                                                 No delivery changes
                                                             </span>
@@ -3305,10 +3084,10 @@ export function EngagementInsightsDashboard({
                                                                 <button
                                                                     onClick={() => copySummary(data.insightsSummary!, 'published')}
                                                                     aria-label="Copy summary to clipboard"
-                                                                    className="inline-flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-2.5 text-[11px] font-medium text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900"
+                                                                    className="inline-flex h-7 items-center gap-1.5 rounded-control border border-line bg-surface px-2 text-small text-fg-muted transition-colors hover:border-line-strong hover:bg-surface-hover hover:text-fg"
                                                                 >
                                                                     {summaryCopied === 'published'
-                                                                        ? <Check className="h-3 w-3 text-primary" />
+                                                                        ? <Check className="h-3 w-3 text-action" />
                                                                         : <Copy className="h-3 w-3" />}
                                                                     {summaryCopied === 'published' ? 'Copied' : 'Copy'}
                                                                 </button>
@@ -3320,14 +3099,14 @@ export function EngagementInsightsDashboard({
                                                     )}
                                                     <button
                                                         onClick={() => { setSummaryDraft(data.insightsSummary ?? ''); setSummaryEditing(true) }}
-                                                        className="inline-flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-2.5 text-[11px] font-medium text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900"
+                                                        className="inline-flex h-7 items-center gap-1.5 rounded-control border border-line bg-surface px-2 text-small text-fg-muted transition-colors hover:border-line-strong hover:bg-surface-hover hover:text-fg"
                                                     >
                                                         <Pencil className="h-3 w-3" />
                                                         {data.insightsSummary ? 'Edit' : 'Add'}
                                                     </button>
                                                     <button
                                                         onClick={handleGenerateSummary}
-                                                        className="inline-flex h-7 items-center gap-1.5 rounded border border-primary/30 bg-primary/5 px-2.5 text-[11px] font-medium text-primary transition-colors hover:border-primary/50 hover:bg-primary/10"
+                                                        className="inline-flex h-7 items-center gap-1.5 rounded-control border border-line bg-surface px-2 text-small font-medium text-action transition-colors hover:border-line-strong hover:bg-surface-hover"
                                                     >
                                                         {data.insightsSummary ? <>Rewrite with</> : <>Write with</>}
                                                         <Brio />
@@ -3338,10 +3117,10 @@ export function EngagementInsightsDashboard({
                                         {data.insightsSummary ? (
                                             <BrioSections
                                                 content={data.insightsSummary}
-                                                className="px-4 py-3 text-gray-600"
+                                                className="px-4 py-3 text-fg-muted"
                                             />
                                         ) : (
-                                            <p data-no-export="" className="text-sm text-gray-400 px-4 py-3">
+                                            <p data-no-export="" className="text-sm text-fg-subtle px-4 py-3">
                                                 No summary yet — write one, or let <Brio /> draft it
                                                 from this engagement&apos;s data.
                                             </p>
@@ -3353,9 +3132,9 @@ export function EngagementInsightsDashboard({
                                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4 p-6 pb-0">
                                     <TileWithTip text="% of the engagement's planned duration that has elapsed, from kickoff (or engagement creation) to due date. Amber ≥60%, red ≥85%." ariaLabel="About Time Lapsed">
                                         {(() => {
-                                            if (!data.engagementDueDate) return <StatTile icon={Timer} label="Time Lapsed" count="—" colorClass="bg-gray-50 text-gray-400" />
+                                            if (!data.engagementDueDate) return <StatTile icon={Timer} label="Time Lapsed" count="—" colorClass="bg-surface-subtle text-fg-subtle" />
                                             const startStr = data.kickoffDate ?? data.engagementCreatedAt
-                                            if (!startStr) return <StatTile icon={Timer} label="Time Lapsed" count="—" colorClass="bg-gray-50 text-gray-400" />
+                                            if (!startStr) return <StatTile icon={Timer} label="Time Lapsed" count="—" colorClass="bg-surface-subtle text-fg-subtle" />
                                             const start = new Date(startStr)
                                             const end = new Date(data.engagementDueDate)
                                             const now = new Date()
@@ -3388,7 +3167,7 @@ export function EngagementInsightsDashboard({
                                     <TileWithTip text="Average time from marking a folder as a Deliverable (share.createdAt) to it being Approved (share.finalizedAt). Only counts approved deliverables. Green ≤7d, amber ≤14d, red >14d." ariaLabel="About Avg Time to Approval">
                                         {(() => {
                                             const cyc = data.approvalCycle?.avgCycleDays
-                                            const colorClass = cyc == null ? 'bg-gray-50 text-gray-400' : cyc <= 7 ? 'bg-green-50 text-green-600' : cyc <= 14 ? 'bg-amber-50 text-amber-600' : 'bg-red-50 text-red-600'
+                                            const colorClass = cyc == null ? 'bg-surface-subtle text-fg-subtle' : cyc <= 7 ? 'bg-green-50 text-green-600' : cyc <= 14 ? 'bg-amber-50 text-amber-600' : 'bg-red-50 text-red-600'
                                             return (
                                                 <StatTile
                                                     icon={Clock}
@@ -3404,9 +3183,9 @@ export function EngagementInsightsDashboard({
                                 <EngagementHealthBody health={data.healthScore} deliverables={data.deliverables ?? []} planningHygiene={data.planningHygiene} commentThreads={data.commentThreads} pace={data.pace} firstTimeRight={data.firstTimeRight} inFlightWithRework={inFlightWithRework} engagementCreatedAt={data.engagementCreatedAt} kickoffDate={data.kickoffDate} engagementDueDate={data.engagementDueDate} hiddenRings={data.insightsConfig?.hiddenRings ?? []} />
                                 {/* End of report marker */}
                                 <div className="mx-6 mb-4 flex items-center gap-3">
-                                    <div className="flex-1 h-px bg-gray-100" />
-                                    <span className="text-[10px] font-headline font-bold tracking-widest uppercase text-gray-300">End of Report</span>
-                                    <div className="flex-1 h-px bg-gray-100" />
+                                    <div className="flex-1 h-px bg-surface-muted" />
+                                    <span className="text-caption text-fg-subtle">End of report</span>
+                                    <div className="flex-1 h-px bg-surface-muted" />
                                 </div>
                             </div>
                         </InsightCard>
@@ -3416,11 +3195,11 @@ export function EngagementInsightsDashboard({
                 {loading ? (
                     <div className="grid grid-cols-2 gap-6">
                         {[0, 1, 2, 3].map((i) => (
-                            <div key={i} className="h-48 rounded-2xl bg-gray-100 animate-pulse" />
+                            <div key={i} className="h-48 rounded-2xl bg-surface-muted animate-pulse" />
                         ))}
                     </div>
                 ) : (
-                    <div className="flex flex-col gap-6">
+                    <div className="flex flex-col gap-10">
                         {/* Team Status */}
                         {showSection('team_status') && (
                             <InsightCard
@@ -3431,7 +3210,7 @@ export function EngagementInsightsDashboard({
                                 subtext="Members & pending invitations"
                                 headerExtra={
                                     engagementBase ? (
-                                        <Link href={`${engagementBase}/members`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-gray-700 transition-colors">
+                                        <Link href={`${engagementBase}/members`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-fg-subtle hover:text-fg-muted transition-colors">
                                             Manage
                                             <ArrowUpRight className="h-3 w-3" />
                                         </Link>

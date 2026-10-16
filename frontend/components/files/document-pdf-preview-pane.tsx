@@ -330,7 +330,7 @@ function PdfThumb({
             >
                 {visible && <PdfPageCanvas pdf={pdf} pageNumber={pageNumber} scale={scale} rotation={rotation} />}
             </div>
-            <span className={`text-[10px] font-mono tabular-nums ${active ? 'text-slate-900 font-semibold' : 'text-slate-500'}`}>
+            <span className={`text-[10px] font-mono tabular-nums ${active ? 'text-fg font-semibold' : 'text-slate-500'}`}>
                 {pageNumber}
             </span>
         </button>
@@ -1025,7 +1025,7 @@ export function DocumentPdfPreviewPane({ document, projectId, alternateView }: D
                             type="button"
                             onClick={() => setSidebarTab((t) => (t ? null : outline.length ? 'outline' : 'thumbnails'))}
                             disabled={!ready}
-                            className={`h-6 w-6 rounded inline-flex items-center justify-center hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed ${sidebarTab ? 'text-slate-900 bg-slate-100' : 'text-slate-500 hover:text-slate-700'}`}
+                            className={`h-6 w-6 rounded inline-flex items-center justify-center hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed ${sidebarTab ? 'text-fg bg-slate-100' : 'text-slate-500 hover:text-slate-700'}`}
                             aria-label={sidebarTab ? 'Hide sidebar' : 'Show page thumbnails and bookmarks'}
                             aria-pressed={Boolean(sidebarTab)}
                         >
@@ -1047,7 +1047,7 @@ export function DocumentPdfPreviewPane({ document, projectId, alternateView }: D
                                 window.setTimeout(() => findInputRef.current?.focus(), 0)
                             }}
                             disabled={!ready}
-                            className={`h-6 w-6 rounded inline-flex items-center justify-center hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed ${findOpen ? 'text-slate-900 bg-slate-100' : 'text-slate-500 hover:text-slate-700'}`}
+                            className={`h-6 w-6 rounded inline-flex items-center justify-center hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed ${findOpen ? 'text-fg bg-slate-100' : 'text-slate-500 hover:text-slate-700'}`}
                             aria-label={findOpen ? 'Close find' : 'Find in document'}
                             aria-pressed={findOpen}
                         >
@@ -1091,7 +1091,7 @@ export function DocumentPdfPreviewPane({ document, projectId, alternateView }: D
                             <DropdownMenuItem
                                 key={preset}
                                 onSelect={() => applyZoom(preset)}
-                                className={`text-xs font-mono tabular-nums justify-center ${preset === zoom ? 'font-semibold text-slate-900' : ''}`}
+                                className={`text-xs font-mono tabular-nums justify-center ${preset === zoom ? 'font-semibold text-fg' : ''}`}
                             >
                                 {preset}%
                             </DropdownMenuItem>
@@ -1302,7 +1302,7 @@ export function DocumentPdfPreviewPane({ document, projectId, alternateView }: D
                                 <button
                                     type="button"
                                     onClick={() => setSidebarTab('outline')}
-                                    className={`flex-1 h-7 inline-flex items-center justify-center gap-1 text-[10px] font-medium ${sidebarTab === 'outline' ? 'text-slate-900 border-b-2 border-slate-700' : 'text-slate-500 hover:text-slate-700'}`}
+                                    className={`flex-1 h-7 inline-flex items-center justify-center gap-1 text-[10px] font-medium ${sidebarTab === 'outline' ? 'text-fg border-b-2 border-slate-700' : 'text-slate-500 hover:text-slate-700'}`}
                                 >
                                     <List className="h-3 w-3" /> Bookmarks
                                 </button>
@@ -1310,7 +1310,7 @@ export function DocumentPdfPreviewPane({ document, projectId, alternateView }: D
                             <button
                                 type="button"
                                 onClick={() => setSidebarTab('thumbnails')}
-                                className={`flex-1 h-7 inline-flex items-center justify-center gap-1 text-[10px] font-medium ${sidebarTab === 'thumbnails' ? 'text-slate-900 border-b-2 border-slate-700' : 'text-slate-500 hover:text-slate-700'}`}
+                                className={`flex-1 h-7 inline-flex items-center justify-center gap-1 text-[10px] font-medium ${sidebarTab === 'thumbnails' ? 'text-fg border-b-2 border-slate-700' : 'text-slate-500 hover:text-slate-700'}`}
                             >
                                 <PanelLeft className="h-3 w-3" /> Pages
                             </button>

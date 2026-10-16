@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { isFirmAdmin } from '@/lib/connectors/connector-access'
 import { createClient as createSupabaseAdmin } from '@supabase/supabase-js'
 import { OneDriveConnector } from '@/lib/connectors/onedrive-connector'
 import { createOneDriveAdapter } from '@/lib/connectors/adapters/onedrive-adapter'
@@ -229,7 +230,8 @@ export async function POST(request: NextRequest) {
         const linkedClient = await prisma.client.findFirst({ where: { connectorId: connectionId }, select: { firmId: true } })
         if (linkedClient) org = await prisma.firm.findUnique({ where: { id: linkedClient.firmId } })
       }
-      if (!org && hintFirmId) {
+      // Caller-supplied hint: only follow it into a firm the caller administers.
+      if (!org && hintFirmId && (await isFirmAdmin(user.id, hintFirmId))) {
         org = await prisma.firm.findUnique({ where: { id: hintFirmId } })
       }
       if (org) {

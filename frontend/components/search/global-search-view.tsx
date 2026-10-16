@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { Search, Folder, Sparkles, X, Building2, Briefcase, Package, Hash, FileText, ArrowUpRight, ArrowRight, RefreshCw, ChevronDown, History, BrushCleaning, CalendarClock, Info, ChevronRight } from 'lucide-react'
+import { Search, Folder, Sparkles, X, Building2, Briefcase, Package, Hash, FileText, ArrowUpRight, ArrowRight, RefreshCw, History, BrushCleaning, CalendarClock, Info, ChevronRight } from 'lucide-react'
 import { DocumentIcon } from '@/components/ui/document-icon'
 import { Button } from '@/components/ui/button'
 import {
@@ -18,6 +18,12 @@ import { formatRelativeTime, cn } from '@/lib/utils'
 import { useAuth } from '@/lib/auth-context'
 import { ASSISTANT } from '@/lib/ai/assistant'
 import { Brio } from '@/components/ui/brio'
+import { PageHeading } from '@/components/ui/page-heading'
+import { EmptyPanel } from '@/components/ui/empty-panel'
+import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { Tag } from '@/components/ui/tag'
+import { Hint } from '@/components/ui/tooltip'
+import { FilterMenuLabel, FilterMenuRow, FilterMenuSearch, FilterPill, summarizePicks } from '@/components/ui/filter-pill'
 import { RelativeDateTime } from '@/components/ui/relative-date-time'
 import { resolvePeriod } from '@/lib/search/period'
 import { fetchWithTimeout, AI_TIMEOUT_MS } from '@/lib/ai/fetch-timeout'
@@ -150,6 +156,21 @@ const RELATIVE_TIME_PRESETS = [
 ] as const
 type RelativeTimePreset = typeof RELATIVE_TIME_PRESETS[number]
 
+/** What the Time menu and chip show. The preset itself stays the id (the search and the Ask
+ *  interpreter match on it), so only the display moves to sentence case. */
+const TIME_PRESET_LABEL: Record<RelativeTimePreset, string> = {
+  'Overdue': 'Overdue',
+  'Today': 'Today',
+  'Last 7 days': 'Last 7 days',
+  'Last 30 days': 'Last 30 days',
+  'This Quarter': 'This quarter',
+  'This Year': 'This year',
+}
+
+/** Long lists (clients, engagements, deliverables) get a search box in their menu past this. */
+const MENU_SEARCH_THRESHOLD = 7
+
+
 function resolveRelativeTimeRange(preset: RelativeTimePreset, now: Date = new Date()): { start: Date; end: Date } {
   const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0)
   const endOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999)
@@ -180,6 +201,14 @@ function resolveRelativeTimeRange(preset: RelativeTimePreset, now: Date = new Da
 // paused typing, not on every incomplete word — 400ms was capturing "researc", "researcg", etc.
 // as separate history entries mid-keystroke.
 const DEBOUNCE_MS = 900
+
+/**
+ * Ask Brio mode — prose interpreted into filter chips by a paid model call — is hidden
+ * (2026-10-15). It runs the same search as Filters, so it found nothing Filters doesn't, while
+ * costing credits and making people pick a mode. The code stays until Deepak signs off on
+ * removing it; flip this to bring the Filters / Ask toggle back.
+ */
+const ASK_MODE_ENABLED = false
 
 // Detailed search history — supersedes the earlier simpler text-only "recent searches" quick-list
 // is text-only, session-scoped; this one is the full record shown in the history sidebar,
@@ -258,7 +287,10 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
   const [debouncedQuery, setDebouncedQuery] = useState('')
   // 'filters' is today's live chip-picker search. 'ask' interprets prose into chips on submit,
   // costs AI credits, and never fires while typing.
-  const [mode, setMode] = useState<'filters' | 'ask'>('filters')
+  const [modeState, setMode] = useState<'filters' | 'ask'>('filters')
+  // Ask only exists while ASK_MODE_ENABLED is on: state left over from before it was switched off
+  // (a tab kept open, fast refresh) must not bring back its prompt or its paid submit.
+  const mode = ASK_MODE_ENABLED ? modeState : 'filters'
   const [interpreting, setInterpreting] = useState(false)
   const [askNote, setAskNote] = useState<string | null>(null)
   // Chips the model inferred, by stage — rendered with a marker so they are distinguishable
@@ -296,6 +328,8 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
   // Selected filter chips — same idea as mentionedUsers in the Comments @mention picker:
   // a chip array decoupled from the raw text, rendered before the textarea.
   const [chips, setChips] = useState<SelectedChip[]>([])
+  /** The search box inside whichever filter menu is open; cleared each time a menu opens. */
+  const [menuQuery, setMenuQuery] = useState('')
   // Index into `chips` of the chip currently focused via keyboard, or null when focus is in the text input.
   // In-progress multi-select state while the Type picker is open — not committed to `chips`
   // until the user confirms (Enter) or closes the picker, so partial toggling doesn't
@@ -486,7 +520,7 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
       return pickerData.deliverables
     }
     if (stage === 'dateRange') {
-      return RELATIVE_TIME_PRESETS.map((p) => ({ id: p, name: p }))
+      return RELATIVE_TIME_PRESETS.map((p) => ({ id: p, name: TIME_PRESET_LABEL[p] }))
     }
     return []
   }, [pickerData, clientChip, engagementChip])
@@ -523,7 +557,7 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
       return [...without, {
         stage: 'type' as FilterStage,
         id: next.join(','),
-        name: next.length === 1 ? FILE_TYPE_LABEL[next[0]] : `${next.length} types`,
+        name: summarizePicks(next.map((t) => FILE_TYPE_LABEL[t])),
       }]
     })
     setInferredStages((prev) => prev.filter((s) => s !== 'type'))
@@ -766,31 +800,27 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
 
   return (
     <TooltipProvider>
-      <div className="flex h-full min-h-0 bg-ki-bg">
+      <div className="flex h-full min-h-0 bg-surface">
       <div className="flex flex-col flex-1 min-w-0 min-h-0">
         {/* No horizontal padding: the tab shell already sets the page gutter and sibling tabs
             (Analytics, Clients) render flush to it. px-6 here inset Doc Search by 24px. */}
-        <div className="shrink-0 pb-4 bg-ki-bg">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h1 className="font-headline text-2xl font-semibold tracking-tight text-ki-on-surface">Document Search</h1>
-              <p className="text-sm text-ki-on-surface-variant mt-1">
-                Search documents across every client and engagement you have access to.
-              </p>
-              <p className="text-xs text-ki-on-surface-variant mt-1">
-                Narrow results with the filters below, or switch to Ask <Brio /> and
-                describe what you need.
-              </p>
-            </div>
-            <button
+        <div className="shrink-0 pb-4">
+          <PageHeading
+            className="pb-0"
+            icon={<Search />}
+            title="Doc Search"
+            description={
+              ASK_MODE_ENABLED
+                ? <>Search documents across every client and engagement you have access to. Narrow with filters, or switch to Ask <Brio /> and describe what you need.</>
+                : 'Search documents across every client and engagement you have access to, and narrow with filters.'
+            }
+            actions={
+            <Button
               type="button"
+              variant="outline"
+              size="sm"
               onClick={() => setHistoryOpen((o) => !o)}
-              className={cn(
-                'shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-[10px] font-mono font-bold uppercase tracking-wider transition-colors',
-                historyOpen
-                  ? 'bg-primary/10 border-primary/30 text-primary'
-                  : 'bg-ki-surface border-ki-outline text-ki-on-surface-variant hover:bg-ki-surface-low'
-              )}
+              className={cn(historyOpen && 'bg-surface-selected text-fg')}
               aria-pressed={historyOpen}
               aria-expanded={historyOpen}
               aria-controls="doc-search-history-pane"
@@ -809,29 +839,25 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                 )}
                 aria-hidden
               />
-            </button>
-          </div>
+            </Button>
+            }
+          />
 
           <div ref={composerRef} className="relative mt-4">
-            <div className="rounded-md border border-ki-outline bg-ki-surface shadow-sm overflow-hidden transition-all focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/5">
-              {/* Row 1 — filters only, inside the same bordered control as the search input below.
-                  Every stage always has a fixed slot in canonical order: a filled pill (icon +
-                  value + remove ×) once selected, or the same pill shape in a muted/outline
-                  "empty" state (icon only) that's a direct mouse entry point — click it to open
-                  that exact stage's picker, no @ or sequencing required. Selecting a value (via
-                  mouse or keyboard) turns the same slot into the filled pill in place. Engagement/
-                  Deliverable badges are disabled until their parent (Client/Engagement) is set,
-                  matching the same hierarchy gating the keyboard flow already enforces. */}
+            <div>
               {/* Mode toggle. Filters is today's search, unchanged and free. Ask interprets a
-                  sentence into filters on submit and consumes AI credits. */}
-              <div className="flex items-center gap-1 px-3 pt-2.5">
-                <div className="inline-flex rounded-full border border-ki-outline p-0.5 bg-ki-surface-low">
+                  sentence into filters on submit and consumes AI credits. Hidden while
+                  ASK_MODE_ENABLED is off. */}
+              {ASK_MODE_ENABLED && (
+              <div className="flex items-center gap-1 pb-2.5">
+                <div className="inline-flex items-center rounded-control border border-line bg-surface-subtle p-0.5" role="group" aria-label="Search mode">
                   <button
                     type="button"
                     onClick={() => { setMode('filters'); setAskNote(null) }}
+                    aria-pressed={mode === 'filters'}
                     className={cn(
-                      'rounded-full px-3 py-1 text-xs font-medium transition-colors',
-                      mode === 'filters' ? 'bg-primary text-white shadow-sm' : 'text-ki-on-surface-variant hover:text-primary'
+                      'rounded-[4px] px-2.5 py-1 text-small transition-colors outline-none focus-visible:ring-2 focus-visible:ring-action/30',
+                      mode === 'filters' ? 'bg-surface text-fg shadow-sm' : 'text-fg-muted hover:text-fg'
                     )}
                   >
                     Filters
@@ -839,24 +865,119 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                   <button
                     type="button"
                     onClick={() => { setMode('ask'); setAskNote(null) }}
+                    aria-pressed={mode === 'ask'}
                     className={cn(
-                      'inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors',
-                      mode === 'ask' ? 'bg-primary text-white shadow-sm' : 'text-primary hover:bg-primary/10'
+                      'inline-flex items-center gap-1 rounded-[4px] px-2.5 py-1 text-small transition-colors outline-none focus-visible:ring-2 focus-visible:ring-action/30',
+                      mode === 'ask' ? 'bg-surface text-fg shadow-sm' : 'text-fg-muted hover:text-fg'
                     )}
                   >
                     Ask <Brio />
                   </button>
                 </div>
                 {mode === 'ask' && (
-                  <span className="text-[11px] text-ki-on-surface-variant ml-1">
+                  <span className="ml-1.5 text-small text-fg-subtle">
                     Describe what you need, then press Enter.
                   </span>
                 )}
               </div>
+              )}
 
-              {/* Filters — plain dropdowns, styled to match the Engagement > Files toolbar.
-                  Client/Engagement/Deliverable are interdependent: each narrows the next. */}
-              <div className="flex flex-wrap items-center gap-2 px-3 pt-2.5 pb-2.5 border-b border-ki-outline">
+            {/* Search — Notion's search field: large and borderless, with a rule under it that
+                darkens on focus. The filter pills sit on their own row below. */}
+            <div className="flex items-center gap-2.5 border-b border-line pb-2 transition-colors focus-within:border-line-strong">
+              <div className="flex shrink-0 items-center">
+                {mode === 'ask'
+                  ? <Sparkles className="h-[18px] w-[18px] text-action" />
+                  : <Search className="h-[18px] w-[18px] text-fg-subtle" />}
+              </div>
+              <div className="flex min-w-0 flex-1 items-center">
+                <input
+                  ref={textareaRef}
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      if (mode === 'ask') runAskSearch()
+                      else setDebouncedQuery(searchQuery)
+                    }
+                  }}
+                  placeholder={mode === 'ask'
+                    ? `Ask ${ASSISTANT.name}, e.g. overdue spreadsheets on the Nexus rollout`
+                    // A topic, not a filename: semantic search finds documents by what they are
+                    // about, which a filename example would never show.
+                    : 'Search by name or topic, e.g. competitor pricing research'}
+                  className="min-w-[10rem] flex-1 border-0 bg-transparent py-1.5 text-body text-fg shadow-none placeholder:text-fg-subtle focus:outline-none focus:ring-0"
+                  autoFocus
+                  aria-label="Document search"
+                />
+              </div>
+              <div className="flex shrink-0 flex-row items-center justify-center gap-1">
+                {/* Ask mode is submit-driven, so it needs an explicit send affordance. Clear only
+                    appears once there are results to clear — before that there is nothing to undo. */}
+                {mode === 'ask' ? (
+                  <>
+                    {hasSearched && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSearchQuery('')
+                          setChips([])
+                          setInferredStages([])
+                          setAskNote(null)
+                          setResults([])
+                          setHasSearched(false)
+                        }}
+                        className="p-1 rounded-full text-fg-muted hover:bg-surface-hover"
+                        aria-label="Clear search and start again"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={runAskSearch}
+                      disabled={interpreting || !searchQuery.trim()}
+                      className={cn(
+                        'p-1.5 rounded-full transition-colors',
+                        interpreting || !searchQuery.trim()
+                          ? 'text-fg-subtle'
+                          : 'bg-action text-action-fg hover:bg-action-hover'
+                      )}
+                      aria-label={`Ask ${ASSISTANT.name}`}
+                    >
+                      {interpreting
+                        ? <RefreshCw className="h-4 w-4 animate-spin" />
+                        : <ArrowRight className="h-4 w-4" />}
+                    </button>
+                  </>
+                ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery('')
+                    setChips([])
+                  }}
+                  disabled={!searchQuery.trim() && chips.length === 0}
+                  className={cn(
+                    'p-1 rounded-full',
+                    (searchQuery.trim() || chips.length > 0) ? 'text-fg-muted hover:bg-surface-hover' : 'text-fg-subtle'
+                  )}
+                  aria-label="Clear search"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+                )}
+              </div>
+            </div>
+
+              {/* Filters — Notion's filter-bar pills, one fixed slot per stage in canonical order.
+                  Empty: a quiet outlined pill ("Client"). Set: filled in the accent, reading
+                  "Client: Contoso", with an x to remove it. Client/Engagement/Deliverable are
+                  interdependent: each narrows the next, so a stage waiting on its parent is faded
+                  and says why in the app's tooltip. */}
+              <div className="flex flex-wrap items-center gap-1.5 pt-3">
                 {FILTER_STAGE_ORDER.map((stage) => {
                   const chip = chips.find((c) => c.stage === stage) || null
                   const Icon = STAGE_ICON[stage]
@@ -866,129 +987,113 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                   // A chip the zero-result ladder relaxed is shown struck through: it is still
                   // there to be restored or removed, but it did NOT constrain these results.
                   const isRelaxed = relaxedStages.includes(stage)
+                  const hint = isRelaxed
+                    ? `Not applied — no results matched this ${STAGE_LABEL[stage].toLowerCase()} filter`
+                    : disabledReason
 
-                  return (
-                    <DropdownMenu key={stage}>
+                  const pill = (
+                    <DropdownMenu key={stage} onOpenChange={(open) => { if (open) setMenuQuery('') }}>
                       <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="outline"
-                          size="sm"
+                        <FilterPill
                           disabled={Boolean(disabledReason)}
-                          className={cn(
-                            'h-8 gap-1.5 text-xs bg-white rounded border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors',
-                            chip && 'border-slate-400 ring-1 ring-slate-300 text-slate-900',
-                            isInferred && 'border-primary/40 ring-primary/30',
-                            isRelaxed && 'border-dashed border-ki-outline-variant bg-ki-surface-low text-ki-on-surface-variant ring-0 hover:bg-ki-surface-mid',
-                          )}
-                          title={isRelaxed
-                            ? `Not applied — no results matched this ${STAGE_LABEL[stage].toLowerCase()} filter`
-                            : disabledReason ?? undefined}
-                        >
-                          {isInferred
-                            ? <Sparkles className="h-3 w-3 text-primary" />
-                            : <Icon className="h-3 w-3 opacity-60" />}
-                          {chip ? chip.name : STAGE_LABEL[stage]}
-                          {isRelaxed && (
-                            <span className="ml-0.5 rounded-sm bg-ki-outline px-1 py-px text-[9px] font-semibold uppercase tracking-wide text-ki-on-surface-variant">
-                              not applied
-                            </span>
-                          )}
-                          {chip && (
-                            <span
-                              role="button"
-                              tabIndex={-1}
-                              aria-label={`Clear ${STAGE_LABEL[stage]} filter`}
-                              onClick={(e) => { e.preventDefault(); e.stopPropagation(); removeChip(stage) }}
-                              className="ml-0.5 rounded hover:bg-slate-200"
-                            >
-                              <X className="h-3 w-3" />
-                            </span>
-                          )}
-                          <ChevronDown className="h-3 w-3 opacity-50" />
-                        </Button>
+                          icon={isInferred ? <Sparkles /> : <Icon />}
+                          label={STAGE_LABEL[stage]}
+                          value={chip?.name}
+                          onClear={() => removeChip(stage)}
+                          relaxed={isRelaxed}
+                        />
                       </DropdownMenuTrigger>
-
-                      <DropdownMenuContent align="start" className="w-[240px] max-h-[320px] overflow-y-auto py-1 text-xs rounded">
-                        <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-slate-400 px-2 py-1.5 font-medium">
-                          {STAGE_LABEL[stage]}
-                        </DropdownMenuLabel>
-                        <DropdownMenuSeparator />
-
-                        {stage === 'type' ? (
-                          FILE_TYPE_OPTIONS.map((opt) => (
-                            <DropdownMenuCheckboxItem
-                              key={opt}
-                              checked={opt === 'any' ? selectedFileTypes.length === 0 : selectedFileTypes.includes(opt)}
-                              onCheckedChange={() => toggleFileTypeSimple(opt)}
-                              onSelect={(e) => e.preventDefault()}
-                              className="text-xs py-1.5 pl-8"
-                            >
-                              {FILE_TYPE_LABEL[opt]}
-                            </DropdownMenuCheckboxItem>
-                          ))
-                        ) : options.length === 0 ? (
-                          <div className="px-2.5 py-2 text-xs text-slate-400">Nothing available</div>
-                        ) : (
-                          <>
-                            {/* "No filter" option — an explicit way back to unfiltered from inside
-                                the menu, rather than only via the chip's ✕. Not a selectable value:
-                                choosing it clears the filter. */}
-                            <DropdownMenuItem
-                              onClick={() => removeChip(stage)}
-                              className={cn(
-                                'text-xs py-1.5 px-2.5 cursor-pointer',
-                                !chip && 'bg-slate-100 font-medium',
+                      {/* Notion's filter menu: the property name, a search box when the list is
+                          long, then compact rows with a check on the chosen value. "Any …" leads
+                          every menu as the way back to no filter. */}
+                      <DropdownMenuContent align="start" className="w-[260px] p-1">
+                        {(() => {
+                          const searchable = stage !== 'type' && stage !== 'dateRange' && options.length > MENU_SEARCH_THRESHOLD
+                          const q = menuQuery.trim().toLowerCase()
+                          const shown = searchable && q ? options.filter((o) => o.name.toLowerCase().includes(q)) : options
+                          return (
+                            <>
+                              <FilterMenuLabel>{STAGE_LABEL[stage]}</FilterMenuLabel>
+                              {searchable && (
+                                <FilterMenuSearch
+                                  value={menuQuery}
+                                  onChange={(e) => setMenuQuery(e.target.value)}
+                                  placeholder={`Search ${STAGE_LABEL[stage].toLowerCase()}s…`}
+                                  aria-label={`Search ${STAGE_LABEL[stage].toLowerCase()}s`}
+                                />
                               )}
-                            >
-                              {STAGE_ANY_LABEL[stage]}
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            {options.map((o) => (
-                              <DropdownMenuItem
-                                key={o.id}
-                                onClick={() => selectStageValue(stage, o)}
-                                className={cn(
-                                  'text-xs py-1.5 px-2.5 cursor-pointer',
-                                  chip?.id === o.id && 'bg-slate-100 font-medium',
+                              <div className="max-h-[280px] overflow-y-auto overflow-x-hidden">
+                                {stage === 'type' ? (
+                                  <>
+                                    <FilterMenuRow multi selected={selectedFileTypes.length === 0} onSelect={() => toggleFileTypeSimple('any')}>
+                                      {STAGE_ANY_LABEL.type}
+                                    </FilterMenuRow>
+                                    <DropdownMenuSeparator className="mx-0 my-1" />
+                                    {FILE_TYPE_OPTIONS.filter((opt) => opt !== 'any').map((opt) => (
+                                      <FilterMenuRow key={opt} multi selected={selectedFileTypes.includes(opt)} onSelect={() => toggleFileTypeSimple(opt)}>
+                                        {FILE_TYPE_LABEL[opt]}
+                                      </FilterMenuRow>
+                                    ))}
+                                  </>
+                                ) : options.length === 0 ? (
+                                  <p className="px-2 py-1.5 text-small text-fg-subtle">Nothing available</p>
+                                ) : (
+                                  <>
+                                    <FilterMenuRow selected={!chip} onSelect={() => removeChip(stage)}>
+                                      {STAGE_ANY_LABEL[stage]}
+                                    </FilterMenuRow>
+                                    <DropdownMenuSeparator className="mx-0 my-1" />
+                                    {shown.map((o) => (
+                                      <FilterMenuRow key={o.id} selected={chip?.id === o.id} onSelect={() => selectStageValue(stage, o)}>
+                                        {o.name}
+                                      </FilterMenuRow>
+                                    ))}
+                                    {shown.length === 0 && <p className="px-2 py-1.5 text-small text-fg-subtle">No matches</p>}
+                                  </>
                                 )}
-                              >
-                                {o.name}
-                              </DropdownMenuItem>
-                            ))}
-                          </>
-                        )}
+                              </div>
+                            </>
+                          )
+                        })()}
                       </DropdownMenuContent>
                     </DropdownMenu>
                   )
+                  // The app's tooltip, not the browser's. A disabled button gets no pointer events,
+                  // so the hint sits on a wrapper.
+                  return hint ? (
+                    <Hint key={stage} label={hint}>
+                      <span className="inline-flex">{pill}</span>
+                    </Hint>
+                  ) : pill
                 })}
 
                 {chips.length > 0 && (
                   <button
                     type="button"
                     onClick={() => { setChips([]); setInferredStages([]) }}
-                    className="text-[11px] text-slate-500 hover:text-slate-800 underline underline-offset-2"
+                    className="ml-0.5 h-7 rounded-full px-2 text-small text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg"
                   >
-                    Clear filters
+                    Clear
                   </button>
                 )}
               </div>
 
               {(interpreting || askNote || ambiguity) && (
-                <div className="px-3 pt-2 flex items-center gap-1.5 text-[11px]">
+                <div className="flex items-center gap-1.5 pt-2 text-small">
                   {interpreting ? (
                     <>
-                      <span className="inline-flex items-center gap-1.5 text-primary">
+                      <span className="inline-flex items-center gap-1.5 text-action">
                         <Brio className="animate-pulse" />
                         is reading your question…
                       </span>
                     </>
                   ) : (
-                    <span className="text-ki-on-surface-variant">{askNote}</span>
+                    <span className="text-fg-muted">{askNote}</span>
                   )}
                   {/* Ambiguity is disclosed alongside results, never as a question that blocks the
                       search (§A.11). Switching re-runs locally — no second model call. */}
                   {ambiguity && !interpreting && (
-                    <span className="text-ki-on-surface-variant">
+                    <span className="text-fg-muted">
                       Did you mean{' '}
                       <button
                         type="button"
@@ -1001,7 +1106,7 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                           setAmbiguity(null)
                           setAskRunId((n) => n + 1)
                         }}
-                        className="underline underline-offset-2 hover:text-primary"
+                        className="underline underline-offset-2 hover:text-fg"
                       >
                         {ambiguity.alternativeName}
                       </button>
@@ -1011,91 +1116,6 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                 </div>
               )}
 
-              <div className="flex">
-                <div className="flex flex-col justify-center py-3 pl-4 pr-2 shrink-0">
-                  {mode === 'ask'
-                    ? <Sparkles className="h-4 w-4 text-primary" />
-                    : <Search className="h-4 w-4 text-primary" />}
-                </div>
-                <div className="flex-1 min-w-0 flex items-center px-1 py-2.5">
-                  <input
-                    ref={textareaRef}
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault()
-                        if (mode === 'ask') runAskSearch()
-                        else setDebouncedQuery(searchQuery)
-                      }
-                    }}
-                    placeholder={mode === 'ask'
-                      ? `Ask ${ASSISTANT.name}, e.g. overdue spreadsheets on the Nexus rollout`
-                      : 'Search by filename or topic, e.g. SEO strategy documents'}
-                    className="flex-1 min-w-[10rem] py-1 px-1 border-0 bg-transparent text-sm font-medium shadow-none focus:outline-none focus:ring-0"
-                    autoFocus
-                    aria-label="Document search"
-                  />
-                </div>
-                <div className="flex flex-row items-center justify-center gap-1 py-2 pl-1.5 pr-3 shrink-0">
-                  {/* Ask mode is submit-driven, so it needs an explicit send affordance. Clear only
-                      appears once there are results to clear — before that there is nothing to undo. */}
-                  {mode === 'ask' ? (
-                    <>
-                      {hasSearched && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSearchQuery('')
-                            setChips([])
-                            setInferredStages([])
-                            setAskNote(null)
-                            setResults([])
-                            setHasSearched(false)
-                          }}
-                          className="p-1 rounded-full text-ki-on-surface-variant hover:bg-ki-surface-low"
-                          aria-label="Clear search and start again"
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={runAskSearch}
-                        disabled={interpreting || !searchQuery.trim()}
-                        className={cn(
-                          'p-1.5 rounded-full transition-colors',
-                          interpreting || !searchQuery.trim()
-                            ? 'text-ki-outline-variant'
-                            : 'text-white bg-primary hover:bg-primary'
-                        )}
-                        aria-label={`Ask ${ASSISTANT.name}`}
-                      >
-                        {interpreting
-                          ? <RefreshCw className="h-4 w-4 animate-spin" />
-                          : <ArrowRight className="h-4 w-4" />}
-                      </button>
-                    </>
-                  ) : (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSearchQuery('')
-                      setChips([])
-                    }}
-                    disabled={!searchQuery.trim() && chips.length === 0}
-                    className={cn(
-                      'p-1 rounded-full',
-                      (searchQuery.trim() || chips.length > 0) ? 'text-ki-on-surface-variant hover:bg-ki-surface-low' : 'text-ki-outline-variant'
-                    )}
-                    aria-label="Clear search"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                  )}
-                </div>
-              </div>
             </div>
 
           </div>
@@ -1103,8 +1123,8 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
           {/* Only for chrono's soft, implicit date detection from typed text — a Time filter set
               explicitly already shows its preset name, so repeating the range here is redundant. */}
           {resolvedFilters?.dateRange && !dateRangeChip && (
-            <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-ki-on-surface-variant">
-              <span className="px-1.5 py-0.5 rounded bg-ki-surface-low font-mono font-medium text-ki-on-surface">
+            <div className="mt-2 flex flex-wrap items-center gap-1.5 text-small text-fg-muted">
+              <span className="rounded-control bg-surface-muted px-1.5 py-0.5 tabular-nums text-fg">
                 {new Date(resolvedFilters.dateRange.start).toLocaleDateString()} – {new Date(resolvedFilters.dateRange.end).toLocaleDateString()}
               </span>
             </div>
@@ -1114,30 +1134,27 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
         <div className="flex-1 min-h-0 overflow-y-auto pb-6">
           {hasSearched && (
             isSearching ? (
-              <div className="py-12 flex flex-col items-center gap-4">
-                <div className="relative">
-                  <div className="h-10 w-10 border-2 border-primary/20 border-t-primary rounded-full animate-spin" />
-                  <Sparkles className="h-4 w-4 text-primary absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
-                </div>
-                <p className="text-xs text-ki-on-surface-variant font-medium">Searching across your firm...</p>
+              <div className="flex flex-col items-center gap-3 py-12 text-fg-subtle" role="status">
+                <LoadingSpinner size="md" />
+                <p className="text-small text-fg-muted">Searching across your firm…</p>
               </div>
             ) : results.length > 0 ? (
               <>
                 {/* Notices sit on the count row: they qualify what was counted, and reading the
                     number apart from them invites believing the results answered the query as asked. */}
-                <div className="flex items-start justify-between gap-3 mb-4 text-[11px]">
+                <div className="mb-2 flex items-start justify-between gap-3 text-small">
                   <div className="flex flex-wrap items-center gap-1.5 min-w-0">
                     {/* A hand-picked chip beats the typed sentence, but saying nothing would leave
                         the user believing their words were honoured. Offer the switch instead. */}
                     {conflicts.length > 0 && !interpreting && conflicts.map((c) => (
                       <span
                         key={c.stage}
-                        className="inline-flex items-center gap-1.5 rounded border border-ki-outline-variant bg-ki-surface px-2.5 py-1.5 text-ki-on-surface shadow-sm"
+                        className="inline-flex items-center gap-1.5 rounded-control bg-surface-subtle px-2.5 py-1.5 text-fg"
                       >
-                        <Info className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
+                        <Info className="h-3.5 w-3.5 shrink-0 text-fg-subtle" aria-hidden />
                         <span>
-                          Using your <span className="font-medium text-ki-on-surface">{c.keptName}</span> filter,
-                          not <span className="font-medium text-ki-on-surface">{c.ignoredName}</span> from your question.
+                          Using your <span className="font-medium text-fg">{c.keptName}</span> filter,
+                          not <span className="font-medium text-fg">{c.ignoredName}</span> from your question.
                         </span>
                         <button
                           type="button"
@@ -1148,21 +1165,21 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                             setConflicts((prev) => prev.filter((x) => x.stage !== c.stage))
                             setAskRunId((n) => n + 1)
                           }}
-                          className="font-medium text-primary underline underline-offset-2 hover:text-primary/80"
+                          className="font-medium text-action underline underline-offset-2 hover:text-action-hover"
                         >
                           Use {c.ignoredName}
                         </button>
                       </span>
                     ))}
                     {relaxedNote && !interpreting && (
-                      <span className="inline-flex items-center gap-1.5 rounded border border-ki-outline-variant bg-ki-surface px-2.5 py-1.5 text-ki-on-surface shadow-sm">
-                        <Info className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
+                      <span className="inline-flex items-center gap-1.5 rounded-control bg-surface-subtle px-2.5 py-1.5 text-fg">
+                        <Info className="h-3.5 w-3.5 shrink-0 text-fg-subtle" aria-hidden />
                         <span>{relaxedNote}</span>
                         {relaxedStages.length > 0 && (
                           <button
                             type="button"
                             onClick={() => relaxedStages.forEach((st) => removeChip(st))}
-                            className="font-medium text-primary underline underline-offset-2 hover:text-primary/80"
+                            className="font-medium text-action underline underline-offset-2 hover:text-action-hover"
                           >
                             Remove {relaxedStages.length > 1 ? 'them' : 'it'}
                           </button>
@@ -1170,13 +1187,13 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                       </span>
                     )}
                   </div>
-                  <span className="text-[10px] font-mono text-ki-on-surface-variant shrink-0 pt-1">
-                    {filteredResults.length} {filteredResults.length === 1 ? 'Result' : 'Results'} found
+                  <span className="shrink-0 pt-1 tabular-nums text-fg-subtle">
+                    {filteredResults.length} {filteredResults.length === 1 ? 'result' : 'results'}
                   </span>
                 </div>
 
                 {filteredResults.length > 0 ? (
-                  <div className="space-y-3">
+                  <div className="flex flex-col divide-y divide-line border-y border-line">
                     {filteredResults.map((file) => {
                       // A chip the ladder relaxed is still on screen but was NOT applied to these
                       // results, so it must not be cited as the reason a document matched.
@@ -1198,39 +1215,34 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                           type="button"
                           onClick={() => openInFiles(file)}
                           disabled={isOpening}
-                          className="group w-full text-left bg-ki-surface border border-ki-outline p-4 rounded hover:shadow-md hover:border-primary/50 transition-all disabled:opacity-60 flex gap-4"
+                          className="group flex w-full gap-3 px-2 py-3 text-left transition-colors hover:bg-surface-hover disabled:opacity-60"
                         >
-                          <div className={cn(
-                            'w-12 h-12 flex items-center justify-center rounded border shrink-0 transition-colors',
-                            file.isFolder
-                              ? 'bg-primary/5 border-primary/20 group-hover:bg-primary/10'
-                              : 'bg-ki-surface-low border-ki-outline group-hover:bg-primary/5'
-                          )}>
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-control bg-surface-muted">
                             {file.isFolder ? (
-                              <Folder className="h-6 w-6 text-primary" />
+                              <Folder className="h-5 w-5 text-fg-muted" />
                             ) : (
-                              <DocumentIcon mimeType={file.metadata?.mimeType} size={24} />
+                              <DocumentIcon mimeType={file.metadata?.mimeType} size={20} />
                             )}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <h3 className="flex items-center gap-1.5 text-sm text-ki-on-surface min-w-0">
+                            <h3 className="flex min-w-0 items-center gap-1.5 text-ui text-fg">
                               {file.docId && (
-                                <span className="shrink-0 px-1.5 py-0.5 rounded-sm bg-ki-surface-low border border-ki-outline text-[9px] font-mono font-bold text-ki-on-surface-variant">
+                                <span className="shrink-0 rounded-control bg-surface-muted px-1.5 py-0.5 font-mono text-caption text-fg-muted">
                                   {file.docId}
                                 </span>
                               )}
-                              <span className="font-medium group-hover:text-primary transition-colors truncate">
+                              <span className="truncate font-medium">
                                 {file.fileName}
                               </span>
                             </h3>
                             {breadcrumbParts.length > 0 && (
-                              <div className="flex items-center flex-wrap gap-x-1.5 gap-y-0.5 mt-1">
+                              <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
                                 {breadcrumbParts.map((part, i) => {
                                   const PartIcon = part.icon
                                   return (
                                     <React.Fragment key={i}>
-                                      {i > 0 && <span className="text-ki-outline-variant">•</span>}
-                                      <span className="inline-flex items-center gap-1 text-[10px] text-ki-on-surface-variant font-mono">
+                                      {i > 0 && <span className="text-fg-subtle">/</span>}
+                                      <span className="inline-flex items-center gap-1 text-caption text-fg-subtle">
                                         <PartIcon className="h-2.5 w-2.5 shrink-0" />
                                         {part.label}
                                       </span>
@@ -1239,16 +1251,15 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                                 })}
                               </div>
                             )}
-                            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase tracking-widest bg-primary/10 text-primary">
-                                {matchType === 'semantic' ? <Sparkles className="h-2.5 w-2.5" /> : <Hash className="h-2.5 w-2.5" />}
-                                {matchType === 'semantic' ? 'Semantic Match' : 'File Match'}
-                              </span>
+                            <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+                              <Tag color={matchType === 'semantic' ? 'purple' : 'gray'} icon={matchType === 'semantic' ? <Sparkles /> : <Hash />}>
+                                {matchType === 'semantic' ? 'Semantic match' : 'File match'}
+                              </Tag>
                               {/* All three dates inline. A date filter matches on
                                   COALESCE(dueDate, createdAt) while the row's timestamp shows
                                   updatedAt, so without these it is not obvious why a document
                                   matched "Q3 2026". The one the active filter used is highlighted. */}
-                              <span className="inline-flex items-center gap-1.5 text-[10px] text-ki-on-surface-variant">
+                              <span className="inline-flex items-center gap-1.5 text-caption text-fg-subtle">
                                 {([
                                   { label: 'Created', value: file.createdAt, used: dateFilterApplied && !file.dueDate },
                                   { label: 'Updated', value: file.updatedAt, used: false },
@@ -1256,8 +1267,8 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                                 ] as const).map(({ label, value, used }, i) => (
                                   <React.Fragment key={label}>
                                     {i > 0 && <span className="opacity-30">|</span>}
-                                    <span className={cn('inline-flex items-center gap-1', used && 'text-primary font-semibold')}>
-                                      <span className="opacity-60">{label}</span>
+                                    <span className={cn('inline-flex items-center gap-1', used && 'font-medium text-action')}>
+                                      <span>{label}</span>
                                       {value ? (
                                         <RelativeDateTime
                                           date={value}
@@ -1265,7 +1276,7 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                                           tooltipPrefix={used ? `Matched the ${dateRangeChip?.name} filter ·` : undefined}
                                           className="gap-0.5"
                                           iconClassName="hidden"
-                                          textClassName={cn('text-[10px]', used && 'text-primary font-semibold')}
+                                          textClassName={cn('text-caption text-fg-muted', used && 'font-medium text-action')}
                                         />
                                       ) : (
                                         <span>Not set</span>
@@ -1292,49 +1303,39 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                           {/* The relative timestamp that used to sit here duplicated "Updated" in
                               the date row below, and the avatar now sits beside those dates. */}
                           <div className="flex flex-col justify-end items-end shrink-0">
-                            <ArrowUpRight className="h-4 w-4 text-ki-on-surface-variant opacity-0 group-hover:opacity-100 transition-opacity" />
+                            <ArrowUpRight className="h-4 w-4 text-fg-subtle opacity-0 transition-opacity group-hover:opacity-100" />
                           </div>
                         </button>
                       )
                     })}
                   </div>
                 ) : (
-                  <div className="py-8 text-center">
-                    <p className="text-sm text-ki-on-surface-variant">No results match this search{typeChip ? ` and ${typeChip.name} filter` : ''}.</p>
-                  </div>
+                  <EmptyPanel compact icon={<Search />} title={`No results match this search${typeChip ? ` and ${typeChip.name} filter` : ''}`} />
                 )}
               </>
             ) : (
-              <div className="py-8 text-center">
-                <div className="bg-ki-surface-low h-12 w-12 rounded-full flex items-center justify-center mx-auto mb-3 shadow-sm">
-                  <Search className="h-6 w-6 text-ki-on-surface-variant" />
-                </div>
-                <p className="text-sm font-medium text-ki-on-surface">No results found</p>
-                <p className="text-xs text-ki-on-surface-variant mt-1">
-                  Try a different search term or remove a filter.
-                </p>
-              </div>
+              <EmptyPanel icon={<Search />} title="No results found" description="Try a different search term or remove a filter." />
             )
           )}
 
           {!hasSearched && searchHistory.length > 0 && !historyOpen && (
             <div className="py-8 text-center">
-              <p className="text-xs text-ki-on-surface-variant">Open History to revisit a past search.</p>
+              <p className="text-small text-fg-subtle">Open History to revisit a past search.</p>
             </div>
           )}
         </div>
       </div>
 
       {historyOpen && (
-        <aside id="doc-search-history-pane" className="w-80 shrink-0 border border-ki-outline bg-ki-surface flex flex-col min-h-0 mb-4 rounded-md overflow-hidden">
-          <div className="shrink-0 px-4 py-3 border-b border-ki-outline flex items-center justify-between">
-            <p className="text-[10px] font-mono font-bold uppercase tracking-widest text-ki-on-surface">Search History</p>
+        <aside id="doc-search-history-pane" className="mb-4 ml-4 flex min-h-0 w-80 shrink-0 flex-col overflow-hidden rounded-card border border-line bg-surface">
+          <div className="flex h-10 shrink-0 items-center justify-between border-b border-line px-3">
+            <p className="text-ui font-medium text-fg">Search history</p>
             <button
               type="button"
               onClick={() => setHistoryOpen(false)}
               title="Hide search history"
               aria-label="Hide search history"
-              className="ml-auto mr-1 shrink-0 rounded p-1 text-ki-on-surface-variant hover:bg-ki-surface-low hover:text-ki-on-surface transition-colors"
+              className="ml-auto mr-1 shrink-0 rounded p-1 text-fg-muted hover:bg-surface-hover hover:text-fg transition-colors"
             >
               <X className="h-3.5 w-3.5" />
             </button>
@@ -1344,7 +1345,7 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                   <button
                     type="button"
                     onClick={clearAllHistory}
-                    className="p-1 rounded text-ki-on-surface-variant hover:text-primary hover:bg-ki-surface-low transition-colors"
+                    className="rounded p-1 text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg"
                     aria-label="Clear all search history"
                   >
                     <BrushCleaning className="h-3.5 w-3.5" />
@@ -1357,15 +1358,15 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
           <div className="flex-1 min-h-0 overflow-y-auto">
             {searchHistory.length === 0 ? (
               <div className="py-8 text-center px-4">
-                <p className="text-xs text-ki-on-surface-variant">No searches yet. Your last {SEARCH_HISTORY_MAX} searches will appear here.</p>
+                <p className="text-small text-fg-subtle">No searches yet. Your last {SEARCH_HISTORY_MAX} searches will appear here.</p>
               </div>
             ) : (
               <ul>
                 {searchHistory.map((entry) => {
                   const isZeroResult = entry.resultCount === 0
                   return (
-                    <li key={entry.id} className="border-b border-ki-outline last:border-b-0">
-                      <div className="group relative px-4 py-3 hover:bg-ki-surface-low transition-colors">
+                    <li key={entry.id} className="border-b border-line last:border-b-0">
+                      <div className="group relative px-3 py-2.5 transition-colors hover:bg-surface-hover">
                         <button
                           type="button"
                           onClick={() => rerunHistoryEntry(entry)}
@@ -1375,26 +1376,26 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                             {entry.chips.map((chip) => {
                               const Icon = STAGE_ICON[chip.stage]
                               return (
-                                <span key={chip.stage} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-primary/10 text-primary text-[9px] font-mono font-medium">
+                                <span key={chip.stage} className="inline-flex items-center gap-1 rounded-control bg-surface-muted px-1.5 py-0.5 text-caption text-fg-muted">
                                   <Icon className="h-2.5 w-2.5" />
                                   {chip.name}
                                 </span>
                               )
                             })}
                             {entry.query && (
-                              <span className="text-sm font-medium text-ki-on-surface truncate">{entry.query}</span>
+                              <span className="truncate text-ui text-fg">{entry.query}</span>
                             )}
                           </div>
-                          <div className="mt-1.5 flex items-center gap-2 text-[10px] font-mono text-ki-on-surface-variant">
+                          <div className="mt-1 flex items-center gap-2 text-caption text-fg-subtle">
                             <span>{formatRelativeTime(new Date(entry.timestamp).toISOString())}</span>
-                            <span className="text-ki-outline-variant">•</span>
-                            <span className={cn(isZeroResult && 'text-error font-medium')}>
+                            <span>·</span>
+                            <span className={cn(isZeroResult && 'text-danger font-medium')}>
                               {entry.resultCount} {entry.resultCount === 1 ? 'result' : 'results'}
                             </span>
                             {entry.openedCount > 0 && (
                               <>
-                                <span className="text-ki-outline-variant">•</span>
-                                <span className="inline-flex items-center gap-0.5 text-primary">
+                                <span>·</span>
+                                <span className="inline-flex items-center gap-0.5 text-action">
                                   <ArrowUpRight className="h-2.5 w-2.5" />
                                   opened {entry.openedCount}
                                 </span>
@@ -1407,7 +1408,7 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                             <button
                               type="button"
                               onClick={() => deleteHistoryEntry(entry.id)}
-                              className="absolute top-3 right-3 p-1 rounded text-ki-on-surface-variant opacity-0 group-hover:opacity-100 hover:bg-ki-surface hover:text-error transition-all"
+                              className="absolute top-3 right-3 p-1 rounded text-fg-muted opacity-0 group-hover:opacity-100 hover:bg-surface hover:text-danger transition-all"
                               aria-label="Clear from history"
                             >
                               <BrushCleaning className="h-3 w-3" />

@@ -27,7 +27,7 @@ export function DeleteConfirmationDialog({
             iconVariant="red"
             title={`Move ${count} file${count === 1 ? '' : 's'} to Trash`}
             subtitle="Items in Trash are deleted forever after 30 days."
-            description={<>You are about to remove <span className="font-semibold text-[#1b1b1d]">{formatFileSize(totalSize)}</span> of data. Items in Trash are deleted forever after 30 days.</>}
+            description={<>You are about to remove <span className="font-semibold text-fg">{formatFileSize(totalSize)}</span> of data. Items in Trash are deleted forever after 30 days.</>}
             confirmLabel="Delete"
             confirmVariant="red"
             onCancel={onClose}

@@ -1,5 +1,20 @@
 import { clsx, type ClassValue } from "clsx"
-import { twMerge } from "tailwind-merge"
+import { extendTailwindMerge } from "tailwind-merge"
+
+/**
+ * tailwind-merge taught the UI token layer's custom scales (tailwind.config.js / app/ui-tokens.css).
+ * Without this it reads `text-ui` / `text-caption` as text *colors* (so `cn('text-ui', 'text-white')`
+ * would drop the size) and `shadow-popover` as a shadow color.
+ */
+const twMerge = extendTailwindMerge({
+  extend: {
+    classGroups: {
+      "font-size": [{ text: ["caption", "small", "ui", "body", "h1", "h2", "h3"] }],
+      rounded: [{ rounded: ["control", "card", "dialog"] }],
+      shadow: [{ shadow: ["popover", "dialog"] }],
+    },
+  },
+})
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))

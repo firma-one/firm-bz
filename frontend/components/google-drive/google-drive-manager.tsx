@@ -97,7 +97,7 @@ export function GoogleDriveManager({ connectionId, onImport, variant = 'default'
 
             {/* Header / Toolbar */}
             <div className={cn(
-                "bg-white border border-gray-100 rounded-xl shadow-sm overflow-hidden",
+                "bg-surface border border-line rounded-xl shadow-sm overflow-hidden",
                 compact && "border-gray-200/80 shadow-none"
             )}>
                 <div className={cn(
@@ -106,13 +106,13 @@ export function GoogleDriveManager({ connectionId, onImport, variant = 'default'
                 )}>
                     <div>
                         <h3 className={cn(
-                            "font-semibold text-gray-900 flex items-center gap-2",
+                            "font-semibold text-fg flex items-center gap-2",
                             compact ? "text-sm" : "text-lg"
                         )}>
-                            <ShieldCheck className={cn(compact ? "w-4 h-4" : "w-5 h-5", "text-gray-700")} />
+                            <ShieldCheck className={cn(compact ? "w-4 h-4" : "w-5 h-5", "text-fg-muted")} />
                             {compact ? "Extra file access" : "Authorized Files"}
                         </h3>
-                        <p className={cn("text-gray-500 mt-1", compact ? "text-xs" : "text-sm")}>
+                        <p className={cn("text-fg-muted mt-1", compact ? "text-xs" : "text-sm")}>
                             {compact
                                 ? "Optional: grant access to specific files beyond your workspace folder."
                                 : (
@@ -128,20 +128,20 @@ export function GoogleDriveManager({ connectionId, onImport, variant = 'default'
                             variant="ghost"
                             size="sm"
                             onClick={() => setIsGuideOpen(!isGuideOpen)}
-                            className={cn("h-9 gap-2", isGuideOpen ? "text-purple-700 bg-purple-50 hover:text-purple-800 hover:bg-purple-100" : "text-gray-500 hover:text-gray-900")}
+                            className={cn("h-9 gap-2", isGuideOpen ? "text-purple-700 bg-purple-50 hover:text-purple-800 hover:bg-purple-100" : "text-fg-muted hover:text-fg")}
                         >
-                            <ShieldCheck className={cn("w-4 h-4", isGuideOpen ? "text-purple-600" : "text-gray-500")} />
+                            <ShieldCheck className={cn("w-4 h-4", isGuideOpen ? "text-purple-600" : "text-fg-muted")} />
                             <span className="hidden sm:inline">How to Grant Access</span>
                         </Button>
 
-                        <div className="h-4 w-px bg-gray-200" />
+                        <div className="h-4 w-px bg-surface-selected" />
 
                         <Button
                             variant="outline"
                             size="sm"
                             onClick={fetchLinkedFiles}
                             disabled={isLoading}
-                            className="h-9 border-gray-200 text-gray-600 hover:text-gray-900 hover:border-gray-300 bg-white"
+                            className="h-9 border-line text-fg-muted hover:text-fg hover:border-line-strong bg-surface"
                         >
                             <RefreshCw className={cn("w-3.5 h-3.5 sm:mr-2", isLoading && "animate-spin")} />
                             <span className="hidden sm:inline">Refresh</span>
@@ -152,7 +152,7 @@ export function GoogleDriveManager({ connectionId, onImport, variant = 'default'
                             className={cn(
                                 "h-9 transition-all active:scale-[0.98]",
                                 compact
-                                    ? "bg-gray-100 text-gray-900 hover:bg-gray-200 border border-gray-200"
+                                    ? "bg-surface-muted text-fg hover:bg-surface-hover border border-line"
                                     : "bg-gray-900 hover:bg-gray-800 text-white shadow-sm"
                             )}
                         >
@@ -195,17 +195,17 @@ export function GoogleDriveManager({ connectionId, onImport, variant = 'default'
 
             {/* Content Area */}
             <div className={cn(
-                "bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm",
+                "bg-surface border border-line rounded-xl overflow-hidden shadow-sm",
                 compact ? "max-h-[min(280px,50vh)] shadow-none" : "min-h-[300px]"
             )}>
                 {/* Search/Filter Bar (Visual only for now) */}
                 <div className={cn(
-                    "border-b border-gray-100 bg-gray-50/50 flex flex-col gap-4",
+                    "border-b border-line bg-gray-50/50 flex flex-col gap-4",
                     compact ? "px-3 py-2" : "px-6 py-4"
                 )}>
                     <div className="flex items-center justify-between">
-                        <div className={cn("flex items-center gap-2 text-gray-500", compact ? "text-xs" : "text-sm")}>
-                            <span className="font-medium text-gray-900">{linkedFiles.length}</span> file(s) authorized
+                        <div className={cn("flex items-center gap-2 text-fg-muted", compact ? "text-xs" : "text-sm")}>
+                            <span className="font-medium text-fg">{linkedFiles.length}</span> file(s) authorized
                         </div>
                     </div>
                 </div>
@@ -220,13 +220,13 @@ export function GoogleDriveManager({ connectionId, onImport, variant = 'default'
                         compact ? "py-10 px-4" : "py-24"
                     )}>
                         <div className={cn(
-                            "bg-gray-100 rounded-full flex items-center justify-center mb-3",
+                            "bg-surface-muted rounded-full flex items-center justify-center mb-3",
                             compact ? "w-10 h-10" : "w-16 h-16 mb-4"
                         )}>
-                            <ShieldCheck className={cn(compact ? "w-5 h-5" : "w-8 h-8", "text-gray-300")} />
+                            <ShieldCheck className={cn(compact ? "w-5 h-5" : "w-8 h-8", "text-fg-subtle")} />
                         </div>
-                        <h4 className={cn("text-gray-900 font-medium", compact ? "text-sm" : "text-lg")}>No extra files yet</h4>
-                        <p className={cn("text-gray-500 mt-2 max-w-sm", compact ? "text-xs" : "text-sm")}>
+                        <h4 className={cn("text-fg font-medium", compact ? "text-sm" : "text-lg")}>No extra files yet</h4>
+                        <p className={cn("text-fg-muted mt-2 max-w-sm", compact ? "text-xs" : "text-sm")}>
                             {compact
                                 ? "Use Grant access only if you need specific files outside the workspace folder."
                                 : (
@@ -237,31 +237,31 @@ export function GoogleDriveManager({ connectionId, onImport, variant = 'default'
                                   )}
                         </p>
                         <div className={cn(compact ? "mt-4" : "mt-6")}>
-                            <Button onClick={() => setIsGrantModalOpen(true)} variant="outline" size={compact ? "sm" : "default"} className="border-gray-200 text-gray-900 hover:bg-gray-50">
+                            <Button onClick={() => setIsGrantModalOpen(true)} variant="outline" size={compact ? "sm" : "default"} className="border-line text-fg hover:bg-surface-hover">
                                 Browse Google Drive
                             </Button>
                         </div>
                     </div>
                 ) : (
                     <div className={cn(
-                        "divide-y divide-gray-100 overflow-y-auto custom-scrollbar",
+                        "divide-y divide-line overflow-y-auto custom-scrollbar",
                         compact ? "max-h-[200px]" : "max-h-[360px]"
                     )}>
                         {linkedFiles.map(file => (
                             <div key={file.id} className="group flex items-center justify-between p-4 hover:bg-gray-50/80 transition-colors">
                                 <div className="flex items-center gap-4 min-w-0">
-                                    <div className="p-2.5 bg-gray-100 rounded-lg text-gray-500 group-hover:bg-white group-hover:shadow-sm transition-all border border-transparent group-hover:border-gray-200">
+                                    <div className="p-2.5 bg-surface-muted rounded-lg text-fg-muted group-hover:bg-white group-hover:shadow-sm transition-all border border-transparent group-hover:border-line">
                                         <FileText className="w-5 h-5" />
                                     </div>
                                     <div className="min-w-0">
-                                        <h4 className="text-sm font-semibold text-gray-900 truncate max-w-[300px] md:max-w-[400px]">
+                                        <h4 className="text-sm font-semibold text-fg truncate max-w-[300px] md:max-w-[400px]">
                                             {file.name}
                                         </h4>
-                                        <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
-                                            <span className="font-mono bg-gray-50 px-1.5 py-0.5 rounded border border-gray-100">
+                                        <div className="flex items-center gap-3 mt-1 text-xs text-fg-muted">
+                                            <span className="font-mono bg-surface-subtle px-1.5 py-0.5 rounded border border-line">
                                                 {formatFileSize(parseInt(file.size))}
                                             </span>
-                                            <span className="text-gray-300">•</span>
+                                            <span className="text-fg-subtle">•</span>
                                             <span>
                                                 Granted {formatDistanceToNow(new Date(file.linkedAt), { addSuffix: true })}
                                             </span>
@@ -275,7 +275,7 @@ export function GoogleDriveManager({ connectionId, onImport, variant = 'default'
                                         size="sm"
                                         onClick={() => handleUnlink(file.id)}
                                         disabled={isRevoking === file.id}
-                                        className="h-9 px-3 text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
+                                        className="h-9 px-3 text-fg-subtle hover:text-tag-red-fg hover:bg-tag-red-bg transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
                                     >
                                         {isRevoking === file.id ? (
                                             <LoadingSpinner size="sm" />
@@ -303,8 +303,8 @@ export function GoogleDriveManager({ connectionId, onImport, variant = 'default'
                     </DialogHeader>
 
                     <div className="space-y-4 py-3">
-                        <div className="flex gap-3 p-3 bg-blue-50 text-blue-900 rounded-lg text-sm border border-blue-100">
-                            <ShieldCheck className="w-5 h-5 flex-shrink-0 text-blue-600 mt-0.5" />
+                        <div className="flex gap-3 p-3 bg-tag-blue-bg text-blue-900 rounded-lg text-sm border border-tag-blue-bg">
+                            <ShieldCheck className="w-5 h-5 flex-shrink-0 text-action mt-0.5" />
                             <div>
                                 <span className="font-bold block text-blue-800 mb-1">Explicit Grant Required</span>
                                 <span className="opacity-90">
@@ -312,17 +312,17 @@ export function GoogleDriveManager({ connectionId, onImport, variant = 'default'
                                 </span>
                             </div>
                         </div>
-                        <div className="flex gap-3 p-3 bg-gray-50 text-gray-900 rounded-lg text-sm border border-gray-100">
-                            <div className="font-bold text-gray-500 w-5 text-center mt-0.5">2</div>
+                        <div className="flex gap-3 p-3 bg-surface-subtle text-fg rounded-lg text-sm border border-line">
+                            <div className="font-bold text-fg-muted w-5 text-center mt-0.5">2</div>
                             <div>
-                                <span className="font-bold block text-gray-800 mb-1">Folder Selection</span>
-                                <span className="text-gray-600">Select specific folders or files using the Google Picker. You can multi-select items.</span>
+                                <span className="font-bold block text-fg mb-1">Folder Selection</span>
+                                <span className="text-fg-muted">Select specific folders or files using the Google Picker. You can multi-select items.</span>
                             </div>
                         </div>
-                        <div className="flex gap-3 p-3 bg-amber-50 text-amber-900 rounded-lg text-sm border border-amber-100">
-                            <div className="font-bold text-amber-600 w-5 text-center mt-0.5">3</div>
+                        <div className="flex gap-3 p-3 bg-tag-yellow-bg text-amber-900 rounded-lg text-sm border border-tag-yellow-bg">
+                            <div className="font-bold text-tag-yellow-fg w-5 text-center mt-0.5">3</div>
                             <div>
-                                <span className="font-bold block text-amber-800 mb-1">Non-Recursive Limitation</span>
+                                <span className="font-bold block text-tag-yellow-fg mb-1">Non-Recursive Limitation</span>
                                 <span className="text-amber-800/90">Selecting a folder does <span className="font-bold underline decoration-amber-300">NOT</span> automatically include sub-folders. You must select sub-folders individually.</span>
                             </div>
                         </div>

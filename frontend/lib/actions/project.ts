@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { ensureFirmAgentUser } from '@/lib/ai/files-agent/agent-identity'
 import { type EngagementStatus, DocumentSharingPermissionStatus } from '@prisma/client'
 import { createClient as createSupabaseClient } from '@/utils/supabase/server'
-import { upsertFollowUpReminder } from '@/lib/actions/user-reminders'
+import { upsertFollowUpReminder } from '@/lib/reminders/reminder-service'
 import { createClient as createSupabaseAdmin } from '@supabase/supabase-js'
 import { revalidatePath } from 'next/cache'
 import { canViewProjectSettings as checkCanViewProjectSettings } from '@/lib/permission-helpers'
@@ -676,7 +676,7 @@ export async function closeEngagement(projectId: string, firmSlug: string, clien
         })
     })
 
-    const { invalidateUserSettingsPlus } = await import('@/lib/actions/user-settings')
+    const { invalidateUserSettingsPlus } = await import('@/lib/permissions/invalidate-user-settings')
     const toInvalidate = new Set<string>([
         ...externalMembers.map((m) => m.userId),
         ...allMemberIds.map((m) => m.userId),
@@ -841,7 +841,7 @@ export async function deleteEngagement(projectId: string, firmSlug: string, clie
 
     // 4. Invalidate caches — must take effect on next request
     if (memberUserIds.length > 0) {
-        const { invalidateUsersSettingsPlus } = await import('@/lib/actions/user-settings')
+        const { invalidateUsersSettingsPlus } = await import('@/lib/permissions/invalidate-user-settings')
         await invalidateUsersSettingsPlus(memberUserIds)
     }
 

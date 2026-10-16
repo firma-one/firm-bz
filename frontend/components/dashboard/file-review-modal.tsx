@@ -81,20 +81,20 @@ function MultiSelectFilter({
                     "flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors",
                     selected.size > 0
                         ? "bg-gray-900 text-white border-gray-900 hover:bg-gray-800"
-                        : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50 hover:border-gray-300"
+                        : "bg-surface text-fg-muted border-line hover:bg-surface-hover hover:border-line-strong"
                 )}
             >
                 {label}
                 {selected.size > 0 && (
-                    <span className="flex items-center justify-center bg-white text-gray-900 text-[10px] rounded-full min-w-[16px] h-4 px-1 ml-1 font-bold">
+                    <span className="flex items-center justify-center bg-surface text-fg text-caption rounded-full min-w-[16px] h-4 px-1 ml-1 font-bold">
                         {selected.size}
                     </span>
                 )}
-                <ChevronDown className={cn("w-3 h-3", selected.size > 0 ? "text-gray-400" : "text-gray-400")} />
+                <ChevronDown className={cn("w-3 h-3", selected.size > 0 ? "text-fg-subtle" : "text-fg-subtle")} />
             </button>
 
             {isOpen && (
-                <div className="absolute top-full left-0 mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-100 py-1 z-[100]">
+                <div className="absolute top-full left-0 mt-1 w-48 bg-surface rounded-lg shadow-lg border border-line py-1 z-[100]">
                     <div className="max-h-60 overflow-y-auto custom-scrollbar">
                         {options.map(option => {
                             const isSelected = selected.has(option)
@@ -102,15 +102,15 @@ function MultiSelectFilter({
                                 <button
                                     key={option}
                                     onClick={() => toggleOption(option)}
-                                    className="flex items-center w-full px-3 py-2 text-xs text-left hover:bg-gray-50 transition-colors"
+                                    className="flex items-center w-full px-3 py-2 text-xs text-left hover:bg-surface-hover transition-colors"
                                 >
                                     <div className={cn(
                                         "w-4 h-4 rounded border mr-2 flex items-center justify-center transition-colors flex-shrink-0",
-                                        isSelected ? "bg-gray-900 border-gray-900" : "border-gray-300 bg-white"
+                                        isSelected ? "bg-gray-900 border-gray-900" : "border-line-strong bg-surface"
                                     )}>
                                         {isSelected && <Check className="w-3 h-3 text-white" />}
                                     </div>
-                                    <span className={cn("truncate", isSelected ? "text-gray-900 font-medium" : "text-gray-600")}>
+                                    <span className={cn("truncate", isSelected ? "text-fg font-medium" : "text-fg-muted")}>
                                         {option}
                                     </span>
                                 </button>
@@ -334,7 +334,7 @@ export function FileReviewModal({
         const someSelected = !allSelected && groupIds.some(id => selectedIds.has(id))
 
         return (
-            <div className="flex items-center w-full px-1 py-3 hover:bg-gray-50 rounded-lg group transition-colors select-none">
+            <div className="flex items-center w-full px-1 py-3 hover:bg-surface-hover rounded-lg group transition-colors select-none">
                 {/* Group Checkbox */}
                 <div onClick={(e) => e.stopPropagation()} className="pl-1 pr-3 flex items-center">
                     <div
@@ -345,7 +345,7 @@ export function FileReviewModal({
                                 ? "bg-gray-900 border-gray-900"
                                 : someSelected
                                     ? "bg-gray-900 border-gray-900"
-                                    : "border-gray-300 hover:border-gray-500 bg-white"
+                                    : "border-line-strong hover:border-gray-500 bg-surface"
                         )}
                     >
                         {allSelected && <Check className="w-3 h-3 text-white" />}
@@ -357,18 +357,18 @@ export function FileReviewModal({
                     onClick={onToggle}
                     className="flex-1 flex items-center cursor-pointer"
                 >
-                    <div className={`p-1 rounded-md mr-3 transition-colors ${isExpanded ? 'bg-gray-100 text-gray-700' : 'text-gray-400 group-hover:text-gray-600'}`}>
+                    <div className={`p-1 rounded-md mr-3 transition-colors ${isExpanded ? 'bg-surface-muted text-fg-muted' : 'text-fg-subtle group-hover:text-fg-muted'}`}>
                         <ChevronRight className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
                     </div>
                     <div className="flex-1">
-                        <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                        <h3 className="text-sm font-semibold text-fg flex items-center gap-2">
                             {title}
-                            <span className="text-xs font-normal text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
+                            <span className="text-xs font-normal text-fg-muted bg-surface-muted px-2 py-0.5 rounded-full">
                                 {count} items
                             </span>
                         </h3>
                     </div>
-                    <div className="text-xs font-medium text-gray-500">
+                    <div className="text-xs font-medium text-fg-muted">
                         {formatFileSize(size)}
                     </div>
                 </div>
@@ -378,48 +378,48 @@ export function FileReviewModal({
 
     return (
         <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
-            <SheetContent side="right" className="!w-[95vw] !max-w-[95vw] p-0 border-l border-gray-200 shadow-2xl flex flex-col h-full bg-slate-50 [&>button]:hidden">
+            <SheetContent side="right" className="!w-[95vw] !max-w-[95vw] p-0 border-l border-line shadow-2xl flex flex-col h-full bg-surface-subtle [&>button]:hidden">
                 <SheetTitle className="sr-only">{title}</SheetTitle>
 
                 {/* 1. HERO HEADER */}
                 <div className="relative flex-shrink-0 bg-gradient-to-b from-orange-50/80 to-white pt-8 pb-6 px-8 border-b border-gray-100/50 z-20">
                     <button
                         onClick={onClose}
-                        className="absolute top-6 right-6 p-2 rounded-full text-gray-400 hover:text-gray-900 hover:bg-gray-100/50 transition-colors"
+                        className="absolute top-6 right-6 p-2 rounded-full text-fg-subtle hover:text-fg hover:bg-gray-100/50 transition-colors"
                     >
                         <SquareX className="h-5 w-5" />
                     </button>
 
                     <div className="space-y-4">
                         <div>
-                            <span className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-white/60 border border-orange-100 text-[11px] font-semibold text-orange-700 uppercase tracking-wide shadow-sm backdrop-blur-sm mb-3">
+                            <span className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-white/60 border border-tag-orange-bg text-caption font-semibold text-tag-orange-fg shadow-sm backdrop-blur-sm mb-3">
                                 <Archive className="w-3 h-3" />
                                 {title}
                             </span>
 
                             {/* Hero Metric */}
                             <div className="flex items-baseline gap-1">
-                                <h2 className="text-4xl font-bold text-gray-900 tracking-tight">
+                                <h2 className="text-4xl font-bold text-fg tracking-tight">
                                     {formatFileSize(totalPotentialSavings).split(' ')[0]}
                                 </h2>
-                                <span className="text-xl font-medium text-gray-500">
+                                <span className="text-xl font-medium text-fg-muted">
                                     {formatFileSize(totalPotentialSavings).split(' ')[1]} Reclaimable
                                 </span>
                             </div>
-                            <p className="text-sm text-gray-500 mt-1 max-w-[90%] leading-relaxed">
+                            <p className="text-sm text-fg-muted mt-1 max-w-[90%] leading-relaxed">
                                 {description}
                             </p>
                         </div>
 
                         {/* Visual Distribution Bar (Mockup for now, could be real data later) */}
-                        <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden flex">
+                        <div className="w-full h-1.5 bg-surface-muted rounded-full overflow-hidden flex">
                             <div className="h-full bg-orange-400 w-[60%]" />
                             <div className="h-full bg-orange-300 w-[25%]" />
                             <div className="h-full bg-orange-200 w-[15%]" />
                         </div>
 
                         {/* Summary Stats */}
-                        <div className="flex items-center gap-6 text-xs font-medium text-gray-500">
+                        <div className="flex items-center gap-6 text-xs font-medium text-fg-muted">
                             <span className="flex items-center gap-1.5">
                                 <div className="w-1.5 h-1.5 rounded-full bg-orange-500" />
                                 {filteredFiles.length} files found
@@ -436,7 +436,7 @@ export function FileReviewModal({
                 <div className="flex flex-col flex-1 overflow-hidden relative">
 
                     {/* Sticky Filter Bar */}
-                    <div className="px-8 py-4 bg-white/80 backdrop-blur-md border-b border-gray-100 sticky top-0 z-10 flex items-center justify-between">
+                    <div className="px-8 py-4 bg-white/80 backdrop-blur-md border-b border-line sticky top-0 z-10 flex items-center justify-between">
                         <div className="flex items-center gap-2">
                             <MultiSelectFilter
                                 label="File Type"
@@ -453,7 +453,7 @@ export function FileReviewModal({
                             {(selectedTypes.size > 0 || selectedSizes.size > 0) && (
                                 <button
                                     onClick={() => { setSelectedTypes(new Set()); setSelectedSizes(new Set()); }}
-                                    className="ml-2 text-xs text-gray-400 hover:text-gray-900 transition-colors flex items-center gap-1"
+                                    className="ml-2 text-xs text-fg-subtle hover:text-fg transition-colors flex items-center gap-1"
                                 >
                                     <X className="w-3 h-3" />
                                     Reset
@@ -463,13 +463,13 @@ export function FileReviewModal({
 
                         {/* Select All Toggle */}
                         <label className="flex items-center gap-2 cursor-pointer group select-none">
-                            <span className="text-xs font-medium text-gray-500 group-hover:text-gray-900 transition-colors">Select All</span>
+                            <span className="text-xs font-medium text-fg-muted group-hover:text-fg transition-colors">Select All</span>
                             <div
                                 className={cn(
                                     "w-5 h-5 rounded-md border flex items-center justify-center transition-all",
                                     filteredFiles.length > 0 && selectedIds.size === filteredFiles.length
                                         ? "bg-gray-900 border-gray-900"
-                                        : "border-gray-300 bg-white group-hover:border-gray-400"
+                                        : "border-line-strong bg-surface group-hover:border-gray-400"
                                 )}
                             >
                                 {filteredFiles.length > 0 && selectedIds.size === filteredFiles.length && <Check className="w-3.5 h-3.5 text-white" />}
@@ -489,16 +489,16 @@ export function FileReviewModal({
                         {isLoading ? (
                             <div className="flex flex-col gap-4">
                                 {[1, 2, 3, 4, 5].map((i) => (
-                                    <div key={i} className="h-20 bg-white rounded-xl border border-gray-100 animate-pulse" />
+                                    <div key={i} className="h-20 bg-surface rounded-xl border border-line animate-pulse" />
                                 ))}
                             </div>
                         ) : filteredFiles.length === 0 ? (
                             <div className="flex flex-col items-center justify-center py-20 text-center">
-                                <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mb-4">
-                                    <Filter className="w-6 h-6 text-gray-300" />
+                                <div className="w-16 h-16 bg-surface-subtle rounded-full flex items-center justify-center mb-4">
+                                    <Filter className="w-6 h-6 text-fg-subtle" />
                                 </div>
-                                <h3 className="text-gray-900 font-medium">No files match your filters</h3>
-                                <p className="text-gray-500 text-sm mt-1">Try resetting the filters to see more results.</p>
+                                <h3 className="text-fg font-medium">No files match your filters</h3>
+                                <p className="text-fg-muted text-sm mt-1">Try resetting the filters to see more results.</p>
                             </div>
                         ) : (
                             groupedFiles.map(([groupTitle, groupFiles]) => {
@@ -529,8 +529,8 @@ export function FileReviewModal({
                                                             className={cn(
                                                                 "group relative flex items-center p-3 rounded-xl border transition-all duration-200 cursor-pointer hover:shadow-md",
                                                                 isSelected
-                                                                    ? "bg-gray-50 border-gray-900 shadow-sm ring-1 ring-gray-900"
-                                                                    : "bg-white border-gray-200 hover:border-gray-300"
+                                                                    ? "bg-surface-subtle border-gray-900 shadow-sm ring-1 ring-gray-900"
+                                                                    : "bg-surface border-line hover:border-line-strong"
                                                             )}
                                                         >
                                                             {/* Checkbox (Moved to Left) */}
@@ -539,7 +539,7 @@ export function FileReviewModal({
                                                                     "w-5 h-5 rounded-full border flex items-center justify-center transition-all",
                                                                     isSelected
                                                                         ? "bg-gray-900 border-gray-900 text-white"
-                                                                        : "border-gray-200 bg-white group-hover:border-gray-400"
+                                                                        : "border-line bg-surface group-hover:border-gray-400"
                                                                 )}>
                                                                     {isSelected && <Check className="w-3 h-3" />}
                                                                 </div>
@@ -547,7 +547,7 @@ export function FileReviewModal({
 
                                                             {/* File Icon */}
                                                             <div className="pr-4">
-                                                                <div className="p-2.5 bg-gray-50 border border-gray-100/50 rounded-xl shadow-sm">
+                                                                <div className="p-2.5 bg-surface-subtle border border-gray-100/50 rounded-xl shadow-sm">
                                                                     <DocumentIcon mimeType={file.mimeType || 'unknown'} className="w-5 h-5" />
                                                                 </div>
                                                             </div>
@@ -556,16 +556,16 @@ export function FileReviewModal({
                                                             <div className="flex-1 min-w-0 py-1">
                                                                 {/* Row 1: File Name */}
                                                                 <h4 className={cn(
-                                                                    "text-sm font-semibold text-gray-900 truncate mb-1.5",
-                                                                    isSelected ? "text-gray-900" : "text-gray-900"
+                                                                    "text-sm font-semibold text-fg truncate mb-1.5",
+                                                                    isSelected ? "text-fg" : "text-fg"
                                                                 )}>
                                                                     {file.name}
                                                                 </h4>
 
                                                                 {/* Row 2: Owner | Location | Tags | Time | Size */}
-                                                                <div className="flex items-center flex-wrap gap-2 text-[11px] text-gray-500">
+                                                                <div className="flex items-center flex-wrap gap-2 text-caption text-fg-muted">
                                                                     {/* Owner Email */}
-                                                                    <span className="truncate text-gray-600 font-medium">
+                                                                    <span className="truncate text-fg-muted font-medium">
                                                                         {file.actorEmail || file.owner || 'Unknown'}
                                                                     </span>
 
@@ -573,7 +573,7 @@ export function FileReviewModal({
 
                                                                     {/* Location with Icon */}
                                                                     <span className="truncate flex items-center gap-1">
-                                                                        <HardDrive className="w-3 h-3 text-gray-400 flex-shrink-0" />
+                                                                        <HardDrive className="w-3 h-3 text-fg-subtle flex-shrink-0" />
                                                                         <span>{file.parentName || 'My Drive'}</span>
                                                                     </span>
 
@@ -597,7 +597,7 @@ export function FileReviewModal({
                                                                                 return (
                                                                                     <span
                                                                                         key={idx}
-                                                                                        className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide border whitespace-nowrap"
+                                                                                        className="inline-flex items-center px-1.5 py-0.5 rounded text-caption font-semibold border whitespace-nowrap"
                                                                                         style={{
                                                                                             backgroundColor: style.bg,
                                                                                             color: style.text,
@@ -621,7 +621,7 @@ export function FileReviewModal({
                                                                     <span className="text-gray-200">|</span>
 
                                                                     {/* File Size */}
-                                                                    <span className="text-gray-600 font-mono font-medium px-1.5 py-0.5 rounded border border-gray-300 bg-gray-50">
+                                                                    <span className="text-fg-muted font-mono font-medium px-1.5 py-0.5 rounded border border-line-strong bg-surface-subtle">
                                                                         {formatFileSize(file.size || 0)}
                                                                     </span>
                                                                 </div>
@@ -629,7 +629,7 @@ export function FileReviewModal({
 
                                                             {/* Action Menu (Absolute positioned) */}
                                                             <div
-                                                                className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-30 bg-white shadow-sm rounded-lg border border-gray-100"
+                                                                className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-30 bg-surface shadow-sm rounded-lg border border-line"
                                                                 onClick={(e) => e.stopPropagation()}
                                                             >
                                                                 <DocumentActionMenu
@@ -676,7 +676,7 @@ export function FileReviewModal({
                                         <span className="text-sm font-semibold text-white">
                                             Delete {selectedIds.size} {selectedIds.size === 1 ? 'file' : 'files'}
                                         </span>
-                                        <span className="text-xs text-gray-300">
+                                        <span className="text-xs text-fg-subtle">
                                             Reclaim {formatFileSize(totalSelectedSize)} of space
                                         </span>
                                     </div>
@@ -684,7 +684,7 @@ export function FileReviewModal({
 
                                 <button
                                     onClick={handleActionClick}
-                                    className="bg-white text-gray-900 px-5 py-2 rounded-xl text-sm font-bold hover:bg-gray-100 transition-colors shadow-lg active:scale-95 transform duration-100"
+                                    className="bg-surface text-fg px-5 py-2 rounded-xl text-sm font-bold hover:bg-surface-hover transition-colors shadow-lg active:scale-95 transform duration-100"
                                 >
                                     Confirm
                                 </button>

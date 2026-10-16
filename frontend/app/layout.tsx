@@ -1,4 +1,5 @@
 import './globals.css'
+import './ui-tokens.css'
 import { Inter, Space_Grotesk, Work_Sans } from 'next/font/google'
 import type { Metadata } from 'next'
 import Script from 'next/script'
@@ -22,11 +23,16 @@ const spaceGrotesk = Space_Grotesk({
   display: 'swap',
 })
 
-/** Work Sans — `--font-kinetic-body` for marketing / kinetic surfaces (see `globals.css` for headline alias). */
+/**
+ * Work Sans — `--font-kinetic-body` for marketing / kinetic surfaces (see `globals.css` for headline alias).
+ * next/font registers every face under its real family name, so CSS that names 'Work Sans',
+ * 'Space Grotesk' or 'Inter' literally resolves to these self-hosted files — there is no CDN
+ * stylesheet. 600 and 700 are here because the marketing pages and the demo set Work Sans bold.
+ */
 const workSans = Work_Sans({
   subsets: ['latin'],
   variable: '--font-kinetic-body',
-  weight: ['300', '400', '500'],
+  weight: ['300', '400', '500', '600', '700'],
   display: 'swap',
 })
 
@@ -118,9 +124,12 @@ export default async function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${inter.className} ${spaceGrotesk.variable} ${workSans.variable} bg-gray-50 text-gray-900`}
+        className={`${inter.className} ${inter.variable} ${spaceGrotesk.variable} ${workSans.variable} bg-gray-50 text-gray-900`}
         suppressHydrationWarning
       >
+        {/* Set <html data-ui="v2"> on /d and the public demo before first paint, so the app's
+            typography never flashes the marketing faces (see lib/ui-shell.ts). */}
+        <Script id="fm-ui-shell" strategy="beforeInteractive" dangerouslySetInnerHTML={{ __html: `try{if(/^\\/(d|demo)(\\/|$)/.test(location.pathname)){document.documentElement.dataset.ui='v2'}}catch(e){}` }} />
         {/* Inject firm brand CSS vars before first paint to prevent FOUC on dashboard routes */}
         <Script id="fm-brand-css-vars" strategy="beforeInteractive" dangerouslySetInnerHTML={{ __html: `try{var m=location.pathname.match(/^\\/d\\/[^/]+\\/f\\/([^/]+)/);if(m){var b=JSON.parse(sessionStorage.getItem('fm_firm_branding_'+m[1])||'null');if(b&&b.primaryHsl){document.documentElement.style.setProperty('--primary',b.primaryHsl);document.documentElement.style.setProperty('--primary-foreground',b.primaryFgHsl);if(b.primaryRgb)document.documentElement.style.setProperty('--primary-rgb',b.primaryRgb);}if(b&&b.accentHsl){document.documentElement.style.setProperty('--brand-accent',b.accentHsl);document.documentElement.style.setProperty('--brand-accent-foreground',b.accentFgHsl);}}}catch(e){}` }} />
         {/* GA is loaded client-side only when analytics consent is granted (see ConsentAwareGoogleAnalytics). */}

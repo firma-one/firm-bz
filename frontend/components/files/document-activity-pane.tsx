@@ -6,6 +6,7 @@ import { DriveFile, DriveRevision } from "@/lib/types"
 import { useAuth } from "@/lib/auth-context"
 import { RelativeDateTime } from "@/components/ui/relative-date-time"
 import { UserAvatarWithTooltip } from "@/components/ui/user-avatar-with-tooltip"
+import { initialsOf } from '@/lib/initials'
 
 interface DocumentActivityPaneProps {
     document: DriveFile
@@ -55,7 +56,7 @@ export function DocumentActivityPane({ document }: DocumentActivityPaneProps) {
 
     return (
         <div className="flex flex-col h-full min-h-0 p-4 min-w-0">
-            <div className="inline-flex max-w-full items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 mb-4">
+            <div className="inline-flex max-w-full items-center gap-2 rounded-xl border border-slate-200 bg-surface-subtle px-3 py-2 mb-4">
                 <span className="truncate text-xs font-medium text-slate-700" title={document.name}>
                     {document.name}
                 </span>
@@ -93,7 +94,7 @@ export function DocumentActivityPane({ document }: DocumentActivityPaneProps) {
                 <div className="flex-1 overflow-y-auto min-h-0 space-y-3 pr-2">
                     {activity.map((rev) => {
                         const displayName = rev.lastModifyingUser?.displayName || 'Unknown'
-                        const initials = displayName.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()
+                        const initials = initialsOf(displayName)
                         return (
                             <div
                                 key={rev.id}
@@ -109,7 +110,7 @@ export function DocumentActivityPane({ document }: DocumentActivityPaneProps) {
                                         showRole={false}
                                     />
                                     <div className="min-w-0 flex-1">
-                                        <p className="text-slate-900 text-xs leading-snug">
+                                        <p className="text-fg text-xs leading-snug">
                                             <span className="font-medium">{displayName}</span>
                                             {' '}
                                             <span className="text-slate-500">edited this file</span>

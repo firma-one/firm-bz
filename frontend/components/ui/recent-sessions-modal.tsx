@@ -108,16 +108,16 @@ export function RecentSessionsModal({ isOpen, onClose, onLoadSession }: RecentSe
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-hidden">
+      <div className="bg-surface rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-200">
+        <div className="flex items-center justify-between p-4 border-b border-line">
           <div className="flex items-center space-x-2">
-            <Clock className="h-5 w-5 text-blue-600" />
-            <h2 className="text-lg font-semibold text-gray-900">Recent Chat Sessions</h2>
+            <Clock className="h-5 w-5 text-action" />
+            <h2 className="text-lg font-semibold text-fg">Recent Chat Sessions</h2>
           </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
+            className="text-fg-subtle hover:text-fg-muted transition-colors"
           >
             <X className="h-5 w-5" />
           </button>
@@ -128,11 +128,11 @@ export function RecentSessionsModal({ isOpen, onClose, onLoadSession }: RecentSe
           {loading ? (
             <div className="flex items-center justify-center py-8">
               <LoadingSpinner size="md" />
-              <span className="ml-2 text-gray-600">Loading sessions...</span>
+              <span className="ml-2 text-fg-muted">Loading sessions...</span>
             </div>
           ) : sessions.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              <MessageSquare className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+            <div className="text-center py-8 text-fg-muted">
+              <MessageSquare className="h-12 w-12 mx-auto mb-3 text-fg-subtle" />
               <p>No recent chat sessions found</p>
               <p className="text-sm">Your chat history will appear here after you start conversations</p>
             </div>
@@ -141,23 +141,23 @@ export function RecentSessionsModal({ isOpen, onClose, onLoadSession }: RecentSe
               {sessions.map((session) => (
                 <div
                   key={session.id}
-                  className="border border-gray-200 rounded-lg p-3 hover:border-blue-300 transition-colors"
+                  className="border border-line rounded-lg p-3 hover:border-line-strong transition-colors"
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center space-x-2 mb-2">
-                        <MessageSquare className="h-4 w-4 text-blue-600" />
-                        <span className="text-sm font-medium text-gray-900">
+                        <MessageSquare className="h-4 w-4 text-action" />
+                        <span className="text-sm font-medium text-fg">
                           {session.messages.length} messages
                         </span>
-                        <span className="text-xs text-gray-500">
+                        <span className="text-xs text-fg-muted">
                           {formatDate(session.lastUpdated)}
                         </span>
                       </div>
 
                       {/* Preview of first user message */}
                       {session.messages.find(m => m.type === 'user') && (
-                        <p className="text-sm text-gray-600 mb-2">
+                        <p className="text-sm text-fg-muted mb-2">
                           <span className="font-medium">Query:</span>{' '}
                           {truncateContent(session.messages.find(m => m.type === 'user')!.content)}
                         </p>
@@ -165,7 +165,7 @@ export function RecentSessionsModal({ isOpen, onClose, onLoadSession }: RecentSe
 
                       {/* Preview of first AI response */}
                       {session.messages.find(m => m.type === 'ai') && (
-                        <p className="text-sm text-gray-600">
+                        <p className="text-sm text-fg-muted">
                           <span className="font-medium">Response:</span>{' '}
                           {truncateContent(session.messages.find(m => m.type === 'ai')!.content)}
                         </p>
@@ -175,7 +175,7 @@ export function RecentSessionsModal({ isOpen, onClose, onLoadSession }: RecentSe
                     <div className="flex items-center space-x-2 ml-3">
                       <button
                         onClick={() => handleLoadSession(session)}
-                        className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+                        className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-action-hover transition-colors"
                         title="Load this session"
                       >
                         Load
@@ -183,7 +183,7 @@ export function RecentSessionsModal({ isOpen, onClose, onLoadSession }: RecentSe
                       <button
                         onClick={() => handleDeleteSession(session.id)}
                         disabled={deleting === session.id}
-                        className="p-1.5 text-gray-400 hover:text-red-600 transition-colors disabled:opacity-50"
+                        className="p-1.5 text-fg-subtle hover:text-danger transition-colors disabled:opacity-50"
                         title="Delete this session"
                       >
                         {deleting === session.id ? (
@@ -202,14 +202,14 @@ export function RecentSessionsModal({ isOpen, onClose, onLoadSession }: RecentSe
 
         {/* Footer */}
         {sessions.length > 0 && (
-          <div className="flex items-center justify-between p-4 border-t border-gray-200 bg-gray-50">
-            <span className="text-sm text-gray-600">
+          <div className="flex items-center justify-between p-4 border-t border-line">
+            <span className="text-sm text-fg-muted">
               {sessions.length} session{sessions.length !== 1 ? 's' : ''} stored
             </span>
             <button
               type="button"
               onClick={() => setClearAllConfirmOpen(true)}
-              className="px-3 py-1.5 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
+              className="px-3 py-1.5 text-xs text-tag-red-fg hover:text-danger hover:bg-tag-red-bg rounded transition-colors"
             >
               Clear All
             </button>

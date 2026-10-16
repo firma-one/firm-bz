@@ -3,6 +3,8 @@ import { createClient } from '@supabase/supabase-js'
 import { prisma } from '@/lib/prisma'
 import { googleDriveConnector } from '@/lib/google-drive-connector'
 import type { GoogleDriveFile } from '@/lib/google-drive-connector'
+import { userSettingsPlus } from '@/lib/user-settings-plus'
+import { findFirmInPermissions } from '@/lib/permission-helpers'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:54321',
@@ -134,11 +136,12 @@ async function authenticate(
 
   const { firmId } = await params
 
-  const membership = await prisma.firmMember.findFirst({
-    where: { userId: user.id, firmId },
-  })
-
-  if (!membership) {
+  // Firm admins only — the same gate as the insights route and the Analytics tab that renders
+  // the Action Center. A bare FirmMember row is not enough: external engagement users (EC/EV)
+  // get one too, and these alerts name engagements and flag risky or sensitive files firm-wide.
+  const settings = await userSettingsPlus.getUserSettingsPlus(user.id)
+  const firm = findFirmInPermissions(settings.permissions, firmId)
+  if (!firm || !(firm.scopes?.firm ?? []).includes('can_manage')) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
@@ -214,7 +217,7 @@ export async function GET(
   { params }: { params: Promise<{ firmId: string }> }
 ) {
   try {
-    // 1. Auth: verify bearer token and firm membership
+    // 1. Auth: verify bearer token and firm admin
     const authResult = await authenticate(request, params)
     if (authResult instanceof NextResponse) return authResult
     const { firmId } = authResult
@@ -310,7 +313,7 @@ export async function POST(
   { params }: { params: Promise<{ firmId: string }> }
 ) {
   try {
-    // 1. Auth: verify bearer token and firm membership
+    // 1. Auth: verify bearer token and firm admin
     const authResult = await authenticate(request, params)
     if (authResult instanceof NextResponse) return authResult
     const { firmId } = authResult

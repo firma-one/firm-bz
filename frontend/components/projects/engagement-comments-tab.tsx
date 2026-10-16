@@ -116,23 +116,23 @@ export function EngagementCommentsTab({
   }
 
   return (
-    <div className="p-4 flex flex-col gap-3">
-      {/* Tab bar */}
-      <div className="flex items-center gap-1 border-b border-[#e5e7eb] pb-0">
+    <div className="flex flex-col gap-3">
+      {/* Filter: All / Mentions — small toggles, like the Inbox */}
+      <div className="flex items-center gap-0.5">
         <button
           type="button"
           onClick={() => setActiveTab('all')}
           className={cn(
-            'inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold border-b-2 -mb-px transition-colors',
+            'inline-flex items-center gap-1.5 rounded-control px-2 py-1 text-small transition-colors',
             activeTab === 'all'
-              ? 'border-brand-accent text-[#1b1b1d] font-bold'
-              : 'border-transparent text-[#45474c] hover:text-[#1b1b1d]'
+              ? 'bg-surface-selected text-fg'
+              : 'text-fg-muted hover:bg-surface-hover hover:text-fg'
           )}
         >
           <MessagesSquare className="h-3.5 w-3.5" />
-          All Comments
+          All
           {!loading && rows.length > 0 && (
-            <span className="font-mono text-[10px] font-bold bg-primary text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
+            <span className="tabular-nums text-fg-subtle">
               {rows.length}
             </span>
           )}
@@ -141,16 +141,16 @@ export function EngagementCommentsTab({
           type="button"
           onClick={() => setActiveTab('mentions')}
           className={cn(
-            'inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold border-b-2 -mb-px transition-colors',
+            'inline-flex items-center gap-1.5 rounded-control px-2 py-1 text-small transition-colors',
             activeTab === 'mentions'
-              ? 'border-brand-accent text-[#1b1b1d] font-bold'
-              : 'border-transparent text-[#45474c] hover:text-[#1b1b1d]'
+              ? 'bg-surface-selected text-fg'
+              : 'text-fg-muted hover:bg-surface-hover hover:text-fg'
           )}
         >
           <AtSign className="h-3.5 w-3.5" />
           Mentions
           {!mentionsLoading && mentionRows.length > 0 && (
-            <span className="font-mono text-[10px] font-bold bg-primary text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
+            <span className="tabular-nums text-fg-subtle">
               {mentionRows.length}
             </span>
           )}
@@ -162,34 +162,34 @@ export function EngagementCommentsTab({
           {/* search */}
           <div className="flex items-center justify-end">
             <div className="relative w-52">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#45474c]" />
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-fg-muted" />
               <Input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search comments…"
-                className="pl-8 h-8 text-xs bg-[#f9f9fb] border-[#e5e7eb] focus:bg-white rounded"
+                className="pl-8"
               />
             </div>
           </div>
 
-          <div className="bg-white border border-[#e5e7eb] rounded overflow-hidden">
+          <div className="overflow-hidden border-t border-line">
             {error ? (
               <div className="p-6 text-sm text-rose-700 bg-rose-50 border-b border-rose-100">{error}</div>
             ) : loading ? (
-              <div className="p-6 text-sm text-[#45474c]">Loading comments…</div>
+              <div className="p-6 text-sm text-fg-muted">Loading comments…</div>
             ) : empty ? (
               <div className="py-12 text-center">
-                <MessagesSquare className="h-7 w-7 text-[#e5e7eb] mx-auto mb-2.5" />
-                <div className="text-sm font-medium text-[#1b1b1d]">No comments yet</div>
-                <div className="text-xs text-[#45474c] mt-1">Add a comment from any document, then it will show up here.</div>
+                <MessagesSquare className="h-7 w-7 text-line mx-auto mb-2.5" />
+                <div className="text-sm font-medium text-fg">No comments yet</div>
+                <div className="text-xs text-fg-muted mt-1">Add a comment from any document, then it will show up here.</div>
               </div>
             ) : (
-              <div className="divide-y divide-[#e5e7eb]">
+              <div className="divide-y divide-line">
                 {rows.map((r) => (
                   <Tooltip key={r.projectDocumentId}>
                   <TooltipTrigger asChild>
                   <div
-                    className="flex items-start gap-3 px-4 py-3 hover:bg-[#f9f9fb] transition-colors cursor-pointer group"
+                    className="flex items-start gap-3 px-4 py-3 hover:bg-surface-hover transition-colors cursor-pointer group"
                     onClick={() => goToDeliverable(r.projectDocumentId)}
                   >
                     <div className="mt-0.5 shrink-0 flex h-7 w-7 items-center justify-center rounded-md bg-primary/10">
@@ -200,7 +200,7 @@ export function EngagementCommentsTab({
                         {r.docId && (
                           <span className="shrink-0 text-[11px] font-bold font-mono text-primary tracking-wide">{r.docId}</span>
                         )}
-                        <span className="text-sm font-semibold text-[#1b1b1d] truncate">{r.documentName}</span>
+                        <span className="text-sm font-semibold text-fg truncate">{r.documentName}</span>
                         <span className="shrink-0 inline-flex items-center rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary tabular-nums leading-none">
                           {r.count}
                         </span>
@@ -215,18 +215,18 @@ export function EngagementCommentsTab({
                         )}
                       </div>
                       {r.latest ? (
-                        <div className="mt-0.5 text-xs text-[#45474c] line-clamp-1">
-                          <span className="text-[9px] font-bold uppercase tracking-wide text-[#9a9ba0] mr-1.5">Latest</span>{renderMentions(r.latest.preview)}
+                        <div className="mt-0.5 text-xs text-fg-muted line-clamp-1">
+                          <span className="text-[9px] font-bold uppercase tracking-wide text-fg-subtle mr-1.5">Latest</span>{renderMentions(r.latest.preview)}
                         </div>
                       ) : null}
                       {r.latest ? (
-                        <div className="mt-1 text-[10px] text-[#9a9ba0] flex items-center gap-1">
+                        <div className="mt-1 text-[10px] text-fg-subtle flex items-center gap-1">
                           <span>Last comment</span>
                           <RelativeDateTime date={r.latest.createdAt} />
                         </div>
                       ) : null}
                     </div>
-                    <div className="shrink-0 text-[#9a9ba0] group-hover:text-primary group-hover:translate-x-0.5 transition-all">
+                    <div className="shrink-0 text-fg-subtle group-hover:text-primary group-hover:translate-x-0.5 transition-all">
                       <ArrowRight className="h-3.5 w-3.5" />
                     </div>
                   </div>
@@ -241,28 +241,28 @@ export function EngagementCommentsTab({
       )}
 
       {activeTab === 'mentions' && (
-        <div className="bg-white border border-[#e5e7eb] rounded overflow-hidden">
+        <div className="overflow-hidden border-t border-line">
           {mentionsError ? (
             <div className="p-6 text-sm text-rose-700 bg-rose-50 border-b border-rose-100">{mentionsError}</div>
           ) : mentionsLoading ? (
-            <div className="p-6 text-sm text-[#45474c]">Loading mentions…</div>
+            <div className="p-6 text-sm text-fg-muted">Loading mentions…</div>
           ) : mentionsEmpty ? (
             <div className="py-12 text-center">
-              <AtSign className="h-7 w-7 text-[#e5e7eb] mx-auto mb-2.5" />
-              <div className="text-sm font-medium text-[#1b1b1d]">No mentions yet</div>
-              <div className="text-xs text-[#45474c] mt-1">Comments that @mention you will appear here.</div>
+              <AtSign className="h-7 w-7 text-line mx-auto mb-2.5" />
+              <div className="text-sm font-medium text-fg">No mentions yet</div>
+              <div className="text-xs text-fg-muted mt-1">Comments that @mention you will appear here.</div>
             </div>
           ) : (
-            <div className="divide-y divide-[#e5e7eb]">
+            <div className="divide-y divide-line">
               {mentionRows.map((r) => (
-                <div key={r.messageId} className="flex items-center gap-2 px-4 py-3 hover:bg-[#f9f9fb] transition-colors">
+                <div key={r.messageId} className="flex items-center gap-2 px-4 py-3 hover:bg-surface-hover transition-colors">
                   <div className="min-w-0 flex-1">
                     <div className="text-xs font-semibold text-primary truncate flex items-center gap-1">
                       <AtSign className="h-3 w-3 shrink-0" />
                       {r.documentName}
                     </div>
-                    <div className="mt-0.5 text-xs text-[#45474c] line-clamp-2">{renderMentions(r.preview)}</div>
-                    <div className="mt-1 text-[10px] text-[#9a9ba0]">
+                    <div className="mt-0.5 text-xs text-fg-muted line-clamp-2">{renderMentions(r.preview)}</div>
+                    <div className="mt-1 text-[10px] text-fg-subtle">
                       <RelativeDateTime date={r.createdAt} />
                     </div>
                   </div>
@@ -272,7 +272,7 @@ export function EngagementCommentsTab({
                         <button
                           type="button"
                           onClick={() => goToDeliverable(r.projectDocumentId)}
-                          className="h-7 w-7 rounded flex items-center justify-center text-[#9a9ba0] hover:text-primary hover:translate-x-0.5 transition-all"
+                          className="h-7 w-7 rounded flex items-center justify-center text-fg-subtle hover:text-primary hover:translate-x-0.5 transition-all"
                         >
                           <ArrowRight className="h-3.5 w-3.5" />
                         </button>

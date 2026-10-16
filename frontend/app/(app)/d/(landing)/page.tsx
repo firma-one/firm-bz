@@ -1,7 +1,8 @@
 import { redirect } from 'next/navigation'
 import { isRedirectError } from 'next/dist/client/components/redirect-error'
 import { FirmsView } from '@/components/projects/firms-view'
-import { getUserFirms, resolveDefaultFirmLandingPath, shouldShowSwitchWorkspace, type FirmOption } from '@/lib/actions/firms'
+import { getUserFirms, shouldShowSwitchWorkspace, type FirmOption } from '@/lib/actions/firms'
+import { resolveDefaultFirmLandingPath } from '@/lib/landing/default-landing-path'
 import { createClient } from '@/utils/supabase/server'
 import { GroupPicker } from './group-picker'
 
@@ -53,7 +54,7 @@ export default async function FirmsPage({
             // there would be a self-redirect. Render the group picker directly instead.
             if (path === '/d/') {
                 return (
-                    <div className="h-full flex flex-col p-8 bg-stone-50/30">
+                    <div className="h-full flex flex-col p-0 bg-transparent">
                         <GroupPicker />
                     </div>
                 )
@@ -73,7 +74,7 @@ export default async function FirmsPage({
     // fallback below.
     if (await shouldShowSwitchWorkspace()) {
         return (
-            <div className="h-full flex flex-col p-8 bg-stone-50/30">
+            <div className="h-full flex flex-col p-0 bg-transparent">
                 <GroupPicker />
             </div>
         )
@@ -90,7 +91,7 @@ export default async function FirmsPage({
     }
 
     return (
-        <div className="h-full flex flex-col p-8 bg-stone-50/30">
+        <div className="h-full flex flex-col p-0 bg-transparent">
             <FirmsView firms={firms} activeOrgIdFromJWT={null} />
         </div>
     )

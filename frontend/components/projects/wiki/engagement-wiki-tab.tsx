@@ -100,7 +100,7 @@ export function EngagementWikiTab({ engagementId, firmId, canEdit, initialPageSl
     }
 
     if (loading) {
-        return <div className="flex items-center justify-center h-full text-sm text-slate-400">Loading…</div>
+        return <div className="flex items-center justify-center h-full text-sm text-fg-subtle">Loading…</div>
     }
 
     if (pages.length === 0) {
@@ -139,7 +139,7 @@ export function EngagementWikiTab({ engagementId, firmId, canEdit, initialPageSl
                         onTitleChange={handleTitleChange}
                     />
                 ) : (
-                    <div className="flex items-center justify-center h-full text-sm text-slate-400">
+                    <div className="flex items-center justify-center h-full text-sm text-fg-subtle">
                         Select a page or create a new one
                     </div>
                 )}

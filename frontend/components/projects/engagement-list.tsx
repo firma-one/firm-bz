@@ -1,13 +1,24 @@
 'use client'
 
-import React from 'react'
-import { Briefcase, CalendarClock, AlertTriangle } from 'lucide-react'
-import { HierarchyClient } from '@/lib/actions/hierarchy'
 import Link from 'next/link'
-
-import { TooltipProvider } from '@/components/ui/tooltip'
-import { formatFullDate } from '@/lib/utils'
+import { useRouter } from 'next/navigation'
+import { format, formatDistanceToNowStrict } from 'date-fns'
+import { Briefcase, CalendarDays, Clock3, Flag, Shield, Type, UserRound, CircleDot } from 'lucide-react'
+import type { HierarchyClient } from '@/lib/actions/hierarchy'
+import type { ProjectMemberSummary } from '@/lib/actions/members'
 import { engagementPath } from '@/lib/navigation/firm-paths'
+import {
+    NotionTable,
+    NotionTableBody,
+    NotionTableCell,
+    NotionTableHead,
+    NotionTableHeader,
+    NotionTableRow,
+} from '@/components/ui/notion-table'
+import { StatusPill, Tag } from '@/components/ui/tag'
+import { PersonAvatar } from '@/components/ui/property-cells'
+import { EmptyPanel } from '@/components/ui/empty-panel'
+import { ShimmerBar, ShimmerBlock } from '@/components/ui/shimmer'
 
 interface ProjectListProps {
     projects: HierarchyClient['engagements']
@@ -16,173 +27,128 @@ interface ProjectListProps {
     clientSlug: string
     clientStatus?: string | null
     isRefreshing?: boolean
+    /** Per-engagement people, from getProjectMemberSummaries — fills the Lead column. */
+    memberSummaries?: Record<string, ProjectMemberSummary>
+    /** Where an engagement opens; defaults to its firm page. The public demo passes its own. */
+    hrefFor?: (project: HierarchyClient['engagements'][number]) => string
 }
 
-function engagementStatusLabel(status: string | null | undefined): string {
-    switch (status) {
-        case 'PLANNED':
-            return 'Planned'
-        case 'ACTIVE':
-            return 'Active'
-        case 'COMPLETED':
-            return 'Completed'
-        case 'PAUSED':
-            return 'Paused'
-        default:
-            return 'Active'
-    }
+/** The current user's role on the engagement, as a short label. */
+const ROLE_LABEL: Record<string, string> = {
+    eng_admin: 'Lead',
+    eng_member: 'Contributor',
+    eng_ext_collaborator: 'Contributor · Limited',
+    eng_viewer: 'Reviewer',
 }
 
-function engagementStatusBadgeClass(status: string | null | undefined): string {
-    switch (status) {
-        case 'PLANNED':
-            return 'bg-blue-50 text-blue-600 ring-1 ring-blue-200/60'
-        case 'ACTIVE':
-            return 'bg-primary/10 text-primary ring-1 ring-primary/25'
-        case 'COMPLETED':
-            return 'bg-[#f3f4f6] text-[#45474c] ring-1 ring-[#e5e7eb]'
-        case 'PAUSED':
-            return 'bg-fuchsia-50 text-fuchsia-500 ring-1 ring-fuchsia-200'
-        default:
-            return 'bg-primary/10 text-primary ring-1 ring-primary/25'
-    }
+function day(value: string | null): string | null {
+    if (!value) return null
+    const d = new Date(value)
+    return Number.isNaN(d.getTime()) ? null : format(d, 'MMM d, yyyy')
 }
 
-/** Current user's role for this engagement — eng_admin | eng_member |
- * eng_ext_collaborator | eng_viewer (EngagementMember.role), split into a role-category
- * label for the main pill and an optional access-level qualifier (Contributor roles only). */
-function engagementRoleParts(role: string | undefined): { label: string; qualifier: string | null } {
-    switch (role) {
-        case 'eng_admin':
-            return { label: 'Engagement Owner', qualifier: null }
-        case 'eng_member':
-            return { label: 'Contributor', qualifier: 'Full Access' }
-        case 'eng_ext_collaborator':
-            return { label: 'Contributor', qualifier: 'Limited Access' }
-        case 'eng_viewer':
-            return { label: 'Engagement Reviewer', qualifier: null }
-        default:
-            return { label: 'Engagement Member', qualifier: null }
-    }
+function isOverdue(due: string | null, status: string): boolean {
+    if (!due || status === 'COMPLETED') return false
+    const d = new Date(due)
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    return !Number.isNaN(d.getTime()) && d < today
 }
 
-function FieldLabel({ children }: { children: React.ReactNode }) {
-    return <p className="text-[9px] font-mono font-bold uppercase tracking-wider text-[#9a9ba0]">{children}</p>
-}
+/**
+ * A client's engagements as a Notion table (.claude/plans/ui-ux-overhaul.md, Phase 6): one row
+ * each — name, status, lead, dates, your role, last update. The whole row opens the engagement.
+ */
+export function ProjectList({ projects, groupSlug, orgSlug, clientSlug, clientStatus, isRefreshing = false, memberSummaries, hrefFor }: ProjectListProps) {
+    const router = useRouter()
 
-function DateField({ label, value }: { label: string; value: string | null }) {
-    return (
-        <div className="min-w-0">
-            <FieldLabel>{label}</FieldLabel>
-            {value ? (
-                <p className="text-xs font-medium text-[#1b1b1d] truncate">{formatFullDate(value)}</p>
-            ) : (
-                <p className="flex items-center gap-1 text-xs font-medium text-amber-600">
-                    <AlertTriangle className="h-3 w-3 shrink-0" /> Not Set
-                </p>
-            )}
-        </div>
-    )
-}
-
-function StatusField({ status }: { status: string | null | undefined }) {
-    return (
-        <div className="min-w-0">
-            <FieldLabel>Status</FieldLabel>
-            <span className={`inline-flex mt-0.5 px-1.5 py-0.5 rounded-sm text-[11px] font-medium ${engagementStatusBadgeClass(status)}`}>
-                {engagementStatusLabel(status)}
-            </span>
-        </div>
-    )
-}
-
-export function ProjectList({ projects, groupSlug, orgSlug, clientSlug, clientStatus, isRefreshing = false }: ProjectListProps) {
-
-    const isProspect = clientStatus === 'PROSPECT'
     if (projects.length === 0 && !isRefreshing) {
         return (
-            <div className="flex flex-col items-center justify-center h-64 text-center border-2 border-dashed border-slate-200 rounded bg-slate-50/50">
-                <div className="h-12 w-12 bg-[#f3f4f6] rounded flex items-center justify-center mb-4 text-[#45474c]">
-                    <Briefcase className="h-6 w-6" />
-                </div>
-                <h3 className="text-sm font-semibold text-slate-900">No engagements found</h3>
-                <p className="text-xs text-slate-500 mt-1 max-w-[200px]">
-                    This client workspace doesn't have any active engagements yet.
-                </p>
-                {/* TODO: Add 'Create Engagement' button here if user has permission */}
-            </div>
+            <EmptyPanel
+                icon={<Briefcase />}
+                title="No engagements yet"
+                description={
+                    clientStatus === 'PROSPECT'
+                        ? 'This client is still a prospect. Engagements you add show up here.'
+                        : 'Engagements for this client show up here.'
+                }
+            />
         )
     }
 
     return (
-        <TooltipProvider>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <NotionTable>
+            <NotionTableHeader>
+                <NotionTableHead icon={<Type />}>Name</NotionTableHead>
+                <NotionTableHead icon={<CircleDot />}>Status</NotionTableHead>
+                <NotionTableHead icon={<UserRound />} className="hidden md:table-cell">Lead</NotionTableHead>
+                <NotionTableHead icon={<CalendarDays />} className="hidden lg:table-cell">Start</NotionTableHead>
+                <NotionTableHead icon={<Flag />}>Due</NotionTableHead>
+                <NotionTableHead icon={<Shield />} className="hidden lg:table-cell">Your role</NotionTableHead>
+                <NotionTableHead icon={<Clock3 />} className="hidden md:table-cell">Updated</NotionTableHead>
+            </NotionTableHeader>
+            <NotionTableBody>
                 {isRefreshing && (
-                    <div className="relative bg-white border border-[#e5e7eb] rounded p-5 flex flex-col h-56 animate-pulse">
-                        <div className="flex items-start justify-between mb-3">
-                            <div className="h-10 w-10 bg-slate-100 rounded" />
-                            <div className="h-5 w-14 bg-slate-100 rounded-sm" />
-                        </div>
-                        <div className="h-4 w-3/4 bg-slate-100 rounded mb-2" />
-                        <div className="h-3 w-full bg-slate-100 rounded mb-1" />
-                        <div className="h-3 w-2/3 bg-slate-100 rounded mb-auto" />
-                        <div className="mt-auto pt-3 border-t border-[#e5e7eb]">
-                            <div className="h-3 w-24 bg-slate-100 rounded" />
-                        </div>
-                    </div>
+                    <tr className="h-9 border-b border-line" aria-hidden>
+                        <td className="px-2 first:pl-1" colSpan={7}>
+                            <span className="flex items-center gap-2">
+                                <ShimmerBlock />
+                                <ShimmerBar className="w-48" />
+                            </span>
+                        </td>
+                    </tr>
                 )}
                 {projects.map((project) => {
+                    const href = hrefFor ? hrefFor(project) : engagementPath(groupSlug, orgSlug, clientSlug, project.slug)
                     const myRole = project.members.find((m) => m.role)?.role
+                    const leads = memberSummaries?.[project.id]?.projectLeads ?? []
+                    const start = day(project.kickoffDate)
+                    const due = day(project.dueDate)
+                    const overdue = isOverdue(project.dueDate, project.status)
                     return (
-                        <Link
-                            key={project.id}
-                            href={engagementPath(groupSlug, orgSlug, clientSlug, project.slug)}
-                            className={`group relative bg-white rounded p-5 shadow-md hover:shadow-lg transition-all duration-200 flex flex-col h-56 ${isProspect ? 'border border-dashed border-amber-300 hover:border-amber-400' : 'border border-[#e5e7eb] hover:border-primary/50'}`}
-                        >
-                            <div className="flex items-start gap-3 pb-3">
-                                <div className="h-10 w-10 bg-[#f3f4f6] text-[#45474c] rounded flex items-center justify-center group-hover:bg-primary/10 group-hover:text-primary transition-all shrink-0">
-                                    <Briefcase className="h-5 w-5" />
-                                </div>
-                                <div className="min-w-0">
-                                    <h3 className="text-sm font-semibold text-slate-900 line-clamp-1 group-hover:text-black transition-colors">
-                                        {project.name}
-                                    </h3>
-                                    <p className="text-xs text-slate-500 line-clamp-2">
-                                        {project.description || "No description provided."}
-                                    </p>
-                                </div>
-                            </div>
-
-                            <div className="flex-1 flex items-center border-t border-[#e5e7eb]">
-                                <div className="grid grid-cols-3 gap-3 w-full">
-                                    <DateField label="Kickoff Date" value={project.kickoffDate} />
-                                    <DateField label="Due Date" value={project.dueDate} />
-                                    <StatusField status={project.status} />
-                                </div>
-                            </div>
-
-                            <div className="pt-3 border-t border-[#e5e7eb]">
-                                {(() => {
-                                    const { label, qualifier } = engagementRoleParts(myRole)
-                                    return (
-                                        <p className="text-[11px] text-[#45474c]/70 leading-snug flex items-center flex-wrap gap-1">
-                                            You are an
-                                            <span className="inline-flex items-center font-mono text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm text-primary bg-primary/10">
-                                                {label}
-                                            </span>
-                                            {qualifier && (
-                                                <span className="inline-flex items-center font-mono text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm text-[#45474c] bg-[#f3f4f6]">
-                                                    {qualifier}
-                                                </span>
-                                            )}
-                                        </p>
-                                    )
-                                })()}
-                            </div>
-                        </Link>
+                        <NotionTableRow key={project.id} onClick={() => router.push(href)}>
+                            <NotionTableCell className="max-w-0 w-[40%]">
+                                <Link
+                                    href={href}
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="flex min-w-0 items-center gap-2 text-fg"
+                                    title={project.description || project.name}
+                                >
+                                    <Briefcase className="h-4 w-4 shrink-0 text-fg-subtle" />
+                                    <span className="truncate font-medium">{project.name}</span>
+                                </Link>
+                            </NotionTableCell>
+                            <NotionTableCell>
+                                <StatusPill kind="engagement" status={project.status} />
+                            </NotionTableCell>
+                            <NotionTableCell className="hidden md:table-cell">
+                                {leads.length === 0 ? (
+                                    <span className="text-fg-subtle">—</span>
+                                ) : (
+                                    <span className="flex min-w-0 items-center gap-1.5">
+                                        <PersonAvatar person={leads[0]} size={18} />
+                                        <span className="truncate text-small">{leads.length === 1 ? leads[0].name : `${leads[0].name} +${leads.length - 1}`}</span>
+                                    </span>
+                                )}
+                            </NotionTableCell>
+                            <NotionTableCell className="hidden whitespace-nowrap text-small tabular-nums text-fg-muted lg:table-cell">
+                                {start ?? <span className="text-fg-subtle">—</span>}
+                            </NotionTableCell>
+                            <NotionTableCell className={`whitespace-nowrap text-small tabular-nums ${overdue ? 'text-danger' : 'text-fg-muted'}`}>
+                                {due ?? <span className="text-fg-subtle">—</span>}
+                            </NotionTableCell>
+                            <NotionTableCell className="hidden lg:table-cell">
+                                {myRole ? <Tag color="gray">{ROLE_LABEL[myRole] ?? 'Member'}</Tag> : <span className="text-fg-subtle">—</span>}
+                            </NotionTableCell>
+                            <NotionTableCell className="hidden whitespace-nowrap text-small text-fg-subtle md:table-cell">
+                                <time dateTime={new Date(project.updatedAt).toISOString()} suppressHydrationWarning>
+                                    {formatDistanceToNowStrict(new Date(project.updatedAt), { addSuffix: true })}
+                                </time>
+                            </NotionTableCell>
+                        </NotionTableRow>
                     )
                 })}
-            </div>
-        </TooltipProvider>
+            </NotionTableBody>
+        </NotionTable>
     )
 }

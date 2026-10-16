@@ -13,7 +13,7 @@ export async function GET() {
     const defaultFirm = await FirmService.getDefaultFirm(user.id)
     const slug = defaultFirm?.slug ?? null
     // Having any firm at all is now the onboarding-complete signal — see
-    // resolveDefaultFirmLandingPath's identical reasoning in lib/actions/firms.ts.
+    // resolveDefaultFirmLandingPath's identical reasoning in lib/landing/default-landing-path.ts.
     const onboardingComplete = defaultFirm !== null
     const isFirmAdmin = defaultFirm
         ? defaultFirm.members.some((m: any) => m.userId === user.id && m.role === 'firm_admin')

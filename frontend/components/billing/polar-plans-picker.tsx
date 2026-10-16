@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import type { BillingCatalogPlan } from '@/lib/billing/billing-catalog.types'
 import {
@@ -14,10 +14,13 @@ import { BRAND_NAME } from '@/config/brand'
 import { getPricingComparisonBulletsForPlan, getSandboxPlanHighlights, type PricingPlanColumnId } from '@/config/pricing'
 import { BillingPolarExplainInline } from '@/components/billing/billing-polar-inline'
 import { Button, buttonVariants } from '@/components/ui/button'
+import { EmptyPanel } from '@/components/ui/empty-panel'
+import { LoadingAnnouncement, ShimmerBar } from '@/components/ui/shimmer'
+import { Tag } from '@/components/ui/tag'
 
 import { persistCheckoutIntent, readCheckoutIntent, type CheckoutPlanName } from '@/lib/marketing/checkout-intent'
 import { cn } from '@/lib/utils'
-import { Check, ChevronDown, ChevronUp, CreditCard, ExternalLink, Loader2, Rows3 } from 'lucide-react'
+import { AlertTriangle, Check, ChevronDown, ChevronUp, CreditCard, ExternalLink, Lock, Rows3 } from 'lucide-react'
 import { EVENTS, Joyride, STATUS, type Controls, type EventData } from 'react-joyride'
 
 type CatalogJson = { items?: BillingCatalogPlan[]; error?: string }
@@ -72,8 +75,9 @@ interface PolarPlansPickerProps {
     density?: 'default' | 'compact'
     className?: string
     /**
-     * Billing page trial: accent #ECC0AA (links, help panel, current-plan chrome).
-     * Omit in dialogs / embeds until promoted to design tokens.
+     * @deprecated No visual effect. Was a peach (#ECC0AA) accent trial for the billing page; the New
+     * UI has one accent (.claude/plans/ui-ux-overhaul.md), so the plan cards ignore it. Kept so
+     * existing callers still type-check.
      */
     blueAccentTrial?: boolean
     /** Hide the catalog free (one-time) product row when current plan is shown elsewhere. */
@@ -94,34 +98,29 @@ interface PolarPlansPickerProps {
     fallbackCanManageBilling?: boolean
 }
 
-const PRICING_PAGE_BILLING_TOGGLE_BTN =
-    'inline-flex items-center justify-center gap-0.5 whitespace-nowrap rounded-sm px-1.5 py-1 text-[9px] font-bold uppercase tracking-wide transition-all duration-200 leading-none sm:px-2 sm:py-1.5 sm:text-[10px] sm:tracking-wider'
+/*
+ * Plan cards follow Linear / Notion pricing (.claude/plans/ui-ux-overhaul.md, Phase 6): flat cards
+ * with a hairline border, the current (or intent-highlighted) plan marked by a stronger outline and
+ * a tag rather than a fill, quiet feature lists and one call to action per card.
+ */
 
-/** Track + segment chrome: billing peach trial vs neutral slate (matches checkout / trust cards). */
-function billingToggleTrackClass(peachAccent: boolean) {
+/** Annual / Monthly segmented control, styled like the table / gallery view toggle. */
+const PERIOD_TRACK_CLASS =
+    'inline-flex shrink-0 items-center rounded-control border border-line bg-surface-subtle p-0.5'
+
+function periodSegmentClass(active: boolean) {
     return cn(
-        'inline-flex w-max max-w-[calc(100%-4.5rem)] shrink-0 items-stretch gap-0.5 rounded p-0.5',
-        peachAccent
-            ? 'border border-[#c49a82]/55 bg-gradient-to-b from-[#ECC0AA]/38 to-[#ECC0AA]/14 shadow-[inset_0_1px_3px_rgba(61,42,34,0.09)]'
-            : 'border border-primary/30 bg-primary/10 shadow-[inset_0_1px_2px_rgba(var(--primary-rgb),0.08)]'
+        'inline-flex items-center gap-1 whitespace-nowrap rounded-[4px] px-2 py-0.5 text-small transition-colors outline-none focus-visible:ring-2 focus-visible:ring-action/30',
+        active ? 'bg-surface text-fg shadow-sm' : 'text-fg-muted hover:text-fg'
     )
 }
 
-function billingToggleSegmentActive(peachAccent: boolean) {
-    return peachAccent
-        ? 'bg-white text-[#3d2a22] shadow-[0_2px_10px_rgba(236,192,170,0.45)] ring-1 ring-[#c49a82]/50'
-        : 'bg-white text-[#1b1b1d] shadow-[0_2px_8px_rgba(var(--primary-rgb),0.12),0_0_0_1px_rgba(var(--primary-rgb),0.1)]'
-}
-
-function billingToggleSegmentInactive(peachAccent: boolean) {
-    return peachAccent
-        ? 'text-[#7a5343]/88 hover:bg-white/40 hover:text-[#3d2a22]'
-        : 'text-primary/80 hover:bg-white/40 hover:text-primary'
-}
-
 function planCardHeadingClass(compact: boolean) {
-    return cn('font-semibold tracking-tight text-slate-900', compact ? 'text-sm' : 'text-base')
+    return cn('min-w-0 text-fg', compact ? 'text-ui font-semibold' : 'text-h3')
 }
+
+/** "Billed annually" / "Billed monthly" under a price. */
+const BILLED_CAPTION_CLASS = 'mt-1 text-caption font-normal text-fg-muted'
 
 type CatalogPlanRow =
     | { kind: 'single'; plan: BillingCatalogPlan }
@@ -264,187 +263,73 @@ function savingsPercentAnnualVsMonthly(monthlyCents: number, annualPeriodCents: 
     return Math.max(0, Math.round((1 - annualPerMonth / monthlyCents) * 100))
 }
 
-/** Shared panel: Polar trust copy + portal actions or Compare plans (inside Billing & plans card). */
-const billingTrustPanelClass = (compact: boolean, blueAccentTrial?: boolean) =>
-    cn(
-        'rounded shadow-sm',
-        blueAccentTrial
-            ? 'border border-[#ECC0AA]/55 bg-gradient-to-br from-[#ECC0AA]/32 via-white to-slate-50/80'
-            : 'border border-[#e5e7eb] bg-[#f9f9fb]',
-        compact ? 'p-4' : 'p-4 sm:p-5'
+/** One plan card: flat, hairline, one level deep. `emphasized` marks the current or picked plan. */
+function planCardClass(emphasized: boolean, compact: boolean) {
+    return cn(
+        'relative flex h-full w-full flex-col rounded-card border bg-surface transition-colors',
+        emphasized ? 'border-line-strong ring-1 ring-action/30' : 'border-line hover:border-line-strong',
+        compact ? 'p-4' : 'p-5'
     )
+}
 
-/** Green CTA (Manage Subscription & plan checkout CTAs). */
-const polarBillingCtaButtonClass = cn(
-    'text-sm font-semibold rounded',
-    'bg-primary text-white hover:bg-primary hover:brightness-105 hover:text-white',
-    'shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all'
-)
-
-/** Billing page trial: primary checkout filled with #ECC0AA */
-const polarBillingPeachCtaClass = cn(
-    'rounded text-sm font-semibold',
-    '!border-2 !border-[#c49a82]/70 !bg-[#ECC0AA] !text-[#3d2a22]',
-    'shadow-[0_2px_6px_rgba(61,42,34,0.1),0_8px_24px_-8px_rgba(236,192,170,0.55)]',
-    'transition-[transform,background-color,border-color,box-shadow,color] duration-200 ease-out',
-    'hover:-translate-y-px hover:!border-[#b07d62] hover:!bg-[#f2d5c4] hover:!text-[#241814]',
-    'active:translate-y-0 active:scale-[0.995]'
-)
-
-/** Match profile billing inner / account cards */
-const planCardBase = cn(
-    'relative flex h-full flex-col overflow-hidden rounded border border-[#e5e7eb]',
-    'bg-white',
-    'shadow-sm',
-    'transition-all duration-300 ease-out'
-)
-
-/** Top-right corner patch for the active plan card */
-function ActivePlanCornerPatch({
-    periodEnd,
-    isTrialing,
-    peach,
-}: {
-    periodEnd: string | null
-    isTrialing: boolean
-    peach?: boolean
-}) {
+/** Status tag for the active plan card: "Active · Oct 15, 2026" (replaces the old corner ribbon). */
+function ActivePlanTag({ periodEnd, isTrialing }: { periodEnd: string | null; isTrialing: boolean }) {
     return (
-        <div className="pointer-events-none absolute right-0 top-0 z-20 overflow-hidden" style={{ width: 96, height: 96 }}>
-            {/* Triangle fill */}
-            <div
-                className={cn(
-                    'absolute inset-0',
-                    peach ? 'bg-[#ECC0AA]' : 'bg-emerald-600'
-                )}
-                style={{ clipPath: 'polygon(100% 0, 0 0, 100% 100%)' }}
-            />
-            {/* Text rotated 45° along the hypotenuse */}
-            <div
-                className="absolute flex flex-col items-center justify-center gap-px"
-                style={{
-                    width: 96,
-                    top: 14,
-                    right: -22,
-                    transform: 'rotate(45deg)',
-                    transformOrigin: 'center center',
-                }}
-            >
-                <span
-                    className={cn(
-                        'text-[9px] font-bold uppercase tracking-widest leading-none',
-                        peach ? 'text-[#3d2a22]' : 'text-white'
-                    )}
-                >
-                    {isTrialing ? 'Trialing' : 'Active'}
-                </span>
-                {periodEnd && (
-                    <span
-                        className={cn(
-                            'text-[8px] font-medium leading-none tabular-nums',
-                            peach ? 'text-[#5c3f32]/80' : 'text-white/85'
-                        )}
-                    >
-                        {periodEnd}
-                    </span>
-                )}
-            </div>
+        <Tag color="green" dot>
+            {isTrialing ? 'Trialing' : 'Active'}
+            {periodEnd ? <span className="tabular-nums"> · {periodEnd}</span> : null}
+        </Tag>
+    )
+}
+
+/** Shown instead of a button on the plan you're already on, when you can't open the portal. */
+function PlanStatusBlock({ children }: { children: ReactNode }) {
+    return (
+        <div className="flex h-9 w-full items-center justify-center rounded-control bg-surface-muted text-ui text-fg-muted">
+            {children}
         </div>
     )
 }
 
 const sandboxPlanHighlights = getSandboxPlanHighlights()
 
-function PlanHighlightsScroll({
-    lines,
-    checkIconClassName = 'text-emerald-600/90',
-    peachScrollbar,
-}: {
-    lines: string[]
-    checkIconClassName?: string
-    peachScrollbar?: boolean
-}) {
-    const ref = useRef<HTMLUListElement | null>(null)
-    const [canScrollUp, setCanScrollUp] = useState(false)
-    const [canScrollDown, setCanScrollDown] = useState(false)
+/** How many features a card shows before "Show all". */
+const FEATURE_PREVIEW_COUNT = 6
 
-    const recompute = useCallback(() => {
-        const el = ref.current
-        if (!el) return
-        const maxScrollTop = Math.max(0, el.scrollHeight - el.clientHeight)
-        const top = el.scrollTop
-        setCanScrollUp(top > 2)
-        setCanScrollDown(top < maxScrollTop - 2)
-    }, [])
-
-    useEffect(() => {
-        recompute()
-    }, [lines.length, recompute])
+/**
+ * Quiet feature list: a muted check and muted text. Long lists show the first few with a
+ * "Show all" toggle instead of a fixed-height scroll box, so there is no scroll area inside a card.
+ */
+function PlanFeatureList({ lines }: { lines: string[] }) {
+    const [expanded, setExpanded] = useState(false)
+    const collapsible = lines.length > FEATURE_PREVIEW_COUNT + 1
+    const visible = collapsible && !expanded ? lines.slice(0, FEATURE_PREVIEW_COUNT) : lines
 
     return (
-        <div className="relative">
-            <ul
-                ref={ref}
-                onScroll={recompute}
-                className={cn(
-                    'h-52 space-y-2.5 overflow-y-auto pr-1',
-                    'scrollbar-thin scrollbar-track-transparent',
-                    peachScrollbar
-                        ? 'scrollbar-thumb-[#ECC0AA]/65 hover:scrollbar-thumb-[#d4a892]'
-                        : 'scrollbar-thumb-slate-200/80 hover:scrollbar-thumb-slate-300/80'
-                )}
-            >
-                {lines.map((line, index) => (
-                    <li key={`plan-highlight-${index}`} className="flex gap-2.5 text-sm leading-snug text-slate-700">
-                        <Check
-                            className={cn('mt-0.5 h-4 w-4 shrink-0', checkIconClassName)}
-                            strokeWidth={2.25}
-                            aria-hidden
-                        />
+        <div>
+            <ul className="space-y-2">
+                {visible.map((line, index) => (
+                    <li key={`plan-highlight-${index}`} className="flex gap-2 text-small text-fg-muted">
+                        <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-fg-subtle" strokeWidth={1.75} aria-hidden />
                         <span>{line}</span>
                     </li>
                 ))}
             </ul>
-
-            {/* Scroll affordance: fades + chevrons, driven by scroll position */}
-            <div
-                className={cn(
-                    'pointer-events-none absolute inset-x-0 top-0 z-10 h-10',
-                    'bg-gradient-to-b from-white via-white/80 to-transparent',
-                    'transition-opacity duration-200',
-                    canScrollUp ? 'opacity-100' : 'opacity-0'
-                )}
-                aria-hidden
-            />
-            <div
-                className={cn(
-                    'pointer-events-none absolute inset-x-0 bottom-0 z-10 h-10',
-                    'bg-gradient-to-t from-white via-white/80 to-transparent',
-                    'transition-opacity duration-200',
-                    canScrollDown ? 'opacity-100' : 'opacity-0'
-                )}
-                aria-hidden
-            />
-            <ChevronUp
-                className={cn(
-                    'pointer-events-none absolute left-1/2 top-1 z-20 -translate-x-1/2 text-slate-400',
-                    'transition-opacity duration-200',
-                    canScrollUp ? 'opacity-100' : 'opacity-0'
-                )}
-                width={16}
-                height={16}
-                aria-hidden
-            />
-            <ChevronDown
-                className={cn(
-                    'pointer-events-none absolute left-1/2 bottom-1 z-20 -translate-x-1/2 text-slate-400',
-                    'transition-opacity duration-200',
-                    canScrollDown ? 'opacity-100' : 'opacity-0'
-                )}
-                width={16}
-                height={16}
-                aria-hidden
-            />
+            {collapsible ? (
+                <button
+                    type="button"
+                    onClick={() => setExpanded((v) => !v)}
+                    aria-expanded={expanded}
+                    className="-ml-1 mt-2 inline-flex items-center gap-1 rounded-control px-1 py-0.5 text-small text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg"
+                >
+                    {expanded ? (
+                        <ChevronUp className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden />
+                    ) : (
+                        <ChevronDown className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden />
+                    )}
+                    {expanded ? 'Show fewer' : `Show all ${lines.length} features`}
+                </button>
+            ) : null}
         </div>
     )
 }
@@ -527,83 +412,42 @@ function normalizeMonthlyIntervalSuffix(intervalTail: string): string {
     return raw
 }
 
+/** Price figure: large tabular numerals, no monospace. */
+function priceFigureClass(compact: boolean) {
+    return cn('tabular-nums text-fg', compact ? 'text-h2' : 'text-h1')
+}
+
 /** Split Polar price labels like "$49 /mo" for clearer numeric hierarchy. */
 function PlanPriceDisplay({
     label,
     compact,
-    peachAmount,
 }: {
     label: string
     compact: boolean
-    peachAmount?: boolean
 }) {
     const t = label.trim()
     const priced = t.match(/^(\$)\s*([\d,.]+)\s+(\/.+|per\s+.+|\/\s*.+)$/i)
     if (t === 'Free') {
-        return (
-            <span
-                className={cn(
-                    'font-bold tabular-nums font-mono tracking-tight',
-                    peachAmount ? 'text-[#6b4538]' : 'text-slate-950',
-                    compact ? 'text-lg' : 'text-2xl'
-                )}
-            >
-                Free
-            </span>
-        )
+        return <span className={priceFigureClass(compact)}>Free</span>
     }
     if (priced) {
         const [, currency, amount, intervalTail] = priced
         const intervalDisplay = normalizeMonthlyIntervalSuffix(intervalTail)
         const intervalGap =
-            intervalDisplay.startsWith(' ') || intervalDisplay === POLAR_MONTHLY_FREQ_LABEL
-                ? ''
-                : compact
-                  ? 'ml-1'
-                  : 'ml-1.5'
+            intervalDisplay.startsWith(' ') || intervalDisplay === POLAR_MONTHLY_FREQ_LABEL ? '' : 'ml-1'
         return (
             <span className="inline-flex flex-wrap items-baseline">
-                <span
-                    className={cn(
-                        'font-semibold tabular-nums font-mono',
-                        peachAmount ? 'text-[#7a5343]' : 'text-slate-700',
-                        compact ? 'text-sm' : 'text-base'
-                    )}
-                >
+                <span className={priceFigureClass(compact)}>
                     {currency}
-                </span>
-                <span
-                    className={cn(
-                        'font-bold tabular-nums font-mono tracking-tight',
-                        peachAmount ? 'text-[#6b4538]' : 'text-slate-950',
-                        compact ? 'ml-px text-xl' : 'ml-0.5 text-[1.625rem] leading-[1.1]'
-                    )}
-                >
                     {amount}
                 </span>
-                <span
-                    className={cn(
-                        'font-medium tabular-nums font-mono tracking-wide',
-                        peachAmount ? 'text-[#7a5343]/85' : 'text-slate-600',
-                        compact ? 'text-xs' : 'text-sm',
-                        intervalGap
-                    )}
-                >
+                <span className={cn('whitespace-pre text-small tabular-nums text-fg-muted', intervalGap)}>
                     {intervalDisplay}
                 </span>
             </span>
         )
     }
-    return (
-        <span
-            className={cn(
-                'font-semibold tabular-nums font-mono tracking-tight text-slate-900',
-                compact ? 'text-base' : 'text-lg'
-            )}
-        >
-            {label}
-        </span>
-    )
+    return <span className={cn('tabular-nums text-fg', compact ? 'text-ui font-semibold' : 'text-h3')}>{label}</span>
 }
 
 /**
@@ -616,76 +460,46 @@ function CatalogGroupedPriceDisplay({
     currency,
     billingPeriod,
     compact,
-    peachAmount,
 }: {
     monthlyEquivCents: number
     currency: string
     billingPeriod: 'monthly' | 'annual'
     compact: boolean
-    peachAmount?: boolean
 }) {
     const full = formatMoneyCents(monthlyEquivCents, currency)
     return (
         <div className="min-w-0">
-            <span className="inline-flex flex-wrap items-baseline gap-0">
-                <span
-                    className={cn(
-                        'font-bold tabular-nums tracking-tight',
-                        peachAmount ? 'text-[#6b4538]' : 'text-slate-950',
-                        compact ? 'text-xl' : 'text-[1.625rem] leading-[1.1]'
-                    )}
-                >
-                    {full}
-                </span>
-                <span
-                    className={cn(
-                        'font-medium tabular-nums',
-                        peachAmount ? 'text-[#7a5343]/85' : 'text-slate-600',
-                        compact ? 'text-xs' : 'text-sm'
-                    )}
-                >
-                    {POLAR_MONTHLY_FREQ_LABEL}
-                </span>
+            <span className="inline-flex flex-wrap items-baseline">
+                <span className={priceFigureClass(compact)}>{full}</span>
+                <span className="whitespace-pre text-small tabular-nums text-fg-muted">{POLAR_MONTHLY_FREQ_LABEL}</span>
             </span>
-            <p className={cn('mt-1 text-xs', peachAmount ? 'text-[#7a5343]/85' : 'text-slate-500')}>
-                {billingPeriod === 'annual' ? 'Billed annually' : 'Billed monthly'}
-            </p>
+            <p className={BILLED_CAPTION_CLASS}>{billingPeriod === 'annual' ? 'Billed annually' : 'Billed monthly'}</p>
         </div>
     )
+}
+
+/** Outline link button to an external page (Compare plans, FAQs). */
+function externalLinkButtonClass(density: 'default' | 'compact', className?: string) {
+    return cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'w-full shrink-0 sm:w-auto', className)
 }
 
 function ComparePlansPricingLink({
     density,
     className,
-    blueAccentTrial,
 }: {
     density: 'default' | 'compact'
     className?: string
-    blueAccentTrial?: boolean
 }) {
-    const compact = density === 'compact'
     return (
         <Link
             href="/pricing"
             target="_blank"
             rel="noopener noreferrer"
-            className={cn(
-                buttonVariants({ variant: 'outline', size: compact ? 'sm' : 'default' }),
-                'inline-flex shrink-0 items-center justify-center gap-2 bg-white font-medium shadow-sm transition-colors',
-                blueAccentTrial
-                    ? cn(
-                          '!border-[#c49a82] !bg-[#ECC0AA] !text-[#3d2a22] !shadow-[0_2px_8px_-2px_rgba(236,192,170,0.45)]',
-                          'hover:!border-[#b07d62] hover:!bg-[#f0d0be] hover:!text-[#241814]'
-                      )
-                    : 'border-slate-300 text-slate-800 hover:border-slate-400 hover:bg-slate-50',
-                compact ? 'h-9 px-3 text-xs' : 'h-10 px-4 text-sm',
-                'w-full sm:w-auto',
-                className
-            )}
+            className={externalLinkButtonClass(density, className)}
         >
-            <Rows3 className={cn('opacity-80', compact ? 'h-3.5 w-3.5' : 'h-4 w-4')} aria-hidden />
+            <Rows3 className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden />
             {upgradeCopy.ctaComparePlans}
-            <ExternalLink className={cn('opacity-70', compact ? 'h-3 w-3' : 'h-3.5 w-3.5')} aria-hidden />
+            <ExternalLink className="h-3 w-3 text-fg-subtle" strokeWidth={1.75} aria-hidden />
         </Link>
     )
 }
@@ -693,33 +507,18 @@ function ComparePlansPricingLink({
 function BillingFaqInlineLink({
     density,
     className,
-    blueAccentTrial,
 }: {
     density: 'default' | 'compact'
     className?: string
-    blueAccentTrial?: boolean
 }) {
-    const compact = density === 'compact'
     return (
         <Link
             href="/resources/faq"
             target="_blank"
             rel="noopener noreferrer"
-            className={cn(
-                buttonVariants({ variant: 'outline', size: compact ? 'sm' : 'default' }),
-                'inline-flex shrink-0 items-center justify-center gap-2 bg-white font-medium shadow-sm transition-colors',
-                blueAccentTrial
-                    ? cn(
-                          '!border-[#c49a82] !bg-[#ECC0AA] !text-[#3d2a22] !shadow-[0_2px_8px_-2px_rgba(236,192,170,0.45)]',
-                          'hover:!border-[#b07d62] hover:!bg-[#f0d0be] hover:!text-[#241814]'
-                      )
-                    : 'border-slate-300 text-slate-800 hover:border-slate-400 hover:bg-slate-50',
-                compact ? 'h-9 px-3 text-xs' : 'h-10 px-4 text-sm',
-                'w-full sm:w-auto',
-                className
-            )}
+            className={externalLinkButtonClass(density, className)}
         >
-            <ExternalLink className={cn('opacity-70', compact ? 'h-3 w-3' : 'h-3.5 w-3.5')} aria-hidden />
+            <ExternalLink className="h-3 w-3 text-fg-subtle" strokeWidth={1.75} aria-hidden />
             FAQs
         </Link>
     )
@@ -752,7 +551,6 @@ export function PolarPlansPicker({
     currentPlanState,
     density = 'default',
     className,
-    blueAccentTrial,
     hideStandaloneFreePlan = false,
     enableBillingTour = false,
     enableCheckoutIntentJoyride = false,
@@ -889,13 +687,13 @@ export function PolarPlansPicker({
             ? '[data-checkout-intent-tour]'
             : '[data-billing-tour-recommended]'
         const planStepContent = intentHighlightPlan ? (
-            <p className="m-0 text-left text-sm leading-relaxed text-slate-700">
+            <p className="m-0 text-left text-small text-fg-muted">
                 {upgradeCopy.checkoutIntentJoyrideLead}
-                <strong className="font-semibold text-slate-900">{intentHighlightPlan}</strong>
+                <strong className="font-medium text-fg">{intentHighlightPlan}</strong>
                 {upgradeCopy.checkoutIntentJoyrideTrail}
             </p>
         ) : (
-            <p className="m-0 text-left text-sm leading-relaxed text-slate-700">
+            <p className="m-0 text-left text-small text-fg-muted">
                 {upgradeCopy.billingTourGenericBody}
             </p>
         )
@@ -916,7 +714,7 @@ export function PolarPlansPicker({
                     target: '[data-onboarding-billing-skip-tour]',
                     title: upgradeCopy.checkoutIntentJoyrideSkipTitle,
                     content: (
-                        <p className="m-0 text-left text-sm leading-relaxed text-slate-700">
+                        <p className="m-0 text-left text-small text-fg-muted">
                             {upgradeCopy.checkoutIntentJoyrideSkipBody}
                         </p>
                     ),
@@ -1106,14 +904,36 @@ export function PolarPlansPicker({
     }, [enableTour, intentHighlightPlan, genericTourMode, loading, visiblePlanRows])
 
     if (!firmId) {
-        return <p className="text-sm text-slate-600">{upgradeCopy.planPickerMissingFirm}</p>
+        return <p className="text-small text-fg-muted">{upgradeCopy.planPickerMissingFirm}</p>
     }
 
     if (loading) {
+        // Skeleton plan cards, shaped like the cards that are coming (Linear / Notion loading).
         return (
-            <div className={cn('flex flex-col items-center justify-center gap-3 py-14 text-slate-500', className)}>
-                <Loader2 className="h-7 w-7 animate-spin text-slate-500/80" aria-hidden />
-                <span className="text-sm font-medium">Loading plans…</span>
+            <div className={cn('grid grid-cols-1 gap-4 lg:grid-cols-2', className)} aria-busy="true">
+                <LoadingAnnouncement label="Loading plans…" />
+                {[0, 1].map((i) => (
+                    <div
+                        key={i}
+                        className={cn(
+                            'flex flex-col rounded-card border border-line bg-surface',
+                            density === 'compact' ? 'p-4' : 'p-5'
+                        )}
+                    >
+                        <ShimmerBar className="h-3.5 w-24" />
+                        <ShimmerBar className="mt-4 h-6 w-28 rounded-control" />
+                        <ShimmerBar className="mt-2 h-2 w-20" />
+                        <ShimmerBar className="mt-4 w-4/5" />
+                        {density !== 'compact' ? (
+                            <div className="mt-4 space-y-3 border-t border-line pt-4">
+                                {[0, 1, 2, 3].map((j) => (
+                                    <ShimmerBar key={j} className={j % 2 ? 'w-3/5' : 'w-4/5'} />
+                                ))}
+                            </div>
+                        ) : null}
+                        <ShimmerBar className="mt-5 h-9 w-full rounded-control" />
+                    </div>
+                ))}
             </div>
         )
     }
@@ -1121,47 +941,42 @@ export function PolarPlansPicker({
     if (error) {
         return (
             <div
+                role="alert"
                 className={cn(
-                    'rounded border border-amber-200/90 bg-gradient-to-br from-amber-50 to-orange-50/50 px-4 py-3.5 text-sm text-amber-950 shadow-sm',
+                    'flex items-start gap-2 rounded-card border border-line bg-surface px-4 py-3 text-small text-fg',
                     className
                 )}
             >
-                {error}
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-danger" strokeWidth={1.75} aria-hidden />
+                <span className="min-w-0">{error}</span>
             </div>
         )
     }
 
     if (!sortedPlans?.length) {
         return (
-            <div className={cn('space-y-4 text-center sm:text-left', className)}>
-                <p className="text-sm text-slate-600">{upgradeCopy.planPickerEmpty}</p>
-                <Button
-                    variant="outline"
-                    className={cn(
-                        'h-10 w-full shadow-sm sm:w-auto',
-                        blueAccentTrial
-                            ? '!border-[#c49a82] !bg-[#ECC0AA] hover:!bg-[#f0d0be]'
-                            : 'border-slate-200 bg-white/80'
-                    )}
-                    asChild
-                >
+            <EmptyPanel
+                compact
+                className={cn('rounded-card border border-line', className)}
+                icon={<Rows3 strokeWidth={1.75} />}
+                title="No plans available"
+                description={upgradeCopy.planPickerEmpty}
+                action={
                     <Link
                         href="/pricing"
                         target="_blank"
                         rel="noopener noreferrer"
-                        className={cn('gap-2 font-medium', blueAccentTrial ? '!text-[#3d2a22]' : undefined)}
+                        className={buttonVariants({ variant: 'outline', size: 'sm' })}
                     >
                         {upgradeCopy.ctaComparePlans}
-                        <ExternalLink className="h-3.5 w-3.5 opacity-70" aria-hidden />
+                        <ExternalLink className="h-3 w-3 text-fg-subtle" strokeWidth={1.75} aria-hidden />
                     </Link>
-                </Button>
-            </div>
+                }
+            />
         )
     }
 
     const compact = density === 'compact'
-    /** #B07D62: same hue family as #ECC0AA, enough contrast on white for small icons */
-    const highlightCheckClass = blueAccentTrial ? 'text-[#c17a54]' : 'text-emerald-600/90'
     const normalizedStatus = (currentPlanState?.subscriptionStatus ?? '').toLowerCase()
     const paidPlans = sortedPlans.filter((p) => p.pricingModel === 'recurring_subscription')
     const paidIdMatch = paidPlans.find((p) => p.id === currentPlanState?.subscriptionProductId)
@@ -1197,25 +1012,24 @@ export function PolarPlansPicker({
     }
 
     return (
-        <div className={cn('space-y-6', className)}>
+        <div className={cn('space-y-4', className)}>
             {showAdminOnlyBlock ? (
-                <div className="rounded border border-amber-200/80 bg-amber-50/60 px-4 py-3 text-sm text-amber-950 shadow-sm">
-                    {upgradeCopy.billingPortalAdminOnlyHint}
+                <div className="flex items-start gap-2 rounded-card border border-line bg-surface-subtle px-4 py-3 text-small text-fg-muted">
+                    <Lock className="mt-0.5 h-4 w-4 shrink-0 text-fg-subtle" strokeWidth={1.75} aria-hidden />
+                    <span className="min-w-0">{upgradeCopy.billingPortalAdminOnlyHint}</span>
                 </div>
             ) : null}
             {showPortalButton ? (
-                <div className={billingTrustPanelClass(compact, blueAccentTrial)}>
-                    <p className={cn('text-sm leading-relaxed text-slate-700', compact && 'text-xs')}>
+                <div>
+                    <p className={cn('max-w-3xl text-fg-muted', compact ? 'text-caption font-normal' : 'text-small')}>
                         <span>{upgradeCopy.billingPortalCombinedIntroPrefix}</span>
                         <BillingPolarExplainInline className="mx-0.5" />
                         <span>{upgradeCopy.billingPortalCombinedIntroSuffix}</span>
                     </p>
-                    {portalError ? (
-                        <p className="mt-3 text-sm text-red-600">{portalError}</p>
-                    ) : null}
+                    {portalError ? <p className="mt-2 text-small text-danger">{portalError}</p> : null}
                 </div>
             ) : null}
-            <ul className="grid grid-cols-1 gap-5 pt-2 lg:grid-cols-2 lg:items-stretch lg:gap-6">
+            <ul className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:items-stretch">
                 {visiblePlanRows?.map((row) => {
                     if (row.kind === 'group') {
                         const period = groupBilling[row.groupKey] ?? 'annual'
@@ -1268,233 +1082,139 @@ export function PolarPlansPicker({
                             returnTo: returnPath,
                             productId: selectedPlan.id,
                         })
+                        // The plan you're on (or picked on /pricing) gets the stronger outline; the
+                        // recommended plan's checkout is the one accent button.
+                        const emphasized = isCurrentPlan || (isIntentHighlight && !enableTour)
+                        const primaryCta = Boolean(selectedPlan.isRecommended) || isIntentHighlight
                         return (
-                            <li key={`group:${row.groupKey}`} className="relative pt-3">
-                                {!isCurrentPlan && selectedPlan.isRecommended ? (
-                                    <div className="pointer-events-none absolute left-1/2 top-0 z-30 -translate-x-1/2">
-                                        <span
-                                            className={cn(
-                                                'inline-flex items-center rounded-sm border px-3 py-1 text-[10px] font-semibold uppercase tracking-wider shadow-md',
-                                                blueAccentTrial
-                                                    ? 'border-[#b88972]/60 bg-[#ECC0AA] text-[#3d2a22]'
-                                                    : 'border-slate-300/80 bg-slate-700 text-white'
-                                            )}
-                                        >
-                                            {upgradeCopy.billingRecommendedBadge}
-                                        </span>
-                                    </div>
-                                ) : null}
+                            <li key={`group:${row.groupKey}`} className="flex min-w-0">
                                 <article
                                     {...(isIntentHighlight ? { 'data-checkout-intent-tour': true } : {})}
                                     {...(isGenericTourTarget ? { 'data-billing-tour-recommended': true } : {})}
-                                    className={cn(
-                                        planCardBase,
-                                        'hover:shadow-[0_8px_24px_-8px_rgba(15,23,42,0.1),0_20px_48px_-16px_rgba(15,23,42,0.12)]',
-                                        blueAccentTrial
-                                            ? 'border-[#ECC0AA]/42 ring-[#ECC0AA]/22 hover:border-[#d4a892] hover:ring-[#ECC0AA]/35'
-                                            : 'border-slate-200/90 hover:border-slate-300/90 hover:ring-slate-200/40',
-                                        isCurrentPlan && !blueAccentTrial && 'border-emerald-200 ring-1 ring-emerald-100',
-                                        blueAccentTrial && isCurrentPlan && 'bg-[#ECC0AA]/10',
-                                        isIntentHighlight &&
-                                            !enableTour &&
-                                            (blueAccentTrial
-                                                ? 'border-2 border-[#b88972]/60'
-                                                : 'border-2 border-emerald-600/40')
-                                    )}
+                                    className={planCardClass(emphasized, compact)}
                                 >
-                                    {isCurrentPlan && (
-                                        <ActivePlanCornerPatch
-                                            periodEnd={currentPlanPeriodEnd}
-                                            isTrialing={isTrialingCurrentPlan}
-                                            peach={blueAccentTrial}
-                                        />
-                                    )}
-                                    <div className={cn('flex flex-1 flex-col', compact ? 'p-4' : 'p-5 sm:p-6')}>
-                                        <div>
-                                            <div className="flex items-start justify-between gap-2 sm:gap-3">
-                                                <h3
-                                                    className={cn(
-                                                        planCardHeadingClass(compact),
-                                                        'min-w-0 flex-1 leading-snug'
-                                                    )}
-                                                >
-                                                    {row.name}
-                                                </h3>
-                                                <div
-                                                    className={cn(
-                                                        billingToggleTrackClass(Boolean(blueAccentTrial)),
-                                                        'shrink-0',
-                                                        isCurrentPlan && 'mr-14'
-                                                    )}
-                                                    role="group"
-                                                    aria-label={`Billing period for ${row.name}`}
-                                                >
-                                                    <button
-                                                        type="button"
-                                                        onClick={() =>
-                                                            setGroupBilling((p) => ({
-                                                                ...p,
-                                                                [row.groupKey]: 'annual',
-                                                            }))
-                                                        }
-                                                        className={cn(
-                                                            PRICING_PAGE_BILLING_TOGGLE_BTN,
-                                                            period === 'annual'
-                                                                ? billingToggleSegmentActive(Boolean(blueAccentTrial))
-                                                                : billingToggleSegmentInactive(Boolean(blueAccentTrial))
-                                                        )}
-                                                    >
-                                                        <span>Annual</span>
-                                                        {savings != null && savings > 0 ? (
-                                                            <span
-                                                                className={cn(
-                                                                    'text-[8px] font-bold leading-none sm:text-[9px]',
-                                                                    blueAccentTrial
-                                                                        ? 'text-emerald-700'
-                                                                        : 'text-[#006e16]'
-                                                                )}
-                                                                aria-hidden
-                                                            >{`${savings}% off`}</span>
-                                                        ) : null}
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() =>
-                                                            setGroupBilling((p) => ({
-                                                                ...p,
-                                                                [row.groupKey]: 'monthly',
-                                                            }))
-                                                        }
-                                                        className={cn(
-                                                            PRICING_PAGE_BILLING_TOGGLE_BTN,
-                                                            period === 'monthly'
-                                                                ? billingToggleSegmentActive(Boolean(blueAccentTrial))
-                                                                : billingToggleSegmentInactive(Boolean(blueAccentTrial))
-                                                        )}
-                                                    >
-                                                        Monthly
-                                                    </button>
-                                                </div>
-                                            </div>
-                                            <div className="mt-2 min-w-0 leading-none">
-                                                {eqCents != null ? (
-                                                    <CatalogGroupedPriceDisplay
-                                                        monthlyEquivCents={eqCents}
-                                                        currency={selectedPlan.priceCurrency}
-                                                        billingPeriod={annualV != null ? period : 'monthly'}
-                                                        compact={compact}
-                                                        peachAmount={blueAccentTrial}
-                                                    />
-                                                ) : (
-                                                    <div className="min-w-0">
-                                                        <PlanPriceDisplay
-                                                            label={selectedPlan.priceLabel}
-                                                            compact={compact}
-                                                            peachAmount={blueAccentTrial}
-                                                        />
-                                                        <p className={cn('mt-1 text-xs', blueAccentTrial ? 'text-[#7a5343]/85' : 'text-slate-500')}>
-                                                            Billed monthly
-                                                        </p>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-
-                                        {selectedPlan.description ? (
-                                            <p
-                                                className={cn(
-                                                    'mt-2 leading-relaxed text-slate-600',
-                                                    compact ? 'text-xs line-clamp-3 sm:text-sm' : 'text-sm'
-                                                )}
-                                            >
-                                                {withBrandName(selectedPlan.description)}
-                                            </p>
-                                        ) : null}
-
-                                        {!compact && planHighlights.length > 0 ? (
-                                            <div
-                                                className={cn(
-                                                    'mt-5 border-t pt-5',
-                                                    blueAccentTrial ? 'border-[#ECC0AA]/28' : 'border-slate-100'
-                                                )}
-                                            >
-                                                <PlanHighlightsScroll
-                                                    lines={planHighlights}
-                                                    checkIconClassName={highlightCheckClass}
-                                                    peachScrollbar={blueAccentTrial}
-                                                />
-                                            </div>
-                                        ) : null}
-
-                                        <div className="mt-auto pt-6">
+                                    {/* Name with its status tag underneath, the period toggle fixed top-right: a
+                                        longer tag ("Active · Oct 24, 2026") never pushes the toggle to a new row. */}
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="flex min-w-0 flex-col items-start gap-1.5">
+                                            <h3 className={planCardHeadingClass(compact)}>{row.name}</h3>
                                             {isCurrentPlan ? (
-                                                showPortalButton ? (
-                                                    <Button
-                                                        type="button"
-                                                        variant="manageBillingCta"
-                                                        className={cn(
-                                                            'h-11 w-full rounded',
-                                                            blueAccentTrial &&
-                                                                '!border-[#c49a82] !bg-[#ECC0AA]/40 !text-[#3d2a22] hover:!border-[#b07d62] hover:!bg-[#ECC0AA]/65 hover:!text-[#241814]'
-                                                        )}
-                                                        disabled={portalLoading}
-                                                        onClick={() => void openBillingPortal()}
-                                                    >
-                                                        <span className="relative z-10">
-                                                            <span className="inline-flex items-center justify-center gap-2">
-                                                                <CreditCard className="h-4 w-4 opacity-90" aria-hidden />
-                                                                {portalLoading
-                                                                    ? upgradeCopy.billingPortalOpening
-                                                                    : upgradeCopy.billingPortalManageSubscriptionCta}
-                                                            </span>
-                                                        </span>
-                                                    </Button>
-                                                ) : (
-                                                    <div
-                                                        className={cn(
-                                                            'rounded border px-4 py-3 text-center shadow-sm',
-                                                            blueAccentTrial
-                                                                ? 'border-[#ECC0AA]/60 bg-[#ECC0AA]/22 shadow-[0_2px_12px_-6px_rgba(236,192,170,0.45)]'
-                                                                : 'border-slate-200/80 bg-white/90'
-                                                        )}
-                                                    >
-                                                        <p
-                                                            className={cn(
-                                                                'text-sm font-medium',
-                                                                blueAccentTrial ? 'text-[#7a5343]' : 'text-slate-800'
-                                                            )}
-                                                        >
-                                                            {upgradeCopy.planPickerCurrentPlanBadge}
-                                                        </p>
-                                                    </div>
-                                                )
-                                            ) : isPaidRecurringCurrent ? null : isFirmBillingAdmin ? (
-                                                <Button
-                                                    type="button"
-                                                    variant={blueAccentTrial ? 'outline' : 'blackCta'}
-                                                    className={cn(
-                                                        'h-11 w-full',
-                                                        blueAccentTrial
-                                                            ? polarBillingPeachCtaClass
-                                                            : polarBillingCtaButtonClass
-                                                    )}
-                                                    onClick={() => {
-                                                        persistCheckoutIntent({
-                                                            plan: row.name as CheckoutPlanName,
-                                                            interval: period === 'annual' ? 'annual' : 'monthly',
-                                                        })
-                                                        window.location.assign(checkoutHref)
-                                                    }}
-                                                >
-                                                    <span className="relative z-10">
-                                                        <span className="inline-flex items-center justify-center gap-2">
-                                                            <CreditCard className="h-4 w-4 opacity-90" aria-hidden />
-                                                            {checkoutCtaLabel(selectedPlan, isPaidRecurringCurrent)}
-                                                        </span>
-                                                    </span>
-                                                </Button>
+                                                <ActivePlanTag
+                                                    periodEnd={currentPlanPeriodEnd}
+                                                    isTrialing={isTrialingCurrentPlan}
+                                                />
+                                            ) : selectedPlan.isRecommended ? (
+                                                <Tag color="blue">{upgradeCopy.billingRecommendedBadge}</Tag>
                                             ) : null}
                                         </div>
+                                        <div
+                                            className={PERIOD_TRACK_CLASS}
+                                            role="group"
+                                            aria-label={`Billing period for ${row.name}`}
+                                        >
+                                            <button
+                                                type="button"
+                                                aria-pressed={period === 'annual'}
+                                                onClick={() =>
+                                                    setGroupBilling((p) => ({
+                                                        ...p,
+                                                        [row.groupKey]: 'annual',
+                                                    }))
+                                                }
+                                                className={periodSegmentClass(period === 'annual')}
+                                            >
+                                                <span>Annual</span>
+                                                {savings != null && savings > 0 ? (
+                                                    <span
+                                                        className="text-caption tabular-nums text-tag-green-fg"
+                                                        aria-hidden
+                                                    >{`${savings}% off`}</span>
+                                                ) : null}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                aria-pressed={period === 'monthly'}
+                                                onClick={() =>
+                                                    setGroupBilling((p) => ({
+                                                        ...p,
+                                                        [row.groupKey]: 'monthly',
+                                                    }))
+                                                }
+                                                className={periodSegmentClass(period === 'monthly')}
+                                            >
+                                                Monthly
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div className="mt-3 min-w-0">
+                                        {eqCents != null ? (
+                                            <CatalogGroupedPriceDisplay
+                                                monthlyEquivCents={eqCents}
+                                                currency={selectedPlan.priceCurrency}
+                                                billingPeriod={annualV != null ? period : 'monthly'}
+                                                compact={compact}
+                                            />
+                                        ) : (
+                                            <div className="min-w-0">
+                                                <PlanPriceDisplay label={selectedPlan.priceLabel} compact={compact} />
+                                                <p className={BILLED_CAPTION_CLASS}>Billed monthly</p>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {selectedPlan.description ? (
+                                        <p
+                                            className={cn(
+                                                'mt-3 text-fg-muted',
+                                                compact ? 'line-clamp-3 text-caption font-normal sm:text-small' : 'text-small'
+                                            )}
+                                        >
+                                            {withBrandName(selectedPlan.description)}
+                                        </p>
+                                    ) : null}
+
+                                    {!compact && planHighlights.length > 0 ? (
+                                        <div className="mt-4 border-t border-line pt-4">
+                                            <PlanFeatureList lines={planHighlights} />
+                                        </div>
+                                    ) : null}
+
+                                    <div className="mt-auto pt-5">
+                                        {isCurrentPlan ? (
+                                            showPortalButton ? (
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    className="h-9 w-full"
+                                                    disabled={portalLoading}
+                                                    onClick={() => void openBillingPortal()}
+                                                >
+                                                    <CreditCard className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden />
+                                                    {portalLoading
+                                                        ? upgradeCopy.billingPortalOpening
+                                                        : upgradeCopy.billingPortalManageSubscriptionCta}
+                                                </Button>
+                                            ) : (
+                                                <PlanStatusBlock>{upgradeCopy.planPickerCurrentPlanBadge}</PlanStatusBlock>
+                                            )
+                                        ) : isPaidRecurringCurrent ? null : isFirmBillingAdmin ? (
+                                            <Button
+                                                type="button"
+                                                variant={primaryCta ? 'greenCta' : 'outline'}
+                                                className="h-9 w-full"
+                                                onClick={() => {
+                                                    persistCheckoutIntent({
+                                                        plan: row.name as CheckoutPlanName,
+                                                        interval: period === 'annual' ? 'annual' : 'monthly',
+                                                    })
+                                                    window.location.assign(checkoutHref)
+                                                }}
+                                            >
+                                                <CreditCard className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden />
+                                                {checkoutCtaLabel(selectedPlan, isPaidRecurringCurrent)}
+                                            </Button>
+                                        ) : null}
                                     </div>
                                 </article>
                             </li>
@@ -1530,230 +1250,92 @@ export function PolarPlansPicker({
                         returnTo: returnPath,
                         productId: plan.id,
                     })
+                    const emphasized =
+                        (isCurrentPlan && !isFreeTier) || (isIntentHighlight && !enableCheckoutIntentJoyride)
+                    const primaryCta = Boolean(plan.isRecommended) || isIntentHighlight
                     return (
-                        <li key={plan.id} className="relative pt-3">
-                            {!isCurrentPlan && !isFreeTier && plan.isRecommended ? (
-                                <div className="pointer-events-none absolute left-1/2 top-0 z-30 -translate-x-1/2">
-                                    <span
-                                        className={cn(
-                                            'inline-flex items-center rounded-sm border px-3 py-1 text-[10px] font-semibold uppercase tracking-wider shadow-md',
-                                            blueAccentTrial
-                                                ? 'border-[#b88972]/60 bg-[#ECC0AA] text-[#3d2a22]'
-                                                : 'border-slate-300/80 bg-slate-700 text-white'
-                                        )}
-                                    >
-                                        {upgradeCopy.billingRecommendedBadge}
-                                    </span>
-                                </div>
-                            ) : null}
+                        <li key={plan.id} className="flex min-w-0">
                             <article
                                 {...(isIntentHighlight ? { 'data-checkout-intent-tour': true } : {})}
-                                className={cn(
-                                    planCardBase,
-                                    isFreeTier
-                                        ? blueAccentTrial
-                                            ? 'border-[#ECC0AA]/45 bg-gradient-to-br from-[#ECC0AA]/18 via-slate-50/75 to-slate-50/95 hover:border-[#ECC0AA]/60 hover:shadow-[0_8px_28px_-8px_rgba(236,192,170,0.22)]'
-                                            : 'bg-slate-50/70 hover:border-slate-200 hover:shadow-[0_8px_24px_-8px_rgba(15,23,42,0.1)]'
-                                        : cn(
-                                              'hover:shadow-[0_8px_24px_-8px_rgba(15,23,42,0.1),0_20px_48px_-16px_rgba(15,23,42,0.12)]',
-                                              blueAccentTrial
-                                                  ? 'border-[#ECC0AA]/42 ring-[#ECC0AA]/22 hover:border-[#d4a892] hover:ring-[#ECC0AA]/35'
-                                                  : 'border-slate-200/90 hover:border-slate-300/90 hover:ring-slate-200/40'
-                                          ),
-                                    isCurrentPlan && !isFreeTier && !blueAccentTrial && 'border-emerald-200 ring-1 ring-emerald-100',
-                                    blueAccentTrial && isCurrentPlan && 'bg-[#ECC0AA]/10',
-                                    isIntentHighlight &&
-                                        !enableCheckoutIntentJoyride &&
-                                        (blueAccentTrial
-                                            ? 'border-2 border-[#b88972]/60'
-                                            : 'border-2 border-emerald-600/40')
-                                )}
+                                className={planCardClass(emphasized, compact)}
                             >
-                                {isCurrentPlan && !isFreeTier && (
-                                    <ActivePlanCornerPatch
-                                        periodEnd={currentPlanPeriodEnd}
-                                        isTrialing={isTrialingCurrentPlan}
-                                        peach={blueAccentTrial}
-                                    />
-                                )}
-                                <div className={cn('flex flex-1 flex-col', compact ? 'p-4' : 'p-5 sm:p-6')}>
-                                    {isFreeTier ? (
-                                        <>
-                                            <h3 className={planCardHeadingClass(compact)}>
-                                                {plan.name}
-                                            </h3>
-                                            <p className="mt-2">
-                                                <PlanPriceDisplay
-                                                    label={plan.priceLabel}
-                                                    compact={compact}
-                                                    peachAmount={blueAccentTrial}
-                                                />
-                                            </p>
-                                        </>
-                                    ) : (
-                                        <div>
-                                            <h3 className={cn(planCardHeadingClass(compact), 'min-w-0', isCurrentPlan && 'pr-14')}>
-                                                {plan.name}
-                                            </h3>
-                                            <div className="mt-2 min-w-0 leading-none">
-                                                <PlanPriceDisplay
-                                                    label={plan.priceLabel}
-                                                    compact={compact}
-                                                    peachAmount={blueAccentTrial}
-                                                />
-                                                <p className={cn('mt-1 text-xs', blueAccentTrial ? 'text-[#7a5343]/85' : 'text-slate-500')}>
-                                                    Billed monthly
-                                                </p>
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {plan.description ? (
-                                        <p
-                                            className={cn(
-                                                'mt-2 leading-relaxed text-slate-600',
-                                                compact ? 'text-xs line-clamp-3 sm:text-sm' : 'text-sm'
-                                            )}
-                                        >
-                                            {withBrandName(plan.description)}
-                                        </p>
+                                <div className="flex min-w-0 flex-col items-start gap-1.5">
+                                    <h3 className={planCardHeadingClass(compact)}>{plan.name}</h3>
+                                    {isCurrentPlan && !isFreeTier ? (
+                                        <ActivePlanTag periodEnd={currentPlanPeriodEnd} isTrialing={isTrialingCurrentPlan} />
+                                    ) : !isCurrentPlan && !isFreeTier && plan.isRecommended ? (
+                                        <Tag color="blue">{upgradeCopy.billingRecommendedBadge}</Tag>
                                     ) : null}
+                                </div>
+                                <div className="mt-3 min-w-0">
+                                    <PlanPriceDisplay label={plan.priceLabel} compact={compact} />
+                                    {!isFreeTier ? <p className={BILLED_CAPTION_CLASS}>Billed monthly</p> : null}
+                                </div>
 
-                                    {!isFreeTier && !compact && planHighlights.length > 0 ? (
-                                        <div
-                                            className={cn(
-                                                'mt-5 border-t pt-5',
-                                                blueAccentTrial ? 'border-[#ECC0AA]/28' : 'border-slate-100'
-                                            )}
-                                        >
-                                            <PlanHighlightsScroll
-                                                lines={planHighlights}
-                                                checkIconClassName={highlightCheckClass}
-                                                peachScrollbar={blueAccentTrial}
-                                            />
-                                        </div>
-                                    ) : null}
-                                    {isFreeTier && !compact ? (
-                                        <div
-                                            className={cn(
-                                                'mt-5 border-t pt-5',
-                                                blueAccentTrial ? 'border-[#ECC0AA]/28' : 'border-slate-100'
-                                            )}
-                                        >
-                                            <ul className="space-y-2.5">
-                                                {sandboxPlanHighlights.map((line, index) => (
-                                                    <li
-                                                        key={`sandbox-highlight-${index}`}
-                                                        className="flex gap-2.5 text-sm leading-snug text-slate-700"
-                                                    >
-                                                        <Check
-                                                            className={cn(
-                                                                'mt-0.5 h-4 w-4 shrink-0',
-                                                                highlightCheckClass
-                                                            )}
-                                                            strokeWidth={2.25}
-                                                            aria-hidden
-                                                        />
-                                                        <span>{line}</span>
-                                                    </li>
-                                                ))}
-                                            </ul>
-                                        </div>
-                                    ) : null}
+                                {plan.description ? (
+                                    <p
+                                        className={cn(
+                                            'mt-3 text-fg-muted',
+                                            compact ? 'line-clamp-3 text-caption font-normal sm:text-small' : 'text-small'
+                                        )}
+                                    >
+                                        {withBrandName(plan.description)}
+                                    </p>
+                                ) : null}
 
-                                    <div className="mt-auto pt-6">
-                                        {isCurrentPlan ? (
-                                            showPortalButton ? (
-                                                <Button
-                                                    type="button"
-                                                    variant="manageBillingCta"
-                                                    className={cn(
-                                                        'h-11 w-full rounded',
-                                                        blueAccentTrial &&
-                                                            '!border-[#c49a82] !bg-[#ECC0AA]/40 !text-[#3d2a22] hover:!border-[#b07d62] hover:!bg-[#ECC0AA]/65 hover:!text-[#241814]'
-                                                    )}
-                                                    disabled={portalLoading}
-                                                    onClick={() => void openBillingPortal()}
-                                                >
-                                                    <span className="relative z-10">
-                                                        <span className="inline-flex items-center justify-center gap-2">
-                                                            <CreditCard className="h-4 w-4 opacity-90" aria-hidden />
-                                                            {portalLoading
-                                                                ? upgradeCopy.billingPortalOpening
-                                                                : upgradeCopy.billingPortalManageSubscriptionCta}
-                                                        </span>
-                                                    </span>
-                                                </Button>
-                                            ) : (
-                                                <div
-                                                    className={cn(
-                                                        'rounded border px-4 py-3 text-center shadow-sm',
-                                                        blueAccentTrial
-                                                            ? 'border-[#ECC0AA]/60 bg-[#ECC0AA]/22 shadow-[0_2px_12px_-6px_rgba(236,192,170,0.45)]'
-                                                            : 'border-slate-200/80 bg-white/90'
-                                                    )}
-                                                >
-                                                    <p
-                                                        className={cn(
-                                                            'text-sm font-medium',
-                                                            blueAccentTrial ? 'text-[#7a5343]' : 'text-slate-800'
-                                                        )}
-                                                    >
-                                                        {upgradeCopy.planPickerCurrentPlanBadge}
-                                                    </p>
-                                                </div>
-                                            )
-                                        ) : isFreeTier ? (
-                                            <div
-                                                className={cn(
-                                                    'rounded border px-4 py-3 text-center shadow-sm',
-                                                    blueAccentTrial
-                                                        ? 'border-[#ECC0AA]/45 bg-[#ECC0AA]/14'
-                                                        : 'border-slate-200/80 bg-white/90'
-                                                )}
-                                            >
-                                                <p
-                                                    className={cn(
-                                                        'text-sm font-medium',
-                                                        blueAccentTrial ? 'text-[#7a5343]' : 'text-slate-800'
-                                                    )}
-                                                >
-                                                    {upgradeCopy.billingIncludedLabel}
-                                                </p>
-                                                <p
-                                                    className={cn(
-                                                        'mt-1 text-xs',
-                                                        blueAccentTrial ? 'text-[#7a5343]/75' : 'text-slate-500'
-                                                    )}
-                                                >
-                                                    {upgradeCopy.freeSandboxFootnote}
-                                                </p>
-                                            </div>
-                                        ) : isPaidRecurringCurrent ? null : isFirmBillingAdmin ? (
+                                {!isFreeTier && !compact && planHighlights.length > 0 ? (
+                                    <div className="mt-4 border-t border-line pt-4">
+                                        <PlanFeatureList lines={planHighlights} />
+                                    </div>
+                                ) : null}
+                                {isFreeTier && !compact ? (
+                                    <div className="mt-4 border-t border-line pt-4">
+                                        <PlanFeatureList lines={sandboxPlanHighlights} />
+                                    </div>
+                                ) : null}
+
+                                <div className="mt-auto pt-5">
+                                    {isCurrentPlan ? (
+                                        showPortalButton ? (
                                             <Button
                                                 type="button"
-                                                variant={blueAccentTrial ? 'outline' : 'blackCta'}
-                                                className={cn(
-                                                    'h-11 w-full',
-                                                    blueAccentTrial ? polarBillingPeachCtaClass : polarBillingCtaButtonClass
-                                                )}
-                                                onClick={() => {
-                                                    persistCheckoutIntent({
-                                                        plan: plan.name as CheckoutPlanName,
-                                                        interval: effectiveCatalogInterval(plan) === 'year' ? 'annual' : 'monthly',
-                                                    })
-                                                    window.location.assign(checkoutHref)
-                                                }}
+                                                variant="outline"
+                                                className="h-9 w-full"
+                                                disabled={portalLoading}
+                                                onClick={() => void openBillingPortal()}
                                             >
-                                                <span className="relative z-10">
-                                                    <span className="inline-flex items-center justify-center gap-2">
-                                                        <CreditCard className="h-4 w-4 opacity-90" aria-hidden />
-                                                        {checkoutCtaLabel(plan, isPaidRecurringCurrent)}
-                                                    </span>
-                                                </span>
+                                                <CreditCard className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden />
+                                                {portalLoading
+                                                    ? upgradeCopy.billingPortalOpening
+                                                    : upgradeCopy.billingPortalManageSubscriptionCta}
                                             </Button>
-                                        ) : null}
-                                    </div>
+                                        ) : (
+                                            <PlanStatusBlock>{upgradeCopy.planPickerCurrentPlanBadge}</PlanStatusBlock>
+                                        )
+                                    ) : isFreeTier ? (
+                                        <div className="space-y-1.5">
+                                            <PlanStatusBlock>{upgradeCopy.billingIncludedLabel}</PlanStatusBlock>
+                                            <p className="text-center text-caption font-normal text-fg-muted">
+                                                {upgradeCopy.freeSandboxFootnote}
+                                            </p>
+                                        </div>
+                                    ) : isPaidRecurringCurrent ? null : isFirmBillingAdmin ? (
+                                        <Button
+                                            type="button"
+                                            variant={primaryCta ? 'greenCta' : 'outline'}
+                                            className="h-9 w-full"
+                                            onClick={() => {
+                                                persistCheckoutIntent({
+                                                    plan: plan.name as CheckoutPlanName,
+                                                    interval: effectiveCatalogInterval(plan) === 'year' ? 'annual' : 'monthly',
+                                                })
+                                                window.location.assign(checkoutHref)
+                                            }}
+                                        >
+                                            <CreditCard className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden />
+                                            {checkoutCtaLabel(plan, isPaidRecurringCurrent)}
+                                        </Button>
+                                    ) : null}
                                 </div>
                             </article>
                         </li>
@@ -1771,14 +1353,16 @@ export function PolarPlansPicker({
                         last: upgradeCopy.checkoutIntentJoyridePrimaryCta,
                         next: 'Next',
                     }}
+                    // Joyride parses `primaryColor` as a hex (it derives rgba() from it), so the
+                    // options keep literal New UI values; the rendered pieces below read the tokens.
                     options={{
-                        primaryColor: '#1b1b1d',
-                        textColor: '#1b1b1d',
+                        primaryColor: '#047857',
+                        textColor: '#37352f',
                         backgroundColor: '#ffffff',
                         arrowColor: '#ffffff',
-                        overlayColor: 'rgba(15, 23, 42, 0.48)',
+                        overlayColor: 'rgba(15, 15, 15, 0.6)',
                         spotlightPadding: 10,
-                        spotlightRadius: 4,
+                        spotlightRadius: 6,
                         zIndex: 10050,
                         skipBeacon: true,
                         showProgress: false,
@@ -1788,60 +1372,62 @@ export function PolarPlansPicker({
                     }}
                     styles={{
                         floater: {
-                            filter: 'drop-shadow(0 4px 16px rgba(15,23,42,0.13))',
+                            filter: 'none',
                         },
                         tooltip: {
-                            borderRadius: 2,
-                            padding: '16px 16px 12px',
-                            fontSize: 12,
-                            maxWidth: 280,
-                            border: '1px solid #e5e7eb',
-                            boxShadow: '0 8px 32px -8px rgba(15,23,42,0.14), 0 2px 8px rgba(15,23,42,0.06)',
+                            borderRadius: 'var(--ui-radius-card)',
+                            padding: '14px 16px 12px',
+                            fontSize: 13,
+                            maxWidth: 300,
+                            color: 'var(--ui-fg)',
+                            backgroundColor: 'var(--ui-surface)',
+                            border: 'none',
+                            boxShadow: 'var(--ui-shadow-popover)',
                             fontFamily: 'inherit',
                         },
                         tooltipContainer: {
                             textAlign: 'left',
-                            lineHeight: 1.5,
+                            lineHeight: '18px',
                         },
                         tooltipTitle: {
-                            fontSize: 12,
-                            fontWeight: 700,
-                            letterSpacing: '0.01em',
-                            color: '#1b1b1d',
+                            fontSize: 14,
+                            fontWeight: 600,
+                            lineHeight: '20px',
+                            color: 'var(--ui-fg)',
                             marginTop: 0,
                             marginBottom: 0,
                             marginLeft: 0,
                             marginRight: 0,
                         },
                         tooltipContent: {
-                            padding: '6px 0 2px',
-                            fontSize: 12,
-                            color: '#45474c',
-                            lineHeight: 1.55,
+                            padding: '4px 0 2px',
+                            fontSize: 13,
+                            color: 'var(--ui-fg-muted)',
+                            lineHeight: '18px',
                         },
                         tooltipFooter: {
                             marginTop: 10,
-                            paddingTop: 8,
-                            borderTop: '1px solid #e5e7eb',
+                            paddingTop: 0,
+                            borderTop: 'none',
                         },
                         buttonPrimary: {
-                            borderRadius: 2,
-                            fontSize: 10,
-                            fontWeight: 700,
-                            letterSpacing: '0.12em',
-                            textTransform: 'uppercase',
-                            padding: '5px 12px',
-                            backgroundColor: '#1b1b1d',
-                            color: '#ffffff',
+                            borderRadius: 'var(--ui-radius-control)',
+                            fontSize: 13,
+                            fontWeight: 500,
+                            letterSpacing: 'normal',
+                            textTransform: 'none',
+                            padding: '5px 10px',
+                            backgroundColor: 'hsl(var(--ui-action))',
+                            color: 'hsl(var(--ui-action-fg))',
                             fontFamily: 'inherit',
                         },
                         buttonClose: {
-                            color: '#9ca3af',
+                            color: 'var(--ui-fg-muted)',
                             width: 10,
                             height: 10,
                             padding: 8,
-                            top: 2,
-                            right: 2,
+                            top: 4,
+                            right: 4,
                         },
                     }}
                 />

@@ -32,13 +32,13 @@ export function WhatsNewModal({ isOpen, onClose, onRead, releases }: WhatsNewMod
         <DialogHeader className="px-5 pt-5 pb-4 border-b border-[#eae7e9]">
           <div className="flex items-center gap-2.5">
             <div className="flex h-7 w-7 items-center justify-center rounded-md bg-[#f0edee] shrink-0">
-              <Megaphone className="h-3.5 w-3.5 text-[#45474c]" />
+              <Megaphone className="h-3.5 w-3.5 text-fg-muted" />
             </div>
             <div>
-              <DialogTitle className="text-[0.875rem] font-semibold text-[#1b1b1d] leading-tight">
+              <DialogTitle className="text-[0.875rem] font-semibold text-fg leading-tight">
                 What&apos;s New
               </DialogTitle>
-              <p className="text-[11px] text-[#6b7280] leading-tight mt-0.5">
+              <p className="text-caption text-[#6b7280] leading-tight mt-0.5">
                 Release history for Firma
               </p>
             </div>
@@ -54,19 +54,19 @@ export function WhatsNewModal({ isOpen, onClose, onRead, releases }: WhatsNewMod
               <div key={release.version} className={cn('px-5 py-3.5', i === 0 && 'bg-[#fafaf9]')}>
                 <div className="flex items-center gap-2 mb-1">
                   <span className={cn(
-                    'text-[10px] font-bold tracking-wide px-1.5 py-0.5 rounded',
+                    'text-caption font-bold tracking-wide px-1.5 py-0.5 rounded',
                     i === 0
-                      ? 'bg-[#1b1b1d] text-white'
+                      ? 'bg-fg text-white'
                       : 'bg-[#f0edee] text-[#6b7280]'
                   )}>
                     v{release.version}
                   </span>
                   {i === 0 && (
-                    <span className="text-[10px] font-semibold text-green-700 bg-green-50 border border-green-200 px-1.5 py-0.5 rounded">
+                    <span className="text-caption font-semibold text-tag-green-fg bg-tag-green-bg border border-green-200 px-1.5 py-0.5 rounded">
                       Latest
                     </span>
                   )}
-                  <span className="text-[11px] text-[#9ca3af] ml-auto">
+                  <span className="text-caption text-[#9ca3af] ml-auto">
                     {new Date(release.date).toLocaleDateString('en-US', {
                       month: 'short',
                       day: 'numeric',
@@ -76,7 +76,7 @@ export function WhatsNewModal({ isOpen, onClose, onRead, releases }: WhatsNewMod
                 </div>
                 <p className={cn(
                   'text-[0.8125rem] leading-snug',
-                  i === 0 ? 'font-semibold text-[#1b1b1d]' : 'font-medium text-[#45474c]'
+                  i === 0 ? 'font-semibold text-fg' : 'font-medium text-fg-muted'
                 )}>
                   {release.title}
                 </p>
@@ -87,7 +87,7 @@ export function WhatsNewModal({ isOpen, onClose, onRead, releases }: WhatsNewMod
 
         {/* Footer */}
         <div className="px-5 py-3 border-t border-[#eae7e9] flex items-center justify-between">
-          <span className="text-[11px] text-[#9ca3af]">
+          <span className="text-caption text-[#9ca3af]">
             {releases.length} release{releases.length !== 1 ? 's' : ''}
           </span>
           <Link
@@ -95,7 +95,7 @@ export function WhatsNewModal({ isOpen, onClose, onRead, releases }: WhatsNewMod
             target="_blank"
             rel="noopener noreferrer"
             onClick={onClose}
-            className="flex items-center gap-1 text-[11px] font-medium text-[#45474c] hover:text-[#1b1b1d] transition-colors"
+            className="flex items-center gap-1 text-caption font-medium text-fg-muted hover:text-fg transition-colors"
           >
             Full changelog
             <ArrowUpRight className="h-3 w-3" />

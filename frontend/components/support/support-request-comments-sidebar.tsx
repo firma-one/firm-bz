@@ -5,6 +5,7 @@ import { X, MessagesSquare, Send } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { formatDistanceToNow } from 'date-fns'
 import { cn } from '@/lib/utils'
+import { initialsOf } from '@/lib/initials'
 
 interface Comment {
   id: string
@@ -30,11 +31,7 @@ interface SupportRequestCommentsSidebarProps {
 }
 
 function getInitials(name?: string, email?: string): string {
-  if (name && name !== 'Current User') {
-    return name.split(' ').map(p => p[0]).join('').toUpperCase().slice(0, 2)
-  }
-  if (email) return email[0].toUpperCase()
-  return '?'
+  return initialsOf(name && name !== 'Current User' ? name : email)
 }
 
 function getAvatarColor(seed: string): string {
@@ -187,10 +184,9 @@ export function SupportRequestCommentsSidebar({
             comments.map((comment) => {
               const label = comment.authorName || comment.authorEmail
               const initials = getInitials(comment.authorName, comment.authorEmail)
-              const avatarColor = getAvatarColor(comment.authorEmail)
               return (
                 <div key={comment.id} className="flex gap-3">
-                  <div className={cn('h-7 w-7 rounded-full flex items-center justify-center text-xs font-semibold shrink-0 mt-0.5', avatarColor)}>
+                  <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-surface-muted text-[11px] font-medium text-fg-muted">
                     {initials}
                   </div>
                   <div className="flex-1 min-w-0">

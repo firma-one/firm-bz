@@ -100,7 +100,7 @@ export function GoogleDriveMock({ folderName, onStageChange }: GoogleDriveMockPr
             <div className="flex" style={{ height: 224 }}>
 
                 {/* Sidebar */}
-                <div className="w-36 shrink-0 border-r border-slate-100 bg-[#f8f9fa] py-2">
+                <div className="w-36 shrink-0 border-r border-line bg-[#f8f9fa] py-2">
                     <div className={`mx-2 mb-2 flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium shadow-sm transition-all duration-300 ${
                         stage === "inside-drive" ? "scale-105 bg-blue-600 text-white ring-2 ring-blue-400 ring-offset-1" : "bg-white text-slate-700"
                     }`}>
@@ -137,7 +137,7 @@ export function GoogleDriveMock({ folderName, onStageChange }: GoogleDriveMockPr
                                     { name: "Client Files", members: "4 members", initials: "CF" },
                                 ].map((drive, i) => (
                                     <div key={drive.name} className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs transition-all duration-300 ${
-                                        i === 0 && stage === "clicking-drive" ? "bg-blue-50 ring-2 ring-blue-300" : "hover:bg-slate-50"
+                                        i === 0 && stage === "clicking-drive" ? "bg-blue-50 ring-2 ring-blue-300" : "hover:bg-surface-hover"
                                     }`}>
                                         <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-400 text-[9px] font-bold text-white">{drive.initials}</div>
                                         <span className="font-medium text-slate-800">{drive.name}</span>
@@ -154,7 +154,7 @@ export function GoogleDriveMock({ folderName, onStageChange }: GoogleDriveMockPr
                             <div className="mb-2 flex items-center gap-2">
                                 <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slate-500 to-slate-700 text-[10px] font-bold text-white shadow-sm">AL</div>
                                 <div>
-                                    <p className="text-xs font-semibold leading-tight text-slate-900">Acme Legal</p>
+                                    <p className="text-xs font-semibold leading-tight text-fg">Acme Legal</p>
                                     <p className="text-[10px] leading-tight text-slate-400">1 person</p>
                                 </div>
                             </div>
@@ -168,7 +168,7 @@ export function GoogleDriveMock({ folderName, onStageChange }: GoogleDriveMockPr
 
                             {stage === "done" && (
                                 <div className="mt-1">
-                                    <div className="flex items-center gap-2 border-b border-slate-100 px-2 pb-1 text-[9px] font-semibold uppercase tracking-wide text-slate-400">
+                                    <div className="flex items-center gap-2 border-b border-line px-2 pb-1 text-[9px] font-semibold uppercase tracking-wide text-slate-400">
                                         <span className="flex-1">Name</span>
                                         <span className="w-16 text-right">Modified</span>
                                         <span className="w-12 text-right">Size</span>
@@ -205,8 +205,8 @@ export function GoogleDriveMock({ folderName, onStageChange }: GoogleDriveMockPr
                             {stage === "dialog" && (
                                 <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/20 animate-in fade-in duration-150">
                                     <div className="w-60 rounded-2xl bg-white p-4 shadow-2xl">
-                                        <p className="mb-2.5 text-sm font-semibold text-slate-900">New folder</p>
-                                        <input readOnly value={folderName || "_firma_workspace_"} className="w-full rounded border border-blue-500 px-2 py-1.5 font-mono text-xs text-slate-900 outline-none ring-2 ring-blue-200" />
+                                        <p className="mb-2.5 text-sm font-semibold text-fg">New folder</p>
+                                        <input readOnly value={folderName || "_firma_workspace_"} className="w-full rounded border border-blue-500 px-2 py-1.5 font-mono text-xs text-fg outline-none ring-2 ring-blue-200" />
                                         <div className="mt-3 flex justify-end gap-2">
                                             <span className="rounded px-3 py-1 text-xs text-slate-500">Cancel</span>
                                             <span className="rounded bg-blue-600 px-3 py-1 text-xs font-semibold text-white">Create</span>

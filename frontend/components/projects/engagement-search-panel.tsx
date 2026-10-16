@@ -46,7 +46,7 @@ const MATCH_TYPE_TOOLTIP: Record<string, string> = {
   semantic: 'Matched by meaning, using file name and summary',
 }
 
-const LIGHT_TOOLTIP_CLASS = 'z-[9999] max-w-[320px] p-3 text-xs bg-white text-slate-900 border border-slate-200 shadow-xl break-words'
+const LIGHT_TOOLTIP_CLASS = 'z-[9999] max-w-[320px] p-3 text-xs bg-white text-fg border border-slate-200 shadow-xl break-words'
 
 const TYPEWRITER_PHRASES = [
   'client discovery files',
@@ -250,8 +250,8 @@ export function EngagementSearchPanel({
           className={cn(
             'w-full text-left px-3 py-2.5 rounded transition-colors flex items-start gap-3 group border border-transparent',
             highlightedIndex === index
-              ? 'bg-slate-50 shadow-sm border-slate-200'
-              : 'hover:bg-slate-50 hover:shadow-sm hover:border-slate-200'
+              ? 'bg-surface-subtle shadow-sm border-slate-200'
+              : 'hover:bg-surface-hover hover:shadow-sm hover:border-slate-200'
           )}
         >
           <div
@@ -413,7 +413,7 @@ export function EngagementSearchPanel({
 
   return (
     <TooltipProvider>
-      <div className="flex flex-col h-full min-h-0 bg-slate-50/50">
+      <div className="flex flex-col h-full min-h-0 bg-surface-subtle">
         {/* Search input - integrated box: icons inside left edge, 2-line textarea, clear on right */}
         <div className="shrink-0 p-3 pb-2">
           <label htmlFor="engagement-search-panel-input" className="sr-only">
@@ -421,7 +421,7 @@ export function EngagementSearchPanel({
           </label>
           <div className="flex rounded border border-slate-200 bg-white shadow-sm overflow-hidden focus-within:ring-1 focus-within:ring-slate-300 focus-within:border-slate-300">
             {/* Left strip: chat icon with tooltip (click to toggle) */}
-            <div className="flex flex-col justify-center py-2 pl-2.5 pr-1.5 border-r border-slate-100 bg-slate-50/80 shrink-0">
+            <div className="flex flex-col justify-center py-2 pl-2.5 pr-1.5 border-r border-line bg-surface-subtle shrink-0">
               <Tooltip open={openTooltipId === `chat-${projectId}`}>
                 <TooltipTrigger asChild>
                   <button
@@ -464,7 +464,7 @@ export function EngagementSearchPanel({
               )}
             </div>
             {/* Right strip: clear (X) icon – always visible, enabled after search text + debounce */}
-            <div className="flex flex-col justify-center py-2 pl-1.5 pr-2.5 border-l border-slate-100 bg-slate-50/80 shrink-0">
+            <div className="flex flex-col justify-center py-2 pl-1.5 pr-2.5 border-l border-line bg-surface-subtle shrink-0">
               {(() => {
                 const canClear = searchQuery.trim().length > 0 && !isSearching
                 return (
@@ -610,7 +610,7 @@ export function EngagementSearchPanel({
                   <div className="bg-white h-12 w-12 rounded-full flex items-center justify-center mx-auto mb-3 shadow-sm">
                     <Search className="h-6 w-6 text-slate-400" />
                   </div>
-                  <p className="text-sm font-medium text-slate-900">No results found</p>
+                  <p className="text-sm font-medium text-fg">No results found</p>
                   <p className="text-xs text-slate-500 mt-1">
                     No files match &quot;{searchQuery}&quot; in this project.
                   </p>

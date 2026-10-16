@@ -2,12 +2,12 @@
 
 import { prisma } from "@/lib/prisma"
 import { createClient } from "@/utils/supabase/server"
-import { upsertFollowUpReminder, removeRemindersByEntity } from '@/lib/actions/user-reminders'
+import { upsertFollowUpReminder, removeRemindersByEntity } from '@/lib/reminders/reminder-service'
 import { sendEmail } from '@/lib/email'
 import { logger } from '@/lib/logger'
 import { BRAND_NAME } from '@/config/brand'
 import { renderInviteEmail } from '@/lib/email-templates/invite'
-import { invalidateUserSettingsPlus } from '@/lib/actions/user-settings'
+import { invalidateUserSettingsPlus } from '@/lib/permissions/invalidate-user-settings'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { mergeLeanAppMetadata } from '@/lib/auth/supabase-jwt-metadata'
 import { maybeProvisionInviteeAccount } from '@/lib/actions/account-provisioning'
@@ -15,6 +15,7 @@ import { findAuthUserIdByEmail } from '@/lib/actions/auth-user-lookup'
 import { joinEngagementForUser, provisionAndNotifyExistingUser } from '@/lib/actions/engagement-membership'
 import { InvitationStatus } from '@prisma/client'
 import { engagementPath, clientPath, firmPath } from '@/lib/navigation/firm-paths'
+import { requireEngagementManager, isEngagementPersonaSlug } from '@/lib/permissions/require-engagement-manager'
 
 /**
  * Invite a member to a project (V2)
@@ -23,6 +24,11 @@ export async function inviteMember(projectId: string, email: string, personaId: 
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) throw new Error("Unauthorized")
+
+    // Without this, anyone signed in could invite themselves to any engagement as its lead.
+    await requireEngagementManager(projectId)
+    const invitePersona = await prisma.persona.findUnique({ where: { id: personaId }, select: { slug: true } })
+    if (!isEngagementPersonaSlug(invitePersona?.slug)) throw new Error("Not an engagement role")
 
     // Sandbox restriction: disallow invites for sandbox orgs
     const projectOrg = await prisma.engagement.findFirst({
@@ -180,6 +186,7 @@ export async function resendInvitation(invitationId: string) {
 
     const invite = await prisma.engagementInvitation.findUnique({ where: { id: invitationId } })
     if (!invite) throw new Error("Invitation not found")
+    await requireEngagementManager(invite.engagementId)
     if (invite.status === InvitationStatus.JOINED) throw new Error("User has already joined")
 
     const token = crypto.randomUUID()

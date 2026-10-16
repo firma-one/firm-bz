@@ -2,25 +2,14 @@
 
 import React, { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
-import {
-    Dialog,
-    DialogContent,
-    DialogTitle,
-} from "@/components/ui/dialog"
-import { VisuallyHidden } from "@radix-ui/react-visually-hidden"
+import { Dialog, DialogContent } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { UserPlus, Linkedin, Users2, MapPin, User, Activity, Share2, CalendarCheck, Building2, Globe, FileText, Lock } from "lucide-react"
-import { LoadingSpinner } from "@/components/ui/loading-spinner"
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select"
+import { Plus, Linkedin, Users2, MapPin, User, Activity, Share2, CalendarCheck, CalendarDays, Building2, Globe, FileText, Lock } from "lucide-react"
+import { StatusProperty } from "@/components/ui/property-cells"
+import { PropertyList, PropertyRow, PROPERTY_FIELD_CLASS, PROPERTY_HINT_CLASS, PROPERTY_TEXTAREA_CLASS } from "@/components/ui/property-list"
+import { CreateDialogFooter, CreateDialogHeader, CreateDialogNotice } from "@/components/ui/create-dialog"
 import { SelectWithCustomEntry } from "@/components/ui/select-with-custom-entry"
 import { OptionalFieldsSection } from "@/components/ui/optional-fields-toggle"
 import { createClient, type LwCrmClientStatus } from '@/lib/actions/client'
@@ -35,9 +24,7 @@ interface AddClientModalProps {
     onSaved?: () => void
 }
 
-const fieldLabel = 'font-mono text-[9px] font-bold uppercase tracking-widest text-[#45474c] block mb-1'
-const inputCls = 'border-[#e5e7eb] text-[#1b1b1d] text-xs font-normal placeholder:text-[#9a9ba0] rounded focus-visible:ring-1 focus-visible:ring-primary focus-visible:border-primary disabled:opacity-50 disabled:cursor-not-allowed'
-const textareaCls = 'flex w-full rounded border border-[#e5e7eb] bg-white px-3 py-2 text-xs font-normal text-[#1b1b1d] placeholder:text-[#9a9ba0] focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed'
+const CLIENT_STATUSES: LwCrmClientStatus[] = ['PROSPECT', 'ACTIVE', 'ON_HOLD', 'PAST']
 
 export function AddClientModal({ groupSlug, orgSlug, firmId, trigger, onSaved }: AddClientModalProps) {
     const [open, setOpen] = useState(false)
@@ -201,188 +188,89 @@ export function AddClientModal({ groupSlug, orgSlug, firmId, trigger, onSaved }:
         <>
             {wrapTrigger(
                 trigger || (
-                    <Button variant="greenCta" type="button" size="sm" className="gap-2">
-                        <UserPlus className="h-4 w-4" />
-                        New Client
+                    <Button type="button" size="sm">
+                        <Plus className="h-3.5 w-3.5" />
+                        New client
                     </Button>
                 ),
             )}
             <Dialog open={open} onOpenChange={setOpen}>
-                <DialogContent className="sm:max-w-[900px] border-[#e5e7eb] max-h-[90vh] overflow-y-auto p-0 gap-0 rounded bg-[#f9f9fb]">
-
-                    <VisuallyHidden><DialogTitle>New Client</DialogTitle></VisuallyHidden>
-
-                    {/* Header */}
-                    <div className="px-5 py-4 border-b border-[#e5e7eb] bg-white flex items-start gap-3 sticky top-0 z-10">
-                        <div className="mt-0.5 h-7 w-7 rounded bg-primary/10 flex items-center justify-center shrink-0">
-                            <UserPlus className="h-3.5 w-3.5 text-primary" />
-                        </div>
-                        <div>
-                            <p className="text-sm font-semibold text-[#1b1b1d] leading-tight">New Client</p>
-                            <p className="text-xs text-[#45474c] mt-0.5">Create a new client record within your firm.</p>
-                        </div>
-                    </div>
+                <DialogContent className="max-h-[90vh] gap-0 overflow-y-auto p-0 sm:max-w-[600px]">
+                    <CreateDialogHeader title="New client" description="Create a new client record within your firm." />
 
                     <form onSubmit={handleSubmit}>
-                        <div className="p-5">
-                            {capBlocked && capMessage && (
-                                <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs px-3 py-2 rounded mb-3 flex items-center gap-2">
-                                    <Lock className="h-3.5 w-3.5 shrink-0 text-rose-500" />
-                                    <span>
-                                        {capMessage.split('Upgrade')[0]}
-                                        <Link href="/d/billing" className="font-semibold underline underline-offset-2 hover:text-rose-900">Upgrade</Link>
-                                        {capMessage.split('Upgrade')[1]}
-                                    </span>
-                                </div>
-                            )}
-                            {error && (
-                                <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs px-3 py-2 rounded mb-3">
-                                    {error}
-                                </div>
-                            )}
+                        <div className="flex flex-col gap-3 px-5 pb-5 pt-2">
+                            {capBlocked && capMessage && <CreateDialogNotice message={capMessage} limit />}
+                            {error && <CreateDialogNotice message={error} />}
 
-                            <div className="space-y-3">
+                            {/* Same property rows as Client Settings: create and edit look alike. */}
+                            <PropertyList>
+                                <PropertyRow label={<label htmlFor="new-client-name">Name <span className="text-danger">*</span></label>} icon={<User />}>
+                                    <Input id="new-client-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Acme Corp" required autoFocus disabled={isDisabled} className={PROPERTY_FIELD_CLASS} />
+                                </PropertyRow>
+                                <PropertyRow label="Status" icon={<Activity />}>
+                                    <StatusProperty kind="client" value={status} options={CLIENT_STATUSES} onChange={(v) => setStatus(v as LwCrmClientStatus)} disabled={isDisabled} />
+                                </PropertyRow>
+                            </PropertyList>
 
-                                {/* IDENTITY — always visible, mandatory fields */}
-                                <div className="bg-white rounded border border-[#e5e7eb] p-3 space-y-3">
-                                    <p className={fieldLabel}>Identity</p>
-
-                                    {/* Name (3/4) + Status (1/4) */}
-                                    <div className="grid grid-cols-[3fr_1fr] gap-3">
-                                        <div>
-                                            <label htmlFor="new-client-name" className={fieldLabel}>
-                                                <span className="inline-flex items-center gap-1"><User className="h-3 w-3" /> Name <span className="text-red-500 normal-case tracking-normal font-sans">*</span></span>
-                                            </label>
-                                            <Input id="new-client-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Acme Corp" required disabled={isDisabled} className={inputCls} />
+                            <OptionalFieldsSection open={showOptional} onToggle={() => setShowOptional((v) => !v)}>
+                                <PropertyList>
+                                    <PropertyRow label={<label htmlFor="new-client-industry">Industry</label>} icon={<Building2 />}>
+                                        <Input id="new-client-industry" value={industry} onChange={(e) => setIndustry(e.target.value)} placeholder="Empty" disabled={isDisabled} className={PROPERTY_FIELD_CLASS} />
+                                    </PropertyRow>
+                                    <PropertyRow label={<label htmlFor="new-client-company-size">Company size</label>} icon={<Users2 />}>
+                                        <SelectWithCustomEntry id="new-client-company-size" value={companySizeBracket} onChange={setCompanySizeBracket} options={['<10', '11–50', '51–200', '201–1000', '1000+']} placeholder="Empty" customEntryHint="Custom…" disabled={isDisabled} className={PROPERTY_FIELD_CLASS} />
+                                    </PropertyRow>
+                                    <PropertyRow label={<label htmlFor="new-client-website">Website</label>} icon={<Globe />}>
+                                        <Input id="new-client-website" value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="https://…" disabled={isDisabled} className={PROPERTY_FIELD_CLASS} />
+                                    </PropertyRow>
+                                    <PropertyRow label={<label htmlFor="new-client-linkedin">LinkedIn</label>} icon={<Linkedin />}>
+                                        <Input id="new-client-linkedin" value={linkedInUrl} onChange={(e) => setLinkedInUrl(e.target.value)} placeholder="https://linkedin.com/company/…" disabled={isDisabled} className={PROPERTY_FIELD_CLASS} />
+                                    </PropertyRow>
+                                    <PropertyRow label={<label htmlFor="new-client-billing">Billing address</label>} icon={<MapPin />}>
+                                        <Textarea id="new-client-billing" value={billingAddress} onChange={(e) => setBillingAddress(e.target.value)} placeholder={"123 Main St\nCity, State ZIP\nCountry"} rows={3} disabled={isDisabled} className={PROPERTY_TEXTAREA_CLASS} />
+                                    </PropertyRow>
+                                    <PropertyRow label={<label htmlFor="new-client-description">Notes</label>} icon={<FileText />}>
+                                        <Textarea id="new-client-description" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Additional details about the client" rows={2} disabled={isDisabled} className={PROPERTY_TEXTAREA_CLASS} />
+                                    </PropertyRow>
+                                    <PropertyRow label={<label htmlFor="new-client-lead-source">Lead source</label>} icon={<Share2 />}>
+                                        <div className="flex w-full flex-col gap-1">
+                                            <SelectWithCustomEntry id="new-client-lead-source" value={leadSource} onChange={setLeadSource} options={['Referral', 'Inbound', 'Outbound', 'Conference', 'Existing Network']} placeholder="Empty" customEntryHint="Other…" disabled={isDisabled} className={PROPERTY_FIELD_CLASS} />
+                                            <p className={PROPERTY_HINT_CLASS}>How the lead came in</p>
                                         </div>
-                                        <div>
-                                            <label htmlFor="new-client-status" className={fieldLabel}>
-                                                <span className="inline-flex items-center gap-1"><Activity className="h-3 w-3" /> Status <span className="text-red-500 normal-case tracking-normal font-sans">*</span></span>
-                                            </label>
-                                            <Select value={status} onValueChange={(v) => setStatus(v as LwCrmClientStatus)} disabled={isDisabled}>
-                                                <SelectTrigger id="new-client-status" className={inputCls}>
-                                                    <SelectValue />
-                                                </SelectTrigger>
-                                                <SelectContent className="rounded border border-[#e5e7eb] bg-white shadow-md py-0.5 min-w-[var(--radix-select-trigger-width)]">
-                                                    <SelectItem value="PROSPECT" className="cursor-pointer rounded-none px-2.5 text-[#45474c] outline-none focus:bg-[#f9f9fb] data-[state=checked]:bg-primary/10 data-[state=checked]:border-l-2 data-[state=checked]:border-brand-accent data-[state=checked]:text-primary data-[state=checked]:font-semibold data-[highlighted]:bg-[#f9f9fb]">Prospect</SelectItem>
-                                                    <SelectItem value="ACTIVE" className="cursor-pointer rounded-none px-2.5 text-[#45474c] outline-none focus:bg-[#f9f9fb] data-[state=checked]:bg-primary/10 data-[state=checked]:border-l-2 data-[state=checked]:border-brand-accent data-[state=checked]:text-primary data-[state=checked]:font-semibold data-[highlighted]:bg-[#f9f9fb]">Active</SelectItem>
-                                                    <SelectItem value="ON_HOLD" className="cursor-pointer rounded-none px-2.5 text-[#45474c] outline-none focus:bg-[#f9f9fb] data-[state=checked]:bg-primary/10 data-[state=checked]:border-l-2 data-[state=checked]:border-brand-accent data-[state=checked]:text-primary data-[state=checked]:font-semibold data-[highlighted]:bg-[#f9f9fb]">On hold</SelectItem>
-                                                    <SelectItem value="PAST" className="cursor-pointer rounded-none px-2.5 text-[#45474c] outline-none focus:bg-[#f9f9fb] data-[state=checked]:bg-primary/10 data-[state=checked]:border-l-2 data-[state=checked]:border-brand-accent data-[state=checked]:text-primary data-[state=checked]:font-semibold data-[highlighted]:bg-[#f9f9fb]">Past</SelectItem>
-                                                </SelectContent>
-                                            </Select>
+                                    </PropertyRow>
+                                    {/* A prospect has an expected close; a client has a start date (as in Client Settings). */}
+                                    {status === 'PROSPECT' ? (
+                                        <PropertyRow label="Expected close" icon={<CalendarCheck />}>
+                                            <div className="flex w-full flex-col gap-1">
+                                                <DateTimePicker value={expectedCloseDate} onChange={setExpectedCloseDate} placeholder="Empty" disabled={isDisabled} defaultTime="17:00" className={PROPERTY_FIELD_CLASS} />
+                                                <p className={PROPERTY_HINT_CLASS}>When you expect to convert the lead</p>
+                                            </div>
+                                        </PropertyRow>
+                                    ) : (
+                                        <PropertyRow label="Client since" icon={<CalendarDays />}>
+                                            <div className="flex w-full flex-col gap-1">
+                                                <DateTimePicker value={clientSinceDate} onChange={setClientSinceDate} placeholder="Empty" disabled={isDisabled} defaultTime="00:00" className={PROPERTY_FIELD_CLASS} />
+                                                <p className={PROPERTY_HINT_CLASS}>When the formal business relationship started</p>
+                                            </div>
+                                        </PropertyRow>
+                                    )}
+                                    <PropertyRow label={<label htmlFor="new-client-memo">Internal memo</label>} icon={<Lock />}>
+                                        <div className="flex w-full flex-col gap-1">
+                                            <Textarea id="new-client-memo" value={internalMemo} onChange={(e) => setInternalMemo(e.target.value)} placeholder="Private notes, call summaries, relationship context…" rows={2} disabled={isDisabled} className={PROPERTY_TEXTAREA_CLASS} />
+                                            <p className={PROPERTY_HINT_CLASS}>Only your firm sees this.</p>
                                         </div>
-                                    </div>
-
-                                </div>
-
-                                <OptionalFieldsSection open={showOptional} onToggle={() => setShowOptional((v) => !v)}>
-                                <div className="grid grid-cols-3 gap-3">
-
-                                {/* COMPANY — col-span-1, row-span-2 */}
-                                <div className="row-span-2 space-y-3">
-                                    <p className={fieldLabel}>Company</p>
-
-                                    <div>
-                                        <label htmlFor="new-client-industry" className={fieldLabel}>
-                                            <span className="inline-flex items-center gap-1"><Building2 className="h-3 w-3" /> Industry</span>
-                                        </label>
-                                        <Input id="new-client-industry" value={industry} onChange={(e) => setIndustry(e.target.value)} placeholder="e.g. Technology" disabled={isDisabled} className={inputCls} />
-                                    </div>
-
-                                    <div>
-                                        <label htmlFor="new-client-company-size" className={fieldLabel}>
-                                            <span className="inline-flex items-center gap-1"><Users2 className="h-3 w-3" /> Company size</span>
-                                        </label>
-                                        <SelectWithCustomEntry id="new-client-company-size" value={companySizeBracket} onChange={setCompanySizeBracket} options={['<10', '11–50', '51–200', '201–1000', '1000+']} placeholder="Select bracket…" customEntryHint="Custom…" disabled={isDisabled} />
-                                    </div>
-
-                                    <div>
-                                        <label htmlFor="new-client-website" className={fieldLabel}>
-                                            <span className="inline-flex items-center gap-1"><Globe className="h-3 w-3" /> Website</span>
-                                        </label>
-                                        <Input id="new-client-website" value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="https://…" disabled={isDisabled} className={inputCls} />
-                                    </div>
-
-                                    <div>
-                                        <label htmlFor="new-client-linkedin" className={fieldLabel}>
-                                            <span className="inline-flex items-center gap-1"><Linkedin className="h-3 w-3" /> LinkedIn</span>
-                                        </label>
-                                        <Input id="new-client-linkedin" value={linkedInUrl} onChange={(e) => setLinkedInUrl(e.target.value)} placeholder="https://linkedin.com/company/…" disabled={isDisabled} className={inputCls} />
-                                    </div>
-
-                                    <div>
-                                        <label htmlFor="new-client-billing" className={fieldLabel}>
-                                            <span className="inline-flex items-center gap-1"><MapPin className="h-3 w-3" /> Billing address</span>
-                                        </label>
-                                        <textarea id="new-client-billing" value={billingAddress} onChange={(e) => setBillingAddress(e.target.value)} placeholder={"123 Main St\nCity, State ZIP\nCountry"} rows={2} disabled={isDisabled} className={textareaCls} />
-                                    </div>
-
-                                    <div>
-                                        <label htmlFor="new-client-description" className={fieldLabel}>
-                                            <span className="inline-flex items-center gap-1"><FileText className="h-3 w-3" /> Notes</span>
-                                        </label>
-                                        <textarea id="new-client-description" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Additional details about the client" rows={2} disabled={isDisabled} className={textareaCls} />
-                                    </div>
-                                </div>
-
-                                {/* CRM — col-span-2 */}
-                                <div className="col-span-2 space-y-3">
-                                    <p className={fieldLabel}>CRM</p>
-
-                                    {/* Row 1: Lead Source + Lead Conversion Date (disabled when not PROSPECT) + Client Onboarding Date (disabled when PROSPECT) */}
-                                    <div className="grid grid-cols-3 gap-3">
-                                        <div>
-                                            <label htmlFor="new-client-lead-source" className={fieldLabel}>
-                                                <span className="inline-flex items-center gap-1"><Share2 className="h-3 w-3" /> Lead source</span>
-                                            </label>
-                                            <SelectWithCustomEntry id="new-client-lead-source" value={leadSource} onChange={setLeadSource} options={['Referral', 'Inbound', 'Outbound', 'Conference', 'Existing Network']} placeholder="Select source…" customEntryHint="Other…" disabled={isDisabled} />
-                                            <p className="mt-1 text-[10px] text-[#9a9ba0]">How did you acquire the lead?</p>
-                                        </div>
-                                        <div>
-                                            <label className={fieldLabel}>
-                                                <span className="inline-flex items-center gap-1"><CalendarCheck className="h-3 w-3" /> Lead conversion date</span>
-                                            </label>
-                                            <DateTimePicker value={expectedCloseDate} onChange={setExpectedCloseDate} placeholder="Select date" disabled={isDisabled || status !== 'PROSPECT'} defaultTime="17:00" />
-                                            <p className="mt-1 text-[10px] text-[#9a9ba0]">When do you expect to convert the lead?</p>
-                                        </div>
-                                        <div>
-                                            <label className={fieldLabel}>
-                                                <span className="inline-flex items-center gap-1"><CalendarCheck className="h-3 w-3" /> Client onboarding date</span>
-                                            </label>
-                                            <DateTimePicker value={clientSinceDate} onChange={setClientSinceDate} placeholder="Select date" disabled={isDisabled || status === 'PROSPECT'} defaultTime="00:00" />
-                                            <p className="mt-1 text-[10px] text-[#9a9ba0]">When did the formal business relationship start?</p>
-                                        </div>
-                                    </div>
-
-                                    {/* Row 3: Internal Memo */}
-                                    <div>
-                                        <label htmlFor="new-client-memo" className={fieldLabel}>
-                                            <span className="inline-flex items-center gap-1"><Lock className="h-3 w-3" /> Internal memo <span className="normal-case tracking-normal font-sans text-[#9a9ba0]">— internal only</span></span>
-                                        </label>
-                                        <textarea id="new-client-memo" value={internalMemo} onChange={(e) => setInternalMemo(e.target.value)} placeholder="Private notes, call summaries, relationship context…" rows={2} disabled={isDisabled} className={textareaCls} />
-                                    </div>
-                                </div>
-
-                                </div>
-                                </OptionalFieldsSection>
-
-                            </div>
+                                    </PropertyRow>
+                                </PropertyList>
+                            </OptionalFieldsSection>
                         </div>
 
-                        {/* Footer */}
-                        <div className="px-5 py-3 border-t border-[#e5e7eb] bg-white flex items-center justify-end gap-3 sticky bottom-0 z-10">
-                            <Button type="button" variant="outline" className="rounded w-32 text-[10px] font-headline font-bold tracking-widest uppercase" onClick={() => setOpen(false)} disabled={isLoading}>
-                                Cancel
-                            </Button>
-                            <Button
-                                variant="greenCta"
-                                type="submit"
-                                disabled={isDisabled || !name.trim()}
-                                className="rounded w-32 text-[10px] font-headline font-bold tracking-widest uppercase text-white"
-                            >
-                                {isLoading ? <LoadingSpinner size="sm" /> : 'Create'}
-                            </Button>
-                        </div>
+                        <CreateDialogFooter
+                            onCancel={() => setOpen(false)}
+                            cancelDisabled={isLoading}
+                            submitDisabled={isDisabled || !name.trim()}
+                            submitting={isLoading}
+                        />
                     </form>
                 </DialogContent>
             </Dialog>

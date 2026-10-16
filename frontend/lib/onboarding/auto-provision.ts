@@ -5,7 +5,7 @@ import { FirmService } from '@/lib/firm-service'
 import { generateGroupSlug } from '@/lib/slug-utils'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { mergeLeanAppMetadata } from '@/lib/auth/supabase-jwt-metadata'
-import { invalidateUserSettingsPlus } from '@/lib/actions/user-settings'
+import { invalidateUserSettingsPlus } from '@/lib/permissions/invalidate-user-settings'
 import { ensureGroupFreePlan } from '@/lib/billing/polar-free-plan'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 

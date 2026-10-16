@@ -16,13 +16,22 @@ export async function GET(request: NextRequest) {
     let where: any = {}
 
     if (firmSlug) {
+      // A firm's tickets are for its firm admins (same rule as canAccessSupportTicket). This had no
+      // membership check, and an unknown slug left `where` empty — every ticket on the platform.
+      // (.claude/plans/access-gates.md, P0 #10)
       const firm = await prisma.firm.findUnique({
         where: { slug: firmSlug },
         select: { id: true }
       })
-      if (firm) {
-        where.firmId = firm.id
+      if (!firm) {
+        return NextResponse.json({ error: 'Not found' }, { status: 404 })
       }
+      const admin = await prisma.firmMember.findFirst({
+        where: { firmId: firm.id, userId: user.id, role: 'firm_admin' },
+        select: { id: true },
+      })
+      // Non-admins still see the tickets they filed themselves in that firm.
+      where = admin ? { firmId: firm.id } : { firmId: firm.id, userId: user.id }
     } else {
       // If no firm specified, show only user's own requests
       where.userId = user.id

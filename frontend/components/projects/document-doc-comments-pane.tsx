@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/tooltip'
 import { DateTimePicker } from '@/components/ui/date-time-picker'
 import { SetupReminderModal } from '@/components/ui/setup-reminder-modal'
+import { initialsOf } from '@/lib/initials'
 
 export interface DocumentDocCommentsPaneProps {
   engagementId: string
@@ -42,20 +43,20 @@ type CommentMessage = {
 type ReactionKey = 'urgent' | 'looking' | 'done' | 'thumbs_up' | 'yes' | 'no' | 'ok' | 'plus_one' | 'celebrate'
 const REACTIONS: { key: ReactionKey; label: string; emoji: string; chipClass: string }[] = [
   // Subtle pill styling (avoid heavy borders/fills; rely on soft tint + hover + focus ring)
-  { key: 'urgent', label: 'Urgent', emoji: '⚠️', chipClass: 'bg-rose-50/70 text-rose-700 hover:bg-rose-100/80' },
-  { key: 'looking', label: 'Looking', emoji: '👀', chipClass: 'bg-amber-50/70 text-amber-800 hover:bg-amber-100/80' },
-  { key: 'done', label: 'Done', emoji: '✅', chipClass: 'bg-emerald-50/70 text-emerald-800 hover:bg-emerald-100/80' },
+  { key: 'urgent', label: 'Urgent', emoji: '⚠️', chipClass: 'bg-surface-muted text-fg-muted hover:bg-surface-selected' },
+  { key: 'looking', label: 'Looking', emoji: '👀', chipClass: 'bg-surface-muted text-fg-muted hover:bg-surface-selected' },
+  { key: 'done', label: 'Done', emoji: '✅', chipClass: 'bg-surface-muted text-fg-muted hover:bg-surface-selected' },
   // Slack-style quick signals
-  { key: 'yes', label: 'Yes', emoji: '🇾', chipClass: 'bg-emerald-50/70 text-emerald-800 hover:bg-emerald-100/80' },
-  { key: 'no', label: 'No', emoji: '🇳', chipClass: 'bg-rose-50/70 text-rose-700 hover:bg-rose-100/80' },
-  { key: 'ok', label: 'OK', emoji: '🆗', chipClass: 'bg-slate-50/70 text-slate-700 hover:bg-slate-100/80' },
-  { key: 'plus_one', label: '+1', emoji: '➕', chipClass: 'bg-indigo-50/70 text-indigo-800 hover:bg-indigo-100/80' },
-  { key: 'thumbs_up', label: 'Thumbs up', emoji: '👍', chipClass: 'bg-sky-50/70 text-sky-800 hover:bg-sky-100/80' },
-  { key: 'celebrate', label: 'Celebrate', emoji: '🎉', chipClass: 'bg-violet-50/70 text-violet-800 hover:bg-violet-100/80' },
+  { key: 'yes', label: 'Yes', emoji: '🇾', chipClass: 'bg-surface-muted text-fg-muted hover:bg-surface-selected' },
+  { key: 'no', label: 'No', emoji: '🇳', chipClass: 'bg-surface-muted text-fg-muted hover:bg-surface-selected' },
+  { key: 'ok', label: 'OK', emoji: '🆗', chipClass: 'bg-surface-muted text-fg-muted hover:bg-surface-selected' },
+  { key: 'plus_one', label: '+1', emoji: '➕', chipClass: 'bg-surface-muted text-fg-muted hover:bg-surface-selected' },
+  { key: 'thumbs_up', label: 'Thumbs up', emoji: '👍', chipClass: 'bg-surface-muted text-fg-muted hover:bg-surface-selected' },
+  { key: 'celebrate', label: 'Celebrate', emoji: '🎉', chipClass: 'bg-surface-muted text-fg-muted hover:bg-surface-selected' },
 ]
 
 const LIGHT_TOOLTIP_CLASS =
-  'z-[9999] max-w-[320px] p-3 text-xs bg-white text-slate-900 border border-slate-200 shadow-xl break-words'
+  'z-[9999] max-w-[320px] p-3 text-xs bg-surface text-fg border border-line shadow-popover break-words'
 
 export function DocumentDocCommentsPane({ engagementId, documentId, documentName, documentMimeType, orgSlug }: DocumentDocCommentsPaneProps) {
   const rightPane = useRightPane()
@@ -499,9 +500,9 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
       if (t.type !== 'mention') return <span key={i}>{t.value}</span>
       const nameWithoutAt = t.value.replace(/^@/, '')
       const member = firmMembers.find((m) => m.name === nameWithoutAt || m.name === t.value)
-      const initials = nameWithoutAt.split(/[\s._-]/).filter(Boolean).map((p: string) => p[0]).join('').slice(0, 2).toUpperCase() || '?'
+      const initials = initialsOf(nameWithoutAt)
       const pill = (
-        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold bg-primary/10 text-primary leading-none mr-1 cursor-pointer">
+        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold bg-action/10 text-action leading-none mr-1 cursor-pointer">
           {t.value}
         </span>
       )
@@ -509,16 +510,16 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
       return (
         <Tooltip key={i}>
           <TooltipTrigger asChild>{pill}</TooltipTrigger>
-          <TooltipContent side="top" className="z-[9999] p-2 bg-white border border-slate-200 shadow-lg text-xs text-slate-800">
+          <TooltipContent side="top" className="z-[9999] p-2 bg-surface border border-line shadow-popover text-xs text-fg">
             <div className="flex items-center gap-2">
-              <div className="h-7 w-7 rounded-full overflow-hidden shrink-0 flex items-center justify-center text-[11px] font-bold bg-primary/20 text-primary">
+              <div className="h-7 w-7 rounded-full overflow-hidden shrink-0 flex items-center justify-center text-[11px] font-medium bg-surface-muted text-fg-muted">
                 {member.avatarUrl
                   ? <img src={member.avatarUrl} alt="" className="h-full w-full object-cover" />
                   : initials}
               </div>
               <div>
                 <div className="font-semibold">{member.name}</div>
-                <div className="text-slate-400 text-[10px]">{member.email}</div>
+                <div className="text-fg-subtle text-caption">{member.email}</div>
               </div>
             </div>
           </TooltipContent>
@@ -601,17 +602,17 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
 
   // MentionPill: shows avatar + name, hover tooltip with avatar, click to edit
   const MentionPill = ({ u }: { u: { userId: string; name: string; avatarUrl?: string | null } }) => {
-    const initials = u.name.replace('@', '').split(/[\s._-]/).filter(Boolean).map((p: string) => p[0]).join('').slice(0, 2).toUpperCase() || '?'
+    const initials = initialsOf(u.name)
     return (
       <Tooltip>
         <TooltipTrigger asChild>
           <button
             type="button"
             onClick={() => openMentionPicker(u.userId)}
-            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-semibold bg-primary/10 text-primary hover:bg-primary/20 transition-colors cursor-pointer leading-none"
+            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-semibold bg-action/10 text-action hover:bg-action/20 transition-colors cursor-pointer leading-none"
             aria-label={`Edit mention of ${u.name}`}
           >
-            <span className="inline-flex h-4 w-4 rounded-full overflow-hidden shrink-0 items-center justify-center text-[9px] font-bold bg-primary/20 text-primary">
+            <span className="inline-flex h-4 w-4 rounded-full overflow-hidden shrink-0 items-center justify-center text-[8px] font-medium bg-surface-muted text-fg-muted">
               {u.avatarUrl
                 ? <img src={u.avatarUrl} alt="" className="h-full w-full object-cover" />
                 : initials}
@@ -619,16 +620,16 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
             @{u.name}
           </button>
         </TooltipTrigger>
-        <TooltipContent side="top" className="z-[9999] p-2 bg-white border border-slate-200 shadow-lg text-xs text-slate-800">
+        <TooltipContent side="top" className="z-[9999] p-2 bg-surface border border-line shadow-popover text-xs text-fg">
           <div className="flex items-center gap-2">
-            <div className="h-7 w-7 rounded-full overflow-hidden shrink-0 flex items-center justify-center text-[11px] font-bold bg-primary/20 text-primary">
+            <div className="h-7 w-7 rounded-full overflow-hidden shrink-0 flex items-center justify-center text-[11px] font-medium bg-surface-muted text-fg-muted">
               {u.avatarUrl
                 ? <img src={u.avatarUrl} alt="" className="h-full w-full object-cover" />
                 : initials}
             </div>
             <div>
               <div className="font-semibold">{u.name}</div>
-              <div className="text-slate-400 text-[10px]">Click to edit mention</div>
+              <div className="text-fg-subtle text-caption">Click to edit mention</div>
             </div>
           </div>
         </TooltipContent>
@@ -640,14 +641,14 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
     <form onSubmit={handleSubmit} className="flex flex-col gap-1 shrink-0">
       {/* Usage hint above the composer */}
       <div className="flex items-center gap-1.5 px-0.5 pb-0.5">
-        <AtSign className="h-3 w-3 text-primary shrink-0" />
-        <span className="text-[10px] text-[#45474c]">Type <span className="font-semibold text-primary">@</span> in the box below to mention a team member and optionally set a reminder.</span>
+        <AtSign className="h-3 w-3 text-action shrink-0" />
+        <span className="text-caption text-fg-muted">Type <span className="font-semibold text-action">@</span> in the box below to mention a team member and optionally set a reminder.</span>
       </div>
       {/* Inline composer: pills + textarea in one visual box */}
       <div ref={composerRef} className="relative">
         <div
           className={cn(
-            'flex flex-wrap items-center gap-1 min-h-[64px] rounded-sm border border-slate-200 bg-white px-3 py-2 text-sm focus-within:ring-2 focus-within:ring-slate-300 focus-within:border-slate-300',
+            'flex flex-wrap items-center gap-1 min-h-[64px] rounded-control border border-line-strong bg-surface px-3 py-2 text-sm focus-within:border-action/60 focus-within:ring-2 focus-within:ring-action/20',
             submitting && 'opacity-60 cursor-not-allowed'
           )}
           onClick={() => textareaRef.current?.focus()}
@@ -689,7 +690,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
                 void handleSubmit(e as any)
               }
             }}
-            className="flex-1 min-w-[80px] bg-transparent outline-none resize-none overflow-hidden placeholder:text-slate-400 disabled:cursor-not-allowed pr-10"
+            className="flex-1 min-w-[80px] bg-transparent outline-none resize-none overflow-hidden placeholder:text-fg-subtle disabled:cursor-not-allowed pr-10"
             style={{ minHeight: '1.5rem' }}
             disabled={submitting}
           />
@@ -698,7 +699,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
             type="submit"
             disabled={submitting || (!newContent.trim() && mentionedUsers.length === 0)}
             aria-label="Send comment"
-            className="absolute bottom-2 right-2 h-7 w-7 flex items-center justify-center rounded-md bg-primary text-white hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
+            className="absolute bottom-2 right-2 h-7 w-7 flex items-center justify-center rounded-control bg-action text-action-fg hover:bg-action-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
           >
             {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
           </button>
@@ -708,13 +709,13 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
         {mentionPickerOpen && mentionCandidates.length > 0 && (
           <div
             ref={mentionPickerRef}
-            className="absolute bottom-full left-0 mb-1 w-full max-w-xs bg-white border border-[#e5e7eb] rounded-sm shadow-2xl z-[200] flex flex-col overflow-hidden"
+            className="absolute bottom-full left-0 mb-1 w-full max-w-xs bg-surface border border-line rounded-card shadow-popover z-[200] flex flex-col overflow-hidden"
           >
             {/* Header */}
-            <div className="flex items-center gap-2 px-3 py-2.5 bg-primary/5 border-b border-primary/10">
-              <AtSign className="h-3.5 w-3.5 text-primary shrink-0" />
-              <span className="text-xs font-semibold text-[#1b1b1d] flex-1">Mention a team member</span>
-              <button type="button" onClick={closeMentionPicker} className="text-[#9a9ba0] hover:text-[#45474c] transition-colors">
+            <div className="flex items-center gap-2 border-b border-line px-3 py-2">
+              <AtSign className="h-3.5 w-3.5 text-action shrink-0" />
+              <span className="text-xs font-semibold text-fg flex-1">Mention a team member</span>
+              <button type="button" onClick={closeMentionPicker} className="text-fg-subtle hover:text-fg-muted transition-colors">
                 <XSquare className="h-4 w-4" />
               </button>
             </div>
@@ -742,11 +743,11 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
                   }
                 }}
                 placeholder="Search members…"
-                className="w-full text-xs rounded-sm border border-[#e5e7eb] bg-[#f9f9fb] px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/40 focus:bg-white transition-colors"
+                className="w-full text-small rounded-control border border-line bg-surface-subtle px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-action/40 focus:border-action/40 focus:bg-surface transition-colors"
               />
             </div>
             {/* Member list */}
-            <div className="overflow-y-auto border-t border-[#f0f0f2]" style={{ maxHeight: '180px' }}>
+            <div className="overflow-y-auto border-t border-line" style={{ maxHeight: '180px' }}>
               {mentionCandidates.map((m, idx) => {
                 const selected = mentionedUsers.some((u) => u.userId === m.userId)
                 const focused = idx === mentionFocusedIndex
@@ -761,37 +762,37 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
                     onMouseEnter={() => setMentionFocusedIndex(idx)}
                     className={cn(
                       'w-full flex items-center gap-2.5 px-3 py-2.5 text-left transition-colors',
-                      selected ? 'bg-primary/5 hover:bg-primary/10' : focused ? 'bg-[#f4f4f5]' : 'hover:bg-[#f4f4f5]'
+                      selected ? 'bg-action/5 hover:bg-action/10' : focused ? 'bg-surface-hover' : 'hover:bg-surface-hover'
                     )}
                   >
                     <span className={cn(
                       'h-4 w-4 rounded border flex items-center justify-center shrink-0 transition-colors',
-                      selected ? 'border-primary bg-primary' : 'border-[#c5c7cc] bg-white'
+                      selected ? 'border-action bg-action' : 'border-line-strong bg-surface'
                     )}>
                       {selected && <Check className="h-3 w-3 text-white" strokeWidth={2.5} />}
                     </span>
                     <div className={cn(
-                      'h-7 w-7 rounded-full overflow-hidden shrink-0 flex items-center justify-center text-[11px] font-bold border',
-                      selected ? 'border-primary/30' : 'border-[#e5e7eb]'
+                      'h-7 w-7 rounded-full overflow-hidden shrink-0 flex items-center justify-center text-caption font-bold border',
+                      selected ? 'border-action/30' : 'border-line'
                     )}>
                       {m.avatarUrl
                         ? <img src={m.avatarUrl} alt="" className="h-full w-full object-cover" />
-                        : <div className={cn('h-full w-full flex items-center justify-center font-bold', selected ? 'bg-primary/10 text-primary' : 'bg-primary/5 text-primary/60')}>{initials}</div>
+                        : <div className={cn('h-full w-full flex items-center justify-center font-bold', selected ? 'bg-action/10 text-action' : 'bg-action/5 text-action/60')}>{initials}</div>
                       }
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className={cn('text-xs font-semibold truncate', selected ? 'text-primary' : 'text-[#1b1b1d]')}>{displayName}</div>
-                      <div className="text-[10px] truncate text-[#9a9ba0]">{m.email}</div>
+                      <div className={cn('text-xs font-semibold truncate', selected ? 'text-action' : 'text-fg')}>{displayName}</div>
+                      <div className="text-caption truncate text-fg-subtle">{m.email}</div>
                     </div>
                   </button>
                 )
               })}
             </div>
             {/* Reminder footer */}
-            <div className="px-3 pt-2.5 pb-3 border-t border-[#e5e7eb] bg-[#f9f9fb] flex flex-col gap-2">
+            <div className="px-3 pt-2.5 pb-3 border-t border-line bg-surface-subtle flex flex-col gap-2">
               <div className="flex items-center gap-1.5">
-                <CalendarClock className={cn('h-3.5 w-3.5 shrink-0', mentionedUsers.length > 0 ? 'text-primary' : 'text-[#c5c7cc]')} />
-                <span className={cn('text-[10px] font-semibold uppercase tracking-wide', mentionedUsers.length > 0 ? 'text-[#45474c]' : 'text-[#c5c7cc]')}>
+                <CalendarClock className={cn('h-3.5 w-3.5 shrink-0', mentionedUsers.length > 0 ? 'text-action' : 'text-fg-subtle')} />
+                <span className={cn('text-small font-medium', mentionedUsers.length > 0 ? 'text-fg-muted' : 'text-fg-subtle')}>
                   Remind on <span className="font-normal normal-case tracking-normal">(optional)</span>
                 </span>
               </div>
@@ -806,13 +807,13 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
                 />
               </div>
               {mentionedUsers.length === 0 && (
-                <p className="text-[10px] text-[#9a9ba0]">Select a member above to enable reminders.</p>
+                <p className="text-caption text-fg-subtle">Select a member above to enable reminders.</p>
               )}
               <div className="flex justify-end pt-0.5">
                 <button
                   type="button"
                   onClick={closeMentionPicker}
-                  className="font-mono text-[10px] font-bold uppercase tracking-widest text-white bg-primary hover:bg-primary/90 px-4 py-1.5 rounded transition-colors"
+                  className="h-7 rounded-control bg-action px-3 text-small font-medium text-action-fg transition-colors hover:bg-action-hover"
                 >
                   Done
                 </button>
@@ -906,49 +907,49 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
       <div className="space-y-3 min-w-0">
 
         {error && (
-          <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+          <div className="rounded-card bg-tag-red-bg px-3 py-2 text-small text-tag-red-fg">
             {error}
           </div>
         )}
 
         {/* Filters (collapsible) */}
-        <div className="rounded-sm border border-slate-200 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+        <div className="border-b border-line">
           <button
             type="button"
-            className="w-full px-3 py-2 flex items-center justify-between gap-2"
+            className="flex h-9 w-full items-center justify-between gap-2 rounded-control px-1 hover:bg-surface-hover"
             onClick={() => setFiltersOpen((v) => !v)}
           >
-            <span className="inline-flex items-center gap-2 text-xs font-semibold text-slate-600">
-              <SlidersHorizontal className="h-4 w-4 text-slate-500" />
+            <span className="inline-flex items-center gap-2 text-small font-medium text-fg-muted">
+              <SlidersHorizontal className="h-3.5 w-3.5 text-fg-subtle" />
               Filters
             </span>
-            <ChevronDown className={`h-4 w-4 text-slate-500 transition-transform ${filtersOpen ? 'rotate-180' : ''}`} />
+            <ChevronDown className={`h-3.5 w-3.5 text-fg-subtle transition-transform ${filtersOpen ? 'rotate-180' : ''}`} />
           </button>
 
           {filtersOpen ? (
-            <div className="px-3 pb-3">
+            <div className="px-1 pb-3">
               {!isExpanded ? (
                 <div className="grid grid-cols-1 gap-3">
               <div className="flex flex-col gap-1">
-                <label className="text-xs font-medium text-slate-600">Status</label>
+                <label className="text-small text-fg-muted">Status</label>
                 <DropdownMenu open={statusMenuOpen} onOpenChange={setStatusMenuOpen}>
                   <DropdownMenuTrigger asChild>
                     <button
                       type="button"
-                      className="h-9 w-full rounded-xl border border-slate-200 bg-white px-2 text-sm text-slate-800 flex items-center justify-between gap-2"
+                      className="flex h-8 w-full items-center justify-between gap-2 rounded-control border border-line bg-surface px-2 text-small text-fg"
                     >
                       <span className="truncate">{selectedStatusLabel}</span>
-                      <ChevronDown className="h-4 w-4 text-slate-500 shrink-0" />
+                      <ChevronDown className="h-4 w-4 text-fg-muted shrink-0" />
                     </button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent className="w-[280px] max-w-[calc(100vw-2rem)] p-0">
-                    <div className="px-2 py-2 flex items-center gap-2 border-b border-slate-100">
+                    <div className="px-2 py-2 flex items-center gap-2 border-b border-line">
                       <input
                         value={statusSearch}
                         onChange={(e) => setStatusSearch(e.target.value)}
                         onKeyDown={(e) => e.stopPropagation()}
                         placeholder="Search status…"
-                        className="flex-1 rounded-md border border-slate-200 px-2 py-1.5 text-sm"
+                        className="flex-1 rounded-md border border-line px-2 py-1.5 text-sm"
                       />
                       <Button
                         variant="blackCta"
@@ -963,14 +964,14 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
                     </div>
                     <button
                       type="button"
-                      className="w-full px-2 py-1.5 text-sm flex items-center gap-2 hover:bg-slate-50"
+                      className="w-full px-2 py-1.5 text-sm flex items-center gap-2 hover:bg-surface-hover"
                       onClick={(e) => {
                         e.preventDefault()
                         setStatusKeysFilter([])
                       }}
                     >
-                      <span className="h-4 w-4 rounded border border-slate-300 bg-white flex items-center justify-center">
-                        <Check className={`h-3 w-3 ${statusKeysFilter.length === 0 ? 'text-slate-800' : 'text-slate-300'}`} strokeWidth={2.5} />
+                      <span className="h-4 w-4 flex items-center justify-center rounded-[3px] border border-line-strong bg-surface">
+                        <Check className={`h-3 w-3 ${statusKeysFilter.length === 0 ? 'text-fg' : 'text-fg-subtle'}`} strokeWidth={2.5} />
                       </span>
                       All statuses
                     </button>
@@ -980,14 +981,14 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
                         <button
                           key={r.key}
                           type="button"
-                          className="w-full px-2 py-1.5 text-sm flex items-center gap-2 hover:bg-slate-50"
+                          className="w-full px-2 py-1.5 text-sm flex items-center gap-2 hover:bg-surface-hover"
                           onClick={(e) => {
                             e.preventDefault()
                             setStatusKeysFilter(toggleId(statusKeysFilter as unknown as string[], r.key) as ReactionKey[])
                           }}
                         >
-                          <span className="h-4 w-4 rounded border border-slate-300 bg-white flex items-center justify-center">
-                            <Check className={`h-3 w-3 ${checked ? 'text-slate-800' : 'text-slate-300'}`} strokeWidth={2.5} />
+                          <span className="h-4 w-4 flex items-center justify-center rounded-[3px] border border-line-strong bg-surface">
+                            <Check className={`h-3 w-3 ${checked ? 'text-fg' : 'text-fg-subtle'}`} strokeWidth={2.5} />
                           </span>
                           <span className="truncate">{r.label}</span>
                         </button>
@@ -998,25 +999,25 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
               </div>
 
               <div className="flex flex-col gap-1">
-                <label className="text-xs font-medium text-slate-600">Commentor</label>
+                <label className="text-small text-fg-muted">Commentor</label>
                 <DropdownMenu open={commentorMenuOpen} onOpenChange={setCommentorMenuOpen}>
                   <DropdownMenuTrigger asChild>
                     <button
                       type="button"
-                      className="h-9 w-full rounded-xl border border-slate-200 bg-white px-2 text-sm text-slate-800 flex items-center justify-between gap-2"
+                      className="flex h-8 w-full items-center justify-between gap-2 rounded-control border border-line bg-surface px-2 text-small text-fg"
                     >
                       <span className="truncate">{selectedCommentorLabel}</span>
-                      <ChevronDown className="h-4 w-4 text-slate-500 shrink-0" />
+                      <ChevronDown className="h-4 w-4 text-fg-muted shrink-0" />
                     </button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent className="w-[280px] max-w-[calc(100vw-2rem)] p-0">
-                    <div className="px-2 py-2 flex items-center gap-2 border-b border-slate-100">
+                    <div className="px-2 py-2 flex items-center gap-2 border-b border-line">
                       <input
                         value={commentorSearch}
                         onChange={(e) => setCommentorSearch(e.target.value)}
                         onKeyDown={(e) => e.stopPropagation()}
                         placeholder="Search people…"
-                        className="flex-1 rounded-md border border-slate-200 px-2 py-1.5 text-sm"
+                        className="flex-1 rounded-md border border-line px-2 py-1.5 text-sm"
                       />
                       <Button
                         variant="blackCta"
@@ -1031,14 +1032,14 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
                     </div>
                     <button
                       type="button"
-                      className="w-full px-2 py-1.5 text-sm flex items-center gap-2 hover:bg-slate-50"
+                      className="w-full px-2 py-1.5 text-sm flex items-center gap-2 hover:bg-surface-hover"
                       onClick={(e) => {
                         e.preventDefault()
                         setCommentorEmailsFilter([])
                       }}
                     >
-                      <span className="h-4 w-4 rounded border border-slate-300 bg-white flex items-center justify-center">
-                        <Check className={`h-3 w-3 ${commentorEmailsFilter.length === 0 ? 'text-slate-800' : 'text-slate-300'}`} strokeWidth={2.5} />
+                      <span className="h-4 w-4 flex items-center justify-center rounded-[3px] border border-line-strong bg-surface">
+                        <Check className={`h-3 w-3 ${commentorEmailsFilter.length === 0 ? 'text-fg' : 'text-fg-subtle'}`} strokeWidth={2.5} />
                       </span>
                       All
                     </button>
@@ -1048,14 +1049,14 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
                         <button
                           key={email}
                           type="button"
-                          className="w-full px-2 py-1.5 text-sm flex items-center gap-2 hover:bg-slate-50"
+                          className="w-full px-2 py-1.5 text-sm flex items-center gap-2 hover:bg-surface-hover"
                           onClick={(e) => {
                             e.preventDefault()
                             setCommentorEmailsFilter(toggleId(commentorEmailsFilter, email))
                           }}
                         >
-                          <span className="h-4 w-4 rounded border border-slate-300 bg-white flex items-center justify-center">
-                            <Check className={`h-3 w-3 ${checked ? 'text-slate-800' : 'text-slate-300'}`} strokeWidth={2.5} />
+                          <span className="h-4 w-4 flex items-center justify-center rounded-[3px] border border-line-strong bg-surface">
+                            <Check className={`h-3 w-3 ${checked ? 'text-fg' : 'text-fg-subtle'}`} strokeWidth={2.5} />
                           </span>
                           <span className="truncate">{email}</span>
                         </button>
@@ -1067,7 +1068,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
 
               <div className="grid grid-cols-2 gap-2">
                 <div className="flex flex-col gap-1">
-                  <label className="text-xs font-medium text-slate-600">From</label>
+                  <label className="text-small text-fg-muted">From</label>
                   <DateTimePicker
                     value={fromDate}
                     onChange={(iso) => {
@@ -1080,7 +1081,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
                   />
                 </div>
                 <div className="flex flex-col gap-1">
-                  <label className="text-xs font-medium text-slate-600">To</label>
+                  <label className="text-small text-fg-muted">To</label>
                   <DateTimePicker
                     value={toDate}
                     onChange={(iso) => {
@@ -1096,15 +1097,15 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
 
               {myMentionedMessageIds.size > 0 && (
                 <div className="flex flex-col gap-1">
-                  <label className="text-xs font-medium text-slate-600">Mentions</label>
+                  <label className="text-small text-fg-muted">Mentions</label>
                   <button
                     type="button"
                     onClick={() => setMentionsFilterActive((v) => !v)}
                     className={cn(
-                      'h-9 px-3 rounded-xl border text-xs font-medium inline-flex items-center gap-1.5 transition-colors',
+                      'inline-flex h-7 items-center gap-1.5 rounded-control border px-2 text-small transition-colors',
                       mentionsFilterActive
-                        ? 'bg-blue-50 border-blue-300 text-blue-700'
-                        : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                        ? 'border-action/40 bg-action/10 text-action'
+                        : 'border-line bg-surface text-fg-muted hover:bg-surface-hover'
                     )}
                   >
                     <UserCheck className="h-3.5 w-3.5" />
@@ -1118,7 +1119,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
                 <Button
                   variant="outline"
                   size="sm"
-                  className="h-9 rounded-xl"
+                  className="h-9 rounded-control"
                   onClick={clearFilters}
                   aria-label="Clear filters"
                 >
@@ -1129,25 +1130,25 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
               ) : (
                 <div className="flex flex-wrap items-end gap-3">
               <div className="flex flex-col gap-1">
-                <label className="text-xs font-medium text-slate-600">Status</label>
+                <label className="text-small text-fg-muted">Status</label>
                 <DropdownMenu open={statusMenuOpen} onOpenChange={setStatusMenuOpen}>
                   <DropdownMenuTrigger asChild>
                     <button
                       type="button"
-                      className="h-9 rounded-xl border border-slate-200 bg-white px-2 text-sm text-slate-800 min-w-[170px] flex items-center justify-between gap-2"
+                      className="flex h-8 items-center justify-between gap-2 rounded-control border border-line bg-surface px-2 text-small text-fg min-w-[170px]"
                     >
                       <span className="truncate">{selectedStatusLabel}</span>
-                      <ChevronDown className="h-4 w-4 text-slate-500 shrink-0" />
+                      <ChevronDown className="h-4 w-4 text-fg-muted shrink-0" />
                     </button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent className="w-[280px] max-w-[calc(100vw-2rem)] p-0">
-                    <div className="px-2 py-2 flex items-center gap-2 border-b border-slate-100">
+                    <div className="px-2 py-2 flex items-center gap-2 border-b border-line">
                       <input
                         value={statusSearch}
                         onChange={(e) => setStatusSearch(e.target.value)}
                         onKeyDown={(e) => e.stopPropagation()}
                         placeholder="Search status…"
-                        className="flex-1 rounded-md border border-slate-200 px-2 py-1.5 text-sm"
+                        className="flex-1 rounded-md border border-line px-2 py-1.5 text-sm"
                       />
                       <Button
                         variant="blackCta"
@@ -1162,14 +1163,14 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
                     </div>
                     <button
                       type="button"
-                      className="w-full px-2 py-1.5 text-sm flex items-center gap-2 hover:bg-slate-50"
+                      className="w-full px-2 py-1.5 text-sm flex items-center gap-2 hover:bg-surface-hover"
                       onClick={(e) => {
                         e.preventDefault()
                         setStatusKeysFilter([])
                       }}
                     >
-                      <span className="h-4 w-4 rounded border border-slate-300 bg-white flex items-center justify-center">
-                        <Check className={`h-3 w-3 ${statusKeysFilter.length === 0 ? 'text-slate-800' : 'text-slate-300'}`} strokeWidth={2.5} />
+                      <span className="h-4 w-4 flex items-center justify-center rounded-[3px] border border-line-strong bg-surface">
+                        <Check className={`h-3 w-3 ${statusKeysFilter.length === 0 ? 'text-fg' : 'text-fg-subtle'}`} strokeWidth={2.5} />
                       </span>
                       All statuses
                     </button>
@@ -1179,14 +1180,14 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
                         <button
                           key={r.key}
                           type="button"
-                          className="w-full px-2 py-1.5 text-sm flex items-center gap-2 hover:bg-slate-50"
+                          className="w-full px-2 py-1.5 text-sm flex items-center gap-2 hover:bg-surface-hover"
                           onClick={(e) => {
                             e.preventDefault()
                             setStatusKeysFilter(toggleId(statusKeysFilter as unknown as string[], r.key) as ReactionKey[])
                           }}
                         >
-                          <span className="h-4 w-4 rounded border border-slate-300 bg-white flex items-center justify-center">
-                            <Check className={`h-3 w-3 ${checked ? 'text-slate-800' : 'text-slate-300'}`} strokeWidth={2.5} />
+                          <span className="h-4 w-4 flex items-center justify-center rounded-[3px] border border-line-strong bg-surface">
+                            <Check className={`h-3 w-3 ${checked ? 'text-fg' : 'text-fg-subtle'}`} strokeWidth={2.5} />
                           </span>
                           <span className="truncate">{r.label}</span>
                         </button>
@@ -1196,25 +1197,25 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
                 </DropdownMenu>
               </div>
               <div className="flex flex-col gap-1">
-                <label className="text-xs font-medium text-slate-600">Commentor</label>
+                <label className="text-small text-fg-muted">Commentor</label>
                 <DropdownMenu open={commentorMenuOpen} onOpenChange={setCommentorMenuOpen}>
                   <DropdownMenuTrigger asChild>
                     <button
                       type="button"
-                      className="h-9 rounded-xl border border-slate-200 bg-white px-2 text-sm text-slate-800 min-w-[220px] flex items-center justify-between gap-2"
+                      className="flex h-8 items-center justify-between gap-2 rounded-control border border-line bg-surface px-2 text-small text-fg min-w-[220px]"
                     >
                       <span className="truncate">{selectedCommentorLabel}</span>
-                      <ChevronDown className="h-4 w-4 text-slate-500 shrink-0" />
+                      <ChevronDown className="h-4 w-4 text-fg-muted shrink-0" />
                     </button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent className="w-[280px] max-w-[calc(100vw-2rem)] p-0">
-                    <div className="px-2 py-2 flex items-center gap-2 border-b border-slate-100">
+                    <div className="px-2 py-2 flex items-center gap-2 border-b border-line">
                       <input
                         value={commentorSearch}
                         onChange={(e) => setCommentorSearch(e.target.value)}
                         onKeyDown={(e) => e.stopPropagation()}
                         placeholder="Search people…"
-                        className="flex-1 rounded-md border border-slate-200 px-2 py-1.5 text-sm"
+                        className="flex-1 rounded-md border border-line px-2 py-1.5 text-sm"
                       />
                       <Button
                         variant="blackCta"
@@ -1229,14 +1230,14 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
                     </div>
                     <button
                       type="button"
-                      className="w-full px-2 py-1.5 text-sm flex items-center gap-2 hover:bg-slate-50"
+                      className="w-full px-2 py-1.5 text-sm flex items-center gap-2 hover:bg-surface-hover"
                       onClick={(e) => {
                         e.preventDefault()
                         setCommentorEmailsFilter([])
                       }}
                     >
-                      <span className="h-4 w-4 rounded border border-slate-300 bg-white flex items-center justify-center">
-                        <Check className={`h-3 w-3 ${commentorEmailsFilter.length === 0 ? 'text-slate-800' : 'text-slate-300'}`} strokeWidth={2.5} />
+                      <span className="h-4 w-4 flex items-center justify-center rounded-[3px] border border-line-strong bg-surface">
+                        <Check className={`h-3 w-3 ${commentorEmailsFilter.length === 0 ? 'text-fg' : 'text-fg-subtle'}`} strokeWidth={2.5} />
                       </span>
                       All
                     </button>
@@ -1246,14 +1247,14 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
                         <button
                           key={email}
                           type="button"
-                          className="w-full px-2 py-1.5 text-sm flex items-center gap-2 hover:bg-slate-50"
+                          className="w-full px-2 py-1.5 text-sm flex items-center gap-2 hover:bg-surface-hover"
                           onClick={(e) => {
                             e.preventDefault()
                             setCommentorEmailsFilter(toggleId(commentorEmailsFilter, email))
                           }}
                         >
-                          <span className="h-4 w-4 rounded border border-slate-300 bg-white flex items-center justify-center">
-                            <Check className={`h-3 w-3 ${checked ? 'text-slate-800' : 'text-slate-300'}`} strokeWidth={2.5} />
+                          <span className="h-4 w-4 flex items-center justify-center rounded-[3px] border border-line-strong bg-surface">
+                            <Check className={`h-3 w-3 ${checked ? 'text-fg' : 'text-fg-subtle'}`} strokeWidth={2.5} />
                           </span>
                           <span className="truncate">{email}</span>
                         </button>
@@ -1263,7 +1264,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
                 </DropdownMenu>
               </div>
               <div className="flex flex-col gap-1">
-                <label className="text-xs font-medium text-slate-600">From</label>
+                <label className="text-small text-fg-muted">From</label>
                 <DateTimePicker
                   value={fromDate}
                   onChange={(iso) => {
@@ -1277,7 +1278,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
                 />
               </div>
               <div className="flex flex-col gap-1">
-                <label className="text-xs font-medium text-slate-600">To</label>
+                <label className="text-small text-fg-muted">To</label>
                 <DateTimePicker
                   value={toDate}
                   onChange={(iso) => {
@@ -1292,15 +1293,15 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
               </div>
               {myMentionedMessageIds.size > 0 && (
                 <div className="flex flex-col gap-1">
-                  <label className="text-xs font-medium text-slate-600">Mentions</label>
+                  <label className="text-small text-fg-muted">Mentions</label>
                   <button
                     type="button"
                     onClick={() => setMentionsFilterActive((v) => !v)}
                     className={cn(
-                      'h-9 px-3 rounded-xl border text-xs font-medium inline-flex items-center gap-1.5 transition-colors',
+                      'inline-flex h-7 items-center gap-1.5 rounded-control border px-2 text-small transition-colors',
                       mentionsFilterActive
-                        ? 'bg-blue-50 border-blue-300 text-blue-700'
-                        : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                        ? 'border-action/40 bg-action/10 text-action'
+                        : 'border-line bg-surface text-fg-muted hover:bg-surface-hover'
                     )}
                   >
                     <UserCheck className="h-3.5 w-3.5" />
@@ -1312,7 +1313,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
               <Button
                 variant="outline"
                 size="sm"
-                className="h-9 rounded-xl"
+                className="h-9 rounded-control"
                 onClick={clearFilters}
                 aria-label="Clear filters"
               >
@@ -1326,58 +1327,58 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
       </div>
 
       {/* View controls (collapsible, Filters-style) */}
-      <div className="mt-2 rounded-sm border border-slate-200 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+      <div className="border-b border-line">
         <button
           type="button"
-          className="w-full px-3 py-2 flex items-center justify-between gap-2"
+          className="flex h-9 w-full items-center justify-between gap-2 rounded-control px-1 hover:bg-surface-hover"
           onClick={() => setViewControlsOpen((v) => !v)}
         >
-          <span className="inline-flex items-center gap-2 text-xs font-semibold text-slate-600">
-            <Eye className="h-4 w-4 text-slate-500" />
+          <span className="inline-flex items-center gap-2 text-small font-medium text-fg-muted">
+            <Eye className="h-3.5 w-3.5 text-fg-subtle" />
             View
           </span>
-          <ChevronDown className={`h-4 w-4 text-slate-500 transition-transform ${viewControlsOpen ? 'rotate-180' : ''}`} />
+          <ChevronDown className={`h-3.5 w-3.5 text-fg-subtle transition-transform ${viewControlsOpen ? 'rotate-180' : ''}`} />
         </button>
 
         {viewControlsOpen ? (
-          <div className="px-3 pb-3">
+          <div className="px-1 pb-3">
             {!isExpanded ? (
               <div className="grid grid-cols-1 gap-3">
                 <div className="flex flex-col gap-1">
-                  <label className="text-xs font-medium text-slate-600">Order</label>
+                  <label className="text-small text-fg-muted">Order</label>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <button
                         type="button"
-                        className="h-9 w-full rounded-xl border border-slate-200 bg-white px-2 text-sm text-slate-800 flex items-center justify-between gap-2"
+                        className="flex h-8 w-full items-center justify-between gap-2 rounded-control border border-line bg-surface px-2 text-small text-fg"
                         aria-label="Change comment sort order"
                       >
                         <span className="truncate">{sortOrder === 'latestLast' ? 'Oldest first' : 'Newest first'}</span>
-                        <ChevronDown className="h-4 w-4 text-slate-500 shrink-0" />
+                        <ChevronDown className="h-4 w-4 text-fg-muted shrink-0" />
                       </button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent className="w-[220px] p-1">
                       <button
                         type="button"
-                        className={`w-full px-2 py-1.5 text-xs flex items-center justify-between gap-2 rounded-md hover:bg-slate-50 ${sortOrder === 'latestLast' ? 'bg-slate-50' : ''}`}
+                        className={`w-full px-2 py-1.5 text-xs flex items-center justify-between gap-2 rounded-md hover:bg-surface-hover ${sortOrder === 'latestLast' ? 'bg-surface-subtle' : ''}`}
                         onClick={(e) => {
                           e.preventDefault()
                           setSortOrder('latestLast')
                         }}
                       >
                         <span>Oldest first</span>
-                        {sortOrder === 'latestLast' ? <Check className="h-4 w-4 text-slate-700" /> : null}
+                        {sortOrder === 'latestLast' ? <Check className="h-4 w-4 text-fg-muted" /> : null}
                       </button>
                       <button
                         type="button"
-                        className={`w-full px-2 py-1.5 text-xs flex items-center justify-between gap-2 rounded-md hover:bg-slate-50 ${sortOrder === 'latestFirst' ? 'bg-slate-50' : ''}`}
+                        className={`w-full px-2 py-1.5 text-xs flex items-center justify-between gap-2 rounded-md hover:bg-surface-hover ${sortOrder === 'latestFirst' ? 'bg-surface-subtle' : ''}`}
                         onClick={(e) => {
                           e.preventDefault()
                           setSortOrder('latestFirst')
                         }}
                       >
                         <span>Newest first</span>
-                        {sortOrder === 'latestFirst' ? <Check className="h-4 w-4 text-slate-700" /> : null}
+                        {sortOrder === 'latestFirst' ? <Check className="h-4 w-4 text-fg-muted" /> : null}
                       </button>
                     </DropdownMenuContent>
                   </DropdownMenu>
@@ -1387,7 +1388,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
                   <Button
                     variant="outline"
                     size="sm"
-                    className="h-9 rounded-xl"
+                    className="h-9 rounded-control"
                     onClick={() => setHideOlderMessages((v) => !v)}
                     aria-label={hideOlderMessages ? 'Show all messages' : 'Hide older messages'}
                   >
@@ -1398,40 +1399,40 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
             ) : (
               <div className="flex flex-wrap items-end gap-3">
                 <div className="flex flex-col gap-1">
-                  <label className="text-xs font-medium text-slate-600">Order</label>
+                  <label className="text-small text-fg-muted">Order</label>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <button
                         type="button"
-                        className="h-9 rounded-xl border border-slate-200 bg-white px-2 text-sm text-slate-800 min-w-[170px] flex items-center justify-between gap-2"
+                        className="flex h-8 items-center justify-between gap-2 rounded-control border border-line bg-surface px-2 text-small text-fg min-w-[170px]"
                         aria-label="Change comment sort order"
                       >
                         <span className="truncate">{sortOrder === 'latestLast' ? 'Oldest first' : 'Newest first'}</span>
-                        <ChevronDown className="h-4 w-4 text-slate-500 shrink-0" />
+                        <ChevronDown className="h-4 w-4 text-fg-muted shrink-0" />
                       </button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent className="w-[220px] p-1">
                       <button
                         type="button"
-                        className={`w-full px-2 py-1.5 text-xs flex items-center justify-between gap-2 rounded-md hover:bg-slate-50 ${sortOrder === 'latestLast' ? 'bg-slate-50' : ''}`}
+                        className={`w-full px-2 py-1.5 text-xs flex items-center justify-between gap-2 rounded-md hover:bg-surface-hover ${sortOrder === 'latestLast' ? 'bg-surface-subtle' : ''}`}
                         onClick={(e) => {
                           e.preventDefault()
                           setSortOrder('latestLast')
                         }}
                       >
                         <span>Oldest first</span>
-                        {sortOrder === 'latestLast' ? <Check className="h-4 w-4 text-slate-700" /> : null}
+                        {sortOrder === 'latestLast' ? <Check className="h-4 w-4 text-fg-muted" /> : null}
                       </button>
                       <button
                         type="button"
-                        className={`w-full px-2 py-1.5 text-xs flex items-center justify-between gap-2 rounded-md hover:bg-slate-50 ${sortOrder === 'latestFirst' ? 'bg-slate-50' : ''}`}
+                        className={`w-full px-2 py-1.5 text-xs flex items-center justify-between gap-2 rounded-md hover:bg-surface-hover ${sortOrder === 'latestFirst' ? 'bg-surface-subtle' : ''}`}
                         onClick={(e) => {
                           e.preventDefault()
                           setSortOrder('latestFirst')
                         }}
                       >
                         <span>Newest first</span>
-                        {sortOrder === 'latestFirst' ? <Check className="h-4 w-4 text-slate-700" /> : null}
+                        {sortOrder === 'latestFirst' ? <Check className="h-4 w-4 text-fg-muted" /> : null}
                       </button>
                     </DropdownMenuContent>
                   </DropdownMenu>
@@ -1441,7 +1442,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
                   <Button
                     variant="outline"
                     size="sm"
-                    className="h-9 rounded-xl"
+                    className="h-9 rounded-control"
                     onClick={() => setHideOlderMessages((v) => !v)}
                     aria-label={hideOlderMessages ? 'Show all messages' : 'Hide older messages'}
                   >
@@ -1460,20 +1461,20 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
         </div>
       ) : null}
 
-      <div ref={scrollRef} className="flex-1 overflow-y-auto min-h-0 space-y-3 mb-4 mt-4">
+      <div ref={scrollRef} className="mb-4 mt-3 min-h-0 flex-1 overflow-y-auto">
         <div ref={topSentinelRef} />
         {loading ? (
-          <div className="flex items-center justify-center py-8 text-gray-500">
-            <Loader2 className="h-6 w-6 animate-spin mr-2" />
+          <div className="flex items-center justify-center gap-2 py-8 text-small text-fg-muted">
+            <Loader2 className="h-4 w-4 animate-spin" />
             Loading comments…
           </div>
         ) : visibleMessages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-8 text-gray-500">
-            <MessagesSquare className="h-10 w-10 text-gray-300 mb-2" />
-            <p className="text-sm">No comments match the current filters.</p>
+          <div className="flex flex-col items-center justify-center gap-2 py-10 text-small text-fg-muted">
+            <MessagesSquare className="h-6 w-6 text-fg-subtle" />
+            No comments match the current filters.
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="border-t border-line">
             {visibleMessages.map((msg) => {
               const isLatest = latestCommentId === msg.id
               const isMine = msg.authorUserId === user?.id
@@ -1488,29 +1489,29 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
                   key={msg.id}
                   id={`comment-${msg.id}`}
                   className={cn(
-                    'group rounded-sm border bg-white px-4 py-3 text-sm shadow-[0_1px_2px_rgba(0,0,0,0.04)] hover:bg-slate-50/80 transition-colors',
-                    focusedCommentId === msg.id ? 'ring-2 ring-slate-300' : '',
-                    mentionedMe ? 'border-l-2 border-l-blue-400 border-slate-200 bg-blue-50/20' : 'border-slate-200'
+                    'group border-b border-line px-2 py-3 text-ui transition-colors hover:bg-surface-hover',
+                    focusedCommentId === msg.id && 'bg-surface-selected',
+                    mentionedMe && 'border-l-2 border-l-action'
                   )}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="text-xs text-slate-600">{msg.authorEmail ?? 'Unknown'}</span>
+                        <span className="text-small font-medium text-fg">{msg.authorEmail ?? 'Unknown'}</span>
                         <RelativeDateTime
                           date={msg.createdAt}
-                          textClassName="text-xs text-slate-400"
-                          iconClassName="text-slate-300 hover:text-slate-500"
+                          textClassName="text-small text-fg-subtle"
+                          iconClassName="text-fg-subtle hover:text-fg-muted"
                           tooltipSide="top"
                         />
                         {isLatest ? (
-                          <span className="ml-1 font-mono text-[10px] font-bold bg-primary text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
+                          <span className="ml-1 rounded-control bg-surface-muted px-1.5 py-0.5 text-caption leading-none text-fg-muted">
                             Latest
                           </span>
                         ) : null}
                       </div>
 
-                      <p className="text-slate-900 whitespace-pre-wrap break-words leading-[1.6] max-w-[700px] mb-3">
+                      <p className="text-fg whitespace-pre-wrap break-words leading-[1.6] max-w-[700px] mb-3">
                         {renderContentWithMentions(msg.content)}
                       </p>
                     </div>
@@ -1526,7 +1527,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
                           <DropdownMenuTrigger asChild>
                             <button
                               type="button"
-                              className="shrink-0 h-7 w-7 rounded-md text-slate-500 hover:text-slate-700 hover:bg-slate-100/80 transition-colors inline-flex items-center justify-center"
+                              className="shrink-0 h-7 w-7 rounded-control text-fg-subtle hover:text-fg hover:bg-surface-hover transition-colors inline-flex items-center justify-center"
                               aria-label="Add reaction"
                               onClick={(e) => e.stopPropagation()}
                             >
@@ -1544,9 +1545,9 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
                                       <button
                                         type="button"
                                         className={cn(
-                                          'h-10 w-10 rounded-xl inline-flex items-center justify-center transition-colors text-slate-700',
-                                          'hover:bg-slate-100/80',
-                                          reactedByMe && 'bg-slate-100/60'
+                                          'h-10 w-10 rounded-control inline-flex items-center justify-center transition-colors text-fg-muted',
+                                          'hover:bg-surface-hover',
+                                          reactedByMe && 'bg-action/10 text-action ring-1 ring-inset ring-action/30'
                                         )}
                                         onClick={(e) => {
                                           e.preventDefault()
@@ -1576,7 +1577,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
                               <TooltipTrigger asChild>
                                 <button
                                   type="button"
-                                  className="shrink-0 h-7 px-2 rounded-full inline-flex items-center justify-center text-sm leading-none transition-colors hover:bg-slate-100/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 focus-visible:ring-offset-1"
+                                  className="shrink-0 h-7 px-2 rounded-full inline-flex items-center justify-center text-sm leading-none transition-colors hover:bg-surface-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-action/30 focus-visible:ring-offset-1"
                                   onClick={(e) => {
                                     e.preventDefault()
                                     e.stopPropagation()
@@ -1586,8 +1587,8 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
                                   <span className="leading-none">{r.emoji}</span>
                                 </button>
                               </TooltipTrigger>
-                              <TooltipContent side="top" className="z-[9999] max-w-[240px] p-2 text-[11px] bg-white text-slate-700 border border-slate-200 shadow-lg">
-                                <div className="font-medium text-slate-800 mb-1">{r.label}</div>
+                              <TooltipContent side="top" className="z-[9999] max-w-[240px] p-2 text-caption bg-surface text-fg-muted border border-line shadow-popover">
+                                <div className="font-medium text-fg mb-1">{r.label}</div>
                                 <ul className="space-y-0.5 max-h-[140px] overflow-y-auto">
                                   {users.map((email) => (
                                     <li key={email} className="truncate">
@@ -1645,7 +1646,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
                         <TooltipTrigger asChild>
                           <button
                             type="button"
-                            className="shrink-0 h-7 w-7 rounded-md text-slate-500 hover:text-slate-700 hover:bg-slate-100/80 transition-colors inline-flex items-center justify-center"
+                            className="shrink-0 h-7 w-7 rounded-control text-fg-subtle hover:text-fg hover:bg-surface-hover transition-colors inline-flex items-center justify-center"
                             aria-label="Copy link to comment"
                             onClick={() => {
                               const base = typeof window !== 'undefined' ? window.location.href.replace(/#.*$/, '') : ''
@@ -1666,7 +1667,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
                           <TooltipTrigger asChild>
                             <button
                               type="button"
-                              className="shrink-0 h-7 w-7 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors inline-flex items-center justify-center opacity-0 group-hover:opacity-100"
+                              className="shrink-0 h-7 w-7 rounded-md text-fg-subtle hover:text-rose-600 hover:bg-rose-50 transition-colors inline-flex items-center justify-center opacity-0 group-hover:opacity-100"
                               aria-label="Delete comment"
                               onClick={() => setDeleteConfirmId(msg.id)}
                             >
@@ -1734,7 +1735,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
     {reminderEditPicker && typeof document !== 'undefined' && createPortal(
       <div
         ref={reminderEditPickerRef}
-        className="fixed bg-white border border-[#e5e7eb] rounded-sm shadow-2xl flex flex-col overflow-hidden"
+        className="fixed bg-surface border border-line rounded-card shadow-popover flex flex-col overflow-hidden"
         style={{
           zIndex: 999999,
           width: 320,
@@ -1747,44 +1748,44 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
         }}
       >
         {/* Header — matches mention picker exactly */}
-        <div className="flex items-center gap-2 px-3 py-2.5 bg-primary/5 border-b border-primary/10">
-          <AtSign className="h-3.5 w-3.5 text-primary shrink-0" />
-          <span className="text-xs font-semibold text-[#1b1b1d]">Edit reminder</span>
+        <div className="flex items-center gap-2 border-b border-line px-3 py-2">
+          <AtSign className="h-3.5 w-3.5 text-action shrink-0" />
+          <span className="text-xs font-semibold text-fg">Edit reminder</span>
         </div>
         {/* Disabled search box */}
         <div className="px-3 pt-2.5 pb-2">
           <input
             disabled
             placeholder="Search members…"
-            className="w-full text-xs rounded-sm border border-[#e5e7eb] bg-[#f3f4f6] px-2.5 py-1.5 outline-none opacity-50 cursor-not-allowed"
+            className="w-full text-small rounded-control border border-line bg-surface-muted px-2.5 py-1.5 outline-none opacity-50 cursor-not-allowed"
           />
         </div>
         {/* Member list — checked, non-interactive */}
-        <div className="overflow-y-auto border-t border-[#f0f0f2]" style={{ maxHeight: 180 }}>
+        <div className="overflow-y-auto border-t border-line" style={{ maxHeight: 180 }}>
           {reminderEditPicker.mentionedNames.map((name, ni) => {
             const initials = name.replace('@', '').split(/\s+/).map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()
             return (
-              <div key={ni} className="flex items-center gap-2.5 px-3 py-2.5 bg-primary/5 select-none">
-                <span className="h-4 w-4 rounded border border-primary bg-primary flex items-center justify-center shrink-0">
+              <div key={ni} className="flex items-center gap-2.5 px-3 py-2.5 bg-action/5 select-none">
+                <span className="h-4 w-4 rounded border border-action bg-action flex items-center justify-center shrink-0">
                   <Check className="h-3 w-3 text-white" strokeWidth={2.5} />
                 </span>
-                <div className="h-7 w-7 rounded-full overflow-hidden shrink-0 flex items-center justify-center text-[11px] font-bold border border-primary/30">
-                  <div className="h-full w-full flex items-center justify-center bg-primary/10 text-primary">{initials}</div>
+                <div className="h-7 w-7 rounded-full overflow-hidden shrink-0 flex items-center justify-center text-caption font-bold border border-action/30">
+                  <div className="h-full w-full flex items-center justify-center bg-action/10 text-action">{initials}</div>
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="text-xs font-semibold truncate text-primary">{name.replace('@', '')}</div>
-                  <div className="text-[10px] text-[#9a9ba0]">Mentioned</div>
+                  <div className="text-xs font-semibold truncate text-action">{name.replace('@', '')}</div>
+                  <div className="text-caption text-fg-subtle">Mentioned</div>
                 </div>
-                <span className="text-[9px] font-semibold text-[#9a9ba0] uppercase tracking-wide shrink-0">Locked</span>
+                <span className="shrink-0 text-caption text-fg-subtle">Locked</span>
               </div>
             )
           })}
         </div>
         {/* Reminder footer — identical to mention picker footer */}
-        <div className="px-3 pt-2.5 pb-3 border-t border-[#e5e7eb] bg-[#f9f9fb] flex flex-col gap-2">
+        <div className="px-3 pt-2.5 pb-3 border-t border-line bg-surface-subtle flex flex-col gap-2">
           <div className="flex items-center gap-1.5">
-            <CalendarClock className="h-3.5 w-3.5 text-primary shrink-0" />
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-[#45474c]">
+            <CalendarClock className="h-3.5 w-3.5 text-action shrink-0" />
+            <span className="text-small font-medium text-fg-muted">
               Remind on <span className="font-normal normal-case tracking-normal">(optional)</span>
             </span>
           </div>
@@ -1806,7 +1807,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
                 }).catch(() => {})
                 setReminderEditPicker(null)
               }}
-              className="text-xs font-semibold text-white bg-primary hover:bg-primary/90 px-4 py-1.5 rounded-sm transition-colors">
+              className="h-7 rounded-control bg-action px-3 text-small font-medium text-action-fg transition-colors hover:bg-action-hover">
               Done
             </button>
           </div>

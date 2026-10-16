@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react'
 import { ChevronDown, Check, X } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -43,9 +44,9 @@ export function SelectWithCustomEntry({
                     <button
                         id={id}
                         type="button"
-                        className={`w-full h-9 flex items-center rounded border border-[#e5e7eb] bg-white px-3 pr-7 text-xs font-normal disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary focus-visible:border-primary ${className ?? ''}`}
+                        className={cn('flex h-8 w-full items-center rounded-control border border-line-strong bg-surface px-2.5 pr-7 text-ui font-normal transition-[border-color,box-shadow] duration-100 focus-visible:border-action/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action/20 disabled:cursor-not-allowed disabled:opacity-50', className)}
                     >
-                        <span className={`flex-1 text-left truncate ${value ? 'text-[#1b1b1d]' : 'text-[#9a9ba0]'}`}>
+                        <span className={`flex-1 text-left truncate ${value ? 'text-fg' : 'text-fg-subtle'}`}>
                             {value || placeholder}
                         </span>
                     </button>
@@ -54,25 +55,25 @@ export function SelectWithCustomEntry({
                     {value && !disabled && !isMandatory ? (
                         <button
                             type="button"
-                            className="pointer-events-auto p-0.5 rounded text-[#9a9ba0] hover:text-[#1b1b1d] hover:bg-gray-100 transition-colors"
+                            className="pointer-events-auto rounded-control p-0.5 text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg"
                             onClick={(e) => { e.stopPropagation(); onChange('') }}
                             aria-label="Clear"
                         >
                             <X className="h-3 w-3" />
                         </button>
                     ) : (
-                        <ChevronDown className="h-3 w-3 text-[#45474c]" />
+                        <ChevronDown className="h-3.5 w-3.5 text-fg-subtle" />
                     )}
                 </div>
             </div>
             <DropdownMenuContent
-                className="w-[var(--radix-dropdown-menu-trigger-width)] rounded border border-[#e5e7eb] bg-white shadow-md py-0.5 p-0"
+                className="w-[var(--radix-dropdown-menu-trigger-width)] p-1"
                 onCloseAutoFocus={(e) => e.preventDefault()}
             >
                 {options.map((label) => (
                     <DropdownMenuItem
                         key={label}
-                        className={`cursor-pointer rounded-none py-2 px-2.5 text-xs text-[#45474c] outline-none focus:bg-[#f9f9fb] flex items-center justify-between ${value === label && !isCustom ? 'bg-primary/10 border-l-2 border-brand-accent text-primary font-semibold' : ''}`}
+                        className={`flex cursor-pointer items-center justify-between ${value === label && !isCustom ? 'text-fg' : 'text-fg-muted'}`}
                         onSelect={() => {
                             onChange(label)
                             setOpen(false)
@@ -80,12 +81,12 @@ export function SelectWithCustomEntry({
                     >
                         {label}
                         {value === label && !isCustom && (
-                            <Check className="h-3 w-3 shrink-0" />
+                            <Check className="h-3.5 w-3.5 shrink-0 text-action" />
                         )}
                     </DropdownMenuItem>
                 ))}
-                <DropdownMenuSeparator className="my-0.5 bg-[#e5e7eb]" />
-                <div className="px-2.5 py-1.5 flex items-center gap-2">
+                <DropdownMenuSeparator />
+                <div className="flex items-center gap-2 px-2 py-1.5">
                     <input
                         value={isCustom ? value : ''}
                         onChange={(e) => onChange(e.target.value)}
@@ -95,10 +96,10 @@ export function SelectWithCustomEntry({
                         }}
                         onClick={(e) => e.stopPropagation()}
                         placeholder={customEntryHint}
-                        className="flex-1 text-xs text-[#1b1b1d] placeholder:text-[#9a9ba0] outline-none bg-transparent"
+                        className="flex-1 bg-transparent text-ui text-fg outline-none placeholder:text-fg-subtle"
                     />
                     {isCustom && value && (
-                        <Check className="h-3 w-3 text-[#45474c] shrink-0" />
+                        <Check className="h-3.5 w-3.5 shrink-0 text-fg-muted" />
                     )}
                 </div>
             </DropdownMenuContent>

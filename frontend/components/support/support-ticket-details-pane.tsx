@@ -209,7 +209,7 @@ export function SupportTicketDetailsPane({
               <code className="font-mono text-xs bg-[#f3f4f6] border border-[#e5e7eb] px-1.5 py-0.5 rounded text-[#1b1b1d] truncate">
                 {ticket.ticketNumber}
               </code>
-              <button onClick={copyTicketNumber} className="p-0.5 hover:bg-[#f3f4f6] rounded transition-colors shrink-0" title="Copy ticket ID">
+              <button onClick={copyTicketNumber} className="p-0.5 hover:bg-surface-hover rounded transition-colors shrink-0" title="Copy ticket ID">
                 <Copy className="h-3.5 w-3.5 text-[#45474c]" />
               </button>
             </div>

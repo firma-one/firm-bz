@@ -7,9 +7,11 @@ import { assignDocId } from '@/lib/doc-id'
 import { assertWithinDocumentCap } from '@/lib/billing/effective-billing-caps'
 import { resolveEngagementConnectorId } from '@/lib/connectors/resolve-client-connector'
 import { buildSettingsForDb } from '@/lib/sharing-settings'
-import { getFirmReminderConfig } from '@/lib/actions/firms'
+import { getFirmReminderConfig } from '@/lib/firm-reminder-config'
 import { createEventNotifications, sendEventEmailToUser, buildAbsoluteUrl } from '@/lib/notify-event'
 import { resolveEntity } from '@/lib/reminders/entity-registry'
+import { appendReminderItem } from '@/lib/reminders/reminder-store'
+import type { ReminderItem } from '@/lib/actions/user-reminders'
 import { renderDocumentIntakeEmail } from '@/lib/email-templates/document-intake'
 import { sendPushToUser } from '@/lib/push'
 
@@ -146,7 +148,7 @@ export async function POST(
 
       if (config.events.newDocumentIntake.inApp) {
         const reminderId = `intake-${projectId}-${externalId}`
-        const reminderItem = {
+        const reminderItem: ReminderItem = {
           id: reminderId,
           entityKey: 'platform.engagements.shares',
           entityValue: projectId,
@@ -156,19 +158,9 @@ export async function POST(
           hiddenAt: null,
           createdAt: new Date().toISOString(),
         }
-        await Promise.all(leads.map(async (lead) => {
-          const p = await prisma.userPersonalization.findUnique({
-            where: { userId: lead.userId },
-            select: { reminders: true },
-          })
-          const existing: any[] = Array.isArray(p?.reminders) ? p!.reminders as any[] : []
-          if (existing.find((r: any) => r.id === reminderId)) return
-          await prisma.userPersonalization.upsert({
-            where: { userId: lead.userId },
-            create: { userId: lead.userId, reminders: [reminderItem] as any },
-            update: { reminders: [...existing, reminderItem] as any },
-          })
-        }))
+        // Through the shared per-user lock rather than a raw read-then-upsert, which could
+        // overwrite a concurrent reminder write for the same lead.
+        await Promise.all(leads.map((lead) => appendReminderItem(lead.userId, reminderItem)))
 
         Promise.resolve().then(async () => {
           const ctx = await resolveEntity('platform.engagements.shares', projectId)

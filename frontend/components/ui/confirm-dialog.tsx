@@ -1,9 +1,10 @@
 'use client'
 
 import React from 'react'
-import { VisuallyHidden } from '@radix-ui/react-visually-hidden'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { cn } from '@/lib/utils'
 
 export interface ConfirmDialogProps {
   open: boolean
@@ -12,7 +13,7 @@ export interface ConfirmDialogProps {
   icon: React.ReactNode
   /** Icon pill color variant */
   iconVariant?: 'red' | 'amber' | 'primary'
-  /** Title shown in the white header strip (rendered uppercase via CSS) */
+  /** Sentence-case title beside the icon; also the dialog's accessible name */
   title: string
   /** Short subtitle shown below the title in the header */
   subtitle?: string
@@ -31,24 +32,18 @@ export interface ConfirmDialogProps {
   hideConfirm?: boolean
 }
 
-const ICON_PILL: Record<string, string> = {
-  red:     'bg-red-50 ring-1 ring-red-200',
-  amber:   'bg-amber-50 ring-1 ring-amber-200',
-  primary: 'bg-primary/10 ring-1 ring-primary/20',
+/** Icon tile tint per variant: Notion tag colors for warnings, neutral for everything else. */
+const ICON_TILE: Record<string, string> = {
+  red:     'bg-tag-red-bg text-tag-red-fg',
+  amber:   'bg-tag-yellow-bg text-tag-yellow-fg',
+  primary: 'bg-surface-muted text-fg-muted',
 }
 
-const ICON_COLOR: Record<string, string> = {
-  red:     'text-red-500',
-  amber:   'text-amber-500',
-  primary: 'text-primary',
-}
-
-const CONFIRM_BTN: Record<string, string> = {
-  red:     'bg-red-600 hover:bg-red-700 text-white shadow-sm',
-  amber:   'bg-amber-600 hover:bg-amber-700 text-white shadow-sm',
-  primary: 'bg-primary hover:brightness-105 text-white shadow-sm',
-}
-
+/**
+ * Linear-style confirmation (.claude/plans/ui-ux-overhaul.md, Phase 6): an icon tile, a sentence-case
+ * title and subtitle, the consequence in plain text, and the two buttons bottom-right — no header
+ * strip, no tinted body, no uppercase.
+ */
 export function ConfirmDialog({
   open,
   onOpenChange,
@@ -68,47 +63,35 @@ export function ConfirmDialog({
 }: ConfirmDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-sm border-[#e5e7eb] p-0 gap-0 rounded bg-[#f9f9fb]">
-        <VisuallyHidden><DialogTitle>{title}</DialogTitle></VisuallyHidden>
-
-        {/* Header */}
-        <div className="px-5 py-4 border-b border-[#e5e7eb] bg-white flex items-start gap-3">
-          <div className={`mt-0.5 h-7 w-7 rounded flex items-center justify-center shrink-0 ${ICON_PILL[iconVariant]}`}>
-            <span className={ICON_COLOR[iconVariant]}>{icon}</span>
+      <DialogContent className="gap-0 p-0 sm:max-w-sm">
+        <div className="flex items-start gap-3 px-5 pb-3 pt-5 pr-10">
+          <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-control [&_svg]:h-4 [&_svg]:w-4 ${ICON_TILE[iconVariant]}`}>
+            {icon}
           </div>
-          <div>
-            <p className="text-[11px] font-headline font-bold tracking-widest uppercase text-[#1b1b1d] leading-tight">
-              {title}
-            </p>
-            {subtitle && (
-              <p className="text-xs text-[#45474c] mt-0.5">{subtitle}</p>
-            )}
+          <div className="min-w-0 pt-0.5">
+            <DialogTitle className="text-ui font-semibold leading-tight text-fg">{title}</DialogTitle>
+            {subtitle && <p className="mt-0.5 text-small text-fg-muted">{subtitle}</p>}
           </div>
         </div>
 
-        {/* Body */}
-        <div className="p-5 space-y-3">
-          <p className="text-xs text-[#45474c] leading-relaxed">{description}</p>
+        <div className="space-y-3 px-5 pb-4 pl-16">
+          <div className="text-small leading-relaxed text-fg-muted">{description}</div>
           {extra}
         </div>
 
-        {/* Footer */}
-        <div className="px-5 py-3 border-t border-[#e5e7eb] bg-white flex items-center justify-end gap-2">
-          <Button
-            variant="outline"
-            onClick={onCancel}
-            disabled={loading}
-            className="rounded text-[10px] font-headline font-bold tracking-widest uppercase border-[#e5e7eb] text-[#45474c] hover:bg-[#f9f9fb]"
-          >
+        <div className="flex items-center justify-end gap-2 px-5 pb-5">
+          <Button variant="outline" size="sm" onClick={onCancel} disabled={loading}>
             {cancelLabel}
           </Button>
           {!hideConfirm && confirmLabel && (
             <Button
+              size="sm"
               onClick={onConfirm}
               disabled={loading}
-              className={`rounded text-[10px] font-headline font-bold tracking-widest uppercase ${CONFIRM_BTN[confirmVariant]}`}
+              variant={confirmVariant === 'red' ? 'destructive' : 'default'}
+              className={cn('min-w-[5.5rem]', confirmVariant === 'amber' && 'bg-tag-orange-fg text-white hover:bg-tag-orange-fg hover:opacity-90')}
             >
-              {loading ? <svg className="h-3 w-3 animate-spin text-white/80" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" /></svg> : confirmLabel}
+              {loading ? <LoadingSpinner size="sm" /> : confirmLabel}
             </Button>
           )}
         </div>

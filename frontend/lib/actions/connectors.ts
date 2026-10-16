@@ -37,12 +37,23 @@ export async function removeConnector({ connectorId }: { connectorId: string }):
     }
 
     if (connector.firmId) {
-        const membership = await prisma.firmMember.findFirst({
-            where: { firmId: connector.firmId, userId: user.id },
-            select: { role: true },
-        })
-        if (!membership) {
-            logger.warn('[removeConnector] Unauthorized — user is not a member of the owning firm', `connectorId:${connectorId} userId:${user.id} firmId:${connector.firmId}`)
+        // Removal orphans every document tracked against the connector, so a bare firm membership is
+        // not enough — external engagement users (EC/EV) hold firm_member rows too. Require the
+        // rights of the screens that offer removal: firm can_manage (Storage settings) or
+        // can_manage on a client that uses this connector (client Settings).
+        const { canManageOrganization, canManageClient } = await import('@/lib/permission-helpers')
+        let allowed = await canManageOrganization(connector.firmId)
+        if (!allowed) {
+            const linked = await prisma.client.findMany({
+                where: { connectorId, firmId: connector.firmId },
+                select: { id: true },
+            })
+            for (const c of linked) {
+                if (await canManageClient(connector.firmId, c.id)) { allowed = true; break }
+            }
+        }
+        if (!allowed) {
+            logger.warn('[removeConnector] Unauthorized — caller cannot manage the owning firm or a linked client', `connectorId:${connectorId} userId:${user.id} firmId:${connector.firmId}`)
             throw new Error('Unauthorized')
         }
     } else {

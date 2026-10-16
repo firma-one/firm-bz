@@ -2,10 +2,14 @@
 
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/lib/auth-context'
-import { Users, Briefcase, MailOpen, TrendingUp, RefreshCw, UserPlus, Send, CheckCircle2, PauseCircle, UserMinus, ArrowLeft, CalendarClock } from 'lucide-react'
+import { Users, Briefcase, MailOpen, TrendingUp, RefreshCw, UserPlus, Send, CheckCircle2, PauseCircle, UserMinus, ArrowLeft, CalendarClock, LineChart } from 'lucide-react'
 import type { FirmInsightsResponse, ClientPipelineItem, EngagementPipelineItem } from '@/app/api/firms/[firmId]/insights/route'
 import { StatTile } from '@/components/ui/stat-tile'
 import { AiFirmBrief } from '@/components/dashboard/ai-firm-brief'
+import { InsightCard } from '@/components/dashboard/insight-card'
+import { Button } from '@/components/ui/button'
+import { Hint } from '@/components/ui/tooltip'
+import { Tag } from '@/components/ui/tag'
 
 function formatValue(val: number, symbol = ''): string {
     if (val === 0) return '—'
@@ -14,77 +18,19 @@ function formatValue(val: number, symbol = ''): string {
     return `${symbol}${val.toFixed(0)}`
 }
 
-const BAR_COLORS = [
-    { bar: 'bg-blue-500',   legend: 'bg-blue-500',   text: 'text-blue-600' },
-    { bar: 'bg-indigo-500', legend: 'bg-indigo-500', text: 'text-indigo-600' },
-    { bar: 'bg-violet-500', legend: 'bg-violet-500', text: 'text-violet-600' },
-    { bar: 'bg-teal-500',   legend: 'bg-teal-500',   text: 'text-teal-600' },
-    { bar: 'bg-emerald-500',legend: 'bg-emerald-500',text: 'text-emerald-600' },
-    { bar: 'bg-amber-500',  legend: 'bg-amber-500',  text: 'text-amber-600' },
-    { bar: 'bg-pink-500',   legend: 'bg-pink-500',   text: 'text-pink-600' },
-]
+/** Pipeline segments and legend dots use the chart palette in ui-tokens.css. */
+const PIPELINE_COLORS = ['blue', 'purple', 'pink', 'green', 'orange', 'yellow', 'teal'] as const
+type PipelineColor = (typeof PIPELINE_COLORS)[number]
+const chartColor = (c: PipelineColor) => `var(--ui-chart-${c})`
 
-// Shades per color family for the engagement drill-down.
-// Order: 500 (matches parent), 700, 400, 800, 300, 600 — so first engagement
-// always matches the parent bar color exactly, subsequent ones fan out.
-const BAR_COLOR_SHADES: { bar: string; legend: string; text: string }[][] = [
-    [ // blue
-        { bar: 'bg-blue-500', legend: 'bg-blue-500', text: 'text-blue-600' },
-        { bar: 'bg-blue-700', legend: 'bg-blue-700', text: 'text-blue-800' },
-        { bar: 'bg-blue-400', legend: 'bg-blue-400', text: 'text-blue-500' },
-        { bar: 'bg-blue-800', legend: 'bg-blue-800', text: 'text-blue-900' },
-        { bar: 'bg-blue-300', legend: 'bg-blue-300', text: 'text-blue-400' },
-        { bar: 'bg-blue-600', legend: 'bg-blue-600', text: 'text-blue-700' },
-    ],
-    [ // indigo
-        { bar: 'bg-indigo-500', legend: 'bg-indigo-500', text: 'text-indigo-600' },
-        { bar: 'bg-indigo-700', legend: 'bg-indigo-700', text: 'text-indigo-800' },
-        { bar: 'bg-indigo-400', legend: 'bg-indigo-400', text: 'text-indigo-500' },
-        { bar: 'bg-indigo-800', legend: 'bg-indigo-800', text: 'text-indigo-900' },
-        { bar: 'bg-indigo-300', legend: 'bg-indigo-300', text: 'text-indigo-400' },
-        { bar: 'bg-indigo-600', legend: 'bg-indigo-600', text: 'text-indigo-700' },
-    ],
-    [ // violet
-        { bar: 'bg-violet-500', legend: 'bg-violet-500', text: 'text-violet-600' },
-        { bar: 'bg-violet-700', legend: 'bg-violet-700', text: 'text-violet-800' },
-        { bar: 'bg-violet-400', legend: 'bg-violet-400', text: 'text-violet-500' },
-        { bar: 'bg-violet-800', legend: 'bg-violet-800', text: 'text-violet-900' },
-        { bar: 'bg-violet-300', legend: 'bg-violet-300', text: 'text-violet-400' },
-        { bar: 'bg-violet-600', legend: 'bg-violet-600', text: 'text-violet-700' },
-    ],
-    [ // teal
-        { bar: 'bg-teal-500', legend: 'bg-teal-500', text: 'text-teal-600' },
-        { bar: 'bg-teal-700', legend: 'bg-teal-700', text: 'text-teal-800' },
-        { bar: 'bg-teal-400', legend: 'bg-teal-400', text: 'text-teal-500' },
-        { bar: 'bg-teal-800', legend: 'bg-teal-800', text: 'text-teal-900' },
-        { bar: 'bg-teal-300', legend: 'bg-teal-300', text: 'text-teal-400' },
-        { bar: 'bg-teal-600', legend: 'bg-teal-600', text: 'text-teal-700' },
-    ],
-    [ // emerald
-        { bar: 'bg-emerald-500', legend: 'bg-emerald-500', text: 'text-emerald-600' },
-        { bar: 'bg-emerald-700', legend: 'bg-emerald-700', text: 'text-emerald-800' },
-        { bar: 'bg-emerald-400', legend: 'bg-emerald-400', text: 'text-emerald-500' },
-        { bar: 'bg-emerald-800', legend: 'bg-emerald-800', text: 'text-emerald-900' },
-        { bar: 'bg-emerald-300', legend: 'bg-emerald-300', text: 'text-emerald-400' },
-        { bar: 'bg-emerald-600', legend: 'bg-emerald-600', text: 'text-emerald-700' },
-    ],
-    [ // amber
-        { bar: 'bg-amber-500', legend: 'bg-amber-500', text: 'text-amber-600' },
-        { bar: 'bg-amber-700', legend: 'bg-amber-700', text: 'text-amber-800' },
-        { bar: 'bg-amber-400', legend: 'bg-amber-400', text: 'text-amber-500' },
-        { bar: 'bg-amber-800', legend: 'bg-amber-800', text: 'text-amber-900' },
-        { bar: 'bg-amber-300', legend: 'bg-amber-300', text: 'text-amber-400' },
-        { bar: 'bg-amber-600', legend: 'bg-amber-600', text: 'text-amber-700' },
-    ],
-    [ // pink
-        { bar: 'bg-pink-500', legend: 'bg-pink-500', text: 'text-pink-600' },
-        { bar: 'bg-pink-700', legend: 'bg-pink-700', text: 'text-pink-800' },
-        { bar: 'bg-pink-400', legend: 'bg-pink-400', text: 'text-pink-500' },
-        { bar: 'bg-pink-800', legend: 'bg-pink-800', text: 'text-pink-900' },
-        { bar: 'bg-pink-300', legend: 'bg-pink-300', text: 'text-pink-400' },
-        { bar: 'bg-pink-600', legend: 'bg-pink-600', text: 'text-pink-700' },
-    ],
-]
+/** Dark hover label over a bar segment. */
+function SegmentTip({ children }: { children: React.ReactNode }) {
+    return (
+        <div className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 -translate-x-1/2 whitespace-nowrap rounded-control bg-fg px-2.5 py-1.5 text-caption font-medium text-surface opacity-0 shadow-popover transition-opacity group-hover:opacity-100">
+            {children}
+        </div>
+    )
+}
 
 function EngagementDrillBar({ engagements, clientTotal, symbol, onBack, clientName, colorIndex }: {
     engagements: EngagementPipelineItem[]
@@ -96,43 +42,37 @@ function EngagementDrillBar({ engagements, clientTotal, symbol, onBack, clientNa
 }) {
     const [hovered, setHovered] = useState<string | null>(null)
     const hasValues = clientTotal > 0
-    const shades = BAR_COLOR_SHADES[colorIndex % BAR_COLOR_SHADES.length]
+    // The first engagement keeps the client's color, so the drill-in reads as a zoom of that segment.
+    const colorAt = (i: number) => PIPELINE_COLORS[(colorIndex + i) % PIPELINE_COLORS.length]
 
     return (
         <div>
-            <div className="flex items-center gap-2 h-8 mb-3">
-                <button
-                    onClick={onBack}
-                    className="flex items-center gap-1.5 px-2.5 h-full rounded-lg bg-gray-200 hover:bg-gray-300 active:scale-95 transition-all text-gray-700 font-medium text-xs"
-                >
+            <div className="mb-3 flex h-7 items-center gap-2">
+                <Button variant="ghost" size="sm" onClick={onBack} className="h-7 px-2">
                     <ArrowLeft className="h-3.5 w-3.5" />
                     Back
-                </button>
-                <span className="text-sm font-bold text-gray-900">{clientName}</span>
-                <span className="text-xs text-gray-400">— {engagements.length} engagement{engagements.length !== 1 ? 's' : ''}</span>
-                <span className="ml-auto text-sm font-bold text-gray-900">{hasValues ? formatValue(clientTotal, symbol) : `${engagements.length} eng`}</span>
+                </Button>
+                <span className="text-ui font-medium text-fg">{clientName}</span>
+                <span className="text-small text-fg-subtle">{engagements.length} engagement{engagements.length !== 1 ? 's' : ''}</span>
+                <span className="ml-auto text-ui font-medium tabular-nums text-fg">{hasValues ? formatValue(clientTotal, symbol) : `${engagements.length} eng`}</span>
             </div>
 
-            <div className="relative h-5 w-full bg-gray-100 rounded-lg overflow-hidden flex mb-3">
+            <div className="relative mb-3 flex h-2.5 w-full gap-0.5 rounded-full bg-surface-muted">
                 {engagements.map((eng, i) => {
-                    const color = shades[i % shades.length]
-                    const pct = hasValues
-                        ? (eng.value / clientTotal) * 100
-                        : (1 / engagements.length) * 100
+                    const pct = hasValues ? (eng.value / clientTotal) * 100 : (1 / engagements.length) * 100
                     return (
                         <div
                             key={eng.engagementId}
-                            style={{ width: `${pct}%` }}
+                            style={{ width: `${pct}%`, backgroundColor: chartColor(colorAt(i)) }}
                             onMouseEnter={() => setHovered(eng.engagementId)}
                             onMouseLeave={() => setHovered(null)}
-                            className={`h-full ${color.bar} relative group cursor-default transition-opacity ${hovered && hovered !== eng.engagementId ? 'opacity-50' : ''}`}
+                            className={`group relative h-full cursor-default transition-opacity first:rounded-l-full last:rounded-r-full ${hovered && hovered !== eng.engagementId ? 'opacity-40' : ''}`}
                         >
-                            <div className="absolute opacity-0 group-hover:opacity-100 bottom-full left-1/2 -translate-x-1/2 mb-2 px-2.5 py-1.5 bg-gray-900 text-white text-xs font-medium rounded-md whitespace-nowrap z-20 pointer-events-none shadow-lg">
+                            <SegmentTip>
                                 {eng.engagementName}
                                 {hasValues ? ` · ${formatValue(eng.value, symbol)} (${pct.toFixed(1)}%)` : ' · no value set'}
                                 {eng.closingSoon && <span className="ml-1 opacity-70">· closing soon</span>}
-                                <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900" />
-                            </div>
+                            </SegmentTip>
                         </div>
                     )
                 })}
@@ -140,7 +80,6 @@ function EngagementDrillBar({ engagements, clientTotal, symbol, onBack, clientNa
 
             <div className="flex flex-wrap gap-x-4 gap-y-1.5">
                 {engagements.map((eng, i) => {
-                    const color = shades[i % shades.length]
                     const pct = hasValues && clientTotal > 0 ? ((eng.value / clientTotal) * 100).toFixed(0) : null
                     return (
                         <div
@@ -149,18 +88,18 @@ function EngagementDrillBar({ engagements, clientTotal, symbol, onBack, clientNa
                             onMouseEnter={() => setHovered(eng.engagementId)}
                             onMouseLeave={() => setHovered(null)}
                         >
-                            <div className={`w-2 h-2 rounded-full shrink-0 mt-1 ${color.legend}`} />
+                            <span className="mt-1 h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: chartColor(colorAt(i)) }} />
                             <div className="flex flex-col gap-0.5">
-                                <span className="text-xs text-gray-700 font-medium leading-tight">{eng.engagementName}</span>
+                                <span className="text-small leading-tight text-fg">{eng.engagementName}</span>
                                 <div className="flex items-center gap-1.5">
-                                    {eng.contractType && <span className="text-xs font-medium text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">{eng.contractType}</span>}
+                                    {eng.contractType && <Tag color="gray">{eng.contractType}</Tag>}
                                     {hasValues && (
                                         <>
-                                            <span className={`text-xs font-semibold ${color.text}`}>{formatValue(eng.value, symbol)}</span>
-                                            {pct && <span className="text-xs text-gray-400">{pct}%</span>}
+                                            <span className="text-small font-medium tabular-nums text-fg">{formatValue(eng.value, symbol)}</span>
+                                            {pct && <span className="text-small tabular-nums text-fg-subtle">{pct}%</span>}
                                         </>
                                     )}
-                                    {eng.closingSoon && <span className="text-[10px] font-medium text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">Soon</span>}
+                                    {eng.closingSoon && <Tag color="orange">Soon</Tag>}
                                 </div>
                             </div>
                         </div>
@@ -171,71 +110,71 @@ function EngagementDrillBar({ engagements, clientTotal, symbol, onBack, clientNa
     )
 }
 
-function PipelineBar({ items, total, symbol }: { items: ClientPipelineItem[]; total: number; symbol: string }) {
+/** The client pipeline bar with its drill-down. Shared with the public demo's Overview. */
+export function PipelineBar({ items, total, symbol }: { items: ClientPipelineItem[]; total: number; symbol: string }) {
     const [hovered, setHovered] = useState<string | null>(null)
     const [drillClient, setDrillClient] = useState<{ item: ClientPipelineItem; colorIndex: number } | null>(null)
     const isDrilled = drillClient !== null
     const hasItems = items.length > 0
     const hasValues = total > 0
+    const engagementTotal = items.reduce((s, x) => s + x.engagementCount, 0)
 
     return (
         <div className="relative overflow-hidden">
             {/* Top-level view */}
-            <div className={`transition-all duration-250 ease-in-out ${isDrilled ? 'opacity-0 -translate-x-4 pointer-events-none absolute inset-x-0 top-0' : 'opacity-100 translate-x-0'}`}>
-                <div className="flex items-center gap-2 mb-3 h-8">
-                    <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">All Clients</span>
-                    {hasValues && <span className="ml-auto text-sm font-bold text-gray-900">{formatValue(total, symbol)}</span>}
+            <div className={`transition-all duration-200 ease-out ${isDrilled ? 'pointer-events-none absolute inset-x-0 top-0 -translate-x-4 opacity-0' : 'translate-x-0 opacity-100'}`}>
+                <div className="mb-3 flex h-7 items-center gap-2">
+                    <span className="text-caption text-fg-subtle">All clients · click a segment to see its engagements</span>
+                    {hasValues && <span className="ml-auto text-ui font-medium tabular-nums text-fg">{formatValue(total, symbol)}</span>}
                 </div>
-                <div className="relative h-5 w-full bg-gray-100 rounded-lg overflow-hidden flex mb-3">
+                <div className="relative mb-3 flex h-2.5 w-full gap-0.5 rounded-full bg-surface-muted">
                     {hasItems ? items.map((item, i) => {
-                        const color = BAR_COLORS[i % BAR_COLORS.length]
-                        const pct = hasValues
-                            ? (item.value / total) * 100
-                            : (item.engagementCount / items.reduce((s, x) => s + x.engagementCount, 0)) * 100
+                        const color = PIPELINE_COLORS[i % PIPELINE_COLORS.length]
+                        const pct = hasValues ? (item.value / total) * 100 : (item.engagementCount / engagementTotal) * 100
                         return (
                             <div
                                 key={item.clientId}
-                                style={{ width: `${pct}%` }}
+                                style={{ width: `${pct}%`, backgroundColor: chartColor(color) }}
                                 onMouseEnter={() => setHovered(item.clientId)}
                                 onMouseLeave={() => setHovered(null)}
                                 onClick={() => setDrillClient({ item, colorIndex: i })}
-                                className={`h-full ${color.bar} relative group cursor-pointer transition-opacity ${hovered && hovered !== item.clientId ? 'opacity-50' : ''}`}
+                                className={`group relative h-full cursor-pointer transition-opacity first:rounded-l-full last:rounded-r-full ${hovered && hovered !== item.clientId ? 'opacity-40' : ''}`}
                             >
-                                <div className="absolute opacity-0 group-hover:opacity-100 bottom-full left-1/2 -translate-x-1/2 mb-2 px-2.5 py-1.5 bg-gray-900 text-white text-xs font-medium rounded-md whitespace-nowrap z-20 pointer-events-none shadow-lg">
-                                    {item.clientName} · {hasValues ? `${formatValue(item.value, symbol)} (${pct.toFixed(1)}%)` : `${item.engagementCount} engagement${item.engagementCount !== 1 ? 's' : ''} · no value set`} · click to drill in
+                                <SegmentTip>
+                                    {item.clientName} · {hasValues ? `${formatValue(item.value, symbol)} (${pct.toFixed(1)}%)` : `${item.engagementCount} engagement${item.engagementCount !== 1 ? 's' : ''} · no value set`}
                                     {hasValues && item.closingSoonValue > 0 && <span className="ml-1 opacity-70">· {formatValue(item.closingSoonValue, symbol)} closing soon</span>}
-                                    <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900" />
-                                </div>
+                                </SegmentTip>
                             </div>
                         )
-                    }) : <div className="h-full w-full bg-gray-200" />}
+                    }) : null}
                 </div>
                 <div className="flex flex-wrap gap-x-4 gap-y-1.5">
                     {items.map((item, i) => {
-                        const color = BAR_COLORS[i % BAR_COLORS.length]
+                        const color = PIPELINE_COLORS[i % PIPELINE_COLORS.length]
                         const pct = hasValues ? ((item.value / total) * 100).toFixed(0) : null
                         return (
                             <button
                                 key={item.clientId}
+                                type="button"
                                 onClick={() => setDrillClient({ item, colorIndex: i })}
-                                className={`flex items-start gap-2 transition-opacity hover:opacity-70 ${hovered && hovered !== item.clientId ? 'opacity-40' : ''}`}
+                                className={`flex items-start gap-2 rounded-control px-1 py-0.5 text-left transition-[opacity,background-color] hover:bg-surface-hover ${hovered && hovered !== item.clientId ? 'opacity-40' : ''}`}
                                 onMouseEnter={() => setHovered(item.clientId)}
                                 onMouseLeave={() => setHovered(null)}
                             >
-                                <div className={`w-2 h-2 rounded-full shrink-0 mt-1 ${color.legend}`} />
-                                <div className="flex flex-col gap-0.5 text-left">
-                                    <span className="text-xs text-gray-700 font-medium leading-tight">{item.clientName}</span>
-                                    <div className="flex items-center gap-1.5">
-                                {item.value > 0 && pct ? (
-                                    <>
-                                        <span className={`text-xs font-semibold ${color.text}`}>{formatValue(item.value, symbol)}</span>
-                                        <span className="text-xs text-gray-400">{pct}%</span>
-                                    </>
-                                ) : (
-                                    <span className="text-xs text-gray-400 font-semibold">—</span>
-                                )}
-                                    </div>
-                                </div>
+                                <span className="mt-1 h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: chartColor(color) }} />
+                                <span className="flex flex-col gap-0.5">
+                                    <span className="text-small leading-tight text-fg">{item.clientName}</span>
+                                    <span className="flex items-center gap-1.5 text-small tabular-nums">
+                                        {item.value > 0 && pct ? (
+                                            <>
+                                                <span className="font-medium text-fg">{formatValue(item.value, symbol)}</span>
+                                                <span className="text-fg-subtle">{pct}%</span>
+                                            </>
+                                        ) : (
+                                            <span className="text-fg-subtle">—</span>
+                                        )}
+                                    </span>
+                                </span>
                             </button>
                         )
                     })}
@@ -243,7 +182,7 @@ function PipelineBar({ items, total, symbol }: { items: ClientPipelineItem[]; to
             </div>
 
             {/* Drill-down view */}
-            <div className={`transition-all duration-250 ease-in-out ${isDrilled ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-4 pointer-events-none absolute inset-x-0 top-0'}`}>
+            <div className={`transition-all duration-200 ease-out ${isDrilled ? 'translate-x-0 opacity-100' : 'pointer-events-none absolute inset-x-0 top-0 translate-x-4 opacity-0'}`}>
                 {drillClient && (
                     <EngagementDrillBar
                         engagements={drillClient.item.engagements}
@@ -255,6 +194,22 @@ function PipelineBar({ items, total, symbol }: { items: ClientPipelineItem[]; to
                     />
                 )}
             </div>
+        </div>
+    )
+}
+
+/**
+ * One block of the Business overview. A full-width hairline sets it apart from the block above,
+ * as between the ring rows on the engagement Overview.
+ */
+export function SubSection({ title, trailing, children }: { title: string; trailing?: React.ReactNode; children: React.ReactNode }) {
+    return (
+        <div className="mt-5 border-t border-line pt-4">
+            <div className="mb-3 flex items-baseline justify-between gap-3">
+                <h3 className="text-small font-medium text-fg-muted">{title}</h3>
+                {trailing}
+            </div>
+            {children}
         </div>
     )
 }
@@ -291,108 +246,93 @@ export function FirmBusinessInsights({ firmId }: FirmBusinessInsightsProps) {
     const overdueDueCount = data?.engagementsDueSoon?.filter((e) => e.daysUntil < 0).length ?? 0
     const atRiskClientCount = data ? (data.clientCounts?.ACTIVE ?? 0) + (data.clientCounts?.PROSPECT ?? 0) - (data.engagementsDueSoon?.length ?? 0) : 0
 
+    const refreshButton = (
+        <Hint label="Refresh">
+            <button
+                type="button"
+                onClick={() => setRefreshTick((t) => t + 1)}
+                className="rounded-control p-1.5 text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg print:hidden"
+                aria-label="Refresh business overview"
+            >
+                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+        </Hint>
+    )
+
     return (
         <>
         <AiFirmBrief firmId={firmId} />
-        <div className="bg-white border border-[#e5e7eb] rounded p-6 shadow-sm">
-            <div className="flex items-center justify-between mb-6">
-                <div>
-                    <h2 className="text-xl font-bold text-gray-900">Business Overview</h2>
-                    <p className="text-sm text-gray-500 mt-0.5">Client pipeline and active engagements</p>
-                </div>
-                <button
-                    onClick={() => setRefreshTick((t) => t + 1)}
-                    className="p-1.5 rounded-md bg-gray-100 hover:bg-gray-200 transition-colors"
-                    title="Refresh"
-                >
-                    <RefreshCw className={`h-4 w-4 text-gray-700 ${loading ? 'animate-spin' : ''}`} />
-                </button>
-            </div>
-
+        <InsightCard title="Business overview" icon={LineChart} theme="blue" subtext="Client pipeline and active engagements" headerExtra={refreshButton}>
             <div className={`transition-opacity duration-300 ${loading ? 'opacity-50' : ''}`}>
-                <div className="grid grid-cols-4 gap-4">
-                    <StatTile icon={Users} label="Active Client(s)" count={totalActiveClients} colorClass="bg-blue-50 text-blue-600" />
-                    <StatTile icon={TrendingUp} label="Prospective Client(s)" count={totalProspects} colorClass="bg-indigo-50 text-indigo-600" />
-                    <StatTile icon={Briefcase} label="Active Engagement(s)" count={totalEngagements} colorClass="bg-purple-50 text-purple-600" />
-                    <StatTile icon={MailOpen} label="Pending Invitation(s)" count={totalPendingInvites} colorClass="bg-amber-50 text-amber-600" />
-                </div>
-
-                {(data?.clientCounts?.ON_HOLD ?? 0) > 0 || (data?.clientCounts?.PAST ?? 0) > 0 ? (
-                    <div className="flex gap-3 mt-1">
-                        {(data?.clientCounts?.ON_HOLD ?? 0) > 0 && (
-                            <StatTile icon={PauseCircle} label="On Hold" count={data?.clientCounts?.ON_HOLD ?? 0} colorClass="bg-slate-50 text-slate-500" />
-                        )}
-                        {(data?.clientCounts?.PAST ?? 0) > 0 && (
-                            <StatTile icon={UserMinus} label="Past Clients" count={data?.clientCounts?.PAST ?? 0} colorClass="bg-gray-50 text-gray-500" />
-                        )}
-                    </div>
-                ) : null}
-            </div>
-
-            {data?.engagementStatusBreakdown && (data.engagementStatusBreakdown.PLANNED + data.engagementStatusBreakdown.PAUSED) > 0 && (
-                <div className={`flex gap-4 mt-1 transition-opacity duration-300 ${loading ? 'opacity-50' : ''}`}>
-                    {data.engagementStatusBreakdown.PLANNED > 0 && (
-                        <div className="flex-1"><StatTile icon={CalendarClock} label="Planned Engagement(s)" count={data.engagementStatusBreakdown.PLANNED} colorClass="bg-blue-50 text-blue-600" /></div>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-3 pt-4 md:grid-cols-4">
+                    <StatTile icon={Users} label="Active clients" count={totalActiveClients} colorClass="text-fg-subtle" />
+                    <StatTile icon={TrendingUp} label="Prospects" count={totalProspects} colorClass="text-fg-subtle" />
+                    <StatTile icon={Briefcase} label="Active engagements" count={totalEngagements} colorClass="text-fg-subtle" />
+                    <StatTile icon={MailOpen} label="Pending invitations" count={totalPendingInvites} colorClass="text-fg-subtle" />
+                    {(data?.clientCounts?.ON_HOLD ?? 0) > 0 && (
+                        <StatTile icon={PauseCircle} label="Clients on hold" count={data?.clientCounts?.ON_HOLD ?? 0} colorClass="text-fg-subtle" />
                     )}
-                    {data.engagementStatusBreakdown.PAUSED > 0 && (
-                        <div className="flex-1"><StatTile icon={PauseCircle} label="Paused Engagement(s)" count={data.engagementStatusBreakdown.PAUSED} colorClass="bg-slate-50 text-slate-500" /></div>
+                    {(data?.clientCounts?.PAST ?? 0) > 0 && (
+                        <StatTile icon={UserMinus} label="Past clients" count={data?.clientCounts?.PAST ?? 0} colorClass="text-fg-subtle" />
+                    )}
+                    {(data?.engagementStatusBreakdown?.PLANNED ?? 0) > 0 && (
+                        <StatTile icon={CalendarClock} label="Planned engagements" count={data!.engagementStatusBreakdown.PLANNED} colorClass="text-fg-subtle" />
+                    )}
+                    {(data?.engagementStatusBreakdown?.PAUSED ?? 0) > 0 && (
+                        <StatTile icon={PauseCircle} label="Paused engagements" count={data!.engagementStatusBreakdown.PAUSED} colorClass="text-fg-subtle" />
                     )}
                 </div>
-            )}
 
-            {(data?.clientPipelineBreakdown !== undefined) && (
-                <div className={`transition-opacity duration-300 ${loading ? 'opacity-50' : ''}`}>
-                    <div className="flex items-baseline justify-between mt-5 mb-3">
-                        <h3 className="text-sm font-semibold text-gray-500">Revenue Pipeline</h3>
-                        <div className="flex items-baseline gap-3">
-                            {(closingSoonCount > 0 || overdueDueCount > 0) && (
-                                <span className="text-xs text-amber-600 font-medium">
-                                    {closingSoonCount + overdueDueCount} closing within 30d
-                                    {(data?.closingSoonValue ?? 0) > 0 && ` · ${formatValue(data!.closingSoonValue, data?.currencySymbol)}`}
+                {(data?.clientPipelineBreakdown !== undefined) && (
+                    <SubSection
+                        title="Revenue pipeline"
+                        trailing={
+                            <div className="flex items-baseline gap-3 text-small">
+                                {(closingSoonCount > 0 || overdueDueCount > 0) && (
+                                    <span className="text-tag-orange-fg">
+                                        {closingSoonCount + overdueDueCount} closing within 30 days
+                                        {(data?.closingSoonValue ?? 0) > 0 && ` · ${formatValue(data!.closingSoonValue, data?.currencySymbol)}`}
+                                    </span>
+                                )}
+                                {(data?.revenueAtRisk ?? 0) > 0 && (
+                                    <span className="text-danger">{formatValue(data!.revenueAtRisk, data?.currencySymbol)} at risk</span>
+                                )}
+                                <span className="text-ui font-medium tabular-nums text-fg">
+                                    {(data?.pipelineValue ?? 0) > 0 ? formatValue(data!.pipelineValue, data?.currencySymbol) : `${totalEngagements} engagement${totalEngagements !== 1 ? 's' : ''}`}
                                 </span>
-                            )}
-                            {(data?.revenueAtRisk ?? 0) > 0 && (
-                                <span className="text-xs text-red-600 font-medium">
-                                    {formatValue(data!.revenueAtRisk, data?.currencySymbol)} at risk
-                                </span>
-                            )}
-                            <span className="text-lg font-bold text-gray-900">
-                                {(data?.pipelineValue ?? 0) > 0 ? formatValue(data!.pipelineValue, data?.currencySymbol) : `${totalEngagements} engagement${totalEngagements !== 1 ? 's' : ''}`}
-                            </span>
-                        </div>
-                    </div>
-                    <div className="bg-white rounded p-4 border border-[#e5e7eb] shadow-md">
-                        <PipelineBar items={data!.clientPipelineBreakdown} total={data?.pipelineValue ?? 0} symbol={data?.currencySymbol ?? ''} />
-                    </div>
-                </div>
-            )}
-
-            {(data?.contractTypeBreakdown?.length ?? 0) > 0 && (
-                <div className={`transition-opacity duration-300 ${loading ? 'opacity-50' : ''}`}>
-                    <h3 className="text-sm font-semibold text-gray-500 mb-3 mt-5">Engagement Types</h3>
-                    <div className="flex flex-wrap gap-2">
-                        {data!.contractTypeBreakdown.map(({ type, count }) => (
-                            <div key={type} className="flex items-center gap-2 px-3 py-1.5 bg-[#f3f4f6] border border-gray-100 rounded shadow-md">
-                                <span className="text-sm font-semibold text-gray-900">{count}</span>
-                                <span className="text-xs text-gray-500">{type}</span>
                             </div>
-                        ))}
-                    </div>
-                </div>
-            )}
+                        }
+                    >
+                        <PipelineBar items={data!.clientPipelineBreakdown} total={data?.pipelineValue ?? 0} symbol={data?.currencySymbol ?? ''} />
+                    </SubSection>
+                )}
 
-            {data?.weeklyActivity && (
-                <div className={`transition-opacity duration-300 ${loading ? 'opacity-50' : ''}`}>
-                    <h3 className="text-sm font-semibold text-gray-500 mb-3 mt-5">Activity This Week</h3>
-                    <div className="grid grid-cols-4 gap-4">
-                        <StatTile icon={UserPlus} label="New Client(s)" count={data.weeklyActivity.newClients} colorClass="bg-blue-50 text-blue-600" />
-                        <StatTile icon={Briefcase} label="New Engagement(s)" count={data.weeklyActivity.newEngagements} colorClass="bg-indigo-50 text-indigo-600" />
-                        <StatTile icon={Send} label="Invitation(s) Sent" count={data.weeklyActivity.invitationsSent} colorClass="bg-amber-50 text-amber-600" />
-                        <StatTile icon={CheckCircle2} label="Engagement(s) Closed" count={data.weeklyActivity.engagementsClosed} colorClass="bg-green-50 text-green-600" />
-                    </div>
-                </div>
-            )}
-        </div>
+                {(data?.contractTypeBreakdown?.length ?? 0) > 0 && (
+                    <SubSection title="Engagement types">
+                        {/* A plain legend, like the pipeline's: label then count, no chips. */}
+                        <div className="flex flex-wrap gap-x-5 gap-y-1.5 text-small">
+                            {data!.contractTypeBreakdown.map(({ type, count }) => (
+                                <span key={type} className="inline-flex items-baseline gap-1.5">
+                                    <span className="text-fg-muted">{type}</span>
+                                    <span className="font-medium tabular-nums text-fg">{count}</span>
+                                </span>
+                            ))}
+                        </div>
+                    </SubSection>
+                )}
+
+                {data?.weeklyActivity && (
+                    <SubSection title="This week">
+                        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                            <StatTile icon={UserPlus} label="New clients" count={data.weeklyActivity.newClients} colorClass="text-fg-subtle" />
+                            <StatTile icon={Briefcase} label="New engagements" count={data.weeklyActivity.newEngagements} colorClass="text-fg-subtle" />
+                            <StatTile icon={Send} label="Invitations sent" count={data.weeklyActivity.invitationsSent} colorClass="text-fg-subtle" />
+                            <StatTile icon={CheckCircle2} label="Engagements closed" count={data.weeklyActivity.engagementsClosed} colorClass="text-fg-subtle" />
+                        </div>
+                    </SubSection>
+                )}
+            </div>
+        </InsightCard>
         </>
     )
 }

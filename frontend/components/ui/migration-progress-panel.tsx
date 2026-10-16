@@ -41,7 +41,7 @@ function BlockLoader() {
 function FileRow({ file }: { file: { fileId: string; fileName: string | null; status: string } }) {
   const name = file.fileName ?? file.fileId.slice(0, 12) + '…'
   return (
-    <div className="flex items-center gap-2 px-3 py-1.5 min-h-[32px] border-b border-slate-100 last:border-0">
+    <div className="flex items-center gap-2 px-3 py-1.5 min-h-[32px] border-b border-line last:border-0">
       <span className="h-3.5 w-3.5 shrink-0 flex items-center justify-center">
         {file.status === 'moved' ? (
           <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
@@ -257,7 +257,7 @@ export function MigrationProgressPanel({ status, migrationStartedAt, onMigration
         {expanded && (
           <div className="flex flex-col min-h-0 overflow-hidden rounded-b-lg">
             {/* Status summary */}
-            <div className="px-3 py-2.5 border-b border-slate-100 shrink-0">
+            <div className="px-3 py-2.5 border-b border-line shrink-0">
               {isStuck ? (
                 <div className="flex flex-col items-center gap-3 py-2">
                   <BlockLoader />

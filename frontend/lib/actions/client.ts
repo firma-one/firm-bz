@@ -9,7 +9,7 @@ import { ensureAppFolderStructure, setupFirmFolder } from '@/lib/connectors/pock
 import { getStorageAdapter } from '@/lib/connectors/registry'
 import type { ClientStatus } from '@prisma/client'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
-import { upsertFollowUpReminder } from '@/lib/actions/user-reminders'
+import { upsertFollowUpReminder } from '@/lib/reminders/reminder-service'
 import { assertWithinClientCap, assertWithinClientContactCap } from '@/lib/billing/effective-billing-caps'
 import { ClientLinkedFolderFailedError } from '@/lib/actions/client-errors'
 import { clientPath, firmPath } from '@/lib/navigation/firm-paths'
@@ -590,10 +590,27 @@ export async function deleteClient(organizationSlug: string, clientSlug: string)
     revalidatePath(firmPath(firm.group.slug, organizationSlug))
 }
 
+/**
+ * Caller may manage this client (client or firm can_manage) — the gate the client Settings tab and
+ * disconnectClientConnector already use. For actions addressed only by clientId: the firm is read
+ * from the client row, never taken from the caller. Returns the client's firm.
+ */
+async function requireClientManager(clientId: string): Promise<{ firmId: string }> {
+    const supabase = await createSupabaseClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) throw new Error('Unauthorized')
+    const client = await prisma.client.findUnique({ where: { id: clientId }, select: { firmId: true } })
+    if (!client) throw new Error('Client not found')
+    const { canManageClient } = await import('@/lib/permission-helpers')
+    if (!(await canManageClient(client.firmId, clientId))) throw new Error('Unauthorized')
+    return { firmId: client.firmId }
+}
+
 // ── Connector sharing actions ──────────────────────────────────────────────
 
 /** Return other clients (excluding the caller) that share the same connectorId. */
 export async function getConnectorSiblingClients(clientId: string): Promise<{ id: string; name: string }[]> {
+    await requireClientManager(clientId)
     const client = await prisma.client.findUnique({
         where: { id: clientId },
         select: { connectorId: true },
@@ -715,6 +732,7 @@ export async function shareConnectorWithClient({
 }
 
 export async function removeClientConnector({ clientId }: { clientId: string }) {
+    await requireClientManager(clientId)
     const client = await prisma.client.findUnique({
         where: { id: clientId },
         select: { connectorId: true },
@@ -780,6 +798,7 @@ export interface ClientBrandData {
 }
 
 export async function upsertClientBrand(clientId: string, data: ClientBrandData | null): Promise<void> {
+    await requireClientManager(clientId)
     const client = await prisma.client.findUnique({
         where: { id: clientId },
         select: { firmId: true, name: true, settings: true },

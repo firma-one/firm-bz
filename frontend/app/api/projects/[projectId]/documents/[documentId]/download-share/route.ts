@@ -52,6 +52,8 @@ export async function GET(
     if (!document) return NextResponse.json({ error: 'Document not found' }, { status: 404 })
 
     const settings = parseSettingsFromDb(document.settings)
+    // Audit events below record `fileName` (the document's own name, which the Audit page shows)
+    // alongside `filename` (the name served, e.g. its PDF copy).
     const isGuest = projectMember.role === 'eng_viewer'
     const isEC = projectMember.role === 'eng_ext_collaborator'
 
@@ -102,7 +104,7 @@ export async function GET(
           .engagement(projectId)
           .document(document.id)
           .actor(user.id)
-          .meta({ fileId: pdfDriveId, filename, usedPdf: true, generated: false })
+          .meta({ fileName: document.fileName, fileId: pdfDriveId, filename, usedPdf: true, generated: false })
           .fireAndForget()
         const body = Buffer.isBuffer(stream) ? new Uint8Array(stream) : stream
         return new NextResponse(body, { status: 200, headers })
@@ -166,7 +168,7 @@ export async function GET(
         .engagement(projectId)
         .document(document.id)
         .actor(user.id)
-        .meta({ fileId: pdfDriveId, filename, usedPdf: true, generated: true })
+        .meta({ fileName: document.fileName, fileId: pdfDriveId, filename, usedPdf: true, generated: true })
         .fireAndForget()
       return new NextResponse(new Uint8Array(pdfBuffer), { status: 200, headers })
     }
@@ -185,7 +187,7 @@ export async function GET(
         .engagement(projectId)
         .document(document.id)
         .actor(user.id)
-        .meta({ fileId: fileInfo.externalId, usedPdf: true })
+        .meta({ fileName: document.fileName, fileId: fileInfo.externalId, usedPdf: true })
         .fireAndForget()
       return new NextResponse(new Uint8Array(pdfBytes), { status: 200, headers })
     }
@@ -204,7 +206,7 @@ export async function GET(
       .engagement(projectId)
       .document(document.id)
       .actor(user.id)
-      .meta({ fileId: fileInfo.externalId, filename, usedPdf: false })
+      .meta({ fileName: document.fileName, fileId: fileInfo.externalId, filename, usedPdf: false })
       .fireAndForget()
 
     const body = Buffer.isBuffer(stream) ? new Uint8Array(stream) : stream

@@ -8,6 +8,8 @@ import { blockIfEngagementFileMutationForbidden } from '@/lib/engagement-access'
 import { resolveEngagementConnector } from '@/lib/connectors/resolve-client-connector'
 import { getPermissionAdapter } from '@/lib/connectors/registry'
 import type { IConnectorPermissionAdapter } from '@/lib/connectors/types'
+import { getManageableConnector } from '@/lib/connectors/connector-access'
+import { isFileInEngagementTree } from '@/lib/connectors/engagement-file-scope'
 
 const supabase = createClient(
     (process.env.NEXT_PUBLIC_SUPABASE_URL || "http://127.0.0.1:54321"),
@@ -40,16 +42,37 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Action is required' }, { status: 400 })
         }
 
-        // 3. Resolve connector via engagement → client.connector (source of truth)
-        // When no engagementId is provided, fall back to scanning the user's firm/client memberships.
-        let primaryConnector: any = null
-        if (engagementId) {
-            primaryConnector = await resolveEngagementConnector(engagementId)
-        }
-
-        // Fallback: scan all memberships for any active connector (used for non-engagement-scoped actions)
+        // 3. Resolve connectors the caller may act through (.claude/plans/access-gates.md, P0 #5).
+        //    Engagement-scoped: only `trash`, only with edit rights on the engagement, only on its
+        //    own connector, and only on a file inside its folder tree. Everything else: only
+        //    connectors the caller manages (owner, firm admin, or manager of a client using it) —
+        //    never one named in the body that isn't theirs, never one reached through a guest's
+        //    firm membership.
         let connectors: Array<any & { organizationId: string }> = []
-        if (!primaryConnector) {
+        if (engagementId) {
+            if (action !== 'trash') {
+                return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
+            }
+            const engagementRow = await prisma.engagement.findFirst({
+                where: { id: engagementId, isDeleted: false },
+                select: { firmId: true, clientId: true },
+            })
+            const { canEditProject } = await import('@/lib/permission-helpers')
+            if (!engagementRow || !(await canEditProject(engagementRow.firmId, engagementRow.clientId, engagementId))) {
+                return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+            }
+            const primaryConnector = await resolveEngagementConnector(engagementId)
+            if (primaryConnector) {
+                if (connectorId && connectorId !== primaryConnector.id) {
+                    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+                }
+                if (fileId && !(await isFileInEngagementTree(engagementId, primaryConnector.id, fileId))) {
+                    return NextResponse.json({ error: 'File is not in this engagement' }, { status: 403 })
+                }
+                connectorId = primaryConnector.id
+                connectors = [{ ...primaryConnector, organizationId: engagementRow.firmId }]
+            }
+        } else {
             const [firmMemberships, clientMemberships] = await Promise.all([
                 prisma.firmMember.findMany({ where: { userId: user.id }, select: { firmId: true } }),
                 prisma.clientMember.findMany({ where: { userId: user.id }, include: { client: { select: { firmId: true, connectorId: true } } } }),
@@ -68,13 +91,19 @@ export async function POST(request: NextRequest) {
                     include: { connector: true }
                 }),
             ])
-            connectors = [
+            const candidates = [
                 ...orgsWithConnectors.filter(o => o.connector).map(o => ({ ...o.connector!, organizationId: o.id })),
                 ...clientsWithConnectors.filter(c => c.connector).map(c => ({ ...c.connector!, organizationId: c.firmId })),
             ]
-        } else {
-            const engagement = await prisma.engagement.findUnique({ where: { id: engagementId }, select: { firmId: true } })
-            connectors = [{ ...primaryConnector, organizationId: engagement?.firmId ?? '' }]
+            const seenIds = new Set<string>()
+            for (const c of candidates) {
+                if (seenIds.has(c.id)) continue
+                seenIds.add(c.id)
+                if (await getManageableConnector(user.id, c.id)) connectors.push(c)
+            }
+            if (connectorId && !connectors.some(c => c.id === connectorId)) {
+                return NextResponse.json({ error: 'Connector not found' }, { status: 404 })
+            }
         }
 
         if (connectors.length === 0) {

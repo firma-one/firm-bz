@@ -3,10 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { usePathname } from 'next/navigation'
-import { X } from 'lucide-react'
+import { Lock, X } from 'lucide-react'
 import { firmAdminMustCompleteOnboarding } from '@/lib/actions/firms'
-import { cn } from '@/lib/utils'
-import { buttonVariants } from '@/components/ui/button'
+import { Button } from '@/components/ui/button'
 
 /** Full-viewport overlay for onboarding exit guard (checkout hint is in-pane via `AppShellHintStrip`). */
 const OVERLAY_Z = 100
@@ -22,7 +21,8 @@ function navigatesAwayFromOnboarding(targetPathname: string, currentPathname: st
 
 /**
  * While mandatory onboarding is incomplete, blocks in-app navigations away from `/d/onboarding`
- * (captured link clicks). Shows a dismissible bottom banner styled like the Standard checkout nudge.
+ * (captured link clicks). Shows a dismissible notice over the scrim: a calm New UI card with a
+ * yellow lock chip, the reason, and one primary action.
  */
 export function OnboardingExitGuardBanner() {
     const pathname = usePathname() ?? ''
@@ -117,53 +117,50 @@ export function OnboardingExitGuardBanner() {
     return createPortal(
         <>
             <div
-                className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm"
+                className="fixed inset-0 bg-scrim"
                 style={{ zIndex: OVERLAY_Z }}
                 aria-hidden
             />
             <div
-                className={cn(
-                    'fixed left-0 right-0 border-t-2 border-[#006e16] bg-white shadow-[0_-12px_40px_-8px_rgba(15,23,42,0.25)]',
-                    'pb-[max(1rem,env(safe-area-inset-bottom))] pt-4'
-                )}
-                style={{ zIndex: OVERLAY_Z + 1, bottom: 0 }}
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="onboarding-exit-guard-title"
+                className="fixed inset-x-0 bottom-0 flex justify-center px-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
+                style={{ zIndex: OVERLAY_Z + 1 }}
             >
-                <div className="mx-auto flex max-w-5xl flex-col gap-4 px-4 sm:flex-row sm:items-center sm:justify-between sm:px-8">
-                    <div className="min-w-0 pr-10 sm:pr-4">
-                        <p
-                            id="onboarding-exit-guard-title"
-                            className="text-lg font-semibold tracking-tight text-slate-900 sm:text-xl"
-                        >
+                <div
+                    className="flex w-full max-w-xl items-start gap-3 rounded-dialog border border-line bg-surface p-4 shadow-dialog"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="onboarding-exit-guard-title"
+                >
+                    <span
+                        aria-hidden
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-control bg-tag-yellow-bg text-tag-yellow-fg"
+                    >
+                        <Lock className="h-4 w-4" strokeWidth={1.75} />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                        <p id="onboarding-exit-guard-title" className="text-ui font-medium text-fg">
                             Finish required setup first
                         </p>
-                        <p className="mt-1 text-sm leading-relaxed text-slate-600 sm:text-base">
-                            Complete the mandatory onboarding steps before opening the rest of the app. You can keep
+                        <p className="mt-0.5 text-small text-fg-muted">
+                            Complete the required onboarding steps before opening the rest of the app. You can keep
                             working here—this message appears whenever you try to leave this page early.
                         </p>
+                        <div className="mt-3 flex items-center gap-2">
+                            <Button type="button" variant="greenCta" onClick={dismiss}>
+                                Continue onboarding
+                            </Button>
+                        </div>
                     </div>
-                    <div className="flex shrink-0 flex-row items-center gap-3 sm:flex-col sm:items-stretch md:flex-row md:items-center">
-                        <button
-                            type="button"
-                            onClick={dismiss}
-                            className={cn(
-                                buttonVariants({ variant: 'blackCta', size: 'default' }),
-                                'h-11 min-w-[10rem] justify-center px-6 text-sm font-semibold shadow-md'
-                            )}
-                        >
-                            Continue onboarding
-                        </button>
-                        <button
-                            type="button"
-                            onClick={dismiss}
-                            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition-colors hover:bg-slate-50 hover:text-slate-900"
-                            aria-label="Dismiss"
-                        >
-                            <X className="h-5 w-5" strokeWidth={2.25} />
-                        </button>
-                    </div>
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={dismiss}
+                        className="-mr-1 -mt-1 h-7 w-7 shrink-0"
+                        aria-label="Dismiss"
+                    >
+                        <X className="h-4 w-4" strokeWidth={1.75} />
+                    </Button>
                 </div>
             </div>
         </>,

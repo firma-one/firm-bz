@@ -57,9 +57,9 @@ type PendingAttachment = {
 }
 
 const REQUEST_TYPE_CONFIG: Record<TicketType, { label: string; color: string; bgColor: string; icon: React.ElementType }> = {
-  [TicketType.BUG]: { label: 'Bug Report', color: 'text-rose-500', bgColor: 'bg-rose-50', icon: AlertCircle },
-  [TicketType.REQUEST]: { label: 'Feature Request', color: 'text-amber-500', bgColor: 'bg-amber-50', icon: Lightbulb },
-  [TicketType.ENQUIRY]: { label: 'General Enquiry', color: 'text-sky-500', bgColor: 'bg-sky-50', icon: HelpCircle },
+  [TicketType.BUG]: { label: 'Bug Report', color: 'text-danger', bgColor: 'bg-tag-red-bg', icon: AlertCircle },
+  [TicketType.REQUEST]: { label: 'Feature Request', color: 'text-tag-yellow-fg', bgColor: 'bg-tag-yellow-bg', icon: Lightbulb },
+  [TicketType.ENQUIRY]: { label: 'General Enquiry', color: 'text-tag-blue-fg', bgColor: 'bg-sky-50', icon: HelpCircle },
 }
 
 export function ViewSupportRequestModal({
@@ -353,25 +353,25 @@ export function ViewSupportRequestModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[600px] border-slate-200 max-h-[90vh] overflow-y-auto p-6">
+      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto p-6">
         <DialogHeader>
-          <DialogTitle className="text-slate-900">Support Request Details</DialogTitle>
+          <DialogTitle className="text-fg">Support Request Details</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
           {/* Ticket Info */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-sm font-semibold text-slate-900">Ticket ID</span>
+              <span className="text-sm font-semibold text-fg">Ticket ID</span>
               <div className="flex items-center gap-2">
-                <code className="text-sm font-mono bg-slate-100 px-2 py-1 rounded text-slate-900">
+                <code className="text-sm font-mono bg-surface-muted px-2 py-1 rounded text-fg">
                   {ticket.ticketNumber}
                 </code>
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="h-auto p-1 text-slate-500 hover:text-slate-900"
+                  className="h-auto p-1 text-fg-muted hover:text-fg"
                   onClick={() => copyToClipboard(ticket.ticketNumber)}
                 >
                   <Copy className="h-4 w-4" />
@@ -380,7 +380,7 @@ export function ViewSupportRequestModal({
             </div>
 
             <div className="flex items-center justify-between">
-              <span className="text-sm font-semibold text-slate-900">Type</span>
+              <span className="text-sm font-semibold text-fg">Type</span>
               {(() => {
                 const cfg = REQUEST_TYPE_CONFIG[ticket.type]
                 const Icon = cfg.icon
@@ -394,10 +394,10 @@ export function ViewSupportRequestModal({
             </div>
 
             <div className="flex items-center justify-between">
-              <span className="text-sm font-semibold text-slate-900">Created</span>
+              <span className="text-sm font-semibold text-fg">Created</span>
               <TooltipProvider>
                 <Tooltip>
-                  <TooltipTrigger className="flex items-center gap-1 text-slate-600 hover:text-slate-900 cursor-help whitespace-nowrap text-xs">
+                  <TooltipTrigger className="flex items-center gap-1 text-fg-muted hover:text-fg cursor-help whitespace-nowrap text-xs">
                     <Clock className="h-3.5 w-3.5 flex-shrink-0" />
                     <span>{formatDistanceToNow(new Date(ticket.createdAt), { addSuffix: true })}</span>
                   </TooltipTrigger>
@@ -410,10 +410,10 @@ export function ViewSupportRequestModal({
 
             {ticket.updatedAt && ticket.updatedAt !== ticket.createdAt && (
               <div className="flex items-center justify-between">
-                <span className="text-sm font-semibold text-slate-900">Modified</span>
+                <span className="text-sm font-semibold text-fg">Modified</span>
                 <TooltipProvider>
                   <Tooltip>
-                    <TooltipTrigger className="flex items-center gap-1 text-slate-600 hover:text-slate-900 cursor-help whitespace-nowrap text-xs">
+                    <TooltipTrigger className="flex items-center gap-1 text-fg-muted hover:text-fg cursor-help whitespace-nowrap text-xs">
                       <Clock className="h-3.5 w-3.5 flex-shrink-0" />
                       <span>{formatDistanceToNow(new Date(ticket.updatedAt), { addSuffix: true })}</span>
                     </TooltipTrigger>
@@ -426,7 +426,7 @@ export function ViewSupportRequestModal({
             )}
 
             <div className="flex items-center justify-between">
-              <span className="text-sm font-semibold text-slate-900">Status</span>
+              <span className="text-sm font-semibold text-fg">Status</span>
               <Select value={currentStatus} onValueChange={handleStatusChange} disabled={isUpdatingStatus}>
                 <SelectTrigger className="w-48 h-9 text-sm">
                   <SelectValue />
@@ -441,27 +441,27 @@ export function ViewSupportRequestModal({
             </div>
           </div>
 
-          <div className="border-t border-slate-200" />
+          <div className="border-t border-line" />
 
           {/* Description */}
           <div className="space-y-2">
-            <Label className="text-slate-900 font-semibold">Description</Label>
+            <Label className="text-fg font-semibold">Description</Label>
             <textarea
               readOnly
               value={ticket.description}
-              className="w-full h-20 p-3 bg-slate-50 border border-slate-200 rounded text-slate-900 text-sm resize-none overflow-y-auto"
+              className="w-full h-20 p-3 bg-surface-subtle border border-line rounded text-fg text-sm resize-none overflow-y-auto"
             />
           </div>
 
           {/* Attachments Section */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <Label className="text-slate-900">Attachments</Label>
+              <Label className="text-fg">Attachments</Label>
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="h-auto p-0 text-slate-600 hover:text-slate-900"
+                className="h-auto p-0 text-fg-muted hover:text-fg"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isLoading}
               >
@@ -493,20 +493,20 @@ export function ViewSupportRequestModal({
               onBlur={() => setIsDropzoneActive(false)}
               className={`border-2 border-dashed rounded-md py-8 text-center transition-colors cursor-pointer ${
                 isDragOver
-                  ? 'border-slate-400 bg-slate-50'
+                  ? 'border-slate-400 bg-surface-subtle'
                   : isDropzoneActive
-                  ? 'border-slate-200 bg-slate-50'
-                  : 'border-slate-300 bg-slate-100'
+                  ? 'border-line bg-surface-subtle'
+                  : 'border-line-strong bg-surface-muted'
               }`}
             >
-              <Paperclip className="h-5 w-5 text-slate-400 mx-auto mb-2" />
-              <p className="text-sm text-slate-500">
+              <Paperclip className="h-5 w-5 text-fg-subtle mx-auto mb-2" />
+              <p className="text-sm text-fg-muted">
                 Drop files here, click to browse, or paste a screenshot
               </p>
             </div>
 
             {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-3 py-2 rounded-md">
+              <div className="bg-tag-red-bg border border-tag-red-bg text-tag-red-fg text-sm px-3 py-2 rounded-md">
                 {error}
               </div>
             )}
@@ -518,7 +518,7 @@ export function ViewSupportRequestModal({
                   <div key={idx} className="space-y-1">
                     {/* Image Preview */}
                     {isImage(a.mimeType) && (
-                      <div className="border border-slate-200 rounded overflow-hidden max-h-48">
+                      <div className="border border-line rounded overflow-hidden max-h-48">
                         <img
                           src={a.blobData}
                           alt={a.originalName}
@@ -532,16 +532,16 @@ export function ViewSupportRequestModal({
                     )}
 
                     {/* File Row with Actions */}
-                    <div className="flex items-center gap-2 p-2 bg-slate-50 rounded border border-slate-200">
-                      <FileIcon className="h-4 w-4 text-slate-500 flex-shrink-0" />
+                    <div className="flex items-center gap-2 p-2 bg-surface-subtle rounded border border-line">
+                      <FileIcon className="h-4 w-4 text-fg-muted flex-shrink-0" />
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm text-slate-900 truncate">{a.originalName}</p>
+                        <p className="text-sm text-fg truncate">{a.originalName}</p>
                         {a.size ? (
-                          <p className="text-xs text-slate-500">
+                          <p className="text-xs text-fg-muted">
                             {(a.size / 1024 / 1024).toFixed(2)} MB
                           </p>
                         ) : (
-                          <p className="text-xs text-slate-400">Size unknown</p>
+                          <p className="text-xs text-fg-subtle">Size unknown</p>
                         )}
                       </div>
 
@@ -550,7 +550,7 @@ export function ViewSupportRequestModal({
                           type="button"
                           variant="ghost"
                           size="sm"
-                          className="h-auto p-1 text-slate-500 hover:text-slate-900"
+                          className="h-auto p-1 text-fg-muted hover:text-fg"
                           title="Download"
                           onClick={() => handleDownloadAttachment(a)}
                         >
@@ -560,7 +560,7 @@ export function ViewSupportRequestModal({
                           type="button"
                           variant="ghost"
                           size="sm"
-                          className="h-auto p-1 text-slate-500 hover:text-red-600"
+                          className="h-auto p-1 text-fg-muted hover:text-danger"
                           title="Delete"
                           onClick={() => handleDeleteAttachment(a)}
                           disabled={isLoading || isUpdatingStatus}
@@ -580,11 +580,11 @@ export function ViewSupportRequestModal({
                 {newAttachments.filter(a => a.status !== 'done').map((a) => (
                   <div
                     key={a.id}
-                    className="flex items-center gap-2 p-2 bg-slate-50 rounded border border-slate-200"
+                    className="flex items-center gap-2 p-2 bg-surface-subtle rounded border border-line"
                   >
-                    <FileIcon className="h-4 w-4 text-slate-500 flex-shrink-0" />
+                    <FileIcon className="h-4 w-4 text-fg-muted flex-shrink-0" />
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm text-slate-900 truncate">{a.displayName}</p>
+                      <p className="text-sm text-fg truncate">{a.displayName}</p>
                       {a.status === 'uploading' && (
                         <div className="flex items-center gap-2 mt-1">
                           <div className="flex-1 h-1 bg-slate-300 rounded overflow-hidden">
@@ -593,16 +593,16 @@ export function ViewSupportRequestModal({
                               style={{ width: `${a.progress}%` }}
                             />
                           </div>
-                          <span className="text-xs text-slate-500">{a.progress}%</span>
+                          <span className="text-xs text-fg-muted">{a.progress}%</span>
                         </div>
                       )}
                       {a.status === 'done' && (
-                        <p className="text-xs text-emerald-600 flex items-center gap-1 mt-1">
+                        <p className="text-xs text-tag-green-fg flex items-center gap-1 mt-1">
                           <CheckCircle2 className="h-3 w-3" /> Uploaded
                         </p>
                       )}
                       {a.status === 'error' && (
-                        <p className="text-xs text-red-600 mt-1">{a.error}</p>
+                        <p className="text-xs text-tag-red-fg mt-1">{a.error}</p>
                       )}
                     </div>
                     {(a.status === 'pending' || a.status === 'error') && (
@@ -610,7 +610,7 @@ export function ViewSupportRequestModal({
                         type="button"
                         variant="ghost"
                         size="sm"
-                        className="h-auto p-1 text-slate-500 hover:text-red-600"
+                        className="h-auto p-1 text-fg-muted hover:text-danger"
                         onClick={() => setNewAttachments(prev => prev.filter(att => att.id !== a.id))}
                       >
                         <X className="h-4 w-4" />
@@ -638,8 +638,8 @@ export function ViewSupportRequestModal({
           {/* Deletion Confirmation Toast */}
           {deletionConfirmation?.shown && (
             <div className="mt-4 p-3 bg-emerald-50 border border-emerald-200 rounded-md flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4 text-emerald-600 flex-shrink-0" />
-              <p className="text-sm text-emerald-700">
+              <CheckCircle2 className="h-4 w-4 text-tag-green-fg flex-shrink-0" />
+              <p className="text-sm text-tag-green-fg">
                 <strong>{deletionConfirmation.attachmentName}</strong> has been deleted
               </p>
             </div>

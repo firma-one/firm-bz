@@ -5,7 +5,6 @@ import {
   Briefcase,
   Building2,
   Check,
-  ChevronDown,
   ClipboardList,
   Copy,
   Download,
@@ -13,6 +12,9 @@ import {
   FileText,
   FileUp,
   FolderLock,
+  Layers,
+  Activity,
+  User,
   Loader2,
   Lock,
   MessageSquare,
@@ -25,6 +27,7 @@ import {
   X,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { EmptyPanel } from '@/components/ui/empty-panel'
 import { formatSmartDateTime } from '@/lib/utils'
 import {
   DropdownMenu,
@@ -42,6 +45,7 @@ import {
 } from '@/components/ui/tooltip'
 import { RelativeDateTime } from '@/components/ui/relative-date-time'
 import { DateTimePicker } from '@/components/ui/date-time-picker'
+import { FilterMenuLabel, FilterMenuRow, FilterMenuSearch, FilterPill, summarizePicks } from '@/components/ui/filter-pill'
 import { UserAvatarWithTooltip } from '@/components/ui/user-avatar-with-tooltip'
 
 export type AuditWithFiltersMode = 'project' | 'org'
@@ -60,6 +64,9 @@ export type AuditEventRow = {
 }
 
 type FilterOption = { id: string; name: string; clientId?: string }
+
+/** Client, Engagement and Actor menus get a search box once their list is longer than this. */
+const MENU_SEARCH_THRESHOLD = 7
 
 const EVENT_TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: '', label: 'All types' },
@@ -275,7 +282,8 @@ export function eventDetails(ev: AuditEventRow): string {
   const m = ev.metadata as Record<string, unknown> | undefined
   if (!m || typeof m !== 'object') return ''
   const approval = approvalSuffix(m)
-  const fileName = m.fileName as string | undefined
+  // `filename` is how the download-share route named the file before it also recorded `fileName`.
+  const fileName = (m.fileName as string | undefined) || (m.filename as string | undefined)
   const description = m.description as string | undefined
   const name = m.name as string | undefined
   const action = m.action as string | undefined
@@ -300,30 +308,44 @@ export function eventDetails(ev: AuditEventRow): string {
   if (changedFields?.length) return `Changed: ${changedFields.join(', ')}${approval}`
   if (m.newStatus) return `Status: ${m.oldStatus ?? '—'} → ${m.newStatus}${approval}`
   if (approval) return approval.replace(/^ · /, '')
-  return Object.keys(m).length ? JSON.stringify(m) : ''
+  // Never raw JSON: a file event whose name could not be found says so, and anything else shows
+  // its plain values — ids left out, since they mean nothing to a reader.
+  if (ev.eventType.startsWith('DOCUMENT_')) return 'File name not recorded'
+  return readableMetadata(m)
+}
+
+/** "Key value · Key value" for an event's simple values, leaving out ids. */
+function readableMetadata(m: Record<string, unknown>): string {
+  return Object.entries(m)
+    .filter(([key, value]) => !/id$/i.test(key) && ['string', 'number', 'boolean'].includes(typeof value) && value !== '')
+    .map(([key, value]) => {
+      const label = key.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase()
+      return `${label.charAt(0).toUpperCase()}${label.slice(1)}: ${String(value)}`
+    })
+    .join(' · ')
 }
 
 function EventIcon({ eventType }: { eventType: string }) {
-  if (eventType.startsWith('ONBOARDING_')) return <Rocket className="h-4 w-4 text-violet-500" />
-  if (eventType.startsWith('FIRM_MEMBER_')) return <UserPlus className="h-4 w-4 text-indigo-400" />
-  if (eventType.startsWith('FIRM_')) return <Building2 className="h-4 w-4 text-indigo-600" />
-  if (eventType.startsWith('CLIENT_CONTACT_')) return <MessageSquare className="h-4 w-4 text-teal-400" />
-  if (eventType.startsWith('CLIENT_MEMBER_')) return <UserPlus className="h-4 w-4 text-teal-400" />
-  if (eventType.startsWith('CLIENT_')) return <Users className="h-4 w-4 text-teal-600" />
-  if (eventType.startsWith('ENGAGEMENT_MEMBER_')) return <UserPlus className="h-4 w-4 text-blue-400" />
-  if (eventType.startsWith('ENGAGEMENT_')) return <Briefcase className="h-4 w-4 text-blue-600" />
-  if (eventType === 'DOCUMENT_OPENED') return <Eye className="h-4 w-4 text-slate-500" />
-  if (eventType === 'DOCUMENT_DOWNLOADED' || eventType === 'DOCUMENT_SHARE_DOWNLOADED') return <Download className="h-4 w-4 text-green-600" />
-  if (eventType === 'AUDIT_LOG_EXPORTED') return <ClipboardList className="h-4 w-4 text-orange-500" />
-  if (eventType.startsWith('DOCUMENT_SHARE_')) return <Share2 className="h-4 w-4 text-purple-600" />
-  if (eventType.startsWith('DOCUMENT_COMMENT_')) return <MessageSquare className="h-4 w-4 text-amber-500" />
-  if (eventType === 'DOCUMENT_FINALIZED' || eventType === 'DOCUMENT_LOCKED') return <Lock className="h-4 w-4 text-amber-600" />
-  if (eventType === 'DOCUMENT_STATUS_CHANGED' || eventType.includes('STATUS')) return <RefreshCw className="h-4 w-4 text-slate-600" />
-  if (eventType.includes('SHARED') || eventType === 'SHARED_EXT') return <Share2 className="h-4 w-4 text-purple-600" />
-  if (eventType.includes('LOCKED') || eventType.includes('CLOSED')) return <Lock className="h-4 w-4 text-amber-600" />
-  if (eventType.includes('UPLOAD') || eventType.includes('DOCUMENT_ADDED') || eventType === 'DOCUMENT_CREATED') return <FileUp className="h-4 w-4 text-blue-600" />
-  if (eventType.startsWith('DOCUMENT_')) return <FileText className="h-4 w-4 text-gray-500" />
-  return <FileText className="h-4 w-4 text-gray-400" />
+  if (eventType.startsWith('ONBOARDING_')) return <Rocket className="h-3.5 w-3.5 text-fg-subtle" />
+  if (eventType.startsWith('FIRM_MEMBER_')) return <UserPlus className="h-3.5 w-3.5 text-fg-subtle" />
+  if (eventType.startsWith('FIRM_')) return <Building2 className="h-3.5 w-3.5 text-fg-subtle" />
+  if (eventType.startsWith('CLIENT_CONTACT_')) return <MessageSquare className="h-3.5 w-3.5 text-fg-subtle" />
+  if (eventType.startsWith('CLIENT_MEMBER_')) return <UserPlus className="h-3.5 w-3.5 text-fg-subtle" />
+  if (eventType.startsWith('CLIENT_')) return <Users className="h-3.5 w-3.5 text-fg-subtle" />
+  if (eventType.startsWith('ENGAGEMENT_MEMBER_')) return <UserPlus className="h-3.5 w-3.5 text-fg-subtle" />
+  if (eventType.startsWith('ENGAGEMENT_')) return <Briefcase className="h-3.5 w-3.5 text-fg-subtle" />
+  if (eventType === 'DOCUMENT_OPENED') return <Eye className="h-3.5 w-3.5 text-fg-subtle" />
+  if (eventType === 'DOCUMENT_DOWNLOADED' || eventType === 'DOCUMENT_SHARE_DOWNLOADED') return <Download className="h-3.5 w-3.5 text-fg-subtle" />
+  if (eventType === 'AUDIT_LOG_EXPORTED') return <ClipboardList className="h-3.5 w-3.5 text-fg-subtle" />
+  if (eventType.startsWith('DOCUMENT_SHARE_')) return <Share2 className="h-3.5 w-3.5 text-fg-subtle" />
+  if (eventType.startsWith('DOCUMENT_COMMENT_')) return <MessageSquare className="h-3.5 w-3.5 text-fg-subtle" />
+  if (eventType === 'DOCUMENT_FINALIZED' || eventType === 'DOCUMENT_LOCKED') return <Lock className="h-3.5 w-3.5 text-fg-subtle" />
+  if (eventType === 'DOCUMENT_STATUS_CHANGED' || eventType.includes('STATUS')) return <RefreshCw className="h-3.5 w-3.5 text-fg-subtle" />
+  if (eventType.includes('SHARED') || eventType === 'SHARED_EXT') return <Share2 className="h-3.5 w-3.5 text-fg-subtle" />
+  if (eventType.includes('LOCKED') || eventType.includes('CLOSED')) return <Lock className="h-3.5 w-3.5 text-fg-subtle" />
+  if (eventType.includes('UPLOAD') || eventType.includes('DOCUMENT_ADDED') || eventType === 'DOCUMENT_CREATED') return <FileUp className="h-3.5 w-3.5 text-fg-subtle" />
+  if (eventType.startsWith('DOCUMENT_')) return <FileText className="h-3.5 w-3.5 text-fg-subtle" />
+  return <FileText className="h-3.5 w-3.5 text-fg-subtle" />
 }
 
 function isJsonObject(s: string): boolean {
@@ -333,7 +355,7 @@ function isJsonObject(s: string): boolean {
 function DetailCell({ ev }: { ev: AuditEventRow }) {
   const [copied, setCopied] = React.useState(false)
   const raw = eventDetails(ev)
-  if (!raw) return <span className="text-gray-400">—</span>
+  if (!raw) return <span className="text-fg-subtle">—</span>
 
   const isJson = isJsonObject(raw)
 
@@ -347,21 +369,21 @@ function DetailCell({ ev }: { ev: AuditEventRow }) {
   return (
     <div className="flex items-center gap-1.5 group max-w-xs">
       {isJson ? (
-        <code className="text-xs font-mono bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded truncate block max-w-[260px]" title={raw}>
+        <code className="block max-w-[260px] truncate rounded-control bg-surface-muted px-1.5 py-0.5 font-mono text-caption text-fg-muted" title={raw}>
           {raw}
         </code>
       ) : (
-        <span className="truncate text-gray-700 max-w-[260px]" title={raw}>{raw}</span>
+        <span className="truncate text-fg-muted max-w-[260px]" title={raw}>{raw}</span>
       )}
       <button
         type="button"
         onClick={handleCopy}
-        className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-slate-100"
+        className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-surface-hover"
         title="Copy"
       >
         {copied
           ? <Check className="h-3 w-3 text-green-500" />
-          : <Copy className="h-3 w-3 text-slate-400" />
+          : <Copy className="h-3 w-3 text-fg-subtle" />
         }
       </button>
     </div>
@@ -508,29 +530,9 @@ export function AuditWithFilters({
     return projects.filter((p) => p.name.toLowerCase().includes(q))
   }, [projects, projectSearch])
 
-  const selectedClientLabel = useMemo(() => {
-    if (clientIdsFilter.length === 0) return 'All clients'
-    if (clientIdsFilter.length === 1) return clients.find((c) => c.id === clientIdsFilter[0])?.name ?? '1 client'
-    return `${clientIdsFilter.length} clients`
-  }, [clientIdsFilter, clients])
 
-  const selectedProjectLabel = useMemo(() => {
-    if (projectIdsFilter.length === 0) return 'All projects'
-    if (projectIdsFilter.length === 1) return projects.find((p) => p.id === projectIdsFilter[0])?.name ?? '1 project'
-    return `${projectIdsFilter.length} projects`
-  }, [projectIdsFilter, projects])
 
-  const selectedScopeLabel = useMemo(() => {
-    if (scopeFilter.length === 0) return 'All scopes'
-    if (scopeFilter.length === 1) return SCOPE_OPTIONS.find((o) => o.value === scopeFilter[0])?.label ?? '1 scope'
-    return `${scopeFilter.length} scopes`
-  }, [scopeFilter])
 
-  const selectedActionLabel = useMemo(() => {
-    if (actionFilter.length === 0) return 'All types'
-    if (actionFilter.length === 1) return EVENT_ACTION_OPTIONS.find((o) => o.value === actionFilter[0])?.label ?? '1 type'
-    return `${actionFilter.length} types`
-  }, [actionFilter])
 
   // Load dropdown options for firm mode
   useEffect(() => {
@@ -665,14 +667,6 @@ export function AuditWithFilters({
     return uniqueActors.filter((a) => a.name.toLowerCase().includes(q) || a.email.toLowerCase().includes(q))
   }, [uniqueActors, actorSearch])
 
-  const selectedActorLabel = useMemo(() => {
-    if (actorFilter.length === 0) return 'All actors'
-    if (actorFilter.length === 1) {
-      const a = uniqueActors.find((a) => a.id === actorFilter[0])
-      return a?.name ?? '1 actor'
-    }
-    return `${actorFilter.length} actors`
-  }, [actorFilter, uniqueActors])
 
   const visibleEvents = useMemo(() => {
     let list = events
@@ -702,406 +696,277 @@ export function AuditWithFilters({
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      <p className="text-xs text-gray-500 mb-3">Audit history is permanent and cannot be edited.</p>
-
-      <div className="flex flex-wrap items-end gap-2 mb-4">
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-gray-600">From date</label>
-          <DateTimePicker
-            key={`from-${pickerResetKey}`}
-            value={fromDate}
-            defaultTime="23:59"
-            allowFutureDateTimes={false}
-            placeholder="From date"
-            className="w-[190px]"
-            onChange={(iso) => {
-              setFromDate(iso)
-              if (iso && toDate && new Date(iso) > new Date(toDate)) {
-                setDateRangeError('From must be before To')
-              } else {
-                setDateRangeError(null)
-              }
-            }}
-          />
-        </div>
-
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-gray-600">To date</label>
-          <DateTimePicker
-            key={`to-${pickerResetKey}`}
-            value={toDate}
-            defaultTime="23:59"
-            placeholder="To date"
-            className="w-[190px]"
-            onChange={(iso) => {
-              if (iso && fromDate && new Date(iso) < new Date(fromDate)) {
-                setDateRangeError('To must be after From')
-                return
-              }
+      
+      {/* Filters — Notion's filter-bar pills and menus, the same parts as Doc Search and the
+          Files toolbar (components/ui/filter-pill.tsx). Every list filter here is multi-select:
+          checkbox rows that stay open. The dates stay inline, shaped as pills. */}
+      <div className="mb-3 flex flex-wrap items-center gap-1.5">
+        <DateTimePicker
+          key={`from-${pickerResetKey}`}
+          value={fromDate}
+          defaultTime="23:59"
+          allowFutureDateTimes={false}
+          placeholder="From date"
+          className="h-7 w-[168px] rounded-full border-line px-2.5 text-small"
+          onChange={(iso) => {
+            setFromDate(iso)
+            if (iso && toDate && new Date(iso) > new Date(toDate)) {
+              setDateRangeError('From must be before To')
+            } else {
               setDateRangeError(null)
-              setToDate(iso)
-            }}
-          />
-        </div>
+            }
+          }}
+        />
+        <DateTimePicker
+          key={`to-${pickerResetKey}`}
+          value={toDate}
+          defaultTime="23:59"
+          placeholder="To date"
+          className="h-7 w-[168px] rounded-full border-line px-2.5 text-small"
+          onChange={(iso) => {
+            if (iso && fromDate && new Date(iso) < new Date(fromDate)) {
+              setDateRangeError('To must be after From')
+              return
+            }
+            setDateRangeError(null)
+            setToDate(iso)
+          }}
+        />
 
         {dateRangeError && (
-          <p className="text-xs text-red-500 self-end pb-1.5">{dateRangeError}</p>
+          <p className="text-small text-danger">{dateRangeError}</p>
         )}
 
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-gray-600">Event scope</label>
-          <DropdownMenu open={scopeMenuOpen} onOpenChange={setScopeMenuOpen}>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                className="rounded border border-slate-300/80 px-2 py-1.5 text-xs w-[130px] bg-white flex items-center justify-between gap-2"
-              >
-                <span className="truncate">{selectedScopeLabel}</span>
-                <ChevronDown className="h-4 w-4 text-gray-500 shrink-0" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-[200px] p-0">
-              <div className="max-h-[280px] overflow-y-auto py-1">
-                <button
-                  type="button"
-                  className="w-full px-2 py-1 text-xs flex items-center gap-2 hover:bg-gray-50"
-                  onClick={(e) => { e.preventDefault(); setScopeFilter([]) }}
-                >
-                  <span className="h-4 w-4 rounded border border-slate-300 bg-white flex items-center justify-center">
-                    <Check className={`h-3 w-3 ${scopeFilter.length === 0 ? 'text-slate-800' : 'text-slate-300'}`} strokeWidth={2.5} />
-                  </span>
-                  All scopes
-                </button>
-                {SCOPE_OPTIONS.map((o) => {
-                  const checked = scopeFilter.includes(o.value)
-                  return (
-                    <button
-                      key={o.value}
-                      type="button"
-                      className="w-full px-2 py-1 text-xs flex items-center gap-2 hover:bg-gray-50"
-                      onClick={(e) => { e.preventDefault(); setScopeFilter(toggleId(scopeFilter, o.value)) }}
-                    >
-                      <span className="h-4 w-4 rounded border border-slate-300 bg-white flex items-center justify-center">
-                        <Check className={`h-3 w-3 ${checked ? 'text-slate-800' : 'text-slate-300'}`} strokeWidth={2.5} />
-                      </span>
-                      <span>{o.label}</span>
-                    </button>
-                  )
-                })}
-              </div>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+        <DropdownMenu open={scopeMenuOpen} onOpenChange={setScopeMenuOpen}>
+          <DropdownMenuTrigger asChild>
+            <FilterPill
+              icon={<Layers />}
+              label="Scope"
+              value={scopeFilter.length
+                ? summarizePicks(SCOPE_OPTIONS.filter((o) => scopeFilter.includes(o.value)).map((o) => o.label))
+                : undefined}
+              onClear={() => setScopeFilter([])}
+            />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-[220px] p-1">
+            <FilterMenuLabel>Scope</FilterMenuLabel>
+            <FilterMenuRow multi selected={scopeFilter.length === 0} onSelect={() => setScopeFilter([])}>
+              Any scope
+            </FilterMenuRow>
+            <DropdownMenuSeparator className="mx-0 my-1" />
+            {SCOPE_OPTIONS.map((o) => (
+              <FilterMenuRow key={o.value} multi selected={scopeFilter.includes(o.value)} onSelect={() => setScopeFilter(toggleId(scopeFilter, o.value))}>
+                {o.label}
+              </FilterMenuRow>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
 
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-gray-600">Event type</label>
-          <DropdownMenu open={actionMenuOpen} onOpenChange={setActionMenuOpen}>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                className="rounded border border-slate-300/80 px-2 py-1.5 text-xs w-[130px] bg-white flex items-center justify-between gap-2"
-              >
-                <span className="truncate">{selectedActionLabel}</span>
-                <ChevronDown className="h-4 w-4 text-gray-500 shrink-0" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-[200px] p-0">
-              <div className="max-h-[280px] overflow-y-auto py-1">
-                <button
-                  type="button"
-                  className="w-full px-2 py-1 text-xs flex items-center gap-2 hover:bg-gray-50"
-                  onClick={(e) => { e.preventDefault(); setActionFilter([]) }}
-                >
-                  <span className="h-4 w-4 rounded border border-slate-300 bg-white flex items-center justify-center">
-                    <Check className={`h-3 w-3 ${actionFilter.length === 0 ? 'text-slate-800' : 'text-slate-300'}`} strokeWidth={2.5} />
-                  </span>
-                  All types
-                </button>
-                {EVENT_ACTION_OPTIONS.map((o) => {
-                  const checked = actionFilter.includes(o.value)
-                  return (
-                    <button
-                      key={o.value}
-                      type="button"
-                      className="w-full px-2 py-1 text-xs flex items-center gap-2 hover:bg-gray-50"
-                      onClick={(e) => { e.preventDefault(); setActionFilter(toggleId(actionFilter, o.value)) }}
-                    >
-                      <span className="h-4 w-4 rounded border border-slate-300 bg-white flex items-center justify-center">
-                        <Check className={`h-3 w-3 ${checked ? 'text-slate-800' : 'text-slate-300'}`} strokeWidth={2.5} />
-                      </span>
-                      <span>{o.label}</span>
-                    </button>
-                  )
-                })}
-              </div>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+        <DropdownMenu open={actionMenuOpen} onOpenChange={setActionMenuOpen}>
+          <DropdownMenuTrigger asChild>
+            <FilterPill
+              icon={<Activity />}
+              label="Type"
+              value={actionFilter.length
+                ? summarizePicks(EVENT_ACTION_OPTIONS.filter((o) => actionFilter.includes(o.value)).map((o) => o.label))
+                : undefined}
+              onClear={() => setActionFilter([])}
+            />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-[220px] p-1">
+            <FilterMenuLabel>Type</FilterMenuLabel>
+            <FilterMenuRow multi selected={actionFilter.length === 0} onSelect={() => setActionFilter([])}>
+              Any type
+            </FilterMenuRow>
+            <DropdownMenuSeparator className="mx-0 my-1" />
+            <div className="max-h-[280px] overflow-y-auto overflow-x-hidden">
+              {EVENT_ACTION_OPTIONS.map((o) => (
+                <FilterMenuRow key={o.value} multi selected={actionFilter.includes(o.value)} onSelect={() => setActionFilter(toggleId(actionFilter, o.value))}>
+                  {o.label}
+                </FilterMenuRow>
+              ))}
+            </div>
+          </DropdownMenuContent>
+        </DropdownMenu>
 
         {showClientProjectFilters && (
           <>
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-gray-600">Client</label>
-              <DropdownMenu open={clientMenuOpen} onOpenChange={setClientMenuOpen}>
-                <DropdownMenuTrigger asChild>
-                  <button
-                    type="button"
-                    className="rounded border border-slate-300/80 px-2 py-1.5 text-xs w-[130px] bg-white flex items-center justify-between gap-2"
-                  >
-                    <span className="truncate">{selectedClientLabel}</span>
-                    <ChevronDown className="h-4 w-4 text-gray-500 shrink-0" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-[280px] p-0">
-                  <div className="px-2 py-2 flex items-center gap-2 border-b border-gray-100">
-                    <input
-                      value={clientSearch}
-                      onChange={(e) => setClientSearch(e.target.value)}
-                      onKeyDown={(e) => e.stopPropagation()}
-                      placeholder="Search clients…"
-                      className="flex-1 rounded border border-slate-300/80 px-2 py-1.5 text-xs"
-                    />
-                    <Button
-                      size="sm"
-                      className="bg-slate-900 hover:bg-slate-800 text-white"
-                      onClick={(e) => {
-                        e.preventDefault()
-                        setClientMenuOpen(false)
+            <DropdownMenu open={clientMenuOpen} onOpenChange={setClientMenuOpen}>
+              <DropdownMenuTrigger asChild>
+                <FilterPill
+                  icon={<Users />}
+                  label="Client"
+                  value={clientIdsFilter.length
+                    ? summarizePicks(clientIdsFilter.map((id) => clients.find((c) => c.id === id)?.name ?? 'Client'))
+                    : undefined}
+                  onClear={() => {
+                    setClientIdsFilter([])
+                    setProjectIdsFilter([])
+                  }}
+                />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-[260px] p-1">
+                <FilterMenuLabel>Client</FilterMenuLabel>
+                {clients.length > MENU_SEARCH_THRESHOLD && (
+                  <FilterMenuSearch
+                    value={clientSearch}
+                    onChange={(e) => setClientSearch(e.target.value)}
+                    placeholder="Search clients…"
+                    aria-label="Search clients"
+                  />
+                )}
+                <FilterMenuRow
+                  multi
+                  selected={clientIdsFilter.length === 0}
+                  onSelect={() => {
+                    setClientIdsFilter([])
+                    setProjectIdsFilter([])
+                  }}
+                >
+                  Any client
+                </FilterMenuRow>
+                <DropdownMenuSeparator className="mx-0 my-1" />
+                <div className="max-h-[280px] overflow-y-auto overflow-x-hidden">
+                  {filteredClients.map((c) => (
+                    <FilterMenuRow
+                      key={c.id}
+                      multi
+                      selected={clientIdsFilter.includes(c.id)}
+                      onSelect={() => {
+                        const next = toggleId(clientIdsFilter, c.id)
+                        setClientIdsFilter(next)
+                        // changing client selection invalidates engagement selection
+                        setProjectIdsFilter((prev) =>
+                          prev.filter((pid) => projects.find((p) => p.id === pid && next.includes(p.clientId ?? '')))
+                        )
                       }}
                     >
-                      Done
-                    </Button>
-                  </div>
-                  <button
-                    type="button"
-                    className="w-full px-2 py-1 text-xs flex items-center gap-2 hover:bg-gray-50"
-                    onClick={(e) => {
-                      e.preventDefault()
-                      setClientIdsFilter([])
-                      setProjectIdsFilter([])
-                    }}
-                  >
-                    <span className="h-4 w-4 rounded border border-slate-300 bg-white flex items-center justify-center">
-                      <Check className={`h-3 w-3 ${clientIdsFilter.length === 0 ? 'text-slate-800' : 'text-slate-300'}`} strokeWidth={2.5} />
-                    </span>
-                    All clients
-                  </button>
-                  {filteredClients.map((c) => {
-                    const checked = clientIdsFilter.includes(c.id)
-                    return (
-                      <button
-                        key={c.id}
-                        type="button"
-                        className="w-full px-2 py-1 text-xs flex items-center gap-2 hover:bg-gray-50"
-                        onClick={(e) => {
-                          e.preventDefault()
-                          const next = toggleId(clientIdsFilter, c.id)
-                          setClientIdsFilter(next)
-                          // changing client selection invalidates project selection
-                          setProjectIdsFilter((prev) =>
-                            prev.filter((pid) => projects.find((p) => p.id === pid && next.includes(p.clientId ?? '')))
-                          )
-                        }}
-                      >
-                        <span className="h-4 w-4 rounded border border-slate-300 bg-white flex items-center justify-center">
-                          <Check className={`h-3 w-3 ${checked ? 'text-slate-800' : 'text-slate-300'}`} strokeWidth={2.5} />
-                        </span>
-                        <span className="truncate">{c.name}</span>
-                      </button>
-                    )
-                  })}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
+                      {c.name}
+                    </FilterMenuRow>
+                  ))}
+                  {filteredClients.length === 0 && <p className="px-2 py-1.5 text-small text-fg-subtle">No matches</p>}
+                </div>
+              </DropdownMenuContent>
+            </DropdownMenu>
 
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-gray-600">Engagement</label>
-              <DropdownMenu open={projectMenuOpen} onOpenChange={setProjectMenuOpen}>
-                <DropdownMenuTrigger asChild>
-                  <button
-                    type="button"
-                    className="rounded border border-slate-300/80 px-2 py-1.5 text-xs w-[130px] bg-white flex items-center justify-between gap-2"
-                  >
-                    <span className="truncate">{selectedProjectLabel}</span>
-                    <ChevronDown className="h-4 w-4 text-gray-500 shrink-0" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-[280px] p-0">
-                  <div className="px-2 py-2 flex items-center gap-2 border-b border-gray-100">
-                    <input
-                      value={projectSearch}
-                      onChange={(e) => setProjectSearch(e.target.value)}
-                      onKeyDown={(e) => e.stopPropagation()}
-                      placeholder="Search projects…"
-                      className="flex-1 rounded border border-slate-300/80 px-2 py-1.5 text-xs"
-                    />
-                    <Button
-                      size="sm"
-                      className="bg-slate-900 hover:bg-slate-800 text-white"
-                      onClick={(e) => {
-                        e.preventDefault()
-                        setProjectMenuOpen(false)
-                      }}
-                    >
-                      Done
-                    </Button>
-                  </div>
-                  <button
-                    type="button"
-                    className="w-full px-2 py-1 text-xs flex items-center gap-2 hover:bg-gray-50"
-                    onClick={(e) => {
-                      e.preventDefault()
-                      setProjectIdsFilter([])
-                    }}
-                  >
-                    <span className="h-4 w-4 rounded border border-slate-300 bg-white flex items-center justify-center">
-                      <Check className={`h-3 w-3 ${projectIdsFilter.length === 0 ? 'text-slate-800' : 'text-slate-300'}`} strokeWidth={2.5} />
-                    </span>
-                    All projects
-                  </button>
-                  {filteredProjects.map((p) => {
-                    const checked = projectIdsFilter.includes(p.id)
-                    return (
-                      <button
-                        key={p.id}
-                        type="button"
-                        className="w-full px-2 py-1 text-xs flex items-center gap-2 hover:bg-gray-50"
-                        onClick={(e) => {
-                          e.preventDefault()
-                          setProjectIdsFilter(toggleId(projectIdsFilter, p.id))
-                        }}
-                      >
-                        <span className="h-4 w-4 rounded border border-slate-300 bg-white flex items-center justify-center">
-                          <Check className={`h-3 w-3 ${checked ? 'text-slate-800' : 'text-slate-300'}`} strokeWidth={2.5} />
-                        </span>
-                        <span className="truncate">{p.name}</span>
-                      </button>
-                    )
-                  })}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
+            <DropdownMenu open={projectMenuOpen} onOpenChange={setProjectMenuOpen}>
+              <DropdownMenuTrigger asChild>
+                <FilterPill
+                  icon={<Briefcase />}
+                  label="Engagement"
+                  value={projectIdsFilter.length
+                    ? summarizePicks(projectIdsFilter.map((id) => projects.find((p) => p.id === id)?.name ?? 'Engagement'))
+                    : undefined}
+                  onClear={() => setProjectIdsFilter([])}
+                />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-[260px] p-1">
+                <FilterMenuLabel>Engagement</FilterMenuLabel>
+                {projects.length > MENU_SEARCH_THRESHOLD && (
+                  <FilterMenuSearch
+                    value={projectSearch}
+                    onChange={(e) => setProjectSearch(e.target.value)}
+                    placeholder="Search engagements…"
+                    aria-label="Search engagements"
+                  />
+                )}
+                <FilterMenuRow multi selected={projectIdsFilter.length === 0} onSelect={() => setProjectIdsFilter([])}>
+                  Any engagement
+                </FilterMenuRow>
+                <DropdownMenuSeparator className="mx-0 my-1" />
+                <div className="max-h-[280px] overflow-y-auto overflow-x-hidden">
+                  {filteredProjects.map((p) => (
+                    <FilterMenuRow key={p.id} multi selected={projectIdsFilter.includes(p.id)} onSelect={() => setProjectIdsFilter(toggleId(projectIdsFilter, p.id))}>
+                      {p.name}
+                    </FilterMenuRow>
+                  ))}
+                  {filteredProjects.length === 0 && <p className="px-2 py-1.5 text-small text-fg-subtle">No matches</p>}
+                </div>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </>
         )}
 
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-gray-600">Actor</label>
-          <DropdownMenu open={actorMenuOpen} onOpenChange={setActorMenuOpen}>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                className="rounded border border-slate-300/80 px-2 py-1.5 text-xs w-[130px] bg-white flex items-center justify-between gap-2"
-              >
-                <span className="truncate">{selectedActorLabel}</span>
-                <ChevronDown className="h-4 w-4 text-gray-500 shrink-0" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-[280px] p-0">
-              <div className="px-2 py-2 flex items-center gap-2 border-b border-gray-100">
-                <input
-                  value={actorSearch}
-                  onChange={(e) => setActorSearch(e.target.value)}
-                  onKeyDown={(e) => e.stopPropagation()}
-                  placeholder="Search actors…"
-                  className="flex-1 rounded border border-slate-300/80 px-2 py-1.5 text-xs"
-                />
-                <Button
-                  size="sm"
-                  className="bg-slate-900 hover:bg-slate-800 text-white"
-                  onClick={(e) => {
-                    e.preventDefault()
-                    setActorMenuOpen(false)
-                  }}
+        <DropdownMenu open={actorMenuOpen} onOpenChange={setActorMenuOpen}>
+          <DropdownMenuTrigger asChild>
+            <FilterPill
+              icon={<User />}
+              label="Actor"
+              value={actorFilter.length
+                ? summarizePicks(actorFilter.map((id) => uniqueActors.find((a) => a.id === id)?.name ?? 'Someone'))
+                : undefined}
+              onClear={() => setActorFilter([])}
+            />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-[260px] p-1">
+            <FilterMenuLabel>Actor</FilterMenuLabel>
+            {uniqueActors.length > MENU_SEARCH_THRESHOLD && (
+              <FilterMenuSearch
+                value={actorSearch}
+                onChange={(e) => setActorSearch(e.target.value)}
+                placeholder="Search people…"
+                aria-label="Search people"
+              />
+            )}
+            <FilterMenuRow multi selected={actorFilter.length === 0} onSelect={() => setActorFilter([])}>
+              Anyone
+            </FilterMenuRow>
+            <DropdownMenuSeparator className="mx-0 my-1" />
+            <div className="max-h-[280px] overflow-y-auto overflow-x-hidden">
+              {uniqueActors.length === 0 && (
+                <p className="px-2 py-1.5 text-small text-fg-subtle">No one in the loaded events yet</p>
+              )}
+              {filteredActors.map((actor) => (
+                <FilterMenuRow
+                  key={actor.id}
+                  multi
+                  selected={actorFilter.includes(actor.id)}
+                  onSelect={() => setActorFilter(toggleId(actorFilter, actor.id))}
+                  icon={<UserAvatarWithTooltip displayName={actor.name} email={actor.email} avatarSize="sm" showRole={false} />}
                 >
-                  Done
-                </Button>
-              </div>
-              <div className="max-h-[280px] overflow-y-auto">
-                <button
-                  type="button"
-                  className="w-full px-2 py-1 text-xs flex items-center gap-2 hover:bg-gray-50"
-                  onClick={(e) => {
-                    e.preventDefault()
-                    setActorFilter([])
-                  }}
-                >
-                  <span className="h-4 w-4 rounded border border-slate-300 bg-white flex items-center justify-center">
-                    <Check className={`h-3 w-3 ${actorFilter.length === 0 ? 'text-slate-800' : 'text-slate-300'}`} strokeWidth={2.5} />
-                  </span>
-                  All actors
-                </button>
-                {filteredActors.length === 0 && (
-                  <p className="px-3 py-2 text-xs text-gray-400 italic">No actors in loaded events</p>
-                )}
-                {filteredActors.map((actor) => {
-                  const checked = actorFilter.includes(actor.id)
-                  return (
-                    <button
-                      key={actor.id}
-                      type="button"
-                      className="w-full px-2 py-1 text-xs flex items-center gap-2 hover:bg-gray-50"
-                      onClick={(e) => {
-                        e.preventDefault()
-                        setActorFilter(toggleId(actorFilter, actor.id))
-                      }}
-                    >
-                      <span className="h-4 w-4 rounded border border-slate-300 bg-white flex items-center justify-center shrink-0">
-                        <Check className={`h-3 w-3 ${checked ? 'text-slate-800' : 'text-slate-300'}`} strokeWidth={2.5} />
-                      </span>
-                      <UserAvatarWithTooltip
-                        displayName={actor.name}
-                        email={actor.email}
-                        avatarSize="sm"
-                        showRole={false}
-                      />
-                      <span className="truncate">{actor.name}</span>
-                    </button>
-                  )
-                })}
-              </div>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+                  {actor.name}
+                </FilterMenuRow>
+              ))}
+              {uniqueActors.length > 0 && filteredActors.length === 0 && (
+                <p className="px-2 py-1.5 text-small text-fg-subtle">No matches</p>
+              )}
+            </div>
+          </DropdownMenuContent>
+        </DropdownMenu>
 
-        <div className="flex items-end gap-1.5 ml-auto">
+        {(fromDate || toDate || scopeFilter.length > 0 || actionFilter.length > 0 || clientIdsFilter.length > 0 || projectIdsFilter.length > 0 || actorFilter.length > 0) && (
+          <button
+            type="button"
+            onClick={() => {
+              setFromDate('')
+              setToDate('')
+              setDateRangeError(null)
+              setPickerResetKey((k) => k + 1)
+              setScopeFilter([])
+              setActionFilter([])
+              setClientIdsFilter([])
+              setProjectIdsFilter([])
+              setActorFilter([])
+              setActorSearch('')
+              setClientSearch('')
+              setProjectSearch('')
+              setNextCursor(null)
+              setClearThenReload(true)
+            }}
+            className="ml-0.5 h-7 rounded-full px-2 text-small text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg"
+          >
+            Clear
+          </button>
+        )}
+
+        <div className="ml-auto flex items-center gap-0.5">
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 w-8 p-0"
-                  onClick={() => {
-                    setFromDate('')
-                    setToDate('')
-                    setDateRangeError(null)
-                    setPickerResetKey((k) => k + 1)
-                    setScopeFilter([])
-                    setActionFilter([])
-                    setClientIdsFilter([])
-                    setProjectIdsFilter([])
-                    setActorFilter([])
-                    setActorSearch('')
-                    setClientSearch('')
-                    setProjectSearch('')
-                    setNextCursor(null)
-                    setClearThenReload(true)
-                  }}
-                >
-                  <X className="h-3.5 w-3.5" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">Clear filters</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 w-8 p-0"
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
                   onClick={() => { setNextCursor(null); load() }}
                 >
                   <RotateCcw className="h-3.5 w-3.5" />
@@ -1115,8 +980,9 @@ export function AuditWithFilters({
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
-                  size="sm"
-                  className="h-8 w-8 p-0 bg-slate-900 hover:bg-slate-800 text-white"
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
                   disabled={events.length === 0}
                   onClick={() => exportToCsv(events, exportTitle ?? 'audit', true)}
                 >
@@ -1130,36 +996,33 @@ export function AuditWithFilters({
       </div>
 
       {error && (
-        <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-3">
+        <div className="mb-3 rounded-card bg-tag-red-bg px-3 py-2 text-small text-tag-red-fg">
           {error}
         </div>
       )}
 
-      <div className="flex items-center justify-between mb-2 min-h-[20px]">
+      <div className="mb-1 flex min-h-[20px] items-center justify-between">
         {!loading && (
-          <span className="text-xs text-gray-500">
-            Showing <span className="font-medium text-gray-700">{visibleEvents.length}</span> row{visibleEvents.length !== 1 ? 's' : ''}
-            {nextCursor && <span className="text-gray-400"> · scroll to load more</span>}
+          <span className="text-caption text-fg-subtle">
+            <span className="tabular-nums">{visibleEvents.length}</span> event{visibleEvents.length !== 1 ? 's' : ''} · audit history is permanent
+            {nextCursor && <span className="text-fg-subtle"> · scroll to load more</span>}
           </span>
         )}
       </div>
 
-      <div className="flex-1 overflow-auto min-h-0 bg-white border border-[#e5e7eb] rounded">
+      <div className="min-h-0 flex-1 overflow-auto custom-scrollbar">
         {loading ? (
-          <div className="flex items-center justify-center py-8 text-gray-500">
-            <Loader2 className="h-6 w-6 animate-spin mr-2" />
+          <div className="flex items-center justify-center gap-2 py-10 text-small text-fg-muted">
+            <Loader2 className="h-4 w-4 animate-spin" />
             Loading audit log…
           </div>
         ) : events.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-8 text-gray-500">
-            <FolderLock className="h-10 w-10 text-gray-300 mb-2" />
-            <p className="text-sm">No audit events found.</p>
-          </div>
+          <EmptyPanel compact icon={<FolderLock />} title="No audit events" description="Nothing matches these filters yet." />
         ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-white border-b border-[#e5e7eb] sticky top-0">
+          <table className="w-full border-collapse text-left text-ui">
+            <thead className="sticky top-0 z-[1] border-b border-line bg-surface">
               <tr>
-                <th className="text-left py-2.5 px-3 text-[0.8125rem] font-medium text-[#45474c] w-[160px]">
+                <th className="h-8 px-2 text-small font-normal text-fg-muted first:pl-1 w-[160px]">
                   <span className="inline-flex items-center gap-1.5">
                     Date
                     <TooltipProvider>
@@ -1170,7 +1033,7 @@ export function AuditWithFilters({
                             role="switch"
                             aria-checked={showFullDate}
                             onClick={() => setShowFullDate((v) => !v)}
-                            className={`inline-flex h-4 w-7 shrink-0 items-center rounded-full transition-colors focus-visible:outline-none ${showFullDate ? 'bg-slate-600' : 'bg-gray-300'}`}
+                            className={`inline-flex h-4 w-7 shrink-0 items-center rounded-full transition-colors focus-visible:outline-none ${showFullDate ? 'bg-action' : 'bg-line-strong'}`}
                           >
                             <span className={`h-3 w-3 rounded-full bg-white shadow-sm transition-transform ${showFullDate ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
                           </button>
@@ -1180,18 +1043,18 @@ export function AuditWithFilters({
                     </TooltipProvider>
                   </span>
                 </th>
-                <th className="text-left py-2.5 px-3 text-[0.8125rem] font-medium text-[#45474c] w-[120px]">Client</th>
-                <th className="text-left py-2.5 px-3 text-[0.8125rem] font-medium text-[#45474c] w-[120px]">Engagement</th>
-                <th className="text-left py-2.5 px-3 text-[0.8125rem] font-medium text-[#45474c] w-[130px]">Event scope</th>
-                <th className="text-left py-2.5 px-3 text-[0.8125rem] font-medium text-[#45474c] w-[130px]">Event type</th>
-                <th className="text-left py-2.5 px-3 text-[0.8125rem] font-medium text-[#45474c] min-w-[80px]">Details</th>
-                <th className="text-left py-2.5 px-3 text-[0.8125rem] font-medium text-[#45474c] w-[200px]">Actor</th>
-                <th className="py-2.5 px-2 w-8 text-right">
+                {showClientProjectFilters && <th className="h-8 px-2 text-small font-normal text-fg-muted first:pl-1 w-[120px]">Client</th>}
+                {showClientProjectFilters && <th className="h-8 px-2 text-small font-normal text-fg-muted first:pl-1 w-[120px]">Engagement</th>}
+                <th className="h-8 px-2 text-small font-normal text-fg-muted first:pl-1 w-[130px]">Event scope</th>
+                <th className="h-8 px-2 text-small font-normal text-fg-muted first:pl-1 w-[130px]">Event type</th>
+                <th className="h-8 px-2 text-small font-normal text-fg-muted first:pl-1 min-w-[80px]">Details</th>
+                <th className="h-8 px-2 text-small font-normal text-fg-muted first:pl-1 w-[200px]">Actor</th>
+                <th className="h-8 w-8 px-1 text-right">
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <button
                         type="button"
-                        className={`inline-flex items-center justify-center h-6 w-6 rounded hover:bg-slate-200 transition-colors ${sortCol !== 'date' || sortDir !== 'desc' ? 'text-indigo-600' : 'text-slate-400'}`}
+                        className={`inline-flex items-center justify-center h-6 w-6 rounded hover:bg-surface-hover transition-colors ${sortCol !== 'date' || sortDir !== 'desc' ? 'text-action' : 'text-fg-subtle'}`}
                         title="Sort"
                       >
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -1199,12 +1062,11 @@ export function AuditWithFilters({
                         </svg>
                       </button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-[200px] py-1 text-xs">
-                      <DropdownMenuLabel className="text-xs uppercase tracking-wider text-slate-400 py-1">Sort by</DropdownMenuLabel>
-                      {SORT_COLS.map((c) => (
+                    <DropdownMenuContent align="end" className="w-[200px]">
+                      <DropdownMenuLabel className="py-1 text-caption font-normal text-fg-subtle">Sort by</DropdownMenuLabel>
+                      {SORT_COLS.filter((c) => showClientProjectFilters || (c.value !== 'client' && c.value !== 'project')).map((c) => (
                         <DropdownMenuCheckboxItem
                           key={c.value}
-                          className="text-xs"
                           checked={sortCol === c.value}
                           onCheckedChange={() => setSortCol(c.value)}
                         >
@@ -1212,16 +1074,14 @@ export function AuditWithFilters({
                         </DropdownMenuCheckboxItem>
                       ))}
                       <DropdownMenuSeparator />
-                      <DropdownMenuLabel className="text-xs uppercase tracking-wider text-slate-400 py-1">Sort direction</DropdownMenuLabel>
+                      <DropdownMenuLabel className="py-1 text-caption font-normal text-fg-subtle">Sort direction</DropdownMenuLabel>
                       <DropdownMenuCheckboxItem
-                        className="text-xs"
                         checked={sortDir === 'desc'}
                         onCheckedChange={() => setSortDir('desc')}
                       >
                         {sortCol === 'date' ? 'Newest first' : 'Z to A'}
                       </DropdownMenuCheckboxItem>
                       <DropdownMenuCheckboxItem
-                        className="text-xs"
                         checked={sortDir === 'asc'}
                         onCheckedChange={() => setSortDir('asc')}
                       >
@@ -1232,38 +1092,42 @@ export function AuditWithFilters({
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#e5e7eb]">
+            <tbody>
               {visibleEvents.map((ev) => (
-                <tr key={ev.id} className="hover:bg-[#f9f9fb] transition-colors">
-                  <td className="py-2.5 px-3 whitespace-nowrap">
+                <tr key={ev.id} className="h-9 border-b border-line transition-colors hover:bg-surface-hover">
+                  <td className="px-2 py-1 first:pl-1 whitespace-nowrap">
                     <TooltipProvider>
                       <RelativeDateTime
                         date={ev.eventAt}
                         displayFormat={showFullDate ? 'verbose' : 'short'}
                         tooltipSide="right"
-                        textClassName="text-[#45474c] text-[0.8125rem]"
+                        textClassName="text-fg-muted text-ui"
                       />
                     </TooltipProvider>
                   </td>
-                  <td className="py-2.5 px-3 text-[#45474c] text-[0.8125rem] max-w-[120px] truncate" title={ev.clientName ?? ''}>
-                    {ev.clientName ?? '—'}
-                  </td>
-                  <td className="py-2.5 px-3 text-[#45474c] text-[0.8125rem] max-w-[120px] truncate" title={ev.projectName ?? ''}>
-                    {ev.projectName ?? '—'}
-                  </td>
-                  <td className="py-2.5 px-3">
+                  {showClientProjectFilters && (
+                    <>
+                      <td className="max-w-[120px] truncate px-2 py-1 text-fg-muted" title={ev.clientName ?? ''}>
+                        {ev.clientName ?? '—'}
+                      </td>
+                      <td className="max-w-[120px] truncate px-2 py-1 text-fg-muted" title={ev.projectName ?? ''}>
+                        {ev.projectName ?? '—'}
+                      </td>
+                    </>
+                  )}
+                  <td className="px-2 py-1 first:pl-1">
                     <div className="flex items-center gap-2">
                       <EventIcon eventType={ev.eventType} />
-                      <span className="text-[#45474c] text-[0.8125rem]">{eventScope(ev.eventType)}</span>
+                      <span className="text-fg-muted text-ui">{eventScope(ev.eventType)}</span>
                     </div>
                   </td>
-                  <td className="py-2.5 px-3">
-                    <span className="font-medium text-[#1b1b1d] text-[0.8125rem]">{eventAction(ev.eventType)}</span>
+                  <td className="px-2 py-1 first:pl-1">
+                    <span className="text-fg">{eventAction(ev.eventType)}</span>
                   </td>
-                  <td className="py-2.5 px-3 text-[0.8125rem]">
+                  <td className="px-2 py-1 first:pl-1 text-ui">
                     <DetailCell ev={ev} />
                   </td>
-                  <td className="py-2.5 px-3 text-[0.8125rem]">
+                  <td className="px-2 py-1 first:pl-1 text-ui">
                     {ev.actorUserId ? (
                       <div className="flex items-center gap-1.5">
                         <UserAvatarWithTooltip
@@ -1271,21 +1135,21 @@ export function AuditWithFilters({
                           email={ev.actorEmail ?? undefined}
                           avatarSize="sm"
                         />
-                        <span className="text-[#45474c] truncate max-w-[160px]">{ev.actorName || ev.actorEmail || 'Unknown'}</span>
+                        <span className="text-fg-muted truncate max-w-[160px]">{ev.actorName || ev.actorEmail || 'Unknown'}</span>
                       </div>
                     ) : (
-                      <span className="text-gray-400 italic">System</span>
+                      <span className="text-fg-subtle">System</span>
                     )}
                   </td>
-                  <td className="py-2.5 px-2" />
+                  <td className="px-1" />
                 </tr>
               ))}
             </tbody>
           </table>
         )}
 
-        <div ref={sentinelRef} className="flex items-center justify-center py-3 border-t border-[#e5e7eb]">
-          {loadingMore && <Loader2 className="h-4 w-4 animate-spin text-gray-400" />}
+        <div ref={sentinelRef} className="flex items-center justify-center py-3">
+          {loadingMore && <Loader2 className="h-4 w-4 animate-spin text-fg-subtle" />}
         </div>
       </div>
     </div>

@@ -101,3 +101,54 @@ export function contrastRatioAgainstWhite(hex: string): number {
   const luminance = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
   return parseFloat((1.05 / (luminance + 0.05)).toFixed(2))
 }
+
+/** WCAG contrast of an HSL color (0-360, 0-100, 0-100) against white. */
+function contrastHslAgainstWhite(h: number, s: number, l: number): number {
+  const sl = s / 100
+  const ll = l / 100
+  const c = (1 - Math.abs(2 * ll - 1)) * sl
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1))
+  const m = ll - c / 2
+
+  let r = 0, g = 0, b = 0
+  if (h < 60)       { r = c; g = x; b = 0 }
+  else if (h < 120) { r = x; g = c; b = 0 }
+  else if (h < 180) { r = 0; g = c; b = x }
+  else if (h < 240) { r = 0; g = x; b = c }
+  else if (h < 300) { r = x; g = 0; b = c }
+  else              { r = c; g = 0; b = x }
+
+  const lin = (v: number) => {
+    const n = v + m
+    return n <= 0.04045 ? n / 12.92 : Math.pow((n + 0.055) / 1.055, 2.4)
+  }
+  const luminance = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
+  return 1.05 / (luminance + 0.05)
+}
+
+/**
+ * The New UI accent for a brand color, as "h s% l%" strings for --ui-action, --ui-action-hover and
+ * --ui-action-fg. The accent fills primary buttons (with white text) and colors links and selected
+ * states on white, so it must reach 4.5:1 against white either way round. A lighter brand color is
+ * darkened, keeping its hue and saturation, until it does; a color that already passes is used as
+ * is. Hover is a step darker.
+ */
+export function brandAccentTokens(hex: string): { action: string; hover: string; fg: string; rgb: string } {
+  const [h, s, start] = hexToHsl(hex)
+  let l = start
+  while (l > 0 && contrastHslAgainstWhite(h, s, l) < 4.5) l -= 1
+  const hover = Math.max(0, l - 5)
+  // The adjusted color as "r, g, b", for rgba(var(--primary-rgb), alpha) in older styles.
+  const sl = s / 100, ll = l / 100
+  const c = (1 - Math.abs(2 * ll - 1)) * sl
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1))
+  const m = ll - c / 2
+  const [r1, g1, b1] = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x] : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x]
+  const to255 = (v: number) => Math.round((v + m) * 255)
+  return {
+    action: `${h} ${s}% ${l}%`,
+    hover: `${h} ${s}% ${hover}%`,
+    fg: '0 0% 100%',
+    rgb: `${to255(r1)}, ${to255(g1)}, ${to255(b1)}`,
+  }
+}

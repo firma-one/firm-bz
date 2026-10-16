@@ -8,6 +8,12 @@ here, in §7 and §11. That file was deleted as redundant — see §11 to recove
 items tracked in §A.10. Phases C and D also shipped ahead of their sketches — see their sections.
 Phase B remains unbuilt.
 
+**Update (2026-10-15):** Phase A's Ask mode is **hidden** (`ASK_MODE_ENABLED = false` in
+`global-search-view.tsx`). It filled the same filter chips as Filters mode with a paid model call
+and then ran the identical search, so it found nothing extra. Doc Search is Filters only. The
+interpret route and the Ask code are kept, not deleted, until Deepak signs off. §A.6 (ranking:
+wider snippets, rank fusion) is still what would improve results, and it applies to Filters.
+
 ---
 
 ## 0a. The assistant's name

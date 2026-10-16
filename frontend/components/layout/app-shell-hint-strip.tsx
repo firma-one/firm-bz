@@ -11,10 +11,10 @@ const accentBorder: Record<AppShellHintStripAccent, string> = {
 }
 
 /**
- * Matches `ProfileSection` foot: `border-t border-slate-100`, outer `py-2`,
+ * Matches `ProfileSection` foot: `border-t border-line`, outer `py-2`,
  * inner row `gap-2` + `py-1.5` like the profile trigger button.
  */
-export const APP_SHELL_PROFILE_RAIL_FOOT_CLASS = 'border-t border-slate-100 bg-white py-2'
+export const APP_SHELL_PROFILE_RAIL_FOOT_CLASS = 'border-t border-line bg-white py-2'
 
 export type AppShellHintStripDensity = 'default' | 'profileRail'
 
@@ -89,8 +89,8 @@ export function AppShellHintStrip({
                     <div
                         className={cn(
                             isRail
-                                ? 'truncate text-sm font-semibold text-slate-900'
-                                : 'text-sm font-semibold text-slate-900 sm:text-base'
+                                ? 'truncate text-sm font-semibold text-fg'
+                                : 'text-sm font-semibold text-fg sm:text-base'
                         )}
                     >
                         {title}

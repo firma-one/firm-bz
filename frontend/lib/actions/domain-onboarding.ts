@@ -5,17 +5,15 @@ import { prisma } from '@/lib/prisma'
 import { redirect } from 'next/navigation'
 import { logger } from '@/lib/logger'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
+import { emailDomain, getDomainOnboardingOptions, type DomainOnboardingOptions } from '@/lib/onboarding/domain-options'
 
-export interface DomainOrgOption {
-    id: string
-    name: string
-    slug: string
-}
+/*
+ * Session-scoped domain-onboarding actions. The (userId, email) lookup they build on lives in
+ * lib/onboarding/domain-options.ts (server-only), so it can't be called from the browser with
+ * someone else's identity.
+ */
 
-export interface DomainOnboardingOptions {
-    orgsToJoin: DomainOrgOption[]
-    orgsAlreadyIn: DomainOrgOption[]
-}
+export type { DomainOnboardingOptions, DomainOrgOption } from '@/lib/onboarding/domain-options'
 
 /**
  * Get domain onboarding options for current user (V2)
@@ -27,51 +25,6 @@ export async function getDomainOnboardingOptionsForCurrentUser(): Promise<Domain
         redirect('/signin')
     }
     return getDomainOnboardingOptions(user.id, user.email)
-}
-
-function emailDomain(email: string): string | null {
-    const part = email.split('@')[1]
-    return part ? part.toLowerCase().trim() : null
-}
-
-/**
- * Get orgs by domain (V2)
- */
-export async function getDomainOnboardingOptions(
-    userId: string,
-    userEmail: string
-): Promise<DomainOnboardingOptions> {
-    const domain = emailDomain(userEmail)
-    if (!domain) return { orgsToJoin: [], orgsAlreadyIn: [] }
-
-    const orgs = await prisma.firm.findMany({
-        where: {
-            allowDomainAccess: true,
-            allowedEmailDomain: domain
-        },
-        select: { id: true, name: true, slug: true }
-    })
-
-    if (orgs.length === 0) return { orgsToJoin: [], orgsAlreadyIn: [] }
-
-    const memberships = await prisma.firmMember.findMany({
-        where: {
-            userId,
-            firmId: { in: orgs.map((o: { id: string }) => o.id) }
-        },
-        select: { firmId: true }
-    })
-    const inSet = new Set(memberships.map((m) => m.firmId))
-
-    const orgsAlreadyIn: DomainOrgOption[] = []
-    const orgsToJoin: DomainOrgOption[] = []
-    for (const org of orgs) {
-        const option = { id: org.id, name: org.name, slug: org.slug }
-        if (inSet.has(org.id)) orgsAlreadyIn.push(option)
-        else orgsToJoin.push(option)
-    }
-
-    return { orgsToJoin, orgsAlreadyIn }
 }
 
 /**
@@ -124,7 +77,7 @@ export async function joinOrganizationByDomain(
         }
     })
 
-    const { invalidateUserSettingsPlus } = await import('@/lib/actions/user-settings')
+    const { invalidateUserSettingsPlus } = await import('@/lib/permissions/invalidate-user-settings')
     await invalidateUserSettingsPlus(userId)
 
     audit(AUDIT_EVENT.ONBOARDING_DOMAIN_JOINED)

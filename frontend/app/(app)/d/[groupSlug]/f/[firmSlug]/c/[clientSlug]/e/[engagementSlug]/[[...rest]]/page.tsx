@@ -16,6 +16,7 @@ import type { ProjectPathSegments } from "@/components/projects/engagement-works
 import { getAccessibleFileCountForPersona } from "@/lib/engagement-sharing-ids"
 import { engagementPath } from "@/lib/navigation/firm-paths"
 import { logger } from "@/lib/logger"
+import { getLastEngagementTab } from "@/lib/recents"
 
 const VALID_TABS = new Set(['files', 'shares', 'comments', 'members', 'analytics', 'sources', 'audit', 'settings', 'wiki'])
 
@@ -100,7 +101,9 @@ export default async function EngagementPage({ params }: PageProps) {
   const isFirmAdmin = await canManageOrganization(org.id)
   const enableBetaFeatures = ((org.settings as Record<string, unknown> | null)?.betaFeatures as Record<string, boolean> | undefined)?.dossier === true
 
-  const defaultTab = 'analytics'
+  // The bare engagement URL reopens the tab the user was last on, else Files. An unknown tab
+  // segment falls back to Overview.
+  const defaultTab = rest?.[0] ? 'analytics' : ((await getLastEngagementTab(user.id, project.id)) ?? 'files')
   const pathSegments = parseRest(rest, defaultTab)
 
   const filesPath = engagementPath(groupSlug, firmSlug, clientSlug, engagementSlug, { tab: 'files' })

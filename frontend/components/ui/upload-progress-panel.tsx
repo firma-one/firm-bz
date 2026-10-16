@@ -5,7 +5,6 @@ import { CheckCircle2, Clock, Folder, Maximize2, Minimize2, X, XCircle } from 'l
 import { useEffect, useRef } from 'react'
 import { cn } from '@/lib/utils'
 import { useUploadProgress } from '@/lib/upload-progress-context'
-import { useBranding } from '@/lib/use-branding'
 import { DocumentIcon } from '@/components/ui/document-icon'
 import { CoffeeIcon, type CoffeeIconHandle } from '@/components/ui/coffee-icon'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
@@ -33,7 +32,6 @@ export function UploadProgressPanel() {
     dismiss,
   } = useUploadProgress()
 
-  const branding = useBranding()
   const coffeeIconRef = useRef<CoffeeIconHandle>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
 
@@ -98,10 +96,9 @@ export function UploadProgressPanel() {
       {/* Chrome-style indeterminate loading bar */}
       {isActive && (
         <div className="relative h-1 w-full overflow-hidden bg-primary/15">
-          <div
-            className="absolute inset-y-0 w-1/2 animate-[indeterminate-progress_1.5s_infinite_linear] rounded-full"
-            style={{ backgroundColor: branding?.secondaryColor ?? 'hsl(var(--primary))' }}
-          />
+          {/* The brand accent (components/shell/use-brand-accent.ts); the retired second brand
+              color no longer applies anywhere. */}
+          <div className="absolute inset-y-0 w-1/2 animate-[indeterminate-progress_1.5s_infinite_linear] rounded-full bg-primary" />
         </div>
       )}
 
@@ -125,7 +122,7 @@ export function UploadProgressPanel() {
               key={item.id}
               data-uploading={item.status === 'uploading' ? 'true' : undefined}
               className={cn(
-                "flex items-center gap-2 px-3 py-1.5 min-h-[32px] border-b border-slate-100 last:border-0 hover:bg-slate-50 group transition-opacity duration-300",
+                "flex items-center gap-2 px-3 py-1.5 min-h-[32px] border-b border-line last:border-0 hover:bg-surface-hover group transition-opacity duration-300",
                 item.status === 'pending' && "opacity-40"
               )}
             >

@@ -12,8 +12,19 @@ import {
 } from '@/components/ui/dialog'
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden'
 import { createClientContact, deleteClientContact, listClientContacts, updateClientContact, type ClientContactRecord } from '@/lib/actions/client'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { UserPlus, UserMinus, Pencil, X, Star, CornerDownLeft, RefreshCw } from 'lucide-react'
+import { AtSign, Briefcase, Contact, CornerDownLeft, Pencil, Phone, Plus, RefreshCw, Search, Star, Tags, Type, UserMinus, UserPlus, X } from 'lucide-react'
+import {
+  NotionTable,
+  NotionTableActions,
+  NotionTableBody,
+  NotionTableCell,
+  NotionTableHead,
+  NotionTableHeader,
+  NotionTableRow,
+} from '@/components/ui/notion-table'
+import { Tag } from '@/components/ui/tag'
+import { EmptyPanel } from '@/components/ui/empty-panel'
+import { LoadingAnnouncement, ShimmerBar } from '@/components/ui/shimmer'
 
 type Draft = { name: string; email: string; phone: string; title: string; notes: string }
 
@@ -153,134 +164,126 @@ export function ClientContactsTab({
     })
   }
 
-  const fieldLabel = 'font-mono text-[9px] font-bold uppercase tracking-widest text-[#45474c] block mb-1'
-  const inputCls = 'border-[#e5e7eb] text-[#1b1b1d] text-sm placeholder:text-[#9a9ba0] rounded focus-visible:ring-1 focus-visible:ring-primary focus-visible:border-primary disabled:opacity-50 disabled:cursor-not-allowed'
+  const fieldLabel = 'mb-1 block text-small font-medium text-fg-muted'
+  const optional = <span className="font-normal text-fg-subtle">(optional)</span>
 
   return (
-    <div className="space-y-4">
-      {/* Table */}
-      <div className="rounded border border-[#e5e7eb] bg-white overflow-hidden">
-        <div className="px-4 py-3 border-b border-[#e5e7eb] flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <UserPlus className="h-4 w-4 text-slate-500" />
-            <span className="text-sm font-semibold text-slate-800">Client contacts</span>
-            {!loading && (
-              <span className="font-mono text-[10px] font-bold bg-primary text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
-                {filtered.length}
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => refresh()}
-              disabled={loading}
-              className="h-7 w-7 text-slate-400 hover:text-slate-600"
-              title="Refresh"
-            >
-              <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
-            </Button>
-            <div className="hidden sm:block w-[220px]">
-              <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search contacts..." className="border-slate-200 h-8 text-xs" />
-            </div>
-            <div className="sm:hidden w-[160px]">
-              <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search..." className="border-slate-200 h-8 text-xs" />
-            </div>
-            <Button
-              disabled={!canManage}
-              variant="ghost"
-              size="sm"
-              data-demo-tour="client-add-contact-btn"
-              className="h-auto px-4 py-1.5 rounded bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:bg-primary hover:brightness-105 hover:text-white shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all border-0 inline-flex items-center gap-1.5"
-              onClick={openAdd}
-            >
-              <UserPlus className="h-4 w-4" />
-              Add Contact
-            </Button>
-          </div>
+    <div className="space-y-3">
+      {/* Toolbar: search on the left, refresh and add on the right */}
+      <div className="flex items-center gap-2">
+        <div className="relative w-full max-w-[260px]">
+          <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-fg-subtle" />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search contacts"
+            aria-label="Search contacts"
+            className="h-7 pl-7 text-small"
+          />
         </div>
+        <div className="ml-auto flex items-center gap-1.5">
+          <Button variant="ghost" size="icon" onClick={() => refresh()} disabled={loading} title="Refresh" aria-label="Refresh contacts" className="h-7 w-7">
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+          </Button>
+          {canManage && (
+            <Button size="sm" data-demo-tour="client-add-contact-btn" onClick={openAdd}>
+              <Plus className="h-3.5 w-3.5" />
+              New contact
+            </Button>
+          )}
+        </div>
+      </div>
 
-        {loading ? (
-          <div className="p-6 text-sm text-slate-500">Loading…</div>
-        ) : filtered.length === 0 ? (
-          <div className="p-6 text-sm text-slate-500">No contacts yet.</div>
-        ) : (
-          <div className="divide-y divide-[#e5e7eb]">
+      {loading && contacts.length === 0 ? (
+        <div aria-busy="true">
+          <LoadingAnnouncement label="Loading contacts" />
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="flex h-9 items-center gap-2 border-b border-line pl-1" aria-hidden>
+              <ShimmerBar className="w-40" />
+            </div>
+          ))}
+        </div>
+      ) : filtered.length === 0 ? (
+        <EmptyPanel
+          icon={<Contact />}
+          title={query.trim() ? 'No matching contacts' : 'No contacts yet'}
+          description={query.trim() ? 'Try a different name, email or tag.' : 'The people you work with at this client — billing, legal, sign-off.'}
+        />
+      ) : (
+        <NotionTable>
+          <NotionTableHeader>
+            <NotionTableHead icon={<Type />}>Name</NotionTableHead>
+            <NotionTableHead icon={<Briefcase />} className="hidden md:table-cell">Title</NotionTableHead>
+            <NotionTableHead icon={<AtSign />}>Email</NotionTableHead>
+            <NotionTableHead icon={<Phone />} className="hidden lg:table-cell">Phone</NotionTableHead>
+            <NotionTableHead icon={<Tags />} className="hidden sm:table-cell">Tags</NotionTableHead>
+            {canManage && <th className="w-px" aria-label="Actions" />}
+          </NotionTableHeader>
+          <NotionTableBody>
             {filtered.map((c) => (
-              <div key={c.id} className="px-4 py-3 flex items-center gap-3 hover:bg-[#f3f4f6] transition-colors">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <div className="font-semibold text-slate-900 text-sm truncate">{c.name}</div>
+              <NotionTableRow key={c.id} onClick={canManage ? () => openEdit(c) : undefined}>
+                <NotionTableCell className="max-w-0 w-[28%]">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="truncate font-medium" title={c.notes ? `${c.name} — ${c.notes}` : c.name}>{c.name}</span>
                     {c.isPrimary && (
-                      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200 shrink-0">
-                        <Star className="h-2.5 w-2.5 fill-amber-500 text-amber-500" /> Primary
-                      </span>
+                      <Tag color="yellow" className="shrink-0" icon={<Star />}>
+                        Primary
+                      </Tag>
                     )}
                   </div>
-                  <div className="text-xs text-slate-500 truncate mt-0.5">
-                    {c.title ?? '—'}
-                    {c.email ? <><span className="text-slate-300"> · </span><span className="text-slate-600">{c.email}</span></> : null}
-                    {c.phone ? <><span className="text-slate-300"> · </span><span className="text-slate-600">{c.phone}</span></> : null}
-                  </div>
-                  {(c.tags?.length ?? 0) > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-1.5">
-                      {(c.tags ?? []).map((t) => (
-                        <span key={t} className="px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded text-xs">{t}</span>
-                      ))}
-                    </div>
-                  )}
-                  {c.notes && <div className="text-xs text-slate-500 mt-1 line-clamp-1">{c.notes}</div>}
-                </div>
-                <div className="flex items-center gap-0.5 shrink-0">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        type="button"
-                        className="h-7 w-7 rounded-md inline-flex items-center justify-center text-slate-500 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
-                        disabled={!canManage}
-                        onClick={() => openEdit(c)}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent side="top" className="text-xs">Edit</TooltipContent>
-                  </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        type="button"
-                        className="h-7 w-7 rounded-md inline-flex items-center justify-center text-rose-500 hover:text-rose-700 hover:bg-rose-50 disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
-                        disabled={!canManage || isPending}
-                        onClick={() => setContactToDelete(c)}
-                      >
-                        <UserMinus className="h-4 w-4" />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent side="top" className="text-xs">Remove</TooltipContent>
-                  </Tooltip>
-                </div>
-              </div>
+                </NotionTableCell>
+                <NotionTableCell className="hidden max-w-[12rem] truncate text-fg-muted md:table-cell">
+                  {c.title || <span className="text-fg-subtle">—</span>}
+                </NotionTableCell>
+                <NotionTableCell className="max-w-[16rem] truncate">
+                  {c.email ? (
+                    <a href={`mailto:${c.email}`} onClick={(e) => e.stopPropagation()} className="text-fg-muted hover:text-fg hover:underline">{c.email}</a>
+                  ) : <span className="text-fg-subtle">—</span>}
+                </NotionTableCell>
+                <NotionTableCell className="hidden whitespace-nowrap tabular-nums text-fg-muted lg:table-cell">
+                  {c.phone || <span className="text-fg-subtle">—</span>}
+                </NotionTableCell>
+                <NotionTableCell className="hidden sm:table-cell">
+                  {(c.tags?.length ?? 0) > 0 ? (
+                    <span className="flex flex-wrap items-center gap-1">
+                      {(c.tags ?? []).slice(0, 3).map((t) => <Tag key={t} color="gray">{t}</Tag>)}
+                      {(c.tags?.length ?? 0) > 3 && <span className="text-caption text-fg-subtle">+{(c.tags?.length ?? 0) - 3}</span>}
+                    </span>
+                  ) : <span className="text-fg-subtle">—</span>}
+                </NotionTableCell>
+                {canManage && (
+                  <NotionTableActions>
+                    <span className="inline-flex items-center gap-0.5">
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(c)} title="Edit" aria-label={`Edit ${c.name}`}>
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-7 w-7 hover:text-danger" disabled={isPending} onClick={() => setContactToDelete(c)} title="Remove" aria-label={`Remove ${c.name}`}>
+                        <UserMinus className="h-3.5 w-3.5" />
+                      </Button>
+                    </span>
+                  </NotionTableActions>
+                )}
+              </NotionTableRow>
             ))}
-          </div>
-        )}
-      </div>
+          </NotionTableBody>
+        </NotionTable>
+      )}
 
       {/* Add / Edit modal */}
       <Dialog open={modalOpen} onOpenChange={(open) => { if (!open) closeModal() }}>
-        <DialogContent className="sm:max-w-[560px] border-[#e5e7eb] max-h-[90vh] overflow-y-auto p-0 gap-0 rounded">
+        <DialogContent className="sm:max-w-[560px] max-h-[90vh] overflow-y-auto p-0 gap-0">
           <VisuallyHidden><DialogTitle>{isEditing ? 'Edit Contact' : 'New Client Contact'}</DialogTitle></VisuallyHidden>
 
           {/* Header */}
-          <div className="px-5 py-4 border-b border-[#e5e7eb] bg-[#f9f9fb] flex items-start gap-3">
-            <div className="mt-0.5 h-7 w-7 rounded bg-primary/10 flex items-center justify-center shrink-0">
-              {isEditing ? <Pencil className="h-3.5 w-3.5 text-primary" /> : <UserPlus className="h-3.5 w-3.5 text-primary" />}
+          <div className="px-5 py-4 border-b border-line flex items-start gap-3">
+            <div className="mt-0.5 h-7 w-7 rounded-control bg-surface-muted text-fg-muted flex items-center justify-center shrink-0">
+              {isEditing ? <Pencil className="h-3.5 w-3.5" /> : <UserPlus className="h-3.5 w-3.5" />}
             </div>
             <div>
-              <p className="text-sm font-semibold text-[#1b1b1d] leading-tight">
-                {isEditing ? `Edit ${editingContact?.name}` : 'New Client Contact'}
+              <p className="text-ui font-semibold text-fg leading-tight">
+                {isEditing ? `Edit ${editingContact?.name}` : 'New contact'}
               </p>
-              <p className="text-xs text-[#45474c] mt-0.5">
+              <p className="text-small text-fg-muted mt-0.5">
                 {isEditing ? 'Update the details for this contact.' : 'Add a contact person for this client.'}
               </p>
             </div>
@@ -290,39 +293,39 @@ export function ClientContactsTab({
 
             {/* Name */}
             <div>
-              <label className={fieldLabel}>Name <span className="text-red-500 normal-case tracking-normal font-sans">*</span></label>
-              <Input value={draft.name} onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))} placeholder="Full name" className={inputCls} />
+              <label className={fieldLabel}>Name <span className="text-danger">*</span></label>
+              <Input value={draft.name} onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))} placeholder="Full name" />
             </div>
 
             {/* Email + Phone */}
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className={fieldLabel}>Email <span className="normal-case tracking-normal font-sans text-[#9a9ba0]">(optional)</span></label>
-                <Input value={draft.email} onChange={(e) => setDraft((d) => ({ ...d, email: e.target.value }))} placeholder="name@company.com" type="email" className={inputCls} />
+                <label className={fieldLabel}>Email {optional}</label>
+                <Input value={draft.email} onChange={(e) => setDraft((d) => ({ ...d, email: e.target.value }))} placeholder="name@company.com" type="email" />
               </div>
               <div>
-                <label className={fieldLabel}>Phone <span className="normal-case tracking-normal font-sans text-[#9a9ba0]">(optional)</span></label>
-                <Input value={draft.phone} onChange={(e) => setDraft((d) => ({ ...d, phone: e.target.value }))} placeholder="+1 (555) 000-0000" type="tel" className={inputCls} />
+                <label className={fieldLabel}>Phone {optional}</label>
+                <Input value={draft.phone} onChange={(e) => setDraft((d) => ({ ...d, phone: e.target.value }))} placeholder="+1 (555) 000-0000" type="tel" />
               </div>
             </div>
 
             {/* Title */}
             <div>
-              <label className={fieldLabel}>Job title <span className="normal-case tracking-normal font-sans text-[#9a9ba0]">(optional)</span></label>
-              <Input value={draft.title} onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))} placeholder="e.g. CFO, Legal Counsel" className={inputCls} />
+              <label className={fieldLabel}>Job title {optional}</label>
+              <Input value={draft.title} onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))} placeholder="e.g. CFO, Legal Counsel" />
             </div>
 
             {/* Tags */}
             <div>
-              <label className={fieldLabel}>Tags <span className="normal-case tracking-normal font-sans text-[#9a9ba0]">(optional)</span></label>
+              <label className={fieldLabel}>Tags {optional}</label>
               <div
-                className="flex flex-wrap gap-1.5 min-h-[36px] w-full rounded border px-3 py-2 text-sm transition-colors cursor-text border-[#e5e7eb] bg-white focus-within:ring-1 focus-within:ring-primary focus-within:border-primary"
+                className="flex flex-wrap gap-1.5 min-h-[36px] w-full rounded-control border border-line-strong bg-surface px-3 py-2 text-ui transition-colors cursor-text focus-within:ring-2 focus-within:ring-action/30 focus-within:border-action"
                 onClick={() => tagInputRef.current?.focus()}
               >
                 {tags.map((tag) => (
-                  <span key={tag} className="inline-flex items-center gap-1 rounded bg-[#f3f4f6] border border-[#e5e7eb] px-2 py-0.5 text-[11px] font-medium text-[#45474c]">
+                  <span key={tag} className="inline-flex items-center gap-1 rounded-control bg-surface-muted px-1.5 py-0.5 text-small text-fg-muted">
                     {tag}
-                    <button type="button" onClick={(e) => { e.stopPropagation(); setTags((prev) => prev.filter((t) => t !== tag)); tagInputRef.current?.focus() }} className="text-[#9a9ba0] hover:text-[#1b1b1d] transition-colors" aria-label={`Remove ${tag}`}>
+                    <button type="button" onClick={(e) => { e.stopPropagation(); setTags((prev) => prev.filter((t) => t !== tag)); tagInputRef.current?.focus() }} className="text-fg-subtle hover:text-fg transition-colors" aria-label={`Remove ${tag}`}>
                       <X className="h-3 w-3" />
                     </button>
                   </span>
@@ -334,34 +337,33 @@ export function ClientContactsTab({
                   onKeyDown={handleTagKeyDown}
                   onBlur={() => { if (tagInput.trim()) commitTag(tagInput) }}
                   placeholder={tags.length === 0 ? 'e.g. billing, primary…' : ''}
-                  className="flex-1 min-w-[120px] bg-transparent outline-none placeholder:text-[#9a9ba0] text-[#1b1b1d] text-xs disabled:cursor-not-allowed"
+                  className="flex-1 min-w-[120px] bg-transparent outline-none placeholder:text-fg-subtle text-fg text-small disabled:cursor-not-allowed"
                 />
-                <CornerDownLeft className="h-3 w-3 text-primary shrink-0 self-center ml-1" />
+                <CornerDownLeft className="h-3 w-3 text-fg-subtle shrink-0 self-center ml-1" />
               </div>
             </div>
 
             {/* Notes */}
             <div>
-              <label className={fieldLabel}>Notes <span className="normal-case tracking-normal font-sans text-[#9a9ba0]">(optional)</span></label>
+              <label className={fieldLabel}>Notes {optional}</label>
               <textarea
                 value={draft.notes}
                 onChange={(e) => setDraft((d) => ({ ...d, notes: e.target.value }))}
                 placeholder="Any notes about this contact"
                 rows={2}
-                className="flex w-full rounded border border-[#e5e7eb] bg-white px-3 py-2 text-sm text-[#1b1b1d] placeholder:text-[#9a9ba0] focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex w-full rounded-control border border-line-strong bg-surface px-3 py-2 text-ui text-fg placeholder:text-fg-subtle focus:outline-none focus:ring-2 focus:ring-action/30 focus:border-action disabled:opacity-50 disabled:cursor-not-allowed"
               />
             </div>
           </div>
 
           {/* Footer */}
-          <div className="px-5 py-3 border-t border-[#e5e7eb] flex items-center justify-end gap-3">
-            <Button variant="outline" className="rounded text-[10px] font-headline font-bold tracking-widest uppercase" disabled={isPending} onClick={closeModal}>
+          <div className="px-5 py-3 border-t border-line flex items-center justify-end gap-2">
+            <Button variant="outline" disabled={isPending} onClick={closeModal}>
               Cancel
             </Button>
             <Button
-              variant="greenCta"
               disabled={!canManage || isPending || !draft.name.trim()}
-              className="rounded min-w-[8rem] text-[10px] font-headline font-bold tracking-widest uppercase text-white"
+              className="min-w-[8rem]"
               onClick={handleSubmit}
             >
               {isPending ? 'Saving…' : isEditing ? 'Save changes' : 'Create'}
@@ -377,7 +379,7 @@ export function ClientContactsTab({
         iconVariant="red"
         title="Remove contact"
         subtitle="This action cannot be undone."
-        description={contactToDelete ? <>This will permanently remove <span className="font-semibold text-[#1b1b1d]">{contactToDelete.name}</span> from this client.</> : ''}
+        description={contactToDelete ? <>This will permanently remove <span className="font-semibold text-fg">{contactToDelete.name}</span> from this client.</> : ''}
         confirmLabel="Remove contact"
         confirmVariant="red"
         onCancel={() => setContactToDelete(null)}

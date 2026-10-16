@@ -35,16 +35,16 @@ function StepProgress({ current, total, onStepClick }: { current: number; total:
         const dotClassName = cn(
           "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold transition-colors",
           step < current
-            ? "bg-[#9a9ba0] text-white"
+            ? "bg-fg-subtle text-white"
             : step === current
-              ? "bg-[#1b1b1d] text-white"
-              : "border border-[#e5e7eb] bg-white text-[#9a9ba0]",
-          clickable && "cursor-pointer hover:bg-[#1b1b1d]",
+              ? "bg-fg text-white"
+              : "border border-line bg-surface text-fg-subtle",
+          clickable && "cursor-pointer hover:bg-fg",
         )
         return (
           <div key={step} className={cn("flex items-center", i > 0 && "flex-1")}>
             {i > 0 && (
-              <div className={cn("h-0.5 flex-1", step <= current ? "bg-[#1b1b1d]" : "bg-[#e5e7eb]")} />
+              <div className={cn("h-0.5 flex-1", step <= current ? "bg-fg" : "bg-line")} />
             )}
             {clickable ? (
               <button type="button" onClick={() => onStepClick(step)} className={dotClassName} aria-label={`Back to step ${step}`}>
@@ -333,17 +333,17 @@ export function OneDriveWorkspaceRoot({
         {rootFolderId ? (
           <TooltipProvider delayDuration={300}>
             <div className="flex items-center gap-3 min-w-0">
-              <div className="shrink-0 flex h-9 w-9 items-center justify-center rounded border border-[#e5e7eb] bg-[#f9f9fb]" aria-hidden>
-                <HardDrive className="h-4.5 w-4.5 text-[#45474c]" strokeWidth={2} />
+              <div className="shrink-0 flex h-9 w-9 items-center justify-center rounded border border-line bg-surface-subtle" aria-hidden>
+                <HardDrive className="h-4.5 w-4.5 text-fg-muted" strokeWidth={2} />
               </div>
               <div className="min-w-0 flex-1">
                 {sectionLabel && (
-                  <p className="text-[0.8125rem] font-bold text-[#1b1b1d] leading-snug">{sectionLabel}</p>
+                  <p className="text-[0.8125rem] font-bold text-fg leading-snug">{sectionLabel}</p>
                 )}
                 <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                  <span className="text-xs text-[#45474c] truncate" title={displayName}>{displayName}</span>
+                  <span className="text-xs text-fg-muted truncate" title={displayName}>{displayName}</span>
                   {breadcrumbRootLabel ? (
-                    <span className="inline-flex items-center gap-1 rounded-sm border border-[#e5e7eb] bg-[#f9f9fb] px-1.5 py-0.5 text-[10px] font-medium text-[#45474c] shrink-0">
+                    <span className="inline-flex items-center gap-1 rounded-sm border border-line bg-surface-subtle px-1.5 py-0.5 text-caption font-medium text-fg-muted shrink-0">
                       {workspaceRootLocation === "SHARED" ? (
                         <SharePointIcon size={11} className="shrink-0 opacity-80" />
                       ) : workspaceRootLocation === "PERSONAL" ? (
@@ -362,7 +362,7 @@ export function OneDriveWorkspaceRoot({
                         href={driveUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex h-8 w-[6.5rem] items-center justify-center gap-1.5 rounded text-xs font-medium text-[#45474c] bg-white border border-[#e5e7eb] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] transition-colors"
+                        className="inline-flex h-8 w-[6.5rem] items-center justify-center gap-1.5 rounded text-xs font-medium text-fg-muted bg-surface border border-line hover:bg-surface-hover hover:text-fg transition-colors"
                         aria-label={workspaceRootLocation === "SHARED" ? "Open SharePoint site" : "Open in OneDrive"}
                       >
                         Open
@@ -384,7 +384,7 @@ export function OneDriveWorkspaceRoot({
                       <button
                         type="button"
                         className={cn(
-                          "inline-flex h-8 w-[6.5rem] items-center justify-center gap-1.5 rounded text-xs font-medium text-[#45474c] bg-white border border-[#e5e7eb] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] transition-colors",
+                          "inline-flex h-8 w-[6.5rem] items-center justify-center gap-1.5 rounded text-xs font-medium text-fg-muted bg-surface border border-line hover:bg-surface-hover hover:text-fg transition-colors",
                           (!accessToken || !connectorActive || migrateDisabled) && "opacity-40 cursor-not-allowed",
                         )}
                         onClick={() => {
@@ -412,26 +412,26 @@ export function OneDriveWorkspaceRoot({
           // choice to present — the workspace folder is created automatically (see the
           // autoPersonalRunRef effect above) as soon as this renders, no button/click needed.
           <div className="flex items-center gap-3 min-w-0">
-            <div className="shrink-0 flex h-9 w-9 items-center justify-center rounded border border-[#e5e7eb] bg-[#f9f9fb]" aria-hidden>
-              <RefreshCw className="h-4.5 w-4.5 text-[#45474c] animate-spin" strokeWidth={1.75} />
+            <div className="shrink-0 flex h-9 w-9 items-center justify-center rounded border border-line bg-surface-subtle" aria-hidden>
+              <RefreshCw className="h-4.5 w-4.5 text-fg-muted animate-spin" strokeWidth={1.75} />
             </div>
-            <p className="min-w-0 flex-1 text-[0.8125rem] text-[#45474c]">
+            <p className="min-w-0 flex-1 text-[0.8125rem] text-fg-muted">
               Setting up your workspace folder in OneDrive…
             </p>
           </div>
         ) : (
           <TooltipProvider delayDuration={300}>
             <div className="flex items-center gap-3 min-w-0">
-              <div className="shrink-0 flex h-9 w-9 items-center justify-center rounded border border-[#e5e7eb] bg-[#f9f9fb]" aria-hidden>
-                <HardDrive className="h-4.5 w-4.5 text-[#45474c]" strokeWidth={1.75} />
+              <div className="shrink-0 flex h-9 w-9 items-center justify-center rounded border border-line bg-surface-subtle" aria-hidden>
+                <HardDrive className="h-4.5 w-4.5 text-fg-muted" strokeWidth={1.75} />
               </div>
-              <p className="min-w-0 flex-1 text-[0.8125rem] text-[#45474c]">
+              <p className="min-w-0 flex-1 text-[0.8125rem] text-fg-muted">
                 No storage location selected.
               </p>
               <button
                 type="button"
                 className={cn(
-                  "inline-flex items-center gap-1.5 rounded h-8 px-4 text-[10px] font-headline font-bold tracking-widest uppercase text-white bg-primary hover:bg-primary hover:brightness-105 shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all shrink-0",
+                  "inline-flex items-center gap-1.5 rounded h-8 px-4 text-white bg-primary hover:bg-primary shadow-sm transition-all shrink-0",
                   (!accessToken || !connectorActive || migrateDisabled) && "opacity-40 cursor-not-allowed",
                 )}
                 onClick={() => {
@@ -449,9 +449,9 @@ export function OneDriveWorkspaceRoot({
           </TooltipProvider>
         )}
         {!accessToken ? (
-          <p className="text-xs text-amber-800 mt-3">Sign in to migrate your workspace folder.</p>
+          <p className="text-xs text-tag-yellow-fg mt-3">Sign in to migrate your workspace folder.</p>
         ) : !connectorActive ? (
-          <p className="text-xs text-amber-800 mt-3">Reconnect this account to manage the workspace folder.</p>
+          <p className="text-xs text-tag-yellow-fg mt-3">Reconnect this account to manage the workspace folder.</p>
         ) : null}
       </div>
 
@@ -464,18 +464,18 @@ export function OneDriveWorkspaceRoot({
         }}
       >
         <DialogContent
-          className="sm:max-w-2xl max-h-[90vh] overflow-y-auto rounded"
+          className="sm:max-w-2xl max-h-[90vh] overflow-y-auto"
           hideClose={isSelectingSite}
           onEscapeKeyDown={(e) => { if (isSelectingSite) e.preventDefault() }}
           onPointerDownOutside={(e) => { if (isSelectingSite) e.preventDefault() }}
           onInteractOutside={(e) => { if (isSelectingSite) e.preventDefault() }}
         >
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-[0.9375rem] font-bold text-[#1b1b1d]">
+            <DialogTitle className="flex items-center gap-2 text-[0.9375rem] font-bold text-fg">
               <MicrosoftIcon size={18} />
               {dialogTitle}
             </DialogTitle>
-            <DialogDescription className="text-left text-xs text-[#45474c]">{dialogSubtitle}</DialogDescription>
+            <DialogDescription className="text-left text-xs text-fg-muted">{dialogSubtitle}</DialogDescription>
           </DialogHeader>
 
           <StepProgress
@@ -486,48 +486,48 @@ export function OneDriveWorkspaceRoot({
 
           {!location ? (
             <div className="space-y-4 py-1">
-              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#45474c]">Location</p>
+              <p className="text-small font-medium text-fg-muted">Location</p>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <button
                   type="button"
                   onClick={startPersonalFlow}
                   disabled={saving}
-                  className="group flex flex-col items-start gap-3 rounded border border-[#e5e7eb] bg-white p-4 text-left transition-all hover:border-[#1b1b1d] hover:bg-[#f9f9fb] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="group flex flex-col items-start gap-3 rounded border border-line bg-surface p-4 text-left transition-all hover:border-fg hover:bg-surface-hover active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded border border-[#e5e7eb] bg-[#f9f9fb]">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded border border-line bg-surface-subtle">
                     <OneDriveIcon size={28} />
                   </div>
                   <div>
-                    <p className="text-[0.8125rem] font-semibold text-[#1b1b1d]">Personal (OneDrive)</p>
-                    <p className="text-xs text-[#45474c] leading-relaxed mt-0.5">Individual storage tied to your Microsoft account.</p>
+                    <p className="text-[0.8125rem] font-semibold text-fg">Personal (OneDrive)</p>
+                    <p className="text-xs text-fg-muted leading-relaxed mt-0.5">Individual storage tied to your Microsoft account.</p>
                   </div>
                 </button>
                 <button
                   type="button"
                   onClick={startSharedFlow}
                   disabled={saving}
-                  className="group flex flex-col items-start gap-3 rounded border border-[#e5e7eb] bg-white p-4 text-left transition-all hover:border-[#1b1b1d] hover:bg-[#f9f9fb] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="group flex flex-col items-start gap-3 rounded border border-line bg-surface p-4 text-left transition-all hover:border-fg hover:bg-surface-hover active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded border border-[#e5e7eb] bg-[#f9f9fb]">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded border border-line bg-surface-subtle">
                     <SharePointIcon size={28} />
                   </div>
                   <div>
-                    <p className="text-[0.8125rem] font-semibold text-[#1b1b1d]">Shared (SharePoint)</p>
-                    <p className="text-xs text-[#45474c] leading-relaxed mt-0.5">Team storage on a SharePoint site.</p>
+                    <p className="text-[0.8125rem] font-semibold text-fg">Shared (SharePoint)</p>
+                    <p className="text-xs text-fg-muted leading-relaxed mt-0.5">Team storage on a SharePoint site.</p>
                   </div>
                 </button>
               </div>
             </div>
           ) : location === "Personal" ? (
             <div className="flex flex-col items-center justify-center gap-3 py-10">
-              <RefreshCw className="h-6 w-6 text-[#45474c] animate-spin" />
-              <p className="text-xs text-[#45474c]">Creating your workspace folder in OneDrive…</p>
+              <RefreshCw className="h-6 w-6 text-fg-muted animate-spin" />
+              <p className="text-xs text-fg-muted">Creating your workspace folder in OneDrive…</p>
             </div>
           ) : (
             <div className="space-y-3 py-1">
               <div className="flex items-center gap-1.5">
                 <SharePointIcon size={14} className="shrink-0" />
-                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#45474c]">Shared (SharePoint) · Pick a site</p>
+                <p className="text-small font-medium text-fg-muted">Shared (SharePoint) · Pick a site</p>
               </div>
               <input
                 type="text"
@@ -535,11 +535,11 @@ export function OneDriveWorkspaceRoot({
                 onChange={(e) => setSiteQuery(e.target.value)}
                 placeholder="Search sites…"
                 disabled={isSelectingSite}
-                className="w-full rounded border border-[#e5e7eb] bg-white px-2.5 py-1.5 text-xs text-[#1b1b1d] placeholder:text-[#9a9ba0] focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary disabled:opacity-40 disabled:cursor-not-allowed"
+                className="w-full rounded border border-line bg-surface px-2.5 py-1.5 text-xs text-fg placeholder:text-fg-subtle focus:outline-none focus:ring-2 focus:ring-action/30 focus:border-action disabled:opacity-40 disabled:cursor-not-allowed"
               />
-              <div className="max-h-64 overflow-y-auto rounded border border-[#e5e7eb] divide-y divide-[#e5e7eb]">
+              <div className="max-h-64 overflow-y-auto rounded border border-line divide-y divide-line">
                 {sitesLoading ? (
-                  <div className="divide-y divide-[#e5e7eb]" aria-label="Loading SharePoint sites" role="status">
+                  <div className="divide-y divide-line" aria-label="Loading SharePoint sites" role="status">
                     {[0, 1, 2, 3].map((i) => (
                       <div key={i} className="flex items-center justify-between gap-2 px-3 py-2.5">
                         <Skeleton className="h-3.5 w-40" />
@@ -548,7 +548,7 @@ export function OneDriveWorkspaceRoot({
                     ))}
                   </div>
                 ) : filteredSites.length === 0 ? (
-                  <p className="text-xs text-[#9a9ba0] px-3 py-3">
+                  <p className="text-xs text-fg-subtle px-3 py-3">
                     {sites.length === 0 ? "No sites found." : "No sites match your search."}
                   </p>
                 ) : (
@@ -570,14 +570,14 @@ export function OneDriveWorkspaceRoot({
                             ? isThisSite
                               ? "cursor-default"
                               : "opacity-40 cursor-not-allowed"
-                            : "hover:bg-[#f9f9fb]"
+                            : "hover:bg-surface-hover"
                         )}
                       >
-                        <span className="text-sm text-[#1b1b1d] truncate">{site.name}</span>
+                        <span className="text-sm text-fg truncate">{site.name}</span>
                         {isThisSite ? (
-                          <RefreshCw className="w-3.5 h-3.5 text-[#9a9ba0] animate-spin shrink-0" />
+                          <RefreshCw className="w-3.5 h-3.5 text-fg-subtle animate-spin shrink-0" />
                         ) : isSelecting ? null : (
-                          <span className="shrink-0 inline-flex items-center gap-1.5 rounded border border-[#e5e7eb] bg-white px-2.5 py-1 text-[10px] font-headline font-bold tracking-widest uppercase text-[#45474c] opacity-0 transition-opacity group-hover:opacity-100">
+                          <span className="shrink-0 inline-flex items-center gap-1.5 rounded border border-line bg-surface px-2.5 py-1 text-fg-muted opacity-0 transition-opacity group-hover:opacity-100">
                             <SharePointIcon size={12} className="shrink-0" />
                             Select Site
                           </span>

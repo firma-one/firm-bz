@@ -15,8 +15,13 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog'
-import { AlertTriangle, BarChart2, Bell, Building2, ChevronDown, Check, DollarSign, FileText, FlaskConical, Globe, HardDrive, ImageIcon, ImagePlus, Info, Linkedin, Lock, MapPin, MessagesSquare, Palette, RefreshCw, RotateCcw, Shield, Trash2, Type, User, Users2, X } from 'lucide-react'
-import { Label } from '@/components/ui/label'
+import { AtSign, BarChart2, Bell, Building2, CalendarClock, ChevronDown, Check, DollarSign, Factory, FileText, FlaskConical, Globe, ImageIcon, ImagePlus, Linkedin, Lock, MapPin, MessagesSquare, Palette, PanelTop, RefreshCw, Repeat, RotateCcw, Shield, Trash2, Type, User, Users2, X } from 'lucide-react'
+import { PropertyList, PropertyRow, PROPERTY_FIELD_CLASS, PROPERTY_HINT_CLASS, PROPERTY_TEXTAREA_CLASS, SETTINGS_SECTION_HEADING_CLASS } from '@/components/ui/property-list'
+import { NotionTable, NotionTableBody, NotionTableCell, NotionTableHead, NotionTableHeader, NotionTableRow } from '@/components/ui/notion-table'
+import { Textarea } from '@/components/ui/textarea'
+import { Tag } from '@/components/ui/tag'
+import { ShimmerBar } from '@/components/ui/shimmer'
+import { TAG_DOT_CLASSES } from '@/lib/ui/status-colors'
 import { Switch } from '@/components/ui/switch'
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
@@ -63,9 +68,6 @@ const WORLD_CURRENCIES: { code: string; symbol: string; label: string }[] = [
     { code: 'KES', symbol: 'KSh',  label: 'KES (KSh)' },
 ]
 
-const fieldLabel = 'font-mono text-[9px] font-bold uppercase tracking-widest text-[#45474c] block mb-1'
-const inputCls = 'border-[#e5e7eb] text-[#1b1b1d] text-xs font-normal placeholder:text-[#9a9ba0] rounded focus-visible:ring-1 focus-visible:ring-primary focus-visible:border-primary disabled:opacity-50 disabled:cursor-not-allowed'
-const textareaCls = 'flex w-full rounded border border-[#e5e7eb] bg-white px-3 py-2 text-xs font-normal text-[#1b1b1d] placeholder:text-[#9a9ba0] focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed'
 
 const PUBLIC_EMAIL_DOMAINS = new Set([
     'gmail.com', 'googlemail.com', 'yahoo.com', 'yahoo.co.uk', 'hotmail.com', 'outlook.com',
@@ -96,6 +98,40 @@ const EVENT_NOTIFICATION_ROWS: { key: EventKey; label: string }[] = [
     { key: 'reminders', label: 'Reminders due (in-app also enables push)' },
 ]
 
+/** Linear-style toggle row: what it does on the left, the switch on the right. */
+function SettingSwitchRow({
+    id,
+    icon,
+    title,
+    description,
+    checked,
+    onChange,
+    disabled,
+}: {
+    id?: string
+    icon?: React.ReactNode
+    title: React.ReactNode
+    description?: React.ReactNode
+    checked: boolean
+    onChange: (next: boolean) => void
+    disabled?: boolean
+}) {
+    const autoId = React.useId()
+    const switchId = id ?? autoId
+    return (
+        <div className="flex items-center justify-between gap-4 py-2.5">
+            <div className="flex min-w-0 items-start gap-2.5">
+                {icon && <span className="mt-0.5 flex shrink-0 text-fg-subtle [&_svg]:h-4 [&_svg]:w-4">{icon}</span>}
+                <label htmlFor={switchId} className="min-w-0 cursor-pointer">
+                    <span className="block text-ui text-fg">{title}</span>
+                    {description && <span className="mt-0.5 block text-small text-fg-muted">{description}</span>}
+                </label>
+            </div>
+            <Switch id={switchId} checked={checked} onCheckedChange={onChange} disabled={disabled} />
+        </div>
+    )
+}
+
 export interface FirmSettingsFormProps {
     orgSlug: string
     orgId?: string | null
@@ -107,6 +143,13 @@ export interface FirmSettingsFormProps {
 }
 
 type Section = 'main' | 'branding' | 'appsettings' | 'storage' | 'danger'
+
+/**
+ * The second brand color is hidden: the New UI has one accent (the brand color, on buttons, links
+ * and selected states), and the nav stripe and tab underlines this colored were legacy-UI only.
+ * A saved value still loads and is saved back unchanged.
+ */
+const SHOW_ACCENT_COLOR = false
 
 export function FirmSettingsForm({
     orgSlug,
@@ -157,7 +200,12 @@ export function FirmSettingsForm({
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
     const [loaded, setLoaded] = useState(false)
 
-    const toggleSection = (s: Section) => setOpenSection((prev) => (prev === s ? 'main' : s))
+    // Deep link to the danger zone (?section=danger): it sits at the bottom of General.
+    const dangerRef = useRef<HTMLElement>(null)
+    useEffect(() => {
+        if (initialSection === 'danger') dangerRef.current?.scrollIntoView({ block: 'start' })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
 
     // Branding state
     const [brandName, setBrandName] = useState('')
@@ -451,526 +499,387 @@ export function FirmSettingsForm({
         }
     }
 
-    const accentColor = brandPrimaryColor && /^#[0-9A-Fa-f]{6}$/.test(brandPrimaryColor) ? brandPrimaryColor : null
-    const sectionHeaderStyle = accentColor
-        ? { backgroundColor: `${accentColor}0f` } // ~6% opacity tint
-        : undefined
-
     const mainSave = (
-        <div className="flex items-center gap-3 pt-2">
+        <div className="flex items-center gap-2">
             <Button type="button" variant="greenCta" onClick={() => void handleSave()}
-                disabled={saving || !loaded || !mainDirty}
-                className="rounded w-32 text-[10px] font-headline font-bold tracking-widest uppercase text-white">
-                {saving ? 'Saving…' : 'Save'}
+                disabled={saving || !loaded || !mainDirty || !name.trim()}>
+                {saving ? 'Saving…' : 'Save changes'}
             </Button>
         </div>
     )
 
     const appSave = (
-        <div className="flex items-center gap-3 pt-2">
+        <div className="flex items-center gap-2">
             <Button type="button" variant="greenCta" onClick={() => void handleSave({ skipNavigation: true })}
-                disabled={saving || !loaded || (!appDirty && !mainDirty)}
-                className="rounded w-32 text-[10px] font-headline font-bold tracking-widest uppercase text-white">
-                {saving ? 'Saving…' : 'Save'}
+                disabled={saving || !loaded || (!appDirty && !mainDirty)}>
+                {saving ? 'Saving…' : 'Save changes'}
             </Button>
         </div>
     )
 
+    const hasBrandLogo = Boolean(brandLogoPreviewUrl || brandLogoUrl)
+    // The danger zone lives at the bottom of General; its deep link opens General and scrolls there.
+    const activeTab: Exclude<Section, 'danger'> = openSection === 'danger' ? 'main' : openSection
+    const tabs: { value: Exclude<Section, 'danger'>; label: string; dirty?: boolean }[] = [
+        { value: 'main', label: 'General', dirty: mainDirty },
+        { value: 'branding', label: 'Branding', dirty: brandDirty },
+        { value: 'appsettings', label: 'App settings', dirty: appDirty },
+        { value: 'storage', label: 'Storage' },
+    ]
+
     return (
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col">
+            <div className="mb-6 flex items-end gap-1 border-b border-line" role="tablist" aria-label="Settings sections">
+                {tabs.map((t) => (
+                    <button
+                        key={t.value}
+                        type="button"
+                        role="tab"
+                        aria-selected={activeTab === t.value}
+                        onClick={() => setOpenSection(t.value)}
+                        className={`relative -mb-px flex h-9 items-center gap-1.5 border-b-2 px-2 text-ui transition-colors ${
+                            activeTab === t.value ? 'border-fg text-fg' : 'border-transparent text-fg-muted hover:text-fg'
+                        }`}
+                    >
+                        {t.label}
+                        {t.dirty && <span className={`h-1.5 w-1.5 rounded-full ${TAG_DOT_CLASSES.yellow}`} title="Unsaved changes" />}
+                    </button>
+                ))}
+            </div>
 
-            {/* ── 1. MAIN (Details + Company + Reminders) ── */}
-            <section className="border border-[#e5e7eb] rounded overflow-hidden">
-                <button type="button" onClick={() => toggleSection('main')}
-                    className="w-full px-5 py-3 flex items-center justify-between gap-2 transition-colors hover:brightness-95" style={sectionHeaderStyle ?? { backgroundColor: '#fafafa' }}>
-                    <div className="flex items-center gap-2">
-                        <Building2 className="h-3.5 w-3.5 text-[#45474c]" />
-                        <span className="font-mono text-[10px] font-bold uppercase tracking-widest text-[#45474c]">Main</span>
-                        {mainDirty && <span className="h-1.5 w-1.5 rounded-full bg-amber-400 shrink-0" />}
-                    </div>
-                    <ChevronDown className={`h-3.5 w-3.5 text-[#45474c] transition-transform duration-200 ${openSection === 'main' ? 'rotate-180' : ''}`} />
-                </button>
-                <div className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${openSection === 'main' ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
-                    <div className="overflow-hidden min-h-0">
-                        <div className="p-5 border-t border-[#e5e7eb] bg-white">
-                            <div className="grid grid-cols-2 gap-5 items-stretch">
-
-                                {/* LEFT — Details + Industry + Company Size */}
-                                <div className="flex flex-col">
-                                    <div className="bg-white rounded border border-[#e5e7eb] p-4 space-y-3 flex-1">
-                                        <p className={fieldLabel}>Details</p>
-                                        <div>
-                                            <label htmlFor="org-name" className={fieldLabel}>
-                                                <span className="inline-flex items-center gap-1"><Building2 className="h-3 w-3" /> Firm name <span className="text-red-500 normal-case tracking-normal font-sans">*</span></span>
-                                            </label>
-                                            <Input id="org-name" value={name} onChange={(e) => { setName(e.target.value); setMainDirty(true) }} placeholder="Firm name" className={inputCls} />
-                                        </div>
-                                        <div>
-                                            <label htmlFor="org-internal-memo" className={fieldLabel}>
-                                                <span className="inline-flex items-center gap-1"><Lock className="h-3 w-3" /> Internal memo <span className="text-[#9a9ba0] normal-case tracking-normal font-sans font-normal">— internal only</span></span>
-                                            </label>
-                                            <textarea id="org-internal-memo" value={internalMemo} onChange={(e) => { setInternalMemo(e.target.value); setMainDirty(true) }} placeholder="Private notes, context about this firm…" rows={2} className={textareaCls} />
-                                        </div>
-                                        <div>
-                                            <label htmlFor="firm-industry" className={fieldLabel}><span className="inline-flex items-center gap-1"><Building2 className="h-3 w-3" /> Industry</span></label>
-                                            <Input id="firm-industry" value={industry} onChange={(e) => { setIndustry(e.target.value); setMainDirty(true) }} placeholder="e.g. Technology" className={inputCls} />
-                                        </div>
-                                        <div>
-                                            <label htmlFor="firm-company-size" className={fieldLabel}><span className="inline-flex items-center gap-1"><Users2 className="h-3 w-3" /> Company size</span></label>
-                                            <SelectWithCustomEntry id="firm-company-size" value={companySizeBracket} onChange={(v) => { setCompanySizeBracket(v); setMainDirty(true) }} options={['<10', '11–50', '51–200', '201–1000', '1000+']} placeholder="Select size bracket…" customEntryHint="Custom…" />
-                                        </div>
-                                    </div>
+            {activeTab === 'main' && (
+                <div className="mx-auto flex w-full max-w-2xl flex-col gap-8" role="tabpanel">
+                    <section>
+                        <h3 className={SETTINGS_SECTION_HEADING_CLASS}>Details</h3>
+                        <PropertyList>
+                            <PropertyRow label={<label htmlFor="org-name">Firm name</label>} icon={<Building2 />}>
+                                <Input id="org-name" value={name} onChange={(e) => { setName(e.target.value); setMainDirty(true) }} placeholder="Firm name" required className={PROPERTY_FIELD_CLASS} />
+                            </PropertyRow>
+                            <PropertyRow label={<label htmlFor="firm-industry">Industry</label>} icon={<Factory />}>
+                                <Input id="firm-industry" value={industry} onChange={(e) => { setIndustry(e.target.value); setMainDirty(true) }} placeholder="Empty" className={PROPERTY_FIELD_CLASS} />
+                            </PropertyRow>
+                            <PropertyRow label={<label htmlFor="firm-company-size">Company size</label>} icon={<Users2 />}>
+                                <SelectWithCustomEntry id="firm-company-size" value={companySizeBracket} onChange={(v) => { setCompanySizeBracket(v); setMainDirty(true) }} options={['<10', '11–50', '51–200', '201–1000', '1000+']} placeholder="Empty" customEntryHint="Custom…" className={PROPERTY_FIELD_CLASS} />
+                            </PropertyRow>
+                            <PropertyRow label={<label htmlFor="firm-company-website">Website</label>} icon={<Globe />}>
+                                <Input id="firm-company-website" type="text" value={companyWebsite} onChange={(e) => { setCompanyWebsite(e.target.value); setMainDirty(true) }} placeholder="https://example.com" className={PROPERTY_FIELD_CLASS} />
+                            </PropertyRow>
+                            <PropertyRow label={<label htmlFor="firm-linkedin">LinkedIn</label>} icon={<Linkedin />}>
+                                <Input id="firm-linkedin" value={linkedInUrl} onChange={(e) => { setLinkedInUrl(e.target.value); setMainDirty(true) }} placeholder="https://linkedin.com/company/…" className={PROPERTY_FIELD_CLASS} />
+                            </PropertyRow>
+                            <PropertyRow label={<label htmlFor="firm-billing-address">Billing address</label>} icon={<MapPin />}>
+                                <Textarea id="firm-billing-address" value={billingAddress} onChange={(e) => { setBillingAddress(e.target.value); setMainDirty(true) }} placeholder={"123 Main St\nCity, State ZIP\nCountry"} rows={3} className={PROPERTY_TEXTAREA_CLASS} />
+                            </PropertyRow>
+                            <PropertyRow label={<label htmlFor="firm-notes">Notes</label>} icon={<FileText />}>
+                                <Textarea id="firm-notes" value={notes} onChange={(e) => { setNotes(e.target.value); setMainDirty(true) }} placeholder="Additional details about the firm" rows={3} className={PROPERTY_TEXTAREA_CLASS} />
+                            </PropertyRow>
+                            <PropertyRow label={<label htmlFor="org-internal-memo">Internal memo</label>} icon={<Lock />}>
+                                <div className="flex w-full flex-col gap-1">
+                                    <Textarea id="org-internal-memo" value={internalMemo} onChange={(e) => { setInternalMemo(e.target.value); setMainDirty(true) }} placeholder="Private notes, context about this firm…" rows={3} className={PROPERTY_TEXTAREA_CLASS} />
+                                    <p className={PROPERTY_HINT_CLASS}>Only firm admins see this.</p>
                                 </div>
+                            </PropertyRow>
+                        </PropertyList>
+                    </section>
 
-                                {/* RIGHT — Company (Website, LinkedIn, Address, Notes) */}
-                                <div className="bg-white rounded border border-[#e5e7eb] p-4 flex flex-col gap-3 h-full">
-                                    <p className={`${fieldLabel} shrink-0`}>Company</p>
-                                    <div className="shrink-0">
-                                        <label htmlFor="firm-company-website" className={fieldLabel}><span className="inline-flex items-center gap-1"><Globe className="h-3 w-3" /> Website</span></label>
-                                        <Input id="firm-company-website" type="text" value={companyWebsite} onChange={(e) => { setCompanyWebsite(e.target.value); setMainDirty(true) }} placeholder="https://example.com or www.example.com" className={inputCls} />
-                                    </div>
-                                    <div className="shrink-0">
-                                        <label htmlFor="firm-linkedin" className={fieldLabel}><span className="inline-flex items-center gap-1"><Linkedin className="h-3 w-3" /> LinkedIn</span></label>
-                                        <Input id="firm-linkedin" value={linkedInUrl} onChange={(e) => { setLinkedInUrl(e.target.value); setMainDirty(true) }} placeholder="https://linkedin.com/company/…" className={inputCls} />
-                                    </div>
-                                    <div className="flex flex-col flex-1">
-                                        <label htmlFor="firm-billing-address" className={fieldLabel}><span className="inline-flex items-center gap-1"><MapPin className="h-3 w-3" /> Billing address</span></label>
-                                        <textarea id="firm-billing-address" value={billingAddress} onChange={(e) => { setBillingAddress(e.target.value); setMainDirty(true) }} placeholder={"123 Main St\nCity, State ZIP\nCountry"} className={`${textareaCls} flex-1 resize-none`} />
-                                    </div>
-                                    <div className="flex flex-col flex-1">
-                                        <label htmlFor="firm-notes" className={fieldLabel}><span className="inline-flex items-center gap-1"><FileText className="h-3 w-3" /> Notes</span></label>
-                                        <textarea id="firm-notes" value={notes} onChange={(e) => { setNotes(e.target.value); setMainDirty(true) }} placeholder="Additional details about the firm" className={`${textareaCls} flex-1 resize-none`} />
-                                    </div>
-                                </div>
+                    {mainSave}
+
+                    {/* Linear-style destructive row: say what happens, one button — no colored box. */}
+                    <section id="firm-danger-zone" ref={dangerRef} className="scroll-mt-4">
+                        <h3 className={SETTINGS_SECTION_HEADING_CLASS}>Danger zone</h3>
+                        <div className="flex flex-col gap-3 py-2 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+                            <div className="min-w-0">
+                                <p className="text-ui font-medium text-fg">Delete firm</p>
+                                <p className="text-small text-fg-muted">
+                                    Permanently deletes this firm. All clients, engagements and members are removed. This cannot be undone.
+                                </p>
                             </div>
-
-                            {mainSave}
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            {/* ── 2. BRANDING ── */}
-            <section className="border border-[#e5e7eb] rounded overflow-hidden">
-                <button type="button" onClick={() => toggleSection('branding')}
-                    className="w-full px-5 py-3 flex items-center justify-between gap-2 transition-colors hover:brightness-95" style={sectionHeaderStyle ?? { backgroundColor: '#fafafa' }}>
-                    <div className="flex items-center gap-2">
-                        <Palette className="h-3.5 w-3.5 text-[#45474c]" />
-                        <span className="font-mono text-[10px] font-bold uppercase tracking-widest text-[#45474c]">Branding</span>
-                        {brandDirty && <span className="h-1.5 w-1.5 rounded-full bg-amber-400 shrink-0" />}
-                    </div>
-                    <ChevronDown className={`h-3.5 w-3.5 text-[#45474c] transition-transform duration-200 ${openSection === 'branding' ? 'rotate-180' : ''}`} />
-                </button>
-                <div className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${openSection === 'branding' ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
-                    <div className="overflow-hidden min-h-0">
-                        <div className="p-5 border-t border-[#e5e7eb] bg-white">
-                            <div className="grid grid-cols-[1fr_1fr] gap-4">
-                                {/* Left: identity + colors */}
-                                <div className="bg-white rounded border border-[#e5e7eb] p-4 space-y-3">
-                                    <div className="flex items-center justify-between">
-                                        <p className={fieldLabel}>Identity</p>
-                                        {(brandPrimaryColor || brandSecondaryColor) && (
-                                            <button type="button" onClick={() => { setBrandPrimaryColor(''); setBrandSecondaryColor(''); setBrandDirty(true) }}
-                                                className="inline-flex items-center gap-1 text-[10px] font-medium text-firma hover:text-firma/80 transition-colors">
-                                                <RotateCcw className="h-3 w-3" /> Reset colors
-                                            </button>
-                                        )}
-                                    </div>
-                                    <div>
-                                        <label htmlFor="firm-brand-name" className={fieldLabel}><span className="inline-flex items-center gap-1"><User className="h-3 w-3" /> Display name <span className="text-[#9a9ba0] normal-case tracking-normal font-sans font-normal">— shown in topbar</span></span></label>
-                                        <input id="firm-brand-name" value={brandName} onChange={(e) => { setBrandName(e.target.value); setBrandDirty(true) }} placeholder={name || 'Firm name'} className={`flex h-9 w-full rounded border bg-white px-3 py-2 ${inputCls}`} />
-                                    </div>
-                                    <div>
-                                        <label htmlFor="firm-brand-subtext" className={fieldLabel}><span className="inline-flex items-center gap-1"><Type className="h-3 w-3" /> Brand tagline <span className="text-[#9a9ba0] normal-case tracking-normal font-sans font-normal">— optional</span></span></label>
-                                        <input id="firm-brand-subtext" value={brandSubtext} onChange={(e) => { setBrandSubtext(e.target.value); setBrandDirty(true) }} placeholder="Optional tagline or subtext" className={`flex h-9 w-full rounded border bg-white px-3 py-2 ${inputCls}`} />
-                                    </div>
-                                    <div className="space-y-1.5">
-                                        <label htmlFor="firm-brand-primary" className={fieldLabel}><span className="inline-flex items-center gap-1"><Palette className="h-3 w-3" /> Primary color <span className="text-[#9a9ba0] normal-case tracking-normal font-sans font-normal">— optional</span></span></label>
-                                        <div className="flex items-center gap-2">
-                                            <input id="firm-brand-primary" type="color" value={brandPrimaryColor || FIRMA_COLOR} onChange={(e) => { setBrandPrimaryColor(e.target.value); setBrandDirty(true) }} className="h-9 w-10 rounded border border-[#e5e7eb] cursor-pointer bg-white disabled:cursor-not-allowed disabled:opacity-60 shrink-0" />
-                                            <input value={brandPrimaryColor} onChange={(e) => { setBrandPrimaryColor(e.target.value); setBrandDirty(true) }} placeholder={`Default (${FIRMA_COLOR})`} className={`flex h-9 w-full rounded border bg-white px-3 py-2 font-mono ${inputCls}`} />
-                                            <button type="button" onClick={() => { setBrandPrimaryColor(''); setBrandDirty(true) }} disabled={!brandPrimaryColor} className="shrink-0 text-[#9a9ba0] hover:text-[#45474c] disabled:opacity-30 disabled:cursor-default"><RotateCcw className="h-3.5 w-3.5" /></button>
-                                        </div>
-                                    </div>
-                                    <div className="space-y-1.5">
-                                        <label htmlFor="firm-brand-accent" className={fieldLabel}><span className="inline-flex items-center gap-1"><Palette className="h-3 w-3" /> Accent color <span className="text-[#9a9ba0] normal-case tracking-normal font-sans font-normal">— optional</span></span></label>
-                                        <p className="text-[11px] text-[#9a9ba0]">Used for nav stripe &amp; tab underlines. Leave empty to match primary.</p>
-                                        <div className="flex items-center gap-2">
-                                            <div className="relative h-9 w-10 shrink-0">
-                                                <input id="firm-brand-accent" type="color" value={brandSecondaryColor || '#ffffff'} onChange={(e) => { setBrandSecondaryColor(e.target.value); setBrandDirty(true) }} className="absolute inset-0 h-full w-full opacity-0 cursor-pointer disabled:cursor-not-allowed" />
-                                                <div className="h-9 w-10 rounded border border-[#e5e7eb] pointer-events-none" style={brandSecondaryColor ? { backgroundColor: brandSecondaryColor } : { background: 'repeating-linear-gradient(45deg, #e5e7eb 0px, #e5e7eb 2px, white 2px, white 6px)' }} />
-                                            </div>
-                                            <input value={brandSecondaryColor} onChange={(e) => { setBrandSecondaryColor(e.target.value); setBrandDirty(true) }} placeholder="Match primary" className={`flex h-9 w-full rounded border bg-white px-3 py-2 font-mono ${inputCls}`} />
-                                            <button type="button" onClick={() => { setBrandSecondaryColor(''); setBrandDirty(true) }} disabled={!brandSecondaryColor} className="shrink-0 text-[#9a9ba0] hover:text-[#45474c] disabled:opacity-30 disabled:cursor-default"><RotateCcw className="h-3.5 w-3.5" /></button>
-                                        </div>
-                                    </div>
-                                </div>
-                                {/* Right: logo */}
-                                <div className="bg-white rounded border border-[#e5e7eb] p-4 space-y-3">
-                                    <p className={fieldLabel}>Logo &amp; preview</p>
-                                    <div className="flex items-center gap-1.5">
-                                        {(['1:1', '4:3', '16:9'] as const).map((ar) => {
-                                            const dims: Record<string, [number,number]> = { '1:1': [16,16], '4:3': [21,16], '16:9': [28,16] }
-                                            const [w, h] = dims[ar]; const active = brandLogoAspectRatio === ar
-                                            return (
-                                                <button key={ar} type="button" onClick={() => { setBrandLogoAspectRatio(ar); setBrandLogoScale(1); setBrandLogoX(0); setBrandLogoY(0); setBrandDirty(true) }}
-                                                    className={`flex flex-col items-center gap-1 px-2 py-1.5 rounded border transition-colors disabled:opacity-50 ${active ? 'border-primary bg-primary/5 text-primary' : 'border-[#e5e7eb] text-[#9a9ba0] hover:border-[#45474c] hover:text-[#45474c]'}`}>
-                                                    <span className={`block rounded-sm border-2 ${active ? 'border-primary' : 'border-current'}`} style={{ width: w, height: h }} />
-                                                    <span className="text-[9px] font-mono font-bold tracking-wide leading-none">{ar}</span>
-                                                </button>
-                                            )
-                                        })}
-                                    </div>
-                                    <p className="text-xs text-[#9a9ba0]">JPG, PNG or SVG. Max 5 MB.</p>
-                                    <input ref={brandFileInputRef} type="file" accept=".jpg,.jpeg,.png,.svg,image/jpeg,image/png,image/svg+xml" onChange={handleBrandLogoFileChange} className="sr-only" aria-hidden />
-                                    {!(brandLogoPreviewUrl || brandLogoUrl) ? (
-                                        <button type="button" onClick={() => brandFileInputRef.current?.click()}
-                                            className="relative flex shrink-0 items-center justify-center rounded border-2 border-dashed border-[#e5e7eb] bg-slate-50 hover:border-primary/40 transition-colors focus:outline-none group disabled:opacity-60 disabled:cursor-not-allowed"
-                                            style={{ width: brandPreviewW, height: BRAND_PREVIEW_H }}>
-                                            <span className="text-5xl font-semibold text-slate-300 group-hover:opacity-30 transition-opacity">{(brandName || name).trim().charAt(0).toUpperCase() || '?'}</span>
-                                            <span className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                <ImagePlus className="h-6 w-6 text-primary" /><span className="text-[10px] font-semibold text-primary uppercase tracking-wider">Upload logo</span>
-                                            </span>
-                                        </button>
-                                    ) : (
-                                        <div className="flex flex-col gap-2">
-                                            <div className="relative flex shrink-0 rounded border border-[#e5e7eb] overflow-hidden select-none group cursor-grab active:cursor-grabbing"
-                                                style={{ width: brandPreviewW, height: BRAND_PREVIEW_H, backgroundImage: 'repeating-conic-gradient(#e5e7eb 0% 25%, white 0% 50%)', backgroundSize: '12px 12px' }}
-                                                onPointerDown={onBrandPointerDown} onPointerMove={onBrandPointerMove} onPointerUp={onBrandPointerUp} onPointerLeave={onBrandPointerUp}>
-                                                <div className="absolute inset-0 flex items-center justify-center" style={{ transform: `translate(${brandLogoX}px, ${brandLogoY}px) scale(${brandLogoScale})` }}>
-                                                    <img src={brandLogoPreviewUrl || brandLogoUrl || undefined} alt="Logo" className="max-w-full max-h-full object-contain pointer-events-none" style={{ width: brandPreviewW, height: BRAND_PREVIEW_H }} draggable={false} />
-                                                </div>
-                                                <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded">
-                                                    <button type="button" onClick={() => brandFileInputRef.current?.click()} className="p-2 rounded bg-white text-[#1b1b1d] hover:bg-[#f9f9fb] shadow-sm disabled:opacity-50"><ImagePlus className="h-4 w-4" /></button>
-                                                    <button type="button" onClick={() => { setBrandLogoUrl(''); setBrandLogoFile(null); setBrandLogoPreviewUrl(null); setBrandDirty(true) }} className="p-2 rounded bg-white text-red-600 hover:bg-red-50 shadow-sm disabled:opacity-50"><Trash2 className="h-4 w-4" /></button>
-                                                </div>
-                                            </div>
-                                            <input type="range" min={-1} max={1} step={0.04}
-                                                value={brandLogoScale <= 1 ? (brandLogoScale - 1) / 0.5 : (brandLogoScale - 1) / 2}
-                                                onChange={(e) => { const v = Number(e.target.value); setBrandLogoScale(v <= 0 ? 1 + v * 0.5 : 1 + v * 2); setBrandDirty(true) }} className="w-full h-1.5 rounded appearance-none bg-[#e5e7eb] accent-primary disabled:opacity-60" style={{ maxWidth: brandPreviewW }} />
-                                        </div>
-                                    )}
-                                    <div className="mt-1">
-                                        <p className={`${fieldLabel} mb-2`}>Header preview</p>
-                                        <div className="rounded border border-[#e5e7eb] bg-white px-4 py-3 flex items-center gap-3">
-                                            {(brandLogoPreviewUrl || brandLogoUrl) ? (() => {
-                                                const dH = 40; const dW = Math.round(dH * brandAspectMap[brandLogoAspectRatio]); const sc = dH / BRAND_PREVIEW_H
-                                                return (
-                                                    <div className="relative shrink-0 rounded-lg bg-slate-50 border-2 border-slate-100 overflow-hidden" style={{ width: dW, height: dH }}>
-                                                        <div className="absolute inset-0 flex items-center justify-center" style={{ transform: `translate(${brandLogoX * sc}px, ${brandLogoY * sc}px) scale(${brandLogoScale})`, transformOrigin: 'center' }}>
-                                                            <img src={brandLogoPreviewUrl || brandLogoUrl || ''} alt="Logo" className="object-contain pointer-events-none" style={{ width: dW, height: dH }} draggable={false} />
-                                                        </div>
-                                                    </div>
-                                                )
-                                            })() : (
-                                                <span className="inline-flex shrink-0 items-center justify-center rounded-lg bg-slate-50 border-2 border-slate-100 h-10 w-10 text-lg font-semibold" style={{ color: brandPrimaryColor || FIRMA_COLOR }}>
-                                                    {(brandName || name || '?').trim().charAt(0).toUpperCase()}
-                                                </span>
-                                            )}
-                                            <div className="flex flex-col justify-center min-w-0">
-                                                <span className="font-headline text-xl font-bold tracking-tighter text-[#1b1b1d] truncate leading-tight">{brandName || name || 'Firm name'}</span>
-                                                {brandSubtext && <span className="text-[11px] text-gray-500 truncate mt-0.5">{brandSubtext}</span>}
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="mt-4 flex items-center gap-3">
-                                <Button onClick={() => void handleSaveBrand()} disabled={savingBrand || !brandDirty} variant="greenCta"
-                                    className="rounded w-40 text-[10px] font-headline font-bold tracking-widest uppercase text-white">
-                                    {savingBrand ? 'Saving…' : 'Save'}
-                                </Button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            {/* ── 3. APP SETTINGS (Features) ── */}
-            <section className="border border-[#e5e7eb] rounded overflow-hidden">
-                <button type="button" onClick={() => toggleSection('appsettings')}
-                    className="w-full px-5 py-3 flex items-center justify-between gap-2 transition-colors hover:brightness-95" style={sectionHeaderStyle ?? { backgroundColor: '#fafafa' }}>
-                    <div className="flex items-center gap-2">
-                        <FlaskConical className="h-3.5 w-3.5 text-[#45474c]" />
-                        <span className="font-mono text-[10px] font-bold uppercase tracking-widest text-[#45474c]">App Settings</span>
-                        {appDirty && <span className="h-1.5 w-1.5 rounded-full bg-amber-400 shrink-0" />}
-                    </div>
-                    <ChevronDown className={`h-3.5 w-3.5 text-[#45474c] transition-transform duration-200 ${openSection === 'appsettings' ? 'rotate-180' : ''}`} />
-                </button>
-                <div className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${openSection === 'appsettings' ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
-                    <div className="overflow-hidden min-h-0">
-                        <div className="p-5 border-t border-[#e5e7eb] bg-white">
-                            {/* Row 1 + Row 2 laid out as two explicit column wrappers */}
-                            <div className="flex gap-4">
-
-                                {/* Col 1: Domain Access (row 1) + Email Reminders (row 2, grows to fill) */}
-                                <div className="flex flex-col gap-4 flex-1">
-
-                                    {/* Row 1 */}
-                                    <div className="bg-white rounded border border-[#e5e7eb] p-4 space-y-3">
-                                        <p className={fieldLabel}><span className="inline-flex items-center gap-1"><Shield className="h-3 w-3" /> Domain access</span></p>
-                                        <div className="flex items-center justify-between gap-4">
-                                            <Label htmlFor="allow-domain" className="text-xs text-[#1b1b1d] cursor-pointer">
-                                                Enable access for <span className="font-semibold">{allowedEmailDomain || 'your domain'}</span>
-                                                <span className="block text-[#9a9ba0] font-normal mt-0.5">Users with this email domain can join without an invitation.</span>
-                                            </Label>
-                                            <Switch id="allow-domain" checked={allowDomainAccess} onCheckedChange={(v) => { setAllowDomainAccess(v); setAppDirty(true) }} disabled={!loaded} />
-                                        </div>
-                                        {allowDomainAccess && (
-                                            <div>
-                                                <label htmlFor="allowed-email-domain" className={fieldLabel}>
-                                                    <span className="inline-flex items-center gap-1"><Shield className="h-3 w-3" /> Email domain</span>
-                                                </label>
-                                                <Input id="allowed-email-domain" value={allowedEmailDomain} onChange={(e) => { setAllowedEmailDomain(e.target.value); setAppDirty(true) }} placeholder="e.g. acme.com" className={`font-mono ${inputCls}`} />
-                                                {isPublicDomain && <p className="mt-1 text-[10px] text-amber-600">Public email domains (e.g. gmail.com) are not recommended for firm access.</p>}
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    {/* Row 2 — grows to match col 2 height */}
-                                    <div className="bg-white rounded border border-[#e5e7eb] p-4 space-y-3 flex-1">
-                                        <p className={`${fieldLabel} mb-1`}>Email Reminders</p>
-                                        <div className="flex items-center justify-between gap-4">
-                                            <div className="flex items-start gap-2.5">
-                                                <Bell className="h-4 w-4 text-[#45474c] mt-0.5 shrink-0" />
-                                                <div>
-                                                    <div className="text-sm font-semibold text-[#1b1b1d]">Immediate notification</div>
-                                                    <p className="text-xs text-[#45474c] mt-0.5">Send an email when a reminder is created.</p>
-                                                </div>
-                                            </div>
-                                            <Switch checked={immediateOnCreate} onCheckedChange={(v) => { setImmediateOnCreate(v); setAppDirty(true) }} disabled={!loaded} aria-label="Immediate notification on create" />
-                                        </div>
-                                        <div className="flex items-center justify-between gap-4">
-                                            <div className="flex items-start gap-2.5">
-                                                <RefreshCw className="h-4 w-4 text-[#45474c] mt-0.5 shrink-0" />
-                                                <div>
-                                                    <div className="text-sm font-semibold text-[#1b1b1d]">Recurring emails</div>
-                                                    <p className="text-xs text-[#45474c] mt-0.5">Send repeat reminder emails until marked done.</p>
-                                                </div>
-                                            </div>
-                                            <Switch checked={recurringEnabled} onCheckedChange={(v) => { setRecurringEnabled(v); setAppDirty(true) }} disabled={!loaded} aria-label="Recurring reminder emails" />
-                                        </div>
-                                        {recurringEnabled && (
-                                            <div className="pl-6 space-y-2 border-l-2 border-[#f0f0f2] ml-2">
-                                                <div>
-                                                    <label className={fieldLabel}>Frequency (every N days)</label>
-                                                    <Select value={String(recurringFrequencyDays)} onValueChange={(v) => { setRecurringFrequencyDays(Number(v)); setAppDirty(true) }} disabled={!loaded}>
-                                                        <SelectTrigger className={inputCls}><SelectValue /></SelectTrigger>
-                                                        <SelectContent>{[1, 3, 7, 14].map((n) => <SelectItem key={n} value={String(n)}>{n === 1 ? 'Every day' : `Every ${n} days`}</SelectItem>)}</SelectContent>
-                                                    </Select>
-                                                </div>
-                                                <div>
-                                                    <label className={fieldLabel}>Start before due date</label>
-                                                    <Select value={String(startDaysBeforeDue)} onValueChange={(v) => { setStartDaysBeforeDue(Number(v)); setAppDirty(true) }} disabled={!loaded}>
-                                                        <SelectTrigger className={inputCls}><SelectValue /></SelectTrigger>
-                                                        <SelectContent>{[1, 3, 7, 14, 21, 30].map((n) => <SelectItem key={n} value={String(n)}>{n} {n === 1 ? 'day' : 'days'} before</SelectItem>)}</SelectContent>
-                                                    </Select>
-                                                </div>
-                                            </div>
-                                        )}
-                                        <div className="flex items-center justify-between gap-4 pt-1 border-t border-[#f0f0f2]">
-                                            <div className="flex items-start gap-2.5">
-                                                <MessagesSquare className="h-4 w-4 text-[#45474c] mt-0.5 shrink-0" />
-                                                <div>
-                                                    <div className="text-sm font-semibold text-[#1b1b1d]">Email on @mention</div>
-                                                    <p className="text-xs text-[#45474c] mt-0.5">Send an email when a user is @mentioned in a comment.</p>
-                                                </div>
-                                            </div>
-                                            <Switch checked={mentionEmailOnCreate} onCheckedChange={(v) => { setMentionEmailOnCreate(v); setAppDirty(true) }} disabled={!loaded} aria-label="Email on @mention" />
-                                        </div>
-                                    </div>
-
-                                </div>{/* end col 1 */}
-
-                                {/* Col 2: Regional (row 1) + Overview + Beta stacked (row 2) */}
-                                <div className="flex flex-col gap-4 flex-1">
-
-                                    {/* Row 1 */}
-                                    <div className="bg-white rounded border border-[#e5e7eb] p-4 space-y-3">
-                                        <p className={fieldLabel}>Regional</p>
-                                        <div>
-                                            <label className={fieldLabel}>
-                                                <span className="inline-flex items-center gap-1"><DollarSign className="h-3 w-3" /> Currency <span className="text-[#9a9ba0] normal-case tracking-normal font-sans font-normal">— optional</span></span>
-                                            </label>
-                                            <div className="relative w-full mt-1">
-                                                <DropdownMenu open={currencyOpen} onOpenChange={setCurrencyOpen}>
-                                                    <DropdownMenuTrigger asChild>
-                                                        <button className="w-full h-9 flex items-center rounded border border-[#e5e7eb] bg-white px-3 pr-7 text-xs text-[#1b1b1d] disabled:cursor-not-allowed disabled:opacity-60 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary">
-                                                            <span className={`flex-1 text-left truncate ${currencyCode || (currencyIsCustom && currencyCustom) ? 'text-[#1b1b1d]' : 'text-[#9a9ba0]'}`}>
-                                                                {currencyCode ? WORLD_CURRENCIES.find((c) => c.code === currencyCode)?.label ?? currencyCode : currencyIsCustom && currencyCustom ? `Other: ${currencyCustom}` : 'Select…'}
-                                                            </span>
-                                                        </button>
-                                                    </DropdownMenuTrigger>
-                                                    <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center">
-                                                        {(currencyCode || (currencyIsCustom && currencyCustom)) ? (
-                                                            <button type="button" className="pointer-events-auto p-0.5 rounded text-[#9a9ba0] hover:text-[#1b1b1d] hover:bg-gray-100 transition-colors" onClick={(e) => { e.stopPropagation(); setCurrencyCode(''); setCurrencyIsCustom(false); setCurrencyCustom(''); setAppDirty(true) }} aria-label="Clear"><X className="h-3 w-3" /></button>
-                                                        ) : (
-                                                            <ChevronDown className="h-3 w-3 text-[#45474c]" />
-                                                        )}
-                                                    </div>
-                                                    <DropdownMenuContent className="w-[var(--radix-dropdown-menu-trigger-width)] p-1 max-h-72 overflow-y-auto rounded" onCloseAutoFocus={(e) => e.preventDefault()}>
-                                                        {(currencyCode || currencyIsCustom) && (<><DropdownMenuItem className="flex items-center gap-2 cursor-pointer text-sm rounded text-[#45474c] hover:text-red-600" onSelect={() => { setCurrencyCode(''); setCurrencyIsCustom(false); setCurrencyCustom(''); setCurrencyOpen(false); setAppDirty(true) }}><span className="text-[#9a9ba0]">×</span> Clear selection</DropdownMenuItem><DropdownMenuSeparator /></>)}
-                                                        {WORLD_CURRENCIES.map((cur) => (
-                                                            <DropdownMenuItem key={cur.code} className="flex items-center justify-between cursor-pointer text-sm rounded" onSelect={() => { setCurrencyCode(cur.code); setCurrencyIsCustom(false); setCurrencyCustom(''); setCurrencyOpen(false); setAppDirty(true) }}>
-                                                                {cur.label}
-                                                                {currencyCode === cur.code && !currencyIsCustom && <Check className="h-4 w-4 text-primary shrink-0" />}
-                                                            </DropdownMenuItem>
-                                                        ))}
-                                                        <DropdownMenuSeparator />
-                                                        <div className="px-2 py-1.5 flex items-center gap-2">
-                                                            <input value={currencyIsCustom ? currencyCustom : ''} onChange={(e) => { setCurrencyCustom(e.target.value); setCurrencyIsCustom(true); setCurrencyCode(''); setAppDirty(true) }} onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') setCurrencyOpen(false) }} onClick={(e) => e.stopPropagation()} placeholder="Other (enter symbol)…" className="flex-1 text-sm text-[#1b1b1d] placeholder:text-[#9a9ba0] outline-none bg-transparent" />
-                                                            {currencyIsCustom && currencyCustom && <Check className="h-4 w-4 text-primary shrink-0" />}
-                                                        </div>
-                                                    </DropdownMenuContent>
-                                                </DropdownMenu>
-                                            </div>
-                                            <p className="mt-1 text-xs text-[#9a9ba0]">Prefix on contract values.</p>
-                                        </div>
-                                    </div>
-
-                                    {/* Row 2: Overview + Beta stacked, grows to match col 1 */}
-                                    <div className="flex flex-col gap-4 flex-1">
-
-                                        {/* Overview visibility */}
-                                        <div className="bg-white rounded border border-[#e5e7eb] p-4 space-y-3">
-                                            <p className={fieldLabel}><span className="inline-flex items-center gap-1"><BarChart2 className="h-3 w-3" /> Overview — Contributor &amp; Reviewer visibility</span></p>
-                                            <p className="text-[11px] text-[#9a9ba0]">Choose which sections external members see on the engagement Overview page. Internal members always see everything.</p>
-                                            <div className="flex flex-col gap-2.5">
-                                                {([
-                                                    { label: 'Engagement Health', value: extEngagementHealth, set: setExtEngagementHealth },
-                                                    { label: 'File Organization', value: extFileOrganization, set: setExtFileOrganization },
-                                                    { label: 'Document Activity', value: extDocumentActivity, set: setExtDocumentActivity },
-                                                ]).map(({ label, value, set }) => (
-                                                    <div key={label} className="flex items-center justify-between gap-4">
-                                                        <span className="text-xs text-[#1b1b1d]">{label}</span>
-                                                        <Switch checked={value} onCheckedChange={(v) => { set(v); setAppDirty(true) }} disabled={!loaded} aria-label={label} />
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-
-                                        {/* Beta features */}
-                                        <div className="bg-white rounded border border-[#e5e7eb] p-4 space-y-3">
-                                            <div className="flex items-center gap-2">
-                                                <FlaskConical className="h-4 w-4 text-[#45474c] shrink-0" />
-                                                <span className={fieldLabel}>Beta features</span>
-                                                <span className="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 leading-none">Beta</span>
-                                            </div>
-                                            <div className="flex flex-col gap-2.5">
-                                                {([
-                                                    { label: 'Dossier', description: 'Enables Engagement > Dossier. Internal personas only.', value: betaDossier, set: setBetaDossier },
-                                                    { label: 'Microsoft Storage Connector', description: 'Enables the Microsoft OneDrive/SharePoint document storage connector for this firm.', value: betaMicrosoftStorageConnector, set: setBetaMicrosoftStorageConnector },
-                                                ]).map(({ label, description, value, set }) => (
-                                                    <div key={label} className="flex items-center justify-between gap-4">
-                                                        <div>
-                                                            <span className="text-xs text-[#1b1b1d]">{label}</span>
-                                                            <p className="text-xs text-[#9a9ba0] mt-0.5">{description}</p>
-                                                        </div>
-                                                        <Switch checked={value} onCheckedChange={(v) => { set(v); setAppDirty(true) }} disabled={!loaded} aria-label={label} />
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-
-                                    </div>{/* end row 2 col 2 */}
-
-                                </div>{/* end col 2 */}
-
-                            </div>{/* end flex row */}
-
-                            {/* Event Notifications grid */}
-                            <div className="mt-4 bg-white rounded border border-[#e5e7eb] p-4 space-y-3">
-                                <div className="flex items-center gap-2">
-                                    <Bell className="h-4 w-4 text-[#45474c] shrink-0" />
-                                    <span className={fieldLabel}>Event Notifications</span>
-                                </div>
-                                <p className="text-[11px] text-[#9a9ba0]">Control which events send an email and which create an in-app notification. Turning In-App off silences the notification entirely — this was previously always-on for some events.</p>
-                                <div className="overflow-x-auto">
-                                    <table className="w-full min-w-[420px] text-xs border-collapse">
-                                        <thead>
-                                            <tr className="border-b border-[#e5e7eb]">
-                                                <th className="text-left font-mono text-[9px] font-bold uppercase tracking-widest text-[#45474c] py-2 pr-2">Event</th>
-                                                <th className="text-center font-mono text-[9px] font-bold uppercase tracking-widest text-[#45474c] py-2 px-2 w-32">Notify by Email</th>
-                                                <th className="text-center font-mono text-[9px] font-bold uppercase tracking-widest text-[#45474c] py-2 pl-2 w-32">In-App Notification</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {EVENT_NOTIFICATION_ROWS.map(({ key, label }) => (
-                                                <tr key={key} className="border-b border-[#f0f0f2] last:border-b-0">
-                                                    <td className="py-2.5 pr-2 text-[#1b1b1d]">{label}</td>
-                                                    <td className="py-2.5 px-2 text-center">
-                                                        <Switch
-                                                            checked={eventConfig[key].email}
-                                                            onCheckedChange={(v) => { setEventConfig((prev) => ({ ...prev, [key]: { ...prev[key], email: v } })); setAppDirty(true) }}
-                                                            disabled={!loaded}
-                                                            aria-label={`${label} — notify by email`}
-                                                        />
-                                                    </td>
-                                                    <td className="py-2.5 pl-2 text-center">
-                                                        <Switch
-                                                            checked={eventConfig[key].inApp}
-                                                            onCheckedChange={(v) => { setEventConfig((prev) => ({ ...prev, [key]: { ...prev[key], inApp: v } })); setAppDirty(true) }}
-                                                            disabled={!loaded}
-                                                            aria-label={`${label} — in-app notification`}
-                                                        />
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-
-                            {appSave}
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            {/* ── 4. DOCUMENT STORAGE ── */}
-            <section className="border border-[#e5e7eb] rounded overflow-hidden">
-                <button type="button" onClick={() => toggleSection('storage')}
-                    className="w-full px-5 py-3 flex items-center justify-between gap-2 transition-colors hover:brightness-95" style={sectionHeaderStyle ?? { backgroundColor: '#fafafa' }}>
-                    <div className="flex items-center gap-2">
-                        <HardDrive className="h-3.5 w-3.5 text-[#45474c]" />
-                        <span className="font-mono text-[10px] font-bold uppercase tracking-widest text-[#1b1b1d]">Document Storage</span>
-                    </div>
-                    <ChevronDown className={`h-3.5 w-3.5 text-[#45474c] transition-transform duration-200 ${openSection === 'storage' ? 'rotate-180' : ''}`} />
-                </button>
-                <div className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${openSection === 'storage' ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
-                    <div className="overflow-hidden min-h-0">
-                        <div className="p-5 border-t border-[#e5e7eb] bg-white">
-                            {orgId
-                                ? <FirmDriveSection firmId={orgId} orgSlug={orgSlug} onConnectorsLoaded={setStorageConnectorCount} microsoftConnectorEnabled={microsoftConnectorEnabled} />
-                                : <div className="text-xs text-[#9a9ba0]">Loading…</div>
-                            }
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            {/* ── 5. DANGER ZONE ── */}
-            <section className="border border-red-200 rounded overflow-hidden">
-                <button type="button" onClick={() => toggleSection('danger')}
-                    className="w-full px-5 py-3 flex items-center justify-between gap-2 bg-red-50/60 hover:bg-red-50 transition-colors">
-                    <div className="flex items-center gap-2">
-                        <AlertTriangle className="h-3.5 w-3.5 text-red-700" />
-                        <span className="font-mono text-[10px] font-bold uppercase tracking-widest text-red-800">Danger zone</span>
-                    </div>
-                    <ChevronDown className={`h-3.5 w-3.5 text-red-500 transition-transform duration-200 ${openSection === 'danger' ? 'rotate-180' : ''}`} />
-                </button>
-                <div className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${openSection === 'danger' ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
-                    <div className="overflow-hidden min-h-0">
-                        <div className="p-5 border-t border-red-200 bg-red-50/40">
-                            <p className="text-sm text-[#45474c] mb-4">Permanently delete this firm. All clients, projects, and members will be removed. This cannot be undone.</p>
-                            <Button type="button" onClick={() => setDeleteConfirmOpen(true)} disabled={deleting}
-                                className="rounded bg-red-700 text-white hover:bg-red-800 border-0 text-[10px] font-headline font-bold tracking-widest uppercase shadow-sm hover:shadow-[0_4px_12px_-2px_rgba(185,28,28,0.35)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all">
+                            <Button type="button" variant="outline" onClick={() => setDeleteConfirmOpen(true)} disabled={deleting} className="shrink-0 text-danger hover:text-danger">
+                                <Trash2 className="h-3.5 w-3.5" />
                                 {deleting ? 'Deleting…' : 'Delete firm'}
                             </Button>
                         </div>
+                    </section>
+                </div>
+            )}
+
+            {activeTab === 'branding' && (
+                <div className="mx-auto flex w-full max-w-2xl flex-col gap-4" role="tabpanel">
+                    <PropertyList>
+                        <PropertyRow label={<label htmlFor="firm-brand-name">Display name</label>} icon={<User />}>
+                            <div className="flex w-full flex-col gap-1">
+                                <Input id="firm-brand-name" value={brandName} onChange={(e) => { setBrandName(e.target.value); setBrandDirty(true) }} placeholder={name || 'Firm name'} className={PROPERTY_FIELD_CLASS} />
+                                <p className={PROPERTY_HINT_CLASS}>Shown in the top bar</p>
+                            </div>
+                        </PropertyRow>
+                        <PropertyRow label={<label htmlFor="firm-brand-subtext">Tagline</label>} icon={<Type />}>
+                            <Input id="firm-brand-subtext" value={brandSubtext} onChange={(e) => { setBrandSubtext(e.target.value); setBrandDirty(true) }} placeholder="Empty" className={PROPERTY_FIELD_CLASS} />
+                        </PropertyRow>
+                        <PropertyRow label={<label htmlFor="firm-brand-primary">{SHOW_ACCENT_COLOR ? 'Primary color' : 'Brand color'}</label>} icon={<Palette />}>
+                            <div className="flex w-full flex-col gap-1">
+                                <div className="flex items-center gap-1.5">
+                                    <input id="firm-brand-primary" type="color" value={brandPrimaryColor || FIRMA_COLOR} onChange={(e) => { setBrandPrimaryColor(e.target.value); setBrandDirty(true) }} className="h-7 w-8 shrink-0 cursor-pointer rounded-control border border-line bg-surface" />
+                                    <Input value={brandPrimaryColor} onChange={(e) => { setBrandPrimaryColor(e.target.value); setBrandDirty(true) }} aria-label="Brand color hex" placeholder={`Empty — uses the Firma default (${FIRMA_COLOR})`} className={`font-mono ${PROPERTY_FIELD_CLASS}`} />
+                                    <Button type="button" variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => { setBrandPrimaryColor(''); setBrandDirty(true) }} disabled={!brandPrimaryColor} title="Clear" aria-label="Clear brand color">
+                                        <RotateCcw className="h-3.5 w-3.5" />
+                                    </Button>
+                                </div>
+                                <p className={PROPERTY_HINT_CLASS}>Buttons, links and selected states. A light color is darkened to stay readable.</p>
+                            </div>
+                        </PropertyRow>
+                        {SHOW_ACCENT_COLOR && (
+                        <PropertyRow label={<label htmlFor="firm-brand-accent">Accent color</label>} icon={<Palette />}>
+                            <div className="flex w-full flex-col gap-1">
+                                <div className="flex items-center gap-1.5">
+                                    <div className="relative h-7 w-8 shrink-0">
+                                        <input id="firm-brand-accent" type="color" value={brandSecondaryColor || '#ffffff'} onChange={(e) => { setBrandSecondaryColor(e.target.value); setBrandDirty(true) }} className="absolute inset-0 h-full w-full cursor-pointer opacity-0" />
+                                        <div className="pointer-events-none h-7 w-8 rounded-control border border-line" style={brandSecondaryColor ? { backgroundColor: brandSecondaryColor } : { background: 'repeating-linear-gradient(45deg, #e5e7eb 0px, #e5e7eb 2px, white 2px, white 6px)' }} />
+                                    </div>
+                                    <Input value={brandSecondaryColor} onChange={(e) => { setBrandSecondaryColor(e.target.value); setBrandDirty(true) }} aria-label="Accent color hex" placeholder="Empty — matches the primary color" className={`font-mono ${PROPERTY_FIELD_CLASS}`} />
+                                    <Button type="button" variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => { setBrandSecondaryColor(''); setBrandDirty(true) }} disabled={!brandSecondaryColor} title="Clear" aria-label="Clear accent color">
+                                        <RotateCcw className="h-3.5 w-3.5" />
+                                    </Button>
+                                </div>
+                                <p className={PROPERTY_HINT_CLASS}>Nav stripe and tab underlines</p>
+                            </div>
+                        </PropertyRow>
+                        )}
+                        <PropertyRow label="Logo" icon={<ImageIcon />}>
+                            <div className="flex w-full flex-col gap-2 px-2 py-1">
+                                <div className="flex items-center gap-1.5" role="group" aria-label="Logo shape">
+                                    {(['1:1', '4:3', '16:9'] as const).map((ar) => {
+                                        const dims: Record<string, [number, number]> = { '1:1': [16, 16], '4:3': [21, 16], '16:9': [28, 16] }
+                                        const [w, h] = dims[ar]; const active = brandLogoAspectRatio === ar
+                                        return (
+                                            <button key={ar} type="button" aria-pressed={active} onClick={() => { setBrandLogoAspectRatio(ar); setBrandLogoScale(1); setBrandLogoX(0); setBrandLogoY(0); setBrandDirty(true) }}
+                                                className={`flex flex-col items-center gap-1 rounded-control border px-2 py-1.5 transition-colors ${active ? 'border-action bg-action/5 text-action' : 'border-line text-fg-subtle hover:border-line-strong hover:text-fg-muted'}`}>
+                                                <span className="block rounded-sm border-2 border-current" style={{ width: w, height: h }} />
+                                                <span className="text-caption leading-none tabular-nums">{ar}</span>
+                                            </button>
+                                        )
+                                    })}
+                                </div>
+                                <input ref={brandFileInputRef} type="file" accept=".jpg,.jpeg,.png,.svg,image/jpeg,image/png,image/svg+xml" onChange={handleBrandLogoFileChange} className="sr-only" aria-hidden />
+                                {!hasBrandLogo ? (
+                                    <button type="button" onClick={() => brandFileInputRef.current?.click()}
+                                        className="group relative flex shrink-0 items-center justify-center rounded-card border-2 border-dashed border-line-strong bg-surface-subtle transition-colors hover:border-fg-subtle focus:outline-none focus-visible:ring-2 focus-visible:ring-action/30"
+                                        style={{ width: brandPreviewW, height: BRAND_PREVIEW_H }} aria-label="Upload logo">
+                                        <span className="select-none text-5xl font-semibold text-line-strong transition-opacity group-hover:opacity-30">{(brandName || name).trim().charAt(0).toUpperCase() || '?'}</span>
+                                        <span className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 opacity-0 transition-opacity group-hover:opacity-100">
+                                            <ImagePlus className="h-5 w-5 text-fg-muted" /><span className="text-small text-fg-muted">Upload logo</span>
+                                        </span>
+                                    </button>
+                                ) : (
+                                    <div className="flex flex-col gap-2">
+                                        <div className="group relative flex shrink-0 cursor-grab select-none overflow-hidden rounded-card border border-line active:cursor-grabbing"
+                                            style={{ width: brandPreviewW, height: BRAND_PREVIEW_H, backgroundImage: 'repeating-conic-gradient(#e5e7eb 0% 25%, white 0% 50%)', backgroundSize: '12px 12px' }}
+                                            onPointerDown={onBrandPointerDown} onPointerMove={onBrandPointerMove} onPointerUp={onBrandPointerUp} onPointerLeave={onBrandPointerUp}>
+                                            <div className="absolute inset-0 flex items-center justify-center" style={{ transform: `translate(${brandLogoX}px, ${brandLogoY}px) scale(${brandLogoScale})` }}>
+                                                <img src={brandLogoPreviewUrl || brandLogoUrl || undefined} alt="Logo" className="pointer-events-none max-h-full max-w-full object-contain" style={{ width: brandPreviewW, height: BRAND_PREVIEW_H }} draggable={false} />
+                                            </div>
+                                            <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
+                                                <button type="button" onClick={() => brandFileInputRef.current?.click()} className="rounded-control bg-surface p-2 text-fg shadow-popover hover:bg-surface-hover" title="Replace" aria-label="Replace logo"><ImagePlus className="h-4 w-4" /></button>
+                                                <button type="button" onClick={() => { setBrandLogoUrl(''); setBrandLogoFile(null); setBrandLogoPreviewUrl(null); setBrandDirty(true) }} className="rounded-control bg-surface p-2 text-danger shadow-popover hover:bg-surface-hover" title="Remove" aria-label="Remove logo"><Trash2 className="h-4 w-4" /></button>
+                                            </div>
+                                        </div>
+                                        <input type="range" min={-1} max={1} step={0.04} aria-label="Logo zoom"
+                                            value={brandLogoScale <= 1 ? (brandLogoScale - 1) / 0.5 : (brandLogoScale - 1) / 2}
+                                            onChange={(e) => { const v = Number(e.target.value); setBrandLogoScale(v <= 0 ? 1 + v * 0.5 : 1 + v * 2); setBrandDirty(true) }} className="h-1.5 w-full appearance-none rounded bg-surface-muted accent-action" style={{ maxWidth: brandPreviewW }} />
+                                    </div>
+                                )}
+                                <p className="text-caption text-fg-subtle">JPG, PNG or SVG. Max 5 MB.</p>
+                            </div>
+                        </PropertyRow>
+                        <PropertyRow label="Preview" icon={<PanelTop />}>
+                            <div className="flex w-full items-center gap-3 rounded-card border border-line bg-surface px-3 py-2.5">
+                                {hasBrandLogo ? (() => {
+                                    const dH = 40; const dW = Math.round(dH * brandAspectMap[brandLogoAspectRatio]); const sc = dH / BRAND_PREVIEW_H
+                                    return (
+                                        <div className="relative shrink-0 overflow-hidden rounded-control border border-line bg-surface-subtle" style={{ width: dW, height: dH }}>
+                                            <div className="absolute inset-0 flex items-center justify-center" style={{ transform: `translate(${brandLogoX * sc}px, ${brandLogoY * sc}px) scale(${brandLogoScale})`, transformOrigin: 'center' }}>
+                                                <img src={brandLogoPreviewUrl || brandLogoUrl || ''} alt="" className="pointer-events-none object-contain" style={{ width: dW, height: dH }} draggable={false} />
+                                            </div>
+                                        </div>
+                                    )
+                                })() : (
+                                    <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-control border border-line bg-surface-subtle text-h3 font-semibold" style={{ color: brandPrimaryColor || FIRMA_COLOR }}>
+                                        {(brandName || name || '?').trim().charAt(0).toUpperCase()}
+                                    </span>
+                                )}
+                                <div className="flex min-w-0 flex-col justify-center">
+                                    <span className="truncate text-h3 font-semibold leading-tight text-fg">{brandName || name || 'Firm name'}</span>
+                                    {brandSubtext && <span className="mt-0.5 truncate text-small text-fg-muted">{brandSubtext}</span>}
+                                </div>
+                            </div>
+                        </PropertyRow>
+                    </PropertyList>
+                    <div className="flex items-center gap-2">
+                        <Button onClick={() => void handleSaveBrand()} disabled={savingBrand || !brandDirty} variant="greenCta">
+                            {savingBrand ? 'Saving…' : 'Save branding'}
+                        </Button>
+                        {/* With one color, the row's own reset does this. */}
+                        {SHOW_ACCENT_COLOR && (brandPrimaryColor || brandSecondaryColor) && (
+                            <Button type="button" variant="ghost" onClick={() => { setBrandPrimaryColor(''); setBrandSecondaryColor(''); setBrandDirty(true) }}>
+                                <RotateCcw className="h-3.5 w-3.5" />
+                                Reset colors
+                            </Button>
+                        )}
                     </div>
                 </div>
-            </section>
+            )}
+
+            {activeTab === 'appsettings' && (
+                <div className="mx-auto flex w-full max-w-2xl flex-col gap-8" role="tabpanel">
+                    <section>
+                        <h3 className={SETTINGS_SECTION_HEADING_CLASS}>Access</h3>
+                        <SettingSwitchRow
+                            id="allow-domain"
+                            icon={<Shield />}
+                            title={<>Let anyone at <span className="font-medium">{allowedEmailDomain || 'your domain'}</span> join</>}
+                            description="People with this email domain can join without an invitation."
+                            checked={allowDomainAccess}
+                            onChange={(v) => { setAllowDomainAccess(v); setAppDirty(true) }}
+                            disabled={!loaded}
+                        />
+                        {allowDomainAccess && (
+                            <PropertyList className="mt-1">
+                                <PropertyRow label={<label htmlFor="allowed-email-domain">Email domain</label>} icon={<AtSign />}>
+                                    <div className="flex w-full flex-col gap-1">
+                                        <Input id="allowed-email-domain" value={allowedEmailDomain} onChange={(e) => { setAllowedEmailDomain(e.target.value); setAppDirty(true) }} placeholder="e.g. acme.com" className={`font-mono ${PROPERTY_FIELD_CLASS}`} />
+                                        {isPublicDomain && <p className="px-2 text-caption text-tag-orange-fg">Public email domains (e.g. gmail.com) aren&apos;t recommended for firm access.</p>}
+                                    </div>
+                                </PropertyRow>
+                            </PropertyList>
+                        )}
+                    </section>
+
+                    <section>
+                        <h3 className={SETTINGS_SECTION_HEADING_CLASS}>Regional</h3>
+                        <PropertyList>
+                            <PropertyRow label="Currency" icon={<DollarSign />}>
+                                <div className="flex w-full flex-col gap-1">
+                                    <div className="relative w-full">
+                                        <DropdownMenu open={currencyOpen} onOpenChange={setCurrencyOpen}>
+                                            <DropdownMenuTrigger asChild>
+                                                <button type="button" disabled={!loaded} className="flex h-8 w-full items-center rounded-control px-2 pr-7 text-left text-ui transition-colors hover:bg-surface-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-action/30 disabled:cursor-not-allowed disabled:opacity-60">
+                                                    <span className={`flex-1 truncate ${currencyCode || (currencyIsCustom && currencyCustom) ? 'text-fg' : 'text-fg-subtle'}`}>
+                                                        {currencyCode ? WORLD_CURRENCIES.find((c) => c.code === currencyCode)?.label ?? currencyCode : currencyIsCustom && currencyCustom ? `Other: ${currencyCustom}` : 'Empty'}
+                                                    </span>
+                                                </button>
+                                            </DropdownMenuTrigger>
+                                            <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center">
+                                                {(currencyCode || (currencyIsCustom && currencyCustom)) ? (
+                                                    <button type="button" className="pointer-events-auto rounded p-0.5 text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg" onClick={(e) => { e.stopPropagation(); setCurrencyCode(''); setCurrencyIsCustom(false); setCurrencyCustom(''); setAppDirty(true) }} aria-label="Clear currency"><X className="h-3 w-3" /></button>
+                                                ) : (
+                                                    <ChevronDown className="h-3 w-3 text-fg-subtle" />
+                                                )}
+                                            </div>
+                                            <DropdownMenuContent className="max-h-72 w-[var(--radix-dropdown-menu-trigger-width)] overflow-y-auto p-1" onCloseAutoFocus={(e) => e.preventDefault()}>
+                                                {(currencyCode || currencyIsCustom) && (<><DropdownMenuItem className="flex cursor-pointer items-center gap-2 text-fg-muted" onSelect={() => { setCurrencyCode(''); setCurrencyIsCustom(false); setCurrencyCustom(''); setCurrencyOpen(false); setAppDirty(true) }}><X className="h-3.5 w-3.5 text-fg-subtle" /> Clear selection</DropdownMenuItem><DropdownMenuSeparator /></>)}
+                                                {WORLD_CURRENCIES.map((cur) => (
+                                                    <DropdownMenuItem key={cur.code} className="flex cursor-pointer items-center justify-between" onSelect={() => { setCurrencyCode(cur.code); setCurrencyIsCustom(false); setCurrencyCustom(''); setCurrencyOpen(false); setAppDirty(true) }}>
+                                                        {cur.label}
+                                                        {currencyCode === cur.code && !currencyIsCustom && <Check className="h-4 w-4 shrink-0 text-action" />}
+                                                    </DropdownMenuItem>
+                                                ))}
+                                                <DropdownMenuSeparator />
+                                                <div className="flex items-center gap-2 px-2 py-1.5">
+                                                    <input value={currencyIsCustom ? currencyCustom : ''} onChange={(e) => { setCurrencyCustom(e.target.value); setCurrencyIsCustom(true); setCurrencyCode(''); setAppDirty(true) }} onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') setCurrencyOpen(false) }} onClick={(e) => e.stopPropagation()} placeholder="Other (enter symbol)…" aria-label="Other currency symbol" className="flex-1 bg-transparent text-ui text-fg outline-none placeholder:text-fg-subtle" />
+                                                    {currencyIsCustom && currencyCustom && <Check className="h-4 w-4 shrink-0 text-action" />}
+                                                </div>
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
+                                    </div>
+                                    <p className={PROPERTY_HINT_CLASS}>Prefix on contract values</p>
+                                </div>
+                            </PropertyRow>
+                        </PropertyList>
+                    </section>
+
+                    <section>
+                        <h3 className={SETTINGS_SECTION_HEADING_CLASS}>Reminder emails</h3>
+                        <SettingSwitchRow icon={<Bell />} title="Immediate notification" description="Send an email when a reminder is created." checked={immediateOnCreate} onChange={(v) => { setImmediateOnCreate(v); setAppDirty(true) }} disabled={!loaded} />
+                        <SettingSwitchRow icon={<RefreshCw />} title="Recurring emails" description="Send repeat reminder emails until marked done." checked={recurringEnabled} onChange={(v) => { setRecurringEnabled(v); setAppDirty(true) }} disabled={!loaded} />
+                        {recurringEnabled && (
+                            <PropertyList className="mb-1 ml-6 border-l border-line pl-3">
+                                <PropertyRow label="Frequency" icon={<Repeat />}>
+                                    <Select value={String(recurringFrequencyDays)} onValueChange={(v) => { setRecurringFrequencyDays(Number(v)); setAppDirty(true) }} disabled={!loaded}>
+                                        <SelectTrigger className={PROPERTY_FIELD_CLASS} aria-label="Reminder frequency"><SelectValue /></SelectTrigger>
+                                        <SelectContent>{[1, 3, 7, 14].map((n) => <SelectItem key={n} value={String(n)}>{n === 1 ? 'Every day' : `Every ${n} days`}</SelectItem>)}</SelectContent>
+                                    </Select>
+                                </PropertyRow>
+                                <PropertyRow label="Start" icon={<CalendarClock />}>
+                                    <Select value={String(startDaysBeforeDue)} onValueChange={(v) => { setStartDaysBeforeDue(Number(v)); setAppDirty(true) }} disabled={!loaded}>
+                                        <SelectTrigger className={PROPERTY_FIELD_CLASS} aria-label="Start before due date"><SelectValue /></SelectTrigger>
+                                        <SelectContent>{[1, 3, 7, 14, 21, 30].map((n) => <SelectItem key={n} value={String(n)}>{n} {n === 1 ? 'day' : 'days'} before due</SelectItem>)}</SelectContent>
+                                    </Select>
+                                </PropertyRow>
+                            </PropertyList>
+                        )}
+                        <SettingSwitchRow icon={<MessagesSquare />} title="Email on @mention" description="Send an email when someone is @mentioned in a comment." checked={mentionEmailOnCreate} onChange={(v) => { setMentionEmailOnCreate(v); setAppDirty(true) }} disabled={!loaded} />
+                    </section>
+
+                    <section>
+                        <h3 className={SETTINGS_SECTION_HEADING_CLASS}>Event notifications</h3>
+                        <p className="mb-2 text-small text-fg-muted">Choose which events send an email and which create an in-app notification. Turning in-app off silences the notification entirely.</p>
+                        <NotionTable className="min-w-[420px]">
+                            <NotionTableHeader>
+                                <NotionTableHead>Event</NotionTableHead>
+                                <NotionTableHead className="w-24 text-center">Email</NotionTableHead>
+                                <NotionTableHead className="w-24 text-center">In-app</NotionTableHead>
+                            </NotionTableHeader>
+                            <NotionTableBody>
+                                {EVENT_NOTIFICATION_ROWS.map(({ key, label }) => (
+                                    <NotionTableRow key={key}>
+                                        <NotionTableCell>{label}</NotionTableCell>
+                                        <NotionTableCell className="text-center">
+                                            <Switch checked={eventConfig[key].email} onCheckedChange={(v) => { setEventConfig((prev) => ({ ...prev, [key]: { ...prev[key], email: v } })); setAppDirty(true) }} disabled={!loaded} aria-label={`${label} — notify by email`} />
+                                        </NotionTableCell>
+                                        <NotionTableCell className="text-center">
+                                            <Switch checked={eventConfig[key].inApp} onCheckedChange={(v) => { setEventConfig((prev) => ({ ...prev, [key]: { ...prev[key], inApp: v } })); setAppDirty(true) }} disabled={!loaded} aria-label={`${label} — in-app notification`} />
+                                        </NotionTableCell>
+                                    </NotionTableRow>
+                                ))}
+                            </NotionTableBody>
+                        </NotionTable>
+                    </section>
+
+                    <section>
+                        <h3 className={SETTINGS_SECTION_HEADING_CLASS}>Overview for contributors and reviewers</h3>
+                        <p className="mb-1 text-small text-fg-muted">Which sections external members see on an engagement&apos;s Overview. Internal members always see everything.</p>
+                        {([
+                            { label: 'Engagement health', value: extEngagementHealth, set: setExtEngagementHealth },
+                            { label: 'File organization', value: extFileOrganization, set: setExtFileOrganization },
+                            { label: 'Document activity', value: extDocumentActivity, set: setExtDocumentActivity },
+                        ]).map(({ label, value, set }) => (
+                            <SettingSwitchRow key={label} icon={<BarChart2 />} title={label} checked={value} onChange={(v) => { set(v); setAppDirty(true) }} disabled={!loaded} />
+                        ))}
+                    </section>
+
+                    <section>
+                        <div className="mb-2 flex items-center gap-2 border-b border-line pb-2">
+                            <h3 className="text-h3 text-fg">Beta features</h3>
+                            <Tag color="yellow">Beta</Tag>
+                        </div>
+                        {([
+                            { label: 'Dossier', description: 'Enables Engagement › Dossier. Internal personas only.', value: betaDossier, set: setBetaDossier },
+                            { label: 'Microsoft storage connector', description: 'Enables the Microsoft OneDrive/SharePoint document storage connector for this firm.', value: betaMicrosoftStorageConnector, set: setBetaMicrosoftStorageConnector },
+                        ]).map(({ label, description, value, set }) => (
+                            <SettingSwitchRow key={label} icon={<FlaskConical />} title={label} description={description} checked={value} onChange={(v) => { set(v); setAppDirty(true) }} disabled={!loaded} />
+                        ))}
+                    </section>
+
+                    {appSave}
+                </div>
+            )}
+
+            {/* Kept mounted while hidden: it reports the connector count that opens this tab when nothing is connected. */}
+            <div className="mx-auto w-full max-w-2xl" role="tabpanel" hidden={activeTab !== 'storage'}>
+                {orgId
+                    ? <FirmDriveSection firmId={orgId} orgSlug={orgSlug} onConnectorsLoaded={setStorageConnectorCount} microsoftConnectorEnabled={microsoftConnectorEnabled} />
+                    : <ShimmerBar className="w-48" />
+                }
+            </div>
 
             <ConfirmDialog
                 open={deleteConfirmOpen}

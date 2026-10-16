@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import * as DialogPrimitive from "@radix-ui/react-dialog"
-import { SquareX } from "lucide-react"
+import { X } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
@@ -21,7 +21,7 @@ const DialogOverlay = React.forwardRef<
     <DialogPrimitive.Overlay
         ref={ref}
         className={cn(
-            "fixed inset-0 z-[120] bg-black/80  data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+            "fixed inset-0 z-[120] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 bg-scrim",
             className
         )}
         {...props}
@@ -46,15 +46,15 @@ const DialogContent = React.forwardRef<
                 // `truncate` on a descendant never engaged because it was never squeezed.
                 // A single track with a 0 floor caps every child at the dialog width, so
                 // truncation works without each child needing its own min-w-0.
-                "fixed left-[50%] top-[50%] z-[121] grid grid-cols-[minmax(0,1fr)] w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-white p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded outline-none focus:ring-1 focus:ring-primary/40",
+                "fixed left-[50%] top-[50%] z-[121] grid grid-cols-[minmax(0,1fr)] w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 bg-white p-6 duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] outline-none focus:ring-primary/40 border-0 shadow-dialog text-fg sm:rounded-dialog focus:ring-0",
                 className
             )}
             {...props}
         >
             {children}
             {!hideClose && (
-                <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
-                    <SquareX className="h-4 w-4" />
+                <DialogPrimitive.Close className="absolute ring-offset-background hover:opacity-100 focus:outline-none focus:ring-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground right-3 top-3 rounded-control p-1 text-fg-muted opacity-100 transition-colors hover:bg-surface-hover hover:text-fg focus:ring-action/30 focus:ring-offset-0">
+                    <X className="h-4 w-4" />
                     <span className="sr-only">Close</span>
                 </DialogPrimitive.Close>
             )}
@@ -98,7 +98,7 @@ const DialogTitle = React.forwardRef<
     <DialogPrimitive.Title
         ref={ref}
         className={cn(
-            "text-lg font-semibold leading-none tracking-tight",
+            "font-semibold text-h3 leading-6 tracking-normal text-fg",
             className
         )}
         {...props}
@@ -112,7 +112,7 @@ const DialogDescription = React.forwardRef<
 >(({ className, ...props }, ref) => (
     <DialogPrimitive.Description
         ref={ref}
-        className={cn("text-sm text-muted-foreground", className)}
+        className={cn("text-sm text-fg-muted", className)}
         {...props}
     />
 ))

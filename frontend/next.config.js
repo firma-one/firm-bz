@@ -38,6 +38,12 @@ const nextConfig = {
 
   async redirects() {
     return [
+      // The old personal pages moved into the cross-firm Home and Inbox
+      // (.claude/plans/cross-firm-home-inbox.md). Not permanent while the move is being reviewed.
+      { source: '/d/u/recent', destination: '/d/u/home', permanent: false },
+      { source: '/d/u/bookmarks', destination: '/d/u/home', permanent: false },
+      { source: '/d/u/reminders', destination: '/d/u/inbox?tab=reminders', permanent: false },
+      { source: '/d/u/notifications', destination: '/d/u/inbox?tab=notifications', permanent: false },
       { source: '/solutions', destination: '/', permanent: true },
       { source: '/solutions/consulting', destination: '/', permanent: true },
       { source: '/solutions/accounting', destination: '/', permanent: true },

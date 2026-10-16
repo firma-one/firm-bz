@@ -20,7 +20,7 @@ function formatVerboseDateTimeWithTZ(date: Date | string | undefined): string {
 }
 
 const LIGHT_TOOLTIP_CLASS =
-  'z-[9999] max-w-[340px] p-3 text-xs bg-white text-slate-900 border border-slate-200 shadow-xl break-words'
+  'z-[9999] max-w-[340px] p-3 text-xs bg-white text-fg border border-slate-200 shadow-xl break-words'
 
 /** Controls what text is rendered inline next to the clock icon. */
 export type RelativeDateTimeFormat =

@@ -58,39 +58,39 @@ export function AccountTypeDialog({ open, onOpenChange, onSelect, provider }: Ac
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg rounded">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle className="text-[0.9375rem] font-bold text-[#1b1b1d]">{copy.title}</DialogTitle>
-          <DialogDescription className="text-left text-xs text-[#45474c]">{copy.subtitle}</DialogDescription>
+          <DialogTitle className="text-[0.9375rem] font-bold text-fg">{copy.title}</DialogTitle>
+          <DialogDescription className="text-left text-xs text-fg-muted">{copy.subtitle}</DialogDescription>
         </DialogHeader>
 
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 py-1">
           <button
             type="button"
             onClick={() => onSelect('personal')}
-            className="group flex flex-col items-start gap-3 rounded border border-[#e5e7eb] bg-white p-4 text-left transition-all hover:border-[#1b1b1d] hover:bg-[#f9f9fb] active:scale-[0.98]"
+            className="group flex flex-col items-start gap-3 rounded border border-line bg-surface p-4 text-left transition-all hover:border-fg hover:bg-surface-hover active:scale-[0.98]"
           >
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded border border-[#e5e7eb] bg-[#f9f9fb]">
-              <User className="h-6 w-6 text-[#45474c]" />
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded border border-line bg-surface-subtle">
+              <User className="h-6 w-6 text-fg-muted" />
             </div>
             <div>
-              <p className="text-[0.8125rem] font-semibold text-[#1b1b1d]">{copy.personalLabel}</p>
-              <p className="text-[11px] text-[#9a9ba0] mt-0.5">{copy.personalExample}</p>
-              <p className="text-xs text-[#45474c] leading-relaxed mt-1.5">{copy.personalDescription}</p>
+              <p className="text-[0.8125rem] font-semibold text-fg">{copy.personalLabel}</p>
+              <p className="text-caption text-fg-subtle mt-0.5">{copy.personalExample}</p>
+              <p className="text-xs text-fg-muted leading-relaxed mt-1.5">{copy.personalDescription}</p>
             </div>
           </button>
           <button
             type="button"
             onClick={() => onSelect('work_school')}
-            className="group flex flex-col items-start gap-3 rounded border border-[#e5e7eb] bg-white p-4 text-left transition-all hover:border-[#1b1b1d] hover:bg-[#f9f9fb] active:scale-[0.98]"
+            className="group flex flex-col items-start gap-3 rounded border border-line bg-surface p-4 text-left transition-all hover:border-fg hover:bg-surface-hover active:scale-[0.98]"
           >
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded border border-[#e5e7eb] bg-[#f9f9fb]">
-              <Building2 className="h-6 w-6 text-[#45474c]" />
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded border border-line bg-surface-subtle">
+              <Building2 className="h-6 w-6 text-fg-muted" />
             </div>
             <div>
-              <p className="text-[0.8125rem] font-semibold text-[#1b1b1d]">{copy.workLabel}</p>
-              <p className="text-[11px] text-[#9a9ba0] mt-0.5">{copy.workExample}</p>
-              <p className="text-xs text-[#45474c] leading-relaxed mt-1.5">{copy.workDescription}</p>
+              <p className="text-[0.8125rem] font-semibold text-fg">{copy.workLabel}</p>
+              <p className="text-caption text-fg-subtle mt-0.5">{copy.workExample}</p>
+              <p className="text-xs text-fg-muted leading-relaxed mt-1.5">{copy.workDescription}</p>
             </div>
           </button>
         </div>

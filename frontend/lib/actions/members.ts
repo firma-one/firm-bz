@@ -10,8 +10,9 @@ import { logger } from '@/lib/logger'
 import { googleDriveConnector } from '@/lib/google-drive-connector'
 import { safeInngestSend } from '@/lib/inngest/client'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
-import { removeRemindersByEntity } from '@/lib/actions/user-reminders'
+import { removeRemindersByEntity } from '@/lib/reminders/reminder-service'
 import { getAvatarUrlFromSupabaseUser } from '@/lib/supabase-user-helpers'
+import { requireEngagementManager, isEngagementPersonaSlug } from '@/lib/permissions/require-engagement-manager'
 
 // Admin Client for fetching user details
 const supabaseAdmin = createSupabaseAdmin(
@@ -24,21 +25,32 @@ export async function getProjectMembers(projectId: string) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) throw new Error("Unauthorized")
 
+    // Names, emails and pending invites: the same people who see the Members tab.
+    const engagement = await prisma.engagement.findFirst({
+        where: { id: projectId, isDeleted: false },
+        select: { clientId: true, client: { select: { firmId: true } } },
+    })
+    if (!engagement) throw new Error("Engagement not found")
+    const { canViewProjectInternalTabs } = await import('@/lib/permission-helpers')
+    if (!(await canViewProjectInternalTabs(engagement.client.firmId, engagement.clientId, projectId))) {
+        throw new Error("Insufficient permissions")
+    }
+
     // 1. Fetch Members (engagement = project in UI)
     const members = await prisma.engagementMember.findMany({
         where: { engagementId: projectId },
         orderBy: { id: 'asc' }
     })
 
-    // 2. Fetch Pending Invitations
-    const invitations = await prisma.engagementInvitation.findMany({
+    // 2. Fetch Pending Invitations — the invite token never leaves the server.
+    const invitations = (await prisma.engagementInvitation.findMany({
         where: {
             engagementId: projectId,
             status: { in: [InvitationStatus.PENDING, InvitationStatus.ACCEPTED, InvitationStatus.ERROR] }
         },
         include: { persona: true },
         orderBy: { createdAt: 'desc' }
-    })
+    })).map(({ token: _token, ...rest }) => rest)
 
     // 3. Enrich Members with User Data
     const enrichedMembers = await Promise.all(members.map(async (m: any) => {
@@ -81,8 +93,20 @@ export async function getProjectMemberSummaries(projectIds: string[]): Promise<R
 
     if (projectIds.length === 0) return {}
 
+    // Only engagements the caller can open — the ids come from the browser.
+    const engagements = await prisma.engagement.findMany({
+        where: { id: { in: projectIds }, isDeleted: false },
+        select: { id: true, clientId: true, client: { select: { firmId: true } } },
+    })
+    const { canViewProject } = await import('@/lib/permission-helpers')
+    const viewable = await Promise.all(
+        engagements.map(async (e) => ((await canViewProject(e.client.firmId, e.clientId, e.id)) ? e.id : null)),
+    )
+    const visibleIds = viewable.filter((id): id is string => id !== null)
+    if (visibleIds.length === 0) return {}
+
     const members = await prisma.engagementMember.findMany({
-        where: { engagementId: { in: projectIds } },
+        where: { engagementId: { in: visibleIds } },
         select: {
             engagementId: true,
             userId: true,
@@ -95,7 +119,7 @@ export async function getProjectMemberSummaries(projectIds: string[]): Promise<R
     const roleToDisplayName = Object.fromEntries(personaList.map((p: any) => [p.slug, p.displayName]))
 
     const result: Record<string, ProjectMemberSummary> = {}
-    for (const id of projectIds) {
+    for (const id of visibleIds) {
         result[id] = { projectLeads: [], teamMembers: [], external: [] }
     }
 
@@ -159,6 +183,7 @@ export async function removeMember(memberId: string) {
         })
 
         if (!member) throw new Error("Member not found")
+        await requireEngagementManager(member.engagementId)
 
         // Fetch member email once — reused for Drive revocation and invitation supersede
         let memberEmail: string | undefined
@@ -277,7 +302,7 @@ export async function removeMember(memberId: string) {
             .meta({ removedUserId: member.userId })
             .fireAndForget()
 
-        const { invalidateUserSettingsPlus } = await import('@/lib/actions/user-settings')
+        const { invalidateUserSettingsPlus } = await import('@/lib/permissions/invalidate-user-settings')
         await invalidateUserSettingsPlus(member.userId)
 
         // Async: reminder cleanup + session sign-out via Inngest (retried on failure)
@@ -306,16 +331,9 @@ export async function revokeInvitation(invitationId: string) {
         })
         if (!invite) throw new Error("Invitation not found")
 
-        // Verify caller has management rights over this engagement's firm
-        const engagement = await prisma.engagement.findUnique({
-            where: { id: invite.engagementId },
-            select: { client: { select: { firmId: true } } },
-        })
-        if (engagement) {
-            const { canManageOrganization } = await import('@/lib/permission-helpers')
-            const canManage = await canManageOrganization(engagement.client.firmId)
-            if (!canManage) throw new Error("Insufficient permissions")
-        }
+        // The engagement's lead, a client manager or a firm admin. This used to accept firm
+        // managers only — and skipped the check entirely when the engagement lookup came back empty.
+        await requireEngagementManager(invite.engagementId)
 
         await prisma.engagementInvitation.delete({ where: { id: invitationId } })
         if (invite?.createdBy) {
@@ -339,14 +357,16 @@ export async function updateMemberPersona(memberId: string, personaId: string) {
             include: { engagement: { include: { client: true } } }
         })
         if (!member) throw new Error("Member not found")
+        await requireEngagementManager(member.engagementId)
 
         const newPersona = await prisma.persona.findUnique({
             where: { id: personaId }
         })
         if (!newPersona) throw new Error("Persona not found")
+        if (!isEngagementPersonaSlug(newPersona.slug)) throw new Error("Not an engagement role")
 
         const oldPersonaSlug = member.role ?? null
-        const newPersonaSlug = newPersona.slug as 'eng_admin' | 'eng_member' | 'eng_ext_collaborator' | 'eng_viewer'
+        const newPersonaSlug = newPersona.slug
 
         await prisma.engagementMember.update({
             where: { id: memberId },
@@ -397,7 +417,7 @@ export async function updateMemberPersona(memberId: string, personaId: string) {
             .meta({ memberId, userId: member.userId, oldRole: oldPersonaSlug, newRole: newPersonaSlug })
             .fireAndForget()
 
-        const { invalidateUserSettingsPlus } = await import('@/lib/actions/user-settings')
+        const { invalidateUserSettingsPlus } = await import('@/lib/permissions/invalidate-user-settings')
         await invalidateUserSettingsPlus(member.userId)
 
         return { success: true }

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { getSharedAndAncestorIdsForAllPersonas } from '@/lib/engagement-sharing-ids'
 import { prisma } from '@/lib/prisma'
+import { resolveProjectContext } from '@/lib/resolve-project-context'
+import { canViewProject } from '@/lib/permission-helpers'
 
 /**
  * GET /api/projects/[projectId]/sharing/ids
@@ -19,6 +21,12 @@ export async function GET(
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const { projectId } = await params
+    // This only checked sign-in and then listed the engagement's shared Drive ids (calling Drive
+    // on the firm's connector). Engagement viewers only; firm and client from the engagement row.
+    const ctx = await resolveProjectContext(projectId)
+    if (!ctx || !(await canViewProject(ctx.firmId, ctx.clientId, projectId))) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
 
     const [result, sharedByMeRows] = await Promise.all([
       getSharedAndAncestorIdsForAllPersonas(projectId),
