@@ -36,6 +36,14 @@ const nextConfig = {
   // Keeping them external means Node require()s them from node_modules as-is.
   serverExternalPackages: ['officeparser', 'pdf-parse'],
 
+  // Types are checked as their own step in `npm run build` (`next typegen && tsc --noEmit`, before
+  // `next build`), not inside `next build`. Inside it, the check ran while the compile's memory was
+  // still held, and the two together ran Vercel's build container out of memory (production deploy
+  // of PR #123, 2026-10-17, SIGKILL at "Running TypeScript"). On its own the check peaks around
+  // 1.3 GB and exits before the compile starts. A type error still fails the build, at that step.
+  // Building with plain `next build` skips the check: use `npm run build`.
+  typescript: { ignoreBuildErrors: true },
+
   async redirects() {
     return [
       // The old personal pages moved into the cross-firm Home and Inbox
