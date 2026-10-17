@@ -17,6 +17,7 @@ import { ElapsedTime } from '@/components/ui/elapsed-time'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { ShimmerBar } from '@/components/ui/shimmer'
+import { ChatTaskList, type ChatAction } from '@/components/projects/chat-action-row'
 // The same list the API narrows against, so the scope chip can never offer a scope the
 // server would silently reject.
 import { CHAT_SCOPES, type ChatScope } from '@/lib/ai/engagement-chat'
@@ -293,7 +294,7 @@ export function EngagementAiChat({
     clientName,
     chrome = 'card',
     suggestionsOverride,
-    suggestionActions,
+    actions,
     aboveThread,
     placeholder,
     capabilityNote,
@@ -331,13 +332,11 @@ export function EngagementAiChat({
      */
     suggestionsOverride?: string[]
     /**
-     * Rendered as the last chip in the suggestion row.
-     *
-     * A caller-supplied ACTION, not a question — the Files page puts "Review folder organization"
-     * here so it reads as one of the things you can ask for, in the place the eye already goes for
-     * them, rather than as a banner above the conversation.
+     * Tasks the page can run from here, as opposed to questions (see `ChatAction`) — on Files,
+     * "Review folder organization" or "Set up folder organization". Shown under their own "Task"
+     * heading in the empty state and under the newest answer, each with a line on what will happen.
      */
-    suggestionActions?: React.ReactNode
+    actions?: ChatAction[]
     /**
      * Agent output, rendered INSIDE the thread at the top.
      *
@@ -1386,12 +1385,13 @@ export function EngagementAiChat({
                             </div>
                         )}
 
-                        {/* The page's action (Files), laid out as a row so its icon lines up. */}
-                        {suggestionActions && <div className="flex flex-col items-start gap-px">{suggestionActions}</div>}
+                        {/* The page's tasks (Files), under their own heading: a task asks a few
+                            things and then changes something, which a question never does. */}
+                        {actions && <ChatTaskList actions={actions} />}
 
                         {/* A fresh engagement has nothing to ask about yet; saying so is more honest
                             than offering prompts that would return nothing. */}
-                        {openingFacts.length === 0 && starters.length === 0 && !suggestionActions && (
+                        {openingFacts.length === 0 && starters.length === 0 && !actions?.length && (
                             <p className="px-2 text-small text-fg-subtle">
                                 Nothing has been added here yet. Once there are deliverables, dates or files,{' '}
                                 <Brio noIcon /> can answer questions about them.
@@ -1487,15 +1487,20 @@ export function EngagementAiChat({
                                 />
                             )}
                             {/* ASK NEXT (item 5): the newest answer's follow-ups, under the answer
-                                they came from, plus the page's action. Each chip disappears once
-                                asked, so the list never repeats what is answered above. */}
-                            {i === lastAssistantIndex && settled && !streaming && (suggestions.length > 0 || suggestionActions) && (
-                                <div className="mt-2 flex flex-col gap-px">
-                                    <p className="px-2 pb-0.5 text-caption text-fg-subtle">Ask next</p>
-                                    {suggestions.map((q) => (
-                                        <SuggestionRow key={q} leading={<CornerDownRight />} label={q} onClick={() => void ask(q)} />
-                                    ))}
-                                    {suggestionActions && <div className="flex flex-col items-start gap-px pt-0.5">{suggestionActions}</div>}
+                                they came from, then the page's tasks under their own heading. Each
+                                question disappears once asked, so the list never repeats what is
+                                answered above. */}
+                            {i === lastAssistantIndex && settled && !streaming && (suggestions.length > 0 || !!actions?.length) && (
+                                <div className="mt-2 flex flex-col gap-3">
+                                    {suggestions.length > 0 && (
+                                        <div className="flex flex-col gap-px">
+                                            <p className="px-2 pb-0.5 text-caption text-fg-subtle">Ask next</p>
+                                            {suggestions.map((q) => (
+                                                <SuggestionRow key={q} leading={<CornerDownRight />} label={q} onClick={() => void ask(q)} />
+                                            ))}
+                                        </div>
+                                    )}
+                                    {actions && <ChatTaskList actions={actions} />}
                                 </div>
                             )}
                         </div>

@@ -114,3 +114,30 @@ Deepak's check:
 - dock to side;
 - doc-ID chips on a real answer, and the sources line;
 - the alignment on Windows, where scrollbars take up space.
+
+## Questions and tasks (2026-10-17)
+
+Deepak asked whether the panel tells apart prompts that are questions from ones that start a task.
+He considered labeling rows "(E) Enquiry" and "(T) Task", and agreed instead to mark only the
+exception, in words.
+
+- **Questions stay as they are**, under "Right now", "Try asking" and "Ask next". They are strings
+  sent to the read-only chat route.
+- **Tasks get their own "Task" heading**, a green label chip, and one muted line on what will
+  happen:
+  - Review folder organization: "Checks names, duplicates and misplaced files, asks you about each
+    fix, then applies the ones you approve. Nothing is deleted."
+  - Set up folder organization: "Asks a few questions about the engagement, shows you the folders,
+    then creates the ones you approve."
+- **In the thread, a running task carries a header**: "Task · Review folder organization · 2 of 5
+  answered", then "Applying…", "Done" or "Needs attention". The setup interview has the same
+  header.
+- **Code.**
+  - `ChatAction`, `ChatTaskList` and `ChatTaskHeader` live in `chat-action-row.tsx`. The chat panel
+    takes `actions: ChatAction[]`, which replaces the old `suggestionActions` ReactNode, so it
+    draws every task the same way.
+  - The review's run state moved out of a second "trigger" copy of `FilesAgentPanel` into
+    `useFilesReview` on the Files page. The results panel is keyed on `reviewSeq`, so each review
+    starts with no answers carried over.
+  - `FilesScaffoldTrigger` is gone.
+  - Tests: `chat-action-row.test.tsx`.

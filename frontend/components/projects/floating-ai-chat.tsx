@@ -7,6 +7,7 @@ import type { ChatScope } from '@/lib/ai/engagement-chat'
 import { EngagementAiChat, type ChatThreadApi } from '@/components/projects/engagement-ai-chat'
 import { Brio } from '@/components/ui/brio'
 import { Hint } from '@/components/ui/tooltip'
+import type { ChatAction } from '@/components/projects/chat-action-row'
 import type { EngagementInsightsResponse } from '@/lib/insights/engagement-insights'
 
 /**
@@ -182,7 +183,7 @@ export function FloatingAiChat({
     surface,
     threadRef,
     suggestionsOverride,
-    suggestionActions,
+    actions,
     placeholder,
     capabilityNote,
 }: {
@@ -204,8 +205,8 @@ export function FloatingAiChat({
     threadRef?: React.MutableRefObject<ChatThreadApi | null>
     /** Starting prompts for the host page, replacing the engagement-derived set. */
     suggestionsOverride?: string[]
-    /** An action chip for the suggestion row — see EngagementAiChat. */
-    suggestionActions?: React.ReactNode
+    /** Tasks the page can run from the panel — see EngagementAiChat and `ChatAction`. */
+    actions?: ChatAction[]
     /** Composer prompt text — see EngagementAiChat. */
     placeholder?: string
     /** One line in the header saying what this panel can do here — see EngagementAiChat. */
@@ -847,7 +848,7 @@ export function FloatingAiChat({
                 clientName={clientName}
                 chrome="floating"
                 suggestionsOverride={suggestionsOverride}
-                suggestionActions={suggestionActions}
+                actions={actions}
                 aboveThread={aboveThread}
                 surface={surface}
                 // Derived, not a second prop for callers to set: a page that said
