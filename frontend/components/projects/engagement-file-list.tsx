@@ -1238,9 +1238,14 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
             : currentFolderType === 'confidential'
                 ? confidentialFolderId
                 : stagingFolderId
+    // What the search pane says it covers. "General" is the engagement's root folder, a name users
+    // never see (the breadcrumb shows it as an icon), so it reads as "this engagement". The other
+    // roots keep their names.
     const searchRootLabel =
         searchRootFolderId && currentFolderType
-            ? currentFolderType.charAt(0).toUpperCase() + currentFolderType.slice(1)
+            ? currentFolderType === 'general'
+                ? 'this engagement'
+                : currentFolderType.charAt(0).toUpperCase() + currentFolderType.slice(1)
             : undefined
 
     useEffect(() => {
@@ -2160,7 +2165,7 @@ const handleRefresh = async () => {
             <div className="px-0 pt-1 pb-2 flex flex-col gap-2.5 shrink-0 z-20">
                 {/* Breadcrumbs: root always visible (as dropdown when canManage); truncate middle */}
                 <div className="flex items-center text-xs font-medium text-fg-muted min-w-0">
-                    <div className="flex items-center min-w-0 overflow-x-auto whitespace-nowrap custom-scrollbar">
+                    <div className="subtle-scrollbar flex min-w-0 items-center overflow-x-auto whitespace-nowrap">
                         {(() => {
                             const ROOT_INDEX = 0
                             const showAll = breadcrumbs.length <= 4
@@ -2876,8 +2881,8 @@ const handleRefresh = async () => {
                     </div>
                 </div>
 
-                {/* File List */}
-                <div className="flex-1 overflow-y-auto custom-scrollbar relative">
+                {/* File List, with the app's slim, light scrollbar (`subtle-scrollbar`, globals.css). */}
+                <div className="subtle-scrollbar relative flex-1 overflow-y-auto">
                     {deeplinkResolving || loading || isLoadingFolders ? (
                         // Rows shaped like the table that is coming (same grid as the header and
                         // FileRow), so nothing jumps when the files arrive.

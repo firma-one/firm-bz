@@ -199,6 +199,8 @@ function AppLayoutContent({ children, isSystemAdmin }: { children: React.ReactNo
                                 onClose={clearPane}
                                 headerActions={rightPaneHeaderActions}
                                 embedContent={true}
+                                // The shell's column draws the edge; flat, like the docked Brio pane.
+                                frame="flush"
                             >
                                 <AnimatePresence mode="wait" initial={false}>
                                     <motion.div

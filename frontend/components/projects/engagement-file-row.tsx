@@ -601,8 +601,9 @@ export function EngagementFileRow({
                 })()}
             </div>
 
-            {/* Date Modified Column */}
-            <div className={DATE_MODIFIED_COL_CLASS}>
+            {/* Date Modified Column. Rows are a fixed h-9, so a date must never wrap onto a second line:
+                it would stick out of the row, and on the last row put a vertical scrollbar on the list. */}
+            <div className={cn('min-w-0 whitespace-nowrap', DATE_MODIFIED_COL_CLASS)}>
                 {file.modifiedTime ? (
                     <RelativeDateTime
                         date={file.modifiedTime}
@@ -616,7 +617,7 @@ export function EngagementFileRow({
             </div>
 
             {/* Due Date Column — leads edit it in place (Notion-style); everyone else sees the relative date */}
-            <div className={DUE_DATE_COL_CLASS} onClick={(e) => { if (canEditDueDate) e.stopPropagation() }}>
+            <div className={cn('min-w-0 whitespace-nowrap', DUE_DATE_COL_CLASS)} onClick={(e) => { if (canEditDueDate) e.stopPropagation() }}>
                 {canEditDueDate ? (
                     <FileDueDateCell
                         projectId={projectId}
