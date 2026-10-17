@@ -318,8 +318,7 @@ export function FirmClientsView({ clients, groupSlug, orgSlug, orgId, firmSandbo
                         <TabsContent value="analytics" className="m-0">
                             {/* The engagement Overview's layout: the Action Center on top, then the
                                 report (.claude/plans/firm-overview-redesign.md). FirmBusinessInsights
-                                renders both from one request; the older FirmActionCenter
-                                (firm-action-center.tsx) is kept, unused, until its removal is signed off. */}
+                                renders both from one request. */}
                             <div data-print-overview className="pb-6">
                                 <ErrorBoundary context="FirmInsightsTab">
                                     <FirmBusinessInsights

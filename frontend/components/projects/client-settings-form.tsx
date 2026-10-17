@@ -101,6 +101,8 @@ export function ClientSettingsForm({
     const [tagInput, setTagInput] = useState('')
     const tagInputRef = useRef<HTMLInputElement>(null)
     const [ownerId, setOwnerId] = useState<string | null>(initialOwnerId ?? null)
+    // The follow-up date has no field for now but is still loaded and saved back, so a stored one
+    // survives edits. KEEP: client follow-up dates are paused, not retired — hidden from the UI on 2026-10-17 and to be revived. Don't remove this as unused.
     const [followUpDate, setFollowUpDate] = useState(initialFollowUpDate)
     const [expectedCloseDate, setExpectedCloseDate] = useState(initialExpectedCloseDate)
     const [leadSource, setLeadSource] = useState(initialLeadSource)

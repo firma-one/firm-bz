@@ -38,6 +38,7 @@ export function AddClientModal({ groupSlug, orgSlug, firmId, trigger, onSaved }:
     const [tagInput, setTagInput] = useState('')
     const tagInputRef = useRef<HTMLInputElement>(null)
     const [leadSource, setLeadSource] = useState('')
+    // No field for now; still sent on create. KEEP: client follow-up dates are paused, not retired — hidden from the UI on 2026-10-17 and to be revived. Don't remove this as unused.
     const [followUpDate, setFollowUpDate] = useState('')
     const [expectedCloseDate, setExpectedCloseDate] = useState('')
     const [clientSinceDate, setClientSinceDate] = useState('')

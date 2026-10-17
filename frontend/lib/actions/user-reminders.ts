@@ -24,6 +24,7 @@ export type { ReminderItem, ReminderWithContext } from '@/lib/reminders/reminder
 // ─── Date field clearer map ──────────────────────────────────────────────────
 
 const DATE_FIELD_CLEARERS: Record<string, (entityValue: string) => Promise<void>> = {
+    // KEEP: client follow-up dates are paused, not retired — hidden from the UI on 2026-10-17 and to be revived. Don't remove this as unused.
     'platform.clients.followUpDate': async (id) => {
         await (prisma as any).client.update({ where: { id }, data: { followUpDate: null } })
     },

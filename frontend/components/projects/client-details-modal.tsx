@@ -168,7 +168,8 @@ export function ClientDetailsModal({ client, open, onOpenChange }: ClientDetails
                         </div>
                     )}
 
-                    {/* Expected close (PROSPECT only). Client follow-up dates were retired 2026-10-17. */}
+                    {/* Expected close (PROSPECT only). The follow-up date that sat above it is hidden for now:
+                        client follow-up dates are paused, not retired, and will be revived (2026-10-17). */}
                     {client.status === 'PROSPECT' && client.expectedCloseDate && (
                         <div className="flex items-start gap-3">
                             <div className="h-9 w-9 bg-surface-muted rounded-lg flex items-center justify-center flex-shrink-0">

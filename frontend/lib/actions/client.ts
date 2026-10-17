@@ -195,7 +195,8 @@ export async function createClient(organizationSlug: string, data: CreateClientD
         logger.error("Failed to create storage connector folder for client", e as Error)
     }
 
-    // Upsert follow-up reminder if followUpDate was set
+    // Upsert follow-up reminder if followUpDate was set.
+    // KEEP: client follow-up dates are paused, not retired — hidden from the UI on 2026-10-17 and to be revived. Don't remove this as unused.
     await upsertFollowUpReminder({
         userId: user.id,
         entityKey: 'platform.clients.id',
@@ -331,6 +332,7 @@ export async function updateClient(
         const entityName = data.name ?? client.name
         if (effectiveOwnerId) {
             const memo = data.internalMemo !== undefined ? data.internalMemo : latest?.internalMemo ?? null
+            // KEEP: client follow-up dates are paused, not retired — hidden from the UI on 2026-10-17 and to be revived. Don't remove this as unused.
             await upsertFollowUpReminder({
                 userId: effectiveOwnerId,
                 entityKey: 'platform.clients.id',
