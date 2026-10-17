@@ -23,6 +23,10 @@ interface UseEngagementFileOpsOptions {
     setFiles: React.Dispatch<React.SetStateAction<DriveFile[]>>
     /** Called when an item leaves the current listing (e.g. moved elsewhere). */
     onItemRemoved?: (fileId: string) => void
+    /** The provider's name for its trash, for the "Moved to Bin" toast. */
+    storageBinName?: string
+    /** Whether "Moved to Bin" offers Undo: the provider can take a file back out of its Bin. */
+    canUndoTrash?: boolean
 }
 
 export function useEngagementFileOps({
@@ -39,6 +43,8 @@ export function useEngagementFileOps({
     stopProcessing,
     setFiles,
     onItemRemoved,
+    storageBinName = 'Google Drive Bin',
+    canUndoTrash = false,
 }: UseEngagementFileOpsOptions) {
     const { addToast } = useToast()
 
@@ -134,6 +140,33 @@ export function useEngagementFileOps({
         }, 200)
     }, [])
 
+    // Undo on the "Moved to Bin" toast: takes the item back out of the Bin. The cleanup that
+    // follows a trash waits a minute for this, so it comes back with its ID and comments
+    // (.claude/plans/undo-move-to-bin.md).
+    const undoTrash = useCallback(async (doc: DriveFile) => {
+        if (!sessionRef.current?.access_token) return
+        try {
+            const res = await fetch('/api/drive-action', {
+                method: 'POST',
+                credentials: 'include',
+                headers: {
+                    Authorization: `Bearer ${sessionRef.current.access_token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ action: 'restore', fileId: doc.id, connectorId: doc.connectorId, projectId, fileName: doc.name })
+            })
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}))
+                throw new Error(err.error || 'Couldn’t restore it')
+            }
+            addToast({ type: 'success', title: 'Restored', message: `${doc.name} is back` })
+            const currentFolderId = currentFolderIdRef.current
+            if (currentFolderId) fetchFiles(currentFolderId, true)
+        } catch (e: any) {
+            addToast({ type: 'error', title: 'Couldn’t undo', message: e?.message || 'Something went wrong' })
+        }
+    }, [sessionRef, projectId, currentFolderIdRef, fetchFiles, addToast])
+
     // Step 2: called from the confirm dialog
     const handleTrashConfirmed = useCallback(async () => {
         if (!trashConfirmTarget || trashConfirming || !sessionRef.current?.access_token) return
@@ -174,7 +207,12 @@ export function useEngagementFileOps({
             addToast(
                 isLink
                     ? { type: 'success', title: 'Deleted', message: `${doc.name} was deleted` }
-                    : { type: 'success', title: 'Moved to Bin', message: `${doc.name} moved to Google Drive Bin` }
+                    : {
+                        type: 'success',
+                        title: 'Moved to Bin',
+                        message: `${doc.name} moved to ${storageBinName}`,
+                        ...(canUndoTrash && { duration: 10_000, action: { label: 'Undo', onClick: () => void undoTrash(doc) } }),
+                    }
             )
             setTrashConfirmTarget(null)
             const currentFolderId = currentFolderIdRef.current
@@ -186,7 +224,7 @@ export function useEngagementFileOps({
             setTrashConfirming(false)
             stopProcessing(doc.id)
         }
-    }, [trashConfirmTarget, trashConfirming, currentFolderIdRef, fetchFiles, addToast, startProcessing, stopProcessing, projectId])
+    }, [trashConfirmTarget, trashConfirming, currentFolderIdRef, fetchFiles, addToast, startProcessing, stopProcessing, projectId, storageBinName, canUndoTrash, undoTrash])
 
     const fetchFolderChildrenResult = useCallback(async (folderId: string): Promise<DriveFile[]> => {
         if (!sessionRef.current?.access_token) return []

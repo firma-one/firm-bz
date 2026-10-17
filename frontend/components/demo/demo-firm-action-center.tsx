@@ -47,14 +47,14 @@ export function DemoFirmActionCenter({ firm }: { firm: DemoFirm }) {
     const attentionTotal = attentionCount(followUps, documents)
 
     return (
-        <div className="sticky top-0">
-            <div className="flex flex-col gap-6 xl:border-l xl:border-line xl:pl-6">
+        <div>
+            <div className="flex flex-col gap-4">
                 <div className="flex items-center gap-2 border-b border-line pb-2">
                     <Inbox className="h-4 w-4 shrink-0 text-fg-subtle" />
                     <h2 className="truncate text-h3 text-fg">Action Center</h2>
                     {attentionTotal > 0 && <span className="text-small tabular-nums text-fg-subtle">{attentionTotal}</span>}
                 </div>
-                <div className="flex flex-col gap-4">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                     <ActionSection title="Follow-ups" icon={CalendarClock} items={followUps} />
                     <ActionSection
                         title="Documents"

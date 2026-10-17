@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildChatSuggestions } from './chat-suggestions'
+import { buildChatSuggestions, buildOpeningFacts } from './chat-suggestions'
 import type { EngagementInsightsResponse } from '@/lib/insights/engagement-insights'
 
 /** Minimal snapshot; each test overlays only the signals it cares about. */
@@ -122,5 +122,35 @@ describe('suggestions stay on the right side of the judgment boundary', () => {
         for (const s of everySuggestion) {
             expect(s, s).not.toMatch(/\bshould I\b|\bprioriti[sz]e\b|\brecommend\b|\bwho should\b|\bwhat should\b/i)
         }
+    })
+})
+
+describe('buildOpeningFacts', () => {
+    it('says nothing when nothing stands out, or with no data', () => {
+        expect(buildOpeningFacts(snapshot())).toEqual([])
+        expect(buildOpeningFacts(null)).toEqual([])
+    })
+
+    it('leads with what is most pressing, at most three, each asking about itself', () => {
+        const facts = buildOpeningFacts(snapshot({
+            deliveryHealth: { overdueCount: 2, stalledInReview: 1 },
+            commentThreads: { unanswered: 1, flaggedOpen: 0 },
+            planningHygiene: { deliverableTotal: 4, deliverableWithDueDate: 3, docTotal: 6, docWithDueDate: 6, docWithAssignee: 6 },
+        }))
+        expect(facts.map((f) => f.label)).toEqual([
+            '2 deliverables overdue',
+            '1 deliverable sitting in review',
+            '1 comment awaiting our reply',
+        ])
+        expect(facts[0]).toMatchObject({ tone: 'red', question: 'Which 2 deliverables are overdue?' })
+        // The same question the suggestion chips would ask, so the panel never offers both.
+        expect(buildChatSuggestions(snapshot({ deliveryHealth: { overdueCount: 2, stalledInReview: 0 } }))).toContain(facts[0].question)
+    })
+
+    it('counts missing due dates across documents and deliverables', () => {
+        const facts = buildOpeningFacts(snapshot({
+            planningHygiene: { deliverableTotal: 2, deliverableWithDueDate: 1, docTotal: 5, docWithDueDate: 3, docWithAssignee: 5 },
+        }))
+        expect(facts).toEqual([{ label: '3 items without a due date', question: 'What work is missing a due date?', tone: 'gray' }])
     })
 })

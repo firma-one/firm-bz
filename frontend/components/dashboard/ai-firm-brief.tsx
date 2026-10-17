@@ -1,23 +1,29 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
-import { AlertCircle, Newspaper, RefreshCw } from 'lucide-react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { AlertCircle, Check, Clock, Copy, Square } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
 import { formatRelativeTime } from '@/lib/utils'
 import { ASSISTANT, ASSISTANT_POLICY } from '@/lib/ai/assistant'
 import { Brio } from '@/components/ui/brio'
-import { Hint } from '@/components/ui/tooltip'
 import { ShimmerBar } from '@/components/ui/shimmer'
-import { InsightCard } from '@/components/dashboard/insight-card'
-import { BrioSections } from '@/components/ui/brio-sections'
-import { fetchWithTimeout, AI_TIMEOUT_MS, AiTimeoutError } from '@/lib/ai/fetch-timeout'
+import { BrioReading, BrioSections, StreamingBrioSections } from '@/components/ui/brio-sections'
+import { fetchWithTimeout, AI_TIMEOUT_MS } from '@/lib/ai/fetch-timeout'
 
-interface FirmBrief {
+export interface FirmBrief {
     content: string
     generatedAt: string
 }
 
-export function AiFirmBrief({ firmId }: { firmId: string }) {
+/**
+ * The firm's brief: loads it, and rewrites it on request. A hook rather than a component so the
+ * Overview knows whether there is a brief to lay the cards out beside.
+ * `available` is false when the model isn't configured, or there is no brief to show.
+ *
+ * The rewrite streams (`streamText` grows as Brio writes) and the brief on screen is replaced only
+ * when it completes; `stop` ends it early and keeps the old one.
+ */
+export function useFirmBrief(firmId: string) {
     const { session } = useAuth()
     const accessToken = session?.access_token
 
@@ -25,9 +31,11 @@ export function AiFirmBrief({ firmId }: { firmId: string }) {
     const [loading, setLoading] = useState(true)
     const [refreshing, setRefreshing] = useState(false)
     // Distinguishes "no API key configured" from "generation failed" — when unconfigured the
-    // component renders nothing at all rather than showing an error to every user.
+    // brief is left out entirely rather than showing an error to every user.
     const [configured, setConfigured] = useState(true)
     const [refreshError, setRefreshError] = useState<string | null>(null)
+    const [streamText, setStreamText] = useState('')
+    const abortRef = useRef<AbortController | null>(null)
 
     useEffect(() => {
         if (!accessToken) return
@@ -57,77 +65,175 @@ export function AiFirmBrief({ firmId }: { firmId: string }) {
 
     const refresh = useCallback(async () => {
         if (!accessToken || refreshing) return
+        const ctrl = new AbortController()
+        abortRef.current = ctrl
         setRefreshing(true)
         setRefreshError(null)
+        setStreamText('')
+        // Gives up when Brio goes quiet for too long — reset on every piece of text, so a long
+        // brief still being written is never cut off.
+        let idle: ReturnType<typeof setTimeout> | undefined
+        const arm = () => {
+            clearTimeout(idle)
+            idle = setTimeout(() => ctrl.abort('timeout'), AI_TIMEOUT_MS.brief)
+        }
+        arm()
         try {
-            const res = await fetchWithTimeout(`/api/firms/${firmId}/ai-brief`, {
+            const res = await fetch(`/api/firms/${firmId}/ai-brief?stream=1`, {
                 method: 'POST',
                 headers: { Authorization: `Bearer ${accessToken}` },
-            }, AI_TIMEOUT_MS.brief)
-            if (!res.ok) throw new Error(`Refresh failed (${res.status})`)
-            const d = await res.json()
-            if (d.brief) setBrief(d.brief)
-            else throw new Error('No brief returned')
-        } catch (e) {
-            // Keep the existing brief on screen rather than blanking it, but say the refresh
-            // failed: the user pressed a button and silence reads as "nothing happened".
-            setRefreshError(
-                e instanceof AiTimeoutError
-                    ? `${ASSISTANT.name} took too long. The brief below is unchanged.`
-                    : `Could not refresh. The brief below is unchanged.`,
-            )
+                signal: ctrl.signal,
+            })
+            if (!res.ok || !res.body) {
+                const d = await res.json().catch(() => null)
+                throw new Error(d?.error ?? `Rewrite failed (${res.status})`)
+            }
+            const reader = res.body.getReader()
+            const decoder = new TextDecoder()
+            let buffer = ''
+            let finished = false
+            while (!finished) {
+                const { value, done } = await reader.read()
+                if (done) break
+                arm()
+                buffer += decoder.decode(value, { stream: true })
+                let nl: number
+                while ((nl = buffer.indexOf('\n')) >= 0) {
+                    const raw = buffer.slice(0, nl).trim()
+                    buffer = buffer.slice(nl + 1)
+                    if (!raw) continue
+                    const msg = JSON.parse(raw) as { type: string; text?: string; brief?: FirmBrief; message?: string }
+                    if (msg.type === 'delta' && msg.text) setStreamText((t) => t + msg.text)
+                    else if (msg.type === 'done' && msg.brief) { setBrief(msg.brief); finished = true }
+                    else if (msg.type === 'error') throw new Error(msg.message ?? 'Rewrite failed')
+                }
+            }
+            if (!finished) throw new Error('The rewrite stopped before it finished')
+        } catch {
+            // Stopped on purpose: the old brief simply stays. Anything else, say so — the user
+            // pressed a button and silence reads as "nothing happened".
+            if (!(ctrl.signal.aborted && ctrl.signal.reason === 'stopped')) {
+                setRefreshError(
+                    ctrl.signal.reason === 'timeout'
+                        ? `${ASSISTANT.name} took too long. The brief below is unchanged.`
+                        : `Could not rewrite it. The brief below is unchanged.`,
+                )
+            }
         } finally {
+            clearTimeout(idle)
+            abortRef.current = null
             setRefreshing(false)
+            setStreamText('')
         }
     }, [firmId, accessToken, refreshing])
 
-    if (!configured) return null
+    /** Ends the rewrite now; the brief on screen stays as it was. */
+    const stop = useCallback(() => abortRef.current?.abort('stopped'), [])
+    // Leaving the page stops it, rather than writing into a card no one sees.
+    useEffect(() => () => abortRef.current?.abort('stopped'), [])
 
-    // The same flat section as the rest of the Overview: a heading row whose height matches the
-    // Action Center's, so the two headings line up across the page.
-    const rewriteLabel = `Ask ${ASSISTANT.name} to rewrite this`
-    const rewrite = (
-        <Hint label={rewriteLabel}>
-            <button
-                type="button"
-                onClick={refresh}
-                disabled={loading || refreshing}
-                className="rounded-control p-1.5 text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg disabled:opacity-50 print:hidden"
-                aria-label={rewriteLabel}
-            >
-                <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-            </button>
-        </Hint>
-    )
+    return { brief, loading, refreshing, streamText, refreshError, refresh, stop, available: configured && (loading || !!brief) }
+}
 
-    if (!loading && !brief) return null
+const CONTROL = 'inline-flex h-7 items-center gap-1.5 rounded-control border border-line bg-surface px-2 text-small transition-colors hover:border-line-strong hover:bg-surface-hover disabled:cursor-default disabled:opacity-50'
+
+/**
+ * Today's brief as a card, with the Engagement Summary's header: title, how old it is, Copy, and
+ * "Rewrite with Brio". Presentational: the Overview feeds it from useFirmBrief, the tour from its
+ * sample data.
+ */
+export function FirmBriefCard({ brief, loading = false, refreshing = false, streamText = '', refreshError = null, onRewrite, onStop, source = 'your current data', reading = 'your firm’s data' }: {
+    brief: FirmBrief | null
+    loading?: boolean
+    /** A rewrite is being written: the card shows it streaming in, in place of the brief. */
+    refreshing?: boolean
+    /** What Brio has written of the rewrite so far. */
+    streamText?: string
+    refreshError?: string | null
+    /** Omitted where a rewrite isn't possible. */
+    onRewrite?: () => void
+    /** Ends the rewrite and keeps the brief as it was. */
+    onStop?: () => void
+    /** What it was written from, for the line under it. */
+    source?: string
+    /** What Brio reads before writing ("your firm's data"). */
+    reading?: string
+}) {
+    const [copied, setCopied] = useState(false)
+    const copy = () => {
+        if (!brief) return
+        void navigator.clipboard.writeText(brief.content).then(() => {
+            setCopied(true)
+            setTimeout(() => setCopied(false), 1500)
+        }).catch(() => {})
+    }
+    const busy = loading || refreshing || !brief
+    // Said once at the start and once at the end, not word by word.
+    const [announce, setAnnounce] = useState('')
+    const wasRefreshing = useRef(false)
+    useEffect(() => {
+        if (refreshing && !wasRefreshing.current) setAnnounce(`${ASSISTANT.name} is writing a new brief.`)
+        else if (!refreshing && wasRefreshing.current) setAnnounce(refreshError ? refreshError : 'The new brief is ready.')
+        wasRefreshing.current = refreshing
+    }, [refreshing, refreshError])
 
     return (
-        <InsightCard title="Today's brief" icon={Newspaper} theme="blue" titleAddon={<Brio className="text-small" />} headerExtra={rewrite}>
-            <div className="pt-4">
-                {loading || !brief ? (
-                    <div className="space-y-2" aria-busy="true">
-                        <ShimmerBar className="w-full" />
-                        <ShimmerBar className="w-[92%]" />
-                        <ShimmerBar className="w-[78%]" />
-                    </div>
-                ) : (
-                    <>
-                        {refreshError && (
-                            <p role="status" className="mb-3 flex items-center gap-1.5 text-small text-fg-muted">
-                                <AlertCircle className="h-3.5 w-3.5 shrink-0 text-amber-600" />
-                                {refreshError}
-                            </p>
-                        )}
-
-                        <BrioSections content={brief.content} className="text-fg-muted" />
-
-                        <p className="mt-3 text-caption text-fg-subtle">
-                            Written by <Brio /> {formatRelativeTime(brief.generatedAt)} from your current data. {ASSISTANT_POLICY.short}
-                        </p>
-                    </>
-                )}
+        <div data-firm-brief className="flex min-w-0 flex-col overflow-hidden rounded-card border border-line bg-surface">
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-line px-4 pb-2 pt-3">
+                <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+                    <span className="text-small font-medium text-fg-muted">Today&apos;s brief</span>
+                    {refreshing ? (
+                        <span className="inline-flex shrink-0 items-center gap-1 text-caption text-fg-muted">
+                            <Brio className="animate-pulse" /> is writing a new brief…
+                        </span>
+                    ) : brief && (
+                        <span className="inline-flex shrink-0 items-center gap-1 text-caption text-fg-subtle">
+                            <Clock className="h-3 w-3" />
+                            {formatRelativeTime(brief.generatedAt)}
+                        </span>
+                    )}
+                </div>
+                <div className="flex shrink-0 items-center gap-2 print:hidden">
+                    <button type="button" onClick={copy} disabled={busy} aria-label="Copy the brief to the clipboard" className={`${CONTROL} text-fg-muted hover:text-fg`}>
+                        {copied ? <Check className="h-3 w-3 text-action" /> : <Copy className="h-3 w-3" />}
+                        {copied ? 'Copied' : 'Copy'}
+                    </button>
+                    {refreshing && onStop ? (
+                        <button type="button" onClick={onStop} className={`${CONTROL} text-fg-muted hover:text-fg`}>
+                            <Square className="h-3 w-3 fill-current" /> Stop
+                        </button>
+                    ) : onRewrite && (
+                        <button type="button" onClick={onRewrite} disabled={busy} className={`${CONTROL} font-medium text-action`}>
+                            Rewrite with <Brio />
+                        </button>
+                    )}
+                </div>
             </div>
-        </InsightCard>
+
+            {refreshError && (
+                <p role="status" className="flex items-center gap-1.5 px-4 pt-3 text-small text-fg-muted">
+                    <AlertCircle className="h-3.5 w-3.5 shrink-0 text-tag-yellow-fg" />
+                    {refreshError}
+                </p>
+            )}
+
+            <p className="sr-only" aria-live="polite">{announce}</p>
+
+            {refreshing ? (
+                <StreamingBrioSections text={streamText} placeholder={<BrioReading what={reading} />} className="px-4 py-3 text-fg-muted" />
+            ) : loading || !brief ? (
+                <div className="space-y-2 px-4 py-4" aria-busy="true">
+                    <ShimmerBar className="w-full" />
+                    <ShimmerBar className="w-[92%]" />
+                    <ShimmerBar className="w-[78%]" />
+                </div>
+            ) : (
+                <BrioSections content={brief.content} className="px-4 py-3 text-fg-muted" />
+            )}
+
+            <p className="mt-auto border-t border-line px-4 py-2 text-caption text-fg-subtle">
+                Written by <Brio /> from {source}. {ASSISTANT_POLICY.short}
+            </p>
+        </div>
     )
 }

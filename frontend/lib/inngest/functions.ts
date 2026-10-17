@@ -2,6 +2,7 @@ import { inngest } from "./client";
 import { prisma } from "@/lib/prisma";
 import { googleDriveConnector } from "@/lib/google-drive-connector";
 import { getPermissionAdapter, getMigrationAdapter, getConnectorInstance } from "@/lib/connectors/registry";
+import { TRASH_UNDO_WINDOW_SECONDS, wasRestoredFromBin } from "@/lib/connectors/trash-undo";
 import { parseSettingsFromDb } from "@/lib/sharing-settings";
 import { logger } from "@/lib/logger";
 import { DocumentSharingPermissionStatus, Prisma } from "@prisma/client";
@@ -463,7 +464,15 @@ export const seedSandboxDeliverables = inngest.createFunction(
 export const reconcileFileDeletion = inngest.createFunction(
     { id: "reconcile-file-deletion", triggers: [{ event: "file.delete.requested" }] },
     async ({ event, step }) => {
-        const { organizationId, externalId, connectorPermissionId } = event.data
+        const { organizationId, externalId, connectorPermissionId, connectorId: trashedVia, undoable } = event.data
+
+        // Moved to the Bin from the Files list: wait out the Undo window, and keep everything if
+        // the file came back out of the Bin meanwhile.
+        if (undoable && trashedVia) {
+            await step.sleep("undo-window", `${TRASH_UNDO_WINDOW_SECONDS}s`)
+            const restored = await step.run("check-still-in-bin", () => wasRestoredFromBin(trashedVia, externalId))
+            if (restored) return { externalId, status: "restored" }
+        }
 
         await step.run("remove-from-search-index", async () => {
             const { SearchService } = await import("@/lib/services/search-service")
@@ -543,7 +552,14 @@ export const reconcileFileDeletion = inngest.createFunction(
 export const reconcileFolderDeletion = inngest.createFunction(
     { id: "reconcile-folder-deletion", triggers: [{ event: "folder.delete.requested" }] },
     async ({ event, step }) => {
-        const { organizationId, externalId } = event.data
+        const { organizationId, externalId, connectorId: trashedVia, undoable } = event.data
+
+        // As for files: wait out the Undo window, and keep everything if the folder came back.
+        if (undoable && trashedVia) {
+            await step.sleep("undo-window", `${TRASH_UNDO_WINDOW_SECONDS}s`)
+            const restored = await step.run("check-still-in-bin", () => wasRestoredFromBin(trashedVia, externalId))
+            if (restored) return { externalId, status: "restored" }
+        }
 
         await step.run("remove-folder-from-search-index", async () => {
             const { SearchService } = await import("@/lib/services/search-service")

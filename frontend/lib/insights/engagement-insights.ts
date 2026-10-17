@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { assessOrganization } from '@/lib/ai/files-agent/assess'
 import { googleDriveConnector } from '@/lib/google-drive-connector'
+import { overdueDeliverablesPenalty, planningGapCount } from './health-penalties'
 
 
 export interface UnansweredThreadItem {
@@ -313,6 +314,8 @@ export interface EngagementInsightsResponse {
    * seeing approved text and exports always carry a summary.
    */
   insightsSummaryStale: boolean
+  /** The pending draft describes older data than now (internal only), so the review can say so. */
+  insightsSummaryDraftStale: boolean
   insightsSummaryPublishedAt: string | null
   folderHealth: FolderHealthReport
   storageHealth: StorageHealthReport
@@ -1112,8 +1115,15 @@ export async function computeEngagementInsights(
     if (hygieneCovs.length > 0) {
       const avgCov = hygieneCovs.reduce((a, b) => a + b, 0) / hygieneCovs.length
       const gapPoints = Math.min(15, Math.round((1 - avgCov) * 15))
-      if (gapPoints > 0) penalties.push({ label: `Planning gaps (${Math.round(avgCov * 100)}% set up)`, points: gapPoints })
+      // Labeled with the count of missing fields, the same number the Action Center's
+      // "Planning gaps" row shows, so the two never disagree on units (it used to say "33% set up").
+      if (gapPoints > 0) penalties.push({ label: `Planning gaps (${planningGapCount(planningHygiene)} missing)`, points: gapPoints })
     }
+    // A late deliverable is a missed client deadline. Overdue documents and an overdue engagement
+    // were already counted above; deliverables were not, so the score could read "Healthy" while
+    // the only deliverable was late.
+    const overdueDeliverables = overdueDeliverablesPenalty(overdueCount)
+    if (overdueDeliverables) penalties.push(overdueDeliverables)
     if (paceHasDeadline && totalDeliverables > 0) {
       const paceGap = paceTimePct - deliveredPct
       if (paceGap > 15) penalties.push({ label: `Behind pace (${deliveredPct}% delivered vs ${paceTimePct}% elapsed)`, points: Math.min(20, Math.round((paceGap - 15) / 2) + 5) })
@@ -1212,6 +1222,7 @@ export async function computeEngagementInsights(
           : null,
       // Filled in below — needs the assembled response to compute the current fingerprint.
       insightsSummaryStale: false,
+      insightsSummaryDraftStale: false,
       // Dates the published summary; safe for externals since it accompanies text they already see.
       insightsSummaryPublishedAt: summaryRecord.publishedAt,
       folderHealth: folderHealthWithAllSignals,
@@ -1237,9 +1248,13 @@ export async function computeEngagementInsights(
 
     // Compare the snapshot the published summary described against the current one. A mismatch
     // means the engagement has moved on, so the text is flagged — never removed.
-    if (!isExternalPersona && response.insightsSummary && summaryRecord.fingerprint) {
+    // The same check for a pending draft, so the review can say it describes an older picture.
+    const draftFingerprint = response.insightsSummaryDraft ? summaryRecord.draft?.fingerprint ?? null : null
+    if (!isExternalPersona && ((response.insightsSummary && summaryRecord.fingerprint) || draftFingerprint)) {
       const { fingerprintInsights } = await import('@/lib/ai/engagement-summary')
-      response.insightsSummaryStale = fingerprintInsights(response) !== summaryRecord.fingerprint
+      const now = fingerprintInsights(response)
+      if (response.insightsSummary && summaryRecord.fingerprint) response.insightsSummaryStale = now !== summaryRecord.fingerprint
+      if (draftFingerprint) response.insightsSummaryDraftStale = now !== draftFingerprint
     }
 
     // External roles (EC/EV): strip data they must never see regardless of config.
@@ -1263,6 +1278,7 @@ export async function computeEngagementInsights(
         // publishedAt passes through — it dates text the client can already see.
         insightsSummaryDraft: null,
         insightsSummaryStale: false,
+        insightsSummaryDraftStale: false,
       } satisfies EngagementInsightsResponse
     }
 

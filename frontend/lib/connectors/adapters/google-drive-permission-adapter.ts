@@ -46,6 +46,11 @@ export function createGoogleDrivePermissionAdapter(): IConnectorPermissionAdapte
       if (!ok) throw new Error(`Failed to trash Google Drive file ${fileId}`)
     },
 
+    restoreFile: async (id, fileId) => {
+      const ok = await g.untrashFile(id, fileId)
+      if (!ok) throw new Error(`Failed to restore Google Drive file ${fileId}`)
+    },
+
     listFiles: (id, folderId, pageSize) =>
       g.listFiles(id, folderId, pageSize),
 

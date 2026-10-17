@@ -111,6 +111,7 @@ const EVENT_TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: 'DOCUMENT_CREATED', label: 'File uploaded' },
   { value: 'DOCUMENT_CHANGED', label: 'File updated' },
   { value: 'DOCUMENT_DELETED', label: 'File deleted' },
+  { value: 'DOCUMENT_RESTORED', label: 'File restored' },
   { value: 'DOCUMENT_MOVED', label: 'File moved' },
   { value: 'DOCUMENT_VERSIONED', label: 'File new version' },
   { value: 'DOCUMENT_OPENED', label: 'File opened' },
@@ -172,7 +173,7 @@ const SCOPE_TO_EVENT_TYPES: Record<string, string[]> = {
     'ENGAGEMENT_FOLDER_ATTACHED',
   ],
   FILE: [
-    'DOCUMENT_CREATED', 'DOCUMENT_CHANGED', 'DOCUMENT_DELETED', 'DOCUMENT_MOVED',
+    'DOCUMENT_CREATED', 'DOCUMENT_CHANGED', 'DOCUMENT_DELETED', 'DOCUMENT_RESTORED', 'DOCUMENT_MOVED',
     'DOCUMENT_VERSIONED', 'DOCUMENT_OPENED', 'DOCUMENT_DOWNLOADED',
     'DOCUMENT_INDEXED', 'DOCUMENT_FINALIZED', 'DOCUMENT_UNLOCKED',
     'DOCUMENT_STATUS_CHANGED', 'DOCUMENT_COMMENT_CREATED',
@@ -203,6 +204,10 @@ const EVENT_ACTION_OPTIONS = [
       'FIRM_DELETED', 'CLIENT_DELETED', 'ENGAGEMENT_DELETED', 'DOCUMENT_DELETED',
       'CLIENT_CONTACT_DELETED', 'DOCUMENT_COMMENT_DELETED', 'DOCUMENT_SHARE_DELETED',
     ],
+  },
+  {
+    value: 'RESTORED', label: 'Restored',
+    eventTypes: ['DOCUMENT_RESTORED'],
   },
   {
     value: 'OPENED', label: 'Opened',

@@ -1,6 +1,6 @@
 import Link from "next/link"
 import { format } from "date-fns"
-import { ArrowRight, AtSign, CheckCircle2, Clock, FileCheck2, Home, Inbox, Sparkles, Upload, Briefcase, Users } from "lucide-react"
+import { ArrowRight, AtSign, CheckCircle2, Clock, FileCheck2, Home, Inbox, Upload, Briefcase, Users } from "lucide-react"
 import type { RecentVisit } from "@/lib/recents"
 import type { MyWork, NeedsYouItem } from "@/lib/home/my-work"
 import type { HomeFirm, UnavailableFirm } from "@/lib/home/home-firms"
@@ -25,7 +25,6 @@ import { FirmFilter, UnavailableFirmsNote } from "./firm-filter"
 const NEEDS_ICON: Record<NeedsYouItem["kind"], React.ReactNode> = {
     deliverable_review: <FileCheck2 />,
     intake: <Upload />,
-    ai_summary: <Sparkles />,
     reminder: <AtSign />,
 }
 

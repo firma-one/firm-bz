@@ -16,6 +16,8 @@ import {
     MAX_QUESTION_LENGTH,
     isObviouslyOutOfScope,
     OUT_OF_SCOPE_REPLY,
+    formatSourcesLine,
+    type ChatSources,
 } from '@/lib/ai/engagement-chat'
 import { buildEngagementActivity } from '@/lib/ai/engagement-activity'
 import { buildFilesContext, loadEngagementFiles } from '@/lib/ai/files-context'
@@ -32,6 +34,36 @@ function isClientDisconnect(error: unknown): boolean {
     if (error instanceof DOMException && error.name === 'AbortError') return true
     const message = error instanceof Error ? error.message : ''
     return /invalid state|already closed|aborted|cancel/i.test(message)
+}
+
+/** Doc IDs look like "QSR-49": a short uppercase prefix, a hyphen, a number. */
+const DOC_ID_PATTERN = /\b[A-Z][A-Z0-9]{1,7}-\d{1,6}\b/g
+/** More chips than this in one answer is a table, and the table already names them. */
+const MAX_SOURCE_ITEMS = 24
+
+/**
+ * The documents an answer cited by doc ID, looked up within this engagement, plus the counts the
+ * answer drew on. Only ids that exist in the engagement come back, so a made-up or foreign id
+ * simply gets no chip.
+ */
+async function resolveSources(
+    engagementId: string,
+    answer: string,
+    insights: EngagementInsightsResponse,
+    files: { isFolder: boolean }[],
+): Promise<ChatSources> {
+    const cited = Array.from(new Set(answer.match(DOC_ID_PATTERN) ?? [])).slice(0, MAX_SOURCE_ITEMS)
+    const docs = cited.length === 0 ? [] : await prisma.engagementDocument.findMany({
+        where: { engagementId, docId: { in: cited }, status: { not: 'ARCHIVED' } },
+        select: { id: true, docId: true, fileName: true, isFolder: true },
+    })
+    return {
+        items: docs
+            .filter((d): d is typeof d & { docId: string } => Boolean(d.docId))
+            .map((d) => ({ docId: d.docId, documentId: d.id, name: d.fileName, isFolder: d.isFolder })),
+        deliverables: Array.isArray(insights.deliverables) ? insights.deliverables.length : 0,
+        files: files.filter((f) => !f.isFolder).length,
+    }
 }
 
 /**
@@ -120,10 +152,8 @@ export async function POST(
         // Still names and structure only — no document content, no comment bodies, no emails.
         // Trimmed on Overview, where forty file names are noise in the answer and the
         // biggest block in a prompt paid for on every turn of the conversation.
-        const files = buildFilesContext(
-            await loadEngagementFiles(projectId),
-            scope === 'files' ? 'full' : 'summary',
-        )
+        const engagementFiles = await loadEngagementFiles(projectId)
+        const files = buildFilesContext(engagementFiles, scope === 'files' ? 'full' : 'summary')
 
         const context = buildEngagementContext(insights, {
             clientName: names?.client?.name,
@@ -178,6 +208,8 @@ export async function POST(
                 // client disconnect cut the stream short.
                 let inputTokens = 0
                 let outputTokens = 0
+                // The answer as it streamed, so the doc IDs it cited can be resolved once it ends.
+                let answerText = ''
                 try {
                     // Streaming reports tokens across two events: the input count arrives with
                     // message_start, the output count with message_delta at the end.
@@ -195,10 +227,23 @@ export async function POST(
                         } else if (event.type === 'message_delta') {
                             outputTokens = event.usage?.output_tokens ?? 0
                         } else if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+                            answerText += event.delta.text
                             controller.enqueue(encoder.encode(event.delta.text))
                         }
                     }
                     await meterAiCall(meterScope, { inputTokens, outputTokens })
+
+                    // The sources line (.claude/plans/brio-panel-redesign.md, item 7): the documents
+                    // behind the doc IDs the answer cited, resolved within THIS engagement only, and
+                    // what the answer drew on. Written by the server, after the model is done, so the
+                    // ids are real. A failure here costs the chips, never the answer.
+                    try {
+                        controller.enqueue(encoder.encode(formatSourcesLine(
+                            await resolveSources(projectId, answerText, insights, engagementFiles),
+                        )))
+                    } catch (error) {
+                        logger.error('AI chat: could not resolve sources', error as Error)
+                    }
                 } catch (error) {
                     // A client disconnect — the user pressed Stop, or closed the tab — surfaces
                     // here when enqueue throws on a cancelled response. Those tokens were really

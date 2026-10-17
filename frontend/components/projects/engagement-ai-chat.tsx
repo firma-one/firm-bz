@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
-import { Send, Loader2, Sparkles, Copy, Check, RotateCcw, History, ThumbsUp, ThumbsDown, ClipboardList, Square, Clock, GripVertical, ChevronDown, Trash2, PanelLeft, Pin, PinOff, SquarePen } from 'lucide-react'
+import { Send, Copy, Check, RotateCcw, History, ThumbsUp, ThumbsDown, ClipboardList, Square, Clock, GripVertical, ChevronDown, Trash2, PanelLeft, Pin, PinOff, SquarePen, Info, MoreHorizontal, PanelRight, PictureInPicture2, MessageSquare, CornerDownRight, Briefcase, Folder } from 'lucide-react'
 import { ASSISTANT } from '@/lib/ai/assistant'
 import { Brio } from '@/components/ui/brio'
 import { RelativeDateTime } from '@/components/ui/relative-date-time'
@@ -15,15 +15,18 @@ import {
 } from '@/lib/ai/chat-conversations'
 import { ElapsedTime } from '@/components/ui/elapsed-time'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-// The same list the API narrows against, so the slider can never offer a scope the
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { ShimmerBar } from '@/components/ui/shimmer'
+import { ChatTaskList, type ChatAction } from '@/components/projects/chat-action-row'
+// The same list the API narrows against, so the scope chip can never offer a scope the
 // server would silently reject.
 import { CHAT_SCOPES, type ChatScope } from '@/lib/ai/engagement-chat'
 import { formatRelativeTime, formatDateTimeWithTZ } from '@/lib/utils'
 import { reasonsFor, type FeedbackReason } from '@/lib/ai/feedback-reasons'
 import { useToast } from '@/components/ui/toast'
 import { buildChatTranscript } from '@/lib/ai/chat-transcript'
-import { buildChatSuggestions } from '@/lib/ai/chat-suggestions'
-import { isObviouslyOutOfScope, OUT_OF_SCOPE_REPLY, parseChatReply } from '@/lib/ai/engagement-chat'
+import { buildChatSuggestions, buildOpeningFacts, type OpeningFact } from '@/lib/ai/chat-suggestions'
+import { isObviouslyOutOfScope, OUT_OF_SCOPE_REPLY, parseChatReply, stripSources } from '@/lib/ai/engagement-chat'
 import type { EngagementInsightsResponse } from '@/lib/insights/engagement-insights'
 
 /** What a panel rendered inside the thread can do to it. */
@@ -242,8 +245,47 @@ function AnswerActions({
     )
 }
 
-/** The rail's side panes. See `railPane`. */
-type RailPane = 'recents' | 'pins' | null
+/** The side pane the header can open. See `railPane`. */
+type RailPane = 'recents' | null
+
+/** What Brio can answer about, as the composer's scope chip names it. */
+const SCOPE_LABEL: Record<ChatScope, { label: string; detail: string; icon: typeof Briefcase }> = {
+    overview: { label: 'This engagement', detail: 'Deliverables, dates, comments and progress', icon: Briefcase },
+    files: { label: 'Files', detail: 'File and folder names, structure and dates', icon: Folder },
+}
+
+/** The dot beside an opening fact, by how much it demands attention. */
+const FACT_TONE: Record<OpeningFact['tone'], string> = {
+    red: 'bg-tag-red-fg',
+    yellow: 'bg-tag-yellow-fg',
+    gray: 'bg-fg-subtle',
+}
+
+/**
+ * One suggested question as a plain row: an icon, the question, and a send arrow on hover that says
+ * clicking asks it (and spends a credit) rather than filling the composer. Used for the empty
+ * panel's starters and facts, and for the "Ask next" list under an answer
+ * (.claude/plans/brio-panel-redesign.md, item 5).
+ */
+function SuggestionRow({ leading, label, onClick, disabled }: {
+    leading: React.ReactNode
+    label: React.ReactNode
+    onClick: () => void
+    disabled?: boolean
+}) {
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            disabled={disabled}
+            className="group/row flex w-full min-w-0 items-start gap-2 rounded-control px-2 py-1.5 text-left text-small text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg disabled:opacity-50"
+        >
+            <span className="flex h-5 w-4 shrink-0 items-center justify-center text-fg-subtle [&_svg]:h-3.5 [&_svg]:w-3.5">{leading}</span>
+            <span className="min-w-0 flex-1 leading-5">{label}</span>
+            <Send className="mt-1 h-3 w-3 shrink-0 text-action/70 opacity-0 transition-opacity group-hover/row:opacity-100 group-focus-visible/row:opacity-100" aria-hidden />
+        </button>
+    )
+}
 
 export function EngagementAiChat({
     projectId,
@@ -252,7 +294,7 @@ export function EngagementAiChat({
     clientName,
     chrome = 'card',
     suggestionsOverride,
-    suggestionActions,
+    actions,
     aboveThread,
     placeholder,
     capabilityNote,
@@ -263,9 +305,11 @@ export function EngagementAiChat({
     onStartDrag,
     dragging = false,
     onCollapse,
-    scopeLabel,
     onHistoryOpenChange,
     dockSide = 'right',
+    layout,
+    onLayoutChange,
+    shortcutLabel,
 }: {
     projectId: string
     /** Insights payload the page already holds; drives data-aware suggestions. */
@@ -288,13 +332,11 @@ export function EngagementAiChat({
      */
     suggestionsOverride?: string[]
     /**
-     * Rendered as the last chip in the suggestion row.
-     *
-     * A caller-supplied ACTION, not a question — the Files page puts "Review folder organization"
-     * here so it reads as one of the things you can ask for, in the place the eye already goes for
-     * them, rather than as a banner above the conversation.
+     * Tasks the page can run from here, as opposed to questions (see `ChatAction`) — on Files,
+     * "Review folder organization" or "Set up folder organization". Shown under their own "Task"
+     * heading in the empty state and under the newest answer, each with a line on what will happen.
      */
-    suggestionActions?: React.ReactNode
+    actions?: ChatAction[]
     /**
      * Agent output, rendered INSIDE the thread at the top.
      *
@@ -331,7 +373,7 @@ export function EngagementAiChat({
      * Whether the reader may change the scope from this page.
      *
      * On Files the panel is scoped to the file tree and stays there — the page IS the scope.
-     * On Overview the reader may want the file detail without leaving, so the slider is offered.
+     * On Overview the reader may want the file detail without leaving, so the scope chip switches.
      */
     scopeSwitchable?: boolean
     /**
@@ -361,8 +403,6 @@ export function EngagementAiChat({
     onStartDrag?: (event: React.PointerEvent<HTMLElement>) => void
     dragging?: boolean
     onCollapse?: () => void
-    /** What this panel is scoped to, matching the collapsed launcher's own label. */
-    scopeLabel?: string
     /**
      * Reports whether the recent-questions pane is open.
      *
@@ -380,11 +420,16 @@ export function EngagementAiChat({
      * on the panel's inner (free) edge and is the only edge that can be dragged.
      */
     dockSide?: 'left' | 'right'
+    /** Floating or docked, when the host can switch (FloatingAiChat). Offered in the ⋯ menu. */
+    layout?: 'float' | 'dock'
+    onLayoutChange?: (layout: 'float' | 'dock') => void
+    /** The open/collapse shortcut ("⌘J"), shown in the collapse button's hint. */
+    shortcutLabel?: string
 }) {
     /**
      * The LIVE scope: what Brio is answering about, which is not always the page you are on.
      *
-     * Starts as the page's own surface and, where the page allows it, follows the slider. Every
+     * Starts as the page's own surface and, where the page allows it, follows the scope chip. Every
      * piece of per-scope state keys off this rather than the `surface` prop — thread, history,
      * pins and the `scope` sent to the API — so switching swaps the whole conversation rather
      * than leaving a Files answer sitting in the Overview thread.
@@ -394,27 +439,6 @@ export function EngagementAiChat({
      */
     const [scope, setScope] = useState(surface)
     useEffect(() => { setScope(surface) }, [surface])
-
-    /** Whether the scope slider is expanded. Collapsed it is just the current scope's name. */
-    const [scopePickerOpen, setScopePickerOpen] = useState(false)
-    // Dismissed by Escape or a click anywhere else, like any popover. Without this the only way
-    // out is picking a scope, which makes opening it to look feel like a commitment.
-    useEffect(() => {
-        if (!scopePickerOpen) return
-        const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setScopePickerOpen(false) }
-        // `pointerdown` on the document, in the capture phase, so a click on the toggle itself
-        // still reaches its own handler and toggles rather than being closed from under it.
-        const onPointer = (e: PointerEvent) => {
-            const el = e.target as HTMLElement | null
-            if (!el?.closest('[data-scope-picker]')) setScopePickerOpen(false)
-        }
-        document.addEventListener('keydown', onKey)
-        document.addEventListener('pointerdown', onPointer)
-        return () => {
-            document.removeEventListener('keydown', onKey)
-            document.removeEventListener('pointerdown', onPointer)
-        }
-    }, [scopePickerOpen])
 
     const [messages, setMessages] = useState<Message[]>([])
 
@@ -490,18 +514,13 @@ export function EngagementAiChat({
     /** The conversation being added to, or `null` before the first turn of a new one. */
     const [activeId, setActiveId] = useState<string | null>(null)
     /**
-     * Which side pane the rail has open, or `null` for the rail alone.
-     *
-     * A union of one, deliberately: the rail is built to take a second stop, and a boolean here
-     * would have to be unpicked to add one. Widen the union, do not reintroduce a flag per pane.
-     *
-     * One slot, not a flag per pane: they occupy the same strip, so two booleans would admit a
-     * state — both open — that cannot be drawn.
+     * Which side pane the header has open, or `null` for none. Only Conversations today (pinned
+     * conversations are listed first in it); a union so another pane is one more member, not a
+     * second flag that could be open at the same time.
      */
     const [railPane, setRailPane] = useState<RailPane>(null)
     const historyOpen = railPane === 'recents'
-    const pinsOpen = railPane === 'pins'
-    /** Either pane being open widens the panel by the same amount. */
+    /** The pane being open widens the panel by its width. */
     const sidePaneOpen = railPane !== null
     /** Toggles a pane, closing it if it is already the open one. */
     const toggleRailPane = useCallback((pane: Exclude<RailPane, null>) => {
@@ -510,7 +529,6 @@ export function EngagementAiChat({
     // The panel widens while a pane is open, so it costs the conversation nothing.
     useEffect(() => { onHistoryOpenChange?.(sidePaneOpen) }, [sidePaneOpen, onHistoryOpenChange])
     const [copiedIndex, setCopiedIndex] = useState<number | null>(null)
-    const [transcriptCopied, setTranscriptCopied] = useState(false)
     // Ratings by message index. Session-only: the thumbs are an affordance on an answer still on
     // screen, and the durable record lives server-side in platform_ai_feedback.
     const [ratings, setRatings] = useState<Record<number, { helpful: boolean; reason?: FeedbackReason }>>({})
@@ -544,7 +562,7 @@ export function EngagementAiChat({
         setConversations(listConversations(projectId, scope))
     }, [projectId])
 
-    /** Pinned conversations are listed on their own tab; recents shows the rest. */
+    /** Pinned conversations, for the pin cap. They are listed first in Conversations. */
     const pinnedConversations = useMemo(() => conversations.filter((c) => c.pinned), [conversations])
     /**
      * ALL conversations, pinned ones first — not the unpinned remainder.
@@ -552,7 +570,7 @@ export function EngagementAiChat({
      * Pinning used to move a conversation out of this list, which made pinning your only
      * conversation empty the tab that lists conversations: it read as deletion. A pin is an
      * attribute of a conversation, not a different kind of thing, so it stays where it was and
-     * the row's pin icon marks it. The pin tab is a filtered view for when there are many.
+     * the row's pin icon marks it.
      */
     const allConversations = useMemo(
         () => [...conversations].sort((a, b) => {
@@ -617,12 +635,11 @@ export function EngagementAiChat({
     const suggestions = modelFollowUps.length > 0 ? modelFollowUps : dataSuggestions
 
     /**
-     * The header's second line.
+     * What Brio can do here: shown in full in the empty state, where it is read before the first
+     * question, and kept one hover away afterwards on the header's info icon.
      *
      * Falls back to the standing promise rather than to nothing: a surface that says nothing
-     * specific about what the assistant can do here should still say what it will not do. Overview
-     * passes no `capabilityNote`, and before this it carried the line inside the thread, where it
-     * disappeared the moment a question was asked.
+     * specific about what the assistant can do here should still say what it will not do.
      */
     const headerNote = capabilityNote ?? (
         <>
@@ -630,22 +647,6 @@ export function EngagementAiChat({
             your consent.
         </>
     )
-
-    /**
-     * What the blank panel suggests doing, which depends on whether there is anything to ask about.
-     *
-     * A fresh engagement has no files, no deliverables and no dates, so "ask about deliverables"
-     * is advice it cannot act on — the useful next step there is to put something in the
-     * engagement, and saying so is more honest than offering prompts that would return nothing.
-     */
-    const emptyStateHint = suggestions.length > 0
-        ? 'Pick one of the questions below, or type your own.'
-        : suggestionActions
-            // There are no QUESTIONS to offer, but there is an action — on Files with no files
-            // that is "Set up folder organization", which is the actual next step. Pointing at
-            // the composer instead would be advice the page cannot act on yet.
-            ? 'Start with the action below, or type a question.'
-            : 'Nothing has been added here yet. Once there are deliverables, dates or files, Brio can answer questions about them.'
 
     /**
      * Keeps the newest content in view as it arrives, and again once the turn settles.
@@ -709,7 +710,8 @@ export function EngagementAiChat({
         }
 
         // History excludes the message being sent; the route appends it as the final user turn.
-        const history = messages.slice(-12)
+        // The sources line is the server's bookkeeping, not part of what was said, so it is dropped.
+        const history = messages.slice(-12).map((m) => ({ role: m.role, content: stripSources(m.content) }))
         setMessages((prev) => [
             ...prev,
             { role: 'user', content: trimmed, at: Date.now() },
@@ -905,12 +907,12 @@ export function EngagementAiChat({
         if (!text) return
         try {
             await navigator.clipboard.writeText(text)
-            setTranscriptCopied(true)
-            setTimeout(() => setTranscriptCopied(false), 1500)
+            // A toast, since the action now lives in the ⋯ menu, which closes on click.
+            addToast({ type: 'success', title: 'Conversation copied', message: 'Paste it into a note or an update.' })
         } catch {
             // Clipboard blocked (permissions, insecure context). Nothing useful to say.
         }
-    }, [messages, engagementName, clientName])
+    }, [messages, engagementName, clientName, addToast])
 
     /** Copies the visible answer — parsed, so the follow-up sentinel never lands on the clipboard. */
     const copyAnswer = useCallback(async (index: number, content: string) => {
@@ -922,25 +924,6 @@ export function EngagementAiChat({
             // Clipboard blocked (permissions, insecure context). Nothing useful to say.
         }
     }, [])
-
-    // Deliberately not `return null`: the panel renders before we can know AI is unconfigured,
-    // so unmounting here would make it vanish underneath the user right after they asked a
-    // question. Show it inert with an explanation instead.
-    if (unavailable) {
-        return (
-            <div className={`bg-surface p-4 ${
-                chrome === 'floating' ? 'rounded-b-card' : 'border border-line rounded-card'
-            }`}>
-                <div className="flex items-center gap-2 mb-1.5">
-                    <span className="text-sm font-semibold text-fg">Ask</span>
-                    <Brio className="text-sm text-fg-subtle" />
-                </div>
-                <p className="text-xs text-fg-muted">
-                    {ASSISTANT.name} is not available right now. Everything else on this page works as usual.
-                </p>
-            </div>
-        )
-    }
 
     /** True once pinning another conversation would exceed the cap. */
     const pinsFull = pinnedConversations.length >= MAX_PINNED
@@ -1094,9 +1077,6 @@ export function EngagementAiChat({
             className={`flex shrink-0 flex-col overflow-hidden bg-surface pt-2 transition-[width] duration-200 ease-out ${
                 open ? 'w-[17rem]' : 'w-0'
             } ${
-                /* Lighter than the rail's border although both are 1px. The rail sits on a
-                   tinted background, so its edge is already softened by the fill beside it;
-                   this one divides two whites, where the same gray reads as a heavier rule. */
                 dockSide === 'right' ? 'border-r border-line' : 'border-l border-line'
             }`}
         >
@@ -1168,306 +1148,273 @@ export function EngagementAiChat({
         ),
     })
 
-    const pinsPane = renderSidePane({
-        open: pinsOpen,
-        title: 'Pinned conversations',
-        footer: `${pinnedConversations.length} of ${MAX_PINNED} pinned. Never cleared with recents, and never aged out.`,
-        children: pinnedConversations.length === 0 ? (
-            /* Says where pinning happens. Pins are made on a recents row, so an empty pin tab
-               with no pointer back is a dead end. */
-            <p className="text-caption leading-snug text-fg-subtle">
-                No pinned conversations yet. Hover one on the conversations tab and press the pin
-                to keep it here.
-            </p>
-        ) : (
-            <>{pinnedConversations.map(renderConversationRow)}</>
-        ),
-    })
-
     /**
-     * The icon rail: always present, never collapsed away.
-     *
-     * The panes it opens used to be reachable only from a count button inside the suggestion chip
-     * row — which is hidden while an answer streams, so mid-answer there was no way to reach
-     * history at all. A fixed rail gives them a home that does not move or disappear.
-     *
-     * Its width is added to the panel rather than taken out of the conversation (see
-     * `RAIL_WIDTH_REM`), so the thread keeps the measure it was tuned for.
+     * What the empty panel leads with on Overview: live facts from the engagement's own data
+     * (.claude/plans/brio-panel-redesign.md, item 6). Only for the engagement scope, since the
+     * facts are about deliverables and comments, not files.
      */
-    const rail = (
-        <TooltipProvider delayDuration={150}>
-            <div
-                className={`flex w-10 shrink-0 flex-col items-center gap-1 bg-gray-50/70 pt-2 ${
-                    dockSide === 'right'
-                        ? 'border-r border-line rounded-bl-lg'
-                        : 'border-l border-line rounded-br-lg'
-                }`}
-            >
-                {/* NEW CHAT, above the stops and separated from them.
-                    It is an action, not a place, and it is what makes the conversation list a
-                    list — without it every question would land in one endless thread. Disabled
-                    on an already-empty new conversation, so it cannot look like it did nothing. */}
-                <Tooltip>
-                    <TooltipTrigger asChild>
-                        <button
-                            type="button"
-                            onClick={startNewConversation}
-                            disabled={streaming || (activeId === null && messages.length === 0)}
-                            className="flex h-8 w-8 items-center justify-center rounded-md text-fg-subtle transition-colors hover:bg-gray-200/60 hover:text-fg-muted disabled:pointer-events-none disabled:opacity-30"
-                            aria-label="Start a new conversation"
-                        >
-                            <SquarePen className="h-4 w-4" />
-                        </button>
-                    </TooltipTrigger>
-                    <TooltipContent side={dockSide === 'right' ? 'right' : 'left'}>
-                        New conversation
-                    </TooltipContent>
-                </Tooltip>
-                <span aria-hidden className="my-1 h-px w-5 bg-surface-selected" />
+    const openingFacts = useMemo(
+        () => (scope === 'overview' && !suggestionsOverride ? buildOpeningFacts(data) : []),
+        [scope, suggestionsOverride, data],
+    )
 
-                {/* Two stops. Suggested prompts are deliberately NOT one: they belong above the
-                    composer, where the eye already is when deciding what to ask, and a copy in
-                    here was simply the same four chips shown twice. */}
-                {([
-                    { id: 'recents', label: 'Conversations', icon: History, count: allConversations.length },
-                    { id: 'pins', label: 'Pinned conversations', icon: Pin, count: pinnedConversations.length },
-                ] as const).map(({ id, label, icon: Icon, count }) => (
-                    <Tooltip key={id}>
-                        <TooltipTrigger asChild>
-                            <button
-                                type="button"
-                                onClick={() => toggleRailPane(id)}
-                                aria-expanded={railPane === id}
-                                aria-label={railPane === id ? `Collapse ${label.toLowerCase()}` : label}
-                                className={`relative flex h-8 w-8 items-center justify-center rounded-md transition-colors ${
-                                    railPane === id
-                                        ? 'bg-action/15 text-action'
-                                        : 'text-fg-subtle hover:bg-gray-200/60 hover:text-fg-muted'
-                                }`}
-                            >
-                                <Icon className="h-4 w-4" />
-                                {/* The count as a corner dot, not a number beside the icon: at
-                                    rail width a digit and a glyph do not both fit legibly, and
-                                    whether there is anything in there is the part that decides
-                                    whether to open it. */}
-                                {count > 0 && railPane !== id && (
-                                    <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-action/60" aria-hidden />
-                                )}
-                            </button>
-                        </TooltipTrigger>
-                        <TooltipContent side={dockSide === 'right' ? 'right' : 'left'}>
-                            {label}
-                            {count > 0 && <span className="ml-1 opacity-70">({count})</span>}
-                        </TooltipContent>
-                    </Tooltip>
-                ))}
+    // Below every hook, so the hook order never changes when Brio reports itself unavailable.
+    // Deliberately not `return null`: the panel renders before we can know AI is unconfigured,
+    // so unmounting here would make it vanish underneath the user right after they asked a
+    // question. Show it inert with an explanation instead.
+    if (unavailable) {
+        return (
+            <div className={`bg-surface p-4 ${
+                chrome === 'floating' ? 'rounded-b-card' : 'border border-line rounded-card'
+            }`}>
+                <div className="flex items-center gap-2 mb-1.5">
+                    <span className="text-sm font-semibold text-fg">Ask</span>
+                    <Brio className="text-sm text-fg-subtle" />
+                </div>
+                <p className="text-xs text-fg-muted">
+                    {ASSISTANT.name} is not available right now. Everything else on this page works as usual.
+                </p>
             </div>
-        </TooltipProvider>
-    )
+        )
+    }
 
-    /**
-     * Rail and whichever pane is open, as one unit.
-     *
-     * The rail is always on the OUTSIDE, against the docked edge, with the pane sliding out
-     * between it and the conversation — so the rail never moves when a pane opens, which is what
-     * makes it read as fixed furniture rather than part of the drawer.
-     */
-    const railGroup = dockSide === 'right' ? (
-        <>
-            {rail}
-            {historyPane}
-            {pinsPane}
-        </>
-    ) : (
-        /* Mirrored. The whole group sits AFTER the conversation when docked left, so to keep the
-           rail against the panel's outer edge it has to come last within the group too — rail
-           first here would put the pane outermost and shunt the rail inward every time one
-           opened. */
-        <>
-            {pinsPane}
-            {historyPane}
-            {rail}
-        </>
-    )
+    const isEmpty = messages.length === 0 && !streaming && !aboveThread
+    const factQuestions = new Set(openingFacts.map((f) => f.question))
+    /** The empty panel's starter questions, minus any a fact already asks. */
+    const starters = dataSuggestions.filter((q) => !factQuestions.has(q))
+    /** The answer the "Ask next" list hangs under: the newest one. */
+    let lastAssistantIndex = -1
+    messages.forEach((m, i) => { if (m.role === 'assistant') lastAssistantIndex = i })
+    const scopeInfo = SCOPE_LABEL[scope]
+    const ScopeIcon = scopeInfo.icon
+    /** The header is the drag surface, so its controls must not start a drag. */
+    const noDrag = (e: React.PointerEvent) => e.stopPropagation()
+    const headerButton =
+        'flex h-7 w-7 shrink-0 items-center justify-center rounded-control text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg-muted disabled:pointer-events-none disabled:opacity-40'
+    const scopeChipClass = 'inline-flex items-center gap-1 rounded-control px-1.5 py-0.5 text-caption text-fg-muted'
+    const hasConversation = messages.some((m) => m.content.trim())
 
-    // New UI: a plain surface with a hairline header — the Brio mark carries the identity. (The
-    // accent tint it used to wear came from the old card-grid layout.)
+    // New UI: a plain surface with one hairline header row — the Brio mark carries the identity.
     //
     // `relative` on the card anchors the history overlay; `overflow-hidden` then keeps that overlay
-    // inside the card, which is what we want — it should never spill over the Action Center below.
+    // inside the card.
     return (
-        <div className={`relative bg-surface flex flex-col overflow-hidden ${
-            chrome === 'floating' ? 'min-h-0 flex-1 rounded-b-card' : 'border border-line rounded-card'
+        <div className={`relative flex flex-col overflow-hidden bg-surface ${
+            chrome === 'floating' ? 'min-h-0 flex-1 rounded-b-card' : 'rounded-card border border-line'
         }`}>
+            {/* ONE header row (.claude/plans/brio-panel-redesign.md, item 3): the name, a hint
+                carrying what Brio can do here, then the conversation controls and collapse. The
+                icon rail and the reserved two-line note it replaced spent ~50px of every answer's
+                height on chrome. The WHOLE row is the drag target when floating; its controls stop
+                propagation so a click never starts a drag. */}
             <div
-                // The WHOLE header is the drag target, not a strip above it. A grip icon says
-                // where to grab; a header that moves when dragged says it better, and buys back
-                // the row the old strip spent on an icon and a chevron.
-                //
-                // `onPointerDown` on the container rather than a handle: the buttons inside stop
-                // propagation themselves, so a click on collapse never starts a drag.
                 onPointerDown={onStartDrag}
-                className={`border-b border-line px-4 py-3 transition-colors ${
+                className={`flex h-11 shrink-0 items-center gap-0.5 border-b border-line pl-3 pr-1.5 transition-colors ${
                     onStartDrag ? 'cursor-grab active:cursor-grabbing' : ''
                 } ${dragging ? 'bg-surface-hover' : 'bg-surface'}`}
             >
-            <div className="flex items-start gap-2">
-                <div className="flex min-w-0 flex-1 items-center gap-2">
-                    {onStartDrag && (
-                        <GripVertical className="h-4 w-4 shrink-0 text-fg-subtle" aria-hidden />
-                    )}
-                    {/* No separate sparkle: the Brio mark already carries one, and two side by
-                        side read as two different things rather than one brand. */}
-                    <span className="text-sm font-semibold text-fg">Ask</span>
-                    <Brio className="text-sm text-action" />
-                </div>
-                {/* The same words the collapsed pill uses. It said "Files" collapsed and "This
-                    engagement" open, which read as two different scopes for one panel.
-
-                    Follows the LIVE scope once the slider has moved it, not the page: the
-                    caller's label describes where you are, and after a switch that is no longer
-                    what Brio is answering about. This label is the only thing on screen that
-                    says which, so it has to be the thing that changed. */}
-                <span className="shrink-0 pt-0.5 text-caption text-fg-subtle">
-                    {scope === surface ? (scopeLabel ?? 'This engagement') : (scope === 'files' ? 'Files' : 'This engagement')}
-                </span>
-                {/* Only once there is a conversation to export, and only on this panel — which
-                    internal roles alone can see, so a transcript cannot reach an external
-                    collaborator who never had access to Brio in the first place. */}
-                {messages.some((m) => m.content.trim()) && (
-                    <TooltipProvider delayDuration={150}>
+                <TooltipProvider delayDuration={150}>
+                    <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                        {onStartDrag && <GripVertical className="-ml-1 h-3.5 w-3.5 shrink-0 text-fg-subtle" aria-hidden />}
+                        <span className="text-ui font-semibold text-fg">Ask</span>
+                        <Brio className="text-ui text-action" />
                         <Tooltip>
                             <TooltipTrigger asChild>
                                 <button
                                     type="button"
-                                    onClick={() => void copyTranscript()}
-                                    aria-label="Copy conversation"
-                                    className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-caption text-action/70 transition-colors hover:bg-action/10"
+                                    onPointerDown={noDrag}
+                                    className="flex h-5 w-5 items-center justify-center rounded text-fg-subtle transition-colors hover:text-fg-muted"
+                                    aria-label={`What ${ASSISTANT.name} can do here`}
                                 >
-                                    {transcriptCopied
-                                        ? <Check className="h-3 w-3" />
-                                        : <ClipboardList className="h-3 w-3" />}
+                                    <Info className="h-3.5 w-3.5" />
                                 </button>
                             </TooltipTrigger>
-                            <TooltipContent side="bottom" className="max-w-xs">
-                                {transcriptCopied
-                                    ? 'Conversation copied'
-                                    : 'Copy this conversation as Markdown, ready to paste into a note or update'}
-                            </TooltipContent>
+                            <TooltipContent side="bottom" className="max-w-[16rem]">{headerNote}</TooltipContent>
                         </Tooltip>
-                    </TooltipProvider>
-                )}
+                    </div>
 
-                {/* Collapse, not close: the conversation is kept and the panel returns to its
-                    launcher. An X claims the thread is being discarded, which would make people
-                    hesitate to put it away.
+                    {/* NEW CONVERSATION. Disabled on an already-empty new one, so it cannot look
+                        like it did nothing. */}
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <button
+                                type="button"
+                                onPointerDown={noDrag}
+                                onClick={startNewConversation}
+                                disabled={streaming || (activeId === null && messages.length === 0)}
+                                className={headerButton}
+                                aria-label="Start a new conversation"
+                            >
+                                <SquarePen className="h-4 w-4" />
+                            </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom">New conversation</TooltipContent>
+                    </Tooltip>
 
-                    `stopPropagation` because the header is now the drag surface — without it a
-                    click here would also begin a drag. */}
-                {onCollapse && (
-                    <button
-                        type="button"
-                        onPointerDown={(e) => e.stopPropagation()}
-                        onClick={onCollapse}
-                        className="-mr-1 flex h-5 w-5 shrink-0 items-center justify-center rounded text-fg-subtle transition-colors hover:bg-surface hover:text-fg-muted"
-                        aria-label="Collapse the assistant"
-                        title="Collapse"
-                    >
-                        <ChevronDown className="h-4 w-4" />
-                    </button>
-                )}
+                    {/* CONVERSATIONS: reachable mid-answer too, which is why it lives up here and not
+                        beside the suggestions. Pinned ones are listed first in the same pane. */}
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <button
+                                type="button"
+                                onPointerDown={noDrag}
+                                onClick={() => toggleRailPane('recents')}
+                                aria-expanded={historyOpen}
+                                aria-label={historyOpen ? 'Collapse conversations' : 'Conversations'}
+                                className={`relative ${headerButton} ${historyOpen ? 'bg-surface-selected text-fg' : ''}`}
+                            >
+                                <History className="h-4 w-4" />
+                                {allConversations.length > 0 && !historyOpen && (
+                                    <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-action/60" aria-hidden />
+                                )}
+                            </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom">
+                            Conversations
+                            {allConversations.length > 0 && <span className="ml-1 opacity-70">({allConversations.length})</span>}
+                        </TooltipContent>
+                    </Tooltip>
+
+                    <DropdownMenu>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <DropdownMenuTrigger asChild>
+                                    <button type="button" onPointerDown={noDrag} className={headerButton} aria-label="More">
+                                        <MoreHorizontal className="h-4 w-4" />
+                                    </button>
+                                </DropdownMenuTrigger>
+                            </TooltipTrigger>
+                            <TooltipContent side="bottom">More</TooltipContent>
+                        </Tooltip>
+                        <DropdownMenuContent align="end" className="w-60 p-1">
+                            {/* Only once there is a conversation to export. The panel is shown to
+                                internal roles only, so a transcript cannot reach an external
+                                collaborator who never had access to Brio. */}
+                            <DropdownMenuItem className="gap-2" disabled={!hasConversation} onSelect={() => void copyTranscript()}>
+                                <ClipboardList className="h-4 w-4 text-fg-muted" />
+                                Copy conversation as Markdown
+                            </DropdownMenuItem>
+                            {onLayoutChange && (
+                                <>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem className="gap-2" onSelect={() => onLayoutChange(layout === 'dock' ? 'float' : 'dock')}>
+                                        {layout === 'dock'
+                                            ? <PictureInPicture2 className="h-4 w-4 text-fg-muted" />
+                                            : <PanelRight className="h-4 w-4 text-fg-muted" />}
+                                        {layout === 'dock' ? 'Float over the page' : 'Dock to the side'}
+                                    </DropdownMenuItem>
+                                </>
+                            )}
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+
+                    {/* Collapse, not close: the conversation is kept and the panel returns to its
+                        launcher. An X claims the thread is being discarded. */}
+                    {onCollapse && (
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <button
+                                    type="button"
+                                    onPointerDown={noDrag}
+                                    onClick={onCollapse}
+                                    className={headerButton}
+                                    aria-label="Collapse the assistant"
+                                >
+                                    <ChevronDown className="h-4 w-4" />
+                                </button>
+                            </TooltipTrigger>
+                            <TooltipContent side="bottom">Collapse{shortcutLabel ? ` · ${shortcutLabel}` : ''}</TooltipContent>
+                        </Tooltip>
+                    )}
+                </TooltipProvider>
             </div>
 
-            {/* A SECOND ROW spanning the full header width, not a subtitle tucked under the name.
-                Beside the title it was squeezed into whatever space the scope label and history
-                button left over, wrapping a one-line sentence across three. Across the full width
-                it reads as one line, and the row sets expectations before the first question
-                rather than from inside the thread, where it was the first thing pushed out of
-                view. */}
-            {/* A FIXED two-line box, not one that grows with its text.
-
-                The header is above the row that the recents pane widens, so anything that changes
-                its height when the pane opens shifts the whole conversation down — reflowing the
-                answer the reader is in the middle of. `line-clamp-2` on a reserved two lines keeps
-                the box the same height whichever note is showing and whatever the panel's width,
-                so opening recents moves nothing above the thread. */}
-            <p className="mt-1.5 line-clamp-2 h-[2.1rem] text-caption leading-snug text-fg-muted">
-                {headerNote}
-            </p>
-            </div>
-
-            {/* Below the header, the panel is a ROW: the recents pane, then the conversation.
-                In flow rather than overlaid, because the panel widens by exactly this pane's width
-                when it opens — so the thread keeps its reading width instead of being covered by
-                a sheet. */}
+            {/* Below the header, the panel is a ROW: the conversations pane, then the conversation.
+                In flow rather than overlaid, because the panel widens by exactly the pane's width
+                when it opens — so the thread keeps its reading width instead of being covered. */}
             <div className="flex min-h-0 flex-1">
-            {dockSide === 'right' && railGroup}
+            {dockSide === 'right' && historyPane}
 
-            {/* The conversation: thread, suggestions, composer. `min-w-0` so a long unbroken
-                answer cannot push the row wider than the panel. */}
+            {/* The conversation: thread, then composer. `min-w-0` so a long unbroken answer cannot
+                push the row wider than the panel. */}
             <div className="flex min-h-0 min-w-0 flex-1 flex-col">
             <div
                 ref={scrollRef}
-                /* Floating gets the taller window and no minimum: the overlay should hug an empty
-                   thread rather than reserve a blank 180px above the composer. In-column keeps the
-                   minimum, where a collapsing card would make the rail jump. */
-                /* `overflow-x-hidden` and `break-words` below are a pair. Answers are full of
-                   long unbreakable tokens — `01_ICP_Firmographics_&_Persona_Data.xlsx` is one
-                   word to the line breaker — and a column narrow enough to not fit one would
-                   otherwise scroll sideways, clipping the text and putting a scrollbar under the
-                   thread. Wrapping mid-token is the lesser evil: a wrapped filename is readable,
-                   a clipped one is not. */
-                /* RECESSED, so the header, rail and composer read as the frame around it and
-                   the conversation as the surface inside.
-
-                   A tint as well as the shadow, not shadow alone: a white recess on white has
-                   nothing to shade against and stays flat however the shadow is tuned. The
-                   inset is strongest at the top, where a well would catch the least light, and
-                   fades at the sides — an even inset ring looks like a border, not depth.
-
-                   Written as an arbitrary value because Tailwind's `shadow-inner` is a single
-                   faint token that disappears entirely against this background. */
-                className={`hover-scrollbar bg-surface px-4 py-4 space-y-3 overflow-y-auto overflow-x-hidden ${
-                    chrome === 'floating'
-                        // Fills the frame's fixed height and scrolls inside it, rather than
-                        // setting the panel's height by growing.
-                        ? 'min-h-0 flex-1'
-                        : 'max-h-[480px] min-h-[180px]'
+                /* `overflow-x-hidden` and `break-words` (in ChatMarkdown) are a pair: answers are full
+                   of long unbreakable tokens like `01_ICP_Firmographics_&_Persona_Data.xlsx`, and
+                   wrapping mid-token is the lesser evil — a wrapped filename is readable, a clipped
+                   one is not. */
+                className={`hover-scrollbar space-y-3 overflow-y-auto overflow-x-hidden bg-surface px-4 py-4 ${
+                    chrome === 'floating' ? 'min-h-0 flex-1' : 'max-h-[480px] min-h-[180px]'
                 }`}
             >
-                {/* EMPTY STATE. Rendered only for a conversation with nothing in it — not while
-                    one is streaming its first answer, which would flash this between the question
-                    and the reply.
+                {/* EMPTY STATE (items 5 and 6). Anchored to the bottom, by the composer, where the
+                    eye is when deciding what to ask. What Brio can do here, then what is true right
+                    now (Overview), then questions to try, then the page's action (Files). Each row
+                    asks its question. Not shown while the first answer streams, nor while an agent
+                    question is showing — that is content, so the panel is not empty. */}
+                {isEmpty && (
+                    <div className="flex min-h-full flex-col justify-end gap-4">
+                        <div className="px-2">
+                            <p className="text-ui font-medium text-fg">
+                                Ask <Brio noIcon /> about {scope === 'files' ? 'these files' : 'this engagement'}
+                            </p>
+                            <p className="mt-0.5 text-small leading-snug text-fg-muted">{headerNote}</p>
+                        </div>
 
-                    Says what to DO, not what Brio is: the header's second line already carries
-                    the capability and the promise, and repeating it here would spend the one
-                    moment of attention a blank panel gets on something already on screen.
+                        {openingFacts.length > 0 && (
+                            <div className="flex flex-col gap-px">
+                                <p className="px-2 pb-0.5 text-caption text-fg-subtle">Right now</p>
+                                {openingFacts.map((f) => (
+                                    <SuggestionRow
+                                        key={f.question}
+                                        leading={<span className={`h-2 w-2 rounded-full ${FACT_TONE[f.tone]}`} aria-hidden />}
+                                        label={f.label}
+                                        onClick={() => void ask(f.question)}
+                                    />
+                                ))}
+                            </div>
+                        )}
 
-                    `aboveThread` suppresses it too — an agent question is content, so a panel
-                    showing one is not empty. */}
-                {messages.length === 0 && !streaming && !aboveThread && (
-                    <div className="flex h-full flex-col items-center justify-center px-6 text-center">
-                        <Sparkles className="h-5 w-5 text-action/30" aria-hidden />
-                        <p className="mt-2 text-xs font-medium text-fg-muted">
-                            Ask <Brio noIcon /> about this engagement
-                        </p>
-                        <p className="mt-1 max-w-[16rem] text-caption leading-relaxed text-fg-subtle">
-                            {emptyStateHint}
-                        </p>
+                        {starters.length > 0 && (
+                            <div className="flex flex-col gap-px">
+                                <p className="px-2 pb-0.5 text-caption text-fg-subtle">Try asking</p>
+                                {starters.map((q) => (
+                                    <SuggestionRow key={q} leading={<MessageSquare />} label={q} onClick={() => void ask(q)} />
+                                ))}
+                            </div>
+                        )}
+
+                        {/* The page's tasks (Files), under their own heading: a task asks a few
+                            things and then changes something, which a question never does. */}
+                        {actions && <ChatTaskList actions={actions} />}
+
+                        {/* A fresh engagement has nothing to ask about yet; saying so is more honest
+                            than offering prompts that would return nothing. */}
+                        {openingFacts.length === 0 && starters.length === 0 && !actions?.length && (
+                            <p className="px-2 text-small text-fg-subtle">
+                                Nothing has been added here yet. Once there are deliverables, dates or files,{' '}
+                                <Brio noIcon /> can answer questions about them.
+                            </p>
+                        )}
                     </div>
                 )}
 
-                {messages.map((m, i) => (
+                {messages.map((m, i) => {
+                    const parsed = m.role === 'assistant' ? parseChatReply(m.content) : null
+                    // Settled: not the answer still arriving.
+                    const settled = !(streaming && i === messages.length - 1)
+                    const based = parsed?.sources
+                        ? [
+                            parsed.sources.deliverables > 0 && `${parsed.sources.deliverables} deliverable${parsed.sources.deliverables === 1 ? '' : 's'}`,
+                            parsed.sources.files > 0 && `${parsed.sources.files} file${parsed.sources.files === 1 ? '' : 's'}`,
+                        ].filter(Boolean)
+                        : []
+                    return (
                     <React.Fragment key={i}>
-                    {/* Marks where the restored thread ends and this visit begins.
-                        Restored answers were true when produced and may not be now — "3
-                        deliverables are overdue" was right an hour ago. Dropping them on reload
-                        loses the conversation; restoring them silently presents a stale figure as
-                        current. The time each turn was produced is shown, so the reader can judge
-                        rather than be told. */}
+                    {/* Marks where the restored thread ends and this visit begins. Restored answers
+                        were true when produced and may not be now, so the time of each is shown. */}
                     {restoredCount > 0 && i === restoredCount && (
-                        // A wave rather than a straight rule — see `.fm-wave-rule` in
-                        // globals.css for why, and why it is CSS rather than an inline SVG.
                         <div className="flex items-center gap-2 py-1 text-fg-subtle">
                             <div className="fm-wave-rule flex-1" aria-hidden />
                             <span className="shrink-0 text-caption text-fg-subtle">
@@ -1480,75 +1427,54 @@ export function EngagementAiChat({
                         <div
                             className={
                                 m.role === 'user'
-                                    // Grey bubble with black text rather than the former near-black
-                                    // on white: the solid dark block pulled the eye to the question
-                                    // instead of the answer. Kept light enough that black text
-                                    // clears the 4.5:1 contrast minimum — a genuinely dark grey
-                                    // would sit near 1.6:1 and be unreadable.
-                                    // An absolute ceiling as well as the percentage: 85% of a
-                                    // resized panel is still 85%, so without it a widened panel
-                                    // produces bubbles of 150-character lines. The percentage keeps
-                                    // bubbles off the opposite edge at narrow widths; the rem value
-                                    // keeps the line readable at wide ones.
-                                    ? 'bg-surface-muted text-fg text-ui rounded-card px-3 py-2 max-w-[85%] sm:max-w-[38rem]'
-                                    // The ASSISTANT bubble takes the full width, and the cap moves
-                                    // inside it (see ChatMarkdown): its prose is capped at the same
-                                    // measure, but a table must be free to use the width the user
-                                    // widened the panel for. Capping the bubble would make the
-                                    // table scroll inside a 38rem box in a 56rem panel.
-                                    // New UI: no bubble at all — the answer reads as text on the
-                                    // page, as in Notion AI; only the question sits in a tint.
-                                    : 'text-fg text-ui px-0.5 py-1 w-full whitespace-pre-line break-words leading-relaxed'
+                                    ? 'max-w-[85%] whitespace-pre-line rounded-card bg-surface-muted px-3 py-2 text-ui text-fg sm:max-w-[38rem]'
+                                    : 'w-full break-words px-0.5 py-1 text-ui leading-relaxed text-fg'
                             }
                         >
                             {m.content ? (
-                                // Only the final assistant bubble is still arriving; earlier turns
-                                // render plain so they don't re-animate on every new token.
-                                //
-                                // Assistant text is parsed rather than shown raw: the reply carries
-                                // its follow-up questions after a sentinel, and parseChatReply also
-                                // hides a half-streamed marker so "<<FOLL" never flashes mid-answer.
-                                m.role === 'assistant' && !(streaming && i === messages.length - 1) ? (
-                                    // Settled assistant turns render as Markdown, so an answer can
-                                    // carry a table or a list instead of needing a purpose-built
-                                    // card per kind of structured output.
-                                    <ChatMarkdown content={parseChatReply(m.content).answer} />
+                                m.role === 'assistant' && settled ? (
+                                    <ChatMarkdown content={parsed!.answer} sources={parsed!.sources?.items} />
                                 ) : (
-                                    // Still streaming, or a user turn. Markdown is not rendered
-                                    // mid-stream: a half-written table is a wall of pipes, and the
-                                    // word animation needs plain text to tokenise.
-                                    <StreamingText
-                                        text={m.role === 'assistant' ? parseChatReply(m.content).answer : m.content}
-                                        animate={m.role === 'assistant' && streaming && i === messages.length - 1}
-                                    />
+                                    /* `pre-line` only on raw text — the answer still streaming, and
+                                       the user's own words — where a newline is a line break. NOT on
+                                       the rendered answer: the Markdown renderer leaves a newline text
+                                       node between every block, and pre-line drew each one as an
+                                       empty line, padding paragraphs and list items apart. */
+                                    <span className={m.role === 'assistant' ? 'whitespace-pre-line' : undefined}>
+                                        <StreamingText
+                                            text={m.role === 'assistant' ? parsed!.answer : m.content}
+                                            animate={m.role === 'assistant' && !settled}
+                                        />
+                                    </span>
                                 )
                             ) : (
-                                // Elapsed time but no commentary: an answer is one model call, so
-                                // there are no steps to narrate — listing them would be inventing
-                                // detail. The timer still earns its place, since it is what tells a
-                                // waiting user whether a slow answer is slow or stuck.
-                                <span className="inline-flex items-center gap-1.5 text-fg-subtle">
-                                    <Loader2 className="w-3 h-3 animate-spin" />
-                                    <Brio /> is thinking
-                                    <ElapsedTime className="text-caption text-fg-subtle" />
-                                </span>
+                                /* Thinking (item 10): the shimmer lines the firm brief loads with,
+                                   shaped like the answer that is coming, with the elapsed time kept
+                                   so a slow answer reads as working rather than stuck. */
+                                <div className="flex w-full flex-col gap-1.5 py-1" role="status">
+                                    <ShimmerBar className="w-full" />
+                                    <ShimmerBar className="w-[88%]" />
+                                    <ShimmerBar className="w-[62%]" />
+                                    <span className="mt-1 inline-flex items-center gap-1 text-caption text-fg-subtle">
+                                        <Brio /> is thinking
+                                        <ElapsedTime className="text-caption text-fg-subtle" />
+                                    </span>
+                                </div>
                             )}
-                            {/* Says plainly that the answer is incomplete. Without this a stopped
-                                turn is indistinguishable from a finished one, and a half-answer
-                                about an engagement would read as the whole picture. */}
+                            {/* Says plainly that the answer is incomplete. */}
                             {m.stopped && (
                                 <p className="mt-1 text-caption italic text-fg-subtle">
                                     Stopped — this answer is incomplete.
                                 </p>
                             )}
-                            {/* Actions on a settled answer only. While streaming the text is still
-                                arriving, so copying it would capture a fragment and retrying would
-                                race the in-flight request.
-
-                                A stopped turn can be copied and re-asked but NOT rated: a thumbs
-                                down on an answer the user cut short measures their impatience, not
-                                the model, and would quietly corrupt the efficacy report. */}
-                            {m.role === 'assistant' && m.content && !(streaming && i === messages.length - 1) && (
+                            {/* What the answer drew on (item 7), so a reader can judge its reach. */}
+                            {m.role === 'assistant' && m.content && settled && based.length > 0 && (
+                                <p className="mt-1.5 text-caption text-fg-subtle">Based on {based.join(' · ')}</p>
+                            )}
+                            {/* Actions on a settled answer only. A stopped turn can be copied and
+                                re-asked but NOT rated: a thumbs-down on an answer the user cut short
+                                measures their impatience, not the model. */}
+                            {m.role === 'assistant' && m.content && settled && (
                                 <AnswerActions
                                     at={m.at}
                                     copied={copiedIndex === i}
@@ -1560,255 +1486,134 @@ export function EngagementAiChat({
                                     onRate={(helpful, reason) => void rate(i, helpful, reason)}
                                 />
                             )}
+                            {/* ASK NEXT (item 5): the newest answer's follow-ups, under the answer
+                                they came from, then the page's tasks under their own heading. Each
+                                question disappears once asked, so the list never repeats what is
+                                answered above. */}
+                            {i === lastAssistantIndex && settled && !streaming && (suggestions.length > 0 || !!actions?.length) && (
+                                <div className="mt-2 flex flex-col gap-3">
+                                    {suggestions.length > 0 && (
+                                        <div className="flex flex-col gap-px">
+                                            <p className="px-2 pb-0.5 text-caption text-fg-subtle">Ask next</p>
+                                            {suggestions.map((q) => (
+                                                <SuggestionRow key={q} leading={<CornerDownRight />} label={q} onClick={() => void ask(q)} />
+                                            ))}
+                                        </div>
+                                    )}
+                                    {actions && <ChatTaskList actions={actions} />}
+                                </div>
+                            )}
                         </div>
                     </div>
                     </React.Fragment>
-                ))}
+                    )
+                })}
 
-                {/* Agent questions render LAST, after the messages.
-                    A conversation runs top to bottom with the newest turn at the bottom, and an
-                    open question is the newest thing in it — the agent has just asked and is
-                    waiting. Rendered first, the question sat above the report that prompted it,
-                    so the exchange read backwards. */}
+                {/* Agent questions render LAST: an open question is the newest thing in the
+                    conversation — the agent has just asked and is waiting. */}
                 {aboveThread}
 
-                {error && <p className="text-xs text-red-600">{error}</p>}
+                {error && <p className="text-xs text-danger">{error}</p>}
             </div>
-
-            {/* Suggestions live ABOVE the input and outside the scroll area, so they survive the
-                first question. Previously they rendered only while the thread was empty, which
-                meant clicking one destroyed the other three with no way back short of a reload —
-                turning a discovery aid into a single use. Each chip disappears once asked, so the
-                row stays useful rather than repeating what is already answered above. */}
-            {(suggestions.length > 0 || suggestionActions) && !streaming && (
-                // Wraps rather than scrolling horizontally. A scroll row clipped the second chip
-                // mid-word with no scrollbar and no affordance, so the options simply looked
-                // broken; at this column width two per line is the honest layout.
-                <TooltipProvider delayDuration={150}>
-                    {/* A rule above the chips, marking where the conversation ends and the
-                        controls begin. Without it the row sat flush against the scrolling thread
-                        and read as the tail of the last answer rather than a set of actions.
-                        Hairline, not a heavy divider: it separates two things that belong to the
-                        same panel. */}
-                    <div className="flex min-w-0 flex-wrap items-center gap-1.5 border-t border-line bg-surface px-4 pb-2.5 pt-2.5">
-                        {/* The recents control used to live here, as a count beside the chips.
-                            It now lives on the rail: this row is hidden while an answer streams,
-                            which left no way to reach history mid-answer, and two buttons for one
-                            pane made the rail look like it did something else. */}
-                        {suggestions.map((s) => (
-                            // The shared Radix tooltip, not `title=`: the native one is slow to
-                            // appear, unstyled, and sits outside the product's visual language.
-                            <Tooltip key={s}>
-                                <TooltipTrigger asChild>
-                                    <button
-                                        onClick={() => ask(s)}
-                                        /* `inline-flex` with the label in its own span, so
-                                           `truncate` shortens the TEXT and leaves the icon alone.
-                                           On the button it would have truncated the whole row,
-                                           clipping the icon off the end of a long chip. */
-                                        className="group/chip inline-flex max-w-full items-center gap-1.5 rounded-control border border-line bg-surface px-2.5 py-1 text-left text-small text-fg-muted transition-colors hover:border-line-strong hover:bg-surface-hover hover:text-fg"
-                                    >
-                                        <span className="truncate">{s}</span>
-                                        {/* Says the chip SENDS rather than filling the composer —
-                                            a pill otherwise reads as a filter or a tag, and this
-                                            one spends a credit. The composer's own send arrow,
-                                            not a return key: these are clicked, not reached by
-                                            Enter, so a ↵ would promise a keystroke that does not
-                                            apply here.
-
-                                            Hidden until hover or focus: four arrows at rest turn
-                                            a row of questions into a row of buttons, and the
-                                            signal is only needed at the moment of deciding to
-                                            click. `shrink-0` so it survives a truncated label. */}
-                                        <Send
-                                            className="h-3 w-3 shrink-0 text-action/70 opacity-0 transition-opacity group-hover/chip:opacity-100 group-focus-visible/chip:opacity-100"
-                                            aria-hidden
-                                        />
-                                    </button>
-                                </TooltipTrigger>
-                                <TooltipContent side="top" className="max-w-xs">
-                                    {s}
-                                </TooltipContent>
-                            </Tooltip>
-                        ))}
-                        {suggestionActions}
-                    </div>
-                </TooltipProvider>
-            )}
 
             <form
-                onSubmit={(e) => { e.preventDefault(); ask(input) }}
-                // New UI: thread and composer share one plain surface; the hairline above and the
-                // bordered input box below are enough to say where to type.
-                className="border-t border-line bg-surface px-3 pb-3 pt-2.5"
+                onSubmit={(e) => { e.preventDefault(); void ask(input) }}
+                className="shrink-0 bg-surface px-3 pb-3 pt-2"
             >
-                {/* The composer is its own surface — a bordered, rounded box inset from the card —
-                    rather than a hairline rule with text beneath it. At the bottom of a long thread
-                    a divider alone did not read as somewhere to type. `focus-within` moves the ring
-                    to this wrapper so the whole box lights up, not just the textarea inside it. */}
-                <div className="flex items-end gap-2 rounded-card border border-line-strong bg-surface px-3 py-2 transition-colors focus-within:border-action/60 focus-within:ring-2 focus-within:ring-action/20">
-                {/* A textarea, not an input: a long question scrolled sideways in a single line, so
-                    the user could not read back what they had typed. It grows to three rows and
-                    scrolls beyond that, which keeps the panel from pushing the Action Center down
-                    the page. Enter still sends; Shift+Enter starts a new line. */}
-                <textarea
-                    ref={inputRef}
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={(e) => {
-                        if (e.key === 'Enter' && !e.shiftKey) {
-                            e.preventDefault()
-                            void ask(input)
-                        }
-                    }}
-                    placeholder={placeholder ?? `Ask ${ASSISTANT.name} about this engagement…`}
-                    disabled={streaming}
-                    maxLength={1000}
-                    rows={1}
-                    // maxHeight comes from the same constant the grow effect clamps to; as a
-                    // Tailwind class it would be a second number to keep in step.
-                    style={{ maxHeight: MAX_COMPOSER_HEIGHT_PX }}
-                    className="hover-scrollbar flex-1 resize-none overflow-y-auto bg-transparent text-ui leading-6 outline-none placeholder:text-fg-subtle disabled:opacity-50"
-                />
-                    {/* While streaming, the spinner itself is the stop control: the ring carries the
-                        "working" signal and the small square inside it says it can be interrupted.
-                        A solid dark button read as a heavier commitment than stopping deserves, and
-                        competed with the answer arriving beside it.
-
-                        type="button" so it never submits the form. */}
-                    {streaming ? (
-                        <button
-                            type="button"
-                            onClick={stop}
-                            className="group mb-0.5 relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-fg-subtle transition-colors hover:text-fg-muted"
-                            aria-label="Stop generating"
-                            title="Stop generating"
-                        >
-                            {/* Ring drawn as a bordered circle with one darker edge, so it reads as
-                                a spinner without a second icon stacked over the square. */}
-                            <span
-                                aria-hidden
-                                className="absolute inset-0 animate-spin rounded-full border-2 border-line border-t-action"
-                            />
-                            <Square className="h-2.5 w-2.5 fill-current" />
-                        </button>
-                    ) : (
-                        /* Filled once there is something to send, so the affordance is obvious
-                           rather than a grey glyph that looks permanently disabled. */
-                        <button
-                            type="submit"
-                            disabled={!input.trim()}
-                            className="mb-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-control bg-action text-action-fg hover:bg-action-hover transition-colors hover:brightness-105 disabled:bg-surface-muted disabled:text-fg-subtle"
-                            aria-label="Send question"
-                        >
-                            <Send className="h-3.5 w-3.5" />
-                        </button>
-                    )}
-                </div>
-
-                {/* SCOPE CONTROL, below the composer: collapsed to the current scope's name,
-                    expanding to the slider on click.
-
-                    Most people never change scope, so the resting state is a single quiet word
-                    — the control is there to be FOUND, not to occupy the panel. Expanded it is
-                    a track with a tick per stop and a knob that travels, which has a position
-                    legible at a glance and still reads as one control when Board and Members are
-                    added; a segmented pill would become four cramped text boxes. */}
-                {scopeSwitchable && (
-                    <div data-scope-picker className="relative mt-2 flex justify-center">
-                        <button
-                            type="button"
-                            onClick={() => setScopePickerOpen((o) => !o)}
-                            disabled={streaming}
-                            aria-expanded={scopePickerOpen}
-                            aria-label={`Brio is answering about ${scope}. Change scope.`}
-                            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-caption transition-colors disabled:opacity-50 ${
-                                scopePickerOpen
-                                    ? 'bg-surface-muted text-fg-muted'
-                                    : 'text-fg-subtle hover:bg-surface-hover hover:text-fg-muted'
-                            }`}
-                        >
-                            <span>Answering about</span>
-                            <span className="font-medium capitalize text-fg-muted">{scope}</span>
-                            <ChevronDown
-                                className={`h-3 w-3 transition-transform ${scopePickerOpen ? 'rotate-180' : ''}`}
-                                aria-hidden
-                            />
-                        </button>
-
-                        {scopePickerOpen && (
-                            /* Opens UPWARD: the control sits at the bottom of the panel, so a
-                               downward popover would fall outside it. */
-                            <div
-                                role="radiogroup"
-                                aria-label="What Brio answers about"
-                                className="absolute bottom-full z-20 mb-1.5 flex items-center gap-2 rounded-card border border-line bg-surface px-3 py-2 shadow-popover"
+                {/* The composer is its own surface, a bordered box that lights up as a whole on
+                    focus. A textarea (it grows to three rows, then scrolls), then a toolbar row:
+                    what Brio is answering about on the left, Send or Stop on the right. */}
+                <div className="flex flex-col rounded-card border border-line-strong bg-surface px-3 pb-1.5 pt-2 transition-colors focus-within:border-action/60 focus-within:ring-2 focus-within:ring-action/20">
+                    <textarea
+                        ref={inputRef}
+                        value={input}
+                        onChange={(e) => setInput(e.target.value)}
+                        onKeyDown={(e) => {
+                            // Enter sends; Shift+Enter starts a new line.
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                                e.preventDefault()
+                                void ask(input)
+                            }
+                        }}
+                        placeholder={placeholder ?? `Ask ${ASSISTANT.name} about this engagement…`}
+                        disabled={streaming}
+                        maxLength={1000}
+                        rows={1}
+                        style={{ maxHeight: MAX_COMPOSER_HEIGHT_PX }}
+                        className="hover-scrollbar w-full resize-none overflow-y-auto bg-transparent text-ui leading-6 outline-none placeholder:text-fg-subtle disabled:opacity-50"
+                    />
+                    <div className="mt-1 flex items-center gap-1">
+                        {/* SCOPE CHIP (item 4): what Brio is answering about, where the eye is
+                            while asking. On Overview it switches between the engagement and its
+                            files; on Files the page is the scope, so it only names it. */}
+                        {scopeSwitchable ? (
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <button
+                                        type="button"
+                                        disabled={streaming}
+                                        aria-label={`${ASSISTANT.name} is answering about ${scopeInfo.label.toLowerCase()}. Change scope.`}
+                                        className={`${scopeChipClass} -ml-1.5 transition-colors hover:bg-surface-hover hover:text-fg disabled:opacity-50`}
+                                    >
+                                        <ScopeIcon className="h-3 w-3" aria-hidden />
+                                        {scopeInfo.label}
+                                        <ChevronDown className="h-3 w-3 text-fg-subtle" aria-hidden />
+                                    </button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="start" side="top" className="w-64 p-1">
+                                    <DropdownMenuLabel className="px-2 py-1 text-caption font-normal text-fg-subtle">
+                                        Answer about
+                                    </DropdownMenuLabel>
+                                    {CHAT_SCOPES.map((s) => {
+                                        const info = SCOPE_LABEL[s]
+                                        const Icon = info.icon
+                                        return (
+                                            <DropdownMenuItem key={s} className="items-start gap-2" onSelect={() => setScope(s)}>
+                                                <Icon className="mt-0.5 h-4 w-4 shrink-0 text-fg-muted" aria-hidden />
+                                                <span className="flex min-w-0 flex-1 flex-col">
+                                                    <span>{info.label}</span>
+                                                    <span className="text-caption text-fg-subtle">{info.detail}</span>
+                                                </span>
+                                                {scope === s && <Check className="mt-0.5 h-4 w-4 shrink-0 text-fg-muted" aria-hidden />}
+                                            </DropdownMenuItem>
+                                        )
+                                    })}
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                        ) : (
+                            <span className={`${scopeChipClass} -ml-1.5`}>
+                                <ScopeIcon className="h-3 w-3" aria-hidden />
+                                {scopeInfo.label}
+                            </span>
+                        )}
+                        <span className="flex-1" />
+                        {/* While streaming, the spinner itself is the stop control: the ring says
+                            "working" and the square inside it says it can be interrupted. */}
+                        {streaming ? (
+                            <button
+                                type="button"
+                                onClick={stop}
+                                className="group relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-fg-subtle transition-colors hover:text-fg-muted"
+                                aria-label="Stop generating"
                             >
-                                <span
-                                    className={`text-caption capitalize transition-colors ${
-                                        scope === CHAT_SCOPES[0] ? 'text-fg-muted' : 'text-fg-subtle'
-                                    }`}
-                                >
-                                    {CHAT_SCOPES[0]}
-                                </span>
-
-                                <div className="relative h-3.5 w-20 shrink-0 select-none">
-                                    <div className="absolute inset-x-0 top-1/2 h-3 -translate-y-1/2 rounded-full bg-surface-muted" />
-
-                                    {/* Ticks say the control is discrete — a bare track reads as
-                                        continuous, and a scope is not. */}
-                                    {CHAT_SCOPES.map((s, i) => (
-                                        <span
-                                            key={`tick-${s}`}
-                                            aria-hidden
-                                            className="absolute top-1/2 h-0.5 w-0.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-gray-300"
-                                            style={{ left: `${((i + 0.5) / CHAT_SCOPES.length) * 100}%` }}
-                                        />
-                                    ))}
-
-                                    {/* Positioned by percentage, so adding a stop needs no
-                                        arithmetic here. */}
-                                    <span
-                                        aria-hidden
-                                        className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-line-strong bg-surface shadow-sm transition-[left] duration-200 ease-out"
-                                        style={{
-                                            left: `${((CHAT_SCOPES.indexOf(scope) + 0.5) / CHAT_SCOPES.length) * 100}%`,
-                                        }}
-                                    />
-
-                                    {/* Invisible hit areas, each a full stop wide: the knob is
-                                        12px, too small to ask anyone to hit. */}
-                                    {CHAT_SCOPES.map((s, i) => (
-                                        <button
-                                            key={s}
-                                            type="button"
-                                            role="radio"
-                                            aria-checked={scope === s}
-                                            aria-label={`Answer about ${s}`}
-                                            onClick={() => { setScope(s); setScopePickerOpen(false) }}
-                                            className="absolute -inset-y-1.5 rounded-full focus-visible:outline focus-visible:outline-1 focus-visible:outline-action/40"
-                                            style={{
-                                                left: `${(i / CHAT_SCOPES.length) * 100}%`,
-                                                width: `${100 / CHAT_SCOPES.length}%`,
-                                            }}
-                                        />
-                                    ))}
-                                </div>
-
-                                <span
-                                    className={`text-caption capitalize transition-colors ${
-                                        scope === CHAT_SCOPES[CHAT_SCOPES.length - 1] ? 'text-fg-muted' : 'text-fg-subtle'
-                                    }`}
-                                >
-                                    {CHAT_SCOPES[CHAT_SCOPES.length - 1]}
-                                </span>
-                            </div>
+                                <span aria-hidden className="absolute inset-0 animate-spin rounded-full border-2 border-line border-t-action" />
+                                <Square className="h-2.5 w-2.5 fill-current" />
+                            </button>
+                        ) : (
+                            <button
+                                type="submit"
+                                disabled={!input.trim()}
+                                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-control bg-action text-action-fg transition-colors hover:bg-action-hover hover:brightness-105 disabled:bg-surface-muted disabled:text-fg-subtle"
+                                aria-label="Send question"
+                            >
+                                <Send className="h-3.5 w-3.5" />
+                            </button>
                         )}
                     </div>
-                )}
+                </div>
             </form>
             </div>
-            {dockSide === 'left' && railGroup}
+            {dockSide === 'left' && historyPane}
             </div>
         </div>
     )

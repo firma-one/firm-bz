@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { formatDistanceToNowStrict } from 'date-fns'
-import { Briefcase, Building2, CalendarClock, CircleDot, Clock3, Type, Users } from 'lucide-react'
+import { Briefcase, Building2, CircleDot, Clock3, Type, Users } from 'lucide-react'
 import type { ClientSummary } from '@/lib/actions/hierarchy'
 import { clientPath } from '@/lib/navigation/firm-paths'
 import { useBranding } from '@/lib/use-branding'
@@ -15,10 +15,9 @@ import {
     NotionTableHeader,
     NotionTableRow,
 } from '@/components/ui/notion-table'
-import { StatusPill, Tag } from '@/components/ui/tag'
+import { StatusPill } from '@/components/ui/tag'
 import { EmptyPanel } from '@/components/ui/empty-panel'
 import { ShimmerBar, ShimmerBlock } from '@/components/ui/shimmer'
-import type { TagColor } from '@/lib/ui/status-colors'
 
 interface ClientListProps {
     clients: ClientSummary[]
@@ -28,22 +27,6 @@ interface ClientListProps {
     isRefreshing?: boolean
     /** Where a client opens; defaults to the client's firm page. The public demo passes its own. */
     hrefFor?: (client: ClientSummary) => string
-}
-
-/** Follow-up due within two days either side, as a tag — else nothing. */
-function followUpTag(followUpDate: Date | null): { label: string; color: TagColor } | null {
-    if (!followUpDate) return null
-    const today = new Date(); today.setHours(0, 0, 0, 0)
-    const fud = new Date(followUpDate); fud.setHours(0, 0, 0, 0)
-    const delta = Math.round((fud.getTime() - today.getTime()) / 86400000)
-    switch (delta) {
-        case 2: return { label: 'Follow up in 2 days', color: 'blue' }
-        case 1: return { label: 'Follow up tomorrow', color: 'blue' }
-        case 0: return { label: 'Follow up today', color: 'yellow' }
-        case -1: return { label: 'Follow-up 1 day late', color: 'orange' }
-        case -2: return { label: 'Follow-up 2 days late', color: 'red' }
-        default: return null
-    }
 }
 
 function ago(value: Date): string {
@@ -106,18 +89,12 @@ export function ClientList({ clients, groupSlug, orgSlug, viewMode = 'list', isR
                     )}
                     {clients.map((client) => {
                         const href = linkFor(client)
-                        const follow = followUpTag(client.followUpDate ?? null)
                         return (
                             <NotionTableRow key={client.id} onClick={() => router.push(href)}>
                                 <NotionTableCell className="w-[40%] max-w-0">
                                     <Link href={href} onClick={(e) => e.stopPropagation()} className="flex min-w-0 items-center gap-2 text-fg">
                                         <ClientMark client={client} accent={accentFor(client)} />
                                         <span className="truncate font-medium">{client.name}</span>
-                                        {follow && (
-                                            <Tag color={follow.color} className="shrink-0" icon={<CalendarClock />}>
-                                                {follow.label}
-                                            </Tag>
-                                        )}
                                     </Link>
                                 </NotionTableCell>
                                 <NotionTableCell><StatusPill kind="client" status={client.status ?? 'ACTIVE'} /></NotionTableCell>
@@ -147,7 +124,6 @@ export function ClientList({ clients, groupSlug, orgSlug, viewMode = 'list', isR
                 </div>
             )}
             {clients.map((client) => {
-                const follow = followUpTag(client.followUpDate ?? null)
                 return (
                     <Link
                         key={client.id}
@@ -161,11 +137,6 @@ export function ClientList({ clients, groupSlug, orgSlug, viewMode = 'list', isR
                             <StatusPill kind="client" status={client.status ?? 'ACTIVE'} />
                         </div>
                         <span className="mt-2.5 line-clamp-1 text-ui font-medium text-fg">{client.name}</span>
-                        {follow && (
-                            <Tag color={follow.color} className="mt-1.5 w-fit" icon={<CalendarClock />}>
-                                {follow.label}
-                            </Tag>
-                        )}
                         <div className="mt-auto flex items-center justify-between text-caption text-fg-subtle">
                             <span className="flex items-center gap-1" title="Last updated">
                                 <Clock3 className="h-3 w-3" />

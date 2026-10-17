@@ -287,9 +287,25 @@ export async function GET(
                 logger.warn('Drive parent names fallback failed', { error: e })
             }
         }
+        // Each result's doc ID ("QSR-31"), the reference the file list and Doc Search show, looked up
+        // within THIS engagement only. A file not yet indexed simply has none.
+        const docIds: Record<string, string> = {}
+        const resultIds = limited.map((f: any) => f.id).filter(Boolean) as string[]
+        if (resultIds.length > 0) {
+            try {
+                const docs = await prisma.engagementDocument.findMany({
+                    where: { engagementId: projectId, externalId: { in: resultIds } },
+                    select: { externalId: true, docId: true },
+                })
+                docs.forEach((d) => { if (d.docId) docIds[d.externalId] = d.docId })
+            } catch (e) {
+                logger.warn('Doc ID lookup failed', { error: e })
+            }
+        }
         const filesWithParent = limited.map((f: any) => ({
             ...f,
-            parentName: (f.parents?.[0] && parentNames[f.parents[0]]) || undefined
+            parentName: (f.parents?.[0] && parentNames[f.parents[0]]) || undefined,
+            docId: f.docId ?? docIds[f.id] ?? null,
         }))
 
         return NextResponse.json({ files: filesWithParent })

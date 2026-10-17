@@ -3,9 +3,10 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { FloatingAiChat } from '@/components/projects/floating-ai-chat'
-import { FilesAgentPanel, type FilesAgentReview } from '@/components/projects/files-agent-panel'
+import { FilesAgentPanel, useFilesReview, type FilesAgentReview } from '@/components/projects/files-agent-panel'
+import type { ChatAction } from '@/components/projects/chat-action-row'
 import type { ChatThreadApi } from '@/components/projects/engagement-ai-chat'
-import { FilesScaffoldPanel, FilesScaffoldTrigger } from '@/components/projects/files-scaffold-panel'
+import { FilesScaffoldPanel } from '@/components/projects/files-scaffold-panel'
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
 import { LoadingAnnouncement, ShimmerBar, ShimmerBlock } from "@/components/ui/shimmer"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
@@ -651,15 +652,14 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
      */
     const [pageReady, setPageReady] = useState(false)
 
-    /** Shared by the agent panel's trigger chip and its results block, which render apart. */
+    /** The current review, shared by the review task (drawn by the chat) and its results block. */
     const [agentReview, setAgentReview] = useState<FilesAgentReview | null>(null)
 
     /**
      * Whether the current review's questions are all answered.
      *
-     * Here rather than inside the panel because BOTH instances need it: the results block knows
-     * the answers, the trigger needs to know whether to offer a fresh review. Each instance has
-     * its own `decisions`, so the trigger could never work this out for itself.
+     * Here rather than inside the panel because the results block knows the answers while the
+     * review TASK needs to know whether to be offered again.
      */
     const [agentAnswered, setAgentAnswered] = useState(false)
     // A new review starts with nothing answered. Reset here rather than relying on the results
@@ -718,6 +718,44 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
         (role: 'user' | 'assistant', content: string) => chatThread.current?.append(role, content),
         [],
     )
+
+    /** Running a review: the work behind the "Review folder organization" task. */
+    const filesReview = useFilesReview({ projectId, setReview: setAgentReview, onThreadTurn: postToThread })
+
+    /**
+     * The TASKS the Brio panel offers here, as opposed to its questions (see ChatAction).
+     *
+     * ONE of these, never both. Setting up and reviewing are the same capability from different
+     * starting points, so the engagement's state picks the entry point rather than the user
+     * guessing. Neither shows while the folder count is unknown — a task that appears and then
+     * swaps to the other is worse than one that arrives a moment late — nor while it is already
+     * in progress: a review with questions still open, or the setup interview.
+     */
+    const chatActions = useMemo<ChatAction[]>(() => {
+        if (hasFolders === true) {
+            const midReview = agentReview != null && agentReview.proposals.length > 0 && !agentAnswered
+            if (midReview) return []
+            return [{
+                id: 'review-folders',
+                label: 'Review folder organization',
+                busyLabel: 'Reviewing…',
+                description: 'Checks names, duplicates and misplaced files, asks you about each fix, then applies the ones you approve. Nothing is deleted.',
+                busy: filesReview.reviewing,
+                disabled: !filesReview.ready,
+                error: filesReview.error,
+                run: () => void filesReview.runReview(),
+            }]
+        }
+        if (hasFolders === false && !scaffoldOpen) {
+            return [{
+                id: 'set-up-folders',
+                label: 'Set up folder organization',
+                description: 'Asks a few questions about the engagement, shows you the folders, then creates the ones you approve.',
+                run: () => setScaffoldOpen(true),
+            }]
+        }
+        return []
+    }, [hasFolders, agentReview, agentAnswered, scaffoldOpen, filesReview.reviewing, filesReview.ready, filesReview.error, filesReview.runReview])
 
     /**
      * Refreshes the folder the user is looking at, so applied renames and moves appear without a
@@ -1200,9 +1238,14 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
             : currentFolderType === 'confidential'
                 ? confidentialFolderId
                 : stagingFolderId
+    // What the search pane says it covers. "General" is the engagement's root folder, a name users
+    // never see (the breadcrumb shows it as an icon), so it reads as "this engagement". The other
+    // roots keep their names.
     const searchRootLabel =
         searchRootFolderId && currentFolderType
-            ? currentFolderType.charAt(0).toUpperCase() + currentFolderType.slice(1)
+            ? currentFolderType === 'general'
+                ? 'this engagement'
+                : currentFolderType.charAt(0).toUpperCase() + currentFolderType.slice(1)
             : undefined
 
     useEffect(() => {
@@ -1432,6 +1475,9 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
         stopProcessing,
         setFiles,
         onItemRemoved: deselectFile,
+        storageBinName,
+        // OneDrive can't take an item back out of its recycle bin through Graph (personal drives only).
+        canUndoTrash: !isOneDriveClient,
     })
 
     const handleMarkAsDeliverable = useCallback(async (doc: any, dueDate?: string) => {
@@ -2122,7 +2168,7 @@ const handleRefresh = async () => {
             <div className="px-0 pt-1 pb-2 flex flex-col gap-2.5 shrink-0 z-20">
                 {/* Breadcrumbs: root always visible (as dropdown when canManage); truncate middle */}
                 <div className="flex items-center text-xs font-medium text-fg-muted min-w-0">
-                    <div className="flex items-center min-w-0 overflow-x-auto whitespace-nowrap custom-scrollbar">
+                    <div className="subtle-scrollbar flex min-w-0 items-center overflow-x-auto whitespace-nowrap">
                         {(() => {
                             const ROOT_INDEX = 0
                             const showAll = breadcrumbs.length <= 4
@@ -2838,8 +2884,8 @@ const handleRefresh = async () => {
                     </div>
                 </div>
 
-                {/* File List */}
-                <div className="flex-1 overflow-y-auto custom-scrollbar relative">
+                {/* File List, with the app's slim, light scrollbar (`subtle-scrollbar`, globals.css). */}
+                <div className="subtle-scrollbar relative flex-1 overflow-y-auto">
                     {deeplinkResolving || loading || isLoadingFolders ? (
                         // Rows shaped like the table that is coming (same grid as the header and
                         // FileRow), so nothing jumps when the files arrive.
@@ -3633,10 +3679,9 @@ const handleRefresh = async () => {
                         <>Ask about these files, review how they are organized, or set up a folder
                         structure for the engagement.</>
                     }
-                    // Two halves, one state. The trigger is a chip in the suggestion row; the
-                    // review's report and its questions render IN THE THREAD, where any other
-                    // answer would — not in a band above the panel, which put output above the
-                    // header that introduces it.
+                    // The review's report and its questions render IN THE THREAD, where any other
+                    // answer would, under a task header. The tasks that start them are data
+                    // (`chatActions`), drawn by the panel under its own "Task" heading.
                     surface="files"
                     threadRef={chatThread}
                     aboveThread={
@@ -3644,10 +3689,13 @@ const handleRefresh = async () => {
                             <>
                                 {agentReview && (
                                     <FilesAgentPanel
-                                        render="results"
+                                        // A fresh panel per review, so no answers carry over.
+                                        key={filesReview.reviewSeq}
                                         projectId={projectId}
                                         review={agentReview}
                                         setReview={setAgentReview}
+                                        runReview={(kind) => void filesReview.runReview(kind)}
+                                        reviewing={filesReview.reviewing}
                                         onApplied={refreshCurrentFolder}
                                         onThreadTurn={postToThread}
                                         onAnsweredChange={setAgentAnswered}
@@ -3662,35 +3710,7 @@ const handleRefresh = async () => {
                             </>
                         ) : null
                     }
-                    suggestionActions={
-                        <>
-                            {/* ONE of these, never both. Setting up and reviewing are the same
-                                capability from different starting points, so the engagement's
-                                state picks the entry point rather than the user guessing.
-
-                                Neither shows while the count is unknown: a chip that appears and
-                                then swaps to the other one is worse than a chip that arrives a
-                                moment late. */}
-                            {hasFolders === true && (
-                                <FilesAgentPanel
-                                    render="trigger"
-                                    projectId={projectId}
-                                    review={agentReview}
-                                    setReview={setAgentReview}
-                                    answered={agentAnswered}
-                                    onApplied={refreshCurrentFolder}
-                                    // The TRIGGER instance is the one that runs the review, so it
-                                    // is the one that must be able to post the report. The results
-                                    // instance below does not exist until a review has returned,
-                                    // so wiring it only there meant the report went nowhere.
-                                    onThreadTurn={postToThread}
-                                />
-                            )}
-                            {hasFolders === false && !scaffoldOpen && (
-                                <FilesScaffoldTrigger onClick={() => setScaffoldOpen(true)} />
-                            )}
-                        </>
-                    }
+                    actions={chatActions}
                 />
             )}
 

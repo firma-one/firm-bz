@@ -1,10 +1,15 @@
 'use client'
 
 import React, { useEffect, useCallback, useRef, useState, useMemo } from 'react'
-import { Search, Folder, Sparkles, Clock, FileText, MoreVertical, X, Hash, MessageSquare } from 'lucide-react'
+import { Search, Folder, Sparkles, Clock, FileText, MoreVertical, Hash, CalendarClock } from 'lucide-react'
 import { Textarea } from '@/components/ui/textarea'
 import { DocumentIcon } from '@/components/ui/document-icon'
 import { DocumentActionMenu } from '@/components/ui/document-action-menu'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { FilterMenuLabel, FilterMenuRow, FilterPill } from '@/components/ui/filter-pill'
+import { EmptyPanel } from '@/components/ui/empty-panel'
+import { ShimmerBar, ShimmerBlock, LoadingAnnouncement } from '@/components/ui/shimmer'
+import { Tag } from '@/components/ui/tag'
 import { formatRelativeTime, formatDateTimeWithTZ, cn } from '@/lib/utils'
 import { useEngagementSearch } from './engagement-search-context'
 import { useRightPane } from '@/lib/right-pane-context'
@@ -24,9 +29,9 @@ function HighlightText({ text, highlight }: { text: string; highlight: string })
     <>
       {parts.map((part, i) =>
         part.toLowerCase() === highlight.toLowerCase() ? (
-          <span key={i} className="bg-indigo-100 text-indigo-900 font-medium rounded px-0.5">
+          <mark key={i} className="rounded-sm bg-tag-yellow-bg px-px text-fg">
             {part}
-          </span>
+          </mark>
         ) : (
           part
         )
@@ -35,10 +40,12 @@ function HighlightText({ text, highlight }: { text: string; highlight: string })
   )
 }
 
+/** The same words and tags firm Doc Search uses (global-search-view.tsx): a name or keyword hit is a
+ * "File match", a hit by meaning a "Semantic match". The hover keeps the more specific reason. */
 const MATCH_TYPE_LABEL: Record<string, string> = {
-  keyword: 'Keyword',
-  name: 'Filename',
-  semantic: 'Semantic',
+  keyword: 'File match',
+  name: 'File match',
+  semantic: 'Semantic match',
 }
 const MATCH_TYPE_TOOLTIP: Record<string, string> = {
   keyword: 'Matched by keyword search in file name or summary',
@@ -46,7 +53,16 @@ const MATCH_TYPE_TOOLTIP: Record<string, string> = {
   semantic: 'Matched by meaning, using file name and summary',
 }
 
-const LIGHT_TOOLTIP_CLASS = 'z-[9999] max-w-[320px] p-3 text-xs bg-white text-fg border border-slate-200 shadow-xl break-words'
+/** Doc Search's Time filter, on the result's last-modified date. */
+const TIME_OPTIONS = [
+  { label: 'Last 7 days', days: 7 },
+  { label: 'Last 30 days', days: 30 },
+  { label: 'Last 90 days', days: 90 },
+] as const
+const TYPE_OPTIONS: { value: 'folder' | 'file'; label: string }[] = [
+  { value: 'folder', label: 'Folders' },
+  { value: 'file', label: 'Files' },
+]
 
 const TYPEWRITER_PHRASES = [
   'client discovery files',
@@ -114,8 +130,7 @@ export function EngagementSearchPanel({
   } = useEngagementSearch()
   const [highlightedIndex, setHighlightedIndex] = useState(-1)
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all')
-  const [infoTooltipOpen, setInfoTooltipOpen] = useState(false)
-  const [openTooltipId, setOpenTooltipId] = useState<string | null>(null)
+  const [timeFilter, setTimeFilter] = useState<number | null>(null)
   const [typewriterText, setTypewriterText] = useState('')
   const [typewriterIndex, setTypewriterIndex] = useState(0)
   const [isDeleting, setIsDeleting] = useState(false)
@@ -123,11 +138,12 @@ export function EngagementSearchPanel({
   const { setExpanded } = useRightPane()
 
   const isFolder = (f: DriveFile) => f.mimeType === 'application/vnd.google-apps.folder'
-  const filteredResults = typeFilter === 'all'
-    ? searchResults
-    : typeFilter === 'folder'
-      ? searchResults.filter(isFolder)
-      : searchResults.filter((f) => !isFolder(f))
+  const filteredResults = searchResults.filter((f) => {
+    if (typeFilter === 'folder' && !isFolder(f)) return false
+    if (typeFilter === 'file' && isFolder(f)) return false
+    if (timeFilter !== null && (!f.modifiedTime || Date.now() - new Date(f.modifiedTime).getTime() > timeFilter * 86_400_000)) return false
+    return true
+  })
 
   const handleClose = useCallback(() => {
     onClose?.()
@@ -204,7 +220,7 @@ export function EngagementSearchPanel({
 
   useEffect(() => {
     setHighlightedIndex(-1)
-  }, [searchQuery, searchResults.length, typeFilter])
+  }, [searchQuery, searchResults.length, typeFilter, timeFilter])
 
   const handleSelect = async (file: DriveFile) => {
     await navigateToItem(file)
@@ -242,16 +258,20 @@ export function EngagementSearchPanel({
     [navigateToItem]
   )
 
+  /**
+   * One result, laid out like firm Doc Search's rows (global-search-view.tsx): an icon tile, the doc
+   * ID chip and name, the folder it is in, then the match tag and the date. Hairline rows rather
+   * than cards that lift on hover.
+   */
   const renderSearchResultCard = useCallback(
     (file: DriveFile, index: number) => {
       const matchType = (file.matchType === 'keyword' || file.matchType === 'name' || file.matchType === 'semantic') ? file.matchType : 'keyword'
+      const folder = isFolder(file)
       return (
         <div
           className={cn(
-            'w-full text-left px-3 py-2.5 rounded transition-colors flex items-start gap-3 group border border-transparent',
-            highlightedIndex === index
-              ? 'bg-surface-subtle shadow-sm border-slate-200'
-              : 'hover:bg-surface-hover hover:shadow-sm hover:border-slate-200'
+            'group flex w-full items-start gap-2.5 rounded-control px-2 py-2.5 text-left transition-colors',
+            highlightedIndex === index ? 'bg-surface-selected' : 'hover:bg-surface-hover'
           )}
         >
           <div
@@ -268,106 +288,71 @@ export function EngagementSearchPanel({
               }
             }}
             onMouseEnter={() => setHighlightedIndex(index)}
-            className="flex items-start gap-3 flex-1 min-w-0 text-left cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-slate-300 focus-visible:ring-inset rounded-lg"
+            className="flex min-w-0 flex-1 cursor-pointer items-start gap-2.5 rounded-control text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-action/30"
           >
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div className="mt-0.5 flex-shrink-0 cursor-default">
-                  {file.mimeType === 'application/vnd.google-apps.folder' ? (
-                    <Folder className="h-4 w-4 text-purple-500 fill-purple-100" />
-                  ) : (
-                    <DocumentIcon mimeType={file.mimeType} className="h-4 w-4" />
-                  )}
-                </div>
-              </TooltipTrigger>
-              <TooltipContent side="left" className={LIGHT_TOOLTIP_CLASS}>
-                {file.name}
-              </TooltipContent>
-            </Tooltip>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center min-w-0">
-                <span className="text-sm font-semibold text-slate-800 truncate block group-hover:text-slate-900">
-                  <HighlightText text={file.name} highlight={searchQuery} />
-                </span>
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-control bg-surface-muted">
+              {folder
+                ? <Folder className="h-4 w-4 text-fg-muted" aria-hidden />
+                : <DocumentIcon mimeType={file.mimeType} size={18} />}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex min-w-0 items-center gap-1.5">
+                {file.docId && (
+                  <span className="shrink-0 rounded-control bg-surface-muted px-1.5 py-0.5 font-mono text-caption text-fg-muted">
+                    {file.docId}
+                  </span>
+                )}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="truncate text-ui font-medium text-fg">
+                      <HighlightText text={file.name} highlight={searchQuery} />
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="left" className="max-w-xs break-words">{file.name}</TooltipContent>
+                </Tooltip>
               </div>
-              <div className="mt-0.5 min-w-0">
-                <div className="flex items-center min-w-0 overflow-hidden">
-                  {file.parents?.[0] ? (
+              {file.parents?.[0] && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
                     <button
                       type="button"
                       data-parent-folder-button
-                      onClick={(e) => {
-                        e.preventDefault()
-                        e.stopPropagation()
-                        handleParentClick(e, file)
-                      }}
-                      className="relative z-10 inline-flex items-center gap-1.5 text-[10px] text-slate-600 hover:text-slate-800 hover:underline min-w-0 flex-shrink cursor-pointer"
-                      title={file.parentName ? `${file.parentName} (open in Files)` : 'Open parent folder in Files'}
+                      onClick={(e) => handleParentClick(e, file)}
+                      className="relative z-10 mt-0.5 inline-flex max-w-full items-center gap-1 text-caption text-fg-subtle transition-colors hover:text-fg hover:underline"
                     >
-                      <Tooltip open={openTooltipId === `parent-${file.id}`}>
-                        <TooltipTrigger asChild>
-                          <span
-                            onClick={(e) => {
-                              // Open tooltip on click without interfering with parent navigation
-                              e.stopPropagation()
-                              setOpenTooltipId((prev) => prev === `parent-${file.id}` ? null : `parent-${file.id}`)
-                            }}
-                            className="inline-flex items-center gap-1.5 max-w-[10rem] cursor-help"
-                          >
-                            <Folder className="h-3.5 w-3.5 shrink-0 stroke-slate-400 stroke-[1.5] fill-slate-200" aria-hidden />
-                            {file.parentName ? (
-                              <span className="font-medium truncate">{file.parentName}</span>
-                            ) : (
-                              'Open parent folder'
-                            )}
-                          </span>
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className={LIGHT_TOOLTIP_CLASS}>
-                          {file.parentName || 'Open parent folder'}
-                        </TooltipContent>
-                      </Tooltip>
+                      <Folder className="h-3 w-3 shrink-0" aria-hidden />
+                      <span className="truncate">{file.parentName || 'Parent folder'}</span>
                     </button>
-                  ) : (
-                    <span className="text-[10px] text-slate-400 flex-shrink-0">—</span>
-                  )}
-                </div>
-                <div className="flex items-center justify-between gap-2 mt-0.5">
-                  <Tooltip open={openTooltipId === `badge-${file.id}`}>
-                    <TooltipTrigger asChild>
-                      <span
-                        onClick={(e) => {
-                          e.preventDefault()
-                          e.stopPropagation()
-                          setOpenTooltipId((prev) => (prev === `badge-${file.id}` ? null : `badge-${file.id}`))
-                        }}
-                        className={cn(
-                          'inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[10px] font-medium shrink-0 bg-slate-100 text-slate-600 cursor-pointer'
-                        )}
-                      >
-                        {matchType === 'semantic' ? <Sparkles className="h-2.5 w-2.5" /> : <Hash className="h-2.5 w-2.5" />}
+                  </TooltipTrigger>
+                  <TooltipContent side="top">
+                    Open {file.parentName ? <>&ldquo;{file.parentName}&rdquo;</> : 'the parent folder'} in Files
+                  </TooltipContent>
+                </Tooltip>
+              )}
+              <div className="mt-1.5 flex items-center justify-between gap-2">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="inline-flex cursor-default">
+                      <Tag color={matchType === 'semantic' ? 'purple' : 'gray'} icon={matchType === 'semantic' ? <Sparkles /> : <Hash />}>
                         {MATCH_TYPE_LABEL[matchType]}
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent side="top" className={LIGHT_TOOLTIP_CLASS}>
-                      {MATCH_TYPE_TOOLTIP[matchType]}
-                    </TooltipContent>
-                  </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="text-[10px] text-slate-400 shrink-0 cursor-default">
-                        {formatRelativeTime(file.modifiedTime)}
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent side="top" className={LIGHT_TOOLTIP_CLASS}>
-                      {formatDateTimeWithTZ(file.modifiedTime)}
-                    </TooltipContent>
-                  </Tooltip>
-                </div>
+                      </Tag>
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">{MATCH_TYPE_TOOLTIP[matchType]}</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="shrink-0 cursor-default text-caption tabular-nums text-fg-subtle">
+                      {formatRelativeTime(file.modifiedTime)}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">{formatDateTimeWithTZ(file.modifiedTime)}</TooltipContent>
+                </Tooltip>
               </div>
             </div>
           </div>
           {actionMenuProps && (
-            <div className="flex-shrink-0 pt-0.5" onClick={(e) => e.stopPropagation()}>
+            <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
               <DocumentActionMenu
                 document={file}
                 showShareModal={actionMenuProps.isProjectLead}
@@ -411,115 +396,129 @@ export function EngagementSearchPanel({
     return { todayResults: today, earlierResults: earlier }
   }, [filteredResults])
 
+  const hasQuery = searchQuery.trim().length >= 2
+  const typeLabel = TYPE_OPTIONS.find((o) => o.value === typeFilter)?.label
+  const timeLabel = TIME_OPTIONS.find((o) => o.days === timeFilter)?.label
+  const sectionLabel = 'px-2 pb-1 pt-2 text-caption text-fg-subtle'
+
+  const renderGroup = (title: string, files: DriveFile[], ref?: React.Ref<HTMLUListElement>) =>
+    files.length > 0 && (
+      <div>
+        <p className={sectionLabel}>{title}</p>
+        <ul ref={ref} className="flex flex-col">
+          {files.map((file) => (
+            <li key={file.id}>{renderSearchResultCard(file, filteredResults.indexOf(file))}</li>
+          ))}
+        </ul>
+      </div>
+    )
+
   return (
-    <TooltipProvider>
-      <div className="flex flex-col h-full min-h-0 bg-surface-subtle">
-        {/* Search input - integrated box: icons inside left edge, 2-line textarea, clear on right */}
-        <div className="shrink-0 p-3 pb-2">
+    <TooltipProvider delayDuration={300}>
+      <div className="flex h-full min-h-0 flex-col bg-surface">
+        {/* SEARCH FIELD, as on firm Doc Search: borderless, a search icon and a clear button, a
+            hairline under it. Two rows, since a natural-language query is often a sentence. */}
+        <div className="shrink-0 px-3 pt-3">
           <label htmlFor="engagement-search-panel-input" className="sr-only">
             Search engagement files
           </label>
-          <div className="flex rounded border border-slate-200 bg-white shadow-sm overflow-hidden focus-within:ring-1 focus-within:ring-slate-300 focus-within:border-slate-300">
-            {/* Left strip: chat icon with tooltip (click to toggle) */}
-            <div className="flex flex-col justify-center py-2 pl-2.5 pr-1.5 border-r border-line bg-surface-subtle shrink-0">
-              <Tooltip open={openTooltipId === `chat-${projectId}`}>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setOpenTooltipId((prev) => (prev === `chat-${projectId}` ? null : `chat-${projectId}`))
-                    }}
-                    className="p-0.5 rounded-md text-slate-500 hover:text-slate-700 hover:bg-slate-100 focus:outline-none focus-visible:ring-1 focus-visible:ring-slate-300 -ml-0.5 cursor-pointer"
-                    aria-label="Natural language search info"
-                  >
-                    <MessageSquare className="h-4 w-4" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="right" className={LIGHT_TOOLTIP_CLASS}>
-                  Natural language search can be performed
-                </TooltipContent>
-              </Tooltip>
-            </div>
-            {/* Middle: textarea + typewriter helper overlay */}
-            <div className="relative flex-1 min-w-0 flex">
+          <div className="flex items-start gap-2 border-b border-line pb-2">
+            <Search className="mt-2 h-[18px] w-[18px] shrink-0 text-fg-subtle" aria-hidden />
+            <div className="relative flex min-w-0 flex-1">
               <Textarea
                 id="engagement-search-panel-input"
                 name="engagement-search-panel"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 rows={2}
-                className="pl-3 pr-3 py-2 min-h-0 resize-none border-0 rounded-none bg-transparent text-sm shadow-none placeholder:text-transparent focus-visible:ring-0 focus-visible:ring-offset-0"
+                className="min-h-0 resize-none rounded-none border-0 bg-transparent px-0 py-1.5 text-body text-fg shadow-none placeholder:text-transparent focus-visible:ring-0 focus-visible:ring-offset-0"
                 autoFocus
                 aria-label="Search engagement files"
               />
+              {/* Example queries, typed out: says "you can describe what you want" without a
+                  separate hint. */}
               {!searchQuery.trim() && (
-                <div
-                  className="absolute left-3 top-2 text-sm text-slate-400 pointer-events-none select-none"
-                  aria-hidden
-                >
+                <div className="pointer-events-none absolute left-0 top-1.5 select-none text-body text-fg-subtle" aria-hidden>
                   <span>Show{typewriterText ? ' ' : ''}{typewriterText}</span>
-                  <span className="inline-block w-[1px] h-[1.1em] -mb-[0.1em] ml-0.5 bg-slate-400 animate-pulse" />
+                  <span className="-mb-[0.1em] ml-0.5 inline-block h-[1.1em] w-px animate-pulse bg-fg-subtle" />
                 </div>
               )}
             </div>
-            {/* Right strip: clear (X) icon – always visible, enabled after search text + debounce */}
-            <div className="flex flex-col justify-center py-2 pl-1.5 pr-2.5 border-l border-line bg-surface-subtle shrink-0">
-              {(() => {
-                const canClear = searchQuery.trim().length > 0 && !isSearching
-                return (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!canClear) return
-                      setSearchQuery('')
-                    }}
-                    disabled={!canClear}
-                    className={cn(
-                      "p-0.5 rounded-md -mr-0.5 focus:outline-none focus-visible:ring-1 focus-visible:ring-slate-300",
-                      canClear
-                        ? "text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
-                        : "text-slate-300 cursor-default"
-                    )}
-                    aria-label="Clear search"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                )
-              })()}
-            </div>
+            {/* "Clear" in words, not a second ×: the pane's own × to close it sits one row above,
+                and two identical icons a row apart read as the same action. Only while there is
+                something to clear. */}
+            {searchQuery.trim() && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="mt-1.5 shrink-0 rounded-control px-1.5 py-0.5 text-caption text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg"
+              >
+                Clear
+              </button>
+            )}
           </div>
           {searchRootLabel && (
-            <p className="text-[10px] text-slate-500 mt-1 px-0.5" aria-live="polite">
-              Searching in <span className="font-medium text-slate-600">{searchRootLabel}</span>
+            <p className="mt-1.5 text-caption text-fg-subtle" aria-live="polite">
+              Searching in <span className="font-medium text-fg-muted">{searchRootLabel}</span>
             </p>
+          )}
+
+          {/* FILTERS, Doc Search's pills and Notion menus. */}
+          {hasQuery && (
+            <div className="flex flex-wrap items-center gap-1.5 pb-1 pt-2.5">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <FilterPill icon={<FileText />} label="Type" value={typeLabel} onClear={() => setTypeFilter('all')} />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-[200px] p-1">
+                  <FilterMenuLabel>Type</FilterMenuLabel>
+                  <FilterMenuRow selected={typeFilter === 'all'} onSelect={() => setTypeFilter('all')}>Any type</FilterMenuRow>
+                  <DropdownMenuSeparator className="mx-0 my-1" />
+                  {TYPE_OPTIONS.map((o) => (
+                    <FilterMenuRow key={o.value} selected={typeFilter === o.value} onSelect={() => setTypeFilter(o.value)}>{o.label}</FilterMenuRow>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <FilterPill icon={<CalendarClock />} label="Modified" value={timeLabel} onClear={() => setTimeFilter(null)} />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-[200px] p-1">
+                  <FilterMenuLabel>Modified</FilterMenuLabel>
+                  <FilterMenuRow selected={timeFilter === null} onSelect={() => setTimeFilter(null)}>Any time</FilterMenuRow>
+                  <DropdownMenuSeparator className="mx-0 my-1" />
+                  {TIME_OPTIONS.map((o) => (
+                    <FilterMenuRow key={o.days} selected={timeFilter === o.days} onSelect={() => setTimeFilter(o.days)}>{o.label}</FilterMenuRow>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           )}
         </div>
 
-        {/* Scrollable content: Recent Search + File results */}
-        <div className="flex-1 min-h-0 overflow-y-auto px-3 pb-2">
-          {/* Recent Search */}
-          {recentSearches.length > 0 && searchQuery.trim().length < 2 && (
-            <section className="mb-4">
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-[10px] font-medium uppercase tracking-wider text-slate-400">Recent Search</span>
+        <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
+          {/* RECENT SEARCHES, as plain rows. */}
+          {recentSearches.length > 0 && !hasQuery && (
+            <section className="pt-1">
+              <div className="flex items-center justify-between px-2 pb-1 pt-2">
+                <span className="text-caption text-fg-subtle">Recent searches</span>
                 <button
                   type="button"
                   onClick={clearRecentSearches}
-                  className="text-[10px] text-slate-500 hover:text-slate-700"
+                  className="rounded-control px-1 text-caption text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg"
                 >
                   Clear
                 </button>
               </div>
-              <ul className="space-y-0.5">
+              <ul className="flex flex-col">
                 {recentSearches.map((q) => (
                   <li key={q}>
                     <button
                       type="button"
                       onClick={() => handleRecentClick(q)}
-                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left text-sm text-slate-700 hover:bg-white hover:shadow-sm transition-colors"
+                      className="flex w-full items-center gap-2 rounded-control px-2 py-1.5 text-left text-small text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg"
                     >
-                      <Clock className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                      <Clock className="h-3.5 w-3.5 shrink-0 text-fg-subtle" aria-hidden />
                       <span className="truncate">{q}</span>
                     </button>
                   </li>
@@ -528,109 +527,50 @@ export function EngagementSearchPanel({
             </section>
           )}
 
-          {/* File results */}
-          {searchQuery.trim().length >= 2 && (
+          {hasQuery && (
             <section>
-              {              searchResults.length > 0 ? (
-                <>
-                  <div className="flex items-center justify-between gap-2 mb-2">
-                    <span className="text-[10px] font-medium uppercase tracking-wider text-slate-400">
-                      Results
-                    </span>
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => setTypeFilter('all')}
-                        className={cn(
-                          'px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors',
-                          typeFilter === 'all' ? 'bg-slate-200 text-slate-800 shadow-sm' : 'text-slate-600 hover:bg-slate-100'
-                        )}
-                      >
-                        All
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setTypeFilter('folder')}
-                        className={cn(
-                          'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors',
-                          typeFilter === 'folder' ? 'bg-slate-200 text-slate-800 shadow-sm' : 'text-slate-600 hover:bg-slate-100'
-                        )}
-                      >
-                        <Folder className="h-3.5 w-3.5" />
-                        Folder
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setTypeFilter('file')}
-                        className={cn(
-                          'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors',
-                          typeFilter === 'file' ? 'bg-slate-200 text-slate-800 shadow-sm' : 'text-slate-600 hover:bg-slate-100'
-                        )}
-                      >
-                        <FileText className="h-3.5 w-3.5" />
-                        File
-                      </button>
+              {isSearching && searchResults.length === 0 ? (
+                /* Loading: rows shaped like the results that are coming, as Doc Search loads. */
+                <div className="flex flex-col gap-1 pt-2">
+                  <LoadingAnnouncement label="Searching" />
+                  {[0, 1, 2, 3].map((i) => (
+                    <div key={i} className="flex items-start gap-2.5 px-2 py-2.5">
+                      <ShimmerBlock className="h-8 w-8" />
+                      <div className="flex min-w-0 flex-1 flex-col gap-1.5 pt-1">
+                        <ShimmerBar className="w-[70%]" />
+                        <ShimmerBar className="w-[40%]" />
+                      </div>
                     </div>
-                  </div>
-                  <>
-                    {todayResults.length > 0 && (
-                      <div className="mb-2">
-                        <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 px-2 py-1 block">Today</span>
-                        <ul ref={listRef} className="space-y-0.5">
-                          {todayResults.map((file) => {
-                            const index = filteredResults.indexOf(file)
-                            return (
-                              <li key={file.id}>
-                                {renderSearchResultCard(file, index)}
-                              </li>
-                            )
-                          })}
-                        </ul>
-                      </div>
-                    )}
-                    {earlierResults.length > 0 && (
-                      <div>
-                        <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 px-2 py-1 block">Earlier</span>
-                        <ul className="space-y-0.5">
-                          {earlierResults.map((file) => {
-                            const index = filteredResults.indexOf(file)
-                            return (
-                              <li key={file.id}>
-                                {renderSearchResultCard(file, index)}
-                              </li>
-                            )
-                          })}
-                        </ul>
-                      </div>
-                    )}
-                  </>
-                </>
-              ) : !isSearching ? (
-                <div className="py-8 text-center">
-                  <div className="bg-white h-12 w-12 rounded-full flex items-center justify-center mx-auto mb-3 shadow-sm">
-                    <Search className="h-6 w-6 text-slate-400" />
-                  </div>
-                  <p className="text-sm font-medium text-fg">No results found</p>
-                  <p className="text-xs text-slate-500 mt-1">
-                    No files match &quot;{searchQuery}&quot; in this project.
-                  </p>
+                  ))}
                 </div>
+              ) : searchResults.length === 0 ? (
+                <EmptyPanel
+                  compact
+                  icon={<Search />}
+                  title="No results"
+                  description={<>Nothing in {searchRootLabel ?? 'this engagement'} matches &ldquo;{searchQuery.trim()}&rdquo;.</>}
+                />
               ) : (
-                <div className="py-12 flex flex-col items-center gap-4">
-                  <div className="relative">
-                    <div className="h-10 w-10 border-2 border-indigo-100 border-t-indigo-600 rounded-full animate-spin" />
-                    <Sparkles className="h-4 w-4 text-indigo-400 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
-                  </div>
-                  <p className="text-xs text-slate-500 font-medium">Scanning with AI context...</p>
-                </div>
+                <>
+                  <p className="flex items-center justify-between px-2 pb-1 pt-2 text-caption text-fg-subtle">
+                    <span>Results</span>
+                    <span className="tabular-nums">{filteredResults.length} {filteredResults.length === 1 ? 'result' : 'results'}</span>
+                  </p>
+                  {filteredResults.length === 0 ? (
+                    <EmptyPanel compact icon={<Search />} title="No results match these filters" />
+                  ) : (
+                    <>
+                      {renderGroup('Today', todayResults, listRef)}
+                      {renderGroup('Earlier', earlierResults)}
+                    </>
+                  )}
+                </>
               )}
             </section>
           )}
 
-          {searchQuery.trim().length < 2 && !recentSearches.length && (
-            <div className="py-8 text-center">
-              <p className="text-xs text-slate-500">Type at least 2 characters to search.</p>
-            </div>
+          {!hasQuery && !recentSearches.length && (
+            <p className="py-8 text-center text-small text-fg-subtle">Type at least 2 characters to search.</p>
           )}
         </div>
       </div>

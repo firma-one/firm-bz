@@ -18,7 +18,6 @@ import { useSearchParams, usePathname, useRouter } from 'next/navigation'
 import { EngagementAuditPane } from './engagement-audit-pane'
 import { ErrorBoundary } from '@/components/error-boundary'
 import { FirmBusinessInsights } from '@/components/dashboard/firm-business-insights'
-import { FirmActionCenter } from '@/components/dashboard/firm-action-center'
 import { CalendarView } from '@/components/calendar/calendar-view'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { useAuth } from '@/lib/auth-context'
@@ -317,22 +316,18 @@ export function FirmClientsView({ clients, groupSlug, orgSlug, orgId, firmSandbo
 
                     {canViewOrgAudit && (orgId ?? (clients[0]?.firmId ?? clients[0]?.firmId)) && (
                         <TabsContent value="analytics" className="m-0">
-                            {/* The engagement Overview's layout: flat sections on the left, the Action
-                                Center in a ruled column on the right. Print stacks the two. */}
-                            <div data-print-overview className="grid grid-cols-1 gap-8 pb-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
-                                <div className="flex min-w-0 flex-col gap-10">
-                                    <ErrorBoundary context="FirmInsightsTab">
-                                        <FirmBusinessInsights
-                                            firmId={orgId ?? clients[0]?.firmId ?? clients[0]?.firmId ?? ''}
-                                            firmSlug={orgSlug}
-                                        />
-                                    </ErrorBoundary>
-                                </div>
-                                <FirmActionCenter
-                                    firmId={orgId ?? clients[0]?.firmId ?? clients[0]?.firmId ?? ''}
-                                    groupSlug={groupSlug}
-                                    firmSlug={orgSlug}
-                                />
+                            {/* The engagement Overview's layout: the Action Center on top, then the
+                                report (.claude/plans/firm-overview-redesign.md). FirmBusinessInsights
+                                renders both from one request; the older FirmActionCenter
+                                (firm-action-center.tsx) is kept, unused, until its removal is signed off. */}
+                            <div data-print-overview className="pb-6">
+                                <ErrorBoundary context="FirmInsightsTab">
+                                    <FirmBusinessInsights
+                                        firmId={orgId ?? clients[0]?.firmId ?? ''}
+                                        firmSlug={orgSlug}
+                                        groupSlug={groupSlug}
+                                    />
+                                </ErrorBoundary>
                             </div>
                         </TabsContent>
                     )}

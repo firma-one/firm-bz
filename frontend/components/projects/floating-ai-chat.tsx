@@ -1,11 +1,13 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronDown, GripVertical } from 'lucide-react'
 import type { ChatScope } from '@/lib/ai/engagement-chat'
 import { EngagementAiChat, type ChatThreadApi } from '@/components/projects/engagement-ai-chat'
 import { Brio } from '@/components/ui/brio'
+import { Hint } from '@/components/ui/tooltip'
+import type { ChatAction } from '@/components/projects/chat-action-row'
 import type { EngagementInsightsResponse } from '@/lib/insights/engagement-insights'
 
 /**
@@ -38,40 +40,70 @@ const SIDE_KEY = 'fm_ai_chat_side'
  */
 const CONVERSATION_WIDTH_REM = 23
 /**
- * The always-visible icon rail on the panel's docked edge (Hints, Recents).
- *
- * Kept OUT of the conversation's width budget: the rail is permanent, so taking it out of the
- * column would permanently narrow the thread to pay for chrome, undoing the line-length tuning
- * above. The panel is wider at rest instead, and the text keeps exactly the measure it had.
- *
- * Must match the rail's `w-10` class.
+ * Panel width, shared between the docked position and the drag clamp. The conversation's own width:
+ * the icon rail that used to sit beside it moved into the header (.claude/plans/brio-panel-redesign.md).
  */
-const RAIL_WIDTH_REM = 2.5
-/** Panel width, shared between the docked position and the drag clamp. */
-const PANEL_WIDTH_REM = CONVERSATION_WIDTH_REM + RAIL_WIDTH_REM
+const PANEL_WIDTH_REM = CONVERSATION_WIDTH_REM
 /**
- * Inset from the viewport edge when docked, and the clamp margin while dragging.
- *
- * Matches the page's own `px-6` content gutter so the panel's edge lines up with the cards it
- * floats over, rather than sitting a few pixels proud of them.
+ * Inset from the viewport edge when docked LEFT (where the panel overlays the sidebar), the clamp
+ * margin while dragging, and the fallback right inset outside the app shell.
  */
 const GUTTER = 24
 
 /**
- * How far the page's right content edge sits inside the viewport.
+ * Where the page's content ends on the right, in viewport pixels: the right edge of the cards.
  *
- * The page scrolls in an inner container, so that container's scrollbar is inside the content area
- * and eats into the right edge. A panel positioned against the viewport would overhang the cards
- * it floats over by exactly that much.
+ * Measured from the app's scroll container (`data-app-scroll` on AppShellV2) — its right edge, less
+ * its scrollbar and its inner padding — rather than assumed:
+ * - the shell's gutter is responsive (`px-4`, `md:px-8`), so no single constant lines up;
+ * - the scrollbar is zero with macOS overlay scrollbars and about 15px elsewhere;
+ * - the shell's right pane moves the edge when it opens.
  *
- * Measured from the live element rather than assumed: scrollbar width differs by platform and is
- * zero for macOS overlay scrollbars, so a hardcoded number would be wrong nearly everywhere.
+ * It used to look up `.d-app .overflow-y-auto`, which in the New UI shell finds the sidebar's
+ * scroller first and so measured the wrong scrollbar. Outside the shell (the onboarding frame) it
+ * falls back to the viewport less the gutter.
  */
-function rightContentInset(): number {
+function contentRightEdge(): number {
     if (typeof document === 'undefined') return 0
-    const scroller = document.querySelector('.d-app .overflow-y-auto')
-    if (!(scroller instanceof HTMLElement)) return 0
-    return Math.max(0, scroller.offsetWidth - scroller.clientWidth)
+    const viewport = document.documentElement.clientWidth
+    const scroller = document.querySelector('[data-app-scroll]')
+    if (!(scroller instanceof HTMLElement)) return viewport - GUTTER
+    const scrollbar = Math.max(0, scroller.offsetWidth - scroller.clientWidth)
+    const inner = scroller.firstElementChild
+    const padding = inner instanceof HTMLElement ? parseFloat(getComputedStyle(inner).paddingRight) || 0 : 0
+    return Math.min(viewport - GUTTER / 2, scroller.getBoundingClientRect().right - scrollbar - padding)
+}
+
+/** Top of the app's content area, below the header bar and any banners: where a docked pane starts. */
+function contentTop(): number {
+    if (typeof document === 'undefined') return 0
+    const scroller = document.querySelector('[data-app-scroll]')
+    return scroller instanceof HTMLElement ? Math.max(0, scroller.getBoundingClientRect().top) : 0
+}
+
+/**
+ * Floating over the page, or docked to its right side as a full-height pane.
+ *
+ * Docked suits the Files page, where a floating panel covers the right-hand columns of a wide file
+ * table: docked, the page makes room (AppShellV2 reads `--ai-chat-dock-width`) and nothing is
+ * covered. A workspace preference, remembered like the dock corner.
+ */
+type Layout = 'float' | 'dock'
+const LAYOUT_KEY = 'fm_ai_chat_layout'
+const DOCK_WIDTH_KEY = 'fm_ai_chat_dock_width'
+/**
+ * Whether the DOCKED pane was open, so it comes back open on the next page (Overview → Files) and
+ * the next load. Only the docked layout remembers this — see the `open` state.
+ */
+const DOCK_OPEN_KEY = 'fm_ai_chat_dock_open'
+const DOCK_DEFAULT_WIDTH_PX = 400
+const DOCK_MIN_WIDTH_PX = 360
+const DOCK_MAX_WIDTH_PX = 640
+
+/** The platform's modifier for the ⌘J shortcut, as shown in hints. Read after mount. */
+function modKeyLabel(): string {
+    if (typeof navigator === 'undefined') return '⌘'
+    return /Mac|iPhone|iPod|iPad/i.test(navigator.platform) ? '⌘' : 'Ctrl+'
 }
 /**
  * How far the pointer must travel before a drag flips the dock, as a share of viewport width.
@@ -103,8 +135,7 @@ const DEFAULT_HEIGHT_PX = 512
  * per line and the composer stops holding a sentence. Widening is for content the default cannot
  * show well — a four-column table in a 23rem column is unreadable whatever the prose does.
  *
- * Includes the icon rail, so the floor still leaves the conversation its full
- * `CONVERSATION_WIDTH_REM` rather than the rail eating into it at the narrowest size.
+ * The floor is the conversation's full `CONVERSATION_WIDTH_REM`, its line-length-tuned measure.
  *
  * Capped rather than unbounded: past about half a wide screen the panel stops being a panel and
  * starts covering the file list it is commenting on.
@@ -152,7 +183,7 @@ export function FloatingAiChat({
     surface,
     threadRef,
     suggestionsOverride,
-    suggestionActions,
+    actions,
     placeholder,
     capabilityNote,
 }: {
@@ -174,8 +205,8 @@ export function FloatingAiChat({
     threadRef?: React.MutableRefObject<ChatThreadApi | null>
     /** Starting prompts for the host page, replacing the engagement-derived set. */
     suggestionsOverride?: string[]
-    /** An action chip for the suggestion row — see EngagementAiChat. */
-    suggestionActions?: React.ReactNode
+    /** Tasks the page can run from the panel — see EngagementAiChat and `ChatAction`. */
+    actions?: ChatAction[]
     /** Composer prompt text — see EngagementAiChat. */
     placeholder?: string
     /** One line in the header saying what this panel can do here — see EngagementAiChat. */
@@ -183,26 +214,48 @@ export function FloatingAiChat({
 }) {
     const [side, setSide] = useState<Side>('right')
     /**
-     * Always starts collapsed, on every page and every load.
+     * A FLOATING panel always starts collapsed, on every page and every load.
      *
      * Not a prop. It was one, defaulting to false, which looked harmless — but a prop invites a
      * caller to pass true, and the rule is that the assistant never opens itself. It is never the
      * reason a page was opened, and a panel that appears unasked covers the content the user
      * actually came for.
+     *
+     * The DOCKED pane is the exception, by the user's own choice: docking is a standing layout, like
+     * keeping a sidebar open, and the page makes room for it rather than being covered. So a docked
+     * pane comes back the way it was left — open on Overview, still open on Files and after a
+     * reload; collapsed, it stays collapsed (Deepak, 2026-10-17).
      */
     const [open, setOpen] = useState(false)
+    const [layout, setLayout] = useState<Layout>('float')
+    const docked = layout === 'dock'
 
     // Read after mount rather than lazily in useState: localStorage is unavailable during SSR, and
     // seeding from it would make the server and client markup disagree.
     //
-    // The DOCK SIDE is restored; the open state deliberately is not. A panel that reopens itself on
-    // every page load covers the content the user came for — they opened it once, for one question,
-    // and that is not a standing preference. Collapsing is also how someone puts it away, and an
-    // assistant that returns uninvited after being dismissed is the behaviour people disable.
+    // The DOCK SIDE and LAYOUT are restored. A floating panel's open state deliberately is not: one
+    // that reopens itself on every page load covers the content the user came for — they opened it
+    // once, for one question, and that is not a standing preference. A docked pane's is, since the
+    // page makes room for it (see the `open` state).
     useEffect(() => {
         const storedSide = readStored(SIDE_KEY)
         if (storedSide === 'left' || storedSide === 'right') setSide(storedSide)
+        const storedLayout = readStored(LAYOUT_KEY)
+        if (storedLayout === 'float' || storedLayout === 'dock') setLayout(storedLayout)
+        if (storedLayout === 'dock' && readStored(DOCK_OPEN_KEY) === '1') setOpen(true)
     }, [projectId])
+
+    const changeLayout = useCallback((next: Layout) => {
+        setLayout(next)
+        writeStored(LAYOUT_KEY, next)
+    }, [])
+
+    // While docked, remember whether the pane is open, so the next page opens it the same way. Only
+    // written while docked: the first render is always floating and collapsed, so nothing is written
+    // before the stored state has been read back.
+    useEffect(() => {
+        if (docked) writeStored(DOCK_OPEN_KEY, open ? '1' : '0')
+    }, [docked, open])
 
     /**
      * Publishes the panel's footprint so the shared upload/download progress panels can sit above
@@ -219,7 +272,9 @@ export function FloatingAiChat({
         const root = document.documentElement
         const clear = () => root.style.setProperty('--ai-chat-corner-offset', '0px')
 
-        if (!open || side !== 'right' || !panelEl) {
+        // Docked, the panel is not in the corner at all: the progress panels move left of it instead
+        // (they read `--ai-chat-dock-width`).
+        if (!open || side !== 'right' || !panelEl || docked) {
             clear()
             return () => root.style.removeProperty('--ai-chat-corner-offset')
         }
@@ -237,7 +292,7 @@ export function FloatingAiChat({
             observer.disconnect()
             root.style.removeProperty('--ai-chat-corner-offset')
         }
-    }, [open, side, panelEl])
+    }, [open, side, panelEl, docked])
 
     /**
      * True while the panel is playing its exit animation but has not unmounted yet.
@@ -284,17 +339,31 @@ export function FloatingAiChat({
     // Re-measured on resize: a scrollbar appears and disappears as content changes, and the panel
     // should stay flush with the cards either way. `viewportWidth` excludes any window scrollbar,
     // which is the frame the docked position must be computed in.
-    const [rightInset, setRightInset] = useState(0)
+    const [contentRight, setContentRight] = useState(0)
+    const [topOffset, setTopOffset] = useState(0)
     const [viewportWidth, setViewportWidth] = useState(0)
     useEffect(() => {
         const measure = () => {
-            setRightInset(rightContentInset())
+            setContentRight(contentRightEdge())
+            setTopOffset(contentTop())
             setViewportWidth(document.documentElement.clientWidth)
         }
         measure()
         window.addEventListener('resize', measure)
-        return () => window.removeEventListener('resize', measure)
+        // The content edge also moves without a window resize: the shell's right pane opening, a
+        // scrollbar appearing, the sidebar collapsing. Watching the scroll container catches them.
+        const scroller = document.querySelector('[data-app-scroll]')
+        const observer = scroller ? new ResizeObserver(measure) : null
+        if (scroller && observer) observer.observe(scroller)
+        return () => {
+            window.removeEventListener('resize', measure)
+            observer?.disconnect()
+        }
     }, [])
+
+    /** The ⌘J label for hints: ⌘ on a Mac, Ctrl+ elsewhere. */
+    const [modKey, setModKey] = useState('⌘')
+    useEffect(() => setModKey(modKeyLabel()), [])
 
     const [width, setWidth] = useState(MIN_WIDTH_PX)
     useEffect(() => {
@@ -303,6 +372,13 @@ export function FloatingAiChat({
     }, [])
 
     const [resizingWidth, setResizingWidth] = useState(false)
+
+    /** Width of the docked pane, remembered separately from the floating width. */
+    const [dockWidth, setDockWidth] = useState(DOCK_DEFAULT_WIDTH_PX)
+    useEffect(() => {
+        const stored = Number(readStored(DOCK_WIDTH_KEY))
+        if (Number.isFinite(stored) && stored >= DOCK_MIN_WIDTH_PX) setDockWidth(Math.min(stored, DOCK_MAX_WIDTH_PX))
+    }, [])
 
     /** Whether the chat is mid-answer, so the collapsed launcher can say so. */
     const [busy, setBusy] = useState(false)
@@ -334,12 +410,29 @@ export function FloatingAiChat({
      * width here would leave it hanging off the gutter the moment it was resized — the same class
      * of bug as computing the dock from 100vw.
      */
-    const panelPx = Math.min(
-        width + (historyOpen ? HISTORY_PANE_PX : 0),
-        // Never wider than the window allows, so a wide panel on a narrow screen does not run off
-        // the edge rather than growing inward.
-        Math.max(width, viewportWidth - GUTTER * 2),
-    )
+    const panelPx = docked
+        ? Math.min(
+            dockWidth + (historyOpen ? HISTORY_PANE_PX : 0),
+            // Docked, the page gives up this width, so always leave it a usable column.
+            Math.max(dockWidth, viewportWidth - 480),
+        )
+        : Math.min(
+            width + (historyOpen ? HISTORY_PANE_PX : 0),
+            // Never wider than the window allows, so a wide panel on a narrow screen does not run off
+            // the edge rather than growing inward.
+            Math.max(width, viewportWidth - GUTTER * 2),
+        )
+
+    // Docked and open, the page makes room for the pane (AppShellV2's content row reads this).
+    useEffect(() => {
+        const root = document.documentElement
+        if (!docked || !open) {
+            root.style.removeProperty('--ai-chat-dock-width')
+            return
+        }
+        root.style.setProperty('--ai-chat-dock-width', `${panelPx}px`)
+        return () => { root.style.removeProperty('--ai-chat-dock-width') }
+    }, [docked, open, panelPx])
 
     /**
      * Panel height, user-set by dragging the top edge and remembered across engagements.
@@ -368,28 +461,32 @@ export function FloatingAiChat({
         // dock, hence the sign flip — on the right the inner edge is the left one, so width
         // increases as clientX decreases.
         const startX = event.clientX
+        const [minWidth, maxWidth, storageKey, setLiveWidth] = docked
+            ? [DOCK_MIN_WIDTH_PX, DOCK_MAX_WIDTH_PX, DOCK_WIDTH_KEY, setDockWidth] as const
+            : [MIN_WIDTH_PX, MAX_WIDTH_PX, WIDTH_KEY, setWidth] as const
         const startWidth = handle.closest('[data-ai-chat-panel]')?.getBoundingClientRect().width
-            ?? MIN_WIDTH_PX
-        const sign = side === 'right' ? -1 : 1
+            ?? minWidth
+        // Docked, the pane hugs the right edge, so like a right-docked float it grows leftward.
+        const sign = docked || side === 'right' ? -1 : 1
 
         const clampWidth = (value: number) => Math.max(
-            MIN_WIDTH_PX,
-            Math.min(value, MAX_WIDTH_PX, document.documentElement.clientWidth - GUTTER * 2),
+            minWidth,
+            Math.min(value, maxWidth, document.documentElement.clientWidth - GUTTER * 2),
         )
 
         const onMove = (e: PointerEvent) =>
-            setWidth(clampWidth(startWidth + sign * (e.clientX - startX)))
+            setLiveWidth(clampWidth(startWidth + sign * (e.clientX - startX)))
         const onUp = (e: PointerEvent) => {
             const final = clampWidth(startWidth + sign * (e.clientX - startX))
-            setWidth(final)
-            writeStored(WIDTH_KEY, String(Math.round(final)))
+            setLiveWidth(final)
+            writeStored(storageKey, String(Math.round(final)))
             setResizingWidth(false)
             handle.removeEventListener('pointermove', onMove)
             handle.removeEventListener('pointerup', onUp)
         }
         handle.addEventListener('pointermove', onMove)
         handle.addEventListener('pointerup', onUp)
-    }, [side])
+    }, [side, docked])
 
     const startResize = useCallback((event: React.PointerEvent<HTMLElement>) => {
         event.preventDefault()
@@ -434,6 +531,12 @@ export function FloatingAiChat({
     const [dragLeft, setDragLeft] = useState<number | null>(null)
 
     const startDrag = useCallback((event: React.PointerEvent<HTMLElement>) => {
+        // Only a press ON the header drags. React bubbles events through portals, so a press inside
+        // a menu opened from the header (the ⋯ menu renders in a portal) arrives here too — and
+        // capturing the pointer for a drag swallowed its click, so "Dock to the side" and "Copy
+        // conversation" did nothing. A portal's DOM is not inside the header, which is the test.
+        if (event.button !== 0) return
+        if (!(event.target instanceof Node) || !event.currentTarget.contains(event.target)) return
         event.preventDefault()
 
         // Capture on the handle itself. Without it the pointer stream stops the moment the cursor
@@ -463,10 +566,7 @@ export function FloatingAiChat({
         // Same frame as the docked position above: clientWidth excludes the window scrollbar, so a
         // dragged panel and a docked one land on the same pixel.
         const clamp = (x: number) =>
-            Math.max(GUTTER, Math.min(
-                x,
-                document.documentElement.clientWidth - panelWidth - GUTTER - rightContentInset(),
-            ))
+            Math.max(GUTTER, Math.min(x, contentRightEdge() - panelWidth))
 
         const onMove = (e: PointerEvent) => setDragLeft(clamp(e.clientX - grabOffset))
         const onUp = (e: PointerEvent) => {
@@ -492,6 +592,49 @@ export function FloatingAiChat({
 
     const dragging = dragLeft !== null
 
+    /**
+     * Set when the panel is opened by ⌘J or the launcher, so the composer takes focus once the
+     * panel is interactive — opening the assistant is opening it to ask something.
+     */
+    const focusOnOpenRef = useRef(false)
+    const focusComposer = useCallback(() => {
+        panelEl?.querySelector<HTMLTextAreaElement>('textarea')?.focus()
+    }, [panelEl])
+    useEffect(() => {
+        if (!open || !focusOnOpenRef.current) return
+        focusOnOpenRef.current = false
+        // A frame later: the `inert` attribute comes off in an effect above, and focus cannot land
+        // in an inert subtree.
+        const frame = requestAnimationFrame(focusComposer)
+        return () => cancelAnimationFrame(frame)
+    }, [open, focusComposer])
+
+    const openAndFocus = useCallback(() => {
+        focusOnOpenRef.current = true
+        toggleOpen()
+    }, [toggleOpen])
+
+    /**
+     * ⌘J (Ctrl+J): opens the panel and focuses the composer; from the composer, collapses it; from
+     * anywhere else on the page with the panel open, moves focus back to the composer. The same key
+     * Notion uses for its AI, and free in this app.
+     */
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => {
+            if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey || e.key.toLowerCase() !== 'j') return
+            e.preventDefault()
+            if (!open) {
+                openAndFocus()
+                return
+            }
+            const composer = panelEl?.querySelector('textarea')
+            if (composer && document.activeElement === composer) toggleOpen()
+            else focusComposer()
+        }
+        window.addEventListener('keydown', onKey)
+        return () => window.removeEventListener('keydown', onKey)
+    }, [open, panelEl, toggleOpen, focusComposer, openAndFocus])
+
     // z-40 keeps the panel under the toast stack (z-100), which is deliberate: a toast confirming
     // something done IN the chat must not render behind it. Success toasts clear themselves in a
     // few seconds; errors persist until dismissed, so they are allowed to cover the panel header
@@ -511,9 +654,10 @@ export function FloatingAiChat({
     // While closing, the panel is still rendered (playing its exit) and the launcher is withheld,
     // so the two never overlap in the same corner.
     const launcher = !open && !closing ? (
+        <Hint label={<>Ask <Brio noIcon /> · {modKey}J</>} side={side === 'right' ? 'left' : 'right'}>
             <button
                 type="button"
-                onClick={toggleOpen}
+                onClick={openAndFocus}
                 /* Grows out of, and shrinks back into, the corner it is docked in, so opening
                    reads as the launcher becoming the panel rather than one thing being swapped
                    for another. */
@@ -522,7 +666,10 @@ export function FloatingAiChat({
                    the open panel. The launcher is sized by its own padding and content. */
                 style={{
                     transformOrigin: side === 'right' ? 'bottom right' : 'bottom left',
-                    ...(side === 'right' ? { right: `${GUTTER + rightInset}px` } : { left: `${GUTTER}px` }),
+                    // On the right it lines up with the cards' edge, measured (see contentRightEdge).
+                    ...(side === 'right' || docked
+                        ? { right: `${Math.max(GUTTER / 2, viewportWidth - contentRight)}px` }
+                        : { left: `${GUTTER}px` }),
                 }}
                 className={`fixed bottom-6 z-40 flex animate-in fade-in zoom-in-95 items-center gap-2 rounded-full border border-line bg-surface py-2 pl-3 pr-3.5 shadow-popover duration-200 transition-colors hover:border-line-strong hover:bg-surface-hover`}
                 aria-label="Open the engagement assistant"
@@ -545,6 +692,7 @@ export function FloatingAiChat({
                 )}
                 {busy && <span className="sr-only">Working on your answer</span>}
             </button>
+        </Hint>
     ) : null
 
     // The panel is rendered in BOTH states, hidden while collapsed rather than unmounted.
@@ -590,7 +738,15 @@ export function FloatingAiChat({
                interpolate between them, so the panel teleported instead of sliding. One animatable
                property means one transition. */
             data-ai-chat-panel
-            style={{
+            data-layout={layout}
+            style={docked ? {
+                // A full-height pane under the header bar, against the right edge. The page makes
+                // room for it (see the `--ai-chat-dock-width` effect), so it covers nothing.
+                top: `${topOffset}px`,
+                bottom: 0,
+                right: 0,
+                width: `${panelPx}px`,
+            } : {
                 height: `${height}px`,
                 // Width is a style, not a class: Tailwind extracts class names statically, so an
                 // interpolated `w-[...]` would never be generated.
@@ -604,10 +760,12 @@ export function FloatingAiChat({
                 // 100vw INCLUDES the scrollbar, so a right-docked panel computed from it sat a
                 // scrollbar's width too far right — visible as the gutter changing after a drag,
                 // because the dragged position was clamped against the true content width.
+                // On the right, its edge lines up with the cards' edge, measured from the app's
+                // scroll container (see contentRightEdge) rather than assumed.
                 left: dragging
                     ? `${dragLeft}px`
                     : side === 'right'
-                        ? `${Math.max(GUTTER, viewportWidth - panelPx - GUTTER - rightInset)}px`
+                        ? `${Math.max(GUTTER, contentRight - panelPx)}px`
                         : `${GUTTER}px`,
             }}
             /* The transition is suppressed while dragging so the panel tracks the pointer exactly;
@@ -624,7 +782,11 @@ export function FloatingAiChat({
                Width is a literal class, not interpolated: Tailwind extracts class names
                statically, so an interpolated `w-[...]` would never be generated. PANEL_WIDTH_REM
                must be kept in step with it. */
-            className={`${!open && !closing ? 'hidden' : 'flex'} fixed bottom-6 z-40 max-h-[calc(100vh-6rem)] ${resizing || resizingWidth ? 'select-none' : ''} max-w-[calc(100vw-3rem)] flex-col overflow-hidden rounded-card border border-line bg-surface shadow-dialog duration-200 ${
+            className={docked ? `${!open && !closing ? 'hidden' : 'flex'} fixed z-40 flex-col overflow-hidden border-l border-line bg-surface duration-200 ${
+                closing
+                    ? 'animate-out fade-out slide-out-to-right-4 fill-mode-forwards pointer-events-none'
+                    : 'animate-in fade-in slide-in-from-right-4'
+            } ${resizingWidth ? 'select-none' : 'transition-[width] duration-200 ease-out'}` : `${!open && !closing ? 'hidden' : 'flex'} fixed bottom-6 z-40 max-h-[calc(100vh-6rem)] ${resizing || resizingWidth ? 'select-none' : ''} max-w-[calc(100vw-3rem)] flex-col overflow-hidden rounded-card border border-line bg-surface shadow-dialog duration-200 ${
                 closing
                     // pointer-events-none so a fast click cannot land on a control in a panel that
                     // is on its way out.
@@ -651,7 +813,7 @@ export function FloatingAiChat({
                 aria-label="Drag to resize the assistant"
                 title="Drag to resize"
                 className={`absolute inset-y-0 z-10 w-1.5 cursor-ew-resize touch-none transition-colors ${
-                    side === 'right' ? 'left-0' : 'right-0'
+                    docked || side === 'right' ? 'left-0' : 'right-0'
                 } ${resizingWidth ? 'bg-action/40' : 'hover:bg-action/25'}`}
             />
 
@@ -662,18 +824,21 @@ export function FloatingAiChat({
 
                 `touch-none` stops a touch drag from scrolling the page underneath instead of
                 resizing, which is what pointer capture alone does not prevent. */}
-            <div
-                onPointerDown={startResize}
-                role="separator"
-                aria-orientation="horizontal"
-                aria-label="Drag to resize the assistant"
-                title="Drag to resize"
-                // `n-resize`, not `ns-resize`: the panel only grows upward from its default, and a
-                // two-headed cursor would promise a direction that does nothing.
-                className={`absolute inset-x-0 top-0 z-10 h-1.5 cursor-n-resize touch-none transition-colors ${
-                    resizing ? 'bg-action/40' : 'hover:bg-action/25'
-                }`}
-            />
+            {/* Docked, the pane is already full height, so only a floating panel has a top grip. */}
+            {!docked && (
+                <div
+                    onPointerDown={startResize}
+                    role="separator"
+                    aria-orientation="horizontal"
+                    aria-label="Drag to resize the assistant"
+                    title="Drag to resize"
+                    // `n-resize`, not `ns-resize`: the panel only grows upward from its default, and a
+                    // two-headed cursor would promise a direction that does nothing.
+                    className={`absolute inset-x-0 top-0 z-10 h-1.5 cursor-n-resize touch-none transition-colors ${
+                        resizing ? 'bg-action/40' : 'hover:bg-action/25'
+                    }`}
+                />
+            )}
 
             {/* Kept mounted while open so the thread, ratings and suggestions survive a dock flip. */}
             <EngagementAiChat
@@ -683,7 +848,7 @@ export function FloatingAiChat({
                 clientName={clientName}
                 chrome="floating"
                 suggestionsOverride={suggestionsOverride}
-                suggestionActions={suggestionActions}
+                actions={actions}
                 aboveThread={aboveThread}
                 surface={surface}
                 // Derived, not a second prop for callers to set: a page that said
@@ -692,16 +857,17 @@ export function FloatingAiChat({
                 // want to reach into the detail without navigating away.
                 scopeSwitchable={(surface ?? 'overview') === 'overview'}
                 threadRef={threadRef}
-                onStartDrag={startDrag}
+                // A docked pane does not move, so its header is not a drag handle.
+                onStartDrag={docked ? undefined : startDrag}
                 dragging={dragging}
+                layout={layout}
+                onLayoutChange={changeLayout}
+                shortcutLabel={`${modKey}J`}
                 onCollapse={toggleOpen}
-                // The same word the collapsed pill shows, so the panel names one scope rather
-                // than two depending on whether it is open.
-                scopeLabel={title}
                 onHistoryOpenChange={setHistoryOpen}
                 // So the pane opens on the docked edge, leaving the inner edge —
                 // and the resize grip that lives on it — clear.
-                dockSide={side}
+                dockSide={docked ? 'right' : side}
                 placeholder={placeholder}
                 capabilityNote={capabilityNote}
                 onBusyChange={setBusy}

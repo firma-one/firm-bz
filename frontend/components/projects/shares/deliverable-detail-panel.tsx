@@ -19,7 +19,7 @@ import {
   CheckCircle, PenLine, Eye, ListTodo, Loader2,
   Folder, MoreVertical,
   Info, MessagesSquare, Settings as SettingsIcon,
-  UserPlus, ChevronDown, X, ScanEye, FolderOpen, Check, CircleDot, CalendarClock,
+  UserPlus, ChevronDown, X, ScanEye, FolderOpen, Check, CircleDot, CalendarClock, UserRound, ListChecks,
 } from 'lucide-react'
 import {
   DropdownMenu,
@@ -34,7 +34,7 @@ import { DateTimePicker } from '@/components/ui/date-time-picker'
 import { Button } from '@/components/ui/button'
 import { StatusPill } from '@/components/ui/tag'
 import { PropertyList, PropertyRow } from '@/components/ui/property-list'
-import { DateProperty, PersonAvatar } from '@/components/ui/property-cells'
+import { DateProperty, PersonAvatar, PersonProperty, type PersonOption } from '@/components/ui/property-cells'
 import type { ActivityStatus } from '@/lib/sharing-settings'
 import { getAllowedTransitions, type EngagementRoleSlug } from '@/lib/deliverable-stage-roles'
 
@@ -566,6 +566,10 @@ export function DeliverableDetailPanel({
   const [savingOptions, setSavingOptions] = useState(false)
   const [movingStatus, setMovingStatus] = useState(false)
   const [members, setMembers] = useState<EngagementMember[]>([])
+  /** The deliverable's owner, shown as Lead (its assigneeUserId, like its documents'). */
+  const [ownerUserId, setOwnerUserId] = useState<string | null>(null)
+  /** How many comments the deliverable has, for the Comments tab. */
+  const [commentCount, setCommentCount] = useState<number | null>(null)
 
 
   const loadDetails = useCallback(async () => {
@@ -606,6 +610,7 @@ export function DeliverableDetailPanel({
       if (subRes.ok) {
         const subData = await subRes.json()
         const loaded: SubtaskRecord[] = subData.subtasks ?? []
+        setOwnerUserId(subData.deliverable?.ownerUserId ?? null)
         subtasksLoadedRef.current = true
         setSubtasks(loaded)
         // Auto-expand first item in large pane
@@ -626,6 +631,30 @@ export function DeliverableDetailPanel({
   }, [documentId, projectId, isExternalViewer, isExternalCollaborator])
 
   useEffect(() => { loadDetails() }, [loadDetails])
+
+  // The Comments tab's count. Refreshed when leaving the tab, so a comment just posted counts.
+  useEffect(() => {
+    if (activeTab === 'comments') return
+    let cancelled = false
+    fetch(`/api/projects/${projectId}/documents/${documentId}/doc-comments`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (!cancelled && d) setCommentCount((d.messages ?? []).length) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [projectId, documentId, activeTab])
+
+  const changeOwner = useCallback(async (next: PersonOption | null) => {
+    const previous = ownerUserId
+    setOwnerUserId(next?.id ?? null)
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.access_token) return
+    const res = await fetch(`/api/projects/${projectId}/documents/${documentId}/assignee`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ assigneeUserId: next?.id ?? null }),
+    }).catch(() => null)
+    if (!res?.ok) setOwnerUserId(previous)
+  }, [ownerUserId, projectId, documentId])
 
   // Auto-save delivery settings on toggle change
   const saveOptions = useCallback(async (opts: SharingOptions) => {
@@ -734,6 +763,21 @@ export function DeliverableDetailPanel({
   }
 
   const isApproved = status === 'approved'
+  const overdueDays = (() => {
+    if (!deliverableDueDate) return 0
+    const due = new Date(deliverableDueDate); due.setHours(0, 0, 0, 0)
+    const today = new Date(); today.setHours(0, 0, 0, 0)
+    return Math.max(0, Math.round((today.getTime() - due.getTime()) / 86400000))
+  })()
+  const approvedSubtasks = subtasks.filter((t) => t.status === 'approved').length
+  const peopleOptions: PersonOption[] = members
+    .filter((m) => !m.isAgent && (m.role === 'eng_admin' || m.role === 'eng_member'))
+    .map((m) => ({ id: m.userId, name: m.name ?? m.email ?? 'Member', email: m.email, avatarUrl: m.avatarUrl }))
+  const ownerOption = (() => {
+    if (!ownerUserId) return null
+    const m = members.find((x) => x.userId === ownerUserId)
+    return m ? { id: m.userId, name: m.name ?? m.email ?? 'Member', email: m.email, avatarUrl: m.avatarUrl } : null
+  })()
   const showEC = true
   const showEV = true
 
@@ -755,7 +799,8 @@ export function DeliverableDetailPanel({
         <PropertyRow label="Status" icon={<CircleDot />}>
         {canManage && status !== 'approved' ? (
           <Select value={status} onValueChange={(v) => handleMoveToNext(v as ActivityStatus)} disabled={movingStatus}>
-            <SelectTrigger aria-label="Deliverable status" className="h-7 w-auto gap-1.5 border-transparent bg-transparent px-1.5 shadow-none hover:bg-surface-hover focus:ring-0 data-[state=open]:bg-surface-hover">
+            {/* The pill is the control: no separate chevron after it (hover shows it is one). */}
+            <SelectTrigger aria-label="Deliverable status" className="h-7 w-auto gap-1.5 border-transparent bg-transparent px-1.5 shadow-none hover:bg-surface-hover focus:ring-0 data-[state=open]:bg-surface-hover [&>svg:last-of-type]:hidden">
               {/* In a div: SelectTrigger clamps its direct <span> children (`[&>span]:line-clamp-1`),
                   which breaks the pill's flex row — label pushed up, status dot gone. */}
               <div className="flex items-center">
@@ -829,7 +874,32 @@ export function DeliverableDetailPanel({
               await handleDueDateChange(day ?? '', documentId)
             }}
           />
+          {/* Why the date is red: how late it is. */}
+          {!isApproved && overdueDays > 0 && (
+            <span className="text-small text-danger">· {overdueDays} day{overdueDays === 1 ? '' : 's'} overdue</span>
+          )}
           {savingDueDate && <Loader2 className="h-3 w-3 animate-spin text-fg-subtle" />}
+        </PropertyRow>
+        <PropertyRow label="Lead" icon={<UserRound />}>
+          <PersonProperty
+            value={ownerOption}
+            people={peopleOptions}
+            onChange={changeOwner}
+            disabled={!canManage}
+            placeholder="No lead"
+          />
+        </PropertyRow>
+        <PropertyRow label="Progress" icon={<ListChecks />}>
+          {subtasks.length > 0 ? (
+            <span className="inline-flex h-7 items-center gap-2 px-1.5">
+              <span className="h-1.5 w-20 overflow-hidden rounded-full bg-surface-muted">
+                <span className="block h-full rounded-full bg-action" style={{ width: `${Math.round((approvedSubtasks / subtasks.length) * 100)}%` }} />
+              </span>
+              <span className="text-small tabular-nums text-fg-muted">{approvedSubtasks} of {subtasks.length} documents approved</span>
+            </span>
+          ) : (
+            <span className="inline-flex h-7 items-center px-1.5 text-small text-fg-subtle">{loadingSubtasks ? 'Loading…' : 'No documents yet'}</span>
+          )}
         </PropertyRow>
        </PropertyList>
       </div>
@@ -849,6 +919,7 @@ export function DeliverableDetailPanel({
           >
             <tab.icon className="h-3.5 w-3.5" />
             {tab.label}
+            {tab.id === 'comments' && commentCount ? <span className="tabular-nums text-fg-subtle">{commentCount}</span> : null}
           </button>
         ))}
       </div>

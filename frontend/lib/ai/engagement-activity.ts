@@ -43,6 +43,7 @@ export const ACTIVITY_LOOKBACK_DAYS = 30
 const EVENT_GROUPS: Array<{ match: RegExp; label: string }> = [
     { match: /^DOCUMENT_CREATED$/, label: 'documents added' },
     { match: /^DOCUMENT_DELETED$/, label: 'documents deleted' },
+    { match: /^DOCUMENT_RESTORED$/, label: 'documents restored' },
     { match: /^DOCUMENT_SHARE_(CREATED|CHANGED)$/, label: 'deliverable sharing changes' },
     { match: /^DOCUMENT_/, label: 'other document changes' },
     { match: /^ENGAGEMENT_CREATED$/, label: 'engagement created' },

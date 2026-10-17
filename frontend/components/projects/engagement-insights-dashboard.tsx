@@ -1,11 +1,12 @@
 'use client'
 
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
+import React, { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback, useSyncExternalStore } from 'react'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '@/lib/auth-context'
 import {
     MessagesSquare,
+    Square,
     CalendarClock,
     FolderOpen,
     HardDrive,
@@ -58,6 +59,7 @@ import { engagementPath, firmSettingsPath } from '@/lib/navigation/firm-paths'
 import { InsightCard } from '@/components/dashboard/insight-card'
 import { StatTile } from '@/components/ui/stat-tile'
 import { Button } from '@/components/ui/button'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Hint, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { ActionSection, type ActionItem } from '@/components/dashboard/action-list'
 import { ConcentricRings, Donut, PlanningGapRow, RING, RingWithLegend, ScoreDeductions } from './insight-rings'
@@ -72,6 +74,20 @@ import { Brio } from '@/components/ui/brio'
 import { StreamingText } from '@/components/ui/streaming-text'
 import { BrioSections } from '@/components/ui/brio-sections'
 import { findUnfilledSections } from '@/lib/ai/summary-sections'
+import { planningGapCount } from '@/lib/insights/health-penalties'
+import { useRightPane } from '@/lib/right-pane-context'
+import { SummaryDraftReview, SummaryDraftReviewPane, summaryReviewStore, type ReviewMode, type SummaryDraftReviewProps } from './summary-draft-review'
+import {
+    DeliverablesTimeline,
+    FileOrganizationSection,
+    HEALTH_SCORE_INFO,
+    OverviewDetails,
+    OverviewTop,
+    TeamSection,
+    type FileCheck,
+    type ReportInputs,
+} from './engagement-overview-sections'
+import type { ChartSegment } from './overview-charts'
 
 // ─── Ring Registry ────────────────────────────────────────────────────────────
 // Stable IDs for every ring. Used by Firm Settings to hide/show rings.
@@ -322,6 +338,35 @@ const ROLE_META: Record<string, { label: string; hex: string }> = {
     eng_viewer:           { label: 'Reviewer',     hex: RING.amber },   // External Reviewer — client side
 }
 const INTERNAL_ROLES = new Set(['eng_admin', 'eng_member'])
+
+/** Team Status as numbers for TeamSection (the bars that replaced TeamStatusBody's rings). */
+function teamSectionProps(data: EngagementInsightsResponse) {
+    const roleEntries = Object.entries(data.membersByRole).filter(([, c]) => c > 0)
+    const roles: ChartSegment[] = roleEntries.map(([role, count]) => ({
+        label: ROLE_META[role]?.label ?? role,
+        hex: ROLE_META[role]?.hex ?? RING.gray,
+        value: count,
+    }))
+    const internal = roleEntries.filter(([role]) => INTERNAL_ROLES.has(role)).reduce((s, [, c]) => s + c, 0)
+    const roleTotal = roles.reduce((s, r) => s + r.value, 0)
+    return { joined: data.memberCount, invited: data.pendingInvitations.length, roles, internal, external: roleTotal - internal }
+}
+
+/** File Organization's checks for FileOrganizationSection: what each flags, out of what it looks at. */
+function fileChecks(data: EngagementInsightsResponse): FileCheck[] {
+    const files = data.storageHealth.totalFiles
+    const folders = data.folderHealth.totalFolders
+    const artifacts = files + folders
+    return [
+        { id: 'folder.poorly_named', label: 'Poorly named', info: 'Default or meaningless names like "Untitled", "New File" or "Copy of".', count: data.storageHealth.badlyNamedCount, of: artifacts },
+        { id: 'folder.duplicates', label: 'Duplicates', info: 'Files with the same or nearly the same name (90% or more) and the same extension.', count: data.storageHealth.duplicateCount, of: artifacts },
+        { id: 'folder.stale_files', label: 'Stale files', info: 'Not modified in the last 6 months.', count: data.storageHealth.staleCount, of: files },
+        { id: 'folder.large_files', label: 'Large files', info: 'Larger than 50 MB.', count: data.storageHealth.largeCount, of: files },
+        { id: 'folder.orphaned_files', label: 'Outside any folder', info: 'Files at the root with no parent folder.', count: data.folderHealth.orphanedFiles, of: files },
+        { id: 'folder.empty_folders', label: 'Empty folders', info: 'Folders with no files or subfolders.', count: data.folderHealth.emptyFolders, of: folders },
+        { id: 'folder.deep_folders', label: 'More than 3 levels deep', info: 'Folders nested more than 3 levels down.', count: data.folderHealth.deeplyNestedFolders, of: folders },
+    ]
+}
 
 // ─── Action Center ───────────────────────────────────────────────────────────
 
@@ -1260,10 +1305,8 @@ function EngagementActionCenterV2({ data, loading, engagementBase, setRefreshTic
     const inFlightIds = new Set((data?.deliverables ?? []).filter((d) => d.stage !== 'approved').map((d) => d.id))
     const reworkedInFlight = (data?.revisionMetrics ?? []).filter((r) => inFlightIds.has(r.documentId) && r.revisions >= 1)
     const reworkedCount = reworkedInFlight.length
-    const ph = data?.planningHygiene
-    const planningGaps = ph
-        ? Math.max(0, (ph.deliverableTotal - ph.deliverableWithDueDate) + (ph.docTotal - ph.docWithDueDate) + (ph.docTotal - ph.docWithAssignee))
-        : 0
+    // The same count the health score's "Planning gaps (N missing)" deduction shows.
+    const planningGaps = planningGapCount(data?.planningHygiene)
     const threadsCount = data?.unansweredThreads.length ?? 0
     const intakeCount = data?.pendingApprovalSharesCount ?? 0
     const pendingInvitesCount = data?.pendingInvitations.length ?? 0
@@ -1280,23 +1323,23 @@ function EngagementActionCenterV2({ data, loading, engagementBase, setRefreshTic
     const allDelivery: (ActionRowItem & { gatingRing?: string; gatingSection?: string })[] = [
         { key: 'overdue', label: 'Overdue deliverables', count: overdueCount, severity: 'critical', icon: AlertTriangle,
           sub: overdueCount > 0 ? 'past due date, not yet approved' : 'nothing overdue',
-          href: '/board', ringId: 'ring-schedule', ringLabel: 'Delivery Schedule',
+          href: '/board', ringId: 'ring-schedule', ringLabel: 'Timeline',
           gatingRing: 'engagement.delivery_schedule' },
         { key: 'in-review', label: 'In review — awaiting approval', count: inReviewCount, severity: 'info', icon: Eye,
           sub: inReviewCount > 0 ? 'ready for your review' : undefined,
-          href: '/board', ringId: 'ring-status', ringLabel: 'Delivery Status',
+          href: '/board', ringId: 'ring-status', ringLabel: 'Status',
           gatingRing: 'engagement.delivery_status' },
         { key: 'reworked', label: 'Awaiting rework', count: reworkedCount, severity: 'warning', icon: RefreshCw,
           sub: reworkedCount > 0 ? `${reworkedInFlight.reduce((s, r) => s + r.revisions, 0)} backward transitions` : undefined,
-          href: '/board', ringId: 'ring-ftr', ringLabel: 'First-Time-Right',
+          href: '/board', ringId: 'ring-ftr', ringLabel: 'First-time-right',
           gatingRing: 'engagement.first_time_right' },
         { key: 'planning', label: 'Planning gaps', count: planningGaps, severity: 'warning', icon: ClipboardCheck,
           sub: planningGaps > 0 ? 'missing due dates or assignees' : undefined,
-          href: '/board', ringId: 'ring-planning', ringLabel: 'Planning Hygiene',
+          href: '/board', ringId: 'ring-planning', ringLabel: 'Planning hygiene',
           gatingRing: 'engagement.planning_hygiene' },
         { key: 'threads', label: 'Unanswered comments', count: threadsCount, severity: 'warning', icon: MessagesSquare,
           sub: threadsCount > 0 ? 'client waiting on a reply' : undefined,
-          href: '/comments', ringId: 'ring-comments', ringLabel: 'Comment Responsiveness',
+          href: '/comments', ringId: 'ring-comments', ringLabel: 'Comment responsiveness',
           gatingRing: 'engagement.comment_responsiveness' },
         { key: 'intake', label: 'Intake awaiting review', count: intakeCount, severity: 'info', icon: MailOpen,
           sub: intakeCount > 0 ? 'files submitted by clients' : undefined,
@@ -1351,10 +1394,10 @@ function EngagementActionCenterV2({ data, loading, engagementBase, setRefreshTic
     const attentionTotal = [...delivery, ...housekeeping].filter((r) => r.count > 0).length
 
     return (
-        <div className="sticky top-0">
-            <div className="flex flex-col gap-6 xl:border-l xl:border-line xl:pl-6">
-                {/* Header — the same shape as the Engagement Health heading on the left, so the two
-                    line up: icon, title, a plain count of items needing attention, a quiet refresh. */}
+        <div>
+            <div className="flex flex-col gap-4">
+                {/* Header — the same shape as the section headings below it: icon, title, a plain
+                    count of items needing attention, a quiet refresh. */}
                 <div className="flex items-center justify-between gap-3 border-b border-line pb-2">
                     <div className="flex min-w-0 items-center gap-2">
                         <Inbox className="h-4 w-4 shrink-0 text-fg-subtle" />
@@ -1375,9 +1418,9 @@ function EngagementActionCenterV2({ data, loading, engagementBase, setRefreshTic
                 </div>
 
                 {(loading || !data) ? (
-                    <div className="flex flex-col gap-4">
-                        <div className="h-40 rounded-2xl bg-surface-muted animate-pulse" />
-                        <div className="h-32 rounded-2xl bg-surface-muted animate-pulse" />
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                        <div className="h-32 rounded-card bg-surface-muted animate-pulse" />
+                        <div className="h-32 rounded-card bg-surface-muted animate-pulse" />
                     </div>
                 ) : drilldown === 'duplicates' ? (
                     <DuplicatesDrilldown
@@ -1386,7 +1429,9 @@ function EngagementActionCenterV2({ data, loading, engagementBase, setRefreshTic
                         onBack={() => setDrilldown(null)}
                     />
                 ) : (
-                    <div className="flex flex-col gap-4">
+                    // Delivery and Housekeeping side by side: at the top of the page they are read first,
+                    // and two short columns keep the report from starting a screen further down.
+                    <div className="grid grid-cols-1 gap-x-10 gap-y-4 md:grid-cols-2">
                         {delivery.length > 0 && (
                             <ACSectionV2 title="Delivery" icon={Package} items={delivery} engagementBase={engagementBase} />
                         )}
@@ -2119,7 +2164,7 @@ function EngagementHealthBody({ health, deliverables, planningHygiene, commentTh
                     <div id="ring-health" className="flex flex-col items-center gap-3 scroll-mt-24">
                         <p className="text-sm font-semibold text-fg-muted flex items-center gap-1.5">
                             <Heart className="h-4 w-4 text-fg-subtle" /> Overall Health Score
-                            <InfoTip ariaLabel="About Overall Health Score" text="Composite score (0–100) starting at 100 and reduced by weighted factors: overdue engagement, planning gaps, pace behind schedule, unanswered comments, sensitive files, and reworked deliverables. 80+ healthy · 50–79 needs attention · <50 critical." />
+                            <InfoTip ariaLabel="About Overall Health Score" text={HEALTH_SCORE_INFO} />
                         </p>
                         <Donut
                             total={100}
@@ -2355,6 +2400,10 @@ export function EngagementInsightsDashboard({
     const unfilledSections = useMemo(() => findUnfilledSections(aiDraftEdit), [aiDraftEdit])
     const [aiStreaming, setAiStreaming] = useState(false)
     const [aiStreamText, setAiStreamText] = useState('')
+    /** Stops a draft being written, when its pane is closed mid-write. */
+    const generationAbortRef = useRef<AbortController | null>(null)
+    /** Leftover drafts are swept on the first load only (see the fetch below). */
+    const draftsSweptRef = useRef(false)
 
     const engagementBase = groupSlug && orgSlug && clientSlug && engagementSlug
         ? engagementPath(groupSlug, orgSlug, clientSlug, engagementSlug)
@@ -2383,14 +2432,18 @@ export function EngagementInsightsDashboard({
 
         // --- PDF text-rendering fixes ---
         // html2canvas does not render `text-overflow: ellipsis`, so truncated spans
-        // just hard-clip mid-word. Remove the constraint and let labels wrap instead.
+        // just hard-clip mid-word. Remove the constraint and let labels wrap instead —
+        // except inside a no-wrap line such as a tag, whose fixed height cannot hold a
+        // second line (a wrapped "Slightly behind" fell out of its chip).
         clone.querySelectorAll('.truncate').forEach((node) => {
             const span = node as HTMLElement
             span.classList.remove('truncate')
             span.style.overflow = 'visible'
-            span.style.whiteSpace = 'normal'
+            if (!span.closest('.whitespace-nowrap')) span.style.whiteSpace = 'normal'
             span.style.textOverflow = 'unset'
         })
+        // html2canvas draws tabular figures with gaps ("100 %"); plain figures render right.
+        clone.querySelectorAll('.tabular-nums').forEach((node) => node.classList.remove('tabular-nums'))
         // Lift the 260 px max-width on the health-score factors container so the
         // now-wrapping labels have the full column width available.
         const factorsContainer = clone.querySelector('#ring-health > :last-child') as HTMLElement | null
@@ -2422,21 +2475,34 @@ export function EngagementInsightsDashboard({
         // Add 80px buffer so content at the very bottom is never clipped by the canvas edge.
         const captureH = Math.max(clone.scrollHeight, liveScrollH) + 40
 
+        // html2canvas places each line of text by measuring a 1×1 test image against sample text,
+        // in this document. Tailwind's base styles make every <img> a block, so the image drops
+        // below the text and every line was drawn a few pixels low: under its tag's background,
+        // into its meter's bar, off its legend dot. Put the test image back inline while capturing.
+        const baselineFix = document.createElement('style')
+        baselineFix.textContent = 'img[src^="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP"]{display:inline!important}'
+        document.head.appendChild(baselineFix)
+
         // html2canvas sign convention: canvas-Y = getBoundingClientRect().top - (-scrollY_option)
         // Clone is at absolute top:0 → getBoundingClientRect().top = -window.scrollY.
         // To anchor canvas-Y = 0: -window.scrollY + window.scrollY = 0 ✓
-        const canvas = await html2canvas(clone, {
-            scale: 1.5,
-            useCORS: true,
-            backgroundColor: '#ffffff',
-            logging: false,
-            scrollX: -window.scrollX,
-            scrollY: -window.scrollY,
-            width: captureW,
-            height: captureH,
-            windowWidth: captureW,
-            windowHeight: captureH,
-        })
+        let canvas: HTMLCanvasElement
+        try {
+            canvas = await html2canvas(clone, {
+                scale: 1.5,
+                useCORS: true,
+                backgroundColor: '#ffffff',
+                logging: false,
+                scrollX: -window.scrollX,
+                scrollY: -window.scrollY,
+                width: captureW,
+                height: captureH,
+                windowWidth: captureW,
+                windowHeight: captureH,
+            })
+        } finally {
+            baselineFix.remove()
+        }
 
         document.body.removeChild(offscreen)
 
@@ -2499,7 +2565,18 @@ export function EngagementInsightsDashboard({
             headers: { Authorization: `Bearer ${session.access_token}` },
         })
             .then((r) => r.json())
-            .then((d) => { setData(d); setSummaryDraft(d?.insightsSummary ?? ''); setAiDraftEdit(d?.insightsSummaryDraft?.content ?? '') })
+            .then((d) => {
+                // Drafts are one-off: written, reviewed, then published or discarded in one sitting.
+                // One found on the first load was left by a review that never finished (a closed
+                // tab), so it is discarded quietly rather than offered back. Later refreshes keep
+                // the draft — it may be the one open in the review pane right now.
+                if (!draftsSweptRef.current && isFirmAdmin && d?.insightsSummaryDraft) {
+                    void dismissEngagementAiSummary(projectId).catch(() => {})
+                    d = { ...d, insightsSummaryDraft: null, insightsSummaryDraftStale: false }
+                }
+                draftsSweptRef.current = true
+                setData(d); setSummaryDraft(d?.insightsSummary ?? ''); setAiDraftEdit(d?.insightsSummaryDraft?.content ?? '')
+            })
             .catch((e) => console.error('Failed to load engagement insights', e))
             .finally(() => setLoading(false))
     }, [projectId, session?.access_token, refreshTick])
@@ -2522,8 +2599,72 @@ export function EngagementInsightsDashboard({
         }
     }
 
+    // ── Draft review in the right pane ─────────────────────────────────────────
+    // The pane takes a node once and draws it twice (docked, and full screen), so the review is
+    // not rendered into it from here: this component publishes the review's props to
+    // summaryReviewStore on every render, and SummaryDraftReviewPane, the node the pane holds,
+    // reads them. Typing and streaming update in place; the pane never remounts.
+    const rightPane = useRightPane()
+    const paneOpen = useSyncExternalStore(summaryReviewStore.subscribe, summaryReviewStore.isOpen, () => false)
+    const clearPaneRef = useRef(rightPane.clearPane)
+    useEffect(() => { clearPaneRef.current = rightPane.clearPane }, [rightPane.clearPane])
+    // Preview (sections, with the lead's own as text boxes) or Markdown. Kept here so both of the
+    // pane's copies show the same view, and back to Preview for each new draft.
+    const [reviewMode, setReviewMode] = useState<ReviewMode>('preview')
+    const draftGeneratedAt = data?.insightsSummaryDraft?.generatedAt ?? null
+    useEffect(() => { setReviewMode('preview') }, [draftGeneratedAt])
+    const openSummaryReview = useCallback(() => {
+        if (!rightPane.hasRightPane || summaryReviewStore.isOpen()) return
+        rightPane.setTitle('Summary draft')
+        rightPane.setHeaderIcon(<FileText className="h-4 w-4" />)
+        rightPane.setHeaderSubtitle('')
+        rightPane.setHeaderActions(null)
+        rightPane.setPaneSize('medium')
+        rightPane.setContent(<SummaryDraftReviewPane />)
+        rightPane.setBeforeClose(() => closeGuardRef.current())
+    }, [rightPane])
+    const hasDraftOrStream = aiStreaming || !!aiStreamText || !!data?.insightsSummaryDraft
+    // Published, dismissed or failed: nothing left to review, so the pane closes itself.
+    useEffect(() => {
+        if (!hasDraftOrStream && summaryReviewStore.isOpen()) clearPaneRef.current()
+    }, [hasDraftOrStream])
+    // Leaving the Overview takes its review pane with it.
+    useEffect(() => () => {
+        if (summaryReviewStore.isOpen()) clearPaneRef.current()
+        summaryReviewStore.set(null)
+    }, [])
+
     /**
-     * Streams a draft into the card above the report.
+     * Throws the draft away: stops it if Brio is still writing, drops it here, and marks it
+     * dismissed on the server (the published summary is untouched). A failed call leaves a
+     * leftover draft, which the next load sweeps.
+     */
+    const discardDraft = useCallback(async () => {
+        generationAbortRef.current?.abort()
+        setData((prev) => prev ? { ...prev, insightsSummaryDraft: null, insightsSummaryDraftStale: false } : prev)
+        setAiDraftEdit('')
+        setAiGenerateNote(null)
+        try { await dismissEngagementAiSummary(projectId) } catch { /* swept on the next load */ }
+    }, [projectId])
+
+    // Closing the pane (its ×) discards the draft. If the lead has typed in it, ask first.
+    const [confirmDiscardOpen, setConfirmDiscardOpen] = useState(false)
+    const draftTyped = !!data?.insightsSummaryDraft && !aiStreaming
+        && aiDraftEdit.trim() !== data.insightsSummaryDraft.content.trim()
+    const closeGuardRef = useRef<() => boolean>(() => true)
+    useEffect(() => {
+        closeGuardRef.current = () => {
+            if (draftTyped) {
+                setConfirmDiscardOpen(true)
+                return false
+            }
+            void discardDraft()
+            return true
+        }
+    })
+
+    /**
+     * Streams a draft into the review pane (or, without one, the card on the page).
      *
      * The model's deltas arrive in irregular bursts, so rendering each one directly makes the
      * text stutter. Arriving text is buffered and drained to the screen on animation frames at
@@ -2535,6 +2676,9 @@ export function EngagementInsightsDashboard({
         setAiGenerateNote(null)
         setAiStreamText('')
         setAiStreaming(true)
+        openSummaryReview()
+        const abort = new AbortController()
+        generationAbortRef.current = abort
 
         let pending = ''          // received but not yet shown
         let shown = ''            // currently on screen
@@ -2592,6 +2736,7 @@ export function EngagementInsightsDashboard({
                 `/api/projects/${projectId}/ai-summary`,
                 { method: 'POST' },
                 AI_TIMEOUT_MS.stream,
+                abort.signal,
             )
             if (!res.ok) {
                 setAiGenerateNote(res.status === 503
@@ -2630,6 +2775,8 @@ export function EngagementInsightsDashboard({
                         setData((prev) => prev ? {
                             ...prev,
                             insightsSummaryDraft: { content: evt.content!, generatedAt: evt.generatedAt! },
+                            // Unchanged means its data is today's.
+                            insightsSummaryDraftStale: false,
                         } : prev)
                     } else if (evt.type === 'done' && evt.content) {
                         completed = { content: evt.content, generatedAt: evt.generatedAt! }
@@ -2650,6 +2797,8 @@ export function EngagementInsightsDashboard({
                 setData((prev) => prev ? {
                     ...prev,
                     insightsSummaryDraft: { content: completed!.content, generatedAt: completed!.generatedAt },
+                    // Just written from today's data.
+                    insightsSummaryDraftStale: false,
                 } : prev)
             } else if (!noted) {
                 // The stream ended without a `done` event and without an `error` event — a
@@ -2660,7 +2809,8 @@ export function EngagementInsightsDashboard({
                 setAiGenerateNote(`${ASSISTANT.name} was interrupted before finishing. Nothing was saved — try again.`)
             }
         } catch {
-            setAiGenerateNote(`${ASSISTANT.name} could not write a summary. Try again.`)
+            // Stopped because its pane was closed: discarding it was the point, so no error.
+            if (!abort.signal.aborted) setAiGenerateNote(`${ASSISTANT.name} could not write a summary. Try again.`)
         } finally {
             finished = true
             cancelAnimationFrame(raf)
@@ -2707,17 +2857,82 @@ export function EngagementInsightsDashboard({
     const hiddenSections = data?.insightsConfig?.hiddenSections ?? []
     const showSection = (id: string) => !hiddenSections.includes(id)
 
+    const reviewProps: SummaryDraftReviewProps = {
+        streaming: aiStreaming,
+        streamText: aiStreamText,
+        generatedAt: draftGeneratedAt,
+        value: aiDraftEdit,
+        onChange: setAiDraftEdit,
+        mode: reviewMode,
+        onModeChange: setReviewMode,
+        unfilledSections,
+        busyAction: aiDraftAction,
+        onPublish: handleAiSummaryApprove,
+        onDismiss: handleAiSummaryDismiss,
+        onCopy: () => copySummary(aiDraftEdit, 'draft'),
+        copied: summaryCopied === 'draft',
+        note: aiGenerateNote,
+        published: data?.insightsSummary ? { content: data.insightsSummary, publishedAt: data.insightsSummaryPublishedAt ?? null } : null,
+        draftBehind: !!data?.insightsSummaryDraftStale,
+        onRewrite: handleGenerateSummary,
+        // Stopping throws the unfinished draft away, as Discard does; with nothing left to
+        // review the pane closes itself, and the published summary stays as it was.
+        onStop: () => { void discardDraft() },
+    }
+    const reviewing = isFirmAdmin && hasDraftOrStream
+    // Every render, so the pane shows the current draft, stream and button states.
+    useLayoutEffect(() => {
+        summaryReviewStore.set(reviewing ? reviewProps : null)
+    })
+
     return (
         <TooltipProvider delayDuration={150}>
-        <div className="grid grid-cols-1 gap-8 pb-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
-            {/* Left: insights — flat sections, no outer card. The page header above already shows
-                the engagement's name, status and due date. */}
-            <div className="flex min-w-0 flex-col gap-10">
+        {/* One column (.claude/plans/engagement-overview-redesign.md): what needs attention first,
+            then the report. The Action Center used to be a sticky rail on the right, beside the
+            report rather than ahead of it, and it cost the report a fifth of its width. */}
+        <div className="flex min-w-0 flex-col gap-10 pb-6">
+            <EngagementActionCenterV2 data={data} loading={loading} engagementBase={engagementBase} projectId={projectId} setRefreshTick={setRefreshTick} />
                 {/* Engagement Health — Health Score · Delivery Status · Delivery Schedule (Phase 7 & 8) */}
                 {!loading && data && (() => {
                     const inFlightIds = new Set((data.deliverables ?? []).filter((d) => d.stage !== 'approved').map((d) => d.id))
                     const inFlightWithRework = (data.revisionMetrics ?? []).filter((r) => inFlightIds.has(r.documentId) && r.revisions > 0).length
                     const memberCount = data.memberCount ?? 0
+                    const hiddenRings = data.insightsConfig?.hiddenRings ?? []
+                    const showRing = (id: string) => !hiddenRings.includes(id)
+                    // Rework rounds over the deliverables that have been to review (or been sent
+                    // back). Before any has, there is no data yet — "0.0" would read as "no rework".
+                    const revision = (() => {
+                        const reviewed = new Set((data.deliverables ?? []).filter((d) => d.stage === 'in_review' || d.stage === 'approved').map((d) => d.id))
+                        for (const r of data.revisionMetrics ?? []) if (r.revisions > 0) reviewed.add(r.documentId)
+                        if (reviewed.size === 0) return { avg: null as number | null, reviewed: 0 }
+                        const rounds = (data.revisionMetrics ?? []).filter((r) => reviewed.has(r.documentId)).reduce((sum, r) => sum + r.revisions, 0)
+                        return { avg: rounds / reviewed.size, reviewed: reviewed.size }
+                    })()
+                    const report: ReportInputs = {
+                        deliverables: data.deliverables ?? [],
+                        startDate: data.kickoffDate ?? data.engagementCreatedAt ?? null,
+                        startIsKickoff: !!data.kickoffDate,
+                        dueDate: data.engagementDueDate ?? null,
+                        nowMs: Date.now(),
+                        deliveredPct: data.pace?.deliveredPct ?? 0,
+                        timePct: data.pace?.timePct ?? 0,
+                        health: data.healthScore ?? null,
+                        planning: data.planningHygiene ?? null,
+                        comments: {
+                            // A thread the firm replied to that is still flagged urgent or looking is
+                            // open, not resolved.
+                            resolved: Math.max(0, (data.commentThreads?.answered ?? 0) - (data.commentThreads?.flaggedOpen ?? 0)),
+                            flaggedOpen: data.commentThreads?.flaggedOpen ?? 0,
+                            unanswered: data.commentThreads?.unanswered ?? 0,
+                        },
+                        firstTimeRight: { firstTime: data.firstTimeRight?.firstTime ?? 0, reworked: data.firstTimeRight?.reworked ?? 0 },
+                        inFlightWithRework,
+                        revisionAvg: revision.avg,
+                        reviewedCount: revision.reviewed,
+                        approvalCycleDays: data.approvalCycle?.avgCycleDays ?? null,
+                        approvedCount: data.approvalCycle?.approvedCount ?? 0,
+                        show: showRing,
+                    }
                     return (
                         <InsightCard
                             title="Engagement Health"
@@ -2830,159 +3045,6 @@ export function EngagementInsightsDashboard({
                                 </motion.div>
                             )}
 
-                            {/* Pending draft — at the top so it reads as the summary it will become, but
-                                deliberately OUTSIDE healthCardRef: only approved text may reach the
-                                PDF/email export. Streams in token-by-token while generating. */}
-                            {isFirmAdmin && !summaryEditing && (aiStreaming || aiStreamText || data?.insightsSummaryDraft) && (
-                                <motion.div
-                                    key="summary-draft"
-                                    initial={{ opacity: 0, height: 0 }}
-                                    animate={{ opacity: 1, height: 'auto' }}
-                                    exit={{ opacity: 0, height: 0 }}
-                                    transition={{ duration: 0.2, ease: 'easeOut' }}
-                                    className="mx-6 mt-4 flex flex-col gap-2 overflow-hidden rounded-card bg-surface-subtle p-3"
-                                >
-                                    <div className="flex items-center gap-2">
-                                        <span className="inline-flex items-center gap-1.5 text-small font-medium text-fg-muted">
-                                            {aiStreaming ? (
-                                                <>
-                                                    <Brio className={aiStreaming ? 'animate-pulse' : ''} />
-                                                    is writing…
-                                                </>
-                                            ) : (
-                                                <>Suggested by <Brio /></>
-                                            )}
-                                        </span>
-                                        {!aiStreaming && data?.insightsSummaryDraft && (
-                                            <span className="text-caption text-fg-subtle">
-                                                {formatRelativeTime(data.insightsSummaryDraft.generatedAt)}
-                                            </span>
-                                        )}
-                                    </div>
-
-                                    {/* The streaming <p> and the editable textarea share box styling
-                                        and height, so the handoff at the end is not visible. */}
-                                    {aiStreaming ? (
-                                        <motion.p
-                                            key="stream"
-                                            initial={{ opacity: 0 }}
-                                            animate={{ opacity: 1 }}
-                                            transition={{ duration: 0.15 }}
-                                            className="hover-scrollbar h-[19.5rem] w-full overflow-y-auto whitespace-pre-wrap rounded-control border border-line bg-surface px-3 py-2 text-ui leading-relaxed text-fg"
-                                        >
-                                            <StreamingText text={aiStreamText} />
-                                            {/* Block caret, terminal style. Sized in `em` so it tracks the
-                                                font rather than a fixed pixel width. */}
-                                            <span
-                                                className="inline-block w-[0.5em] h-[1.05em] -mb-[0.15em] ml-0.5 translate-y-px bg-action align-baseline"
-                                                style={{ animation: 'fm-caret 1.3s ease-in-out infinite' }}
-                                            />
-                                            {!aiStreamText && (
-                                                <span className="text-fg-subtle"><Brio /> is reading this engagement…</span>
-                                            )}
-                                        </motion.p>
-                                    ) : (
-                                        <motion.textarea
-                                            key="draft-edit"
-                                            initial={{ opacity: 0 }}
-                                            animate={{ opacity: 1 }}
-                                            transition={{ duration: 0.2, ease: 'easeOut' }}
-                                            value={aiDraftEdit}
-                                            onChange={(e) => setAiDraftEdit(e.target.value)}
-                                            disabled={aiDraftBusy}
-                                            className="hover-scrollbar h-[19.5rem] w-full resize-none overflow-y-scroll [scrollbar-gutter:stable] rounded-control border border-line bg-surface px-3 py-2 text-ui leading-relaxed text-fg focus:border-action/60 focus:outline-none focus:ring-2 focus:ring-action/20 disabled:opacity-60"
-                                        />
-                                    )}
-
-                                    {aiGenerateNote && !aiStreaming && (
-                                        <p className="text-caption text-action">{aiGenerateNote}</p>
-                                    )}
-
-                                    {!aiStreaming && (
-                                        <>
-                                            {unfilledSections.length > 0 && (
-                                                <p className="text-caption text-tag-orange-fg">
-                                                    <strong>{unfilledSections.join(' and ')}</strong> are yours to
-                                                    decide. <Brio /> reports what the data shows; it does not
-                                                    commit your firm to a plan. Add your notes before publishing.
-                                                </p>
-                                            )}
-                                            <p className="text-caption text-fg-muted">
-                                                Review and edit before publishing — once published this becomes the engagement
-                                                summary, visible to the client and included in PDF and email exports.
-                                                {data?.insightsSummary && (
-                                                    <> It replaces the summary published
-                                                        {data.insightsSummaryPublishedAt
-                                                            ? ` ${formatRelativeTime(data.insightsSummaryPublishedAt)}`
-                                                            : ' earlier'}, which is hidden while you review.</>
-                                                )}
-                                            </p>
-                                            <div className="flex items-center justify-end gap-2">
-                                                <Button
-                                                    size="sm"
-                                                    variant="ghost"
-                                                    onClick={() => copySummary(aiDraftEdit, 'draft')}
-                                                    disabled={!aiDraftEdit.trim()}
-                                                    aria-label="Copy draft summary to clipboard"
-                                                    className="mr-auto"
-                                                >
-                                                    {summaryCopied === 'draft'
-                                                        ? <Check className="h-3 w-3 text-action" />
-                                                        : <Copy className="h-3 w-3" />}
-                                                    {summaryCopied === 'draft' ? 'Copied' : 'Copy'}
-                                                </Button>
-                                                <Button size="sm" variant="outline" onClick={handleAiSummaryDismiss} disabled={aiDraftBusy}>
-                                                    {aiDraftAction === 'dismiss' && <RefreshCw className="h-3 w-3 animate-spin" />}
-                                                    Dismiss
-                                                </Button>
-                                                <Button
-                                                    size="sm"
-                                                    onClick={handleAiSummaryApprove}
-                                                    disabled={aiDraftBusy || !aiDraftEdit.trim() || unfilledSections.length > 0}
-                                                    title={unfilledSections.length > 0
-                                                        ? `Complete: ${unfilledSections.join(', ')}`
-                                                        : undefined}
-                                                >
-                                                    {aiDraftAction === 'publish' && <RefreshCw className="h-3 w-3 animate-spin" />}
-                                                    Publish
-                                                </Button>
-                                            </div>
-                                        </>
-                                    )}
-                                </motion.div>
-                            )}
-                            </AnimatePresence>
-
-                            {/* Generation feedback when there is no draft card to host it (AI off, or failure). */}
-                            {isFirmAdmin && aiGenerateNote && !data?.insightsSummaryDraft && !aiStreamText && !aiStreaming && (
-                                <p className="mx-6 mt-4 text-caption text-fg-muted">{aiGenerateNote}</p>
-                            )}
-
-                            {/* Stale marker — firm users only, and outside healthCardRef so it never
-                                appears on the client's exported report. The summary itself is kept. */}
-                            <AnimatePresence initial={false}>
-                            {isFirmAdmin && data?.insightsSummaryStale && !data?.insightsSummaryDraft && !aiStreaming && (
-                                <motion.div
-                                    key="summary-stale"
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                    exit={{ opacity: 0 }}
-                                    transition={{ duration: 0.18, ease: 'easeOut' }}
-                                    className="mx-6 mt-4 flex items-center gap-2 text-caption text-tag-orange-fg"
-                                >
-                                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                                    <span>
-                                        The engagement has changed since this summary was published
-                                        {data.insightsSummaryPublishedAt ? ` ${formatRelativeTime(data.insightsSummaryPublishedAt)}` : ''}.
-                                    </span>
-                                    <button
-                                        onClick={handleGenerateSummary}
-                                        className="underline underline-offset-2 transition-colors hover:text-fg"
-                                    >
-                                        Ask <Brio /> for an update
-                                    </button>
-                                </motion.div>
-                            )}
                             </AnimatePresence>
 
                             <div ref={healthCardRef}>
@@ -3008,179 +3070,194 @@ export function EngagementInsightsDashboard({
                                         </span>
                                     </div>
                                 )}
-                                {/* Engagement Summary — leads the report, and inside healthCardRef so it
-                                    captures into the PDF/email export. Only ever approved text. */}
-                                {/* Rendered even with no summary yet (for firm admins) so the card is
-                                    the single entry point for adding or generating one. */}
-                                <AnimatePresence initial={false}>
-                                {/* Hidden while a draft is under review (or streaming) so the card above
-                                    isn't mistaken for a duplicate of the published summary. */}
-                                {(data.insightsSummary || isFirmAdmin)
-                                    && !summaryEditing
-                                    && !aiStreaming
-                                    && !aiStreamText
-                                    && !data.insightsSummaryDraft && (
-                                    <motion.div
-                                        key="summary-published"
-                                        // With no summary the card exists only to offer Add/Generate, so
-                                        // the whole shell is dropped from the export rather than leaving
-                                        // an empty box in the client's report.
-                                        {...(data.insightsSummary ? {} : { 'data-no-export': '' })}
-                                        // Height is animated as well as opacity: the edit box lives in a
-                                        // separate subtree (the PDF boundary sits between them), so without
-                                        // this the container snaps as one unmounts and the other mounts.
-                                        initial={{ opacity: 0, height: 0 }}
-                                        animate={{ opacity: 1, height: 'auto' }}
-                                        exit={{ opacity: 0, height: 0 }}
-                                        transition={{ duration: 0.2, ease: 'easeOut' }}
-                                        className="mx-6 mt-4 flex flex-col overflow-hidden rounded-card border border-line bg-surface"
-                                    >
-                                        <div className="flex items-center justify-between gap-4 px-4 pt-3 pb-2 border-b border-line">
-                                            <div className="flex items-baseline gap-2 min-w-0">
-                                                <span className="text-small font-medium text-fg-muted">
-                                                    Engagement Summary
-                                                </span>
-                                                {data.insightsSummaryPublishedAt && (
-                                                    <Tooltip>
-                                                        <TooltipTrigger asChild>
-                                                            <span className="inline-flex shrink-0 cursor-default items-center gap-1 text-caption text-fg-subtle">
-                                                                <Clock className="h-3 w-3" />
-                                                                {formatRelativeTime(data.insightsSummaryPublishedAt)}
-                                                            </span>
-                                                        </TooltipTrigger>
-                                                        <TooltipContent side="bottom" className="text-xs">
-                                                            Published {formatDateTimeWithTZ(data.insightsSummaryPublishedAt)}
-                                                        </TooltipContent>
-                                                    </Tooltip>
-                                                )}
-                                                {/* Deliberately narrow: the fingerprint watches deliverable stages,
-                                                    due dates, comment counts, planning coverage and team size — not
-                                                    everything the summary can describe (pace, health score, approval
-                                                    cycle and storage are excluded). So this states what was checked
-                                                    rather than asserting the text is still correct. */}
-                                                {data.insightsSummaryPublishedAt && !data.insightsSummaryStale && (
-                                                    <Tooltip>
-                                                        <TooltipTrigger asChild>
-                                                            <span className="inline-flex shrink-0 cursor-default items-center gap-1 text-caption text-fg-subtle">
-                                                                <Check className="h-3 w-3" />
-                                                                No delivery changes
-                                                            </span>
-                                                        </TooltipTrigger>
-                                                        <TooltipContent side="bottom" className="text-xs max-w-[260px]">
-                                                            No deliverable, due date, comment or team change since this
-                                                            was published. Other details can still have moved — worth a
-                                                            rewrite if the engagement has shifted.
-                                                        </TooltipContent>
-                                                    </Tooltip>
-                                                )}
+                                {/* The report (.claude/plans/engagement-overview-redesign.md): the cards to
+                                    read first — Overall Health, Timeline, Status — in the left third, the
+                                    summary in the right two thirds, then the deliverables and what feeds
+                                    the health score. All inside healthCardRef, so it exports with the PDF;
+                                    the summary is only ever approved text. It renders even with no summary
+                                    yet (for firm admins), as the one place to add or generate one, and stays
+                                    while a draft is reviewed in the pane. */}
+                                <div className="flex flex-col gap-8 px-6 pt-4 pb-6">
+                                    <OverviewTop
+                                        report={report}
+                                        // Without a right pane (none outside /d) the draft review sits above the
+                                        // summary instead. No-export: only approved text reaches the client.
+                                        aboveSummary={isFirmAdmin && !summaryEditing && hasDraftOrStream && !rightPane.hasRightPane ? (
+                                            <div data-no-export="" className="flex h-[32rem] flex-col overflow-hidden rounded-card border border-line">
+                                                <SummaryDraftReview {...reviewProps} />
                                             </div>
-                                            {/* Controls are marked no-export so they are stripped from the
-                                                clone at capture time and never reach the client's PDF. */}
-                                            {isFirmAdmin && !aiStreaming && !data.insightsSummaryDraft && (
-                                                <div data-no-export="" className="flex items-center gap-2 shrink-0">
-                                                    {data.insightsSummary && (
-                                                        <Tooltip>
-                                                            <TooltipTrigger asChild>
+                                        ) : null}
+                                        summary={(data.insightsSummary || isFirmAdmin) && !summaryEditing ? (
+                                            <motion.div
+                                                key="summary-published"
+                                                // With no summary the card exists only to offer Add/Generate, so
+                                                // the whole shell is dropped from the export rather than leaving
+                                                // an empty box in the client's report.
+                                                {...(data.insightsSummary ? {} : { 'data-no-export': '' })}
+                                                // Height is animated as well as opacity: the edit box lives in a
+                                                // separate subtree (the PDF boundary sits between them), so without
+                                                // this the container snaps as one unmounts and the other mounts.
+                                                initial={{ opacity: 0, height: 0 }}
+                                                animate={{ opacity: 1, height: 'auto' }}
+                                                transition={{ duration: 0.2, ease: 'easeOut' }}
+                                                className="flex flex-col overflow-hidden rounded-card border border-line bg-surface"
+                                            >
+                                                <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 pt-3 pb-2 border-b border-line">
+                                                    <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+                                                        <span className="text-small font-medium text-fg-muted">
+                                                            Engagement Summary
+                                                        </span>
+                                                        {data.insightsSummaryPublishedAt && (
+                                                            <Tooltip>
+                                                                <TooltipTrigger asChild>
+                                                                    <span className="inline-flex shrink-0 cursor-default items-center gap-1 text-caption text-fg-subtle">
+                                                                        <Clock className="h-3 w-3" />
+                                                                        {formatRelativeTime(data.insightsSummaryPublishedAt)}
+                                                                    </span>
+                                                                </TooltipTrigger>
+                                                                <TooltipContent side="bottom" className="text-xs">
+                                                                    Published {formatDateTimeWithTZ(data.insightsSummaryPublishedAt)}
+                                                                </TooltipContent>
+                                                            </Tooltip>
+                                                        )}
+                                                        {/* Deliberately narrow: the fingerprint watches deliverable stages,
+                                                            due dates, comment counts, planning coverage and team size — not
+                                                            everything the summary can describe (pace, health score, approval
+                                                            cycle and storage are excluded). So this states what was checked
+                                                            rather than asserting the text is still correct. */}
+                                                        {data.insightsSummaryPublishedAt && !data.insightsSummaryStale && (
+                                                            <Tooltip>
+                                                                <TooltipTrigger asChild>
+                                                                    <span className="inline-flex shrink-0 cursor-default items-center gap-1 text-caption text-fg-subtle">
+                                                                        <Check className="h-3 w-3" />
+                                                                        No delivery changes
+                                                                    </span>
+                                                                </TooltipTrigger>
+                                                                <TooltipContent side="bottom" className="text-xs max-w-[260px]">
+                                                                    No deliverable, due date, comment or team change since this
+                                                                    was published. Other details can still have moved — worth a
+                                                                    rewrite if the engagement has shifted.
+                                                                </TooltipContent>
+                                                            </Tooltip>
+                                                        )}
+                                                        {/* Out of date: firm users only, and no-export, so it never reaches the
+                                                            client's report. It used to be a row of its own above the card. */}
+                                                        {isFirmAdmin && data.insightsSummaryStale && !data.insightsSummaryDraft && !aiStreaming && (
+                                                            <Tooltip>
+                                                                <TooltipTrigger asChild>
+                                                                    <span data-no-export="" className="inline-flex shrink-0 cursor-default items-center gap-1 text-caption font-medium text-tag-orange-fg">
+                                                                        <AlertTriangle className="h-3 w-3" />
+                                                                        Out of date
+                                                                    </span>
+                                                                </TooltipTrigger>
+                                                                <TooltipContent side="bottom" className="text-xs max-w-[260px]">
+                                                                    The engagement has changed since this summary was published.
+                                                                    Rewrite it with Brio to bring it up to date.
+                                                                </TooltipContent>
+                                                            </Tooltip>
+                                                        )}
+                                                    </div>
+                                                    {/* Controls are marked no-export so they are stripped from the
+                                                        clone at capture time and never reach the client's PDF. */}
+                                                    {/* A pending draft: the notice and Review take the controls' place, in the
+                                                        header rather than a row of their own above the card. The review opens
+                                                        in the right pane; the published summary stays below. */}
+                                                    {isFirmAdmin && hasDraftOrStream && rightPane.hasRightPane && (
+                                                        <div data-no-export="" className="flex shrink-0 items-center gap-2">
+                                                            <span className="inline-flex items-center gap-1.5 text-small text-fg-muted">
+                                                                {aiStreaming
+                                                                    ? <><Brio className="animate-pulse" /> is writing a new summary…</>
+                                                                    : <><Brio /> drafted a new summary</>}
+                                                            </span>
+                                                            {!aiStreaming && data.insightsSummaryDraft && (
+                                                                <span className="text-caption text-fg-subtle">{formatRelativeTime(data.insightsSummaryDraft.generatedAt)}</span>
+                                                            )}
+                                                            <button
+                                                                onClick={openSummaryReview}
+                                                                disabled={paneOpen}
+                                                                className="inline-flex h-7 items-center gap-1.5 rounded-control border border-line bg-surface px-2 text-small font-medium text-action transition-colors hover:border-line-strong hover:bg-surface-hover disabled:cursor-default disabled:text-fg-subtle disabled:hover:bg-surface"
+                                                            >
+                                                                {paneOpen ? 'Reviewing' : aiStreaming ? 'Watch' : 'Review'}
+                                                            </button>
+                                                            {aiStreaming && (
                                                                 <button
-                                                                    onClick={() => copySummary(data.insightsSummary!, 'published')}
-                                                                    aria-label="Copy summary to clipboard"
+                                                                    onClick={() => { void discardDraft() }}
                                                                     className="inline-flex h-7 items-center gap-1.5 rounded-control border border-line bg-surface px-2 text-small text-fg-muted transition-colors hover:border-line-strong hover:bg-surface-hover hover:text-fg"
                                                                 >
-                                                                    {summaryCopied === 'published'
-                                                                        ? <Check className="h-3 w-3 text-action" />
-                                                                        : <Copy className="h-3 w-3" />}
-                                                                    {summaryCopied === 'published' ? 'Copied' : 'Copy'}
+                                                                    <Square className="h-3 w-3 fill-current" /> Stop
                                                                 </button>
-                                                            </TooltipTrigger>
-                                                            <TooltipContent side="bottom" className="text-xs">
-                                                                Copy the summary as markdown
-                                                            </TooltipContent>
-                                                        </Tooltip>
+                                                            )}
+                                                        </div>
                                                     )}
-                                                    <button
-                                                        onClick={() => { setSummaryDraft(data.insightsSummary ?? ''); setSummaryEditing(true) }}
-                                                        className="inline-flex h-7 items-center gap-1.5 rounded-control border border-line bg-surface px-2 text-small text-fg-muted transition-colors hover:border-line-strong hover:bg-surface-hover hover:text-fg"
-                                                    >
-                                                        <Pencil className="h-3 w-3" />
-                                                        {data.insightsSummary ? 'Edit' : 'Add'}
-                                                    </button>
-                                                    <button
-                                                        onClick={handleGenerateSummary}
-                                                        className="inline-flex h-7 items-center gap-1.5 rounded-control border border-line bg-surface px-2 text-small font-medium text-action transition-colors hover:border-line-strong hover:bg-surface-hover"
-                                                    >
-                                                        {data.insightsSummary ? <>Rewrite with</> : <>Write with</>}
-                                                        <Brio />
-                                                    </button>
+                                                    {isFirmAdmin && !aiStreaming && !data.insightsSummaryDraft && (
+                                                        <div data-no-export="" className="flex items-center gap-2 shrink-0">
+                                                            {data.insightsSummary && (
+                                                                <Tooltip>
+                                                                    <TooltipTrigger asChild>
+                                                                        <button
+                                                                            onClick={() => copySummary(data.insightsSummary!, 'published')}
+                                                                            aria-label="Copy summary to clipboard"
+                                                                            className="inline-flex h-7 items-center gap-1.5 rounded-control border border-line bg-surface px-2 text-small text-fg-muted transition-colors hover:border-line-strong hover:bg-surface-hover hover:text-fg"
+                                                                        >
+                                                                            {summaryCopied === 'published'
+                                                                                ? <Check className="h-3 w-3 text-action" />
+                                                                                : <Copy className="h-3 w-3" />}
+                                                                            {summaryCopied === 'published' ? 'Copied' : 'Copy'}
+                                                                        </button>
+                                                                    </TooltipTrigger>
+                                                                    <TooltipContent side="bottom" className="text-xs">
+                                                                        Copy the summary as markdown
+                                                                    </TooltipContent>
+                                                                </Tooltip>
+                                                            )}
+                                                            <button
+                                                                onClick={() => { setSummaryDraft(data.insightsSummary ?? ''); setSummaryEditing(true) }}
+                                                                className="inline-flex h-7 items-center gap-1.5 rounded-control border border-line bg-surface px-2 text-small text-fg-muted transition-colors hover:border-line-strong hover:bg-surface-hover hover:text-fg"
+                                                            >
+                                                                <Pencil className="h-3 w-3" />
+                                                                {data.insightsSummary ? 'Edit' : 'Add'}
+                                                            </button>
+                                                            <button
+                                                                onClick={handleGenerateSummary}
+                                                                className="inline-flex h-7 items-center gap-1.5 rounded-control border border-line bg-surface px-2 text-small font-medium text-action transition-colors hover:border-line-strong hover:bg-surface-hover"
+                                                            >
+                                                                {data.insightsSummary ? <>Rewrite with</> : <>Write with</>}
+                                                                <Brio />
+                                                            </button>
+                                                        </div>
+                                                    )}
                                                 </div>
-                                            )}
-                                        </div>
-                                        {data.insightsSummary ? (
-                                            <BrioSections
-                                                content={data.insightsSummary}
-                                                className="px-4 py-3 text-fg-muted"
-                                            />
-                                        ) : (
-                                            <p data-no-export="" className="text-sm text-fg-subtle px-4 py-3">
-                                                No summary yet — write one, or let <Brio /> draft it
-                                                from this engagement&apos;s data.
-                                            </p>
-                                        )}
-                                    </motion.div>
-                                )}
-                                </AnimatePresence>
-                                {/* Quick-stats row — inside the card so they export with the PDF */}
-                                <div className="grid grid-cols-2 md:grid-cols-3 gap-4 p-6 pb-0">
-                                    <TileWithTip text="% of the engagement's planned duration that has elapsed, from kickoff (or engagement creation) to due date. Amber ≥60%, red ≥85%." ariaLabel="About Time Lapsed">
-                                        {(() => {
-                                            if (!data.engagementDueDate) return <StatTile icon={Timer} label="Time Lapsed" count="—" colorClass="bg-surface-subtle text-fg-subtle" />
-                                            const startStr = data.kickoffDate ?? data.engagementCreatedAt
-                                            if (!startStr) return <StatTile icon={Timer} label="Time Lapsed" count="—" colorClass="bg-surface-subtle text-fg-subtle" />
-                                            const start = new Date(startStr)
-                                            const end = new Date(data.engagementDueDate)
-                                            const now = new Date()
-                                            const totalMs = end.getTime() - start.getTime()
-                                            const spentMs = now.getTime() - start.getTime()
-                                            const pct = totalMs > 0 ? Math.round(Math.max(0, Math.min(100, (spentMs / totalMs) * 100))) : 0
-                                            const daysLeft = Math.round((end.getTime() - now.getTime()) / 86400000)
-                                            const colorClass = pct < 60 ? 'bg-green-50 text-green-600' : pct < 85 ? 'bg-amber-50 text-amber-600' : 'bg-red-50 text-red-600'
-                                            const dueStr = daysLeft < 0 ? `${Math.abs(daysLeft)}d overdue` : daysLeft === 0 ? 'Due today' : `${daysLeft}d left`
-                                            const fromLabel = start.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
-                                            const sourceLabel = data.kickoffDate ? `from ${fromLabel}` : `est. from ${fromLabel}`
-                                            return <StatTile icon={Timer} label="Time Lapsed" count={`${pct}%`} sub={`${dueStr} · ${sourceLabel}`} colorClass={colorClass} />
-                                        })()}
-                                    </TileWithTip>
-                                    <TileWithTip text="Average number of backward stage transitions (rework loops) per deliverable, e.g. In Review → In Progress. Counted from DOCUMENT_STATUS_CHANGED audit events. Lower is better." ariaLabel="About Avg Revision Rounds">
-                                        {(() => {
-                                            const rm = data.revisionMetrics
-                                            const avg = rm?.length ? rm.reduce((s, r) => s + r.revisions, 0) / rm.length : null
-                                            return (
-                                                <StatTile
-                                                    icon={RefreshCw}
-                                                    label="Avg Revision Rounds"
-                                                    count={avg === null ? '—' : avg.toFixed(1)}
-                                                    sub={rm?.length ? 'per deliverable' : undefined}
-                                                    colorClass="bg-primary/10 text-primary"
-                                                />
-                                            )
-                                        })()}
-                                    </TileWithTip>
-                                    <TileWithTip text="Average time from marking a folder as a Deliverable (share.createdAt) to it being Approved (share.finalizedAt). Only counts approved deliverables. Green ≤7d, amber ≤14d, red >14d." ariaLabel="About Avg Time to Approval">
-                                        {(() => {
-                                            const cyc = data.approvalCycle?.avgCycleDays
-                                            const colorClass = cyc == null ? 'bg-surface-subtle text-fg-subtle' : cyc <= 7 ? 'bg-green-50 text-green-600' : cyc <= 14 ? 'bg-amber-50 text-amber-600' : 'bg-red-50 text-red-600'
-                                            return (
-                                                <StatTile
-                                                    icon={Clock}
-                                                    label="Avg Time to Approval"
-                                                    count={cyc == null ? '—' : `${cyc}d`}
-                                                    sub={data.approvalCycle && data.approvalCycle.approvedCount > 0 ? `To Do → Approved · ${data.approvalCycle.approvedCount} deliverable${data.approvalCycle.approvedCount > 1 ? 's' : ''}` : 'none approved yet'}
-                                                    colorClass={colorClass}
-                                                />
-                                            )
-                                        })()}
-                                    </TileWithTip>
+                                                {/* Generation feedback with no draft to host it (AI off, or a failure). */}
+                                                {isFirmAdmin && aiGenerateNote && !hasDraftOrStream && (
+                                                    <p data-no-export="" className="px-4 pt-3 text-caption text-fg-muted">{aiGenerateNote}</p>
+                                                )}
+                                                {data.insightsSummary ? (
+                                                    <BrioSections
+                                                        content={data.insightsSummary}
+                                                        className="px-4 py-3 text-fg-muted"
+                                                    />
+                                                ) : (
+                                                    <p data-no-export="" className="text-sm text-fg-subtle px-4 py-3">
+                                                        {hasDraftOrStream
+                                                            ? <>Nothing published yet. <Brio />&apos;s draft is open for review.</>
+                                                            : <>No summary yet — write one, or let <Brio /> draft it from this engagement&apos;s data.</>}
+                                                    </p>
+                                                )}
+                                            </motion.div>
+                                        ) : null}
+                                    />
+                                    <div className="border-t border-line pt-6">
+                                        <DeliverablesTimeline
+                                            deliverables={report.deliverables}
+                                            startDate={report.startDate}
+                                            dueDate={report.dueDate}
+                                            nowMs={report.nowMs}
+                                        />
+                                    </div>
+                                    <div className="border-t border-line pt-6">
+                                        <OverviewDetails report={report} />
+                                    </div>
                                 </div>
-                                <EngagementHealthBody health={data.healthScore} deliverables={data.deliverables ?? []} planningHygiene={data.planningHygiene} commentThreads={data.commentThreads} pace={data.pace} firstTimeRight={data.firstTimeRight} inFlightWithRework={inFlightWithRework} engagementCreatedAt={data.engagementCreatedAt} kickoffDate={data.kickoffDate} engagementDueDate={data.engagementDueDate} hiddenRings={data.insightsConfig?.hiddenRings ?? []} />
                                 {/* End of report marker */}
                                 <div className="mx-6 mb-4 flex items-center gap-3">
                                     <div className="flex-1 h-px bg-surface-muted" />
@@ -3217,7 +3294,11 @@ export function EngagementInsightsDashboard({
                                     ) : undefined
                                 }
                             >
-                                {data && <TeamStatusBody data={data} />}
+                                {data && (
+                                    <div className="px-6 pt-4 pb-2">
+                                        <TeamSection {...teamSectionProps(data)} />
+                                    </div>
+                                )}
                             </InsightCard>
                         )}
 
@@ -3229,7 +3310,14 @@ export function EngagementInsightsDashboard({
                                 theme="blue"
                                 subtext={`${data.storageHealth.totalFiles} file${data.storageHealth.totalFiles === 1 ? '' : 's'} · ${data.folderHealth.totalFolders} folder${data.folderHealth.totalFolders === 1 ? '' : 's'} · max depth ${data.folderHealth.maxDepth} · ${formatBytes(data.storageHealth.totalSizeBytes)}`}
                             >
-                                <FolderHealthBody storageHealth={data.storageHealth} folderHealth={data.folderHealth} hiddenRings={data.insightsConfig?.hiddenRings ?? []} />
+                                <div className="px-6 pt-4 pb-2">
+                                    <FileOrganizationSection
+                                        score={data.folderHealth.score}
+                                        penalties={data.folderHealth.penalties ?? []}
+                                        checks={fileChecks(data)}
+                                        show={(id) => !(data.insightsConfig?.hiddenRings ?? []).includes(id)}
+                                    />
+                                </div>
                             </InsightCard>
                         )}
 
@@ -3239,18 +3327,25 @@ export function EngagementInsightsDashboard({
                         )}
                     </div>
                 )}
-            </div>
-
-            {/* Right: the Action Center, now with the full column. The assistant used to lead this
-                rail — it had been buried beneath the Action Center, roughly 1400px down the page —
-                but occupying a column permanently cost this panel half its width whether or not
-                anyone was asking anything. It floats instead, below, and keeps its prominence
-                through a persistent launcher rather than through page real estate. */}
-            <div className="flex flex-col gap-6 min-w-0">
-                <EngagementActionCenterV2 data={data} loading={loading} engagementBase={engagementBase} projectId={projectId} setRefreshTick={setRefreshTick} />
-            </div>
-
         </div>
+
+        <ConfirmDialog
+            open={confirmDiscardOpen}
+            onOpenChange={setConfirmDiscardOpen}
+            icon={<Trash2 />}
+            iconVariant="amber"
+            title="Discard this draft?"
+            description="What you typed in it will be lost. The published summary stays as it is."
+            cancelLabel="Keep reviewing"
+            confirmLabel="Discard"
+            confirmVariant="red"
+            onCancel={() => setConfirmDiscardOpen(false)}
+            onConfirm={() => {
+                setConfirmDiscardOpen(false)
+                void discardDraft()
+                rightPane.clearPane()
+            }}
+        />
 
         {/* Outside the grid: a fixed overlay must not inherit the column's width or stacking
             context. Open by default here — the assistant leads this page, and starting it

@@ -1,7 +1,8 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { AlertCircle, Loader2, Check, X, FolderTree, ChevronRight } from 'lucide-react'
+import { AlertCircle, Loader2, Check, X, ChevronRight } from 'lucide-react'
+import { ChatTaskHeader } from '@/components/projects/chat-action-row'
 import { useAuth } from '@/lib/auth-context'
 import { AgentPromptCard } from '@/components/ui/agent-prompt-card'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -203,6 +204,8 @@ export function FilesScaffoldPanel({
     // folders, which the agent never does.
     if (previousRun) {
         return (
+            <div className="space-y-2">
+            <ChatTaskHeader title="Set up folder organization" status="Already set up" />
             <div className="rounded-xl border border-gray-200 bg-white px-3.5 py-3">
                 <div className="flex items-start gap-2">
                     <p className="min-w-0 flex-1 font-headline text-[13px] leading-snug text-gray-900">
@@ -226,11 +229,20 @@ export function FilesScaffoldPanel({
                     ask Brio to review how the existing structure is organized.
                 </p>
             </div>
+            </div>
         )
     }
 
+    // Where the task stands, for its header in the thread.
+    const answeredCount = SCAFFOLD_QUESTIONS.filter((q) => q.id in answers).length
+    const status = outcome ? (outcome.ok ? 'Done' : 'Needs attention')
+        : creating ? 'Creating…'
+        : complete ? 'Review the folders'
+        : `${answeredCount} of ${SCAFFOLD_QUESTIONS.length} answered`
+
     return (
         <div className="space-y-2">
+            <ChatTaskHeader title="Set up folder organization" status={status} />
             {SCAFFOLD_QUESTIONS.map((q, i) => {
                 // One question on screen at a time — see the agent panel for why.
                 if (i !== pendingIndex || outcome) return null
@@ -444,21 +456,5 @@ export function FilesScaffoldPanel({
                 </div>
             )}
         </div>
-    )
-}
-
-/** The chip that starts the interview, for the suggestion row. */
-export function FilesScaffoldTrigger({ onClick, disabled }: { onClick: () => void; disabled?: boolean }) {
-    return (
-        <button
-            type="button"
-            onClick={onClick}
-            disabled={disabled}
-            title="Answer a few questions and Brio will create a folder structure for this engagement."
-            className="inline-flex max-w-full shrink-0 items-center gap-1.5 truncate rounded-full border border-primary/30 bg-white px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/5 disabled:opacity-60"
-        >
-            <FolderTree className="h-3 w-3 shrink-0" />
-            Set up folder organization
-        </button>
     )
 }

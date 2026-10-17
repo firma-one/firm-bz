@@ -1,7 +1,8 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { AlertCircle, Check, Loader2, Sparkles } from 'lucide-react'
+import { AlertCircle, Check, Loader2 } from 'lucide-react'
+import { ChatTaskHeader } from '@/components/projects/chat-action-row'
 import { useAuth } from '@/lib/auth-context'
 import { proposalKey, type Proposal } from '@/lib/ai/files-agent/tools'
 import { AgentPromptCard, type AgentPromptOption } from '@/components/ui/agent-prompt-card'
@@ -269,36 +270,94 @@ function ProposalRow({ proposal }: { proposal: Proposal }) {
     )
 }
 
+/**
+ * Running a review: what the "Review folder organization" task does when clicked, and what the
+ * results panel calls again when the user names the engagement's kind.
+ *
+ * Owned by the PAGE, not by the panel. The task is shown by the chat panel as data (a ChatAction),
+ * so the work it starts has to live somewhere that outlasts any one rendering of it. `reviewSeq`
+ * goes up with every review that returns, so the page can key the results panel on it and each
+ * review starts with no answers carried over from the last.
+ */
+export function useFilesReview({ projectId, setReview, onThreadTurn }: {
+    projectId: string
+    setReview: (r: ReviewData | null) => void
+    onThreadTurn?: (role: 'user' | 'assistant', content: string) => void
+}) {
+    // Both routes authenticate through `getAuthUser`, which reads an Authorization header and
+    // returns null without one — a cookie-only fetch comes back 401 "Unauthorized".
+    const { session } = useAuth()
+    const token = session?.access_token
+    const [reviewing, setReviewing] = useState(false)
+    const [error, setError] = useState<string | null>(null)
+    const [reviewSeq, setReviewSeq] = useState(0)
+
+    const runReview = useCallback(async (engagementKind?: string) => {
+        if (!token) {
+            setError('Your session has expired. Reload the page and try again.')
+            return
+        }
+        setReviewing(true)
+        setError(null)
+        try {
+            const res = await fetch(`/api/projects/${projectId}/files-agent`, {
+                method: 'POST',
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+                credentials: 'include',
+                // Sent only when the user has just answered. The server persists it, so this
+                // happens once per engagement rather than on every review.
+                body: JSON.stringify(engagementKind ? { engagementKind } : {}),
+            })
+            const body = await res.json().catch(() => ({}))
+            if (!res.ok) {
+                setError(body.error ?? 'Could not review the files')
+                return
+            }
+            setReview(body.data)
+            setReviewSeq((n) => n + 1)
+            // The report goes into the conversation, where it persists with everything else. The
+            // panel keeps only the questions, because those are a control and the report is not.
+            if (body.data?.summaryMarkdown) {
+                onThreadTurn?.('assistant', body.data.summaryMarkdown)
+            }
+        } catch {
+            setError('Could not review the files')
+        } finally {
+            setReviewing(false)
+        }
+    }, [projectId, token, setReview, onThreadTurn])
+
+    return { runReview, reviewing, error, reviewSeq, ready: Boolean(token) }
+}
+
 export function FilesAgentPanel({
     projectId,
     onApplied,
     review,
     setReview,
-    render,
+    runReview,
+    reviewing = false,
     onThreadTurn,
-    answered = false,
     onAnsweredChange,
 }: {
     projectId: string
     /** Called after a successful apply so the file list can refresh. */
     onApplied?: () => void
     /**
-     * Review state is OWNED BY THE CALLER, because the two halves of this panel render in two
-     * places: the trigger sits among the suggestion chips, low in the panel where the other things
-     * you can ask for live, while the proposals need the full width above the conversation. Local
-     * state would give each half its own copy and the trigger would never open the results.
+     * Review state is OWNED BY THE CALLER (with `useFilesReview`), because the task that starts a
+     * review is drawn by the chat panel while the questions render in the thread. Key this panel on
+     * `useFilesReview().reviewSeq` so each review starts with no answers carried over.
      */
     review: ReviewData | null
     setReview: (r: ReviewData | null) => void
-    /** Which half to draw. */
-    render: 'trigger' | 'results'
-    /**
-     * Whether every question in the current review has been answered.
-     *
-     * Owned by the parent because both instances need it and each has its own `decisions`.
-     */
-    answered?: boolean
-    /** Reports progress up, so the parent can tell the trigger whether questions remain. */
+    /** Re-runs the review — used when the user names the engagement's kind. From `useFilesReview`. */
+    runReview: (engagementKind?: string) => void
+    /** Whether a review is running, from `useFilesReview`. */
+    reviewing?: boolean
+    /** Reports progress up, so the page can hide the review task while questions remain. */
     onAnsweredChange?: (answered: boolean) => void
     /**
      * Posts the exchange into the conversation.
@@ -309,13 +368,11 @@ export function FilesAgentPanel({
      */
     onThreadTurn?: (role: 'user' | 'assistant', content: string) => void
 }) {
-    // Both routes authenticate through `getAuthUser`, which reads an Authorization header and
-    // returns null without one — a cookie-only fetch comes back 401 "Unauthorized", which is what
-    // the panel was showing instead of a review.
+    // Applying authenticates the same way as reviewing (see `useFilesReview`).
     const { session } = useAuth()
     const token = session?.access_token
 
-    const [state, setState] = useState<'idle' | 'reviewing' | 'applying'>('idle')
+    const [applying, setApplying] = useState(false)
     /**
      * One decision per proposal, keyed by {@link proposalKey}.
      *
@@ -346,54 +403,11 @@ export function FilesAgentPanel({
         && review.proposals.length > 0
         && review.proposals.every((p) => proposalKey(p) in decisions)
     useEffect(() => {
-        if (render === 'results') onAnsweredChange?.(allDecided)
-    }, [render, allDecided, onAnsweredChange])
+        onAnsweredChange?.(allDecided)
+    }, [allDecided, onAnsweredChange])
 
     /** What the run did, once it has finished. Shown in the thread rather than as a toast. */
     const [outcome, setOutcome] = useState<{ ok: boolean; message: string } | null>(null)
-    const [error, setError] = useState<string | null>(null)
-
-    const runReview = useCallback(async (engagementKind?: string) => {
-        if (!token) {
-            setError('Your session has expired. Reload the page and try again.')
-            return
-        }
-        setState('reviewing')
-        setError(null)
-        setDecisions({})
-        setNotes({})
-        setOutcome(null)
-        applyStarted.current = false
-        try {
-            const res = await fetch(`/api/projects/${projectId}/files-agent`, {
-                method: 'POST',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
-                credentials: 'include',
-                // Sent only when the user has just answered. The server persists it, so this
-                // happens once per engagement rather than on every review.
-                body: JSON.stringify(engagementKind ? { engagementKind } : {}),
-            })
-            const body = await res.json().catch(() => ({}))
-            if (!res.ok) {
-                setError(body.error ?? 'Could not review the files')
-                return
-            }
-            setReview(body.data)
-            // The report goes into the conversation, where it persists with everything else. The
-            // panel keeps only the questions, because those are a control and the report is not.
-            if (body.data?.summaryMarkdown) {
-                onThreadTurn?.('assistant', body.data.summaryMarkdown)
-            }
-        } catch {
-            setError('Could not review the files')
-        } finally {
-            setState('idle')
-        }
-    }, [projectId, token, onThreadTurn])
-
 
     const apply = useCallback(async (finalDecisions: Record<string, string>) => {
         if (!review?.token || !token) return
@@ -407,7 +421,7 @@ export function FilesAgentPanel({
         })
         if (approved.length === 0) return
 
-        setState('applying')
+        setApplying(true)
         try {
             const res = await fetch(`/api/projects/${projectId}/files-agent/apply`, {
                 method: 'POST',
@@ -485,7 +499,7 @@ export function FilesAgentPanel({
         } catch {
             setOutcome({ ok: false, message: 'Please try again.' })
         } finally {
-            setState('idle')
+            setApplying(false)
         }
     }, [projectId, review, onApplied, token, onThreadTurn])
 
@@ -532,43 +546,6 @@ export function FilesAgentPanel({
         }
     }, [review, apply, decisions, onThreadTurn])
 
-    // The trigger: one more chip in the suggestion row, in the accent color because unlike its
-    // neighbours it does not ask a question — it starts work that ends in file changes, and that
-    // difference is worth seeing before you click.
-    if (render === 'trigger') {
-        // Hidden only while there are questions still to answer — offering a fresh review then
-        // would abandon decisions the user is part-way through making, and the approval token
-        // would be stale by the time they finished.
-        //
-        // Available again once the review is answered or has nothing to ask, so re-running after
-        // tidying something up does not mean reloading the page. Reviewing is read-only and free:
-        // there is no reason to ration it.
-        // Hidden only while questions are still unanswered — offering a fresh review mid-decision
-        // would abandon choices in progress and stale the approval token.
-        //
-        // `answered` comes from the PARENT, not from this instance's own `decisions`: there are
-        // two instances of this component, the trigger and the results block, and the trigger's
-        // local copy is always empty. Testing it made the chip disappear for good once a review
-        // existed.
-        if (review != null && review.proposals.length > 0 && !answered) return null
-        return (
-            <>
-                <button
-                    type="button"
-                    onClick={() => void runReview()}
-                    disabled={state === 'reviewing' || !token}
-                    title="Check this engagement's folders and files — inconsistent naming, duplicates, files in the wrong place, and folders this kind of work usually has — then propose fixes for you to approve."
-                    className="inline-flex max-w-full shrink-0 items-center gap-1.5 truncate rounded-control bg-action px-2.5 py-1 text-small font-medium text-action-fg hover:bg-action-hover transition-all hover:brightness-105 disabled:opacity-60"
-                >
-                    {state === 'reviewing'
-                        ? <><Loader2 className="h-3 w-3 shrink-0 animate-spin" /> Reviewing…</>
-                        : <><Sparkles className="h-3 w-3 shrink-0" /> Review folder organization</>}
-                </button>
-                {error && <p className="w-full px-0.5 text-xs text-red-600">{error}</p>}
-            </>
-        )
-    }
-
     if (!review) return null
 
     // Position in the queue: the first proposal with no decision yet.
@@ -578,9 +555,19 @@ export function FilesAgentPanel({
         return d != null && d !== DECLINE
     }).length
     const allAnswered = pendingIndex === -1
+    const answeredCount = review.proposals.filter((p) => proposalKey(p) in decisions).length
+
+    // Where the task stands, for its header in the thread.
+    const status = reviewing ? 'Reviewing…'
+        : applying ? 'Applying…'
+        : outcome ? (outcome.ok ? 'Done' : 'Needs attention')
+        : review.needsEngagementKind ? 'One question'
+        : review.proposals.length === 0 ? 'Nothing to change'
+        : `${answeredCount} of ${review.proposals.length} answered`
 
     return (
         <div className="space-y-3">
+            <ChatTaskHeader title="Review folder organization" status={status} />
             {/* The report is NOT rendered here. It is posted into the thread as an assistant turn
                 the moment the review returns, so it scrolls, persists and reads like any other
                 answer — and has no close button, because a turn in a conversation is not something
@@ -601,8 +588,8 @@ export function FilesAgentPanel({
                     question="What kind of engagement is this?"
                     options={ENGAGEMENT_KIND_QUESTION.options}
                     answer={undefined}
-                    disabled={state === 'reviewing'}
-                    onAnswer={(value) => void runReview(value)}
+                    disabled={reviewing}
+                    onAnswer={(value) => runReview(value)}
                     dismissLabel="Not now"
                     onDismiss={() => setReview({ ...review, needsEngagementKind: false })}
                 />
@@ -646,7 +633,7 @@ export function FilesAgentPanel({
                         step={i + 1}
                         stepCount={review.proposals.length}
                         answer={decisions[key] ?? undefined}
-                        disabled={state === 'applying'}
+                        disabled={applying}
                         onAnswer={(value) => answerProposal(p, value)}
                         // Through `answerProposal`, NOT `decide`. Declining is an answer, and
                         // routing it around the normal path cost two things: the exchange never
@@ -688,7 +675,7 @@ export function FilesAgentPanel({
 
             {/* While applying. There is no Apply button: answering the last question IS the
                 confirmation, so the run starts on that answer and this reports it. */}
-            {state === 'applying' && (
+            {applying && (
                 // Named work, not a bare spinner: the user answered several questions and the
                 // agent is now carrying out what they agreed to, so the line says how many and
                 // what kind. The pulsing dots reuse the search affordance rather than introducing

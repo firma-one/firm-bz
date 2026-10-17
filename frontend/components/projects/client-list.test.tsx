@@ -38,10 +38,10 @@ describe('ClientList', () => {
         expect(screen.getByText('Prospect')).toBeTruthy()
     })
 
-    it('shows a follow-up tag only when one is due within two days', () => {
+    it('shows no follow-up tags: client follow-up dates are retired', () => {
+        // Contoso still carries a follow-up date due today.
         render(<ClientList clients={clients} groupSlug="g" orgSlug="acme" />)
-        expect(screen.getByText('Follow up today')).toBeTruthy()
-        expect(screen.getAllByText(/Follow/)).toHaveLength(1)
+        expect(screen.queryByText(/Follow/)).toBeNull()
     })
 
     it('opens the client when its row is clicked', () => {

@@ -110,7 +110,8 @@ export function fingerprintInsights(data: EngagementInsightsResponse): string {
         data.firstTimeRight?.firstTime ?? '',
         data.firstTimeRight?.reworked ?? '',
         data.memberCount ?? '',
-        data.healthScore?.score ?? '',
+        // Not healthScore: it folds in clock-driven penalties (behind pace, overdue deliverables),
+        // so it moves when nobody did anything. Its person-made inputs are hashed on their own.
         data.approvalCycle?.approvedCount ?? '',
         data.approvalCycle?.deliverableCount ?? '',
         data.folderHealth?.score ?? '',

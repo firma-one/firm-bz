@@ -86,14 +86,13 @@ describe('getMyWork — scope', () => {
         const sqls = prisma.$queryRaw.mock.calls.map((c: any[]) => (c[0] as string[]).join('?'))
         expect(sqls.some((s) => s.includes("'in_review'"))).toBe(false)
         expect(sqls.some((s) => s.includes("= 'PENDING'"))).toBe(false)
-        expect(prisma.engagement.findMany).toHaveBeenCalledTimes(1) // no AI-draft lookup either
+        expect(prisma.engagement.findMany).toHaveBeenCalledTimes(1)
         expect(work.needsYou).toEqual([])
     })
 
     it('limits approvals to engagements the caller leads', async () => {
         prisma.engagement.findMany
             .mockResolvedValueOnce([eng('lead', 'eng_admin'), eng('member', 'eng_member')])
-            .mockResolvedValueOnce([{ id: 'lead' }]) // AI draft pending
         routeRaw({
             review: [{ id: 'd1', engagementId: 'lead', fileName: 'Q3 Report', updatedAt: past }],
             intake: [{ id: 'd2', engagementId: 'lead', fileName: 'Client upload', createdAt: past }],
@@ -101,9 +100,10 @@ describe('getMyWork — scope', () => {
         const work = await getMyWork(base)
         const reviewCall = prisma.$queryRaw.mock.calls.find((c: any[]) => (c[0] as string[]).join('?').includes("'in_review'"))!
         expect(reviewCall).toContainEqual(['lead']) // only lead engagement ids are passed
-        expect(work.needsYou.map((n) => n.kind)).toEqual(['deliverable_review', 'intake', 'ai_summary'])
+        // No AI-summary item: drafts are published or discarded in one sitting, never left waiting.
+        expect(work.needsYou.map((n) => n.kind)).toEqual(['deliverable_review', 'intake'])
         expect(work.needsYou[0]).toMatchObject({ title: 'Q3 Report', context: 'Contoso · Eng lead', href: '/d/g/f/acme/c/contoso/e/lead/shares/board' })
-        expect(prisma.engagement.findMany.mock.calls[1][0].where.id).toEqual({ in: ['lead'] })
+        expect(prisma.engagement.findMany).toHaveBeenCalledTimes(1)
     })
 })
 

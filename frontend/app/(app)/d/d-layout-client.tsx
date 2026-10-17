@@ -54,7 +54,7 @@ function ViewAsBanner() {
 function AppLayoutContent({ children, isSystemAdmin }: { children: React.ReactNode; isSystemAdmin?: boolean }) {
     const pathname = usePathname()
     const { isCollapsed } = useSidebar()
-    const { content: rightPaneContent, contentKey: rightPaneContentKey, title: rightPaneTitle, clearPane, headerActions: rightPaneHeaderActions, headerIcon, iconTooltip, headerSubtitle, paneSize } = useRightPane()
+    const { content: rightPaneContent, contentKey: rightPaneContentKey, title: rightPaneTitle, clearPane, canClose, headerActions: rightPaneHeaderActions, headerIcon, iconTooltip, headerSubtitle, paneSize } = useRightPane()
     const { session } = useAuth()
     const accessToken = session?.access_token ?? null
     const firms = useSidebarFirms()
@@ -197,8 +197,11 @@ function AppLayoutContent({ children, isSystemAdmin }: { children: React.ReactNo
                                 iconTooltip={iconTooltip || undefined}
                                 subtitle={headerSubtitle || undefined}
                                 onClose={clearPane}
+                                beforeClose={canClose}
                                 headerActions={rightPaneHeaderActions}
                                 embedContent={true}
+                                // The shell's column draws the edge; flat, like the docked Brio pane.
+                                frame="flush"
                             >
                                 <AnimatePresence mode="wait" initial={false}>
                                     <motion.div
@@ -313,6 +316,7 @@ function AppLayoutContent({ children, isSystemAdmin }: { children: React.ReactNo
                                 iconTooltip={iconTooltip || undefined}
                                 subtitle={headerSubtitle || undefined}
                                 onClose={clearPane}
+                                beforeClose={canClose}
                                 headerActions={rightPaneHeaderActions}
                                 embedContent={true}
                             >

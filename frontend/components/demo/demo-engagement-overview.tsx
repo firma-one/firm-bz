@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react'
 import {
     AlertTriangle,
     Archive,
-    CalendarClock,
     ClipboardCheck,
     Eye,
     FileQuestion,
@@ -13,39 +12,31 @@ import {
     FolderMinus,
     FolderOpen,
     FolderTree,
-    Gauge,
     HardDrive,
     Heart,
     Inbox,
     MessagesSquare,
     Package,
     RefreshCw,
-    Target,
     Users,
 } from 'lucide-react'
 import { InsightCard } from '@/components/dashboard/insight-card'
 import { ActionSection, attentionCount, type ActionItem } from '@/components/dashboard/action-list'
-import { ConcentricRings, Donut, PlanningGapRow, RING, RingWithLegend, ScoreDeductions } from '@/components/projects/insight-rings'
+import { RING } from '@/components/projects/insight-rings'
+import {
+    DeliverablesTimeline,
+    FileOrganizationSection,
+    OverviewDetails,
+    OverviewTop,
+    TeamSection,
+    type OverviewDeliverable,
+    type ReportInputs,
+} from '@/components/projects/engagement-overview-sections'
 import { countFilesInFolder, type DemoEngagement } from '@/lib/demo/static-demo-data'
+import { DemoSummaryCard } from '@/components/demo/demo-summary-card'
 import { getDemoDeliverables } from '@/lib/demo/demo-deliverables'
 
 const DAY = 86400000
-
-const STAGES = [
-    { key: 'to_do', label: 'To Do', hex: RING.amber },
-    { key: 'in_progress', label: 'In Progress', hex: RING.blue },
-    { key: 'in_review', label: 'In Review', hex: RING.indigo },
-    { key: 'approved', label: 'Approved', hex: RING.green },
-] as const
-
-/** A ring's title row, as on the app's Overview. */
-function RingTitle({ icon: Icon, children }: { icon: React.ElementType; children: React.ReactNode }) {
-    return (
-        <p className="flex items-center gap-1.5 text-sm font-semibold text-fg-muted">
-            <Icon className="h-4 w-4 text-fg-subtle" /> {children}
-        </p>
-    )
-}
 
 function startOfToday(): Date {
     const d = new Date()
@@ -54,47 +45,56 @@ function startOfToday(): Date {
 }
 
 /**
- * Static counterpart to EngagementInsightsDashboard: the same sections, the same rings
- * (components/projects/insight-rings.tsx) and the same Linear-style Action Center, computed from the
- * engagement's sample deliverables — the four milestones the board and Brio also show. Anything
- * that depends on today is worked out after mount, so the server and the visitor agree.
+ * Static counterpart to EngagementInsightsDashboard: the same layout and the same sections
+ * (components/projects/engagement-overview-sections.tsx), computed from the engagement's sample
+ * deliverables — the milestones the board and Brio also show. Anything that depends on today is
+ * worked out after mount, so the server and the visitor agree; the dated sections wait for it.
  */
 export function DemoEngagementOverview({ engagement }: { engagement: DemoEngagement }) {
     const [today, setToday] = useState<Date | null>(null)
     useEffect(() => setToday(startOfToday()), [])
 
     const m = useMemo(() => {
-        const deliverables = getDemoDeliverables(engagement)
+        const demo = getDemoDeliverables(engagement)
+        const dueMs = engagement.dueDate ? new Date(engagement.dueDate).getTime() : null
+        // A 90-day engagement: kickoff 90 days before its due date.
+        const kickoffMs = dueMs ? dueMs - 90 * DAY : null
+        const deliverables: OverviewDeliverable[] = demo.map((d, i) => {
+            const dueTime = d.dueDate ? new Date(d.dueDate).getTime() : null
+            return {
+                id: d.folder.id,
+                docId: d.folder.docId,
+                name: d.folder.name,
+                stage: d.status,
+                dueDate: d.dueDate,
+                isOverdue: !!today && d.status !== 'approved' && dueTime !== null && dueTime < today.getTime(),
+                // Marked a deliverable a week or so apart from kickoff, approved two days before due.
+                createdAt: kickoffMs ? new Date(kickoffMs + i * 7 * DAY).toISOString() : null,
+                finalizedAt: d.status === 'approved' && dueTime ? new Date(dueTime - 2 * DAY).toISOString() : null,
+            }
+        })
         const total = deliverables.length
-        const count = (k: string) => deliverables.filter((d) => d.status === k).length
-        const approved = count('approved')
-        const inReview = count('in_review')
-        const open = deliverables.filter((d) => d.status !== 'approved')
-        const overdue = today ? open.filter((d) => d.dueDate && new Date(d.dueDate).getTime() < today.getTime()).length : 0
+        const approved = deliverables.filter((d) => d.stage === 'approved').length
+        const inReview = deliverables.filter((d) => d.stage === 'in_review').length
+        const overdue = deliverables.filter((d) => d.isOverdue).length
+        const open = demo.filter((d) => d.status !== 'approved')
 
         const files = engagement.folders.flatMap((f) => f.files)
         const docTotal = open.reduce((s, d) => s + d.fileCount, 0)
         const docWithDueDate = Math.floor(docTotal * 0.55)
         const docWithAssignee = Math.floor(docTotal * 0.7)
-        const delivDueCov = open.length > 0 ? 100 : 0
-        const docDueCov = docTotal > 0 ? Math.round((docWithDueDate / docTotal) * 100) : 0
-        const docAssigneeCov = docTotal > 0 ? Math.round((docWithAssignee / docTotal) * 100) : 0
-        const hygienePct = Math.round((delivDueCov + docDueCov + docAssigneeCov) / 3)
         const planningGaps = (docTotal - docWithDueDate) + (docTotal - docWithAssignee)
 
-        // Pace: delivered share against the share of a 90-day engagement already elapsed.
-        const dueMs = engagement.dueDate ? new Date(engagement.dueDate).getTime() : null
-        const kickoffMs = dueMs ? dueMs - 90 * DAY : null
         const timePct = today && dueMs && kickoffMs
             ? Math.max(0, Math.min(100, Math.round(((today.getTime() - kickoffMs) / (dueMs - kickoffMs)) * 100)))
             : 0
         const deliveredPct = total > 0 ? Math.round((approved / total) * 100) : 0
-        const paceScore = timePct > 0 ? Math.min(100, Math.round((deliveredPct / timePct) * 100)) : 100
 
+        // The same deductions the app makes (lib/insights/health-penalties.ts for the first two).
         const penalties = [
-            ...(overdue > 0 ? [{ label: overdue === 1 ? 'Overdue deliverable' : `${overdue} overdue deliverables`, points: 15 }] : []),
-            ...(planningGaps > 0 ? [{ label: 'Planning gaps', points: 6 }] : []),
-            ...(paceScore < 90 ? [{ label: 'Behind pace', points: 8 }] : []),
+            ...(overdue > 0 ? [{ label: `${overdue} overdue deliverable${overdue === 1 ? '' : 's'}`, points: Math.min(45, overdue * 15) }] : []),
+            ...(planningGaps > 0 ? [{ label: `Planning gaps (${planningGaps} missing)`, points: 6 }] : []),
+            ...(timePct - deliveredPct > 15 ? [{ label: `Behind pace (${deliveredPct}% delivered vs ${timePct}% elapsed)`, points: 8 }] : []),
         ]
         const score = Math.max(0, 100 - penalties.reduce((s, p) => s + p.points, 0))
 
@@ -104,22 +104,38 @@ export function DemoEngagementOverview({ engagement }: { engagement: DemoEngagem
         const folderScore = 100 - folderPenalties.reduce((s, p) => s + p.points, 0)
 
         return {
-            total, approved, inReview, overdue, open, files, docTotal, docWithDueDate, docWithAssignee,
-            delivDueCov, docDueCov, docAssigneeCov, hygienePct, planningGaps, timePct, deliveredPct, paceScore,
-            penalties, score, folderPenalties, folderScore,
-            statusItems: STAGES.map((s) => ({ label: s.label, hex: s.hex, value: count(s.key) })),
+            deliverables, total, approved, inReview, overdue, open, files, docTotal, docWithDueDate, docWithAssignee,
+            planningGaps, timePct, deliveredPct, penalties, score, folderPenalties, folderScore,
+            kickoff: kickoffMs ? new Date(kickoffMs).toISOString() : null,
         }
     }, [engagement, today])
 
-    const healthHex = m.score >= 80 ? RING.green : m.score >= 50 ? RING.amber : RING.red
-    const healthText = m.score >= 80 ? 'text-green-600' : m.score >= 50 ? 'text-amber-600' : 'text-red-600'
-    const healthLabel = m.score >= 80 ? 'Healthy' : m.score >= 50 ? 'Needs attention' : 'Critical'
-    const approvedPct = m.total > 0 ? Math.round((m.approved / m.total) * 100) : 0
-    const onSchedulePct = m.total > 0 ? Math.round(((m.total - m.overdue) / m.total) * 100) : 100
-    const paceHex = m.paceScore >= 90 ? RING.green : m.paceScore >= 60 ? RING.amber : RING.red
-    const paceGap = m.timePct - m.deliveredPct
-    const paceStatus = paceGap <= 0 ? 'On or ahead of pace' : paceGap <= 15 ? 'Slightly behind' : 'Behind pace'
-    const deducted = 100 - m.score
+    const level = m.score >= 80 ? 'good' as const : m.score >= 50 ? 'warning' as const : 'critical' as const
+    const nowMs = today?.getTime() ?? 0
+    const report: ReportInputs = {
+        deliverables: m.deliverables,
+        startDate: m.kickoff,
+        startIsKickoff: true,
+        dueDate: engagement.dueDate ?? null,
+        nowMs,
+        deliveredPct: m.deliveredPct,
+        timePct: m.timePct,
+        health: { score: m.score, level, penalties: m.penalties },
+        planning: {
+            deliverableTotal: m.open.length,
+            deliverableWithDueDate: m.open.length,
+            docTotal: m.docTotal,
+            docWithDueDate: m.docWithDueDate,
+            docWithAssignee: m.docWithAssignee,
+        },
+        comments: { resolved: 4, flaggedOpen: 0, unanswered: 0 },
+        firstTimeRight: { firstTime: m.approved, reworked: 0 },
+        inFlightWithRework: 0,
+        revisionAvg: m.approved + m.inReview > 0 ? 0.3 : null,
+        reviewedCount: m.approved + m.inReview,
+        approvalCycleDays: m.approved > 0 ? 9 : null,
+        approvedCount: m.approved,
+    }
 
     const delivery: ActionItem[] = [
         { key: 'overdue', label: 'Overdue deliverables', count: m.overdue, severity: 'critical', icon: AlertTriangle, sub: 'past due date, not yet approved' },
@@ -139,180 +155,100 @@ export function DemoEngagementOverview({ engagement }: { engagement: DemoEngagem
         { key: 'empty-folders', label: 'Empty folders', count: 0, severity: 'info', icon: FolderMinus },
         { key: 'deep-folders', label: 'Deep folder nesting', count: 0, severity: 'info', icon: FolderTree },
     ]
+    const folderCount = engagement.folders.length
+    const artifacts = m.files.length + folderCount
 
     return (
-        <div className="grid grid-cols-1 gap-8 pb-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
-            <div className="flex min-w-0 flex-col gap-10">
-                <InsightCard
-                    title="Engagement Health"
-                    icon={Heart}
-                    theme="green"
-                    subtext={`Overall Health ${m.score}/100 · ${m.total} deliverable${m.total === 1 ? '' : 's'}`}
-                >
-                    <div className="flex flex-col gap-6 p-6">
-                        {/* .ring-rows (globals.css) draws a full-width hairline between rows of rings. */}
-                        <div className="ring-rows grid grid-cols-1 md:grid-cols-3" data-cols="3">
-                            <div className="flex flex-col items-center gap-3">
-                                <RingTitle icon={Heart}>Overall Health Score</RingTitle>
-                                <Donut
-                                    total={100}
-                                    size={108}
-                                    thickness={13}
-                                    segments={[{ value: m.score, hex: healthHex }]}
-                                    centerTop={<span className={`text-2xl font-bold leading-none ${healthText}`}>{m.score}</span>}
-                                    centerBottom={<span className="mt-0.5 text-[10px] text-fg-subtle">/ 100</span>}
-                                />
-                                <div className="text-center">
-                                    <p className={`text-xs font-medium ${healthText}`}>{healthLabel}</p>
-                                    {deducted > 0 && (
-                                        <p className="mt-0.5 text-[11px] text-fg-subtle">100 − <span className="font-medium text-red-500">{deducted}</span> = <span className={`font-semibold ${healthText}`}>{m.score}</span></p>
-                                    )}
-                                </div>
-                                <ScoreDeductions penalties={m.penalties} emptyText="All clear — no risks" className="w-full max-w-[260px]" />
-                            </div>
-                            <div className="flex flex-col items-center gap-3">
-                                <RingTitle icon={Package}>Delivery Status</RingTitle>
-                                <RingWithLegend
-                                    items={m.statusItems}
-                                    centerTop={<span className="text-xl font-bold leading-none tabular-nums text-fg">{approvedPct}%</span>}
-                                    centerBottom={<span className="mt-0.5 text-[10px] text-fg-subtle">approved</span>}
-                                />
-                            </div>
-                            <div className="flex flex-col items-center gap-3">
-                                <RingTitle icon={CalendarClock}>Delivery Schedule</RingTitle>
-                                <RingWithLegend
-                                    items={[
-                                        { label: 'Completed', hex: RING.green, value: m.approved },
-                                        { label: 'On Track', hex: RING.blue, value: m.total - m.approved - m.overdue },
-                                        { label: 'Overdue', hex: RING.red, value: m.overdue },
-                                    ]}
-                                    centerTop={<span className="text-xl font-bold leading-none tabular-nums text-fg">{onSchedulePct}%</span>}
-                                    centerBottom={<span className="mt-0.5 text-[10px] text-fg-subtle">on schedule</span>}
-                                />
-                            </div>
-                            <div className="flex flex-col items-center gap-3">
-                                <RingTitle icon={ClipboardCheck}>Planning Hygiene</RingTitle>
-                                <ConcentricRings
-                                    rings={[
-                                        { pct: m.delivDueCov, hex: RING.green },
-                                        { pct: m.docDueCov, hex: RING.blue },
-                                        { pct: m.docAssigneeCov, hex: RING.indigo },
-                                    ]}
-                                    centerTop={<span className="text-lg font-bold leading-none tabular-nums text-fg">{m.hygienePct}%</span>}
-                                    centerBottom={<span className="text-[9px] text-fg-subtle">set up</span>}
-                                />
-                                <div className="flex w-full max-w-[240px] flex-col gap-1.5">
-                                    <PlanningGapRow hex={RING.green} label="Deliverable due dates" missing={0} total={m.open.length} />
-                                    <PlanningGapRow hex={RING.blue} label="Doc due dates" missing={m.docTotal - m.docWithDueDate} total={m.docTotal} />
-                                    <PlanningGapRow hex={RING.indigo} label="Doc assignees" missing={m.docTotal - m.docWithAssignee} total={m.docTotal} />
-                                </div>
-                            </div>
-                            <div className="flex flex-col items-center gap-3">
-                                <RingTitle icon={MessagesSquare}>Comment Responsiveness</RingTitle>
-                                <RingWithLegend
-                                    items={[
-                                        { label: 'Resolved', hex: RING.green, value: 4 },
-                                        { label: 'Flagged open', hex: RING.amber, value: 0 },
-                                        { label: 'Unanswered', hex: RING.red, value: 0 },
-                                    ]}
-                                    centerTop={<span className="text-xl font-bold leading-none tabular-nums text-fg">100%</span>}
-                                    centerBottom={<span className="mt-0.5 text-[10px] text-fg-subtle">resolved</span>}
-                                />
-                            </div>
-                            <div className="flex flex-col items-center gap-3">
-                                <RingTitle icon={Gauge}>Pace</RingTitle>
-                                <Donut
-                                    total={100}
-                                    size={108}
-                                    thickness={14}
-                                    segments={[{ value: m.paceScore, hex: paceHex }]}
-                                    centerTop={<span className="text-xl font-bold leading-none tabular-nums text-fg">{m.paceScore}%</span>}
-                                    centerBottom={<span className="mt-0.5 text-[10px] text-fg-subtle">on pace</span>}
-                                />
-                                <div className="text-center">
-                                    <p className="text-xs font-medium text-fg-muted">{paceStatus}</p>
-                                    <p className="mt-0.5 text-[11px] text-fg-subtle">{m.deliveredPct}% delivered · {m.timePct}% elapsed</p>
-                                </div>
-                            </div>
-                            <div className="flex flex-col items-center gap-3">
-                                <RingTitle icon={Target}>First-Time-Right</RingTitle>
-                                <RingWithLegend
-                                    items={[
-                                        { label: 'Approved first pass', hex: RING.green, value: m.approved },
-                                        { label: 'Approved after rework', hex: RING.amber, value: 0 },
-                                    ]}
-                                    centerTop={<span className="text-xl font-bold leading-none tabular-nums text-fg">{m.approved > 0 ? '100%' : '—'}</span>}
-                                    centerBottom={<span className="mt-0.5 text-[10px] tabular-nums text-fg-subtle">{m.approved}/{m.approved} approved</span>}
-                                />
-                                <p className="max-w-[220px] text-center text-[11px] text-fg-subtle">Approved deliverables only</p>
-                            </div>
-                        </div>
-                    </div>
-                </InsightCard>
-
-                <InsightCard title="Team Status" icon={Users} theme="blue" count={3} subtext="Members & pending invitations">
-                    <div className="ring-rows grid grid-cols-1 p-6 md:grid-cols-3" data-cols="3">
-                        <div className="flex flex-col items-center gap-3">
-                            <RingTitle icon={Users}>On Team vs Invited</RingTitle>
-                            <RingWithLegend
-                                items={[{ label: 'On team', hex: RING.green, value: 2 }, { label: 'Invited', hex: RING.gray, value: 1 }]}
-                                centerTop={<span className="text-xl font-bold leading-none tabular-nums text-fg">67%</span>}
-                                centerBottom={<span className="mt-0.5 text-[10px] text-fg-subtle">on team</span>}
-                            />
-                        </div>
-                        <div className="flex flex-col items-center gap-3">
-                            <RingTitle icon={Users}>Distribution by Role</RingTitle>
-                            <RingWithLegend
-                                items={[{ label: 'Lead', hex: RING.green, value: 1 }, { label: 'Member', hex: RING.blue, value: 1 }]}
-                                centerTop={<span className="text-xl font-bold leading-none tabular-nums text-fg">2</span>}
-                                centerBottom={<span className="mt-0.5 text-[10px] text-fg-subtle">members</span>}
-                            />
-                        </div>
-                        <div className="flex flex-col items-center gap-3">
-                            <RingTitle icon={Users}>Internal vs External</RingTitle>
-                            <RingWithLegend
-                                items={[{ label: 'Internal', hex: RING.green, value: 2 }, { label: 'External', hex: RING.indigo, value: 1 }]}
-                                centerTop={<span className="text-xl font-bold leading-none tabular-nums text-fg">67%</span>}
-                                centerBottom={<span className="mt-0.5 text-[10px] text-fg-subtle">internal</span>}
-                            />
-                        </div>
-                    </div>
-                </InsightCard>
-
-                <InsightCard title="File Organization" icon={FolderOpen} theme="blue" subtext={`${m.files.length} files · ${engagement.folders.length} folders`}>
-                    <div className="flex justify-center p-6">
-                        <div className="flex w-full max-w-[260px] flex-col items-center gap-3">
-                            <RingTitle icon={FolderOpen}>Overall Score</RingTitle>
-                            <Donut
-                                total={100}
-                                size={108}
-                                thickness={13}
-                                segments={[{ value: m.folderScore, hex: RING.green }]}
-                                centerTop={<span className="text-2xl font-bold leading-none text-green-600">{m.folderScore}</span>}
-                                centerBottom={<span className="mt-0.5 text-[10px] text-fg-subtle">/ 100</span>}
-                            />
-                            <p className="text-xs font-medium text-green-600">Well organized</p>
-                            <ScoreDeductions penalties={m.folderPenalties} emptyText="No organization issues" className="w-full" />
-                        </div>
-                    </div>
-                </InsightCard>
-            </div>
-
-            <div className="sticky top-0">
-                <div className="flex flex-col gap-6 xl:border-l xl:border-line xl:pl-6">
-                    <div className="flex items-center gap-2 border-b border-line pb-2">
-                        <Inbox className="h-4 w-4 shrink-0 text-fg-subtle" />
-                        <h2 className="truncate text-h3 text-fg">Action Center</h2>
-                        {attentionCount(delivery, housekeeping) > 0 && (
-                            <span className="text-small tabular-nums text-fg-subtle">{attentionCount(delivery, housekeeping)}</span>
-                        )}
-                    </div>
-                    <div className="flex flex-col gap-4">
-                        <ActionSection title="Delivery" icon={Package} items={delivery} />
-                        <ActionSection title="Housekeeping" icon={Archive} items={housekeeping} />
-                    </div>
+        <div className="flex min-w-0 flex-col gap-10 pb-6">
+            <div className="flex flex-col gap-4">
+                <div className="flex items-center gap-2 border-b border-line pb-2">
+                    <Inbox className="h-4 w-4 shrink-0 text-fg-subtle" />
+                    <h2 className="truncate text-h3 text-fg">Action Center</h2>
+                    {attentionCount(delivery, housekeeping) > 0 && (
+                        <span className="text-small tabular-nums text-fg-subtle">{attentionCount(delivery, housekeeping)}</span>
+                    )}
+                </div>
+                <div className="grid grid-cols-1 gap-x-10 gap-y-4 md:grid-cols-2">
+                    <ActionSection title="Delivery" icon={Package} items={delivery} />
+                    <ActionSection title="Housekeeping" icon={Archive} items={housekeeping} />
                 </div>
             </div>
+
+            <InsightCard
+                title="Engagement Health"
+                icon={Heart}
+                theme="green"
+                subtext={`Overall Health ${m.score}/100 · ${m.total} deliverable${m.total === 1 ? '' : 's'}`}
+            >
+                <div className="flex flex-col gap-8 px-6 pt-4 pb-6">
+                    {today ? (
+                        <>
+                            {/* A sample summary beside the cards, as on the app's Overview, with a
+                                simulated Rewrite with Brio (components/demo/demo-summary-card.tsx). */}
+                            <OverviewTop
+                                report={report}
+                                summary={
+                                    <DemoSummaryCard
+                                        today={today}
+                                        input={{
+                                            engagementName: engagement.name,
+                                            deliverables: m.deliverables,
+                                            timePct: m.timePct,
+                                            deliveredPct: m.deliveredPct,
+                                            daysLeft: engagement.dueDate ? Math.round((new Date(engagement.dueDate).getTime() - today.getTime()) / DAY) : null,
+                                            planningGaps: m.planningGaps,
+                                            resolvedThreads: 4,
+                                        }}
+                                    />
+                                }
+                            />
+                            <div className="border-t border-line pt-6">
+                                <DeliverablesTimeline deliverables={m.deliverables} startDate={m.kickoff} dueDate={engagement.dueDate ?? null} nowMs={nowMs} />
+                            </div>
+                        </>
+                    ) : (
+                        // Holds the dated sections' place until the visitor's today is known.
+                        <div className="h-72" aria-hidden />
+                    )}
+                    <div className="border-t border-line pt-6">
+                        <OverviewDetails report={report} />
+                    </div>
+                </div>
+            </InsightCard>
+
+            <InsightCard title="Team Status" icon={Users} theme="blue" count={3} subtext="Members & pending invitations">
+                <div className="px-6 pt-4 pb-2">
+                    <TeamSection
+                        joined={3}
+                        invited={1}
+                        roles={[
+                            { label: 'Admin', hex: RING.green, value: 1 },
+                            { label: 'Member', hex: RING.blue, value: 1 },
+                            { label: 'Collaborator', hex: RING.indigo, value: 1 },
+                        ]}
+                        internal={2}
+                        external={1}
+                    />
+                </div>
+            </InsightCard>
+
+            <InsightCard title="File Organization" icon={FolderOpen} theme="blue" subtext={`${m.files.length} files · ${folderCount} folders`}>
+                <div className="px-6 pt-4 pb-2">
+                    <FileOrganizationSection
+                        score={m.folderScore}
+                        penalties={m.folderPenalties}
+                        checks={[
+                            { id: 'folder.poorly_named', label: 'Poorly named', info: 'Default or meaningless names like "Untitled", "New File" or "Copy of".', count: 0, of: artifacts },
+                            { id: 'folder.duplicates', label: 'Duplicates', info: 'Files with the same or nearly the same name (90% or more) and the same extension.', count: 0, of: artifacts },
+                            { id: 'folder.stale_files', label: 'Stale files', info: 'Not modified in the last 6 months.', count: 0, of: m.files.length },
+                            { id: 'folder.large_files', label: 'Large files', info: 'Larger than 50 MB.', count: 0, of: m.files.length },
+                            { id: 'folder.orphaned_files', label: 'Outside any folder', info: 'Files at the root with no parent folder.', count: 0, of: m.files.length },
+                            { id: 'folder.empty_folders', label: 'Empty folders', info: 'Folders with no files or subfolders.', count: 0, of: folderCount },
+                            { id: 'folder.deep_folders', label: 'More than 3 levels deep', info: 'Folders nested more than 3 levels down.', count: 0, of: folderCount },
+                        ]}
+                    />
+                </div>
+            </InsightCard>
         </div>
     )
 }

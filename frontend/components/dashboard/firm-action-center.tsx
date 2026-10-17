@@ -426,11 +426,12 @@ export function FirmActionCenter({ firmId, groupSlug, firmSlug }: FirmActionCent
         </div>
     ) : null
 
+    // Full width at the top of the Overview, its groups side by side — as on the engagement.
     return (
-        <div className="sticky top-0 print:static">
-            <div className="flex flex-col gap-6 xl:border-l xl:border-line xl:pl-6">
-                {/* Header — the same shape as the section headings on the left, so the two line up:
-                    icon, title, a plain count of items needing attention, a quiet refresh. */}
+        <div>
+            <div className="flex flex-col gap-4">
+                {/* Header — the same shape as the section headings below: icon, title, a plain
+                    count of items needing attention, a quiet refresh. */}
                 <div className="flex items-center justify-between gap-3 border-b border-line pb-2">
                     <div className="flex min-w-0 items-center gap-2">
                         <Inbox className="h-4 w-4 shrink-0 text-fg-subtle" />
@@ -456,7 +457,7 @@ export function FirmActionCenter({ firmId, groupSlug, firmSlug }: FirmActionCent
                         {[1, 2, 3].map((i) => <ShimmerBlock key={i} className="h-10 w-full" />)}
                     </div>
                 ) : acView === 'summary' ? (
-                    <div className="flex flex-col gap-4">
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                         <ActionSection title="Follow-ups" icon={CalendarClock} items={followUps} />
                         {driveLoading ? (
                             <ShimmerBlock className="h-10 w-full" />
