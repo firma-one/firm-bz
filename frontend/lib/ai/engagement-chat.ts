@@ -25,10 +25,71 @@ export const FOLLOWUP_MARKER = '<<FOLLOWUPS>>'
 /** Chips offered after an answer. Three fits the panel; more reads as a menu, not a nudge. */
 export const MAX_FOLLOWUPS = 3
 
+/**
+ * Marker the SERVER writes after the model's stream ends, followed by one line of JSON: the
+ * documents behind the doc IDs the answer cited, and how much the answer drew on
+ * (.claude/plans/brio-panel-redesign.md, item 7).
+ *
+ * Server-written rather than asked of the model, so the ids in it are real and the model spends no
+ * tokens on it. The client turns each cited doc ID into a chip that opens the item, and shows
+ * "Based on N deliverables · M files" under the answer.
+ */
+export const SOURCES_MARKER = '<<SOURCES>>'
+
+/** A document an answer cited by its doc ID. */
+export interface ChatSourceItem {
+    docId: string
+    /** The EngagementDocument id, for the `#doc-file:` deep link. */
+    documentId: string
+    name: string
+    isFolder: boolean
+}
+
+export interface ChatSources {
+    items: ChatSourceItem[]
+    /** In-flight deliverables the engagement has, as the model saw them. */
+    deliverables: number
+    /** Files (not folders) the engagement has, as the model saw them. */
+    files: number
+}
+
 export interface ParsedChatReply {
-    /** The answer shown to the user, with the marker and everything after it removed. */
+    /** The answer shown to the user, with the markers and everything after them removed. */
     answer: string
     followUps: string[]
+    /** What the answer cited and drew on, when the server appended it. */
+    sources: ChatSources | null
+}
+
+/** Builds the line the route appends after the model's stream. */
+export function formatSourcesLine(sources: ChatSources): string {
+    return `\n${SOURCES_MARKER}${JSON.stringify(sources)}`
+}
+
+/**
+ * Parses the JSON after the sources marker, keeping only well-formed entries. Shape-checked rather
+ * than trusted: the line is server-written, but a reply could contain the marker text too.
+ */
+function parseSources(json: string): ChatSources | null {
+    try {
+        const raw = JSON.parse(json.trim()) as Partial<ChatSources>
+        const items = Array.isArray(raw.items) ? raw.items.filter((i): i is ChatSourceItem =>
+            Boolean(i) && typeof i.docId === 'string' && typeof i.documentId === 'string'
+            && /^[\w-]+$/.test(i.documentId) && typeof i.name === 'string' && typeof i.isFolder === 'boolean') : []
+        const count = (n: unknown) => (typeof n === 'number' && Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0)
+        return { items, deliverables: count(raw.deliverables), files: count(raw.files) }
+    } catch {
+        return null
+    }
+}
+
+/**
+ * Removes the sources line from a reply, for anything that sends an earlier answer back to the
+ * model (the history) or shows it as text. The model never needs to see the JSON.
+ */
+export function stripSources(raw: string): string {
+    const at = raw.lastIndexOf(SOURCES_MARKER)
+    return at === -1 ? raw : raw.slice(0, at).trimEnd()
 }
 
 /**
@@ -54,15 +115,22 @@ function isPlausibleFollowUp(line: string): boolean {
     return words.length >= 2
 }
 
-export function parseChatReply(raw: string): ParsedChatReply {
+export function parseChatReply(fullText: string): ParsedChatReply {
+    // The sources line comes last and is split off first, so it never reads as a follow-up or, in a
+    // reply that lost its follow-up marker, as part of the answer. The LAST marker is the server's.
+    const sourcesAt = fullText.lastIndexOf(SOURCES_MARKER)
+    const sources = sourcesAt === -1 ? null : parseSources(fullText.slice(sourcesAt + SOURCES_MARKER.length))
+    const raw = sourcesAt === -1 ? fullText : fullText.slice(0, sourcesAt)
+
     const at = raw.indexOf(FOLLOWUP_MARKER)
     if (at === -1) {
-        // Hide a partially-streamed marker ("<<FOLL") rather than showing it mid-sentence.
+        // Hide a partially-streamed marker ("<<FOLL", "<<SOU") rather than showing it mid-sentence.
         const partial = raw.lastIndexOf('<<')
-        const safe = partial !== -1 && FOLLOWUP_MARKER.startsWith(raw.slice(partial).trimEnd())
+        const tail = partial === -1 ? '' : raw.slice(partial).trimEnd()
+        const safe = partial !== -1 && (FOLLOWUP_MARKER.startsWith(tail) || SOURCES_MARKER.startsWith(tail))
             ? raw.slice(0, partial)
             : raw
-        return { answer: safe.trimEnd(), followUps: [] }
+        return { answer: safe.trimEnd(), followUps: [], sources }
     }
 
     const answer = raw.slice(0, at).trimEnd()
@@ -75,7 +143,7 @@ export function parseChatReply(raw: string): ParsedChatReply {
         .filter(isPlausibleFollowUp)
         .slice(0, MAX_FOLLOWUPS)
 
-    return { answer, followUps }
+    return { answer, followUps, sources }
 }
 
 /**
@@ -600,5 +668,7 @@ export function sanitizeHistory(raw: unknown): ChatMessage[] {
             typeof (m as any).content === 'string' &&
             (m as any).content.trim().length > 0)
         .slice(-MAX_HISTORY_MESSAGES)
-        .map((m) => ({ role: m.role, content: m.content.slice(0, MAX_QUESTION_LENGTH) }))
+        // The sources line is the server's bookkeeping, not part of what was said: stripped so the
+        // model never sees it, nor learns to write one. The client strips it too; this is the backstop.
+        .map((m) => ({ role: m.role, content: stripSources(m.content).slice(0, MAX_QUESTION_LENGTH) }))
 }

@@ -26,8 +26,12 @@ export function DownloadProgressPanel() {
       isOpen ? 'h-auto max-h-[400px]' : 'h-10'
     )}
       /* Sits above the floating assistant when it occupies this corner, rather than over it. The
-         variable is 0px whenever the chat is closed or docked left, leaving the usual bottom-4. */
-      style={{ bottom: 'calc(1rem + var(--ai-chat-corner-offset, 0px))' }}>
+         variable is 0px whenever the chat is closed or docked left, leaving the usual bottom-4.
+         When the assistant is docked to the side, it moves left of the docked pane instead. */
+      style={{
+        bottom: 'calc(1rem + var(--ai-chat-corner-offset, 0px))',
+        right: 'calc(1rem + var(--ai-chat-dock-width, 0px))',
+      }}>
       {/* Header */}
       <div
         className="flex items-center justify-between px-3 py-2 bg-slate-100 border-b border-slate-200 text-fg rounded-t-lg cursor-pointer"

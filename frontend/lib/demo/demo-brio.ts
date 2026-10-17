@@ -1,6 +1,7 @@
 import { ASSISTANT } from '@/lib/ai/assistant'
 import { DemoClient, DemoEngagement, DemoFirm, countFilesInFolder } from './static-demo-data'
 import { DemoDeliverable, DeliverableStatus, getDemoDeliverables } from './demo-deliverables'
+import type { OpeningFact } from '@/lib/ai/chat-suggestions'
 
 /**
  * What Brio "says" in the public demo. The demo has no backend and no model, so the firm brief and
@@ -108,6 +109,29 @@ export function buildDemoFirmBrief(firm: DemoFirm): string {
 export interface DemoChatTurn {
     question: string
     answer: string
+}
+
+/**
+ * What the empty demo panel leads with on Overview, like the app's `buildOpeningFacts`: facts from
+ * the sample engagement, each asking one of the demo's own questions so it always has an answer.
+ * Computed relative to today, so call it in the browser.
+ */
+export function overviewFacts(engagement: DemoEngagement): OpeningFact[] {
+    const open = getDemoDeliverables(engagement).filter(isOpen)
+    const facts: OpeningFact[] = []
+    const overdue = open.filter((d) => d.dueDate && daysUntil(d.dueDate) < 0).length
+    if (overdue > 0) {
+        facts.push({ label: `${overdue} deliverable${overdue === 1 ? '' : 's'} overdue`, question: 'What needs my attention this week?', tone: 'red' })
+    }
+    const inReview = open.filter((d) => d.status === 'in_review').length
+    if (inReview > 0) {
+        facts.push({ label: `${inReview} deliverable${inReview === 1 ? '' : 's'} waiting on client approval`, question: "What's waiting on client approval?", tone: 'yellow' })
+    }
+    const dueSoon = open.filter((d) => d.dueDate && daysUntil(d.dueDate) >= 0 && daysUntil(d.dueDate) <= 14).length
+    if (dueSoon > 0 && overdue === 0) {
+        facts.push({ label: `${dueSoon} deliverable${dueSoon === 1 ? '' : 's'} due in the next two weeks`, question: 'What needs my attention this week?', tone: 'gray' })
+    }
+    return facts
 }
 
 /** Prompt hints and their answers for the engagement Overview. */

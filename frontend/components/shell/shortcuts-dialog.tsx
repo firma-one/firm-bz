@@ -9,6 +9,7 @@ const GROUPS: { title: string; rows: { keys: string[]; label: string }[] }[] = [
         title: "General",
         rows: [
             { keys: ["⌘", "K"], label: "Search and commands" },
+            { keys: ["⌘", "J"], label: "Ask Brio (on an engagement's Overview and Files)" },
             { keys: ["["], label: "Toggle sidebar" },
             { keys: ["?"], label: "Keyboard shortcuts" },
         ],

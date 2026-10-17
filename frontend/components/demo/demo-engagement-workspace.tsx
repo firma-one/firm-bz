@@ -17,7 +17,7 @@ import { DemoEngagementComments } from '@/components/demo/demo-engagement-commen
 import { DemoEngagementAudit } from '@/components/demo/demo-engagement-audit'
 import { DemoEngagementMembers } from '@/components/demo/demo-engagement-members'
 import { DemoBrioChat } from '@/components/demo/demo-brio-chat'
-import { filesChat, overviewChat } from '@/lib/demo/demo-brio'
+import { filesChat, overviewChat, overviewFacts } from '@/lib/demo/demo-brio'
 
 interface DemoEngagementWorkspaceProps {
     client: DemoClient
@@ -126,7 +126,7 @@ export function DemoEngagementWorkspace({ client, engagement }: DemoEngagementWo
             </Tabs>
 
             {/* One panel per page, keyed so each keeps its own conversation. */}
-            {currentTab === 'analytics' && <DemoBrioChat key="overview" turns={overviewTurns} />}
+            {currentTab === 'analytics' && <DemoBrioChat key="overview" turns={overviewTurns} facts={overviewFacts(engagement)} />}
             {currentTab === 'files' && (
                 <DemoBrioChat
                     key="files"

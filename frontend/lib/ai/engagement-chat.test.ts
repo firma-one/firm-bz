@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { buildEngagementContext, isObviouslyOutOfScope, PLATFORM_DATA_MODEL, CHAT_SYSTEM_PROMPT, parseChatReply, FOLLOWUP_MARKER, MAX_FOLLOWUPS, parseChatScope, chatScopeGuidance,
+    SOURCES_MARKER, formatSourcesLine, stripSources, sanitizeHistory,
 } from './engagement-chat'
 import { SUMMARY_SYSTEM_PROMPT } from './engagement-summary'
 import type { EngagementInsightsResponse } from '@/lib/insights/engagement-insights'
@@ -526,5 +527,59 @@ describe('buildEngagementContext — engagement metadata', () => {
             rateOrValue: '250000',
         })
         expect(out).not.toContain('250000')
+    })
+})
+
+describe('the sources line', () => {
+    const sources = {
+        items: [{ docId: 'QSR-9', documentId: 'doc_1', name: 'Market Report', isFolder: true }],
+        deliverables: 4,
+        files: 18,
+    }
+
+    it('is split off after the follow-ups, never shown as answer or follow-up', () => {
+        const raw = `"Market Report" (QSR-9) is due Friday.\n${FOLLOWUP_MARKER}\nWho owns it?\nWhat else is due?${formatSourcesLine(sources)}`
+        const r = parseChatReply(raw)
+        expect(r.answer).toBe('"Market Report" (QSR-9) is due Friday.')
+        expect(r.followUps).toEqual(['Who owns it?', 'What else is due?'])
+        expect(r.sources).toEqual(sources)
+    })
+
+    it('is split off when the model lost its follow-up marker', () => {
+        const r = parseChatReply(`All on track.${formatSourcesLine(sources)}`)
+        expect(r.answer).toBe('All on track.')
+        expect(r.followUps).toEqual([])
+        expect(r.sources?.files).toBe(18)
+    })
+
+    it('hides a half-arrived marker, and an answer without one has no sources', () => {
+        expect(parseChatReply('All on track.\n<<SOU').answer).toBe('All on track.')
+        expect(parseChatReply('All on track.').sources).toBeNull()
+    })
+
+    it('drops malformed entries rather than trusting the line', () => {
+        const raw = `Hi.\n${SOURCES_MARKER}${JSON.stringify({
+            items: [
+                { docId: 'QSR-9', documentId: 'doc_1', name: 'Ok', isFolder: false },
+                { docId: 'QSR-10', documentId: 'javascript:alert(1)', name: 'Bad', isFolder: false },
+                { docId: 7 },
+            ],
+            deliverables: -3,
+            files: 'many',
+        })}`
+        expect(parseChatReply(raw).sources).toEqual({
+            items: [{ docId: 'QSR-9', documentId: 'doc_1', name: 'Ok', isFolder: false }],
+            deliverables: 0,
+            files: 0,
+        })
+        expect(parseChatReply(`Hi.\n${SOURCES_MARKER}{not json`).sources).toBeNull()
+    })
+
+    it('never goes back to the model as history', () => {
+        const answer = `Due Friday.\n${FOLLOWUP_MARKER}\nWho owns it?${formatSourcesLine(sources)}`
+        expect(stripSources(answer)).not.toContain(SOURCES_MARKER)
+        const history = sanitizeHistory([{ role: 'assistant', content: answer }])
+        expect(history[0].content).not.toContain(SOURCES_MARKER)
+        expect(history[0].content).toContain(FOLLOWUP_MARKER)
     })
 })

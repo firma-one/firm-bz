@@ -129,9 +129,12 @@ export function AppShellV2({
                     </div>
                     {banners}
 
-                    <div className="flex min-h-0 flex-1 print:block">
+                    {/* `--ai-chat-dock-width` is set by the Brio panel while it is docked to the side
+                        (floating-ai-chat.tsx), so the page makes room for it instead of sitting under it. */}
+                    <div className="flex min-h-0 flex-1 print:block" style={{ marginRight: 'var(--ai-chat-dock-width, 0px)' }}>
                         <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden print:block print:overflow-visible">
-                            <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden print:overflow-visible">
+                            {/* `data-app-scroll` lets floating chrome (the Brio panel) find the content edge. */}
+                            <div data-app-scroll className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden print:overflow-visible">
                                 <div className="flex min-h-full w-full flex-col px-4 py-5 md:px-8 md:py-6 print:min-h-0">
                                     {children}
                                 </div>

@@ -147,3 +147,87 @@ export function buildChatSuggestions(
     }
     return out
 }
+
+/** One live fact the empty panel opens with (.claude/plans/brio-panel-redesign.md, item 6). */
+export interface OpeningFact {
+    /** What is true right now, e.g. "2 deliverables overdue". */
+    label: string
+    /** The question asked when the fact is clicked. */
+    question: string
+    /** How much it demands attention, for the dot beside it. */
+    tone: 'red' | 'yellow' | 'gray'
+}
+
+/** Three facts reads as a briefing; more is a dashboard, which the Overview already is. */
+const MAX_OPENING_FACTS = 3
+
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
+
+/**
+ * What the empty panel leads with on Overview: up to three facts from the engagement's own data,
+ * most pressing first, each asking Brio about itself when clicked. The same signals as
+ * `buildChatSuggestions`, so a fact is only shown when it is true and its question has an answer.
+ * Empty when nothing stands out, and the panel falls back to its starter questions.
+ */
+export function buildOpeningFacts(data: EngagementInsightsResponse | null | undefined): OpeningFact[] {
+    if (!data) return []
+    const facts: (OpeningFact & { score: number })[] = []
+
+    const overdue = data.deliveryHealth?.overdueCount ?? 0
+    if (overdue > 0) {
+        facts.push({
+            label: `${plural(overdue, 'deliverable', 'deliverables')} overdue`,
+            question: overdue === 1 ? "What's overdue, and how late is it?" : `Which ${overdue} deliverables are overdue?`,
+            tone: 'red',
+            score: 100,
+        })
+    }
+
+    const unanswered = data.commentThreads?.unanswered ?? 0
+    if (unanswered > 0) {
+        facts.push({
+            label: `${plural(unanswered, 'comment', 'comments')} awaiting our reply`,
+            question: unanswered === 1 ? 'Which comment is awaiting our reply?' : `Which ${unanswered} comments are awaiting our reply?`,
+            tone: 'yellow',
+            score: 80,
+        })
+    }
+
+    const stuckInReview = data.deliveryHealth?.stalledInReview ?? 0
+    if (stuckInReview > 0) {
+        facts.push({
+            label: `${plural(stuckInReview, 'deliverable', 'deliverables')} sitting in review`,
+            question: "What's been sitting in review too long?",
+            tone: 'yellow',
+            score: 90,
+        })
+    }
+
+    const dueSoon = data.documentsDueSoon?.length ?? 0
+    if (dueSoon > 0 && overdue === 0) {
+        facts.push({
+            label: `${plural(dueSoon, 'item', 'items')} due in the next few days`,
+            question: "What's due in the next few days?",
+            tone: 'gray',
+            score: 70,
+        })
+    }
+
+    const hygiene = data.planningHygiene
+    if (hygiene) {
+        const missingDates = (hygiene.docTotal - hygiene.docWithDueDate) + (hygiene.deliverableTotal - hygiene.deliverableWithDueDate)
+        if (missingDates > 0) {
+            facts.push({
+                label: `${plural(missingDates, 'item', 'items')} without a due date`,
+                question: 'What work is missing a due date?',
+                tone: 'gray',
+                score: 50,
+            })
+        }
+    }
+
+    return facts
+        .sort((a, b) => b.score - a.score)
+        .slice(0, MAX_OPENING_FACTS)
+        .map(({ score: _score, ...fact }) => fact)
+}
