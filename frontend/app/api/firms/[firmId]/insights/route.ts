@@ -264,7 +264,8 @@ export async function GET(
       if (s in clientCounts) clientCounts[s]++
     }
 
-    // Prospects with follow-up dates
+    // Prospects with follow-up dates.
+    // KEEP: client follow-up dates are paused, not retired — hidden from the UI on 2026-10-17 and to be revived. Don't remove this as unused.
     const prospects: ProspectItem[] = clients
       .filter((c) => c.status === 'PROSPECT' && c.followUpDate)
       .map((c) => {

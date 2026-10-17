@@ -29,6 +29,9 @@ interface ClientListProps {
     hrefFor?: (client: ClientSummary) => string
 }
 
+// Follow-up tags ("Follow up today", "Follow-up 2 days late") are hidden for now: client
+// follow-up dates are paused, not retired, and will be revived (2026-10-17). The dates are kept.
+
 function ago(value: Date): string {
     return formatDistanceToNowStrict(new Date(value), { addSuffix: true })
 }

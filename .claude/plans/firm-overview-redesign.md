@@ -79,11 +79,12 @@ derived in `lib/insights/firm-actions.ts`), one request with the report:
   one past its date counts as expired, since expiry is only written when the link is opened).
 - **Clients**: Start work with idle clients (active, no active engagement) · Decide on prospects
   (past their expected close date, or with none set; opens the client's settings).
-- **Client follow-up dates are retired** (decided 2026-10-17: the field complicated the client
-  form). Its field had already left Client Settings and Add client in July (`7902446d`); the
-  client list's follow-up tags and the details popup's follow-up date are now gone too. Not yet
-  removed: the stored column, the settings form carrying the old value through on save, and the
-  reminder `client.ts` writes for a stored date.
+- **Client follow-up dates are paused, not retired** (2026-10-17: the field complicated the client
+  form, and Deepak plans to bring it back). Its field had already left Client Settings and Add
+  client in July (`7902446d`); the client list's follow-up tags and the details popup's date are
+  hidden too. Everything behind them stays — the column, the forms carrying the value through on
+  save, the reminder `client.ts` writes, the reminder clearer, the insights route's follow-up list
+  — each marked "KEEP: client follow-up dates are paused" so it isn't removed as dead code.
 - **Gone**: the Documents group (file checks belong to each engagement's Housekeeping; it also
   dropped a firm-wide Drive scan from every load), personal reminders (Inbox and Home), and
   Upcoming (due dates are in Coming up).
@@ -91,8 +92,8 @@ derived in `lib/insights/firm-actions.ts`), one request with the report:
 - **All clear is one line**: "All clear · 6 checks passed", the checks listed on a click.
 - The tour shows two sample items (a client comment, an invitation about to lapse) so visitors
   see what the list is for.
-- `firm-action-center.tsx` and `demo-firm-action-center.tsx` are unused, kept until their removal
-  is signed off.
+- The old `firm-action-center.tsx` and `demo-firm-action-center.tsx` were deleted on sign-off
+  (2026-10-17).
 
 ## Rewriting the brief (2026-10-17)
 
