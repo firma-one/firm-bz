@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { Briefcase } from "lucide-react"
+import { Briefcase, Building2, Users } from "lucide-react"
 import { formatDistanceToNowStrict, format } from "date-fns"
 import { ListGroup, ListRow } from "@/components/ui/list-row"
 import { StatusPill } from "@/components/ui/tag"
@@ -31,6 +31,30 @@ export function RelativeTime({ iso, className }: { iso: string; className?: stri
 }
 
 type Grouping = "firm" | "client" | "status"
+
+/*
+ * The app's icons for the three levels, as in the breadcrumbs, the sidebar and ⌘K: Building2 for a
+ * firm, Users for a client, Briefcase for an engagement.
+ */
+const GROUP_ICON_CLASS = "h-3.5 w-3.5 shrink-0 text-fg-subtle"
+
+/** A row's client, and its firm when the list spans several, each with its icon. */
+function ClientAndFirm({ client, firm }: { client: string; firm?: string }) {
+    return (
+        <span className="inline-flex min-w-0 items-center gap-1.5">
+            <span className="inline-flex min-w-0 items-center gap-1">
+                <Users className="h-3 w-3 shrink-0" aria-hidden />
+                <span className="truncate">{client}</span>
+            </span>
+            {firm && (
+                <span className="inline-flex min-w-0 items-center gap-1">
+                    <Building2 className="h-3 w-3 shrink-0" aria-hidden />
+                    <span className="truncate">{firm}</span>
+                </span>
+            )}
+        </span>
+    )
+}
 
 const STATUS_ORDER = ["ACTIVE", "PLANNED", "PAUSED", "COMPLETED"]
 const STATUS_TITLES: Record<string, string> = { ACTIVE: "Active", PLANNED: "Planned", PAUSED: "Paused", COMPLETED: "Completed" }
@@ -112,15 +136,25 @@ export function MyEngagementsList({
             ) : (
                 <div className="flex flex-col gap-3">
                     {groups.map(([key, items]) => (
-                        <ListGroup key={key} title={grouping === "status" ? STATUS_TITLES[key] ?? key : key} count={items.length}>
+                        <ListGroup
+                            key={key}
+                            title={grouping === "status" ? STATUS_TITLES[key] ?? key : key}
+                            count={items.length}
+                            icon={
+                                grouping === "firm" ? <Building2 className={GROUP_ICON_CLASS} aria-hidden />
+                                : grouping === "client" ? <Users className={GROUP_ICON_CLASS} aria-hidden />
+                                : undefined
+                            }
+                        >
                             {items.map((e) => (
                                 <ListRow
                                     key={e.id}
                                     href={e.href}
+                                    leading={<Briefcase aria-hidden />}
                                     title={e.name}
                                     meta={
-                                        grouping === "firm" ? e.clientName
-                                        : grouping === "status" ? (multiFirm ? `${e.clientName} · ${firmOf(e)}` : e.clientName)
+                                        grouping === "firm" ? <ClientAndFirm client={e.clientName} />
+                                        : grouping === "status" ? <ClientAndFirm client={e.clientName} firm={multiFirm ? firmOf(e) : undefined} />
                                         : undefined
                                     }
                                     trailing={
