@@ -1386,7 +1386,8 @@ export function EngagementAiChat({
                             </div>
                         )}
 
-                        {suggestionActions && <div className="flex flex-wrap gap-1.5 px-2">{suggestionActions}</div>}
+                        {/* The page's action (Files), laid out as a row so its icon lines up. */}
+                        {suggestionActions && <div className="flex flex-col items-start gap-px">{suggestionActions}</div>}
 
                         {/* A fresh engagement has nothing to ask about yet; saying so is more honest
                             than offering prompts that would return nothing. */}
@@ -1426,18 +1427,25 @@ export function EngagementAiChat({
                         <div
                             className={
                                 m.role === 'user'
-                                    ? 'max-w-[85%] rounded-card bg-surface-muted px-3 py-2 text-ui text-fg sm:max-w-[38rem]'
-                                    : 'w-full whitespace-pre-line break-words px-0.5 py-1 text-ui leading-relaxed text-fg'
+                                    ? 'max-w-[85%] whitespace-pre-line rounded-card bg-surface-muted px-3 py-2 text-ui text-fg sm:max-w-[38rem]'
+                                    : 'w-full break-words px-0.5 py-1 text-ui leading-relaxed text-fg'
                             }
                         >
                             {m.content ? (
                                 m.role === 'assistant' && settled ? (
                                     <ChatMarkdown content={parsed!.answer} sources={parsed!.sources?.items} />
                                 ) : (
-                                    <StreamingText
-                                        text={m.role === 'assistant' ? parsed!.answer : m.content}
-                                        animate={m.role === 'assistant' && !settled}
-                                    />
+                                    /* `pre-line` only on raw text — the answer still streaming, and
+                                       the user's own words — where a newline is a line break. NOT on
+                                       the rendered answer: the Markdown renderer leaves a newline text
+                                       node between every block, and pre-line drew each one as an
+                                       empty line, padding paragraphs and list items apart. */
+                                    <span className={m.role === 'assistant' ? 'whitespace-pre-line' : undefined}>
+                                        <StreamingText
+                                            text={m.role === 'assistant' ? parsed!.answer : m.content}
+                                            animate={m.role === 'assistant' && !settled}
+                                        />
+                                    </span>
                                 )
                             ) : (
                                 /* Thinking (item 10): the shimmer lines the firm brief loads with,
@@ -1487,7 +1495,7 @@ export function EngagementAiChat({
                                     {suggestions.map((q) => (
                                         <SuggestionRow key={q} leading={<CornerDownRight />} label={q} onClick={() => void ask(q)} />
                                     ))}
-                                    {suggestionActions && <div className="flex flex-wrap gap-1.5 px-2 pt-1">{suggestionActions}</div>}
+                                    {suggestionActions && <div className="flex flex-col items-start gap-px pt-0.5">{suggestionActions}</div>}
                                 </div>
                             )}
                         </div>

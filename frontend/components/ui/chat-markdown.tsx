@@ -103,6 +103,9 @@ export function ChatMarkdown({ content, className, sources }: { content: string;
                 '[&_p]:my-2',
                 '[&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-4',
                 '[&_li]:my-0.5 [&_li]:marker:text-fg-subtle',
+                // A "loose" list (a blank line between items, which the model often writes) wraps
+                // each item in a <p>; without this every item carried a paragraph's margins.
+                '[&_li>p]:my-0',
                 '[&_h2]:text-caption [&_h2]:font-semibold [&_h2]:text-fg-subtle [&_h2]:mt-4 [&_h2]:mb-1',
                 '[&_h3]:text-small [&_h3]:font-semibold [&_h3]:text-fg [&_h3]:mt-3 [&_h3]:mb-1',
                 '[&_strong]:font-semibold [&_strong]:text-fg',

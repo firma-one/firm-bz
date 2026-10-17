@@ -1,7 +1,9 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { AlertCircle, Loader2, Check, X, FolderTree, ChevronRight } from 'lucide-react'
+import { AlertCircle, Loader2, Check, X, ChevronRight } from 'lucide-react'
+import { Hint } from '@/components/ui/tooltip'
+import { ChatActionRow } from '@/components/projects/chat-action-row'
 import { useAuth } from '@/lib/auth-context'
 import { AgentPromptCard } from '@/components/ui/agent-prompt-card'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -447,18 +449,13 @@ export function FilesScaffoldPanel({
     )
 }
 
-/** The chip that starts the interview, for the suggestion row. */
+/** The action that starts the interview, for the panel's suggestion lists. */
 export function FilesScaffoldTrigger({ onClick, disabled }: { onClick: () => void; disabled?: boolean }) {
     return (
-        <button
-            type="button"
-            onClick={onClick}
-            disabled={disabled}
-            title="Answer a few questions and Brio will create a folder structure for this engagement."
-            className="inline-flex max-w-full shrink-0 items-center gap-1.5 truncate rounded-full border border-primary/30 bg-white px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/5 disabled:opacity-60"
-        >
-            <FolderTree className="h-3 w-3 shrink-0" />
-            Set up folder organization
-        </button>
+        <Hint label="Answer a few questions and Brio will create a folder structure for this engagement.">
+            <ChatActionRow onClick={onClick} disabled={disabled}>
+                Set up folder organization
+            </ChatActionRow>
+        </Hint>
     )
 }

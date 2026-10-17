@@ -1,7 +1,9 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { AlertCircle, Check, Loader2, Sparkles } from 'lucide-react'
+import { AlertCircle, Check, Loader2 } from 'lucide-react'
+import { Hint } from '@/components/ui/tooltip'
+import { ChatActionRow } from '@/components/projects/chat-action-row'
 import { useAuth } from '@/lib/auth-context'
 import { proposalKey, type Proposal } from '@/lib/ai/files-agent/tools'
 import { AgentPromptCard, type AgentPromptOption } from '@/components/ui/agent-prompt-card'
@@ -553,17 +555,15 @@ export function FilesAgentPanel({
         if (review != null && review.proposals.length > 0 && !answered) return null
         return (
             <>
-                <button
-                    type="button"
-                    onClick={() => void runReview()}
-                    disabled={state === 'reviewing' || !token}
-                    title="Check this engagement's folders and files — inconsistent naming, duplicates, files in the wrong place, and folders this kind of work usually has — then propose fixes for you to approve."
-                    className="inline-flex max-w-full shrink-0 items-center gap-1.5 truncate rounded-control bg-action px-2.5 py-1 text-small font-medium text-action-fg hover:bg-action-hover transition-all hover:brightness-105 disabled:opacity-60"
-                >
-                    {state === 'reviewing'
-                        ? <><Loader2 className="h-3 w-3 shrink-0 animate-spin" /> Reviewing…</>
-                        : <><Sparkles className="h-3 w-3 shrink-0" /> Review folder organization</>}
-                </button>
+                <Hint label={<span className="block max-w-[18rem]">Check this engagement&apos;s folders and files — inconsistent naming, duplicates, files in the wrong place, and folders this kind of work usually has — then propose fixes for you to approve.</span>}>
+                    <ChatActionRow
+                        onClick={() => void runReview()}
+                        disabled={state === 'reviewing' || !token}
+                        busy={state === 'reviewing'}
+                    >
+                        {state === 'reviewing' ? 'Reviewing…' : 'Review folder organization'}
+                    </ChatActionRow>
+                </Hint>
                 {error && <p className="w-full px-0.5 text-xs text-red-600">{error}</p>}
             </>
         )
