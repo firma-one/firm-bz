@@ -665,8 +665,8 @@ export function DocumentActionMenu({
                     </TooltipProvider>
                   ) : isDeliverable ? (
                     <DropdownMenuItem
-                      onSelect={(e) => {
-                        e.preventDefault()
+                      // Closes the menu: it sits above dialogs, so left open it covers the confirmation.
+                      onSelect={() => {
                         if (deliverableStatus && deliverableStatus !== 'to_do') {
                           addToast({ type: 'error', title: 'Cannot untag', message: 'Only deliverables with a To Do status can be untagged.' })
                           return
@@ -699,7 +699,8 @@ export function DocumentActionMenu({
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <DropdownMenuItem
-                            onSelect={(e) => { e.preventDefault(); setTagDeliverableDueDate(""); setShowTagDeliverableModal(true) }}
+                            // Closes the menu: it sits above dialogs, so left open it covers the dialog.
+                            onSelect={() => { setTagDeliverableDueDate(""); setShowTagDeliverableModal(true) }}
                             className="flex cursor-pointer items-center gap-2"
                           >
                             <Package className="h-4 w-4 text-fg-subtle" />
@@ -833,7 +834,8 @@ export function DocumentActionMenu({
                             </div>
                           ) : (
                             <DropdownMenuItem
-                              onSelect={(e) => { e.preventDefault(); onDeleteDocument!(document); }}
+                              // Closes the menu: it sits above dialogs, so left open it covers the confirmation.
+                              onSelect={() => onDeleteDocument!(document)}
                               className="flex cursor-pointer items-center gap-2 text-danger focus:text-danger"
                             >
                               <Trash2 className="h-4 w-4" />
@@ -1371,7 +1373,8 @@ export function DocumentActionMenu({
                             </div>
                           ) : (
                             <DropdownMenuItem
-                              onSelect={(e) => { e.preventDefault(); onDeleteDocument!(document); }}
+                              // Closes the menu: it sits above dialogs, so left open it covers the confirmation.
+                              onSelect={() => onDeleteDocument!(document)}
                               className="flex cursor-pointer items-center gap-2 text-danger focus:text-danger"
                             >
                               <Trash2 className="h-4 w-4" />

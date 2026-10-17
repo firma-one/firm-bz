@@ -1475,6 +1475,9 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
         stopProcessing,
         setFiles,
         onItemRemoved: deselectFile,
+        storageBinName,
+        // OneDrive can't take an item back out of its recycle bin through Graph (personal drives only).
+        canUndoTrash: !isOneDriveClient,
     })
 
     const handleMarkAsDeliverable = useCallback(async (doc: any, dueDate?: string) => {

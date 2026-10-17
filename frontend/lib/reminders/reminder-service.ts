@@ -6,6 +6,7 @@ import { safeInngestSend } from '@/lib/inngest/client'
 import { getFirmReminderConfig } from '@/lib/firm-reminder-config'
 import { logger } from '@/lib/logger'
 import { resolveEntity } from '@/lib/reminders/entity-registry'
+import { reminderFireAt } from '@/lib/reminders/fire-at'
 import {
     loadReminderItems as loadItems,
     saveReminderItems as saveItems,
@@ -223,9 +224,8 @@ async function scheduleReminderEmail(
     params: { entityKey: string; entityValue: string; action: string; dateKey: string | null; dateValue: string | null; entityName: string; firmId: string; ctaUrl: string | null; userId: string }
 ): Promise<void> {
     if (!params.dateValue) return
-    const fireAt = new Date(params.dateValue)
-    if (fireAt <= new Date()) return // past dates — don't schedule
-    fireAt.setUTCHours(9, 0, 0, 0)
+    const fireAt = reminderFireAt(params.dateKey, params.dateValue)
+    if (!fireAt) return // past dates — don't schedule
 
     await safeInngestSend('reminder.email.scheduled', {
         reminderId,

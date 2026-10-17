@@ -67,19 +67,21 @@ export function ActionRow({ item, aside }: { item: ActionItem; aside?: React.Rea
 
 /**
  * One group: the header carries a plain count of rows needing attention (no badges), those rows
- * follow — most severe, then largest, first — and everything at zero folds into one "nothing to
- * do" line instead of a column of zeros. `aside` fills a fixed slot at the end of every row, so
+ * follow — most severe, then largest, first — and everything at zero folds into one "N checks
+ * passed" line instead of a column of zeros. `aside` fills a fixed slot at the end of every row, so
  * the counts stay aligned whether or not a row has one.
  */
-export function ActionSection<T extends ActionItem>({ title, icon: Icon, items, headerAction, aside, footer }: {
+export function ActionSection<T extends ActionItem>({ title, icon: Icon, items, headerAction, aside, footer, defaultShowClear = false }: {
     title: string
     icon: React.ElementType
     items: T[]
     headerAction?: React.ReactNode
     aside?: (item: T) => React.ReactNode
     footer?: React.ReactNode
+    /** Start with the passed checks listed (when the reader just asked to see them). */
+    defaultShowClear?: boolean
 }) {
-    const [showClear, setShowClear] = useState(false)
+    const [showClear, setShowClear] = useState(defaultShowClear)
     const active = items
         .filter((i) => i.count > 0)
         .sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity] || b.count - a.count)
@@ -112,7 +114,7 @@ export function ActionSection<T extends ActionItem>({ title, icon: Icon, items, 
                         className="flex h-8 items-center gap-1.5 rounded-control px-2 text-left text-small text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg-muted"
                     >
                         <ChevronRight className={`h-3.5 w-3.5 shrink-0 transition-transform ${showClear ? 'rotate-90' : ''}`} />
-                        {clear.length} with nothing to do
+                        {clear.length} {clear.length === 1 ? 'check' : 'checks'} passed
                     </button>
                 )}
                 {showClear && clear.map(row)}

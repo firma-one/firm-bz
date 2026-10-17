@@ -152,6 +152,8 @@ export interface GoogleDriveFile {
   metadata?: any
   /** Present when the file lives in a shared drive (Drive API `driveId`). */
   driveId?: string | null
+  /** In the Drive Bin. Only getFileMetadata asks for it. */
+  trashed?: boolean
   /** Storage consumed by the file (in bytes, as a string). Present for native Google files (Docs, Sheets, Slides) that have no `size` field. */
   quotaBytesUsed?: string
 }
@@ -2768,6 +2770,33 @@ export class GoogleDriveConnector {
     }
   }
 
+  /** Take a file out of the trash: the reverse of trashFile. */
+  async untrashFile(connectorId: string, fileId: string): Promise<boolean> {
+    try {
+      const accessToken = await this.getAccessToken(connectorId)
+      if (!accessToken) throw new Error('Could not get access token')
+
+      const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?supportsAllDrives=true`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ trashed: false })
+      })
+
+      if (!res.ok) {
+        const body = await res.text().catch(() => '')
+        logger.error(`Failed to untrash file ${fileId} via connector ${connectorId}: HTTP ${res.status}: ${body}`, new Error(`HTTP ${res.status}`))
+        return false
+      }
+      return true
+    } catch (error) {
+      logger.error(`Failed to untrash file ${fileId} via connector ${connectorId}`, error as Error)
+      return false
+    }
+  }
+
   /**
    * Permanently delete a file, bypassing trash. Irreversible.
    */
@@ -4033,7 +4062,7 @@ export class GoogleDriveConnector {
 
     try {
       const res = await fetch(
-        `https://www.googleapis.com/drive/v3/files/${fileId}?fields=id,name,mimeType,size,modifiedTime,webViewLink,thumbnailLink,iconLink,parents,permissions,driveId,owners(displayName,emailAddress,photoLink),lastModifyingUser(displayName,photoLink)&supportsAllDrives=true`,
+        `https://www.googleapis.com/drive/v3/files/${fileId}?fields=id,name,mimeType,size,modifiedTime,webViewLink,thumbnailLink,iconLink,parents,permissions,driveId,trashed,owners(displayName,emailAddress,photoLink),lastModifyingUser(displayName,photoLink)&supportsAllDrives=true`,
         {
           headers: { Authorization: `Bearer ${accessToken}` },
         }
@@ -4052,6 +4081,7 @@ export class GoogleDriveConnector {
           parents: f.parents,
           permissions: f.permissions,
           driveId: f.driveId ?? null,
+          trashed: f.trashed === true,
           connectorId: connectionId,
           owners: f.owners ?? null,
           lastModifyingUser: f.lastModifyingUser ?? null,

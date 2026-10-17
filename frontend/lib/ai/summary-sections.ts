@@ -36,7 +36,7 @@ export const LEAD_PLACEHOLDER = '_Awaiting the Engagement Lead\u2019s input._'
  * placeholder still in the text. This gate protects client-facing content, so it matches on
  * intent — normalised punctuation, plus the "awaiting …" phrasing in any form.
  */
-function isPlaceholderText(body: string): boolean {
+export function isPlaceholderText(body: string): boolean {
     const normalised = body
         .replace(/[\u2018\u2019]/g, "'")   // curly -> straight apostrophes
         .replace(/[_*`]/g, '')              // markdown emphasis
@@ -67,4 +67,40 @@ export function findUnfilledSections(text: string): string[] {
         if (isPlaceholderText(body)) unfilled.push(section.heading)
     }
     return unfilled
+}
+
+/** The headings a lead writes (Mitigation & Contingency, Next Steps), in summary order. */
+export const LEAD_SECTIONS: string[] = SUMMARY_SECTIONS.filter((s) => s.authored === 'lead').map((s) => s.heading)
+
+/**
+ * A summary split at its `## ` headings, in order. Text before the first heading comes back with
+ * a null heading. Bodies are trimmed. Used by the review pane to draw each section, so the
+ * lead-authored ones can be edited in place.
+ */
+export function splitSections(text: string): { heading: string | null; body: string }[] {
+    const parts = text.split(/^## /m)
+    const out: { heading: string | null; body: string }[] = []
+    const preamble = parts[0].trim()
+    if (preamble) out.push({ heading: null, body: preamble })
+    for (const part of parts.slice(1)) {
+        const nl = part.indexOf('\n')
+        const heading = (nl === -1 ? part : part.slice(0, nl)).trim()
+        const body = nl === -1 ? '' : part.slice(nl + 1).trim()
+        out.push({ heading, body })
+    }
+    return out
+}
+
+/**
+ * Replaces one section's body, leaving every other section exactly as it was. A heading the draft
+ * does not have is appended at the end.
+ */
+export function writeSection(text: string, heading: string, body: string): string {
+    const marker = `## ${heading}`
+    const start = text.indexOf(marker)
+    if (start === -1) return `${text.trimEnd()}\n\n${marker}\n${body.trim()}\n`
+    const bodyStart = start + marker.length
+    const next = text.slice(bodyStart).search(/\n##\s/)
+    const after = next === -1 ? '' : text.slice(bodyStart + next)
+    return `${text.slice(0, bodyStart)}\n${body.trim()}\n${after}`
 }

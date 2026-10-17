@@ -12,7 +12,8 @@ export function DemoTourButton() {
     if (run) return null
 
     return (
-        <div className="fixed bottom-6 right-6 z-[10040]">
+        // Hidden while a pane is docked on the right (demoPaneOpen): it would sit on the pane's buttons.
+        <div className="fixed bottom-6 right-6 z-[10040] [[data-demo-pane=open]_&]:hidden">
             <Hint label="Replay the guided tour" side="left">
                 <button
                     type="button"

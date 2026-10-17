@@ -66,7 +66,7 @@ export function UploadProgressPanel() {
          When the assistant is docked to the side, it moves left of the docked pane instead. */
       style={{
         bottom: 'calc(1rem + var(--ai-chat-corner-offset, 0px))',
-        right: 'calc(1rem + var(--ai-chat-dock-width, 0px))',
+        right: 'calc(1rem + var(--ai-chat-dock-width, 0px) + var(--right-pane-dock-width, 0px))',
       }}>
       {/* Header */}
       <div

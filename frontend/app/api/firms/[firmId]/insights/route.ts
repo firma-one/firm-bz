@@ -4,6 +4,8 @@ import { createClient } from '@/utils/supabase/server'
 import { userSettingsPlus } from '@/lib/user-settings-plus'
 import { findFirmInPermissions } from '@/lib/permission-helpers'
 import { getUserReminders, type ReminderWithContext } from '@/lib/actions/user-reminders'
+import { buildFirmEngagementRows } from '@/lib/insights/firm-engagement-rows'
+import type { FirmEngagementRow } from '@/lib/insights/firm-engagement-pace'
 
 function firmPrivileges(scopes: Record<string, string[]> | undefined): string[] {
   if (!scopes) return []
@@ -28,6 +30,25 @@ export interface PendingInviteItem {
   clientSlug: string
   expireAt: string
   daysUntilExpiry: number
+}
+
+/** A prospect to convert or let go: past its expected close date, or with none set. */
+export interface ProspectDecisionItem {
+  clientId: string
+  clientName: string
+  clientSlug: string
+  expectedCloseDate: string | null
+  /** Whole days since the expected close; null when none is set. */
+  daysPast: number | null
+}
+
+/** An active client with no active engagement: the Action Center's "start work" item. */
+export interface IdleClientItem {
+  clientId: string
+  clientName: string
+  clientSlug: string
+  /** What its past engagements were worth, for the at-risk figure. */
+  pastValue: number
 }
 
 export interface EngagementDueSoonItem {
@@ -105,6 +126,14 @@ export interface FirmInsightsResponse {
   totalEngagementCount: number
   currencySymbol: string
   engagementStatusBreakdown: { PLANNED: number; ACTIVE: number; PAUSED: number }
+  /** Every active engagement, for the Firm Overview's list. */
+  engagementRows: FirmEngagementRow[]
+  /** Active clients with no active engagement. */
+  clientsWithoutEngagement: IdleClientItem[]
+  /** Engagement invitations expired in the last 30 days or expiring within 3: resend them. */
+  invitationsToResend: PendingInviteItem[]
+  /** Prospects past their expected close date, or with none set. */
+  prospectsToDecide: ProspectDecisionItem[]
 }
 
 /**
@@ -153,18 +182,22 @@ export async function GET(
           expectedCloseDate: true,
         },
       }),
+      // Every active engagement — with a due date or not. Requiring one here left engagements
+      // without one out of the types, the pipeline and the comment scan, so those disagreed with
+      // "Active engagements".
       prisma.engagement.findMany({
         where: {
           firmId,
           isDeleted: false,
           status: { notIn: ['COMPLETED', 'PAUSED'] },
-          dueDate: { not: null },
         },
         select: {
           id: true,
           name: true,
           slug: true,
           dueDate: true,
+          kickoffDate: true,
+          createdAt: true,
           status: true,
           rateOrValue: true,
           contractType: true,
@@ -457,6 +490,60 @@ export async function GET(
       r.dateKey !== 'platform.engagements.dueDate'
     )
 
+    const engagementRows = await buildFirmEngagementRows(engagements)
+
+    // Active clients with no active engagement.
+    const clientsWithoutEngagement: IdleClientItem[] = clients
+      .filter((c) => (c.status ?? 'ACTIVE') === 'ACTIVE' && !engagements.some((e) => e.clientId === c.id))
+      .map((c) => ({ clientId: c.id, clientName: c.name, clientSlug: c.slug, pastValue: clientTotalValueMap.get(c.id) ?? 0 }))
+      .sort((a, b) => b.pastValue - a.pastValue || a.clientName.localeCompare(b.clientName))
+
+    // Prospects to decide on: past their expected close date (longest past first), or with none.
+    const prospectsToDecide: ProspectDecisionItem[] = clients
+      .filter((c) => c.status === 'PROSPECT')
+      .map((c) => {
+        if (!c.expectedCloseDate) return { clientId: c.id, clientName: c.name, clientSlug: c.slug, expectedCloseDate: null, daysPast: null }
+        const d = new Date(c.expectedCloseDate)
+        d.setHours(0, 0, 0, 0)
+        return { clientId: c.id, clientName: c.name, clientSlug: c.slug, expectedCloseDate: c.expectedCloseDate.toISOString(), daysPast: Math.round((today.getTime() - d.getTime()) / 86400000) }
+      })
+      .filter((p) => p.daysPast === null || p.daysPast > 0)
+      .sort((a, b) => (b.daysPast ?? -1) - (a.daysPast ?? -1) || a.clientName.localeCompare(b.clientName))
+
+    // Invitations to resend: expired lately, or about to. Expiry is only written to the status
+    // when someone opens the link, so a pending one past its date is expired too.
+    const in3Days = new Date(Date.now() + 3 * 86400000)
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000)
+    const resendRows = await prisma.engagementInvitation.findMany({
+      where: {
+        engagement: { firmId, isDeleted: false, status: { notIn: ['COMPLETED'] } },
+        status: { in: ['PENDING', 'EXPIRED'] },
+        expireAt: { gte: thirtyDaysAgo, lte: in3Days },
+      },
+      select: {
+        id: true,
+        email: true,
+        expireAt: true,
+        engagement: { select: { id: true, name: true, slug: true, client: { select: { slug: true } } } },
+      },
+      orderBy: { expireAt: 'asc' },
+      take: 50,
+    })
+    const invitationsToResend: PendingInviteItem[] = resendRows.map((inv) => {
+      const d = new Date(inv.expireAt!)
+      d.setHours(0, 0, 0, 0)
+      return {
+        invitationId: inv.id,
+        email: inv.email,
+        engagementId: inv.engagement.id,
+        engagementName: inv.engagement.name,
+        engagementSlug: inv.engagement.slug,
+        clientSlug: inv.engagement.client.slug,
+        expireAt: inv.expireAt!.toISOString(),
+        daysUntilExpiry: Math.round((d.getTime() - today.getTime()) / 86400000),
+      }
+    })
+
     const response: FirmInsightsResponse = {
       clientCounts,
       activeEngagements,
@@ -482,6 +569,10 @@ export async function GET(
       totalEngagementCount: totalEngagementWithDriveCount,
       currencySymbol,
       engagementStatusBreakdown,
+      engagementRows,
+      clientsWithoutEngagement,
+      invitationsToResend,
+      prospectsToDecide,
     }
 
     return NextResponse.json(response)

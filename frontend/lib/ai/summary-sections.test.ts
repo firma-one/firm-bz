@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { findUnfilledSections, LEAD_PLACEHOLDER, SUMMARY_SECTIONS } from './summary-sections'
+import { findUnfilledSections, LEAD_PLACEHOLDER, LEAD_SECTIONS, SUMMARY_SECTIONS, splitSections, writeSection } from './summary-sections'
 
 const build = (mitigation: string, nextSteps: string) => `## Summary
 Things are on track.
@@ -62,5 +62,42 @@ describe('findUnfilledSections', () => {
         const aiSections = SUMMARY_SECTIONS.filter((s) => s.authored === 'ai').map((s) => s.heading)
         const flagged = findUnfilledSections(build(LEAD_PLACEHOLDER, LEAD_PLACEHOLDER))
         for (const heading of aiSections) expect(flagged).not.toContain(heading)
+    })
+})
+
+describe('splitSections and writeSection', () => {
+    const draft = build(LEAD_PLACEHOLDER, LEAD_PLACEHOLDER)
+
+    it('splits a summary at its headings, in order', () => {
+        const sections = splitSections(draft)
+        expect(sections.map((s) => s.heading)).toEqual(SUMMARY_SECTIONS.map((s) => s.heading))
+        expect(sections[0].body).toBe('Things are on track.')
+    })
+
+    it('names the sections a lead writes', () => {
+        expect(LEAD_SECTIONS).toEqual(['Mitigation & Contingency', 'Next Steps'])
+    })
+
+    it('fills one section and leaves the rest as they were', () => {
+        const filled = writeSection(draft, 'Mitigation & Contingency', 'Weekly check-ins with the client.')
+        expect(findUnfilledSections(filled)).toEqual(['Next Steps'])
+        const before = splitSections(draft)
+        const after = splitSections(filled)
+        expect(after.map((s) => s.heading)).toEqual(before.map((s) => s.heading))
+        expect(after.filter((s) => s.heading !== 'Mitigation & Contingency')).toEqual(before.filter((s) => s.heading !== 'Mitigation & Contingency'))
+        expect(after.find((s) => s.heading === 'Mitigation & Contingency')?.body).toBe('Weekly check-ins with the client.')
+    })
+
+    it('fills the last section too', () => {
+        const filled = writeSection(draft, 'Next Steps', 'Confirm scope by Friday.')
+        expect(splitSections(filled).at(-1)).toEqual({ heading: 'Next Steps', body: 'Confirm scope by Friday.' })
+    })
+
+    it('appends a section the draft does not have', () => {
+        const filled = writeSection('## Summary\nAll good.', 'Next Steps', 'Close out.')
+        expect(splitSections(filled)).toEqual([
+            { heading: 'Summary', body: 'All good.' },
+            { heading: 'Next Steps', body: 'Close out.' },
+        ])
     })
 })

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { X, Expand, Minimize2, PanelRight, PanelRightOpen } from 'lucide-react'
 import { Hint } from '@/components/ui/tooltip'
 import Logo from '@/components/Logo'
@@ -30,6 +30,8 @@ interface LayoutRightPanelProps {
   iconTooltip?: string
   children: React.ReactNode
   onClose: () => void
+  /** Asked before the close animation starts; false keeps the pane open (e.g. unsaved text). */
+  beforeClose?: () => boolean
   headerActions?: React.ReactNode
   embedContent?: boolean
   dockedPosition?: DockedPosition
@@ -78,6 +80,7 @@ export function LayoutRightPanel({
   iconTooltip,
   children,
   onClose,
+  beforeClose,
   headerActions,
   embedContent = false,
   dockedPosition,
@@ -91,6 +94,7 @@ export function LayoutRightPanel({
   const [closing, setClosing] = useState(false)
 
   const isLarge = paneSize === 'large'
+  const dockRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!isCollapsed) toggleSidebar()
@@ -98,6 +102,7 @@ export function LayoutRightPanel({
 
   const handleClose = () => {
     if (closing) return
+    if (beforeClose && !beforeClose()) return
     setClosing(true)
     setOverlayEntered(false)
     setPanelEntered(false)
@@ -109,6 +114,28 @@ export function LayoutRightPanel({
     const t = setTimeout(() => onClose(), TRANSITION_MS)
     return () => clearTimeout(t)
   }, [closing, onClose])
+
+  // Publishes the docked pane's width as `--right-pane-dock-width`, so bottom-right chrome (toasts,
+  // the upload and download panels) sits beside the pane instead of over it. Full screen, or on a
+  // phone where the pane covers the screen, there is nothing to sit beside: they go on top.
+  useEffect(() => {
+    const el = dockRef.current
+    const root = document.documentElement
+    if (!el || isLarge || typeof ResizeObserver === 'undefined') return
+    const publish = () => {
+      const width = el.offsetWidth
+      root.style.setProperty('--right-pane-dock-width', `${width + 360 <= window.innerWidth ? width : 0}px`)
+    }
+    publish()
+    const observer = new ResizeObserver(publish)
+    observer.observe(el)
+    window.addEventListener('resize', publish)
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('resize', publish)
+      root.style.removeProperty('--right-pane-dock-width')
+    }
+  }, [isLarge])
 
   // Slide in docked panel
   useEffect(() => {
@@ -149,6 +176,7 @@ export function LayoutRightPanel({
     <>
       {/* Docked panel — visible in 'small' and 'medium' states */}
       <div
+        ref={dockRef}
         className={dockedPosition ? '' : 'w-full h-full flex flex-col overflow-hidden min-w-0'}
         style={
           dockedPosition

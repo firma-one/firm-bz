@@ -13,7 +13,8 @@ const { who, state, adapter } = vi.hoisted(() => ({
     state: { canEdit: false, inTree: true, manageable: new Set<string>() },
     adapter: {
         trashFile: vi.fn(async () => {}),
-        getFileMetadata: vi.fn(async () => ({ mimeType: 'application/pdf' })),
+        restoreFile: vi.fn(async () => {}) as ReturnType<typeof vi.fn> | undefined,
+        getFileMetadata: vi.fn(async (..._args: unknown[]): Promise<any> => ({ mimeType: 'application/pdf' })),
         revokePermission: vi.fn(async () => true),
         updatePermissionExpiry: vi.fn(async () => true),
     },
@@ -25,7 +26,7 @@ vi.mock('@supabase/supabase-js', () => ({
 vi.mock('@/lib/prisma', () => ({
     prisma: {
         engagement: { findFirst: vi.fn(async () => ({ firmId: 'f1', clientId: 'c1' })), findUnique: vi.fn(async () => ({ firmId: 'f1' })) },
-        engagementDocument: { findFirst: vi.fn(async () => ({ id: 'd1' })) },
+        engagementDocument: { findFirst: vi.fn(async (): Promise<any> => ({ id: 'd1', firmId: 'f1', engagement: { clientId: 'c1' } })) },
         firm: { findUnique: vi.fn(async () => ({ sandboxOnly: false })), findMany: vi.fn(async () => [{ id: 'f1', connector: { id: 'firm-conn', name: 'Firm' } }]) },
         firmMember: { findMany: vi.fn(async () => [{ firmId: 'f1' }]) },
         clientMember: { findMany: vi.fn(async () => []) },
@@ -47,6 +48,8 @@ vi.mock('@/lib/audit', () => ({
 }))
 
 import { POST } from './route'
+import { prisma } from '@/lib/prisma'
+import { safeInngestSend } from '@/lib/inngest/client'
 
 const call = (body: Record<string, unknown>) =>
     POST(new NextRequest(new URL('http://localhost/api/drive-action'), { method: 'POST', headers: { authorization: 'Bearer t' }, body: JSON.stringify(body) }))
@@ -57,6 +60,7 @@ beforeEach(() => {
     state.canEdit = false
     state.inTree = true
     state.manageable = new Set()
+    adapter.restoreFile = vi.fn(async () => {})
 })
 
 describe('engagement-scoped trash', () => {
@@ -101,5 +105,68 @@ describe('actions without an engagement', () => {
         const res = await call({ action: 'revoke', fileId: 'f', permissionId: 'p' })
         expect(res.status).toBe(200)
         expect(adapter.revokePermission).toHaveBeenCalledWith('firm-conn', 'f', 'p')
+    })
+})
+
+describe('restore (Undo on "Moved to Bin")', () => {
+    const inBin = (meta: Record<string, unknown> = {}) => ({ id: 'file', name: 'Report.pdf', mimeType: 'application/pdf', trashed: true, parents: ['folder'], ...meta })
+
+    it('tells the cleanup after a trash that it can be undone, and through which connector', async () => {
+        state.canEdit = true
+        await call({ action: 'trash', fileId: 'file', projectId: 'e1' })
+        expect(safeInngestSend).toHaveBeenCalledWith('file.delete.requested', expect.objectContaining({ externalId: 'file', connectorId: 'eng-conn', undoable: true }))
+    })
+
+    it('has the same gates as trash: edit rights, the engagement\'s connector, a file in its tree', async () => {
+        expect((await call({ action: 'restore', fileId: 'file', projectId: 'e1' })).status).toBe(403)
+        state.canEdit = true
+        expect((await call({ action: 'restore', fileId: 'file', projectId: 'e1', connectorId: 'victim-conn' })).status).toBe(403)
+        state.inTree = false
+        expect((await call({ action: 'restore', fileId: 'someone-elses-file', projectId: 'e1' })).status).toBe(403)
+        expect(adapter.restoreFile).not.toHaveBeenCalled()
+    })
+
+    it('is only for an engagement', async () => {
+        state.manageable.add('firm-conn')
+        expect((await call({ action: 'restore', fileId: 'file' })).status).toBe(400)
+        expect(adapter.restoreFile).not.toHaveBeenCalled()
+    })
+
+    it('takes the file out of the Bin through the engagement\'s connector', async () => {
+        state.canEdit = true
+        adapter.getFileMetadata.mockImplementation(async (_c: unknown, id: unknown) => (id === 'file' ? inBin() : { id: 'folder', trashed: false }))
+        const res = await call({ action: 'restore', fileId: 'file', projectId: 'e1' })
+        expect(res.status).toBe(200)
+        expect(adapter.restoreFile).toHaveBeenCalledWith('eng-conn', 'file')
+    })
+
+    it('is too late once the cleanup has removed the file\'s record', async () => {
+        state.canEdit = true
+        vi.mocked(prisma.engagementDocument.findFirst).mockResolvedValueOnce(null)
+        adapter.getFileMetadata.mockImplementation(async () => inBin())
+        const res = await call({ action: 'restore', fileId: 'file', projectId: 'e1' })
+        expect(res.status).toBe(409)
+        expect(adapter.restoreFile).not.toHaveBeenCalled()
+    })
+
+    it('refuses when the file\'s folder is in the Bin too', async () => {
+        state.canEdit = true
+        adapter.getFileMetadata.mockImplementation(async (_c: unknown, id: unknown) => (id === 'file' ? inBin() : { id: 'folder', trashed: true }))
+        const res = await call({ action: 'restore', fileId: 'file', projectId: 'e1' })
+        expect(res.status).toBe(409)
+        expect(adapter.restoreFile).not.toHaveBeenCalled()
+    })
+
+    it('answers success for a file already out of the Bin, without restoring it again', async () => {
+        state.canEdit = true
+        adapter.getFileMetadata.mockImplementation(async () => inBin({ trashed: false }))
+        expect((await call({ action: 'restore', fileId: 'file', projectId: 'e1' })).status).toBe(200)
+        expect(adapter.restoreFile).not.toHaveBeenCalled()
+    })
+
+    it('says so for a provider that cannot restore (OneDrive)', async () => {
+        state.canEdit = true
+        adapter.restoreFile = undefined
+        expect((await call({ action: 'restore', fileId: 'file', projectId: 'e1' })).status).toBe(400)
     })
 })

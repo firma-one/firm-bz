@@ -99,6 +99,9 @@ export async function POST(
         })
 
         const generatedAt = new Date().toISOString()
+        // Set when the client stops reading (Stop, or it left the page): the model is stopped too,
+        // and nothing is metered or saved.
+        let cancelled = false
 
         const body = new ReadableStream<Uint8Array>({
             async start(controller) {
@@ -121,6 +124,7 @@ export async function POST(
                         }
                     }
 
+                    if (cancelled) return
                     const content = full.trim()
                     if (!content) {
                         controller.enqueue(line({ type: 'error', message: 'Empty response' }))
@@ -155,13 +159,19 @@ export async function POST(
 
                     controller.enqueue(line({ type: 'done', content, generatedAt }))
                 } catch (error) {
+                    // Stopped on purpose: the abort surfaces here as an error, but it is not one.
+                    if (cancelled) return
         const limited = aiLimitResponse(error)
         if (limited) return limited
                     logger.error('AI summary stream error:', error as Error)
                     controller.enqueue(line({ type: 'error', message: 'Generation failed' }))
                 } finally {
-                    controller.close()
+                    try { controller.close() } catch { /* already closed by the client leaving */ }
                 }
+            },
+            cancel() {
+                cancelled = true
+                modelStream.controller.abort()
             },
         })
 

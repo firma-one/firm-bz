@@ -1,12 +1,13 @@
 'use client'
 
-import { useState } from 'react'
-import { createPortal } from 'react-dom'
+import { useEffect, useRef, useState } from 'react'
 import { CalendarDays, CheckCircle, Eye, ListTodo, PackageCheck, PackagePlus, PenLine } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { DemoEngagement } from '@/lib/demo/static-demo-data'
 import { DemoDeliverable, DeliverableStatus, getDemoDeliverables } from '@/lib/demo/demo-deliverables'
 import { DemoDeliverablePane } from '@/components/demo/demo-deliverable-pane'
+import { prettyName } from '@/lib/demo/demo-summary'
+import { useRightPane } from '@/lib/right-pane-context'
 
 type BoardStatus = DeliverableStatus
 
@@ -86,12 +87,44 @@ function BoardCard({ card, open, onToggle }: { card: DemoDeliverable; open: bool
 export function DemoEngagementBoard({ engagement }: { engagement: DemoEngagement }) {
     const [selected, setSelected] = useState<string | null>(null)
 
+    // A deliverable opens in the docked right pane, as on the app's Board (engagement-shares-tab):
+    // its ID as the title, its name below, half the width.
+    const rightPane = useRightPane()
+    const openIdRef = useRef<string | null>(null)
+    const clearPaneRef = useRef(rightPane.clearPane)
+    useEffect(() => { clearPaneRef.current = rightPane.clearPane }, [rightPane.clearPane])
+    const openCard = (card: DemoDeliverable) => {
+        setSelected(card.folder.id)
+        openIdRef.current = card.folder.id
+        rightPane.setTitle(card.folder.docId)
+        rightPane.setHeaderSubtitle(prettyName(card.folder.name))
+        rightPane.setHeaderIcon(card.status === 'approved' ? <PackageCheck className="h-4 w-4" /> : <PackagePlus className="h-4 w-4" />)
+        rightPane.setIconTooltip('Deliverable')
+        rightPane.setHeaderActions(null)
+        rightPane.setPaneSize('medium')
+        rightPane.setContent(<DemoDeliverablePane deliverable={card} embedded />)
+    }
+    const closeCard = () => {
+        setSelected(null)
+        openIdRef.current = null
+        rightPane.clearPane()
+    }
+    // Closed from the pane's own ×: drop the card's highlight.
+    useEffect(() => {
+        if (!rightPane.content) {
+            setSelected(null)
+            openIdRef.current = null
+        }
+    }, [rightPane.content])
+    // Leaving the Board takes its pane with it.
+    useEffect(() => () => {
+        if (openIdRef.current) clearPaneRef.current()
+    }, [])
+
     const cards = getDemoDeliverables(engagement)
     const total = cards.length
     const byLane: Record<BoardStatus, DemoDeliverable[]> = { to_do: [], in_progress: [], in_review: [], approved: [] }
     cards.forEach((c) => byLane[c.status].push(c))
-
-    const selectedCard = cards.find((c) => c.folder.id === selected) ?? null
 
     return (
         <div className="subtle-scrollbar overflow-x-auto pb-1">
@@ -123,7 +156,7 @@ export function DemoEngagementBoard({ engagement }: { engagement: DemoEngagement
                                         key={c.folder.id}
                                         card={c}
                                         open={selected === c.folder.id}
-                                        onToggle={() => setSelected(selected === c.folder.id ? null : c.folder.id)}
+                                        onToggle={() => (selected === c.folder.id ? closeCard() : openCard(c))}
                                     />
                                 ))}
                                 {laneCards.length === 0 && (
@@ -137,14 +170,6 @@ export function DemoEngagementBoard({ engagement }: { engagement: DemoEngagement
                 })}
             </div>
 
-            {selectedCard && typeof document !== 'undefined' && createPortal(
-                <div className="fixed inset-y-0 right-0 z-[100] p-4">
-                    <div className="flex h-full w-[400px] flex-col overflow-hidden rounded-card border border-line bg-surface shadow-xl">
-                        <DemoDeliverablePane deliverable={selectedCard} onClose={() => setSelected(null)} />
-                    </div>
-                </div>,
-                document.body,
-            )}
         </div>
     )
 }

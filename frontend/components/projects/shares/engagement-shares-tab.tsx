@@ -44,6 +44,7 @@ import { supabase } from '@/lib/supabase'
 import { useSecureOpenDocument } from '@/lib/use-secure-open-document'
 import { logger } from '@/lib/logger'
 import { RelativeDateTime } from '@/components/ui/relative-date-time'
+import { displayFolderName, splitFolderOrdinal } from '@/lib/display-names'
 import { DocumentDocCommentsPane } from '@/components/projects/document-doc-comments-pane'
 import { DocumentPreviewPane } from '@/components/files/document-preview-pane'
 import { formatDistanceToNow } from 'date-fns'
@@ -526,7 +527,13 @@ function ShareCardContent({
             >
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <span className="truncate">{share.documentName}</span>
+                  {/* "01__Market & …" reads as "01 Market & …": the firm's ordering number muted. */}
+                  <span className="truncate">
+                    {(() => {
+                      const { ordinal, title } = splitFolderOrdinal(share.documentName)
+                      return <>{ordinal && <span className="mr-1 tabular-nums text-fg-subtle">{ordinal}</span>}{title}</>
+                    })()}
+                  </span>
                 </TooltipTrigger>
                 <TooltipContent side="top" className="text-xs max-w-64 break-words">{share.documentName}</TooltipContent>
               </Tooltip>
@@ -1845,7 +1852,7 @@ export function EngagementSharesTab({
       const hashSuffix = initialTab === 'comments' ? ':comments' : ''
       window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#doc-file:${share.documentId}${hashSuffix}`)
       rightPane.setTitle(share.docId ?? share.documentName)
-      rightPane.setHeaderSubtitle(share.documentName)
+      rightPane.setHeaderSubtitle(displayFolderName(share.documentName))
       rightPane.setHeaderIcon(<PackagePlus className="h-4 w-4" />)
       rightPane.setIconTooltip('Deliverable')
       rightPane.setPaneSize('medium')

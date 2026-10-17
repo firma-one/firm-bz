@@ -43,14 +43,14 @@ export async function POST(request: NextRequest) {
         }
 
         // 3. Resolve connectors the caller may act through (.claude/plans/access-gates.md, P0 #5).
-        //    Engagement-scoped: only `trash`, only with edit rights on the engagement, only on its
-        //    own connector, and only on a file inside its folder tree. Everything else: only
+        //    Engagement-scoped: only `trash` and its Undo (`restore`), only with edit rights on the
+        //    engagement, only on its own connector, and only on a file inside its folder tree. Everything else: only
         //    connectors the caller manages (owner, firm admin, or manager of a client using it) —
         //    never one named in the body that isn't theirs, never one reached through a guest's
         //    firm membership.
         let connectors: Array<any & { organizationId: string }> = []
         if (engagementId) {
-            if (action !== 'trash') {
+            if (action !== 'trash' && action !== 'restore') {
                 return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
             }
             const engagementRow = await prisma.engagement.findFirst({
@@ -200,17 +200,13 @@ export async function POST(request: NextRequest) {
                 const trashAdapter = await getPermissionAdapter(targetId)
                 const fileMeta = trashAdapter ? await trashAdapter.getFileMetadata(targetId, fileId) : null
 
-                // Trigger background reconciliation via Inngest
+                // Trigger background reconciliation via Inngest. From an engagement's Files list the
+                // cleanup waits out the Undo window first (.claude/plans/undo-move-to-bin.md).
+                const reconcile = { organizationId: successOrgId, externalId: fileId, connectorId: targetId, undoable: Boolean(engagementId) }
                 if (fileMeta?.mimeType === 'application/vnd.google-apps.folder') {
-                    await safeInngestSend('folder.delete.requested', {
-                        organizationId: successOrgId,
-                        externalId: fileId
-                    })
+                    await safeInngestSend('folder.delete.requested', reconcile)
                 } else {
-                    await safeInngestSend('file.delete.requested', {
-                        organizationId: successOrgId,
-                        externalId: fileId
-                    })
+                    await safeInngestSend('file.delete.requested', reconcile)
                 }
 
                 // Engagement-scoped audit: record file removed (moved to bin) when engagementId is provided
@@ -246,6 +242,64 @@ export async function POST(request: NextRequest) {
 
                 result = { success: true }
                 break
+
+            case 'restore': {
+                // Undo on "Moved to Bin". Engagement-scoped only, so every gate above applies: edit
+                // rights, the engagement's own connector, a file inside its tree.
+                if (!fileId || typeof engagementId !== 'string' || !engagementId) {
+                    return NextResponse.json({ error: 'fileId and projectId are required for restore' }, { status: 400 })
+                }
+                const closedDenied = await blockIfEngagementFileMutationForbidden(user.id, engagementId)
+                if (closedDenied) return closedDenied
+
+                // Inside the Undo window the file's record is still here. After it, the cleanup has
+                // removed it, and a restore would bring the file back as a new item without its
+                // ID or comments: that is for the provider's own Bin.
+                const restoredDoc = await prisma.engagementDocument.findFirst({
+                    where: { engagementId, externalId: fileId },
+                    select: { id: true, firmId: true, engagement: { select: { clientId: true } } },
+                })
+                if (!restoredDoc) {
+                    return NextResponse.json({ error: 'Too late to undo. You can still restore it from the Bin in your storage.' }, { status: 409 })
+                }
+
+                const restoreConnectorId = connectorId || connectors[0].id
+                const restoreAdapter = await getPermissionAdapter(restoreConnectorId)
+                if (!restoreAdapter?.restoreFile) {
+                    return NextResponse.json({ error: 'Undo isn’t available for this storage provider.' }, { status: 400 })
+                }
+                const restoreMeta = await restoreAdapter.getFileMetadata(restoreConnectorId, fileId)
+                if (!restoreMeta) {
+                    return NextResponse.json({ error: 'This item is no longer in the Bin.' }, { status: 404 })
+                }
+                // Already out of the Bin (a second click, or restored in the provider): nothing to do.
+                if (restoreMeta.trashed) {
+                    const parentId = restoreMeta.parents?.[0]
+                    const parentMeta = parentId ? await restoreAdapter.getFileMetadata(restoreConnectorId, parentId) : null
+                    if (parentMeta?.trashed) {
+                        return NextResponse.json({ error: 'Its folder is in the Bin too. Restore the folder first.' }, { status: 409 })
+                    }
+                    try {
+                        await restoreAdapter.restoreFile(restoreConnectorId, fileId)
+                    } catch (err) {
+                        logger.error(`[restore] Failed to restore fileId=${fileId}`, err as Error)
+                        return NextResponse.json({ error: 'Couldn’t restore it. Try again, or restore it from the Bin in your storage.' }, { status: 500 })
+                    }
+                }
+
+                audit(AUDIT_EVENT.DOCUMENT_RESTORED)
+                    .scope(AUDIT_SCOPE.DOCUMENT)
+                    .firm(restoredDoc.firmId)
+                    .client(restoredDoc.engagement?.clientId)
+                    .engagement(engagementId)
+                    .document(restoredDoc.id)
+                    .actor(user.id)
+                    .meta({ fileName: requestFileName ?? restoreMeta.name ?? fileId, reason: 'undo_move_to_bin' })
+                    .fireAndForget()
+
+                result = { success: true }
+                break
+            }
 
             case 'duplicate_search':
                 // Search ALL connectors and aggregate

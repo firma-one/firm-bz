@@ -33,6 +33,14 @@ type RightPaneContextValue = {
   headerSubtitle: string
   setHeaderSubtitle: (t: string) => void
   clearPane: () => void
+  /**
+   * Lets the pane's content stop a user's close (the × button), e.g. to ask before throwing away
+   * typed text. Return false to keep the pane open. Cleared when the pane closes or its content
+   * changes. Programmatic clearPane() is never stopped.
+   */
+  setBeforeClose: (guard: (() => boolean) | null) => void
+  /** Runs the content's guard; true when the pane may close. The layout calls it from the ×. */
+  canClose: () => boolean
   /** Optional actions (e.g. Search icon) to show in the right panel header; set by page content (e.g. EngagementFileList). */
   headerActions: ReactNode
   setHeaderActions: (node: ReactNode) => void
@@ -64,7 +72,12 @@ export function RightPaneProvider({ children }: { children: ReactNode }) {
   const [searchRoot, setSearchRootState] = useState<SearchRootValue>(null)
   const [paneSize, setPaneSizeState] = useState<PaneSize>('small')
 
+  const beforeCloseRef = useRef<(() => boolean) | null>(null)
+  const setBeforeClose = useCallback((guard: (() => boolean) | null) => { beforeCloseRef.current = guard }, [])
+  const canClose = useCallback(() => (beforeCloseRef.current ? beforeCloseRef.current() : true), [])
+
   const setContent = useCallback((node: ReactNode) => {
+    beforeCloseRef.current = null
     contentKeyRef.current += 1
     setContentKey(contentKeyRef.current)
     setContentState(node)
@@ -78,6 +91,7 @@ export function RightPaneProvider({ children }: { children: ReactNode }) {
   const setPaneSize = useCallback((size: PaneSize) => setPaneSizeState(size), [])
 
   const clearPane = useCallback(() => {
+    beforeCloseRef.current = null
     setContentState(null)
     setTitleState('')
     setHeaderIconState(null)
@@ -101,6 +115,7 @@ export function RightPaneProvider({ children }: { children: ReactNode }) {
         iconTooltip, setIconTooltip,
         headerSubtitle, setHeaderSubtitle,
         clearPane,
+        setBeforeClose, canClose,
         headerActions, setHeaderActions,
         hasRightPane: true,
         searchRoot, setSearchRoot,
@@ -123,6 +138,7 @@ export function useRightPane(): RightPaneContextValue {
       iconTooltip: '', setIconTooltip: () => {},
       headerSubtitle: '', setHeaderSubtitle: () => {},
       clearPane: () => {},
+      setBeforeClose: () => {}, canClose: () => true,
       headerActions: null, setHeaderActions: () => {},
       hasRightPane: false,
       searchRoot: null, setSearchRoot: () => {},

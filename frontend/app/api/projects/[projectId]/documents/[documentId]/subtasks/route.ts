@@ -57,6 +57,8 @@ export async function GET(
       dueDate: folder.dueDate?.toISOString() ?? null,
       status: folderParsedSettings.activity?.status ?? null,
       docId: folder.docId ?? null,
+      // The deliverable's owner (Lead in its pane): the same assignee field its documents use.
+      ownerUserId: ((folder.settings as Record<string, unknown> | null)?.assigneeUserId as string | undefined) ?? null,
     }
 
     // Walk the full descendant tree and collect non-folder file IDs.
@@ -105,7 +107,7 @@ export async function GET(
       )) as Array<{ id: string }>
     }
 
-    if (descendantIds.length === 0) return NextResponse.json({ subtasks: [] })
+    if (descendantIds.length === 0) return NextResponse.json({ subtasks: [], deliverable })
 
     const children = await prisma.engagementDocument.findMany({
       where: { id: { in: descendantIds.map((r) => r.id) } },

@@ -39,7 +39,7 @@ describe('ActionSection', () => {
             />,
         )
         expect(screen.queryByText('Large files')).toBeNull()
-        fireEvent.click(screen.getByRole('button', { name: /2 with nothing to do/ }))
+        fireEvent.click(screen.getByRole('button', { name: /2 checks passed/ }))
         expect(screen.getByText('Large files')).toBeTruthy()
         expect(screen.getByText('Sharing alerts')).toBeTruthy()
     })
@@ -63,7 +63,7 @@ describe('ActionSection', () => {
         )
         fireEvent.click(screen.getByRole('button', { name: /Overdue/ }))
         expect(onSelect).toHaveBeenCalledTimes(1)
-        fireEvent.click(screen.getByRole('button', { name: /1 with nothing to do/ }))
+        fireEvent.click(screen.getByRole('button', { name: /1 check passed/ }))
         expect(screen.queryByRole('button', { name: /^Upcoming/ })).toBeNull()
     })
 })

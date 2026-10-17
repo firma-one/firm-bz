@@ -54,7 +54,12 @@ function collectSubtasks(folder: DemoFolder): { id: string; docId: string; name:
 }
 
 /** Static counterpart to deliverable-detail-panel.tsx, docked the same way layout-right-panel.tsx renders its 'small'/'medium' pane. Details tab is real (folder's files as subtasks); Comments/Settings are inert per the same tab strip, not wired up. */
-export function DemoDeliverablePane({ deliverable, onClose }: { deliverable: DemoDeliverable; onClose: () => void }) {
+export function DemoDeliverablePane({ deliverable, onClose, embedded = false }: {
+    deliverable: DemoDeliverable
+    onClose?: () => void
+    /** Inside the docked right pane (the tour Board): its header (ID, name, close) is the pane's own. */
+    embedded?: boolean
+}) {
     const [activeTab, setActiveTab] = useState<Tab>('details')
     const subtasks = collectSubtasks(deliverable.folder)
     const approvedCount = deliverable.status === 'approved' ? subtasks.length : Math.max(0, Math.floor(subtasks.length * 0.5))
@@ -73,9 +78,9 @@ export function DemoDeliverablePane({ deliverable, onClose }: { deliverable: Dem
     })()
 
     return (
-        <div className="flex flex-col h-full overflow-hidden bg-white">
-            {/* Header — matches layout-right-panel.tsx docked pane header */}
-            <header className="flex items-center justify-between gap-2 px-4 h-[52px] border-b border-[#e5e7eb] bg-white shrink-0">
+        <div className={cn('flex flex-col overflow-hidden bg-white', embedded ? 'min-h-0 flex-1' : 'h-full')}>
+            {/* Header — matches layout-right-panel.tsx docked pane header; the docked pane has its own */}
+            {!embedded && (<header className="flex items-center justify-between gap-2 px-4 h-[52px] border-b border-[#e5e7eb] bg-white shrink-0">
                 <div className="flex items-center gap-2.5 min-w-0 flex-1">
                     <div className="h-8 w-8 rounded-sm bg-primary/10 flex items-center justify-center text-primary shrink-0">
                         {deliverable.status === 'approved'
@@ -95,7 +100,7 @@ export function DemoDeliverablePane({ deliverable, onClose }: { deliverable: Dem
                 >
                     <XSquare className="h-4 w-4" />
                 </button>
-            </header>
+            </header>)}
 
             {/* Stage badge row */}
             <div className="px-4 py-2.5 border-b border-[#e5e7eb] flex items-center justify-between gap-2">

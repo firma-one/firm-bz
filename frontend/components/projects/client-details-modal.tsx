@@ -2,7 +2,7 @@
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { ClientSummary } from '@/lib/actions/hierarchy'
-import { Users, Building, Calendar, Clock, Tag, TrendingUp, GitBranch, CalendarClock, Lock, Linkedin, Users2, MapPin } from 'lucide-react'
+import { Users, Building, Calendar, Clock, Tag, TrendingUp, GitBranch, Lock, Linkedin, Users2, MapPin } from 'lucide-react'
 import { formatDistanceToNow, format } from 'date-fns'
 import { formatFullDate } from '@/lib/utils'
 import { Globe, Link2 } from 'lucide-react'
@@ -168,21 +168,7 @@ export function ClientDetailsModal({ client, open, onOpenChange }: ClientDetails
                         </div>
                     )}
 
-                    {/* Follow-up / Expected Close (PROSPECT only) */}
-                    {client.status === 'PROSPECT' && client.followUpDate && (
-                        <div className="flex items-start gap-3">
-                            <div className="h-9 w-9 bg-tag-yellow-bg rounded-lg flex items-center justify-center flex-shrink-0">
-                                <CalendarClock className="h-4 w-4 text-tag-yellow-fg" />
-                            </div>
-                            <div className="flex-1">
-                                <div className="text-small font-medium text-fg-muted mb-1">Follow-up Date</div>
-                                <div className="text-sm font-medium text-fg">
-                                    {format(new Date(client.followUpDate), 'd MMM yyyy')}
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
+                    {/* Expected close (PROSPECT only). Client follow-up dates were retired 2026-10-17. */}
                     {client.status === 'PROSPECT' && client.expectedCloseDate && (
                         <div className="flex items-start gap-3">
                             <div className="h-9 w-9 bg-surface-muted rounded-lg flex items-center justify-center flex-shrink-0">

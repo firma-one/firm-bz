@@ -1,27 +1,41 @@
 'use client'
 
-import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react'
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { AtSign, CalendarClock, Eye, MessagesSquare, Send, Loader2, Check, ChevronDown, Link2, SlidersHorizontal, Smile, Trash2, UserCheck, X, XSquare } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
+import { ArrowUpDown, AtSign, BellRing, CalendarClock, Check, Link2, Loader2, MessagesSquare, Send, Smile, Trash2, UserCheck, Users, X } from 'lucide-react'
+import { cn, formatDateTimeWithTZ, formatRelativeTime } from '@/lib/utils'
 import { useRightPane } from '@/lib/right-pane-context'
 import { useAuth } from '@/lib/auth-context'
-import { RelativeDateTime } from '@/components/ui/relative-date-time'
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import {
+  Hint,
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { DateTimePicker } from '@/components/ui/date-time-picker'
 import { SetupReminderModal } from '@/components/ui/setup-reminder-modal'
-import { initialsOf } from '@/lib/initials'
+import { FilterMenuLabel, FilterMenuRow, FilterPill, summarizePicks } from '@/components/ui/filter-pill'
+import { PersonAvatar } from '@/components/ui/property-cells'
+import { ENGAGEMENT_ROLE_LABEL, findMentionQuery, insertMention, mentionedNames, splitMentions } from '@/lib/comments/mentions'
+
+/*
+ * Comments on a document or deliverable (.claude/plans/board-pane-comments-redesign.md). Shared
+ * by the deliverable pane's Comments tab, the Files comments pane and the document menu.
+ *
+ * - Mentions: typing "@" opens a menu at the caret that narrows as you type; picking inserts
+ *   "@Name " where you were typing. People still mentioned when the comment is sent are notified.
+ * - Reminders: the composer's Remind button schedules that notification for everyone mentioned.
+ * - The thread: avatar and name (email on hover), relative time, actions on hover; filters and
+ *   sorting in one compact row, once a thread is long enough to need them.
+ */
 
 export interface DocumentDocCommentsPaneProps {
   engagementId: string
@@ -40,150 +54,175 @@ type CommentMessage = {
   reactions?: Record<string, { count: number; users: string[] }>
 }
 
+type Member = { userId: string; email: string; name: string; role: string; avatarUrl?: string | null; isAgent?: boolean }
+
 type ReactionKey = 'urgent' | 'looking' | 'done' | 'thumbs_up' | 'yes' | 'no' | 'ok' | 'plus_one' | 'celebrate'
-const REACTIONS: { key: ReactionKey; label: string; emoji: string; chipClass: string }[] = [
-  // Subtle pill styling (avoid heavy borders/fills; rely on soft tint + hover + focus ring)
-  { key: 'urgent', label: 'Urgent', emoji: '⚠️', chipClass: 'bg-surface-muted text-fg-muted hover:bg-surface-selected' },
-  { key: 'looking', label: 'Looking', emoji: '👀', chipClass: 'bg-surface-muted text-fg-muted hover:bg-surface-selected' },
-  { key: 'done', label: 'Done', emoji: '✅', chipClass: 'bg-surface-muted text-fg-muted hover:bg-surface-selected' },
+const REACTIONS: { key: ReactionKey; label: string; emoji: string }[] = [
+  { key: 'urgent', label: 'Urgent', emoji: '⚠️' },
+  { key: 'looking', label: 'Looking', emoji: '👀' },
+  { key: 'done', label: 'Done', emoji: '✅' },
   // Slack-style quick signals
-  { key: 'yes', label: 'Yes', emoji: '🇾', chipClass: 'bg-surface-muted text-fg-muted hover:bg-surface-selected' },
-  { key: 'no', label: 'No', emoji: '🇳', chipClass: 'bg-surface-muted text-fg-muted hover:bg-surface-selected' },
-  { key: 'ok', label: 'OK', emoji: '🆗', chipClass: 'bg-surface-muted text-fg-muted hover:bg-surface-selected' },
-  { key: 'plus_one', label: '+1', emoji: '➕', chipClass: 'bg-surface-muted text-fg-muted hover:bg-surface-selected' },
-  { key: 'thumbs_up', label: 'Thumbs up', emoji: '👍', chipClass: 'bg-surface-muted text-fg-muted hover:bg-surface-selected' },
-  { key: 'celebrate', label: 'Celebrate', emoji: '🎉', chipClass: 'bg-surface-muted text-fg-muted hover:bg-surface-selected' },
+  { key: 'yes', label: 'Yes', emoji: '🇾' },
+  { key: 'no', label: 'No', emoji: '🇳' },
+  { key: 'ok', label: 'OK', emoji: '🆗' },
+  { key: 'plus_one', label: '+1', emoji: '➕' },
+  { key: 'thumbs_up', label: 'Thumbs up', emoji: '👍' },
+  { key: 'celebrate', label: 'Celebrate', emoji: '🎉' },
 ]
 
-const LIGHT_TOOLTIP_CLASS =
-  'z-[9999] max-w-[320px] p-3 text-xs bg-surface text-fg border border-line shadow-popover break-words'
+/** Filters and sorting appear once a thread is longer than this, or when a filter is on. */
+const TOOLBAR_AFTER = 3
 
-export function DocumentDocCommentsPane({ engagementId, documentId, documentName, documentMimeType, orgSlug }: DocumentDocCommentsPaneProps) {
+type DatePreset = 'any' | '7d' | '30d'
+const DATE_PRESETS: { value: DatePreset; label: string; days: number | null }[] = [
+  { value: 'any', label: 'Any time', days: null },
+  { value: '7d', label: 'Last 7 days', days: 7 },
+  { value: '30d', label: 'Last 30 days', days: 30 },
+]
+
+/** Format a raw auth name (may be username-style like "deepaksshettigar") into a readable display name. */
+function formatDisplayName(name: string, email: string): string {
+  if (!name || name === email.split('@')[0]) {
+    const local = email.split('@')[0]
+    return local.replace(/[._\-+]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()).trim()
+  }
+  if (name.includes(' ') || name.includes('.') || name.includes('_')) {
+    return name.split(/[\s._-]+/).map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ').trim()
+  }
+  return name
+}
+
+/** 9:00 AM local, `days` from today — the reminder presets. */
+function nineAm(days: number): string {
+  const d = new Date()
+  d.setDate(d.getDate() + days)
+  d.setHours(9, 0, 0, 0)
+  return d.toISOString()
+}
+function nextMondayNineAm(): string {
+  const d = new Date()
+  const add = ((8 - d.getDay()) % 7) || 7
+  return nineAm(add)
+}
+const shortDateTime = (iso: string) => new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+
+/**
+ * Where the caret sits inside a textarea, in px from its top-left — measured with a mirror div
+ * styled like the textarea, so the mention menu can open right where "@" was typed.
+ */
+function caretOffset(el: HTMLTextAreaElement, position: number): { left: number; top: number } {
+  const style = window.getComputedStyle(el)
+  const mirror = document.createElement('div')
+  const props = ['boxSizing', 'width', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft', 'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth', 'fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'wordSpacing', 'textTransform'] as const
+  for (const p of props) mirror.style[p] = style[p]
+  mirror.style.position = 'absolute'
+  mirror.style.visibility = 'hidden'
+  mirror.style.whiteSpace = 'pre-wrap'
+  mirror.style.overflowWrap = 'break-word'
+  mirror.textContent = el.value.slice(0, position)
+  const marker = document.createElement('span')
+  marker.textContent = '​'
+  mirror.appendChild(marker)
+  document.body.appendChild(mirror)
+  const offset = { left: marker.offsetLeft, top: marker.offsetTop - el.scrollTop }
+  document.body.removeChild(mirror)
+  return offset
+}
+
+export function DocumentDocCommentsPane({ engagementId, documentId, documentName, documentMimeType }: DocumentDocCommentsPaneProps) {
   const rightPane = useRightPane()
   const { user } = useAuth()
   const myEmail = user?.email ?? ''
-  const isExpanded = rightPane.isExpanded
   const [messages, setMessages] = useState<CommentMessage[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [newContent, setNewContent] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const [firmMembers, setFirmMembers] = useState<{ userId: string; email: string; name: string; role: string; avatarUrl?: string | null }[]>([])
+  const [firmMembers, setFirmMembers] = useState<Member[]>([])
   const [reminderModal, setReminderModal] = useState<{ messageId: string; content: string } | null>(null)
   // Map of userId → { reminderId, dateValue } for already-set reminders on this comment
   const [existingReminders, setExistingReminders] = useState<Map<string, { reminderId: string; dateValue: string | null }>>(new Map())
-  // Set of messageIds that have at least one active reminder (for dot indicator)
-  const [messagesWithReminders, setMessagesWithReminders] = useState<Set<string>>(new Set())
+  // messageId → when its reminder is due, for comments with a dated reminder (they show a bell).
+  // A mention alone notifies at once and is stored as a reminder with no date: no bell for that.
+  const [reminderDates, setReminderDates] = useState<Map<string, string>>(new Map())
 
-  // @mention state
+  // ── Mentions and reminders in the composer ─────────────────────────────────
   type MentionedUser = { userId: string; name: string; avatarUrl?: string | null }
+  /** Everyone picked from the menu while writing; only those still in the text are notified. */
   const [mentionedUsers, setMentionedUsers] = useState<MentionedUser[]>([])
-  const [mentionPickerOpen, setMentionPickerOpen] = useState(false)
-  const [mentionSearch, setMentionSearch] = useState('')
-  const [mentionDateValue, setMentionDateValue] = useState('')
-  const [editingMentionId, setEditingMentionId] = useState<string | null>(null)
-  const [mentionFocusedIndex, setMentionFocusedIndex] = useState(0)
-  const mentionPickerRef = useRef<HTMLDivElement>(null)
+  /** The "@query" being typed at the caret, and where the menu opens. */
+  const [mentionQuery, setMentionQuery] = useState<{ start: number; query: string; left: number } | null>(null)
+  /** An "@" whose menu was closed with Escape: it stays closed until the caret leaves it. */
+  const dismissedAtRef = useRef<number | null>(null)
+  const [menuIndex, setMenuIndex] = useState(0)
+  /** When to remind the people mentioned; empty = notify them as soon as it is sent. */
+  const [remindAt, setRemindAt] = useState('')
+  const [remindOpen, setRemindOpen] = useState(false)
   const composerRef = useRef<HTMLDivElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  // Mentions filter: show only comments where current user is mentioned
+  // ── Thread filters and view ────────────────────────────────────────────────
   const [mentionsFilterActive, setMentionsFilterActive] = useState(false)
   // messageIds where current user has an active reminder/mention (for filter)
   const [myMentionedMessageIds, setMyMentionedMessageIds] = useState<Set<string>>(new Set())
   // messageIds that have ANY active reminder/mention (blocks delete)
   const [messagesWithAnyMention, setMessagesWithAnyMention] = useState<Set<string>>(new Set())
-  // delete confirmation
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const topSentinelRef = useRef<HTMLDivElement>(null)
   const bottomSentinelRef = useRef<HTMLDivElement>(null)
 
-  // Filters: multi-select dropdowns (Audit-style)
   const [statusKeysFilter, setStatusKeysFilter] = useState<ReactionKey[]>([])
-  const [statusSearch, setStatusSearch] = useState('')
-  const [statusMenuOpen, setStatusMenuOpen] = useState(false)
-
   const [commentorEmailsFilter, setCommentorEmailsFilter] = useState<string[]>([])
-  const [commentorSearch, setCommentorSearch] = useState('')
-  const [commentorMenuOpen, setCommentorMenuOpen] = useState(false)
-
-  const [fromDate, setFromDate] = useState('')
-  const [toDate, setToDate] = useState('')
-
-  const toggleId = (list: string[], id: string) =>
-    list.includes(id) ? list.filter((x) => x !== id) : [...list, id]
-
-  const clearFilters = useCallback(() => {
-    setStatusKeysFilter([])
-    setCommentorEmailsFilter([])
-    setFromDate('')
-    setToDate('')
-    setMentionsFilterActive(false)
-  }, [])
-
-  const [filtersOpen, setFiltersOpen] = useState<boolean>(isExpanded)
-  useEffect(() => {
-    // Spec: collapsed by default in MIN; expanded by default in MAX
-    setFiltersOpen(isExpanded)
-  }, [isExpanded])
-
-  const [viewControlsOpen, setViewControlsOpen] = useState<boolean>(isExpanded)
-  useEffect(() => {
-    // Match Filters behavior
-    setViewControlsOpen(isExpanded)
-  }, [isExpanded])
+  const [datePreset, setDatePreset] = useState<DatePreset>('any')
+  const filtersActive = statusKeysFilter.length > 0 || commentorEmailsFilter.length > 0 || datePreset !== 'any' || mentionsFilterActive
 
   // View: user preference (global, stored in localStorage)
   const COMMENTS_PREFS_KEY = 'fm_comments_view_prefs_v1'
   const [sortOrder, setSortOrder] = useState<'latestLast' | 'latestFirst'>('latestLast')
   const [hideOlderMessages, setHideOlderMessages] = useState(false)
 
-  // Load persisted prefs once (global, not per-document)
   useEffect(() => {
     if (typeof window === 'undefined') return
     try {
       const raw = window.localStorage.getItem(COMMENTS_PREFS_KEY)
       if (!raw) return
       const parsed = JSON.parse(raw) as { sortOrder?: 'latestLast' | 'latestFirst'; hideOlderMessages?: boolean }
-      if (parsed.sortOrder === 'latestLast' || parsed.sortOrder === 'latestFirst') {
-        setSortOrder(parsed.sortOrder)
-      }
-      if (typeof parsed.hideOlderMessages === 'boolean') {
-        setHideOlderMessages(parsed.hideOlderMessages)
-      }
+      if (parsed.sortOrder === 'latestLast' || parsed.sortOrder === 'latestFirst') setSortOrder(parsed.sortOrder)
+      if (typeof parsed.hideOlderMessages === 'boolean') setHideOlderMessages(parsed.hideOlderMessages)
     } catch {
       // ignore
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Persist prefs whenever they change
   useEffect(() => {
     if (typeof window === 'undefined') return
     try {
-      window.localStorage.setItem(
-        COMMENTS_PREFS_KEY,
-        JSON.stringify({ sortOrder, hideOlderMessages })
-      )
+      window.localStorage.setItem(COMMENTS_PREFS_KEY, JSON.stringify({ sortOrder, hideOlderMessages }))
     } catch {
       // ignore
     }
   }, [sortOrder, hideOlderMessages])
 
-  // Fetch internal engagement members for reminder recipient dropdown
+  // Engagement members: who can be mentioned, and the names and faces in the thread.
   useEffect(() => {
     fetch(`/api/projects/${engagementId}/members`)
       .then((r) => r.ok ? r.json() : null)
       .then((data) => {
-        const members: { userId: string; email: string; name: string; role: string }[] = (data?.members ?? [])
+        const members: Member[] = (data?.members ?? [])
           .filter((m: any) => m.userId && m.email)
-          .map((m: any) => ({ userId: m.userId, email: m.email, name: m.name ?? m.email.split('@')[0], role: m.role ?? '', avatarUrl: m.avatarUrl ?? null }))
+          .map((m: any) => ({ userId: m.userId, email: m.email, name: m.name ?? m.email.split('@')[0], role: m.role ?? '', avatarUrl: m.avatarUrl ?? null, isAgent: !!m.isAgent }))
         setFirmMembers(members)
       })
       .catch(() => {})
   }, [engagementId])
+
+  const memberById = useMemo(() => new Map(firmMembers.map((m) => [m.userId, m])), [firmMembers])
+  const memberByEmail = useMemo(() => new Map(firmMembers.map((m) => [m.email.toLowerCase(), m])), [firmMembers])
+  const displayNameOf = useCallback((m: Member) => formatDisplayName(m.name, m.email), [])
+  /** Every name a mention can be written with, for finding mentions in comments. */
+  const knownNames = useMemo(() => firmMembers.flatMap((m) => [displayNameOf(m), m.name]).filter(Boolean), [firmMembers, displayNameOf])
 
   const fetchMessages = useCallback(async () => {
     setLoading(true)
@@ -203,80 +242,155 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
     }
   }, [engagementId, documentId])
 
-  // Fetch which comments the current user is mentioned in (for Mentions filter)
+  // Which comments the current user is mentioned in (for the Mentions me filter)
   const fetchMyMentions = useCallback(async () => {
     if (!user?.id) return
     try {
       const res = await fetch(`/api/projects/${engagementId}/doc-comments?filter=mentions`)
       if (!res.ok) return
       const data = await res.json()
-      const ids = new Set<string>((data.mentions ?? []).map((m: any) => m.messageId as string))
-      setMyMentionedMessageIds(ids)
+      setMyMentionedMessageIds(new Set<string>((data.mentions ?? []).map((m: any) => m.messageId as string)))
     } catch {
       // non-blocking
     }
   }, [engagementId, user?.id])
 
-  // Build set of messages that have ANY active reminder (blocks delete) + populates reminder icon set
-  const refreshMessagesWithAnyMention = useCallback(async (msgs: typeof messages) => {
-    if (msgs.length === 0) { setMessagesWithAnyMention(new Set()); setMessagesWithReminders(new Set()); return }
+  // Every mention is a reminder record (no date = notified at once). Comments with any record
+  // cannot be deleted; only those with a date show the bell.
+  const refreshMessagesWithAnyMention = useCallback(async (msgs: CommentMessage[]) => {
+    if (msgs.length === 0) { setMessagesWithAnyMention(new Set()); setReminderDates(new Map()); return }
     const results = await Promise.allSettled(
       msgs.map((m) =>
         fetch(`/api/projects/${engagementId}/documents/${documentId}/doc-comments/reminders?messageId=${encodeURIComponent(m.id)}`)
           .then((r) => r.ok ? r.json() : null)
-          .then((d) => ({ id: m.id, hasReminder: (d?.reminders?.length ?? 0) > 0 }))
+          .then((d) => ({ id: m.id, reminders: (d?.reminders ?? []) as { dateValue: string | null }[] }))
       )
     )
-    const withReminder = new Set<string>()
+    const withMention = new Set<string>()
+    const dates = new Map<string, string>()
     for (const r of results) {
-      if (r.status === 'fulfilled' && r.value?.hasReminder) withReminder.add(r.value.id)
+      if (r.status !== 'fulfilled' || r.value.reminders.length === 0) continue
+      withMention.add(r.value.id)
+      const due = r.value.reminders.map((x) => x.dateValue).filter((d): d is string => Boolean(d)).sort()[0]
+      if (due) dates.set(r.value.id, due)
     }
-    setMessagesWithAnyMention(withReminder)
-    setMessagesWithReminders(withReminder)
+    setMessagesWithAnyMention(withMention)
+    setReminderDates(dates)
   }, [engagementId, documentId])
 
-  useEffect(() => {
-    fetchMessages()
-  }, [fetchMessages])
-
-  useEffect(() => {
-    fetchMyMentions()
-  }, [fetchMyMentions])
-
+  useEffect(() => { fetchMessages() }, [fetchMessages])
+  useEffect(() => { fetchMyMentions() }, [fetchMyMentions])
   useEffect(() => {
     if (!loading) refreshMessagesWithAnyMention(messages)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, messages.length])
 
-  useEffect(() => {
-    // Keyboard friendly: focus composer on open
-    textareaRef.current?.focus()
-  }, [engagementId, documentId])
+  // Keyboard friendly: focus composer on open
+  useEffect(() => { textareaRef.current?.focus() }, [engagementId, documentId])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        rightPane.clearPane()
-      }
+      if (e.key === 'Escape') rightPane.clearPane()
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
   }, [rightPane])
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    // Strip any trailing '@' that opened the picker but wasn't completed
-    const content = newContent.replace(/@\s*$/, '').trim()
-    if ((!content && mentionedUsers.length === 0) || submitting) return
+  // ── Composer ───────────────────────────────────────────────────────────────
+
+  /** People picked from the menu who are still mentioned in the text. */
+  const currentMentions = useMemo(
+    () => mentionedUsers.filter((u) => mentionedNames(newContent, [u.name]).length > 0),
+    [mentionedUsers, newContent],
+  )
+
+  // Grows with the text, up to about eight lines; then it scrolls.
+  useLayoutEffect(() => {
+    const el = textareaRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${Math.min(el.scrollHeight, 192)}px`
+  }, [newContent])
+
+  /** Opens, narrows or closes the mention menu from where the caret is. */
+  const syncMentionQuery = useCallback((value: string, caret: number) => {
+    const q = findMentionQuery(value, caret)
+    if (!q || firmMembers.length === 0) {
+      dismissedAtRef.current = null
+      setMentionQuery(null)
+      return
+    }
+    if (dismissedAtRef.current === q.start) { setMentionQuery(null); return }
+    const el = textareaRef.current
+    const left = el ? caretOffset(el, q.start).left : 0
+    setMentionQuery((prev) => {
+      if (!prev || prev.query !== q.query || prev.start !== q.start) setMenuIndex(0)
+      return { ...q, left }
+    })
+  }, [firmMembers.length])
+
+  const mentionCandidates = useMemo(() => {
+    if (!mentionQuery) return []
+    const q = mentionQuery.query.toLowerCase()
+    const people = firmMembers.filter((m) => m.userId !== user?.id && !m.isAgent)
+    const rank = (m: Member) => {
+      const name = displayNameOf(m).toLowerCase()
+      if (!q) return 0
+      if (name.startsWith(q)) return 0
+      if (name.split(/\s+/).some((w) => w.startsWith(q))) return 1
+      if (name.includes(q) || m.email.toLowerCase().startsWith(q)) return 2
+      return -1
+    }
+    return people
+      .map((m) => ({ m, r: rank(m) }))
+      .filter((x) => x.r >= 0)
+      .sort((a, b) => a.r - b.r || displayNameOf(a.m).localeCompare(displayNameOf(b.m)))
+      .slice(0, 8)
+      .map((x) => x.m)
+  }, [mentionQuery, firmMembers, user?.id, displayNameOf])
+
+  const pickMention = (member: Member) => {
+    const el = textareaRef.current
+    if (!mentionQuery || !el) return
+    const name = displayNameOf(member)
+    const caret = el.selectionStart ?? newContent.length
+    const next = insertMention(newContent, mentionQuery.start, caret, name)
+    setNewContent(next.text)
+    setMentionedUsers((prev) => prev.some((u) => u.userId === member.userId) ? prev : [...prev, { userId: member.userId, name, avatarUrl: member.avatarUrl }])
+    setMentionQuery(null)
+    requestAnimationFrame(() => {
+      el.focus()
+      el.setSelectionRange(next.caret, next.caret)
+    })
+  }
+
+  /** The @ button: types an "@" at the caret, which opens the menu. */
+  const startMention = () => {
+    const el = textareaRef.current
+    if (!el) return
+    const caret = el.selectionStart ?? newContent.length
+    const needsSpace = caret > 0 && !/\s/.test(newContent[caret - 1])
+    const insert = `${needsSpace ? ' ' : ''}@`
+    const value = newContent.slice(0, caret) + insert + newContent.slice(caret)
+    setNewContent(value)
+    requestAnimationFrame(() => {
+      el.focus()
+      el.setSelectionRange(caret + insert.length, caret + insert.length)
+      syncMentionQuery(value, caret + insert.length)
+    })
+  }
+
+  const handleSubmit = async (e?: React.FormEvent) => {
+    e?.preventDefault()
+    const content = newContent.trim()
+    if (!content || submitting) return
+    const recipients = currentMentions
     setSubmitting(true)
     try {
-      // Prepend @mentions to the message text so they're visible in the thread
-      const mentionPrefix = mentionedUsers.map((u) => `@${u.name}`).join(' ')
-      const fullContent = mentionPrefix ? `${mentionPrefix} ${content}`.trim() : content
       const res = await fetch(`/api/projects/${engagementId}/documents/${documentId}/doc-comments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: fullContent }),
+        body: JSON.stringify({ content }),
       })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
@@ -286,24 +400,26 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
       const newMsg = data.message
       setMessages((prev) => [...prev, newMsg])
       setNewContent('')
-      setMentionPickerOpen(false)
+      setMentionQuery(null)
 
-      // Create reminders for @mentioned users
-      if (mentionedUsers.length > 0) {
-        const toMention = [...mentionedUsers]
-        const dateVal = mentionDateValue || null
-        setMentionedUsers([])
-        setMentionDateValue('')
-        for (const { userId } of toMention) {
+      // Notify everyone still mentioned: now, or on the reminder date.
+      if (recipients.length > 0) {
+        const dateVal = remindAt || null
+        for (const { userId } of recipients) {
           fetch(`/api/projects/${engagementId}/documents/${documentId}/doc-comments`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ messageId: newMsg.id, recipientId: userId, dateValue: dateVal }),
           }).catch(() => {})
         }
-        // Refresh mention state
-        setTimeout(() => { void fetchMyMentions(); void refreshMessagesWithAnyMention([...messages, newMsg]) }, 500)
+        // Known here, so set at once: the server writes reminders after it replies, and a refetch
+        // could miss them.
+        setMessagesWithAnyMention((prev) => new Set(prev).add(newMsg.id))
+        if (dateVal) setReminderDates((prev) => new Map(prev).set(newMsg.id, dateVal))
+        setTimeout(() => { void fetchMyMentions() }, 500)
       }
+      setMentionedUsers([])
+      setRemindAt('')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to add comment')
     } finally {
@@ -333,75 +449,42 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
     }
   }
 
+  // ── Thread ─────────────────────────────────────────────────────────────────
+
   const distinctCommentors = useMemo(() => {
     const set = new Set<string>()
-    for (const m of messages) {
-      if (m.authorEmail) set.add(m.authorEmail)
-    }
+    for (const m of messages) if (m.authorEmail) set.add(m.authorEmail)
     return Array.from(set).sort((a, b) => a.localeCompare(b))
   }, [messages])
 
-  const filteredStatusOptions = useMemo(() => {
-    const q = statusSearch.trim().toLowerCase()
-    if (!q) return REACTIONS
-    return REACTIONS.filter((r) => r.label.toLowerCase().includes(q))
-  }, [statusSearch])
-
-  const filteredCommentors = useMemo(() => {
-    const q = commentorSearch.trim().toLowerCase()
-    if (!q) return distinctCommentors
-    return distinctCommentors.filter((e) => e.toLowerCase().includes(q))
-  }, [distinctCommentors, commentorSearch])
-
-  const selectedStatusLabel = useMemo(() => {
-    if (statusKeysFilter.length === 0) return 'All statuses'
-    if (statusKeysFilter.length === 1) return REACTIONS.find((r) => r.key === statusKeysFilter[0])?.label ?? '1 status'
-    return `${statusKeysFilter.length} statuses`
-  }, [statusKeysFilter])
-
-  const selectedCommentorLabel = useMemo(() => {
-    if (commentorEmailsFilter.length === 0) return 'All'
-    if (commentorEmailsFilter.length === 1) return commentorEmailsFilter[0]
-    return `${commentorEmailsFilter.length} people`
-  }, [commentorEmailsFilter])
+  const authorMember = useCallback((msg: CommentMessage): Member | undefined =>
+    (msg.authorUserId ? memberById.get(msg.authorUserId) : undefined)
+      ?? (msg.authorEmail ? memberByEmail.get(msg.authorEmail.toLowerCase()) : undefined), [memberById, memberByEmail])
+  const authorName = useCallback((msg: CommentMessage) => {
+    const member = authorMember(msg)
+    if (member) return displayNameOf(member)
+    return msg.authorEmail ? formatDisplayName('', msg.authorEmail) : 'Unknown'
+  }, [authorMember, displayNameOf])
+  const authorAvatar = (msg: CommentMessage) => authorMember(msg)?.avatarUrl ?? null
 
   const filteredMessages = useMemo(() => {
+    const preset = DATE_PRESETS.find((p) => p.value === datePreset)
+    const since = preset?.days ? Date.now() - preset.days * 86400000 : null
     return messages.filter((m) => {
       if (mentionsFilterActive && !myMentionedMessageIds.has(m.id)) return false
       if (commentorEmailsFilter.length > 0 && (!m.authorEmail || !commentorEmailsFilter.includes(m.authorEmail))) return false
-      if (statusKeysFilter.length > 0) {
-        const anyMatch = statusKeysFilter.some((k) => (m.reactions?.[k]?.count ?? 0) > 0)
-        if (!anyMatch) return false
-      }
-      if (fromDate) {
-        const d = new Date(m.createdAt)
-        const from = new Date(fromDate)
-        from.setHours(0, 0, 0, 0)
-        if (d < from) return false
-      }
-      if (toDate) {
-        const d = new Date(m.createdAt)
-        const to = new Date(toDate)
-        to.setHours(23, 59, 59, 999)
-        if (d > to) return false
-      }
+      if (statusKeysFilter.length > 0 && !statusKeysFilter.some((k) => (m.reactions?.[k]?.count ?? 0) > 0)) return false
+      if (since !== null && new Date(m.createdAt).getTime() < since) return false
       return true
     })
-  }, [messages, mentionsFilterActive, myMentionedMessageIds, commentorEmailsFilter, statusKeysFilter, fromDate, toDate])
+  }, [messages, mentionsFilterActive, myMentionedMessageIds, commentorEmailsFilter, statusKeysFilter, datePreset])
 
-  const displayMessages = useMemo(() => {
-    if (sortOrder === 'latestFirst') return [...filteredMessages].reverse()
-    return filteredMessages
-  }, [filteredMessages, sortOrder])
+  const displayMessages = useMemo(() => (sortOrder === 'latestFirst' ? [...filteredMessages].reverse() : filteredMessages), [filteredMessages, sortOrder])
 
   const latestCommentId = useMemo(() => {
     if (filteredMessages.length === 0) return null
-    // Latest = greatest createdAt. Messages are not guaranteed sorted.
     let latest = filteredMessages[0]
-    for (let i = 1; i < filteredMessages.length; i++) {
-      const m = filteredMessages[i]
-      if (new Date(m.createdAt).getTime() > new Date(latest.createdAt).getTime()) latest = m
-    }
+    for (const m of filteredMessages) if (new Date(m.createdAt).getTime() > new Date(latest.createdAt).getTime()) latest = m
     return latest.id
   }, [filteredMessages])
 
@@ -413,418 +496,85 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
 
   const [focusedCommentId, setFocusedCommentId] = useState<string | null>(null)
 
+  // Deep link: #doc-comment:<documentId>:<commentId> scrolls to and highlights that comment.
   useEffect(() => {
     if (typeof window === 'undefined') return
     const h = window.location.hash.replace(/^#/, '')
     if (!h.startsWith('doc-comment:')) return
-    const parts = h.split(':')
-    const docId = parts[1]
-    const commentId = parts[2]
-    if (!docId || !commentId) return
-    if (docId !== documentId) return
-
+    const [, docId, commentId] = h.split(':')
+    if (!docId || !commentId || docId !== documentId) return
     setFocusedCommentId(commentId)
     let tries = 0
-    const maxTries = 20
     const tryScroll = () => {
       const el = document.getElementById(`comment-${commentId}`)
-      if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-        return true
-      }
+      if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); return true }
       return false
     }
-    // Try immediately (in case it's already rendered), else retry briefly as messages render.
-    if (!tryScroll()) {
-      const interval = window.setInterval(() => {
-        tries += 1
-        if (tryScroll() || tries >= maxTries) window.clearInterval(interval)
-      }, 120)
-      // clear interval on cleanup too
-      const clear = window.setTimeout(() => setFocusedCommentId(null), 4000)
-      return () => {
-        window.clearInterval(interval)
-        window.clearTimeout(clear)
-      }
-    }
+    const interval = tryScroll() ? null : window.setInterval(() => {
+      tries += 1
+      if ((tryScroll() || tries >= 20) && interval !== null) window.clearInterval(interval)
+    }, 120)
     const clear = window.setTimeout(() => setFocusedCommentId(null), 4000)
     return () => {
+      if (interval !== null) window.clearInterval(interval)
       window.clearTimeout(clear)
     }
   }, [documentId, messages.length])
 
-  // If filters change, keep "latest-only" mode consistent.
-  // (No-op: visibleMessages recomputes from latestCommentId.)
-
-  // Keep scroll position consistent with sort direction:
-  // - Newest first: show the top of the list (latest items near top)
-  // - Oldest first: show the bottom of the list (latest items near bottom)
+  // Newest first shows the top of the list; oldest first, the bottom.
   useEffect(() => {
     if (loading) return
-    const behavior: ScrollBehavior = 'auto'
-    if (sortOrder === 'latestFirst') {
-      topSentinelRef.current?.scrollIntoView({ behavior, block: 'start' })
-    } else {
-      bottomSentinelRef.current?.scrollIntoView({ behavior, block: 'end' })
-    }
+    if (sortOrder === 'latestFirst') topSentinelRef.current?.scrollIntoView({ behavior: 'auto', block: 'start' })
+    else bottomSentinelRef.current?.scrollIntoView({ behavior: 'auto', block: 'end' })
   }, [loading, sortOrder, visibleMessages.length])
 
-  // Format a raw auth name (may be username-style like "deepaksshettigar") into a readable display name.
-  // If it contains no spaces/separators, fall back to the email local part split by domain.
-  const formatDisplayName = (name: string, email: string): string => {
-    if (!name || name === email.split('@')[0]) {
-      // Try to derive a nice name from the email local part
-      const local = email.split('@')[0]
-      return local.replace(/[._\-+]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()).trim()
-    }
-    if (name.includes(' ') || name.includes('.') || name.includes('_')) {
-      return name.split(/[\s._-]+/).map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ').trim()
-    }
-    return name
-  }
-
-  // Render message content with @Name tokens highlighted as pills
-  const renderContentWithMentions = (content: string) => {
-    // Names are prepended as "@Name1 @Name2 message…" — extract leading @tokens, rest is plain text
-    const tokens: { type: 'mention' | 'text'; value: string }[] = []
-    let remaining = content
-    while (remaining.startsWith('@')) {
-      // Greedily consume one @token: stop at the next @ or when we hit lowercase-start words
-      const match = remaining.match(/^(@[A-Za-z][^\s]*(?:\s+[A-Z][^\s]*)?)(\s+|$)/)
-      if (!match) break
-      tokens.push({ type: 'mention', value: match[1] })
-      remaining = remaining.slice(match[0].length)
-    }
-    if (remaining) tokens.push({ type: 'text', value: remaining })
-    return tokens.map((t, i) => {
+  /** A comment's text with its mentions drawn as pills (name and email on hover). */
+  const renderContentWithMentions = (content: string) =>
+    splitMentions(content, knownNames).map((t, i) => {
       if (t.type !== 'mention') return <span key={i}>{t.value}</span>
-      const nameWithoutAt = t.value.replace(/^@/, '')
-      const member = firmMembers.find((m) => m.name === nameWithoutAt || m.name === t.value)
-      const initials = initialsOf(nameWithoutAt)
-      const pill = (
-        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold bg-action/10 text-action leading-none mr-1 cursor-pointer">
-          {t.value}
-        </span>
-      )
+      const name = t.value.replace(/^@/, '')
+      const member = firmMembers.find((m) => displayNameOf(m) === name || m.name === name)
+      const pill = <span className="rounded-[4px] bg-action/10 px-1 py-px font-medium text-action">{t.value}</span>
       if (!member) return <span key={i}>{pill}</span>
       return (
         <Tooltip key={i}>
           <TooltipTrigger asChild>{pill}</TooltipTrigger>
-          <TooltipContent side="top" className="z-[9999] p-2 bg-surface border border-line shadow-popover text-xs text-fg">
+          <TooltipContent side="top" className="z-[9999] border border-line bg-surface p-2 text-xs text-fg shadow-popover">
             <div className="flex items-center gap-2">
-              <div className="h-7 w-7 rounded-full overflow-hidden shrink-0 flex items-center justify-center text-[11px] font-medium bg-surface-muted text-fg-muted">
-                {member.avatarUrl
-                  ? <img src={member.avatarUrl} alt="" className="h-full w-full object-cover" />
-                  : initials}
-              </div>
+              <PersonAvatar person={{ name: displayNameOf(member), avatarUrl: member.avatarUrl }} size={28} />
               <div>
-                <div className="font-semibold">{member.name}</div>
-                <div className="text-fg-subtle text-caption">{member.email}</div>
+                <div className="font-semibold">{displayNameOf(member)}</div>
+                <div className="text-caption text-fg-subtle">{member.email}</div>
               </div>
             </div>
           </TooltipContent>
         </Tooltip>
       )
     })
-  }
 
-  // State for editing reminder on an already-posted message (read-only mentions, editable date)
+  // Setting or changing a posted comment's reminder date (from its bell, or "Remind" on hover).
   const [reminderEditPicker, setReminderEditPicker] = useState<{
     messageId: string
     anchorEl: HTMLElement
     existingDate: string
-    mentionedNames: string[] // @Name tokens parsed from message content
+    /** The date it had when opened: '' for a mention with no reminder yet. */
+    savedDate: string
+    mentionedNames: string[]
+    recipientIds: string[]
+    saving?: boolean
+    error?: string
   } | null>(null)
   const reminderEditPickerRef = useRef<HTMLDivElement>(null)
-
-  // Close reminder edit picker on outside click
   useEffect(() => {
     if (!reminderEditPicker) return
     const handler = (e: MouseEvent) => {
       const target = e.target as Node
       if ((target as Element)?.closest?.('[data-radix-popper-content-wrapper]')) return
-      if (reminderEditPickerRef.current && !reminderEditPickerRef.current.contains(target)) {
-        setReminderEditPicker(null)
-      }
+      if (reminderEditPickerRef.current && !reminderEditPickerRef.current.contains(target)) setReminderEditPicker(null)
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [reminderEditPicker])
-
-  // Filtered member list for mention picker
-  const mentionCandidates = useMemo(() => {
-    const q = mentionSearch.trim().toLowerCase()
-    const others = firmMembers.filter((m) => m.userId !== user?.id)
-    if (!q) return others
-    return others.filter((m) => m.name.toLowerCase().includes(q) || m.email.toLowerCase().includes(q))
-  }, [firmMembers, mentionSearch, user?.id])
-
-  const openMentionPicker = (editUserId?: string) => {
-    setMentionSearch('')
-    setEditingMentionId(editUserId ?? null)
-    setMentionPickerOpen(true)
-  }
-
-  const closeMentionPicker = () => {
-    setMentionPickerOpen(false)
-    setMentionSearch('')
-    setMentionDateValue('')
-    setEditingMentionId(null)
-    textareaRef.current?.focus()
-  }
-
-  const toggleMentionUser = (member: { userId: string; name: string; email: string; avatarUrl?: string | null }) => {
-    setMentionedUsers((prev) => {
-      const already = prev.find((m) => m.userId === member.userId)
-      if (already) return prev.filter((m) => m.userId !== member.userId)
-      const displayName = formatDisplayName(member.name, member.email)
-      return [...prev, { userId: member.userId, name: displayName, avatarUrl: member.avatarUrl }]
-    })
-  }
-
-  // Close picker on outside click — but not when clicking inside a Radix Popover portal (e.g. DateTimePicker calendar)
-  useEffect(() => {
-    if (!mentionPickerOpen) return
-    const handler = (e: MouseEvent) => {
-      const target = e.target as Node
-      const insidePortal = (target as Element)?.closest?.('[data-radix-popper-content-wrapper]')
-      if (insidePortal) return
-      if (
-        mentionPickerRef.current && !mentionPickerRef.current.contains(target) &&
-        composerRef.current && !composerRef.current.contains(target)
-      ) {
-        closeMentionPicker()
-      }
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [mentionPickerOpen])
-
-  // MentionPill: shows avatar + name, hover tooltip with avatar, click to edit
-  const MentionPill = ({ u }: { u: { userId: string; name: string; avatarUrl?: string | null } }) => {
-    const initials = initialsOf(u.name)
-    return (
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <button
-            type="button"
-            onClick={() => openMentionPicker(u.userId)}
-            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-semibold bg-action/10 text-action hover:bg-action/20 transition-colors cursor-pointer leading-none"
-            aria-label={`Edit mention of ${u.name}`}
-          >
-            <span className="inline-flex h-4 w-4 rounded-full overflow-hidden shrink-0 items-center justify-center text-[8px] font-medium bg-surface-muted text-fg-muted">
-              {u.avatarUrl
-                ? <img src={u.avatarUrl} alt="" className="h-full w-full object-cover" />
-                : initials}
-            </span>
-            @{u.name}
-          </button>
-        </TooltipTrigger>
-        <TooltipContent side="top" className="z-[9999] p-2 bg-surface border border-line shadow-popover text-xs text-fg">
-          <div className="flex items-center gap-2">
-            <div className="h-7 w-7 rounded-full overflow-hidden shrink-0 flex items-center justify-center text-[11px] font-medium bg-surface-muted text-fg-muted">
-              {u.avatarUrl
-                ? <img src={u.avatarUrl} alt="" className="h-full w-full object-cover" />
-                : initials}
-            </div>
-            <div>
-              <div className="font-semibold">{u.name}</div>
-              <div className="text-fg-subtle text-caption">Click to edit mention</div>
-            </div>
-          </div>
-        </TooltipContent>
-      </Tooltip>
-    )
-  }
-
-  const Composer = (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-1 shrink-0">
-      {/* Usage hint above the composer */}
-      <div className="flex items-center gap-1.5 px-0.5 pb-0.5">
-        <AtSign className="h-3 w-3 text-action shrink-0" />
-        <span className="text-caption text-fg-muted">Type <span className="font-semibold text-action">@</span> in the box below to mention a team member and optionally set a reminder.</span>
-      </div>
-      {/* Inline composer: pills + textarea in one visual box */}
-      <div ref={composerRef} className="relative">
-        <div
-          className={cn(
-            'flex flex-wrap items-center gap-1 min-h-[64px] rounded-control border border-line-strong bg-surface px-3 py-2 text-sm focus-within:border-action/60 focus-within:ring-2 focus-within:ring-action/20',
-            submitting && 'opacity-60 cursor-not-allowed'
-          )}
-          onClick={() => textareaRef.current?.focus()}
-        >
-          {/* Inline mention pills */}
-          {mentionedUsers.map((u) => (
-            <MentionPill key={u.userId} u={u} />
-          ))}
-
-          {/* Actual textarea — grows to fill remaining space */}
-          <textarea
-            ref={textareaRef}
-            value={newContent}
-            onChange={(e) => setNewContent(e.target.value)}
-            placeholder={mentionedUsers.length === 0 ? 'Add a comment… (type @ to mention)' : ''}
-            rows={1}
-            onKeyDown={(e) => {
-              if (e.key === '@' && firmMembers.length > 0) {
-                setTimeout(() => {
-                  setNewContent((prev) => prev.replace(/@$/, ''))
-                  openMentionPicker()
-                }, 0)
-                return
-              }
-              if (e.key === 'Backspace' && newContent === '' && mentionedUsers.length > 0) {
-                // Remove last mention when backspacing on empty text
-                setMentionedUsers((prev) => prev.slice(0, -1))
-                e.preventDefault()
-                return
-              }
-              if (e.key === 'Escape' && mentionPickerOpen) {
-                closeMentionPicker()
-                e.stopPropagation()
-                return
-              }
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault()
-                if (mentionPickerOpen) { closeMentionPicker(); return }
-                void handleSubmit(e as any)
-              }
-            }}
-            className="flex-1 min-w-[80px] bg-transparent outline-none resize-none overflow-hidden placeholder:text-fg-subtle disabled:cursor-not-allowed pr-10"
-            style={{ minHeight: '1.5rem' }}
-            disabled={submitting}
-          />
-          {/* Send button — inline bottom-right */}
-          <button
-            type="submit"
-            disabled={submitting || (!newContent.trim() && mentionedUsers.length === 0)}
-            aria-label="Send comment"
-            className="absolute bottom-2 right-2 h-7 w-7 flex items-center justify-center rounded-control bg-action text-action-fg hover:bg-action-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
-          >
-            {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-          </button>
-        </div>
-
-        {/* Anchored mention picker dropdown */}
-        {mentionPickerOpen && mentionCandidates.length > 0 && (
-          <div
-            ref={mentionPickerRef}
-            className="absolute bottom-full left-0 mb-1 w-full max-w-xs bg-surface border border-line rounded-card shadow-popover z-[200] flex flex-col overflow-hidden"
-          >
-            {/* Header */}
-            <div className="flex items-center gap-2 border-b border-line px-3 py-2">
-              <AtSign className="h-3.5 w-3.5 text-action shrink-0" />
-              <span className="text-xs font-semibold text-fg flex-1">Mention a team member</span>
-              <button type="button" onClick={closeMentionPicker} className="text-fg-subtle hover:text-fg-muted transition-colors">
-                <XSquare className="h-4 w-4" />
-              </button>
-            </div>
-            {/* Search */}
-            <div className="px-3 pt-2.5 pb-2">
-              <input
-                autoFocus
-                value={mentionSearch}
-                onChange={(e) => { setMentionSearch(e.target.value); setMentionFocusedIndex(0) }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Escape') { closeMentionPicker(); e.stopPropagation(); return }
-                  if (e.key === 'ArrowDown') {
-                    e.preventDefault()
-                    setMentionFocusedIndex((i) => Math.min(i + 1, mentionCandidates.length - 1))
-                    return
-                  }
-                  if (e.key === 'ArrowUp') {
-                    e.preventDefault()
-                    setMentionFocusedIndex((i) => Math.max(i - 1, 0))
-                    return
-                  }
-                  if (e.key === ' ' || e.key === 'Enter') {
-                    const m = mentionCandidates[mentionFocusedIndex]
-                    if (m) { e.preventDefault(); toggleMentionUser(m) }
-                  }
-                }}
-                placeholder="Search members…"
-                className="w-full text-small rounded-control border border-line bg-surface-subtle px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-action/40 focus:border-action/40 focus:bg-surface transition-colors"
-              />
-            </div>
-            {/* Member list */}
-            <div className="overflow-y-auto border-t border-line" style={{ maxHeight: '180px' }}>
-              {mentionCandidates.map((m, idx) => {
-                const selected = mentionedUsers.some((u) => u.userId === m.userId)
-                const focused = idx === mentionFocusedIndex
-                const displayName = formatDisplayName(m.name, m.email)
-                const initials = displayName.split(/\s+/).filter(Boolean).map((p: string) => p[0]).join('').slice(0, 2).toUpperCase() || '?'
-                return (
-                  <button
-                    key={m.userId}
-                    type="button"
-                    ref={(el) => { if (el && focused) el.scrollIntoView({ block: 'nearest' }) }}
-                    onClick={() => toggleMentionUser(m)}
-                    onMouseEnter={() => setMentionFocusedIndex(idx)}
-                    className={cn(
-                      'w-full flex items-center gap-2.5 px-3 py-2.5 text-left transition-colors',
-                      selected ? 'bg-action/5 hover:bg-action/10' : focused ? 'bg-surface-hover' : 'hover:bg-surface-hover'
-                    )}
-                  >
-                    <span className={cn(
-                      'h-4 w-4 rounded border flex items-center justify-center shrink-0 transition-colors',
-                      selected ? 'border-action bg-action' : 'border-line-strong bg-surface'
-                    )}>
-                      {selected && <Check className="h-3 w-3 text-white" strokeWidth={2.5} />}
-                    </span>
-                    <div className={cn(
-                      'h-7 w-7 rounded-full overflow-hidden shrink-0 flex items-center justify-center text-caption font-bold border',
-                      selected ? 'border-action/30' : 'border-line'
-                    )}>
-                      {m.avatarUrl
-                        ? <img src={m.avatarUrl} alt="" className="h-full w-full object-cover" />
-                        : <div className={cn('h-full w-full flex items-center justify-center font-bold', selected ? 'bg-action/10 text-action' : 'bg-action/5 text-action/60')}>{initials}</div>
-                      }
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className={cn('text-xs font-semibold truncate', selected ? 'text-action' : 'text-fg')}>{displayName}</div>
-                      <div className="text-caption truncate text-fg-subtle">{m.email}</div>
-                    </div>
-                  </button>
-                )
-              })}
-            </div>
-            {/* Reminder footer */}
-            <div className="px-3 pt-2.5 pb-3 border-t border-line bg-surface-subtle flex flex-col gap-2">
-              <div className="flex items-center gap-1.5">
-                <CalendarClock className={cn('h-3.5 w-3.5 shrink-0', mentionedUsers.length > 0 ? 'text-action' : 'text-fg-subtle')} />
-                <span className={cn('text-small font-medium', mentionedUsers.length > 0 ? 'text-fg-muted' : 'text-fg-subtle')}>
-                  Remind on <span className="font-normal normal-case tracking-normal">(optional)</span>
-                </span>
-              </div>
-              <div className={cn(mentionedUsers.length === 0 && 'opacity-40 pointer-events-none select-none')}>
-                <DateTimePicker
-                  value={mentionDateValue}
-                  onChange={setMentionDateValue}
-                  placeholder="No date — notify now"
-                  defaultTime="09:00"
-                  allowFutureDateTimes={true}
-                  disabled={mentionedUsers.length === 0}
-                />
-              </div>
-              {mentionedUsers.length === 0 && (
-                <p className="text-caption text-fg-subtle">Select a member above to enable reminders.</p>
-              )}
-              <div className="flex justify-end pt-0.5">
-                <button
-                  type="button"
-                  onClick={closeMentionPicker}
-                  className="h-7 rounded-control bg-action px-3 text-small font-medium text-action-fg transition-colors hover:bg-action-hover"
-                >
-                  Done
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
-    </form>
-  )
 
   const updateReactionOptimistic = useCallback(
     (messageId: string, emojiKey: ReactionKey, action: 'add' | 'remove') => {
@@ -834,17 +584,8 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
           if (m.id !== messageId) return m
           const current = m.reactions ?? {}
           const users = current[emojiKey]?.users ?? []
-          const nextUsers =
-            action === 'add'
-              ? users.includes(myEmail) ? users : [...users, myEmail]
-              : users.filter((e) => e !== myEmail)
-          return {
-            ...m,
-            reactions: {
-              ...current,
-              [emojiKey]: { count: nextUsers.length, users: nextUsers },
-            },
-          }
+          const nextUsers = action === 'add' ? (users.includes(myEmail) ? users : [...users, myEmail]) : users.filter((e) => e !== myEmail)
+          return { ...m, reactions: { ...current, [emojiKey]: { count: nextUsers.length, users: nextUsers } } }
         })
       )
     },
@@ -859,10 +600,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messageId, emojiKey, action }),
       })
-      if (!res.ok) {
-        // best-effort revert
-        updateReactionOptimistic(messageId, emojiKey, action === 'add' ? 'remove' : 'add')
-      }
+      if (!res.ok) updateReactionOptimistic(messageId, emojiKey, action === 'add' ? 'remove' : 'add')
     },
     [engagementId, documentId, updateReactionOptimistic]
   )
@@ -891,930 +629,552 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
     const results = await Promise.allSettled(ops)
     const failed = results.filter((r) => r.status === 'rejected')
     if (failed.length > 0) throw new Error(`${failed.length} operation(s) failed`)
-    // Update dot indicator: add if any selected, remove if none remain
-    const messageId = reminderModal.messageId
-    const remainingCount = (existingReminders.size - deselected.length) + selected.length
-    setMessagesWithReminders((prev) => {
-      const next = new Set(prev)
-      remainingCount > 0 ? next.add(messageId) : next.delete(messageId)
-      return next
-    })
+    void refreshMessagesWithAnyMention(messages)
   }
 
-  return (
-    <div className="flex flex-col h-full min-h-0 p-4 min-w-0">
-      <TooltipProvider>
-      <div className="space-y-3 min-w-0">
+  const openReminderEdit = (msg: CommentMessage, btn: HTMLElement) => {
+    const names = splitMentions(msg.content, knownNames).filter((t) => t.type === 'mention').map((t) => t.value)
+    // The people to remind are the ones the comment notified; failing that, its mentions by name.
+    const byName = firmMembers
+      .filter((m) => !m.isAgent && names.some((n) => n.replace(/^@/, '') === displayNameOf(m) || n.replace(/^@/, '') === m.name))
+      .map((m) => m.userId)
+    const savedDate = reminderDates.get(msg.id) ?? ''
+    const open = (recipientIds: string[]) =>
+      setReminderEditPicker({ messageId: msg.id, anchorEl: btn, existingDate: savedDate, savedDate, mentionedNames: names, recipientIds })
+    fetch(`/api/projects/${engagementId}/documents/${documentId}/doc-comments/reminders?messageId=${encodeURIComponent(msg.id)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        const ids = ((data?.reminders ?? []) as { userId: string }[]).map((r) => r.userId)
+        open(ids.length > 0 ? ids : byName)
+      })
+      .catch(() => open(byName))
+  }
 
-        {error && (
-          <div className="rounded-card bg-tag-red-bg px-3 py-2 text-small text-tag-red-fg">
-            {error}
+  /** Saves the reminder date for everyone the comment mentions; null clears it. */
+  const saveReminderDate = async (dateValue: string | null) => {
+    const picker = reminderEditPicker
+    if (!picker) return
+    setReminderEditPicker({ ...picker, saving: true, error: undefined })
+    const results = await Promise.allSettled(picker.recipientIds.map((recipientId) =>
+      fetch(`/api/projects/${engagementId}/documents/${documentId}/doc-comments`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messageId: picker.messageId, recipientId, dateValue }),
+      }).then((res) => { if (!res.ok) throw new Error('Failed') })
+    ))
+    if (picker.recipientIds.length === 0 || results.some((r) => r.status === 'rejected')) {
+      setReminderEditPicker((prev) => (prev ? { ...prev, saving: false, error: 'Couldn’t save the reminder. Try again.' } : prev))
+      return
+    }
+    setReminderDates((prev) => {
+      const next = new Map(prev)
+      if (dateValue) next.set(picker.messageId, dateValue)
+      else next.delete(picker.messageId)
+      return next
+    })
+    setReminderEditPicker(null)
+  }
+
+  // ── Pieces ─────────────────────────────────────────────────────────────────
+
+  const toolbar = (messages.length > TOOLBAR_AFTER || filtersActive) && (
+    <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-line pb-2">
+      <span className="mr-auto text-small tabular-nums text-fg-muted">
+        {filtersActive ? `${filteredMessages.length} of ${messages.length}` : messages.length} comment{messages.length === 1 ? '' : 's'}
+      </span>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <FilterPill icon={<Users />} label="People" value={commentorEmailsFilter.length ? summarizePicks(commentorEmailsFilter.map((e) => formatDisplayName(memberByEmail.get(e.toLowerCase())?.name ?? '', e))) : undefined} onClear={() => setCommentorEmailsFilter([])} />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-[240px] p-1">
+          <FilterMenuLabel>Commented by</FilterMenuLabel>
+          {distinctCommentors.map((email) => (
+            <FilterMenuRow key={email} multi selected={commentorEmailsFilter.includes(email)} onSelect={() => setCommentorEmailsFilter((l) => (l.includes(email) ? l.filter((x) => x !== email) : [...l, email]))}>
+              {formatDisplayName(memberByEmail.get(email.toLowerCase())?.name ?? '', email)}
+            </FilterMenuRow>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <FilterPill icon={<Smile />} label="Reaction" value={statusKeysFilter.length ? summarizePicks(statusKeysFilter.map((k) => REACTIONS.find((r) => r.key === k)?.label ?? k)) : undefined} onClear={() => setStatusKeysFilter([])} />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-[200px] p-1">
+          <FilterMenuLabel>Has reaction</FilterMenuLabel>
+          {REACTIONS.map((r) => (
+            <FilterMenuRow key={r.key} multi selected={statusKeysFilter.includes(r.key)} onSelect={() => setStatusKeysFilter((l) => (l.includes(r.key) ? l.filter((x) => x !== r.key) : [...l, r.key]))}>
+              <span className="mr-1">{r.emoji}</span>{r.label}
+            </FilterMenuRow>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <FilterPill icon={<CalendarClock />} label="Date" value={datePreset !== 'any' ? DATE_PRESETS.find((p) => p.value === datePreset)?.label : undefined} onClear={() => setDatePreset('any')} />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-[180px] p-1">
+          <FilterMenuLabel>Posted</FilterMenuLabel>
+          {DATE_PRESETS.map((p) => (
+            <FilterMenuRow key={p.value} selected={datePreset === p.value} onSelect={() => setDatePreset(p.value)}>{p.label}</FilterMenuRow>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {myMentionedMessageIds.size > 0 && (
+        <FilterPill icon={<UserCheck />} label="Mentions me" value={mentionsFilterActive ? 'On' : undefined} onClick={() => setMentionsFilterActive((v) => !v)} onClear={() => setMentionsFilterActive(false)} />
+      )}
+      <DropdownMenu>
+        <Hint label="Sort">
+          <DropdownMenuTrigger asChild>
+            <button type="button" aria-label="Sort comments" className="flex h-7 w-7 items-center justify-center rounded-control text-fg-subtle hover:bg-surface-hover hover:text-fg-muted">
+              <ArrowUpDown className="h-3.5 w-3.5" />
+            </button>
+          </DropdownMenuTrigger>
+        </Hint>
+        <DropdownMenuContent align="end" className="w-[200px] p-1">
+          <FilterMenuLabel>Order</FilterMenuLabel>
+          <FilterMenuRow selected={sortOrder === 'latestLast'} onSelect={() => setSortOrder('latestLast')}>Oldest first</FilterMenuRow>
+          <FilterMenuRow selected={sortOrder === 'latestFirst'} onSelect={() => setSortOrder('latestFirst')}>Newest first</FilterMenuRow>
+          <DropdownMenuSeparator className="mx-0 my-1" />
+          <FilterMenuRow multi selected={hideOlderMessages} onSelect={() => setHideOlderMessages((v) => !v)}>Only the latest</FilterMenuRow>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  )
+
+  const remindNames = currentMentions.map((u) => u.name.split(/\s+/)[0])
+
+  // The text box and the chip layer behind it share this box exactly (padding, type, wrapping,
+  // scrollbar gutter), so each chip sits under its name.
+  const COMPOSER_TEXT = 'max-h-48 w-full overflow-y-auto whitespace-pre-wrap break-words px-3 pb-1 pt-2.5 text-ui leading-relaxed [scrollbar-gutter:stable]'
+  const backdropRef = useRef<HTMLDivElement>(null)
+  /** The composer's text with the mentions of people who will be notified marked, for the chips. */
+  const backdropSegments = useMemo(
+    () => splitMentions(newContent, currentMentions.map((u) => u.name)),
+    [newContent, currentMentions],
+  )
+  const Composer = (
+    <form onSubmit={handleSubmit} className="flex shrink-0 flex-col gap-1.5">
+      {/* The reminder, as a chip, before it is sent. */}
+      {remindAt && currentMentions.length > 0 && (
+        <div className="flex">
+          <span className="inline-flex max-w-full items-center gap-1.5 rounded-control bg-tag-orange-bg py-0.5 pl-2 pr-1 text-caption text-tag-orange-fg">
+            <BellRing className="h-3 w-3 shrink-0" />
+            <span className="truncate">Remind {remindNames.join(', ')} · {shortDateTime(remindAt)}</span>
+            <button type="button" onClick={() => setRemindAt('')} aria-label="Remove reminder" className="rounded-[4px] p-0.5 hover:bg-tag-orange-fg/10">
+              <X className="h-3 w-3" />
+            </button>
+          </span>
+        </div>
+      )}
+      <div
+        ref={composerRef}
+        className={cn(
+          'relative rounded-control border border-line-strong bg-surface focus-within:border-action/60 focus-within:ring-2 focus-within:ring-action/20',
+          submitting && 'opacity-60',
+        )}
+      >
+        {/* Chips behind the mentioned names (react-mentions' approach): this layer mirrors the text
+            box's text, transparent, and only the mention backgrounds show through the text box. */}
+        <div ref={backdropRef} aria-hidden className={cn(COMPOSER_TEXT, 'pointer-events-none absolute inset-x-0 top-0 overflow-hidden text-transparent')}>
+          {backdropSegments.map((t, i) => t.type === 'mention'
+            ? <mark key={i} className="-mx-0.5 rounded-[4px] bg-action/15 px-0.5 text-transparent [box-decoration-break:clone]">{t.value}</mark>
+            : <span key={i}>{t.value}</span>)}
+          {/* A trailing new line needs a character to take up its line, as it does in the text box. */}
+          {newContent.endsWith('\n') && '\u200b'}
+        </div>
+        <textarea
+          ref={textareaRef}
+          value={newContent}
+          rows={1}
+          onScroll={(e) => { if (backdropRef.current) backdropRef.current.scrollTop = e.currentTarget.scrollTop }}
+          disabled={submitting}
+          placeholder="Leave a comment…"
+          aria-label="Comment"
+          onChange={(e) => {
+            setNewContent(e.target.value)
+            syncMentionQuery(e.target.value, e.target.selectionStart ?? e.target.value.length)
+          }}
+          onClick={(e) => syncMentionQuery(e.currentTarget.value, e.currentTarget.selectionStart ?? 0)}
+          onKeyUp={(e) => {
+            if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) syncMentionQuery(e.currentTarget.value, e.currentTarget.selectionStart ?? 0)
+          }}
+          onBlur={() => window.setTimeout(() => setMentionQuery(null), 120)}
+          onKeyDown={(e) => {
+            const menuOpen = !!mentionQuery
+            if (menuOpen && mentionCandidates.length > 0) {
+              if (e.key === 'ArrowDown') { e.preventDefault(); setMenuIndex((i) => (i + 1) % mentionCandidates.length); return }
+              if (e.key === 'ArrowUp') { e.preventDefault(); setMenuIndex((i) => (i - 1 + mentionCandidates.length) % mentionCandidates.length); return }
+              if ((e.key === 'Enter' && !e.metaKey && !e.ctrlKey) || e.key === 'Tab') {
+                e.preventDefault()
+                pickMention(mentionCandidates[Math.min(menuIndex, mentionCandidates.length - 1)])
+                return
+              }
+            }
+            if (menuOpen && e.key === 'Escape') {
+              e.preventDefault()
+              e.stopPropagation()
+              dismissedAtRef.current = mentionQuery!.start
+              setMentionQuery(null)
+              return
+            }
+            // ⌘↵ / Ctrl↵ sends; Enter alone is a new line.
+            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+              e.preventDefault()
+              void handleSubmit()
+            }
+          }}
+          className={cn(COMPOSER_TEXT, 'relative block resize-none bg-transparent text-fg outline-none placeholder:text-fg-subtle disabled:cursor-not-allowed')}
+        />
+        <div className="flex items-center gap-0.5 px-1.5 pb-1.5">
+          <Hint label="Mention someone (@)">
+            <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={startMention} aria-label="Mention someone" className="flex h-7 w-7 items-center justify-center rounded-control text-fg-subtle hover:bg-surface-hover hover:text-fg-muted">
+              <AtSign className="h-3.5 w-3.5" />
+            </button>
+          </Hint>
+          <Popover open={remindOpen} onOpenChange={setRemindOpen}>
+            <Hint label={currentMentions.length > 0 ? 'Remind the people you mention' : 'Mention someone to set a reminder'}>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  disabled={currentMentions.length === 0}
+                  aria-label="Remind"
+                  className={cn('inline-flex h-7 items-center gap-1 rounded-control px-1.5 text-small hover:bg-surface-hover disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent', remindAt ? 'text-tag-orange-fg' : 'text-fg-subtle hover:text-fg-muted')}
+                >
+                  <BellRing className="h-3.5 w-3.5" />
+                  <span>Remind…</span>
+                </button>
+              </PopoverTrigger>
+            </Hint>
+            <PopoverContent align="start" side="top" className="w-64 p-1.5">
+              <p className="px-1.5 pb-1 pt-0.5 text-caption text-fg-subtle">Remind {remindNames.join(', ') || 'them'}</p>
+              {[
+                { label: 'Tomorrow, 9:00 AM', value: () => nineAm(1) },
+                { label: 'In 3 days, 9:00 AM', value: () => nineAm(3) },
+                { label: 'Next Monday, 9:00 AM', value: nextMondayNineAm },
+              ].map((p) => (
+                <button key={p.label} type="button" onClick={() => { setRemindAt(p.value()); setRemindOpen(false) }} className="flex h-8 w-full items-center rounded-control px-2 text-left text-small text-fg hover:bg-surface-hover">
+                  {p.label}
+                </button>
+              ))}
+              <div className="mt-1 border-t border-line px-0.5 pt-1.5">
+                <DateTimePicker value={remindAt} onChange={(v) => setRemindAt(v)} placeholder="Pick a date and time" defaultTime="09:00" allowPastDateTimes={false} />
+              </div>
+              {remindAt && (
+                <button type="button" onClick={() => { setRemindAt(''); setRemindOpen(false) }} className="mt-1 flex h-8 w-full items-center gap-2 rounded-control px-2 text-small text-fg-muted hover:bg-surface-hover">
+                  <X className="h-3.5 w-3.5" /> No reminder — notify now
+                </button>
+              )}
+            </PopoverContent>
+          </Popover>
+          <span className="ml-auto hidden pr-1.5 text-caption text-fg-subtle sm:inline">⌘↵ to send</span>
+          <button
+            type="submit"
+            disabled={submitting || !newContent.trim()}
+            aria-label="Send comment"
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-control bg-action text-action-fg transition-colors hover:bg-action-hover disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+          </button>
+        </div>
+
+        {/* The mention menu: just above the composer, where "@" was typed. */}
+        {mentionQuery && (
+          <div
+            role="listbox"
+            aria-label="Mention someone"
+            className="absolute bottom-full z-[200] mb-1.5 w-64 overflow-hidden rounded-card border border-line bg-surface p-1 shadow-popover"
+            style={{ left: Math.max(0, Math.min(mentionQuery.left, (composerRef.current?.clientWidth ?? 260) - 260)) }}
+          >
+            {mentionCandidates.length === 0 ? (
+              <p className="px-2 py-1.5 text-small text-fg-subtle">No one matches “{mentionQuery.query}”</p>
+            ) : mentionCandidates.map((m, idx) => (
+              <button
+                key={m.userId}
+                type="button"
+                role="option"
+                aria-selected={idx === menuIndex}
+                onMouseDown={(e) => e.preventDefault()}
+                onMouseEnter={() => setMenuIndex(idx)}
+                onClick={() => pickMention(m)}
+                className={cn('flex h-9 w-full items-center gap-2 rounded-control px-2 text-left', idx === menuIndex && 'bg-surface-hover')}
+              >
+                <PersonAvatar person={{ name: displayNameOf(m), avatarUrl: m.avatarUrl }} size={22} />
+                <span className="min-w-0 flex-1 truncate text-small text-fg">{displayNameOf(m)}</span>
+                {ENGAGEMENT_ROLE_LABEL[m.role] && <span className="shrink-0 text-caption text-fg-subtle">{ENGAGEMENT_ROLE_LABEL[m.role]}</span>}
+              </button>
+            ))}
           </div>
         )}
+      </div>
+    </form>
+  )
 
-        {/* Filters (collapsible) */}
-        <div className="border-b border-line">
-          <button
-            type="button"
-            className="flex h-9 w-full items-center justify-between gap-2 rounded-control px-1 hover:bg-surface-hover"
-            onClick={() => setFiltersOpen((v) => !v)}
-          >
-            <span className="inline-flex items-center gap-2 text-small font-medium text-fg-muted">
-              <SlidersHorizontal className="h-3.5 w-3.5 text-fg-subtle" />
-              Filters
-            </span>
-            <ChevronDown className={`h-3.5 w-3.5 text-fg-subtle transition-transform ${filtersOpen ? 'rotate-180' : ''}`} />
-          </button>
+  return (
+    <div className="flex h-full min-h-0 min-w-0 flex-col gap-3 p-4">
+      <TooltipProvider>
+        {error && <div className="shrink-0 rounded-card bg-tag-red-bg px-3 py-2 text-small text-tag-red-fg">{error}</div>}
+        {toolbar}
 
-          {filtersOpen ? (
-            <div className="px-1 pb-3">
-              {!isExpanded ? (
-                <div className="grid grid-cols-1 gap-3">
-              <div className="flex flex-col gap-1">
-                <label className="text-small text-fg-muted">Status</label>
-                <DropdownMenu open={statusMenuOpen} onOpenChange={setStatusMenuOpen}>
-                  <DropdownMenuTrigger asChild>
-                    <button
-                      type="button"
-                      className="flex h-8 w-full items-center justify-between gap-2 rounded-control border border-line bg-surface px-2 text-small text-fg"
-                    >
-                      <span className="truncate">{selectedStatusLabel}</span>
-                      <ChevronDown className="h-4 w-4 text-fg-muted shrink-0" />
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent className="w-[280px] max-w-[calc(100vw-2rem)] p-0">
-                    <div className="px-2 py-2 flex items-center gap-2 border-b border-line">
-                      <input
-                        value={statusSearch}
-                        onChange={(e) => setStatusSearch(e.target.value)}
-                        onKeyDown={(e) => e.stopPropagation()}
-                        placeholder="Search status…"
-                        className="flex-1 rounded-md border border-line px-2 py-1.5 text-sm"
-                      />
-                      <Button
-                        variant="blackCta"
-                        size="sm"
-                        onClick={(e) => {
-                          e.preventDefault()
-                          setStatusMenuOpen(false)
-                        }}
-                      >
-                        Done
-                      </Button>
-                    </div>
-                    <button
-                      type="button"
-                      className="w-full px-2 py-1.5 text-sm flex items-center gap-2 hover:bg-surface-hover"
-                      onClick={(e) => {
-                        e.preventDefault()
-                        setStatusKeysFilter([])
-                      }}
-                    >
-                      <span className="h-4 w-4 flex items-center justify-center rounded-[3px] border border-line-strong bg-surface">
-                        <Check className={`h-3 w-3 ${statusKeysFilter.length === 0 ? 'text-fg' : 'text-fg-subtle'}`} strokeWidth={2.5} />
-                      </span>
-                      All statuses
-                    </button>
-                    {filteredStatusOptions.map((r) => {
-                      const checked = statusKeysFilter.includes(r.key)
-                      return (
-                        <button
-                          key={r.key}
-                          type="button"
-                          className="w-full px-2 py-1.5 text-sm flex items-center gap-2 hover:bg-surface-hover"
-                          onClick={(e) => {
-                            e.preventDefault()
-                            setStatusKeysFilter(toggleId(statusKeysFilter as unknown as string[], r.key) as ReactionKey[])
-                          }}
-                        >
-                          <span className="h-4 w-4 flex items-center justify-center rounded-[3px] border border-line-strong bg-surface">
-                            <Check className={`h-3 w-3 ${checked ? 'text-fg' : 'text-fg-subtle'}`} strokeWidth={2.5} />
-                          </span>
-                          <span className="truncate">{r.label}</span>
-                        </button>
-                      )
-                    })}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
+        {sortOrder === 'latestFirst' ? Composer : null}
 
-              <div className="flex flex-col gap-1">
-                <label className="text-small text-fg-muted">Commentor</label>
-                <DropdownMenu open={commentorMenuOpen} onOpenChange={setCommentorMenuOpen}>
-                  <DropdownMenuTrigger asChild>
-                    <button
-                      type="button"
-                      className="flex h-8 w-full items-center justify-between gap-2 rounded-control border border-line bg-surface px-2 text-small text-fg"
-                    >
-                      <span className="truncate">{selectedCommentorLabel}</span>
-                      <ChevronDown className="h-4 w-4 text-fg-muted shrink-0" />
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent className="w-[280px] max-w-[calc(100vw-2rem)] p-0">
-                    <div className="px-2 py-2 flex items-center gap-2 border-b border-line">
-                      <input
-                        value={commentorSearch}
-                        onChange={(e) => setCommentorSearch(e.target.value)}
-                        onKeyDown={(e) => e.stopPropagation()}
-                        placeholder="Search people…"
-                        className="flex-1 rounded-md border border-line px-2 py-1.5 text-sm"
-                      />
-                      <Button
-                        variant="blackCta"
-                        size="sm"
-                        onClick={(e) => {
-                          e.preventDefault()
-                          setCommentorMenuOpen(false)
-                        }}
-                      >
-                        Done
-                      </Button>
-                    </div>
-                    <button
-                      type="button"
-                      className="w-full px-2 py-1.5 text-sm flex items-center gap-2 hover:bg-surface-hover"
-                      onClick={(e) => {
-                        e.preventDefault()
-                        setCommentorEmailsFilter([])
-                      }}
-                    >
-                      <span className="h-4 w-4 flex items-center justify-center rounded-[3px] border border-line-strong bg-surface">
-                        <Check className={`h-3 w-3 ${commentorEmailsFilter.length === 0 ? 'text-fg' : 'text-fg-subtle'}`} strokeWidth={2.5} />
-                      </span>
-                      All
-                    </button>
-                    {filteredCommentors.map((email) => {
-                      const checked = commentorEmailsFilter.includes(email)
-                      return (
-                        <button
-                          key={email}
-                          type="button"
-                          className="w-full px-2 py-1.5 text-sm flex items-center gap-2 hover:bg-surface-hover"
-                          onClick={(e) => {
-                            e.preventDefault()
-                            setCommentorEmailsFilter(toggleId(commentorEmailsFilter, email))
-                          }}
-                        >
-                          <span className="h-4 w-4 flex items-center justify-center rounded-[3px] border border-line-strong bg-surface">
-                            <Check className={`h-3 w-3 ${checked ? 'text-fg' : 'text-fg-subtle'}`} strokeWidth={2.5} />
-                          </span>
-                          <span className="truncate">{email}</span>
-                        </button>
-                      )
-                    })}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div className="flex flex-col gap-1">
-                  <label className="text-small text-fg-muted">From</label>
-                  <DateTimePicker
-                    value={fromDate}
-                    onChange={(iso) => {
-                      setFromDate(iso)
-                      if (toDate && iso && new Date(iso) > new Date(toDate)) setToDate(iso)
-                    }}
-                    placeholder="From date"
-                    defaultTime="00:00"
-                    allowFutureDateTimes={false}
-                  />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-small text-fg-muted">To</label>
-                  <DateTimePicker
-                    value={toDate}
-                    onChange={(iso) => {
-                      if (fromDate && iso && new Date(iso) < new Date(fromDate)) return
-                      setToDate(iso)
-                    }}
-                    placeholder="To date"
-                    defaultTime="23:59"
-                    allowFutureDateTimes={false}
-                  />
-                </div>
-              </div>
-
-              {myMentionedMessageIds.size > 0 && (
-                <div className="flex flex-col gap-1">
-                  <label className="text-small text-fg-muted">Mentions</label>
-                  <button
-                    type="button"
-                    onClick={() => setMentionsFilterActive((v) => !v)}
+        <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
+          <div ref={topSentinelRef} />
+          {loading ? (
+            <div className="flex items-center justify-center gap-2 py-8 text-small text-fg-muted">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Loading comments…
+            </div>
+          ) : visibleMessages.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-2 py-10 text-small text-fg-muted">
+              <MessagesSquare className="h-6 w-6 text-fg-subtle" />
+              {messages.length === 0 ? 'No comments yet. Start the conversation below.' : 'No comments match these filters.'}
+            </div>
+          ) : (
+            <div className="flex flex-col">
+              {visibleMessages.map((msg) => {
+                const isMine = msg.authorUserId === user?.id
+                const isLastMsg = messages[messages.length - 1]?.id === msg.id
+                const hasMention = messagesWithAnyMention.has(msg.id)
+                const mentionedMe = myMentionedMessageIds.has(msg.id)
+                // Delete only if: my message, last in the thread, no active reminders/mentions.
+                const canDelete = isMine && isLastMsg && !hasMention
+                const isConfirmingDelete = deleteConfirmId === msg.id
+                const name = authorName(msg)
+                const reacted = REACTIONS.filter((r) => (msg.reactions?.[r.key]?.count ?? 0) > 0)
+                return (
+                  <div
+                    key={msg.id}
+                    id={`comment-${msg.id}`}
                     className={cn(
-                      'inline-flex h-7 items-center gap-1.5 rounded-control border px-2 text-small transition-colors',
-                      mentionsFilterActive
-                        ? 'border-action/40 bg-action/10 text-action'
-                        : 'border-line bg-surface text-fg-muted hover:bg-surface-hover'
+                      'group relative flex gap-2.5 rounded-control px-2 py-2.5 transition-colors hover:bg-surface-hover',
+                      focusedCommentId === msg.id && 'bg-surface-selected',
+                      mentionedMe && 'shadow-[inset_2px_0_0_hsl(var(--ui-action))]',
                     )}
                   >
-                    <UserCheck className="h-3.5 w-3.5" />
-                    Mentions me
-                    {mentionsFilterActive && <X className="h-3 w-3 ml-0.5" />}
-                  </button>
-                </div>
-              )}
-
-              <div className="flex gap-2 items-center">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-9 rounded-control"
-                  onClick={clearFilters}
-                  aria-label="Clear filters"
-                >
-                  Clear
-                </Button>
-              </div>
-            </div>
-              ) : (
-                <div className="flex flex-wrap items-end gap-3">
-              <div className="flex flex-col gap-1">
-                <label className="text-small text-fg-muted">Status</label>
-                <DropdownMenu open={statusMenuOpen} onOpenChange={setStatusMenuOpen}>
-                  <DropdownMenuTrigger asChild>
-                    <button
-                      type="button"
-                      className="flex h-8 items-center justify-between gap-2 rounded-control border border-line bg-surface px-2 text-small text-fg min-w-[170px]"
-                    >
-                      <span className="truncate">{selectedStatusLabel}</span>
-                      <ChevronDown className="h-4 w-4 text-fg-muted shrink-0" />
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent className="w-[280px] max-w-[calc(100vw-2rem)] p-0">
-                    <div className="px-2 py-2 flex items-center gap-2 border-b border-line">
-                      <input
-                        value={statusSearch}
-                        onChange={(e) => setStatusSearch(e.target.value)}
-                        onKeyDown={(e) => e.stopPropagation()}
-                        placeholder="Search status…"
-                        className="flex-1 rounded-md border border-line px-2 py-1.5 text-sm"
-                      />
-                      <Button
-                        variant="blackCta"
-                        size="sm"
-                        onClick={(e) => {
-                          e.preventDefault()
-                          setStatusMenuOpen(false)
-                        }}
-                      >
-                        Done
-                      </Button>
-                    </div>
-                    <button
-                      type="button"
-                      className="w-full px-2 py-1.5 text-sm flex items-center gap-2 hover:bg-surface-hover"
-                      onClick={(e) => {
-                        e.preventDefault()
-                        setStatusKeysFilter([])
-                      }}
-                    >
-                      <span className="h-4 w-4 flex items-center justify-center rounded-[3px] border border-line-strong bg-surface">
-                        <Check className={`h-3 w-3 ${statusKeysFilter.length === 0 ? 'text-fg' : 'text-fg-subtle'}`} strokeWidth={2.5} />
-                      </span>
-                      All statuses
-                    </button>
-                    {filteredStatusOptions.map((r) => {
-                      const checked = statusKeysFilter.includes(r.key)
-                      return (
-                        <button
-                          key={r.key}
-                          type="button"
-                          className="w-full px-2 py-1.5 text-sm flex items-center gap-2 hover:bg-surface-hover"
-                          onClick={(e) => {
-                            e.preventDefault()
-                            setStatusKeysFilter(toggleId(statusKeysFilter as unknown as string[], r.key) as ReactionKey[])
-                          }}
-                        >
-                          <span className="h-4 w-4 flex items-center justify-center rounded-[3px] border border-line-strong bg-surface">
-                            <Check className={`h-3 w-3 ${checked ? 'text-fg' : 'text-fg-subtle'}`} strokeWidth={2.5} />
-                          </span>
-                          <span className="truncate">{r.label}</span>
-                        </button>
-                      )
-                    })}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-              <div className="flex flex-col gap-1">
-                <label className="text-small text-fg-muted">Commentor</label>
-                <DropdownMenu open={commentorMenuOpen} onOpenChange={setCommentorMenuOpen}>
-                  <DropdownMenuTrigger asChild>
-                    <button
-                      type="button"
-                      className="flex h-8 items-center justify-between gap-2 rounded-control border border-line bg-surface px-2 text-small text-fg min-w-[220px]"
-                    >
-                      <span className="truncate">{selectedCommentorLabel}</span>
-                      <ChevronDown className="h-4 w-4 text-fg-muted shrink-0" />
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent className="w-[280px] max-w-[calc(100vw-2rem)] p-0">
-                    <div className="px-2 py-2 flex items-center gap-2 border-b border-line">
-                      <input
-                        value={commentorSearch}
-                        onChange={(e) => setCommentorSearch(e.target.value)}
-                        onKeyDown={(e) => e.stopPropagation()}
-                        placeholder="Search people…"
-                        className="flex-1 rounded-md border border-line px-2 py-1.5 text-sm"
-                      />
-                      <Button
-                        variant="blackCta"
-                        size="sm"
-                        onClick={(e) => {
-                          e.preventDefault()
-                          setCommentorMenuOpen(false)
-                        }}
-                      >
-                        Done
-                      </Button>
-                    </div>
-                    <button
-                      type="button"
-                      className="w-full px-2 py-1.5 text-sm flex items-center gap-2 hover:bg-surface-hover"
-                      onClick={(e) => {
-                        e.preventDefault()
-                        setCommentorEmailsFilter([])
-                      }}
-                    >
-                      <span className="h-4 w-4 flex items-center justify-center rounded-[3px] border border-line-strong bg-surface">
-                        <Check className={`h-3 w-3 ${commentorEmailsFilter.length === 0 ? 'text-fg' : 'text-fg-subtle'}`} strokeWidth={2.5} />
-                      </span>
-                      All
-                    </button>
-                    {filteredCommentors.map((email) => {
-                      const checked = commentorEmailsFilter.includes(email)
-                      return (
-                        <button
-                          key={email}
-                          type="button"
-                          className="w-full px-2 py-1.5 text-sm flex items-center gap-2 hover:bg-surface-hover"
-                          onClick={(e) => {
-                            e.preventDefault()
-                            setCommentorEmailsFilter(toggleId(commentorEmailsFilter, email))
-                          }}
-                        >
-                          <span className="h-4 w-4 flex items-center justify-center rounded-[3px] border border-line-strong bg-surface">
-                            <Check className={`h-3 w-3 ${checked ? 'text-fg' : 'text-fg-subtle'}`} strokeWidth={2.5} />
-                          </span>
-                          <span className="truncate">{email}</span>
-                        </button>
-                      )
-                    })}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-              <div className="flex flex-col gap-1">
-                <label className="text-small text-fg-muted">From</label>
-                <DateTimePicker
-                  value={fromDate}
-                  onChange={(iso) => {
-                    setFromDate(iso)
-                    if (toDate && iso && new Date(iso) > new Date(toDate)) setToDate(iso)
-                  }}
-                  placeholder="From date"
-                  defaultTime="00:00"
-                  allowFutureDateTimes={false}
-                  className="min-w-[140px]"
-                />
-              </div>
-              <div className="flex flex-col gap-1">
-                <label className="text-small text-fg-muted">To</label>
-                <DateTimePicker
-                  value={toDate}
-                  onChange={(iso) => {
-                    if (fromDate && iso && new Date(iso) < new Date(fromDate)) return
-                    setToDate(iso)
-                  }}
-                  placeholder="To date"
-                  defaultTime="23:59"
-                  allowFutureDateTimes={false}
-                  className="min-w-[140px]"
-                />
-              </div>
-              {myMentionedMessageIds.size > 0 && (
-                <div className="flex flex-col gap-1">
-                  <label className="text-small text-fg-muted">Mentions</label>
-                  <button
-                    type="button"
-                    onClick={() => setMentionsFilterActive((v) => !v)}
-                    className={cn(
-                      'inline-flex h-7 items-center gap-1.5 rounded-control border px-2 text-small transition-colors',
-                      mentionsFilterActive
-                        ? 'border-action/40 bg-action/10 text-action'
-                        : 'border-line bg-surface text-fg-muted hover:bg-surface-hover'
-                    )}
-                  >
-                    <UserCheck className="h-3.5 w-3.5" />
-                    Mentions me
-                    {mentionsFilterActive && <X className="h-3 w-3 ml-0.5" />}
-                  </button>
-                </div>
-              )}
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-9 rounded-control"
-                onClick={clearFilters}
-                aria-label="Clear filters"
-              >
-                Clear
-              </Button>
-            </div>
-              )}
-            </div>
-          ) : null}
-        </div>
-      </div>
-
-      {/* View controls (collapsible, Filters-style) */}
-      <div className="border-b border-line">
-        <button
-          type="button"
-          className="flex h-9 w-full items-center justify-between gap-2 rounded-control px-1 hover:bg-surface-hover"
-          onClick={() => setViewControlsOpen((v) => !v)}
-        >
-          <span className="inline-flex items-center gap-2 text-small font-medium text-fg-muted">
-            <Eye className="h-3.5 w-3.5 text-fg-subtle" />
-            View
-          </span>
-          <ChevronDown className={`h-3.5 w-3.5 text-fg-subtle transition-transform ${viewControlsOpen ? 'rotate-180' : ''}`} />
-        </button>
-
-        {viewControlsOpen ? (
-          <div className="px-1 pb-3">
-            {!isExpanded ? (
-              <div className="grid grid-cols-1 gap-3">
-                <div className="flex flex-col gap-1">
-                  <label className="text-small text-fg-muted">Order</label>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <button
-                        type="button"
-                        className="flex h-8 w-full items-center justify-between gap-2 rounded-control border border-line bg-surface px-2 text-small text-fg"
-                        aria-label="Change comment sort order"
-                      >
-                        <span className="truncate">{sortOrder === 'latestLast' ? 'Oldest first' : 'Newest first'}</span>
-                        <ChevronDown className="h-4 w-4 text-fg-muted shrink-0" />
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent className="w-[220px] p-1">
-                      <button
-                        type="button"
-                        className={`w-full px-2 py-1.5 text-xs flex items-center justify-between gap-2 rounded-md hover:bg-surface-hover ${sortOrder === 'latestLast' ? 'bg-surface-subtle' : ''}`}
-                        onClick={(e) => {
-                          e.preventDefault()
-                          setSortOrder('latestLast')
-                        }}
-                      >
-                        <span>Oldest first</span>
-                        {sortOrder === 'latestLast' ? <Check className="h-4 w-4 text-fg-muted" /> : null}
-                      </button>
-                      <button
-                        type="button"
-                        className={`w-full px-2 py-1.5 text-xs flex items-center justify-between gap-2 rounded-md hover:bg-surface-hover ${sortOrder === 'latestFirst' ? 'bg-surface-subtle' : ''}`}
-                        onClick={(e) => {
-                          e.preventDefault()
-                          setSortOrder('latestFirst')
-                        }}
-                      >
-                        <span>Newest first</span>
-                        {sortOrder === 'latestFirst' ? <Check className="h-4 w-4 text-fg-muted" /> : null}
-                      </button>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-
-                <div className="flex gap-2 items-center">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-9 rounded-control"
-                    onClick={() => setHideOlderMessages((v) => !v)}
-                    aria-label={hideOlderMessages ? 'Show all messages' : 'Hide older messages'}
-                  >
-                    {hideOlderMessages ? 'Show all messages' : 'Hide older messages'}
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <div className="flex flex-wrap items-end gap-3">
-                <div className="flex flex-col gap-1">
-                  <label className="text-small text-fg-muted">Order</label>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <button
-                        type="button"
-                        className="flex h-8 items-center justify-between gap-2 rounded-control border border-line bg-surface px-2 text-small text-fg min-w-[170px]"
-                        aria-label="Change comment sort order"
-                      >
-                        <span className="truncate">{sortOrder === 'latestLast' ? 'Oldest first' : 'Newest first'}</span>
-                        <ChevronDown className="h-4 w-4 text-fg-muted shrink-0" />
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent className="w-[220px] p-1">
-                      <button
-                        type="button"
-                        className={`w-full px-2 py-1.5 text-xs flex items-center justify-between gap-2 rounded-md hover:bg-surface-hover ${sortOrder === 'latestLast' ? 'bg-surface-subtle' : ''}`}
-                        onClick={(e) => {
-                          e.preventDefault()
-                          setSortOrder('latestLast')
-                        }}
-                      >
-                        <span>Oldest first</span>
-                        {sortOrder === 'latestLast' ? <Check className="h-4 w-4 text-fg-muted" /> : null}
-                      </button>
-                      <button
-                        type="button"
-                        className={`w-full px-2 py-1.5 text-xs flex items-center justify-between gap-2 rounded-md hover:bg-surface-hover ${sortOrder === 'latestFirst' ? 'bg-surface-subtle' : ''}`}
-                        onClick={(e) => {
-                          e.preventDefault()
-                          setSortOrder('latestFirst')
-                        }}
-                      >
-                        <span>Newest first</span>
-                        {sortOrder === 'latestFirst' ? <Check className="h-4 w-4 text-fg-muted" /> : null}
-                      </button>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-
-                <div className="flex gap-2 items-center">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-9 rounded-control"
-                    onClick={() => setHideOlderMessages((v) => !v)}
-                    aria-label={hideOlderMessages ? 'Show all messages' : 'Hide older messages'}
-                  >
-                    {hideOlderMessages ? 'Show all messages' : 'Hide older messages'}
-                  </Button>
-                </div>
-              </div>
-            )}
-          </div>
-        ) : null}
-      </div>
-
-      {sortOrder === 'latestFirst' ? (
-        <div className="mt-4 shrink-0">
-          {Composer}
-        </div>
-      ) : null}
-
-      <div ref={scrollRef} className="mb-4 mt-3 min-h-0 flex-1 overflow-y-auto">
-        <div ref={topSentinelRef} />
-        {loading ? (
-          <div className="flex items-center justify-center gap-2 py-8 text-small text-fg-muted">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Loading comments…
-          </div>
-        ) : visibleMessages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-2 py-10 text-small text-fg-muted">
-            <MessagesSquare className="h-6 w-6 text-fg-subtle" />
-            No comments match the current filters.
-          </div>
-        ) : (
-          <div className="border-t border-line">
-            {visibleMessages.map((msg) => {
-              const isLatest = latestCommentId === msg.id
-              const isMine = msg.authorUserId === user?.id
-              const isLastMsg = messages[messages.length - 1]?.id === msg.id
-              const hasMention = messagesWithAnyMention.has(msg.id)
-              const mentionedMe = myMentionedMessageIds.has(msg.id)
-              // Trash visible only if: my message, last in thread, no active reminders/mentions
-              const canDelete = isMine && isLastMsg && !hasMention
-              const isConfirmingDelete = deleteConfirmId === msg.id
-              return (
-                <div
-                  key={msg.id}
-                  id={`comment-${msg.id}`}
-                  className={cn(
-                    'group border-b border-line px-2 py-3 text-ui transition-colors hover:bg-surface-hover',
-                    focusedCommentId === msg.id && 'bg-surface-selected',
-                    mentionedMe && 'border-l-2 border-l-action'
-                  )}
-                >
-                  <div className="flex items-start justify-between gap-3">
+                    <div className="pt-0.5"><PersonAvatar person={{ name, avatarUrl: authorAvatar(msg) }} size={24} /></div>
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-small font-medium text-fg">{msg.authorEmail ?? 'Unknown'}</span>
-                        <RelativeDateTime
-                          date={msg.createdAt}
-                          textClassName="text-small text-fg-subtle"
-                          iconClassName="text-fg-subtle hover:text-fg-muted"
-                          tooltipSide="top"
-                        />
-                        {isLatest ? (
-                          <span className="ml-1 rounded-control bg-surface-muted px-1.5 py-0.5 text-caption leading-none text-fg-muted">
-                            Latest
-                          </span>
-                        ) : null}
+                      <div className="flex items-baseline gap-2 pr-24">
+                        <Hint label={msg.authorEmail ?? name}>
+                          <span className="truncate text-small font-medium text-fg">{name}</span>
+                        </Hint>
+                        <Hint label={formatDateTimeWithTZ(msg.createdAt)}>
+                          <span className="shrink-0 cursor-default text-caption text-fg-subtle">{formatRelativeTime(msg.createdAt)}</span>
+                        </Hint>
+                        {/* The reminder is state, not an action: it stays visible. */}
+                        {reminderDates.has(msg.id) && (() => {
+                          const due = reminderDates.get(msg.id)!
+                          const when = `${new Date(due) > new Date() ? 'Reminder' : 'Reminded'} ${shortDateTime(due)}`
+                          // Only the comment's author changes its reminder; others see when it is.
+                          return isMine ? (
+                            <Hint label={`${when} — click to change`}>
+                              <button type="button" aria-label="Edit reminder" onClick={(e) => openReminderEdit(msg, e.currentTarget)} className="inline-flex h-5 w-5 shrink-0 items-center justify-center self-center rounded-[4px] text-tag-orange-fg hover:bg-tag-orange-bg">
+                                <BellRing className="h-3 w-3" />
+                              </button>
+                            </Hint>
+                          ) : (
+                            <Hint label={when}>
+                              <span aria-label={when} className="inline-flex h-5 w-5 shrink-0 items-center justify-center self-center text-tag-orange-fg">
+                                <BellRing className="h-3 w-3" />
+                              </span>
+                            </Hint>
+                          )
+                        })()}
                       </div>
-
-                      <p className="text-fg whitespace-pre-wrap break-words leading-[1.6] max-w-[700px] mb-3">
+                      <p className="mt-0.5 max-w-[700px] whitespace-pre-wrap break-words text-ui leading-[1.6] text-fg">
                         {renderContentWithMentions(msg.content)}
                       </p>
-                    </div>
-
-                    <span className="h-7 w-7" aria-hidden="true" />
-                  </div>
-
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="relative flex-1 min-w-0">
-                      <div className="flex items-center gap-1 flex-wrap pr-6">
-                        {/* Reaction picker trigger (left-aligned) */}
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <button
-                              type="button"
-                              className="shrink-0 h-7 w-7 rounded-control text-fg-subtle hover:text-fg hover:bg-surface-hover transition-colors inline-flex items-center justify-center"
-                              aria-label="Add reaction"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <Smile className="h-4 w-4 text-yellow-600" />
-                            </button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent className="w-[186px] p-2">
-                            <div className="grid grid-cols-3 gap-1">
-                              {REACTIONS.map((r) => {
-                                const users = msg.reactions?.[r.key]?.users ?? []
-                                const reactedByMe = Boolean(myEmail && users.includes(myEmail))
-                                return (
-                                  <Tooltip key={`picker-${r.key}`}>
-                                    <TooltipTrigger asChild>
-                                      <button
-                                        type="button"
-                                        className={cn(
-                                          'h-10 w-10 rounded-control inline-flex items-center justify-center transition-colors text-fg-muted',
-                                          'hover:bg-surface-hover',
-                                          reactedByMe && 'bg-action/10 text-action ring-1 ring-inset ring-action/30'
-                                        )}
-                                        onClick={(e) => {
-                                          e.preventDefault()
-                                          e.stopPropagation()
-                                          void toggleReaction(msg.id, r.key, reactedByMe ? 'remove' : 'add')
-                                        }}
-                                      >
-                                        <span className="text-lg leading-none">{r.emoji}</span>
-                                      </button>
-                                    </TooltipTrigger>
-                                    <TooltipContent side="top" className={LIGHT_TOOLTIP_CLASS}>
-                                      {r.label}
-                                    </TooltipContent>
-                                  </Tooltip>
-                                )
-                              })}
-                            </div>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-
-                        {/* Reaction chips (wrap; only show reactions with >= 1 user; no count, hover = email list) */}
-                        {REACTIONS.filter((r) => (msg.reactions?.[r.key]?.count ?? 0) > 0).map((r) => {
-                          const users = msg.reactions?.[r.key]?.users ?? []
-                          const reactedByMe = Boolean(myEmail && users.includes(myEmail))
-                          return (
-                            <Tooltip key={r.key}>
-                              <TooltipTrigger asChild>
-                                <button
-                                  type="button"
-                                  className="shrink-0 h-7 px-2 rounded-full inline-flex items-center justify-center text-sm leading-none transition-colors hover:bg-surface-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-action/30 focus-visible:ring-offset-1"
-                                  onClick={(e) => {
-                                    e.preventDefault()
-                                    e.stopPropagation()
-                                    void toggleReaction(msg.id, r.key, reactedByMe ? 'remove' : 'add')
-                                  }}
-                                >
-                                  <span className="leading-none">{r.emoji}</span>
-                                </button>
-                              </TooltipTrigger>
-                              <TooltipContent side="top" className="z-[9999] max-w-[240px] p-2 text-caption bg-surface text-fg-muted border border-line shadow-popover">
-                                <div className="font-medium text-fg mb-1">{r.label}</div>
-                                <ul className="space-y-0.5 max-h-[140px] overflow-y-auto">
-                                  {users.map((email) => (
-                                    <li key={email} className="truncate">
-                                      {email}
-                                    </li>
-                                  ))}
-                                </ul>
-                              </TooltipContent>
-                            </Tooltip>
-                          )
-                        })}
-                      </div>
-
-                      {/* No fade mask needed for wrapped layout */}
-                    </div>
-
-                    <div className="flex items-center gap-1">
-                      {messagesWithReminders.has(msg.id) && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <button
-                              type="button"
-                              className="relative shrink-0 h-7 w-7 rounded-md hover:bg-orange-50 transition-colors inline-flex items-center justify-center"
-                              style={{ color: '#C4572B' }}
-                              aria-label="Edit reminder"
-                              onClick={(e) => {
-                                const btn = e.currentTarget as HTMLElement
-                                const names: string[] = []
-                                let rem = msg.content
-                                while (rem.startsWith('@')) {
-                                  const m = rem.match(/^(@[A-Za-z][^\s]*(?:\s+[A-Z][^\s]*)?)(\s+|$)/)
-                                  if (!m) break
-                                  names.push(m[1])
-                                  rem = rem.slice(m[0].length)
-                                }
-                                fetch(`/api/projects/${engagementId}/documents/${documentId}/doc-comments/reminders?messageId=${encodeURIComponent(msg.id)}`)
-                                  .then((r) => r.ok ? r.json() : null)
-                                  .then((data) => {
-                                    const firstReminder = (data?.reminders ?? [])[0]
-                                    setReminderEditPicker({ messageId: msg.id, anchorEl: btn, existingDate: firstReminder?.dateValue ?? '', mentionedNames: names })
-                                  })
-                                  .catch(() => setReminderEditPicker({ messageId: msg.id, anchorEl: btn, existingDate: '', mentionedNames: names }))
-                              }}
-                            >
-                              <CalendarClock className="h-4 w-4" />
-                              <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full border border-white" style={{ backgroundColor: '#C4572B' }} />
-                            </button>
-                          </TooltipTrigger>
-                          <TooltipContent side="top" className={LIGHT_TOOLTIP_CLASS}>
-                            Edit reminder
-                          </TooltipContent>
-                        </Tooltip>
-                      )}
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <button
-                            type="button"
-                            className="shrink-0 h-7 w-7 rounded-control text-fg-subtle hover:text-fg hover:bg-surface-hover transition-colors inline-flex items-center justify-center"
-                            aria-label="Copy link to comment"
-                            onClick={() => {
-                              const base = typeof window !== 'undefined' ? window.location.href.replace(/#.*$/, '') : ''
-                              const url = base ? `${base}#doc-comment:${documentId}:${msg.id}` : ''
-                              if (url) void navigator.clipboard.writeText(url)
-                            }}
-                          >
-                            <Link2 className="h-4 w-4" />
-                          </button>
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className={LIGHT_TOOLTIP_CLASS}>
-                          Copy link
-                        </TooltipContent>
-                      </Tooltip>
-
-                      {canDelete && !isConfirmingDelete && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <button
-                              type="button"
-                              className="shrink-0 h-7 w-7 rounded-md text-fg-subtle hover:text-rose-600 hover:bg-rose-50 transition-colors inline-flex items-center justify-center opacity-0 group-hover:opacity-100"
-                              aria-label="Delete comment"
-                              onClick={() => setDeleteConfirmId(msg.id)}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          </TooltipTrigger>
-                          <TooltipContent side="top" className={LIGHT_TOOLTIP_CLASS}>
-                            Delete comment
-                          </TooltipContent>
-                        </Tooltip>
-                      )}
-                      {isConfirmingDelete && (
-                        <div className="inline-flex items-center gap-1.5 text-xs text-rose-600 bg-rose-50 border border-rose-200 rounded-md px-2 py-1">
-                          <span>Delete?</span>
-                          <button
-                            type="button"
-                            className="font-semibold hover:underline"
-                            disabled={deleting}
-                            onClick={() => void handleDeleteComment(msg.id)}
-                          >
-                            {deleting ? 'Deleting…' : 'Yes'}
-                          </button>
-                          <span className="text-rose-300">·</span>
-                          <button
-                            type="button"
-                            className="hover:underline"
-                            onClick={() => setDeleteConfirmId(null)}
-                          >
-                            No
-                          </button>
+                      {reacted.length > 0 && (
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                          {reacted.map((r) => {
+                            const users = msg.reactions?.[r.key]?.users ?? []
+                            const reactedByMe = Boolean(myEmail && users.includes(myEmail))
+                            return (
+                              <Tooltip key={r.key}>
+                                <TooltipTrigger asChild>
+                                  <button
+                                    type="button"
+                                    onClick={() => void toggleReaction(msg.id, r.key, reactedByMe ? 'remove' : 'add')}
+                                    className={cn('inline-flex h-6 items-center gap-1 rounded-full border px-2 text-caption tabular-nums transition-colors', reactedByMe ? 'border-action/30 bg-action/10 text-action' : 'border-line bg-surface text-fg-muted hover:bg-surface-hover')}
+                                  >
+                                    <span className="leading-none">{r.emoji}</span>{users.length}
+                                  </button>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="z-[9999] max-w-[240px] border border-line bg-surface p-2 text-caption text-fg-muted shadow-popover">
+                                  <div className="mb-1 font-medium text-fg">{r.label}</div>
+                                  <ul className="max-h-[140px] space-y-0.5 overflow-y-auto">
+                                    {users.map((email) => <li key={email} className="truncate">{formatDisplayName(memberByEmail.get(email.toLowerCase())?.name ?? '', email)}</li>)}
+                                  </ul>
+                                </TooltipContent>
+                              </Tooltip>
+                            )
+                          })}
                         </div>
                       )}
                     </div>
+
+                    {/* Actions on hover (or keyboard focus), top-right. */}
+                    <div className={cn(
+                      'absolute right-1.5 top-1.5 flex items-center gap-0.5 rounded-control border border-line bg-surface p-0.5 shadow-sm transition-opacity',
+                      isConfirmingDelete ? 'opacity-100' : 'opacity-0 focus-within:opacity-100 group-hover:opacity-100',
+                    )}>
+                      {isConfirmingDelete ? (
+                        <span className="inline-flex items-center gap-1.5 px-1.5 text-caption text-danger">
+                          Delete?
+                          <button type="button" className="font-semibold hover:underline" disabled={deleting} onClick={() => void handleDeleteComment(msg.id)}>
+                            {deleting ? 'Deleting…' : 'Yes'}
+                          </button>
+                          <span className="text-fg-subtle">·</span>
+                          <button type="button" className="hover:underline" onClick={() => setDeleteConfirmId(null)}>No</button>
+                        </span>
+                      ) : (
+                        <>
+                          <DropdownMenu>
+                            <Hint label="React">
+                              <DropdownMenuTrigger asChild>
+                                <button type="button" aria-label="Add reaction" className="flex h-6 w-6 items-center justify-center rounded-[4px] text-fg-subtle hover:bg-surface-hover hover:text-fg-muted">
+                                  <Smile className="h-3.5 w-3.5" />
+                                </button>
+                              </DropdownMenuTrigger>
+                            </Hint>
+                            <DropdownMenuContent align="end" className="w-[156px] p-1.5">
+                              <div className="grid grid-cols-3 gap-1">
+                                {REACTIONS.map((r) => {
+                                  const reactedByMe = Boolean(myEmail && (msg.reactions?.[r.key]?.users ?? []).includes(myEmail))
+                                  return (
+                                    <Hint key={r.key} label={r.label}>
+                                      <button
+                                        type="button"
+                                        onClick={() => void toggleReaction(msg.id, r.key, reactedByMe ? 'remove' : 'add')}
+                                        className={cn('flex h-9 w-9 items-center justify-center rounded-control text-lg leading-none hover:bg-surface-hover', reactedByMe && 'bg-action/10 ring-1 ring-inset ring-action/30')}
+                                      >
+                                        {r.emoji}
+                                      </button>
+                                    </Hint>
+                                  )
+                                })}
+                              </div>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                          {isMine && hasMention && !reminderDates.has(msg.id) && (
+                            <Hint label="Remind the people mentioned">
+                              <button type="button" aria-label="Set reminder" onClick={(e) => openReminderEdit(msg, e.currentTarget)} className="flex h-6 w-6 items-center justify-center rounded-[4px] text-fg-subtle hover:bg-surface-hover hover:text-fg-muted">
+                                <BellRing className="h-3.5 w-3.5" />
+                              </button>
+                            </Hint>
+                          )}
+                          <Hint label="Copy link">
+                            <button
+                              type="button"
+                              aria-label="Copy link to comment"
+                              onClick={() => {
+                                const base = typeof window !== 'undefined' ? window.location.href.replace(/#.*$/, '') : ''
+                                if (base) void navigator.clipboard.writeText(`${base}#doc-comment:${documentId}:${msg.id}`)
+                              }}
+                              className="flex h-6 w-6 items-center justify-center rounded-[4px] text-fg-subtle hover:bg-surface-hover hover:text-fg-muted"
+                            >
+                              <Link2 className="h-3.5 w-3.5" />
+                            </button>
+                          </Hint>
+                          {canDelete && (
+                            <Hint label="Delete">
+                              <button type="button" aria-label="Delete comment" onClick={() => setDeleteConfirmId(msg.id)} className="flex h-6 w-6 items-center justify-center rounded-[4px] text-fg-subtle hover:bg-tag-red-bg hover:text-danger">
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </Hint>
+                          )}
+                        </>
+                      )}
+                    </div>
                   </div>
-                </div>
-              )
-            })}
-          </div>
-        )}
-        <div ref={bottomSentinelRef} />
-      </div>
-
-      {sortOrder === 'latestLast' ? Composer : null}
-
-      <SetupReminderModal
-        open={reminderModal !== null}
-        onClose={() => {
-          setReminderModal(null)
-          setExistingReminders(new Map())
-        }}
-        entityName={documentName}
-        entityMimeType={documentMimeType}
-        contentPreview={reminderModal?.content}
-        currentUser={user ? { userId: user.id, name: user.user_metadata?.full_name ?? user.user_metadata?.name ?? null, email: user.email ?? null, avatarUrl: user.user_metadata?.avatar_url ?? null, role: firmMembers.find((m) => m.userId === user.id)?.role ?? null } : undefined}
-        members={firmMembers.filter((m) => m.userId !== user?.id)}
-        existingReminders={existingReminders}
-        multiSelect={true}
-        hint="A reminder with a link to this comment will appear in the assignee's reminders on the selected date."
-        onSubmit={handleReminderSubmit}
-      />
-
-    </TooltipProvider>
-
-    {/* Reminder-edit picker — portalled to body, identical layout to mention picker */}
-    {reminderEditPicker && typeof document !== 'undefined' && createPortal(
-      <div
-        ref={reminderEditPickerRef}
-        className="fixed bg-surface border border-line rounded-card shadow-popover flex flex-col overflow-hidden"
-        style={{
-          zIndex: 999999,
-          width: 320,
-          ...(() => {
-            const rect = reminderEditPicker.anchorEl.getBoundingClientRect()
-            return rect.top > window.innerHeight / 2
-              ? { bottom: window.innerHeight - rect.top + 8, right: window.innerWidth - rect.right }
-              : { top: rect.bottom + 8, right: window.innerWidth - rect.right }
-          })()
-        }}
-      >
-        {/* Header — matches mention picker exactly */}
-        <div className="flex items-center gap-2 border-b border-line px-3 py-2">
-          <AtSign className="h-3.5 w-3.5 text-action shrink-0" />
-          <span className="text-xs font-semibold text-fg">Edit reminder</span>
+                )
+              })}
+            </div>
+          )}
+          <div ref={bottomSentinelRef} />
         </div>
-        {/* Disabled search box */}
-        <div className="px-3 pt-2.5 pb-2">
-          <input
-            disabled
-            placeholder="Search members…"
-            className="w-full text-small rounded-control border border-line bg-surface-muted px-2.5 py-1.5 outline-none opacity-50 cursor-not-allowed"
-          />
-        </div>
-        {/* Member list — checked, non-interactive */}
-        <div className="overflow-y-auto border-t border-line" style={{ maxHeight: 180 }}>
-          {reminderEditPicker.mentionedNames.map((name, ni) => {
-            const initials = name.replace('@', '').split(/\s+/).map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()
-            return (
-              <div key={ni} className="flex items-center gap-2.5 px-3 py-2.5 bg-action/5 select-none">
-                <span className="h-4 w-4 rounded border border-action bg-action flex items-center justify-center shrink-0">
-                  <Check className="h-3 w-3 text-white" strokeWidth={2.5} />
-                </span>
-                <div className="h-7 w-7 rounded-full overflow-hidden shrink-0 flex items-center justify-center text-caption font-bold border border-action/30">
-                  <div className="h-full w-full flex items-center justify-center bg-action/10 text-action">{initials}</div>
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="text-xs font-semibold truncate text-action">{name.replace('@', '')}</div>
-                  <div className="text-caption text-fg-subtle">Mentioned</div>
-                </div>
-                <span className="shrink-0 text-caption text-fg-subtle">Locked</span>
-              </div>
-            )
-          })}
-        </div>
-        {/* Reminder footer — identical to mention picker footer */}
-        <div className="px-3 pt-2.5 pb-3 border-t border-line bg-surface-subtle flex flex-col gap-2">
-          <div className="flex items-center gap-1.5">
-            <CalendarClock className="h-3.5 w-3.5 text-action shrink-0" />
-            <span className="text-small font-medium text-fg-muted">
-              Remind on <span className="font-normal normal-case tracking-normal">(optional)</span>
-            </span>
-          </div>
-          <DateTimePicker
-            value={reminderEditPicker.existingDate}
-            onChange={(val) => setReminderEditPicker((prev) => prev ? { ...prev, existingDate: val } : prev)}
-            placeholder="No date — notify now"
-            defaultTime="09:00"
-            allowFutureDateTimes={true}
-          />
-          <div className="flex justify-end pt-0.5">
-            <button type="button"
-              onClick={() => {
-                const dateVal = reminderEditPicker.existingDate || null
-                fetch(`/api/projects/${engagementId}/documents/${documentId}/doc-comments`, {
-                  method: 'PATCH',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ messageId: reminderEditPicker.messageId, dateValue: dateVal }),
-                }).catch(() => {})
-                setReminderEditPicker(null)
-              }}
-              className="h-7 rounded-control bg-action px-3 text-small font-medium text-action-fg transition-colors hover:bg-action-hover">
-              Done
+
+        {sortOrder === 'latestLast' ? Composer : null}
+
+        <SetupReminderModal
+          open={reminderModal !== null}
+          onClose={() => {
+            setReminderModal(null)
+            setExistingReminders(new Map())
+          }}
+          entityName={documentName}
+          entityMimeType={documentMimeType}
+          contentPreview={reminderModal?.content}
+          currentUser={user ? { userId: user.id, name: user.user_metadata?.full_name ?? user.user_metadata?.name ?? null, email: user.email ?? null, avatarUrl: user.user_metadata?.avatar_url ?? null, role: firmMembers.find((m) => m.userId === user.id)?.role ?? null } : undefined}
+          members={firmMembers.filter((m) => m.userId !== user?.id)}
+          existingReminders={existingReminders}
+          multiSelect={true}
+          hint="A reminder with a link to this comment will appear in the assignee's reminders on the selected date."
+          onSubmit={handleReminderSubmit}
+        />
+      </TooltipProvider>
+
+      {/* Changing a posted comment's reminder date, from its bell. */}
+      {reminderEditPicker && typeof document !== 'undefined' && createPortal(
+        <div
+          ref={reminderEditPickerRef}
+          className="fixed flex flex-col overflow-hidden rounded-card border border-line bg-surface shadow-popover"
+          style={{
+            zIndex: 999999,
+            width: 280,
+            ...(() => {
+              const rect = reminderEditPicker.anchorEl.getBoundingClientRect()
+              // Centered under the button, but never past either edge of the window: the hover
+              // bell sits at the pane's right edge.
+              const left = Math.min(Math.max(8, rect.left + rect.width / 2 - 140), window.innerWidth - 280 - 8)
+              return rect.top > window.innerHeight / 2
+                ? { bottom: window.innerHeight - rect.top + 8, left }
+                : { top: rect.bottom + 8, left }
+            })(),
+          }}
+        >
+          <div className="flex items-center gap-2 border-b border-line px-3 py-2">
+            <BellRing className="h-3.5 w-3.5 text-tag-orange-fg" />
+            <span className="flex-1 text-small font-medium text-fg">Reminder</span>
+            <button type="button" aria-label="Close" onClick={() => setReminderEditPicker(null)} className="rounded-[4px] p-0.5 text-fg-subtle hover:bg-surface-hover hover:text-fg-muted">
+              <X className="h-3.5 w-3.5" />
             </button>
           </div>
-        </div>
-      </div>,
-      document.body
-    )}
+          <div className="flex flex-col gap-2 px-3 py-2.5">
+            {reminderEditPicker.mentionedNames.length > 0 && (
+              <p className="text-caption text-fg-muted">For {reminderEditPicker.mentionedNames.map((n) => n.replace(/^@/, '')).join(', ')}</p>
+            )}
+            <DateTimePicker
+              value={reminderEditPicker.existingDate}
+              onChange={(val) => setReminderEditPicker((prev) => (prev ? { ...prev, existingDate: val } : prev))}
+              placeholder="Pick a date and time"
+              defaultTime="09:00"
+              allowPastDateTimes={false}
+            />
+            {reminderEditPicker.error && <p className="text-caption text-danger">{reminderEditPicker.error}</p>}
+            <div className="flex items-center justify-end gap-1.5">
+              {reminderEditPicker.savedDate && (
+                <button
+                  type="button"
+                  disabled={reminderEditPicker.saving}
+                  onClick={() => void saveReminderDate(null)}
+                  className="mr-auto inline-flex h-7 items-center rounded-control px-2 text-small text-fg-muted hover:bg-surface-hover hover:text-fg disabled:opacity-40"
+                >
+                  Remove reminder
+                </button>
+              )}
+              <button
+                type="button"
+                disabled={reminderEditPicker.saving || !reminderEditPicker.existingDate || reminderEditPicker.existingDate === reminderEditPicker.savedDate}
+                onClick={() => void saveReminderDate(reminderEditPicker.existingDate)}
+                className="inline-flex h-7 items-center gap-1 rounded-control bg-action px-2.5 text-small font-medium text-action-fg hover:bg-action-hover disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {reminderEditPicker.saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} Save
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   )
 }

@@ -98,6 +98,8 @@ export interface ConnectorFileMetadata {
   mimeType?: string
   /** Provider-specific: Google Drive shared drive id. Indicates SHARED location when non-null. */
   driveId?: string | null
+  /** In the provider's Bin. Google reports it; OneDrive returns no metadata for a deleted item. */
+  trashed?: boolean
 }
 
 /** Folder IDs for a project's engagement subfolders, provider-agnostic. */
@@ -128,6 +130,11 @@ export interface IConnectorPermissionAdapter {
   getEngagementFolderIds(connectionId: string, engagementSlug: string, opts: { projectName?: string; clientSlug?: string; clientName?: string; projectFolderId?: string }): Promise<EngagementFolderIds>
   /** Move a file to trash (soft delete). */
   trashFile(connectionId: string, fileId: string): Promise<void>
+  /**
+   * Take a file out of the trash (Undo on "Moved to Bin"). Optional: OneDrive leaves it out,
+   * because Graph's driveItem restore works only on OneDrive Personal.
+   */
+  restoreFile?(connectionId: string, fileId: string): Promise<void>
   /** List files in a folder. Returns array of file metadata objects. */
   listFiles(connectionId: string, folderId: string, pageSize?: number): Promise<Array<{ id: string; name: string; mimeType?: string }>>
   /** Get metadata for a single file/folder. Returns null if not found. */

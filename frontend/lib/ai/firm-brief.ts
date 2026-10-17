@@ -1,6 +1,7 @@
 import type { FirmInsightsResponse } from '@/app/api/firms/[firmId]/insights/route'
-import { completeText } from './client'
-import { meterAiCall } from './guarded-client'
+import { logger } from '@/lib/logger'
+import { AI_MODEL, completeText } from './client'
+import { getGuardedAnthropic, meterAiCall } from './guarded-client'
 import { assertWithinAiCreditCap } from './credit-cap'
 
 export interface FirmBrief {
@@ -145,6 +146,14 @@ export function buildSnapshot(data: FirmInsightsResponse): string {
     return lines.join('\n')
 }
 
+const BRIEF_MAX_TOKENS = 500
+const BRIEF_TEMPERATURE = 0.4
+
+/** What the model is asked: today's date and the firm's snapshot. */
+function briefRequest(data: FirmInsightsResponse): string {
+    return `Today is ${new Date().toISOString().slice(0, 10)}.\n\nFirm snapshot:\n${buildSnapshot(data)}`
+}
+
 /**
  * Generates a brief, refusing when the firm is over its AI credit allowance.
  *
@@ -164,9 +173,9 @@ export async function generateFirmBrief(
     }
     return completeText({
         system: SYSTEM,
-        userMessage: `Today is ${new Date().toISOString().slice(0, 10)}.\n\nFirm snapshot:\n${buildSnapshot(data)}`,
-        maxTokens: 500,
-        temperature: 0.4,
+        userMessage: briefRequest(data),
+        maxTokens: BRIEF_MAX_TOKENS,
+        temperature: BRIEF_TEMPERATURE,
         label: 'firm-brief',
         onUsage: meta?.firmId
             ? (u) => meterAiCall(
@@ -175,4 +184,62 @@ export async function generateFirmBrief(
             )
             : undefined,
     })
+}
+
+/**
+ * The same brief, streamed: `onDelta` gets each piece of text as the model writes it, so "Rewrite
+ * with Brio" can show the brief being written rather than a long wait. Returns the whole text, or
+ * null when the model returned nothing or `signal` stopped it.
+ *
+ * Gated by `getGuardedAnthropic` (throws `AiCreditLimitError` over the allowance). Metered only
+ * when the stream completes: a stopped rewrite is not a billable call, and is not saved either.
+ */
+export async function streamFirmBrief(
+    data: FirmInsightsResponse,
+    meta: { firmId: string; userId?: string },
+    onDelta: (text: string) => void,
+    signal?: AbortSignal,
+): Promise<string | null> {
+    const scope = { firmId: meta.firmId, userId: meta.userId ?? null, feature: 'brief' as const }
+    const client = await getGuardedAnthropic(scope)
+    if (!client) return null
+
+    const stream = await client.messages.create({
+        model: AI_MODEL,
+        max_tokens: BRIEF_MAX_TOKENS,
+        temperature: BRIEF_TEMPERATURE,
+        system: SYSTEM,
+        messages: [{ role: 'user', content: briefRequest(data) }],
+        stream: true,
+    }, { signal })
+
+    let full = ''
+    let inputTokens = 0
+    let outputTokens = 0
+    try {
+        // Streaming reports tokens across two events: input with message_start, output with
+        // message_delta at the end.
+        for await (const event of stream) {
+            if (event.type === 'message_start') inputTokens = event.message.usage?.input_tokens ?? 0
+            else if (event.type === 'message_delta') outputTokens = event.usage?.output_tokens ?? 0
+            else if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+                full += event.delta.text
+                onDelta(event.delta.text)
+            }
+        }
+    } catch (error) {
+        if (signal?.aborted) return null
+        throw error
+    }
+    if (signal?.aborted) return null
+
+    const content = full.trim()
+    if (!content) return null
+    try {
+        await meterAiCall(scope, { inputTokens, outputTokens })
+    } catch (error) {
+        // Metering is bookkeeping; losing a row must not cost the user their brief.
+        logger.error('AI usage metering failed (firm-brief stream):', error as Error)
+    }
+    return content
 }

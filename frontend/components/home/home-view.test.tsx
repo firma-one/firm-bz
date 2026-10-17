@@ -16,7 +16,7 @@ const work: MyWork = {
         { id: 'e2', name: 'Tax', href: '/b', firmId: 'f2', clientName: 'Globex', status: 'ACTIVE', dueDate: null, updatedAt: '2026-10-14T10:00:00Z', role: 'eng_member' },
     ],
     needsYou: [
-        { id: 'n1', kind: 'ai_summary', firmId: 'f2', title: 'AI summary ready for review', context: 'Globex · Tax', href: '/b/analytics', actionLabel: 'Review', at: null },
+        { id: 'n1', kind: 'deliverable_review', firmId: 'f2', title: 'Q3 Report', context: 'Globex · Tax', href: '/b/shares/board', actionLabel: 'Review', at: null },
     ],
     dueSoon: [],
 }

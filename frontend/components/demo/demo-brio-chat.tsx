@@ -158,7 +158,7 @@ export function DemoBrioChat({
                         onClick={() => setOpen(true)}
                         data-demo-tour="ask-brio"
                         style={{ transformOrigin: 'bottom right' }}
-                        className="fixed bottom-6 right-[84px] z-40 flex animate-in fade-in zoom-in-95 items-center gap-2 rounded-full border border-line bg-surface py-2 pl-3 pr-3.5 shadow-popover duration-200 transition-colors hover:border-line-strong hover:bg-surface-hover"
+                        className="fixed bottom-6 right-[84px] z-40 flex [[data-demo-pane=open]_&]:hidden animate-in fade-in zoom-in-95 items-center gap-2 rounded-full border border-line bg-surface py-2 pl-3 pr-3.5 shadow-popover duration-200 transition-colors hover:border-line-strong hover:bg-surface-hover"
                         aria-label="Open the engagement assistant"
                     >
                         <span className="text-sm font-medium text-fg">
@@ -172,7 +172,7 @@ export function DemoBrioChat({
             {open && (
                 <div
                     style={{ transformOrigin: 'bottom right' }}
-                    className="fixed bottom-6 right-[84px] z-40 flex h-[min(32rem,calc(100vh-6rem))] w-[23rem] max-w-[calc(100vw-7rem)] animate-in fade-in zoom-in-95 flex-col overflow-hidden rounded-card border border-line bg-surface shadow-dialog duration-200"
+                    className="fixed bottom-6 right-[84px] z-40 flex [[data-demo-pane=open]_&]:hidden h-[min(32rem,calc(100vh-6rem))] w-[23rem] max-w-[calc(100vw-7rem)] animate-in fade-in zoom-in-95 flex-col overflow-hidden rounded-card border border-line bg-surface shadow-dialog duration-200"
                 >
                     <div className="flex h-11 shrink-0 items-center gap-0.5 border-b border-line pl-3 pr-1.5">
                         <div className="flex min-w-0 flex-1 items-center gap-1.5">

@@ -91,5 +91,15 @@ describe('fingerprintInsights', () => {
                 (d.deliverables as Array<Record<string, unknown>>)[0].isOverdue = true
             })).toBe(fingerprintInsights(base()))
         })
+
+        it('the health score drops because a due date passed', () => {
+            // An overdue deliverable or a behind-pace penalty moves the score with no one acting.
+            // Hashing it marked a summary out of date the moment it was published.
+            expect(fpWith((d) => {
+                d.healthScore = { score: 75, level: 'warning', penalties: [] }
+            })).toBe(fpWith((d) => {
+                d.healthScore = { score: 90, level: 'good', penalties: [] }
+            }))
+        })
     })
 })

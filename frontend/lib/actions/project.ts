@@ -983,6 +983,23 @@ export async function approveEngagementAiSummary(projectId: string, editedConten
         )
     }
 
+    // Publishing vouches for the text as of now, so record the engagement's data as it is now,
+    // not as it was when Brio wrote the draft. With the draft's fingerprint, a draft written
+    // yesterday was "Out of date" the moment it was published. The review pane already warns
+    // when the draft is behind the data (insightsSummaryDraftStale), before anyone publishes.
+    let fingerprint = draft.fingerprint ?? null
+    try {
+        const { resolveProjectContext } = await import('@/lib/resolve-project-context')
+        const ctx = await resolveProjectContext(projectId)
+        if (ctx) {
+            const { computeEngagementInsights } = await import('@/lib/insights/engagement-insights')
+            const { fingerprintInsights } = await import('@/lib/ai/engagement-summary')
+            fingerprint = fingerprintInsights(await computeEngagementInsights(projectId, ctx.firmId, false))
+        }
+    } catch (e) {
+        logger.warn('Could not fingerprint the engagement at publish; keeping the draft\'s', e as Error)
+    }
+
     const now = new Date().toISOString()
     await prisma.engagement.update({
         where: { id: projectId },
@@ -993,9 +1010,9 @@ export async function approveEngagementAiSummary(projectId: string, editedConten
                     text,
                     publishedAt: now,
                     publishedByUserId: user?.id ?? null,
-                    // Fingerprint of the data this described, so the UI can later tell the
-                    // engagement has moved on and flag the published text as out of date.
-                    fingerprint: draft.fingerprint ?? null,
+                    // Fingerprint of the data as it was when published, so the UI can later tell
+                    // the engagement has moved on and flag the published text as out of date.
+                    fingerprint,
                     source: 'ai',
                     // Retained as an audit record of what was reviewed and by whom.
                     draft: {
@@ -1029,7 +1046,9 @@ export async function dismissEngagementAiSummary(projectId: string) {
     const existingSettings = (project.settings as Record<string, unknown> | null) ?? {}
     const { readInsightsSummary } = await import('@/lib/ai/engagement-summary')
     const current = readInsightsSummary(existingSettings)
-    if (!current.draft) return
+    // Only a draft still waiting for review. After a publish, `draft` is kept as the audit record
+    // of what was approved; discarding must never rewrite that record as "dismissed".
+    if (!current.draft || current.draft.status !== 'pending_review') return
 
     await prisma.engagement.update({
         where: { id: projectId },

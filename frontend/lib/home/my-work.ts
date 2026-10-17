@@ -16,8 +16,9 @@ import type { HomeFirm } from '@/lib/home/home-firms'
  * Access rules — every query starts from the caller's own EngagementMember rows in those firms, the
  * same basis as getFirmHierarchy, so a firm admin sees only engagements they belong to (firm-wide
  * views stay on the admin Overview):
- *  - approvals (deliverables in review, intake, AI summary drafts) only on engagements the caller
- *    leads (eng_admin) — the only role that can act on them;
+ *  - approvals (deliverables in review, intake) only on engagements the caller leads (eng_admin) —
+ *    the only role that can act on them. AI summary drafts are not listed: a draft is written,
+ *    reviewed and published or discarded in one sitting, never left waiting;
  *  - due deliverables assigned to an external (EC/EV) member are shown only at stages their role
  *    may see (deliverable-stage-roles), so a hidden to-do never leaks its name;
  *  - reminders are the caller's own, filtered to those firms.
@@ -41,7 +42,7 @@ export type HomeEngagement = {
 
 export type NeedsYouItem = {
     id: string
-    kind: 'deliverable_review' | 'intake' | 'ai_summary' | 'reminder'
+    kind: 'deliverable_review' | 'intake' | 'reminder'
     /** The firm it belongs to, for the firm label and filter; null for a reminder without one. */
     firmId: string | null
     title: string
@@ -142,7 +143,7 @@ export async function getMyWork(params: {
         const dueCutoff = new Date(Date.now() + DUE_SOON_DAYS * 86_400_000)
         const today = startOfToday()
 
-        const [inReview, intake, aiDrafts, assigned] = await Promise.all([
+        const [inReview, intake, assigned] = await Promise.all([
             // Deliverables (explicitly shared folders — the shares API's definition) awaiting the lead's approval.
             leadIds.length
                 ? prisma.$queryRaw<{ id: string; engagementId: string; fileName: string; updatedAt: Date }[]>`
@@ -172,13 +173,6 @@ export async function getMyWork(params: {
                         AND ed."isFolder" = true
                       ORDER BY ed."createdAt" DESC
                       LIMIT ${LIST_LIMIT}`
-                : [],
-            // AI engagement summaries generated but not yet reviewed (lead approves before clients see them).
-            leadIds.length
-                ? prisma.engagement.findMany({
-                      where: { id: { in: leadIds }, settings: { path: ['insightsSummary', 'draft', 'status'], equals: 'pending_review' } },
-                      select: { id: true },
-                  })
                 : [],
             // Deliverables assigned to the caller that are due soon or overdue and not yet approved.
             prisma.$queryRaw<{ id: string; engagementId: string; fileName: string; dueDate: Date; status: string | null }[]>`
@@ -213,16 +207,6 @@ export async function getMyWork(params: {
                 href: sharesBoard(d.engagementId),
                 actionLabel: 'Approve upload',
                 at: d.createdAt.toISOString(),
-            })),
-            ...aiDrafts.map((e) => ({
-                id: `ai:${e.id}`,
-                kind: 'ai_summary' as const,
-                firmId: firmOf(e.id),
-                title: 'AI summary ready for review',
-                context: contextOf(e.id),
-                href: `${byId.get(e.id)!.href}/analytics`,
-                actionLabel: 'Review',
-                at: null,
             })),
         ]
 
