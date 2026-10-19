@@ -102,29 +102,29 @@ export const FAQ_DATA: FAQItem[] = [
   },
   {
     question: `What counts as an "active engagement"?`,
-    answer: "An active engagement is any engagement that is not deleted or closed. You can have unlimited closed or deleted engagements without counting toward your limit. Each subscription covers one firm; the cap applies to that firm's engagements.",
+    answer: "An active engagement is any engagement that is not deleted or closed. You can have unlimited closed or deleted engagements without counting toward your limit. The cap applies to each firm's engagements.",
     category: "Billing",
   },
   {
     question: "Can I add more engagements?",
-    answer: "Free includes 1 active engagement, Standard 10, Pro 25, Business 50, and Enterprise typically up to 100 (negotiated). Need more? Contact us for custom capacity.",
-    displayAnswer: "Free includes <strong>1</strong> active engagement, Standard <strong>10</strong>, Pro <strong>25</strong>, Business <strong>50</strong>, and Enterprise typically up to <strong>100</strong> (negotiated). Need more? Contact us for custom capacity.",
+    answer: "Yes. Higher plans include more active engagements, and closed or deleted engagements never count toward your limit. Need more than your plan allows? Contact us for custom capacity.",
+    displayAnswer: "Yes. Higher plans include <strong>more active engagements</strong>, and closed or deleted engagements <strong>never count</strong> toward your limit. Need more than your plan allows? Contact us for custom capacity.",
     category: "Billing",
   },
   {
     question: "What if I need more than one firm?",
-    answer: "Standard and Pro each cover 1 firm workspace. Business covers 3 firms. For additional firms beyond your plan's included count, add another subscription — or talk to us about Enterprise for custom multi-firm arrangements and consolidated billing.",
+    answer: "Each plan includes a set number of firm workspaces. For additional firms beyond your plan's included count, add another subscription — or talk to us about Enterprise for custom multi-firm arrangements and consolidated billing.",
     category: "Billing",
   },
   {
     question: "Are there per-user charges?",
-    answer: "No. All plans include unlimited members. Add as many team members, clients, and collaborators as you need without additional charges.",
-    displayAnswer: "<strong>No.</strong> All plans include <strong>unlimited members</strong>. Add as many team members, clients, and collaborators as you need without additional charges.",
+    answer: "No. Paid plans include unlimited members. Add as many team members, clients, and collaborators as you need without additional charges. The free plan includes 2 users.",
+    displayAnswer: "<strong>No.</strong> Paid plans include <strong>unlimited members</strong>. Add as many team members, clients, and collaborators as you need without additional charges. The free plan includes 2 users.",
     category: "Billing",
   },
   {
     question: "What happens if I exceed my engagement limit?",
-    answer: "Your plan includes a set number of active engagements per firm (Free 1, Standard 10, Pro 25, Business 50, Enterprise per contract). Close engagements you no longer need to free up slots, upgrade tiers, or contact us for higher capacity.",
+    answer: "Your plan includes a set number of active engagements per firm. Close engagements you no longer need to free up slots, upgrade tiers, or contact us for higher capacity.",
     category: "Billing",
   },
   {
@@ -135,8 +135,8 @@ export const FAQ_DATA: FAQItem[] = [
   },
   {
     question: "Is there a free plan?",
-    answer: `Yes. ${BRAND_NAME} includes a free plan with a Demo firm and 1 real firm — no credit card required. When you're ready to remove limits, upgrade to Standard. All checkout details are shown in Polar before you confirm.`,
-    displayAnswer: `Yes. ${brandNameInlineHtml()} includes a <strong>free plan</strong> with a Demo firm and 1 real firm — no credit card required. When you're ready to remove limits, <strong>upgrade to Standard and take off the training wheels</strong>. All checkout details are shown in [[POLAR_LINK]] before you confirm.`,
+    answer: `Yes. ${BRAND_NAME} includes a free plan for your first client, with a Demo firm to explore — no credit card required. When you're ready to remove limits, upgrade to Standard. All checkout details are shown in Polar before you confirm.`,
+    displayAnswer: `Yes. ${brandNameInlineHtml()} includes a <strong>free plan</strong> for your first client, with a Demo firm to explore — no credit card required. When you're ready to remove limits, <strong>upgrade to Standard and take off the training wheels</strong>. All checkout details are shown in [[POLAR_LINK]] before you confirm.`,
     category: "Billing",
   },
   {
@@ -147,7 +147,7 @@ export const FAQ_DATA: FAQItem[] = [
   },
   {
     question: "What's included in the free plan?",
-    answer: "The free plan includes a Demo firm (with sample data for exploration) and 1 real firm for production use — no credit card required. Limits apply: 1 active engagement, 1 client, and 10 documents. Paid plans remove those limits and unlock additional features such as templates, advanced review workflows, custom DNS, and SSO.",
+    answer: "The free plan includes 1 client, 2 users, and 25 AI credits a month, plus a Demo firm with sample data to explore — no credit card required. Paid plans raise those limits and add features such as audit history, templates, custom domains, and SSO, depending on the tier.",
     category: "Billing",
   },
   {

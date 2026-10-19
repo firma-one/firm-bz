@@ -142,7 +142,8 @@ export const PRICING_PLANS: PricingPlan[] = [
         duration: '/month',
         cta: 'Get Standard',
         ctaVariant: 'black',
-        href: '/contact',
+        // Sign-up carries the plan intent into Polar checkout; /pricing adds the billing interval.
+        href: '/signup?intent=standard&paid_plan=true',
         popular: true,
         theme: 'purple'
     },
