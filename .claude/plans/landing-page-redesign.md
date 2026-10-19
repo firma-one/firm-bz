@@ -592,6 +592,118 @@ needs the real page in a browser. Build with **Framer Motion** (already in `fron
 `useScroll` + `useTransform` for scroll-linked pieces. Each item must render in its final state under
 `prefers-reduced-motion` (`useReducedMotion`).
 
+**Card motion kit (revision 25, after Stripe's "Flexible solutions" bento).** Deepak found Firma's cards
+"very vanilla" next to stripe.com/in. Stripe's cards, measured on the live page:
+- Each card is a button that opens a detail dialog.
+- On hover:
+  - The title shifts about 5px up and left.
+  - The expand button shifts up and right and fills violet.
+  - A radial violet-to-pink gradient behind a 1px rim follows the cursor, with a 1s ease-out lag.
+  - All of it runs at 800 ms on `cubic-bezier(0.165, 0.84, 0.44, 1)`.
+- Each illustration plays a short story (about 2.3 s) the first time it scrolls into view, then rests.
+  Cards off-screen don't animate.
+- A few illustrations loop: every text line in the mock UI rolls like an odometer (1.4 s) to a new
+  scenario about every 7 s (Roastery in US$ and English, Cartsy in € and German, Showflix in ¥ and
+  Japanese).
+
+Firma's version, on the variant board:
+- **Hover, on every marketing card:**
+  - A 1.5px green rim (electric, aqua, bottle) and a faint green spotlight follow the cursor. Use CSS
+    custom properties `--gx`/`--gy`, registered with `@property` so they ease over 700 ms. The rim is a
+    masked radial gradient.
+  - The title nudges 3px up and left.
+  - The product scene lifts 6px.
+  - Links slide 4px right, and the shadow deepens.
+  - Timing matches Stripe's.
+- **The feature grid becomes a bento** (3 columns: 2+1, 1+1+1, then one full-width card). Every card has
+  a real product scene on a pastel panel, and the duotone icon now sits inline with the title. The
+  scenes play once on scroll-in:
+  - Comments and approvals: two comments arrive, Approve is pressed, the status rolls to Approved, and
+    the card crosses the Board from In Review to Approved.
+  - Client reminders: rows arrive, Send reminder rolls to "Reminder sent ✓", then a toast.
+  - Firm Overview: 15 due-date bars rise, staggered.
+  - Calendar and Inbox: chips pop onto the week and inbox rows slide in.
+- **Two cards loop quietly, like Stripe's:**
+  - The audit log takes a new row every 3.5 s, and the older rows push down.
+  - Doc Search's filter chips and results roll every 6.5 s through three real filter searches: contracts
+    for Horizon FinTech, decks in Q4 Brand Refresh, reports from the last 30 days. They use filters only;
+    Ask mode stays hidden.
+- **Audience cards:** the product peeks reveal row by row on scroll-in.
+- **Under reduced motion:** every scene renders its final state and nothing loops.
+- **Smoothness rules (revision 26).** Deepak found the first cut "sharp and jerky". Three things fix it:
+  - **Animate only `transform` and `opacity`, on GPU layers.** Hover is pure CSS (`:hover` and
+    transitions) with no state change or re-render. The glows are pre-rendered gradient blobs that
+    travel by `translate3d`, chasing the cursor over 1s with `cubic-bezier(0.16, 1, 0.3, 1)`; nothing
+    repaints a gradient per frame.
+  - **State changes roll or fade, never repaint.** The status chip and the Send button carry each
+    state's color inside the odometer stack. Presses are 500ms keyframes with an expanding ring, and
+    reveals are 900ms on the same curve.
+  - **Off-screen work stops.** The hero ribbon stops drawing while the hero is off-screen, and the
+    100ms refresh stops when no section that needs it is visible. In the build, use the same
+    `IntersectionObserver` gating, Framer Motion's `useInView`, and `will-change` only on moving layers.
+- **Build:**
+  - `useInView({ once: true, amount: 0.3 })` for the stories.
+  - One `pointermove` handler per card that writes `--gx`/`--gy`.
+  - The odometer is a fixed-height window over a stack of values, with the first value repeated at the
+    end so it can wrap without a visible jump.
+  - The scene data comes from the `/tour` demo firm.
+
+**Dates relative to today (revision 27).** Every date in the product scenes moves with the real date, so
+the page never looks stale:
+- **One offset for everything.** The /tour demo data was written as if today were Oct 18, 2026. Every date
+  keeps its distance from today, so "14 days left", the percentages used and "behind pace" stay true.
+- **Business days for the near future.** Upcoming due dates and follow-ups land on business days.
+- **Smart display:**
+  - Today, Tomorrow or Yesterday.
+  - A weekday ("Thu") inside the current week.
+  - Otherwise a short date ("Oct 9"). The year appears only for dates more than six months away in
+    another year.
+  - Tables keep full dates, and prose reads naturally ("was due Monday", "due tomorrow").
+- **The calendar card** shows the next five business days starting today, from Monday at the weekend.
+  Today gets a green highlight.
+- **Activity uses relative times:** the newest audit-log row reads "now", then "12m" and "40m". The
+  approval reads "Approved just now".
+- **Build:** one shared `relativeDate()` helper for every marketing scene, and the same shift for the
+  `/tour` seed (`prisma/seed.ts`), so the tour and the page always agree with each other and with today.
+
+**Meet Brio as a scroll story (revision 28).** The day is the section where Brio is told as a character,
+so it gets the same treatment as the bento, tied to the reader's scroll:
+- **The line follows the scroll.** Its tip tracks a fixed point on screen, written as one `scaleX`
+  (desktop) or `scaleY` (phone) per frame, so it never stutters and never moves on its own.
+- **Each moment wakes when the line reaches its dot.** The dot pops and the card rises. If a fast scroll
+  passes several dots at once, their moments start 600 ms apart. Each one plays a short story, then rests:
+  - **8:30 brief:** the brief types itself in, word by word.
+  - **10:15 Ask Brio:** the question appears, Brio thinks for a beat, then the answer streams in.
+  - **2:00 client update:** the draft's checklist ticks section by section, then *Review and publish*
+    is pressed.
+  - **4:30 tidy the files:** the messy filename is struck through, the new name slides in, then
+    *Approve* is pressed.
+  - The "You ·" footer under each card fades in last, because the person makes every call.
+- **NOW and NEXT.** During the workday (8:30 AM to 6:30 PM local), a pulsing NOW chip marks the latest
+  moment that has already happened. Outside those hours, a NEXT chip marks the morning brief.
+- **Build:** `useScroll` on the timeline with `useTransform` for the scale, and `useMotionValueEvent` to
+  fire each moment once. Reduced motion shows the finished day with the line full.
+
+**Phone variant (revision 29).** The phone board now matches the desktop variant. It sits left of the
+desktop variant on the canvas as *Phone — variant: silk ribbon hero*:
+- **Hero:** the silk ribbon runs behind the product cards. A white wash keeps the headline and copy clean,
+  and the ribbon fades out just above the trust strip. Phones get about two-thirds of the threads, and the
+  ribbon stops drawing while it's off-screen.
+- **Surfaces:** every light section is flat white. The feature bento is the one flat gray band, with the
+  same slanted edges as the dark bands.
+- **Meet Brio:** the vertical timeline from revision 15 becomes the scroll story above. Its line draws
+  downward.
+- **Feature bento:** the phone gains the six scenes, stacked and re-laid for a 350 px card. The scenes
+  keep the desktop stories and loops. Two changes fit the narrow card: *Approved just now* replaces
+  *Request changes* in place, and the inbox shows two rows.
+- **Touch states:**
+  - Pressing a card sinks it to 98.5% and lights its green rim under the finger.
+  - Buttons press in to 96.5%.
+  - Starting a scroll cancels the press (`pointercancel`).
+  - Hover styles sit inside `@media (hover: hover)`, so nothing stays stuck in a hover state after a tap.
+  - The build uses `whileTap`, plus a `pointerdown` handler that places the glow.
+- **Type:** the landing scale's phone end: headline 48, section titles 38, final CTA 42.
+
 **Hover (150–200 ms, ease-out)**
 | Element | Effect |
 |---|---|
@@ -609,7 +721,7 @@ needs the real page in a browser. Build with **Framer Motion** (already in `fron
 | Hero mesh | A WebGL gradient (a `minigl` port, as Stripe does) with this CSS as the fallback; a slight parallax (the band moves at 0.85× scroll). |
 | Hero composite | Rises 24 px into place; the health ring counts 0 → 71; the Ask Brio answer writes in word by word; the Board card moves *In review → Approved*. |
 | Meet Brio | The large lockup fades up and its sparkle twinkles once on entry. |
-| A day with Brio | The timeline line **draws left to right, tied to scroll progress** (`useScroll` on the row, `scaleX` 0 → 1). Each dot lights as the line reaches it, and its card rises in turn (8:30 → 10:15 → 2:00 → 4:30). |
+| A day with Brio | The timeline line **draws left to right, tied to scroll progress** (`useScroll` on the row, `scaleX` 0 → 1; downward with `scaleY` on phones). Each dot lights as the line reaches it, and its card rises and plays its story (8:30 → 10:15 → 2:00 → 4:30; revision 28). |
 | 01 Connect | The three folder checkboxes tick in sequence; the "Map to engagement" button pulses once. |
 | 02 Plan | The QPL-11 card slides from In Review into Approved, and the column counts update. |
 | 03 Share | Riley's comment appears, then the item flips from "Awaiting your approval" to "Approved". |
