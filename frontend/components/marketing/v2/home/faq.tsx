@@ -59,7 +59,7 @@ const QUESTIONS: { q: ReactNode; a: ReactNode }[] = [
 
 export function FaqSection() {
   return (
-    <Band surface="white" aria-labelledby="mk-faq-teaser-title" className="pb-[88px] pt-20 md:pb-[clamp(104px,9.72vw,140px)] md:pt-[clamp(96px,8.9vw,128px)]">
+    <Band surface="white" id="faq" aria-labelledby="mk-faq-teaser-title" className="pb-[88px] pt-20 md:pb-[clamp(104px,9.72vw,140px)] md:pt-[clamp(96px,8.9vw,128px)]">
       <div className="mk-rail leading-[normal]">
         <h2 id="mk-faq-teaser-title" className="mk-section text-[var(--mk-bottle)]">
           Questions firms ask first

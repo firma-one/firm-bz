@@ -1,0 +1,202 @@
+/*
+ * The home page's floating section indicator (section-indicator.tsx): a frosted pill at the bottom
+ * center naming the section on screen, and the list of sections it opens. White glass so it reads
+ * the same over the white, gray and dark bands. Under the header (z 50) and the cookie banner.
+ */
+
+.mk-secnav {
+  position: fixed;
+  left: 50%;
+  bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  z-index: 40;
+  opacity: 0;
+  transform: translate3d(-50%, 16px, 0);
+  pointer-events: none;
+  transition: opacity 300ms var(--mk-ease), transform 400ms var(--mk-ease);
+}
+.mk-secnav.is-shown {
+  opacity: 1;
+  transform: translate3d(-50%, 0, 0);
+  pointer-events: auto;
+}
+
+.mk-secnav-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 12px 0 10px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.86);
+  -webkit-backdrop-filter: saturate(1.5) blur(14px);
+  backdrop-filter: saturate(1.5) blur(14px);
+  box-shadow: 0 0 0 1px rgba(5, 39, 28, 0.08), 0 14px 32px -16px rgba(3, 40, 27, 0.45);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--mk-muted);
+  cursor: pointer;
+  transition: box-shadow 200ms ease, color 200ms ease;
+}
+.mk-secnav-pill:hover,
+.mk-secnav.is-open .mk-secnav-pill {
+  color: var(--mk-ink);
+  box-shadow: 0 0 0 1px rgba(5, 39, 28, 0.12), 0 16px 36px -14px rgba(3, 40, 27, 0.5);
+}
+.mk .mk-secnav-pill:focus-visible {
+  border-radius: 999px;
+}
+
+.mk-secnav-ring {
+  flex: none;
+  transform: rotate(-90deg);
+}
+.mk-secnav-ring-track {
+  fill: none;
+  stroke: rgba(5, 39, 28, 0.1);
+  stroke-width: 2;
+}
+.mk-secnav-ring-fill {
+  fill: none;
+  stroke: var(--mk-bottle);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.mk-secnav-num {
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #8fa39b;
+}
+
+/* The name's box animates its width; the name inside rolls in from the side you scrolled toward. */
+.mk-secnav-label-box {
+  position: relative;
+  display: inline-flex;
+  height: 18px;
+  overflow: hidden;
+  transition: width 320ms var(--mk-ease);
+}
+.mk-secnav-label {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  animation: mkSecIn 360ms var(--mk-ease) both;
+}
+.mk-secnav-label[data-dir='up'] {
+  --mk-sec-from: -100%;
+}
+@keyframes mkSecIn {
+  from {
+    opacity: 0;
+    transform: translate3d(0, var(--mk-sec-from, 100%), 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.mk-secnav-chevron {
+  flex: none;
+  opacity: 0.7;
+  transition: transform 250ms var(--mk-ease);
+}
+.mk-secnav.is-open .mk-secnav-chevron {
+  transform: rotate(180deg);
+}
+
+/* The list of sections, opening upward from the pill. */
+.mk-secnav-menu {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  width: max-content;
+  min-width: 240px;
+  max-width: calc(100vw - 32px);
+  padding: 6px;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 0 0 1px rgba(5, 39, 28, 0.07), 0 30px 60px -24px rgba(3, 40, 27, 0.4);
+  opacity: 0;
+  visibility: hidden;
+  transform: translate3d(-50%, 6px, 0) scale(0.98);
+  transform-origin: 50% 100%;
+  transition: opacity 180ms ease, transform 220ms var(--mk-ease), visibility 0s linear 220ms;
+}
+.mk-secnav.is-open .mk-secnav-menu {
+  opacity: 1;
+  visibility: visible;
+  transform: translate3d(-50%, 0, 0);
+  transition: opacity 180ms ease, transform 220ms var(--mk-ease);
+}
+.mk-secnav-menu ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.mk-secnav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 38px;
+  padding: 0 12px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--mk-muted);
+  transition: background-color 150ms ease, color 150ms ease;
+}
+.mk-secnav-item:hover {
+  background: var(--mk-gray);
+  color: var(--mk-ink);
+}
+.mk-secnav-item[aria-current='location'] {
+  background: var(--mk-gray);
+  color: var(--mk-ink);
+  font-weight: 600;
+}
+/* Back to top: a row like the others, without a number, and a hairline under it. */
+.mk-secnav-top {
+  position: relative;
+  width: 100%;
+  margin-bottom: 8px;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+.mk-secnav-top::after {
+  content: '';
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: -4px;
+  height: 1px;
+  background: rgba(5, 39, 28, 0.08);
+}
+.mk-secnav-item-num {
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  font-weight: 600;
+  color: #8fa39b;
+}
+.mk-secnav-item[aria-current='location'] .mk-secnav-item-num {
+  color: var(--mk-bottle-dark);
+}
+
+@media (max-width: 767px) {
+  .mk-secnav {
+    bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  }
+  .mk-secnav-item {
+    min-height: 44px;
+  }
+}

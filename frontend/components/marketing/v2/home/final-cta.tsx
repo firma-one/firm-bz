@@ -8,7 +8,7 @@ import './final-cta.css';
 
 export function FinalCtaSection() {
   return (
-    <Band surface="dark" slant="top" aria-labelledby="mk-final-cta-title" className="mk-final-cta">
+    <Band surface="dark" slant="top" id="get-started" aria-labelledby="mk-final-cta-title" className="mk-final-cta">
       <div className="mk-rail">
         {/* Centered by its wrapper: `.mk-cta` resets its own margin and loads after Tailwind. */}
         <div className="mx-auto max-w-[860px]">

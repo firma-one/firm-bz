@@ -35,7 +35,7 @@ function Checklist({ items }: { items: ReactNode[] }) {
 
 export function PricingTeaserSection() {
   return (
-    <Band surface="gray" aria-labelledby="mk-pricing-teaser-title" className="mk-pricing-teaser py-[52px] md:py-[clamp(88px,8.33vw,120px)]">
+    <Band surface="gray" id="pricing" aria-labelledby="mk-pricing-teaser-title" className="mk-pricing-teaser py-[52px] md:py-[clamp(88px,8.33vw,120px)]">
       <div className="mk-rail leading-[normal]">
         <Eyebrow>PRICING</Eyebrow>
         <div className="mt-4 md:mt-5">

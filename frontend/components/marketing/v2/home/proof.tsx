@@ -12,7 +12,7 @@ import './proof.css';
 
 export function ProofSection() {
   return (
-    <Band surface="white" aria-labelledby="mk-proof-title" className="pb-20 pt-[72px] md:pb-[clamp(96px,8.9vw,128px)] md:pt-[clamp(88px,7.78vw,112px)]">
+    <Band surface="white" id="see-it" aria-labelledby="mk-proof-title" className="pb-20 pt-[72px] md:pb-[clamp(96px,8.9vw,128px)] md:pt-[clamp(88px,7.78vw,112px)]">
       <div className="mk-rail leading-[normal]">
         <h2 id="mk-proof-title" className="sr-only">
           See it for yourself
