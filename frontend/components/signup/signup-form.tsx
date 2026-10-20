@@ -31,6 +31,7 @@ import { sendEvent, ANALYTICS_EVENTS } from "@/lib/analytics"
 import { logger } from '@/lib/logger'
 import { persistCheckoutIntent } from '@/lib/marketing/checkout-intent'
 import { BRAND_NAME } from '@/config/brand'
+import { enabledOAuthProviders, signUpMethodsHint } from '@/lib/auth/oauth-providers'
 import {
     AuthAlert,
     AuthBack,
@@ -542,8 +543,8 @@ export function SignupForm({
         const errorAlert = error ? <AuthAlert>{error}</AuthAlert> : null
         const applicableProviders =
             step === 'auth-method'
-                ? getApplicableOAuthProviders(email).filter(
-                      p => p !== 'microsoft' || microsoftSignInEnabled
+                ? getApplicableOAuthProviders(email).filter(p =>
+                      enabledOAuthProviders(microsoftSignInEnabled).includes(p)
                   )
                 : []
         const hasOAuthOption = applicableProviders.length > 0
@@ -567,7 +568,7 @@ export function SignupForm({
                                     id="email"
                                     label="Work email"
                                     placeholder="you@example.com"
-                                    hint="We’ll email you a one-time code. No password needed."
+                                    hint={signUpMethodsHint(enabledOAuthProviders(microsoftSignInEnabled))}
                                     value={email}
                                     onValueChange={setEmail}
                                     disabled={emailVerifiedNewUser}
@@ -1101,8 +1102,8 @@ export function SignupForm({
 
             {/* Step 2: Auth Method Selection */}
             {step === 'auth-method' && (() => {
-                const applicableProviders = getApplicableOAuthProviders(email).filter(
-                    p => p !== 'microsoft' || microsoftSignInEnabled
+                const applicableProviders = getApplicableOAuthProviders(email).filter(p =>
+                    enabledOAuthProviders(microsoftSignInEnabled).includes(p)
                 )
                 const hasOAuthOption = applicableProviders.length > 0
                 return (

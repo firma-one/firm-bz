@@ -18,10 +18,13 @@ import {
   GoogleMark,
   MicrosoftMark,
 } from '@/components/marketing/v2/auth/auth-ui'
+import { enabledOAuthProviders, OAUTH_PROVIDER_LABEL, signInMethodsHint } from '@/lib/auth/oauth-providers'
 import { useSignInFlow } from './use-sign-in-flow'
 
 /** Turnstile on the white card: light theme, full card width (min 300 px per Cloudflare). */
 const TURNSTILE_OPTIONS = { theme: 'light', size: 'flexible' } as const
+
+const PROVIDER_MARK = { google: <GoogleMark />, microsoft: <MicrosoftMark /> }
 
 /**
  * Sign-in on the v2 marketing system (SignIn / SignInPhone boards): the card is the hero, with the
@@ -61,6 +64,8 @@ export function SigninView({ microsoftSignInEnabled = false }: { microsoftSignIn
   } = useSignInFlow()
 
   const canChooseMethod = !noAccountMessage && emailVerified
+  const providers = enabledOAuthProviders(microsoftSignInEnabled)
+  const providerLoading = { google: googleLoading, microsoft: microsoftLoading }
 
   return (
     <AuthShell
@@ -85,7 +90,7 @@ export function SigninView({ microsoftSignInEnabled = false }: { microsoftSignIn
               id="signin-email"
               label="Work email"
               placeholder="you@example.com"
-              hint="We’ll email you a one-time code. No password needed."
+              hint={signInMethodsHint(providers)}
               value={email}
               onValueChange={setEmail}
               onKeyDown={(e) => {
@@ -154,31 +159,22 @@ export function SigninView({ microsoftSignInEnabled = false }: { microsoftSignIn
                 )}
               </button>
 
-              <AuthDivider>Or sign in with</AuthDivider>
+              {providers.length > 0 && <AuthDivider>Or sign in with</AuthDivider>}
 
-              <button
-                type="button"
-                onClick={() => handleEmailSubmit('google')}
-                disabled={!emailVerified || loading || googleLoading}
-                aria-busy={googleLoading || undefined}
-                className="mk-auth-oauth"
-              >
-                {googleLoading ? <LoadingSpinner size="sm" /> : <GoogleMark />}
-                {googleLoading ? 'Signing in…' : 'Google'}
-              </button>
-
-              {microsoftSignInEnabled && (
+              {/* The same list the hint above is written from. */}
+              {providers.map((p) => (
                 <button
+                  key={p}
                   type="button"
-                  onClick={() => handleEmailSubmit('microsoft')}
-                  disabled={!emailVerified || loading || microsoftLoading}
-                  aria-busy={microsoftLoading || undefined}
+                  onClick={() => handleEmailSubmit(p)}
+                  disabled={!emailVerified || loading || providerLoading[p]}
+                  aria-busy={providerLoading[p] || undefined}
                   className="mk-auth-oauth"
                 >
-                  {microsoftLoading ? <LoadingSpinner size="sm" /> : <MicrosoftMark />}
-                  {microsoftLoading ? 'Signing in…' : 'Microsoft'}
+                  {providerLoading[p] ? <LoadingSpinner size="sm" /> : PROVIDER_MARK[p]}
+                  {providerLoading[p] ? 'Signing in…' : OAUTH_PROVIDER_LABEL[p]}
                 </button>
-              )}
+              ))}
             </div>
           ) : (
             // Before that: confirm the email (Turnstile, then the account check).
