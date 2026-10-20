@@ -485,6 +485,239 @@
   animation-delay: 0.3s;
 }
 
+/* ── Header navigation ────────────────────────────────────────────────────────────────────── */
+
+/* Anchored sections land below the fixed header, not under it. */
+.mk section[id] {
+  scroll-margin-top: 64px;
+}
+@media (min-width: 768px) {
+  .mk section[id] {
+    scroll-margin-top: 76px;
+  }
+}
+
+/* Each item fills the bar's height, so the pointer never crosses a gap on its way into a dropdown. */
+.mk-nav {
+  display: flex;
+  align-items: stretch;
+}
+.mk-nav-bar {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.mk-nav-bar > li {
+  display: flex;
+}
+.mk-nav-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 10px;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--mk-ink);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  transition: color 150ms ease;
+}
+.mk-nav-item:hover,
+.mk-nav-trigger[aria-expanded='true'] {
+  color: var(--mk-bottle-dark);
+}
+.mk-nav-chevron {
+  margin-top: 1px;
+  opacity: 0.7;
+  transition: transform 250ms var(--mk-ease);
+}
+.mk-nav-trigger[aria-expanded='true'] .mk-nav-chevron {
+  transform: rotate(180deg);
+}
+@media (min-width: 1280px) {
+  .mk-nav-bar {
+    gap: 10px;
+  }
+}
+
+/*
+ * The dropdown, in three layers, timed from Stripe's own menu. .mk-dd-panel sits still under the bar
+ * and only changes height between menus; .mk-dd-card wipes open downward (and back up to close); each
+ * .mk-dd-section slides through like a carousel: the incoming menu travels in from the side you moved
+ * toward, decelerating over half a second, while the outgoing one fades almost at once.
+ * Positioned against the fixed header, just under the items.
+ */
+.mk-dd {
+  --mk-dd-size: cubic-bezier(0.45, 0.05, 0.55, 0.95);
+  --mk-dd-slide: cubic-bezier(0.4, 0, 0.2, 1);
+  position: absolute;
+  top: 66px;
+  left: 0;
+  right: 0;
+  height: 0;
+  pointer-events: none;
+  visibility: hidden;
+  transition: visibility 0s linear 240ms;
+}
+.mk-dd.is-open {
+  visibility: visible;
+  transition: none;
+}
+.mk-dd-panel {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transition: height 300ms var(--mk-dd-size);
+}
+.mk-dd-card {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 0 0 1px rgba(5, 39, 28, 0.06), 0 50px 100px -20px rgba(3, 40, 27, 0.25),
+    0 30px 60px -30px rgba(0, 0, 0, 0.3);
+  /* Closed: the visible band is collapsed to the arrow's top edge. Open: it reaches past the shadow. */
+  clip-path: inset(-12px -80px calc(100% + 12px) -80px);
+  transition: clip-path 240ms var(--mk-dd-size);
+}
+.mk-dd.is-open .mk-dd-card {
+  clip-path: inset(-12px -80px -140px -80px);
+  pointer-events: auto;
+}
+.mk-dd-arrow {
+  position: absolute;
+  top: -6px;
+  left: 0;
+  z-index: 1;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px 0 0 0;
+  background: #ffffff;
+  box-shadow: -1px -1px 0 rgba(5, 39, 28, 0.06);
+  transition: transform 300ms var(--mk-dd-size);
+}
+.mk-dd-clip {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 14px;
+}
+.mk-dd-section {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: max-content;
+  padding: 12px;
+  opacity: 0;
+  visibility: hidden;
+  transform: translate3d(var(--mk-dd-shift), 0, 0);
+  transition: opacity 120ms var(--mk-dd-slide), transform 500ms var(--mk-dd-slide), visibility 0s linear 500ms;
+}
+.mk-dd-section.is-shown {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition: opacity 250ms var(--mk-dd-slide), transform 500ms var(--mk-dd-slide);
+}
+.mk-dd.is-instant .mk-dd-panel,
+.mk-dd.is-instant .mk-dd-arrow,
+.mk-dd.is-instant .mk-dd-section {
+  transition: none;
+}
+/* Every menu is two columns at the same width, so the panel only ever changes height. */
+.mk-dd-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 284px);
+  gap: 2px 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.mk-dd-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 12px;
+  border-radius: 12px;
+  transition: background-color 150ms ease;
+}
+.mk-dd-item:hover,
+.mk-dd-item:focus-visible {
+  background: var(--mk-gray);
+}
+.mk-nav-icon {
+  display: block;
+  flex: none;
+  overflow: visible;
+  transition: transform 300ms var(--mk-ease-hover);
+}
+.mk-dd-item:hover .mk-nav-icon,
+.mk-dd-item:focus-visible .mk-nav-icon {
+  transform: translate3d(0, -2px, 0) scale(1.06);
+}
+.mk-dd-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 1px;
+}
+.mk-dd-title {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--mk-ink);
+  transition: color 150ms ease;
+}
+.mk-dd-item:hover .mk-dd-title {
+  color: var(--mk-bottle-dark);
+}
+.mk-dd-desc {
+  font-size: 13.5px;
+  line-height: 1.4;
+  color: var(--mk-muted);
+}
+
+/* The phone menu: the same entries, grouped under each dropdown's name. */
+.mk-phone-group {
+  padding: 14px 0 10px;
+  border-bottom: 1px solid rgba(5, 39, 28, 0.08);
+}
+.mk-phone-group:last-of-type {
+  border-bottom: 0;
+}
+.mk-phone-group-title {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--mk-muted);
+}
+.mk-phone-group ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.mk-phone-item {
+  display: flex;
+  min-height: 52px;
+  align-items: center;
+  gap: 14px;
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--mk-ink);
+}
+.mk-phone-item:active .mk-nav-icon {
+  transform: scale(0.92);
+}
+
 /* ── Keyframes ────────────────────────────────────────────────────────────────────────────── */
 
 @keyframes mkMeshDrift {

@@ -35,7 +35,7 @@ function Connector({ label, note }: { label: string; note: string }) {
 
 export function BuiltOnDriveSection() {
   return (
-    <Band surface="white" aria-labelledby="mk-built-on-drive-title" className="py-20 md:py-[clamp(96px,8.9vw,128px)]">
+    <Band surface="white" id="drive" aria-labelledby="mk-built-on-drive-title" className="py-20 md:py-[clamp(96px,8.9vw,128px)]">
       <div className="mk-rail leading-[normal]">
         <Eyebrow>SECURITY</Eyebrow>
         {/* Spacing sits on wrappers: the type classes reset their own margins and load after Tailwind. */}

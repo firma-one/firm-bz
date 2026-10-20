@@ -160,7 +160,7 @@ const AUDIENCES = [
 
 export function WhoItsForSection() {
   return (
-    <Band surface="gray" aria-labelledby="mk-who-its-for-title" className="py-[72px] md:py-[clamp(88px,7.78vw,112px)]">
+    <Band surface="gray" id="who-its-for" aria-labelledby="mk-who-its-for-title" className="py-[72px] md:py-[clamp(88px,7.78vw,112px)]">
       <div className="mk-rail leading-[normal]">
         <h2 id="mk-who-its-for-title" className="mk-section max-w-[760px] text-[var(--mk-bottle)]">
           Built for people who deliver their value in documents.

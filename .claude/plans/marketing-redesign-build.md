@@ -140,3 +140,17 @@ but keep the email templates design minimal."
   (Deepak noticed the modal still had the Kinetic look): sentence-case pill buttons, Space Grotesk titles,
   mint icon circles, bottle-green switches, 18 px cards, green-tinted scrim. Consent logic unchanged;
   verified accept/customize/save in the browser.
+- 2026-10-20 (later): storage marks in the trust strip and the story's Drive chip are now single-color
+  outlines (`storage-icons.tsx`: Google Drive, OneDrive, SharePoint), as Deepak asked.
+- 2026-10-20 (later): header navigation restored to the old site's menus, as dropdowns timed from
+  Stripe's live menu (`site-nav.tsx`): Product ▾ (How it works, Features, Brio, Built on your Drive, Who
+  it's for, Take the tour), Brio, Pricing, Resources ▾ (FAQs, Blog, Changelog, Trust Center), Contact ▾
+  (Get in touch, Book a demo). Tour left the bar (it's in Product and the hero). The panel stays put
+  under the bar, wipes open downward, eases its height between menus (300 ms) and carousels the menus:
+  the new one slides 160 px in from the side you moved toward over 500 ms while the old one fades in
+  120 ms; the arrow slides to the item. Every menu is two columns at one width. Icons are duotone, in
+  the Features bento's language (`nav-icons.tsx`). Hover with a mouse, click or Enter/Space, ArrowDown or
+  Tab into the menu, Escape back to the item; menus not shown are inert. The phone sheet groups the same
+  entries under Product / Resources / Contact (Pricing joins Product). Home sections got `id="drive"`
+  and `id="who-its-for"`, and anchored sections clear the fixed header. Verified in the browser at
+  1440, 1024 and 390.

@@ -12,14 +12,57 @@ export const FILES_AGENT_PUBLIC = false;
 export const DEMO_BOOKING_URL = 'https://calendly.com/firmaone/firma-connect';
 export const CONTACT_EMAIL = 'info@firmaone.com';
 
-export type NavLink = { label: string; href: string; brio?: boolean };
+/** `icon` is for the phone menu, where a plain header link sits in a group beside dropdown entries. */
+export type NavLink = { label: string; href: string; brio?: boolean; icon?: NavMenuItem['icon'] };
 
-export const HEADER_LINKS: NavLink[] = [
-  { label: 'Product', href: '/#product' },
-  { label: 'Brio', href: '/#brio', brio: true },
-  { label: 'Tour', href: '/tour' },
-  { label: 'Pricing', href: '/pricing' },
-  { label: 'Resources', href: '/resources/blog' },
+/** An entry in a header dropdown: an icon (named, drawn by the nav), a title and one line of description. */
+export type NavMenuItem = {
+  label: string;
+  href: string;
+  description: string;
+  icon: 'flow' | 'features' | 'brio' | 'drive' | 'people' | 'tour' | 'pricing' | 'faq' | 'blog' | 'changelog' | 'trust' | 'mail' | 'calendar';
+  external?: boolean;
+};
+
+export type NavMenuId = 'product' | 'resources' | 'contact';
+
+export const NAV_MENUS: Record<NavMenuId, { label: string; items: NavMenuItem[] }> = {
+  product: {
+    label: 'Product',
+    items: [
+      { label: 'How it works', href: '/#product', icon: 'flow', description: 'From your folders to a Board your client can follow.' },
+      { label: 'Features', href: '/#features', icon: 'features', description: 'Approvals, reminders, the audit trail, Doc Search and more.' },
+      { label: 'Brio', href: '/#brio', icon: 'brio', description: 'The assistant for client delivery, built in.' },
+      { label: 'Built on your Drive', href: '/#drive', icon: 'drive', description: 'Your files never leave Google Drive or OneDrive.' },
+      { label: 'Who it’s for', href: '/#who-its-for', icon: 'people', description: 'Consultancies, agencies and fractional leaders.' },
+      { label: 'Take the tour', href: '/tour', icon: 'tour', description: 'A demo firm in the real product. No account needed.' },
+    ],
+  },
+  resources: {
+    label: 'Resources',
+    items: [
+      { label: 'FAQs', href: '/resources/faq', icon: 'faq', description: 'Common questions and answers about firmä.' },
+      { label: 'Blog', href: '/resources/blog', icon: 'blog', description: 'Insights, guides, and best practices for client portals.' },
+      { label: 'Changelog', href: '/resources/changelog', icon: 'changelog', description: 'New features, fixes, and improvements in every release.' },
+      { label: 'Trust Center', href: '/resources/trust-center', icon: 'trust', description: 'How firmä keeps your files and your clients’ data safe.' },
+    ],
+  },
+  contact: {
+    label: 'Contact',
+    items: [
+      { label: 'Get in touch', href: '/contact', icon: 'mail', description: 'Send a message to our team through the contact form.' },
+      { label: 'Book a demo', href: DEMO_BOOKING_URL, icon: 'calendar', description: 'Pick a time on Calendly for a live walkthrough.', external: true },
+    ],
+  },
+};
+
+/** The header, left to right: dropdown menus and plain links. The tour lives in Product, beside the hero's own Take the tour. */
+export const NAV_BAR: ({ kind: 'menu'; id: NavMenuId } | ({ kind: 'link' } & NavLink))[] = [
+  { kind: 'menu', id: 'product' },
+  { kind: 'link', label: 'Brio', href: '/#brio', brio: true },
+  { kind: 'link', label: 'Pricing', href: '/pricing', icon: 'pricing' },
+  { kind: 'menu', id: 'resources' },
+  { kind: 'menu', id: 'contact' },
 ];
 
 export const FOOTER_COLUMNS: { title: string; links: NavLink[] }[] = [

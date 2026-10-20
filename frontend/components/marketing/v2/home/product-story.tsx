@@ -12,6 +12,7 @@ import { Brio } from '@/components/ui/brio';
 import { BRAND_NAME } from '@/config/brand';
 import { DemoDate } from '../demo-dates-context';
 import { Band, Eyebrow } from '../primitives';
+import { GoogleDriveIcon } from '../storage-icons';
 import { StoryScale } from './product-story-scale';
 import { StoryTabs, type StoryStep } from './product-story-tabs';
 import './product-story.css';
@@ -130,9 +131,7 @@ function ConnectScreen() {
     >
       <div style={{ ...UI, background: '#FFFFFF', borderRadius: 12, boxShadow: FRAME_SHADOW, overflow: 'hidden' }}>
         <div style={{ padding: '14px 16px', borderBottom: '1px solid rgba(55,53,47,0.08)', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#55534E" strokeWidth="1.8" strokeLinejoin="round" aria-hidden="true">
-            <path d="M8 3h8l6 11-4 7H6l-4-7z" />
-          </svg>
+          <GoogleDriveIcon size={16} color="#55534E" />
           <span style={{ fontWeight: 600 }}>Choose folders</span>
           <span style={{ marginLeft: 'auto', color: MUTED, fontSize: 12 }}>My Drive › Clients › Horizon FinTech</span>
         </div>
