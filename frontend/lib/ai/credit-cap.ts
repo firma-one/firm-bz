@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { logger } from '@/lib/logger'
 import { parseEntitledAiCredits, applyEntitlementOverrides } from '@/lib/billing/subscription-metadata'
 import { getActiveSubscriptionForGroup } from '@/lib/billing/active-billing-subscription'
-import { CREDIT_WEIGHTS, creditsUsedSince, creditPeriodStart, type AiFeature } from './usage'
+import { CREDIT_WEIGHTS, creditsUsedSince, creditPeriod, creditPeriodStart, type AiFeature } from './usage'
 import { maybeNotifyCreditPace } from './credit-pace-notify'
 
 /**
@@ -182,9 +182,14 @@ export async function assertWithinAiCreditCap(params: {
         )
     }
 
+    const period = creditPeriod(sub?.currentPeriodEnd ?? null)
+
     if (status.usedThisPeriod + cost > status.allowance) {
+        // Say when they come back: running out pauses only the AI features, and the date is what
+        // makes that a pause rather than a dead end.
+        const refill = period.end.toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'UTC' })
         throw new AiCreditLimitError(
-            `You have used your ${status.allowance} AI credits for this billing period. Upgrade your plan for more.`,
+            `You have used this month's ${status.allowance} AI credits. They refill on ${refill}. Upgrade your plan for more.`,
             'period',
             status.allowance,
             status.usedThisPeriod,
@@ -194,12 +199,13 @@ export async function assertWithinAiCreditCap(params: {
     // Warn the group admin when spending outruns the period. Deliberately after both limits pass:
     // a refused request should not also produce a "running low" notification, since the user has
     // already been told something stronger. Awaited but never throws, so it cannot fail the call.
-    const periodEnd = sub?.currentPeriodEnd ?? null
+    // Pace is measured against this month's window, not the subscription's period end, which on an
+    // annual plan is up to a year away. Without a subscription there is no pace warning.
     await maybeNotifyCreditPace({
         groupId,
         status,
-        periodStart: creditPeriodStart(periodEnd),
-        periodEnd,
+        periodStart: period.start,
+        periodEnd: sub?.currentPeriodEnd ? period.end : null,
     })
 }
 

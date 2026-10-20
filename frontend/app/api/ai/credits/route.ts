@@ -3,7 +3,7 @@ import { createClient } from '@/utils/supabase/server'
 import { prisma } from '@/lib/prisma'
 import { aiCreditStatus } from '@/lib/ai/credit-cap'
 import { creditPace } from '@/lib/ai/credit-pace'
-import { creditPeriodStart } from '@/lib/ai/usage'
+import { creditPeriod } from '@/lib/ai/usage'
 import { getActiveSubscriptionForGroup } from '@/lib/billing/active-billing-subscription'
 import { logger } from '@/lib/logger'
 
@@ -47,13 +47,15 @@ export async function GET() {
             getActiveSubscriptionForGroup(groupId),
         ])
 
-        const periodEnd = sub?.currentPeriodEnd ?? null
-        const pace = periodEnd
+        // This month's credit window. On an annual plan the subscription's period end is up to a
+        // year away, so pace and the refill date come from the window, not from it.
+        const period = creditPeriod(sub?.currentPeriodEnd ?? null)
+        const pace = sub?.currentPeriodEnd
             ? creditPace({
                 allowance: status.allowance,
                 used: status.usedThisPeriod,
-                periodStart: creditPeriodStart(periodEnd),
-                periodEnd,
+                periodStart: period.start,
+                periodEnd: period.end,
             })
             : null
 
@@ -67,7 +69,8 @@ export async function GET() {
                 used: status.usedThisPeriod,
                 remaining: Number.isFinite(status.allowance) ? status.remaining : null,
                 enforced: status.enforced,
-                periodEndIso: periodEnd?.toISOString() ?? null,
+                // When the credits refill: the end of this month's window.
+                periodEndIso: sub?.currentPeriodEnd ? period.end.toISOString() : null,
                 aheadOfPace: pace?.aheadOfPace ?? false,
                 projectedExhaustionIso: pace?.projectedExhaustion?.toISOString() ?? null,
             },
