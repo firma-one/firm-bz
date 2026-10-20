@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { resolveProjectContext } from '@/lib/resolve-project-context'
 import { canViewProjectSettings } from '@/lib/permission-helpers'
 import { sendEmail } from '@/lib/email'
-import { renderEmail, ctaButton, escHtml, TEXT_DARK, TEXT_MUTED } from '@/lib/email-templates/base'
+import { renderEmail, ctaButton, detailCard, emailFootnote, emailHeading, escHtml } from '@/lib/email-templates/base'
 
 export async function POST(
   request: NextRequest,
@@ -68,25 +68,16 @@ export async function POST(
     const subject = `Engagement Health Report — ${engagementName}`
     const analyticsLink = pageUrl ?? ''
 
-    const emailBody = `
-      <h2 style="margin:0 0 16px;font-size:20px;font-weight:700;color:${TEXT_DARK};letter-spacing:-0.01em;">Engagement Health Report</h2>
-
-      <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f9f9fb;border:1px solid #e5e7eb;border-radius:6px;margin-bottom:20px;">
-        <tr>
-          <td style="padding:16px 20px;">
-            <p style="margin:0 0 6px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:${TEXT_MUTED};">Engagement</p>
-            <p style="margin:0;font-size:15px;font-weight:600;color:${TEXT_DARK};">${escHtml(engagementName)}</p>
-            <p style="margin:6px 0 0;font-size:13px;color:${TEXT_MUTED};">A snapshot of this engagement's health has been shared with your team. The full report is attached as a PDF.</p>
-          </td>
-        </tr>
-      </table>
-
-      ${analyticsLink ? ctaButton('View Live Analytics →', analyticsLink) : ''}
-
-      <p style="margin:24px 0 0;font-size:12px;color:${TEXT_MUTED};line-height:1.6;">
-        You are receiving this because you are a member of ${escHtml(engagementName)}.
-      </p>
-    `
+    const emailBody = [
+      emailHeading('Engagement Health Report'),
+      detailCard({
+        label: 'Engagement',
+        title: engagementName,
+        lines: ["A snapshot of this engagement's health has been shared with your team. The full report is attached as a PDF."],
+      }),
+      analyticsLink ? ctaButton('View live analytics', analyticsLink) : '',
+      emailFootnote(`You are receiving this because you are a member of ${escHtml(engagementName)}.`),
+    ].join('\n')
     const html = renderEmail({ title: subject, preheader: `Engagement health snapshot for ${engagementName}`, body: emailBody })
 
     // Send to all members in parallel

@@ -76,15 +76,24 @@ fi
 
 tailscale funnel localhost:3000 > /tmp/tailscale-funnel.log 2>&1 &
 TAILSCALE_PID=$!
-sleep 3
+
+# Poll for the config instead of sleeping a fixed amount. It usually lands in
+# ~1s, but some starts take longer than 3s (the funnel log then holds only the
+# client-version warning, not yet the "Available on the internet" banner).
+FUNNEL_WAIT_SECS=20
+for _ in $(seq 1 $((FUNNEL_WAIT_SECS * 2))); do
+  funnel_is_serving && break
+  kill -0 "$TAILSCALE_PID" 2>/dev/null || break
+  sleep 0.5
+done
 if ! kill -0 "$TAILSCALE_PID" 2>/dev/null; then
   cat /tmp/tailscale-funnel.log
-  fail_and_stop "tailscale funnel exited immediately (see log above)"
+  fail_and_stop "tailscale funnel exited (see log above)"
 fi
 # Alive is necessary but not sufficient - confirm the config actually landed.
 if ! funnel_is_serving; then
   cat /tmp/tailscale-funnel.log
-  fail_and_stop "tailscale funnel process started (pid $TAILSCALE_PID) but no serve config is active"
+  fail_and_stop "tailscale funnel process started (pid $TAILSCALE_PID) but no serve config became active within ${FUNNEL_WAIT_SECS}s"
 fi
 log_ok "tailscale funnel serving (pid $TAILSCALE_PID), log: /tmp/tailscale-funnel.log"
 

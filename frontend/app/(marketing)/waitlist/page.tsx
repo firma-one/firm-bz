@@ -1,7 +1,6 @@
 import { redirect } from 'next/navigation'
 import { getActiveCampaign } from '@/app/actions/get-active-campaign'
-import { Header } from '@/components/layout/Header'
-import { Footer } from '@/components/layout/Footer'
+import { PageGuides, PillLink } from '@/components/marketing/v2/primitives'
 
 export default async function WaitlistRoot({
     searchParams,
@@ -13,16 +12,18 @@ export default async function WaitlistRoot({
 
     if (!result.success || !result.data) {
         return (
-            <div className="relative flex min-h-screen flex-col">
-                <Header />
-                <main className="flex-1 flex items-center justify-center">
-                    <div className="text-center">
-                        <h1 className="text-2xl font-bold text-[#1b1b1d] mb-2">Coming soon</h1>
-                        <p className="text-[#45474c]">The waitlist isn&apos;t open yet. Check back soon.</p>
+            <section className="mk-band mk-band--white flex min-h-[78vh] items-center pb-24 pt-32 md:pt-40">
+                <PageGuides />
+                <div className="mk-rail relative w-full text-center">
+                    <h1 className="mk-page text-[var(--mk-ink)]">Coming soon</h1>
+                    <p className="mk-lede mx-auto mt-5 max-w-md md:mt-6">The waitlist isn&apos;t open yet. Check back soon.</p>
+                    <div className="mt-8 flex justify-center">
+                        <PillLink href="/" block>
+                            Back to home
+                        </PillLink>
                     </div>
-                </main>
-                <Footer />
-            </div>
+                </div>
+            </section>
         )
     }
 

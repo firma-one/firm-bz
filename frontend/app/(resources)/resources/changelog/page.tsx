@@ -2,17 +2,11 @@ import fs from 'fs'
 import path from 'path'
 import { Metadata } from 'next'
 import matter from 'gray-matter'
-import { History } from 'lucide-react'
 
-import { Header } from '@/components/layout/Header'
-import { Footer } from '@/components/layout/Footer'
-import { MarketingBreadcrumb } from '@/components/marketing/marketing-breadcrumb'
-import { KineticSectionIntro, kineticSectionLeadClassName } from '@/components/kinetic/kinetic-section-intro'
-import { MARKETING_PAGE_SHELL } from '@/lib/marketing/target-audience-nav'
-import { BrandName } from '@/components/brand/BrandName'
+import { DocView, FinalCtaOnWhite } from '@/components/marketing/v2/reading/doc-view'
+import { formatLongDate, slugify } from '@/components/marketing/v2/reading/format'
+import { ReleaseSection, type ReleaseSectionData } from '@/components/marketing/v2/reading/release-notes'
 import { BRAND_NAME } from '@/config/brand'
-import { cn } from '@/lib/utils'
-import { ChangelogReleases } from '@/components/changelog/changelog-releases'
 
 export const metadata: Metadata = {
   title: `Changelog | ${BRAND_NAME}`,
@@ -42,51 +36,103 @@ function parseReleaseSections(content: string, releases: ReleaseFrontmatter[]) {
     .filter((s) => s.version)
 }
 
+const TYPE_LABEL: Record<ReleaseType, string> = { major: 'Major', minor: 'Minor', patch: 'Patch' }
+
+const MONTHS = [
+  'january', 'february', 'march', 'april', 'may', 'june',
+  'july', 'august', 'september', 'october', 'november', 'december',
+]
+
+/** "September 27, 2026" → "2026-09-27" (no Date parsing, so no time-zone drift). */
+function isoFromLongDate(text: string): string | undefined {
+  const m = text.match(/^([A-Za-z]+)\s+(\d{1,2}),\s*(\d{4})$/)
+  const month = m ? MONTHS.indexOf(m[1].toLowerCase()) : -1
+  if (!m || month < 0) return undefined
+  return `${m[3]}-${String(month + 1).padStart(2, '0')}-${m[2].padStart(2, '0')}`
+}
+
+const RELEASED_LINE = /^\*Released ([^*]+)\*\s*(?:\n|$)/
+const EDGE_RULE = /^(?:-{3,}\s*\n+)+|(?:\n+\s*-{3,})+\s*$/g
+
+/**
+ * A release's header data and notes. The notes' own "*Released …*" line becomes the header date (it
+ * is the release author's calendar day; the frontmatter date is the UTC day, sometimes one earlier),
+ * and the `---` separators at either end give way to the sections' own rules.
+ */
+function toReleaseData(
+  section: ReturnType<typeof parseReleaseSections>[number],
+  latest: boolean,
+): ReleaseSectionData {
+  let body = section.body
+  let date: string | undefined
+  let dateLabel: string | undefined
+
+  const released = body.match(RELEASED_LINE)
+  if (released) {
+    const label = released[1].trim()
+    const iso = isoFromLongDate(label)
+    if (iso) {
+      date = iso
+      dateLabel = label
+      body = body.slice(released[0].length)
+    }
+  }
+  if (!date && section.meta?.date) {
+    date = section.meta.date
+    dateLabel = formatLongDate(section.meta.date)
+  }
+  body = body.trim().replace(EDGE_RULE, '').trim()
+
+  return {
+    version: section.version,
+    title: section.meta?.title ?? `Version ${section.version}`,
+    date,
+    dateLabel,
+    typeLabel: section.meta?.type ? TYPE_LABEL[section.meta.type] : undefined,
+    latest,
+    body,
+  }
+}
+
 export default function ChangelogPage() {
   const filePath = path.join(process.cwd(), 'content/releases.mdx')
   const { data, content } = matter(fs.readFileSync(filePath, 'utf8'))
   const releases: ReleaseFrontmatter[] = data.releases ?? []
-  const sections = parseReleaseSections(content, releases)
+  const sections = parseReleaseSections(content, releases).map((s, i) => toReleaseData(s, i === 0))
+  const withIds = sections.map((release) => ({ release, id: slugify(`v${release.version}`) }))
+  const latest = sections[0]
 
   return (
-    <div className="relative flex min-h-screen flex-col">
-      <Header />
-
-      <main className={cn(MARKETING_PAGE_SHELL, 'relative z-10 w-full flex-1 pb-16 md:pb-24')}>
-        <MarketingBreadcrumb
-          items={[{ label: 'Resources' }, { label: 'Changelog' }]}
-          className="mb-8"
-        />
-
-        <header className="mb-10 md:mb-12">
-          <KineticSectionIntro
-            compact
-            heading="h1"
-            titleScale="hero"
-            badge={{
-              variant: 'lime',
-              icon: <History className="ds-badge-kinetic__icon stroke-[2]" aria-hidden />,
-              label: 'Product // Changelog',
-            }}
-            title={
-              <>
-                <span className="text-[#1b1b1d]">What&apos;s new in </span>
-                <BrandName className="inline [font-size:inherit] [line-height:inherit]" gradient />
-              </>
-            }
-            description={
-              <p className={cn(kineticSectionLeadClassName, 'max-w-2xl')}>
-                Release notes, feature announcements, and improvements — every update in one place.
-              </p>
-            }
-            descriptionClassName=""
-          />
-        </header>
-
-        <ChangelogReleases sections={sections} />
-      </main>
-
-      <Footer />
-    </div>
+    <>
+      <DocView
+        crumbs={[
+          { label: 'Resources' },
+          { label: 'Changelog', href: '/resources/changelog' },
+        ]}
+        title={<>What’s new in {BRAND_NAME}</>}
+        dek="Release notes, feature announcements, and improvements — every update in one place."
+        meta={
+          latest ? (
+            <>
+              Latest release <strong>v{latest.version}</strong>
+              {latest.date && latest.dateLabel ? (
+                <>
+                  <span aria-hidden="true" className="mk-doc-meta-dot" />
+                  <time dateTime={latest.date}>{latest.dateLabel}</time>
+                </>
+              ) : null}
+            </>
+          ) : undefined
+        }
+        toc={withIds.map(({ release, id }) => ({ id, text: `v${release.version} — ${release.title}` }))}
+      >
+        {withIds.length > 0 ? (
+          withIds.map(({ release, id }) => <ReleaseSection key={release.version} release={release} id={id} />)
+        ) : (
+          <p className="mk-doc-lead">The first release notes are on the way.</p>
+        )}
+      </DocView>
+      <FinalCtaOnWhite />
+    </>
   )
 }

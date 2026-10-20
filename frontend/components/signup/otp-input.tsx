@@ -9,8 +9,11 @@ interface OTPInputProps {
     disabled?: boolean
     loading?: boolean
     length?: number
-    /** Kinetic dark auth surfaces — light digits + lime accents. */
-    variant?: 'light' | 'dark'
+    /**
+     * Kinetic dark auth surfaces — light digits + lime accents. `mk`: the v2 marketing auth boxes
+     * (60 px rounded boxes, bottle-green focus ring); needs `marketing/v2/auth/auth.css`.
+     */
+    variant?: 'light' | 'dark' | 'mk'
     /** Horizontal alignment of digit slots (split-light forms often use `start`). */
     slotsJustify?: 'center' | 'start'
 }
@@ -179,6 +182,7 @@ export const OTPInput = forwardRef<OTPInputHandle, OTPInputProps>(function OTPIn
     }
 
     const activeIndex = value.length
+    const isMk = variant === 'mk'
 
     return (
         <div className="relative">
@@ -203,14 +207,36 @@ export const OTPInput = forwardRef<OTPInputHandle, OTPInputProps>(function OTPIn
 
             {/* Visual slots */}
             <div
-                className={`flex cursor-text gap-3 ${slotsJustify === 'start' ? 'justify-start' : 'justify-center'}`}
+                className={
+                    isMk
+                        ? 'mk-auth-otp'
+                        : `flex cursor-text gap-3 ${slotsJustify === 'start' ? 'justify-start' : 'justify-center'}`
+                }
+                style={isMk ? { gridTemplateColumns: `repeat(${length}, minmax(0, 1fr))` } : undefined}
                 onClick={focusInput}
+                aria-hidden={isMk || undefined}
             >
                 {Array.from({ length }).map((_, index) => {
                     const digit = value[index] || ''
                     const isFilled = digit !== ''
                     const isActive = isFocused && index === activeIndex && !loading
                     const loadingDelay = loading ? `${index * 0.2}s` : undefined
+
+                    if (isMk) {
+                        return (
+                            <div
+                                key={index}
+                                className="mk-auth-otp-box"
+                                data-filled={isFilled || undefined}
+                                data-active={isActive || undefined}
+                                data-loading={loading || undefined}
+                                style={loading ? { animationDelay: `${index * 0.12}s` } : undefined}
+                            >
+                                {digit}
+                                {isActive && !isFilled ? <span className="mk-auth-otp-caret" /> : null}
+                            </div>
+                        )
+                    }
 
                     return (
                         <div

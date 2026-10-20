@@ -1,0 +1,131 @@
+/*
+ * 6 · Built on your Drive. The storage → delivery layer → client diagram runs left to right from 1024 px
+ * and turns into a vertical flow below it, so the three cards never wrap into an orphan row.
+ */
+
+.mk-built-on-drive-flow {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.mk-built-on-drive-node {
+  min-width: 0;
+  border-radius: 16px;
+  padding: 22px;
+  box-sizing: border-box;
+}
+.mk-built-on-drive-node--light {
+  background: #ffffff;
+  box-shadow: 0 0 0 1px rgba(5, 39, 28, 0.08), 0 18px 40px -28px rgba(3, 40, 27, 0.35);
+}
+/* The delivery layer: a 1.5 px gradient rim around the forest card. */
+.mk-built-on-drive-node--rim {
+  border-radius: 17px;
+  padding: 1.5px;
+  background: linear-gradient(140deg, #7dff77, #00c49a 50%, #009669);
+}
+.mk-built-on-drive-node--rim > div {
+  height: 100%;
+  border-radius: 16px;
+  padding: 22px;
+  box-sizing: border-box;
+  background-color: #04160f;
+  background-image: radial-gradient(at 100% 0%, rgba(125, 255, 119, 0.22) 0px, transparent 55%);
+  color: #ffffff;
+}
+
+/* Connector: label, a short gradient line, a note. Vertical (labels either side) on phones and tablets. */
+.mk-built-on-drive-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 6px 0;
+  font-size: 12px;
+  line-height: 1.3;
+}
+.mk-built-on-drive-link > span {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.mk-built-on-drive-link > span:first-child {
+  text-align: right;
+  font-weight: 600;
+  color: var(--mk-bottle-dark);
+}
+.mk-built-on-drive-link > span:last-child {
+  color: var(--mk-muted);
+}
+.mk-built-on-drive-line {
+  flex: none;
+  width: 2px;
+  height: 40px;
+  border-radius: 1px;
+  background: linear-gradient(180deg, rgba(0, 150, 105, 0.2), #009669, rgba(0, 150, 105, 0.2));
+}
+
+.mk-built-on-drive-points {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 24px;
+}
+
+@media (min-width: 768px) {
+  .mk-built-on-drive-node,
+  .mk-built-on-drive-node--rim > div {
+    padding: 26px;
+  }
+  .mk-built-on-drive-node--rim {
+    padding: 1.5px;
+  }
+  .mk-built-on-drive-points {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 32px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .mk-built-on-drive-flow {
+    flex-direction: row;
+  }
+  .mk-built-on-drive-node {
+    flex: 1 1 260px;
+  }
+  .mk-built-on-drive-link {
+    flex: 0 1 120px;
+    min-width: 80px;
+    flex-direction: column;
+    gap: 6px;
+    padding: 12px 0;
+  }
+  .mk-built-on-drive-link > span {
+    flex: none;
+  }
+  .mk-built-on-drive-link > span:first-child {
+    text-align: center;
+  }
+  .mk-built-on-drive-line {
+    width: 100%;
+    height: 2px;
+    background: linear-gradient(90deg, rgba(0, 150, 105, 0.2), #009669, rgba(0, 150, 105, 0.2));
+  }
+  .mk-built-on-drive-points {
+    gap: 32px 48px;
+  }
+}
+
+/* Small laptops: shorter connectors and tighter padding, so the cards' lines don't wrap. */
+@media (min-width: 1024px) and (max-width: 1279px) {
+  .mk-built-on-drive-link {
+    flex-basis: 88px;
+    min-width: 72px;
+  }
+  .mk-built-on-drive-node,
+  .mk-built-on-drive-node--rim > div {
+    padding: 22px;
+  }
+  .mk-built-on-drive-node--rim {
+    padding: 1.5px;
+  }
+}

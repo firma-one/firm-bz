@@ -1,168 +1,134 @@
-import { LogIn, Mail, Shield, KeyRound } from "lucide-react"
 import { BRAND_NAME } from "@/config/brand"
-import { DocSection } from "@/components/docs/doc-section"
-import { InfoBox } from "@/components/docs/info-box"
-import { StepList } from "@/components/docs/step-list"
+import {
+    DocsBox,
+    DocsGrid,
+    DocsHeader,
+    DocsList,
+    DocsNote,
+    DocsPanel,
+    DocsQa,
+    DocsSection,
+    DocsStepCard,
+    DocsSteps,
+} from "@/components/marketing/v2/docs/docs-blocks"
 
 export default function SigninPage() {
     return (
-        <div className="space-y-10">
-            <div>
-                <h1 className="text-3xl font-bold text-gray-900 mb-4">Signin</h1>
-                <p className="text-lg text-gray-600 leading-relaxed">
-                    Access your {BRAND_NAME} account using your preferred authentication method.
-                    Our signin process is secure, fast, and offers multiple options.
-                </p>
-            </div>
+        <>
+            <DocsHeader section="Authentication" title="Signin">
+                Access your {BRAND_NAME} account using your preferred authentication method.
+                Our signin process is secure, fast, and offers multiple options.
+            </DocsHeader>
 
             {/* Signin Flow Overview */}
-            <DocSection title="Signin Flow" icon={LogIn} color="blue">
-                <p className="text-gray-600 mb-4">
-                    The signin process is simple and secure:
-                </p>
-                <div className="grid gap-4 md:grid-cols-2 mb-6">
-                    <div className="bg-blue-50 border border-blue-100 rounded-lg p-4">
-                        <div className="flex items-center gap-2 mb-2">
-                            <div className="h-6 w-6 bg-blue-600 rounded-full flex items-center justify-center text-white text-xs font-bold">
-                                1
-                            </div>
-                            <h3 className="font-semibold text-gray-900">Enter Email</h3>
-                        </div>
-                        <p className="text-sm text-gray-600">
-                            Provide the email address associated with your account
-                        </p>
-                    </div>
-                    <div className="bg-blue-50 border border-blue-100 rounded-lg p-4">
-                        <div className="flex items-center gap-2 mb-2">
-                            <div className="h-6 w-6 bg-blue-600 rounded-full flex items-center justify-center text-white text-xs font-bold">
-                                2
-                            </div>
-                            <h3 className="font-semibold text-gray-900">Verify & Access</h3>
-                        </div>
-                        <p className="text-sm text-gray-600">
-                            Complete verification via Email Code or Sign in with Google
-                        </p>
-                    </div>
-                </div>
-            </DocSection>
+            <DocsSection title="Signin Flow">
+                <p>The signin process is simple and secure:</p>
+                <DocsGrid cols={2}>
+                    <DocsStepCard n={1} title="Enter Email">
+                        Provide the email address associated with your account
+                    </DocsStepCard>
+                    <DocsStepCard n={2} title="Verify & Access">
+                        Complete verification via Email Code or Sign in with Google
+                    </DocsStepCard>
+                </DocsGrid>
+            </DocsSection>
 
             {/* Email Code Signin */}
-            <DocSection title="Email Code Signin" icon={Mail} color="purple">
-                <p className="text-gray-600 mb-4">
-                    Sign in without a password using a one-time code sent to your email.
-                </p>
-                <StepList
+            <DocsSection title="Email Code Signin">
+                <p>Sign in without a password using a one-time code sent to your email.</p>
+                <DocsSteps
                     title="How it works:"
                     steps={[
                         "Enter your email address",
-                        "Click <strong>\"Continue with Email\"</strong>",
-                        "Complete the <strong>Turnstile CAPTCHA</strong> verification",
+                        <>Click <strong>&quot;Continue with Email&quot;</strong></>,
+                        <>Complete the <strong>Turnstile CAPTCHA</strong> verification</>,
                         "Check your email for a 6-digit verification code",
                         "Enter the code to sign in",
-                        "You'll be redirected to your dashboard"
+                        "You'll be redirected to your dashboard",
                     ]}
                 />
-                <InfoBox type="info" title="Code Expiration">
+                <DocsNote type="info" title="Code Expiration">
                     <p>
                         Verification codes expire after <strong>10 minutes</strong> for security.
-                        If your code expires, simply request a new one by clicking "Resend code".
+                        If your code expires, simply request a new one by clicking &quot;Resend code&quot;.
                     </p>
-                </InfoBox>
-            </DocSection>
+                </DocsNote>
+            </DocsSection>
 
             {/* Sign in with Google */}
-            <DocSection title="Sign in with Google" icon={Shield} color="green">
-                <p className="text-gray-600 mb-4">
-                    Sign in instantly using your Google account.
-                </p>
-                <StepList
+            <DocsSection title="Sign in with Google">
+                <p>Sign in instantly using your Google account.</p>
+                <DocsSteps
                     title="How it works:"
                     steps={[
                         "Enter your email address",
-                        "Click <strong>\"Continue with Google\"</strong>",
+                        <>Click <strong>&quot;Continue with Google&quot;</strong></>,
                         "You'll be redirected to Google's secure login page",
                         "Sign in with your Google account",
-                        `You'll be redirected back to your ${BRAND_NAME} dashboard`
+                        `You'll be redirected back to your ${BRAND_NAME} dashboard`,
                     ]}
                 />
-                <InfoBox type="tip" title="Faster Signin">
+                <DocsNote type="tip" title="Faster Signin">
                     <p>
-                        If you're already signed in to Google in your browser, the signin process
+                        If you&apos;re already signed in to Google in your browser, the signin process
                         is nearly instant - just one click!
                     </p>
-                </InfoBox>
-            </DocSection>
+                </DocsNote>
+            </DocsSection>
 
             {/* Session Management */}
-            <DocSection title="Session Management" icon={KeyRound} color="indigo">
-                <p className="text-gray-600 mb-4">
-                    Your {BRAND_NAME} session is managed securely using industry-standard practices.
-                </p>
-                <div className="bg-gray-50 rounded-lg p-4 space-y-3">
-                    <h3 className="font-semibold text-gray-900">Session Details:</h3>
-                    <ul className="text-sm text-gray-600 space-y-2 list-disc list-inside">
-                        <li><strong>Duration:</strong> Sessions remain active for 7 days</li>
-                        <li><strong>Auto-renewal:</strong> Sessions automatically renew when you use the app</li>
-                        <li><strong>Security:</strong> Sessions are encrypted and stored securely</li>
-                        <li><strong>Multi-device:</strong> You can be signed in on multiple devices</li>
-                    </ul>
-                </div>
-                <InfoBox type="warning" title="Shared Devices">
+            <DocsSection title="Session Management">
+                <p>Your {BRAND_NAME} session is managed securely using industry-standard practices.</p>
+                <DocsBox title="Session Details:">
+                    <DocsList
+                        items={[
+                            <><strong>Duration:</strong> Sessions remain active for 7 days</>,
+                            <><strong>Auto-renewal:</strong> Sessions automatically renew when you use the app</>,
+                            <><strong>Security:</strong> Sessions are encrypted and stored securely</>,
+                            <><strong>Multi-device:</strong> You can be signed in on multiple devices</>,
+                        ]}
+                    />
+                </DocsBox>
+                <DocsNote type="warning" title="Shared Devices">
                     <p>
-                        If you're using a shared or public computer, always remember to sign out when you're done.
+                        If you&apos;re using a shared or public computer, always remember to sign out when you&apos;re done.
                         This prevents others from accessing your account.
                     </p>
-                </InfoBox>
-            </DocSection>
+                </DocsNote>
+            </DocsSection>
 
             {/* Turnstile Protection */}
-            <DocSection title="Bot Protection" icon={Shield} color="amber">
-                <p className="text-gray-600 mb-4">
-                    Email OTP signin is protected by Cloudflare Turnstile to prevent automated attacks.
-                </p>
-                <div className="bg-gray-50 rounded-lg p-4 space-y-3">
-                    <h3 className="font-semibold text-gray-900">When you'll see Turnstile:</h3>
-                    <ul className="text-sm text-gray-600 space-y-2 list-disc list-inside">
-                        <li>When clicking "Continue with Email" during signin</li>
-                        <li>When requesting a new verification code (resend)</li>
-                    </ul>
-                    <p className="text-xs text-gray-500 mt-3">
+            <DocsSection title="Bot Protection">
+                <p>Email OTP signin is protected by Cloudflare Turnstile to prevent automated attacks.</p>
+                <DocsBox title="When you'll see Turnstile:">
+                    <DocsList
+                        items={[
+                            'When clicking "Continue with Email" during signin',
+                            "When requesting a new verification code (resend)",
+                        ]}
+                    />
+                    <p className="mk-docs-small">
                         <strong>Note:</strong> The verification step is not shown when signing in with Google.
                     </p>
-                </div>
-            </DocSection>
+                </DocsBox>
+            </DocsSection>
 
             {/* Troubleshooting */}
-            <div className="bg-gradient-to-br from-blue-50 to-purple-50 border border-blue-200 rounded-lg p-6">
-                <h2 className="text-xl font-bold text-gray-900 mb-4">Troubleshooting</h2>
-                <div className="space-y-4">
-                    <div>
-                        <h3 className="font-semibold text-gray-900 mb-1">Didn't receive the verification code?</h3>
-                        <p className="text-sm text-gray-600">
-                            Check your spam folder. If still not received, click "Resend code" and complete the Turnstile verification again.
-                        </p>
-                    </div>
-                    <div>
-                        <h3 className="font-semibold text-gray-900 mb-1">Code expired?</h3>
-                        <p className="text-sm text-gray-600">
-                            Verification codes expire after 10 minutes. Request a new code by clicking "Resend code".
-                        </p>
-                    </div>
-                    <div>
-                        <h3 className="font-semibold text-gray-900 mb-1">Email not recognized?</h3>
-                        <p className="text-sm text-gray-600">
-                            Make sure you're using the email address you signed up with. If you don't have an account yet,
-                            click "Sign up" to create one.
-                        </p>
-                    </div>
-                    <div>
-                        <h3 className="font-semibold text-gray-900 mb-1">Google OAuth not working?</h3>
-                        <p className="text-sm text-gray-600">
-                            Ensure pop-ups are enabled for {BRAND_NAME} in your browser. Google OAuth requires opening a new window.
-                        </p>
-                    </div>
-                </div>
-            </div>
-        </div>
+            <DocsPanel title="Troubleshooting">
+                <DocsQa q="Didn't receive the verification code?">
+                    Check your spam folder. If still not received, click &quot;Resend code&quot; and complete the Turnstile verification again.
+                </DocsQa>
+                <DocsQa q="Code expired?">
+                    Verification codes expire after 10 minutes. Request a new code by clicking &quot;Resend code&quot;.
+                </DocsQa>
+                <DocsQa q="Email not recognized?">
+                    Make sure you&apos;re using the email address you signed up with. If you don&apos;t have an account yet,
+                    click &quot;Sign up&quot; to create one.
+                </DocsQa>
+                <DocsQa q="Google OAuth not working?">
+                    Ensure pop-ups are enabled for {BRAND_NAME} in your browser. Google OAuth requires opening a new window.
+                </DocsQa>
+            </DocsPanel>
+        </>
     )
 }

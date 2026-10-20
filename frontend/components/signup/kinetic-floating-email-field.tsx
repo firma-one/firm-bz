@@ -11,6 +11,7 @@ import {
   type ReactNode,
 } from 'react'
 import { Mail } from 'lucide-react'
+import { AuthField } from '@/components/marketing/v2/auth/auth-ui'
 
 /** Shared sign-in / split-signup email: floating label, mail icon, neutral focus (no blue ring). */
 const inputSurfaceClass =
@@ -29,6 +30,19 @@ export type KineticFloatingEmailFieldProps = {
   trailing?: ReactNode
   onKeyDown?: KeyboardEventHandler<HTMLInputElement>
   onFocus?: () => void
+  /**
+   * `floating` (default): the legacy split-auth field with a floating label and mail icon.
+   * `mk`: the v2 marketing auth field (label above a 48 px control); needs `marketing/v2/auth/auth.css`.
+   */
+  variant?: 'floating' | 'mk'
+  /** `mk` only: helper line under the field. */
+  hint?: ReactNode
+  /** `mk` only: shown at the right of the label (e.g. "Edit email"). */
+  labelAction?: ReactNode
+  /** `mk` only: shown inside the control at its right edge (e.g. the verified check). */
+  endAdornment?: ReactNode
+  /** `mk` only: placeholder text (the floating variant uses the label). */
+  placeholder?: string
 }
 
 export const KineticFloatingEmailField = forwardRef<HTMLInputElement, KineticFloatingEmailFieldProps>(
@@ -45,6 +59,11 @@ export const KineticFloatingEmailField = forwardRef<HTMLInputElement, KineticFlo
       trailing,
       onKeyDown,
       onFocus: onFocusProp,
+      variant = 'floating',
+      hint,
+      labelAction,
+      endAdornment,
+      placeholder,
     },
     ref,
   ) {
@@ -78,6 +97,40 @@ export const KineticFloatingEmailField = forwardRef<HTMLInputElement, KineticFlo
     }, [syncFromDom])
 
     const labelFloated = focused || value.length > 0
+
+    if (variant === 'mk') {
+      return (
+        <AuthField id={id} label={label} labelAction={labelAction} hint={hint} end={endAdornment} disabled={disabled}>
+          <input
+            ref={inputRef}
+            id={id}
+            type="email"
+            value={value}
+            onChange={(e) => onValueChange(e.target.value)}
+            onBlur={() => {
+              setFocused(false)
+              syncFromDom()
+            }}
+            onFocus={() => {
+              setFocused(true)
+              syncFromDom()
+              onFocusProp?.()
+            }}
+            onAnimationStart={(e) => {
+              if (e.animationName) syncFromDom()
+            }}
+            onKeyDown={onKeyDown}
+            autoFocus={autoFocus}
+            autoComplete={autoComplete}
+            disabled={disabled}
+            required={required}
+            placeholder={placeholder}
+            aria-describedby={hint ? `${id}-hint` : undefined}
+            className="mk-auth-input"
+          />
+        </AuthField>
+      )
+    }
 
     const field = (
       <div className="relative min-w-0 flex-1">

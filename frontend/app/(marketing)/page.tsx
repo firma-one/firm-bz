@@ -1,13 +1,13 @@
 import type { Metadata } from "next"
 
-import { LandingPage } from "@/components/landing/landing-page"
+import { HomePageV2 } from "@/components/marketing/v2/home/home-page"
 import { BRAND_NAME } from "@/config/brand"
 import { getPlatformSiteOrigin } from "@/config/platform-domain"
 
 const siteOrigin = getPlatformSiteOrigin()
 
-const homeTitle = `${BRAND_NAME} | Client Portal for Marketing Firms, Agencies & Advisors atop Google Drive`
-const homeDescription = `${BRAND_NAME} turns Google Drive into a branded client portal for marketing agencies, fractional executives, strategic consultants, and advisory partners—non-custodial sharing, audit-ready access, and one-click Wrap when engagements end. Also trusted by audit, training, and consulting teams.`
+const homeTitle = `${BRAND_NAME} | Run every client engagement from your own Drive`
+const homeDescription = `${BRAND_NAME} turns the Google Drive or OneDrive you already use into a client workspace: every deliverable on a Board, every approval in one thread, and Brio, the assistant for client delivery. Your files never leave your Drive.`
 
 export const metadata: Metadata = {
   title: homeTitle,
@@ -23,7 +23,8 @@ export const metadata: Metadata = {
     "Secure File Sharing",
     "Non-Custodial Security",
     "Google Drive Integration",
-    "Project Wrap",
+    "OneDrive Client Portal",
+    "AI Assistant for Client Delivery",
     "Professional Services Automation",
   ],
   robots: {
@@ -65,5 +66,5 @@ export const metadata: Metadata = {
 }
 
 export default function MarketingHomePage() {
-  return <LandingPage skin="legacy" />
+  return <HomePageV2 />
 }

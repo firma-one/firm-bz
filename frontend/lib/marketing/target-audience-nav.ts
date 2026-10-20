@@ -46,10 +46,7 @@ export const CALENDLY_DEMO_URL = "https://calendly.com/firmaone/firma-connect" a
 export const MARKETING_PAGE_SHELL =
   "max-w-[min(100%,92rem)] mx-auto px-3 sm:px-3 md:px-4 lg:px-3 xl:px-5 2xl:px-6"
 
-/**
- * Hover depth on bordered marketing tiles — matches `RealityStatCard` in
- * `components/landing/reality-check-section.tsx` (`shadow-sm` base + this on hover).
- */
+/** Hover depth on bordered marketing tiles (`shadow-sm` base + this on hover). */
 export const MARKETING_SURFACE_DEPTH_HOVER =
   "relative transition-[box-shadow] duration-200 ease-out hover:z-[1] hover:shadow-[0_14px_32px_-10px_rgba(27,27,29,0.22)]"
 

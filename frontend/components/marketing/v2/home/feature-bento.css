@@ -1,0 +1,656 @@
+/*
+ * 5 · Feature bento: six product scenes on the page's one gray band (desktop board:
+ * desktop-05-feature-bento.html; phone board: MobileRibbon "5 · FEATURE BENTO (phone)").
+ *
+ * ≥1120 px   the board's 3-column bento: f1 (2) + f2, then f3 f4 f5, then f6 across all three, short.
+ * 768–1119   two columns: f1 and f6 full width (f6 stacks its scene under the copy), f2–f5 in pairs.
+ * <768       one column; each card is copy on top and a fixed-height scene panel under it.
+ *
+ * Only transform and opacity animate. Story states are inline styles set by the scenes; everything
+ * that merely arrives is an `mk-reveal` keyed off the card's `data-revealed`.
+ */
+
+.mk-bento {
+  padding: clamp(140px, 16.667vw, 240px) 0;
+}
+.mk-bento-h2 {
+  margin-top: 20px;
+  max-width: 780px;
+  color: var(--mk-bottle);
+}
+.mk-bento-grid {
+  margin-top: 56px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+}
+
+/* ── Card ─────────────────────────────────────────────────────────────────────────────────── */
+
+.mk-bento-card {
+  min-width: 0;
+  border-radius: 18px;
+  background: #ffffff;
+  overflow: hidden;
+  box-shadow: var(--mk-shadow-card);
+}
+/*
+ * Per card: where the panel starts on desktop (top), the panel's minimum height on tablets (the
+ * desktop panel's own height) and its height on phones, and the scene's top inset.
+ */
+.mk-bento-f1 {
+  --mk-bento-top: 176px;
+  --mk-bento-tph: 294px;
+  --mk-bento-ph: 276px;
+}
+.mk-bento-f2 {
+  --mk-bento-top: 196px;
+  --mk-bento-tph: 274px;
+  --mk-bento-ph: 266px;
+  --mk-bento-sheet-top: 18px;
+}
+.mk-bento-f3 {
+  --mk-bento-top: 196px;
+  --mk-bento-tph: 234px;
+  --mk-bento-ph: 236px;
+}
+.mk-bento-f4 {
+  --mk-bento-top: 220px;
+  --mk-bento-tph: 210px;
+  --mk-bento-ph: 220px;
+  --mk-bento-sheet-top: 20px;
+}
+.mk-bento-f5 {
+  --mk-bento-top: 196px;
+  --mk-bento-tph: 234px;
+  --mk-bento-ph: 200px;
+}
+.mk-bento-f6 {
+  --mk-bento-tph: 232px;
+  --mk-bento-ph: 344px;
+}
+
+.mk-bento-head {
+  position: relative;
+  z-index: 2;
+  padding: 28px 28px 0;
+  max-width: 516px; /* the board's 460 px of copy plus the padding */
+}
+.mk-bento-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.mk-bento-icon {
+  display: block;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  overflow: visible;
+}
+.mk-bento-title {
+  color: var(--mk-ink);
+}
+.mk-bento-desc {
+  margin: 12px 0 0;
+  font-size: 15.5px;
+  line-height: 1.6;
+  color: var(--mk-body);
+}
+
+/* The pastel panel under the copy (the board's panel1–panel4 meshes); the scene sits in the lift layer. */
+.mk-bento-panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: var(--mk-bento-top, 196px);
+  bottom: 0;
+  z-index: 1;
+  overflow: hidden;
+  background-color: var(--mk-panel);
+  border-top: 1px solid rgba(5, 39, 28, 0.05);
+}
+.mk-bento-panel--1 {
+  background-image: radial-gradient(at 0% 0%, #e9ffb0 0px, transparent 55%),
+    radial-gradient(at 100% 10%, #c4f6ea 0px, transparent 55%),
+    radial-gradient(at 90% 100%, #a9f2c8 0px, transparent 55%),
+    radial-gradient(at 0% 100%, #d9ffd4 0px, transparent 55%);
+}
+.mk-bento-panel--2 {
+  background-image: radial-gradient(at 100% 0%, #e9ffb0 0px, transparent 55%),
+    radial-gradient(at 0% 30%, #c4f6ea 0px, transparent 55%),
+    radial-gradient(at 30% 100%, #a9f2c8 0px, transparent 55%),
+    radial-gradient(at 100% 100%, #d9ffd4 0px, transparent 55%);
+}
+.mk-bento-panel--3 {
+  background-image: radial-gradient(at 0% 100%, #e9ffb0 0px, transparent 55%),
+    radial-gradient(at 100% 100%, #c4f6ea 0px, transparent 55%),
+    radial-gradient(at 100% 0%, #a9f2c8 0px, transparent 55%),
+    radial-gradient(at 0% 0%, #d9ffd4 0px, transparent 55%);
+}
+.mk-bento-panel--4 {
+  background-image: radial-gradient(at 50% 0%, #e9ffb0 0px, transparent 55%),
+    radial-gradient(at 100% 70%, #c4f6ea 0px, transparent 55%),
+    radial-gradient(at 0% 60%, #a9f2c8 0px, transparent 55%),
+    radial-gradient(at 60% 100%, #d9ffd4 0px, transparent 55%);
+}
+.mk-bento-lift {
+  position: absolute;
+  inset: 0;
+}
+/* f1 and f6 have a desktop scene (scaled to fit) and a phone scene; one shows at a time. */
+.mk-bento-phone {
+  position: absolute;
+  inset: 0;
+  display: none;
+}
+
+/* ── Scene kit: the product's own UI (Inter, warm ink) ────────────────────────────────────── */
+
+.mk-bento-ui {
+  overflow: hidden;
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: var(--mk-shadow-ui);
+  font-family: var(--mk-font-body);
+  color: #37352f;
+  font-size: 13px;
+}
+.mk-bento-sheet {
+  position: absolute;
+  left: 24px;
+  right: 24px;
+  top: var(--mk-bento-sheet-top, 24px);
+}
+.mk-bento-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+}
+.mk-bento-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-top: 1px solid rgba(55, 53, 47, 0.07);
+}
+.mk-bento-row--top {
+  align-items: flex-start;
+}
+.mk-bento-strong {
+  font-weight: 600;
+}
+.mk-bento-muted {
+  color: #8d8b86;
+}
+.mk-bento-ell {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mk-bento-av {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+.mk-bento-av--sm {
+  width: 24px;
+  height: 24px;
+}
+.mk-bento-tag {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11.5px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* ── f1 · Comments and approvals ──────────────────────────────────────────────────────────── */
+
+.mk-bento-thread {
+  position: absolute;
+  left: 28px;
+  top: 26px;
+  width: 404px;
+}
+.mk-bento-comment {
+  display: block;
+  margin-top: 2px;
+  line-height: 1.45;
+}
+.mk-bento-status {
+  display: block;
+  flex: none;
+  border-radius: 4px;
+  overflow: hidden;
+  isolation: isolate;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.mk-bento-approve {
+  position: relative;
+  flex: none;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: var(--mk-electric);
+  color: var(--mk-on-electric);
+  font-weight: 700;
+}
+.mk-bento-ring {
+  position: absolute;
+  inset: -4px;
+  border-radius: 999px;
+  box-shadow: 0 0 0 2px var(--mk-electric);
+  opacity: 0;
+  pointer-events: none;
+}
+.mk-bento-secondary {
+  display: block;
+  flex: none;
+  padding: 6px 14px;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px rgba(55, 53, 47, 0.2);
+  font-weight: 600;
+  transition: opacity 500ms var(--mk-ease);
+}
+.mk-bento-done {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  color: #2f7a46;
+  font-size: 12px;
+  font-weight: 600;
+  transition: opacity 700ms var(--mk-ease), transform 900ms var(--mk-ease);
+}
+.mk-bento-done--end {
+  margin-left: auto;
+}
+/* Phones: "Approved just now" fades in where "Request changes" was. */
+.mk-bento-done--over {
+  position: absolute;
+  left: 2px;
+  top: 0;
+  bottom: 0;
+  will-change: transform;
+}
+.mk-bento-board {
+  position: absolute;
+  left: 456px;
+  top: 26px;
+  width: 280px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  font-family: var(--mk-font-body);
+  font-size: 12px;
+  color: #37352f;
+}
+.mk-bento-col-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+.mk-bento-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.mk-bento-tile {
+  padding: 10px 11px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+.mk-bento-tile-title {
+  display: block;
+  font-weight: 600;
+}
+.mk-bento-tile-meta {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+  color: #8d8b86;
+}
+/* The card that crosses the Board from In Review to Approved. */
+.mk-bento-mover {
+  position: absolute;
+  left: 0;
+  top: 26px;
+  width: 135px;
+  will-change: transform;
+  transition: transform 1300ms var(--mk-roll);
+}
+.mk-bento-mover .mk-bento-tile {
+  box-shadow: 0 0 0 1px rgba(55, 53, 47, 0.09), 0 22px 36px -16px rgba(3, 40, 27, 0.45);
+}
+
+/* ── f2 · Client reminders ────────────────────────────────────────────────────────────────── */
+
+.mk-bento-send {
+  display: block;
+  flex: none;
+  border-radius: 999px;
+  overflow: hidden;
+  isolation: isolate;
+  font-size: 12px;
+  font-weight: 600;
+}
+.mk-bento-toast {
+  position: absolute;
+  left: 24px;
+  right: 24px;
+  bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  will-change: transform;
+  transition: opacity 700ms var(--mk-ease), transform 900ms var(--mk-ease);
+}
+
+/* ── f3 · Firm Overview ───────────────────────────────────────────────────────────────────── */
+
+.mk-bento-ov {
+  padding: 14px;
+}
+.mk-bento-ov-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.mk-bento-ov-total {
+  margin-top: 6px;
+  font-family: var(--mk-font-display);
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--mk-ink);
+}
+.mk-bento-bars {
+  margin-top: 12px;
+  height: 80px;
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+}
+.mk-bento-bars > span {
+  flex: 1;
+  border-radius: 3px 3px 0 0;
+  transform-origin: bottom;
+}
+.mk-bento-legend {
+  margin-top: 10px;
+  display: flex;
+  gap: 14px;
+  font-size: 11.5px;
+  color: #8d8b86;
+}
+
+/* ── f4 · Audit trail ─────────────────────────────────────────────────────────────────────── */
+
+.mk-bento-log {
+  height: 138px;
+  overflow: hidden;
+}
+.mk-bento-log-row {
+  height: 46px;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+.mk-bento-log-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  font-size: 12px;
+  line-height: 1.35;
+}
+/* A new row: the list slides down one row while the new row fades in on top. */
+.mk-bento-log-shift {
+  animation: mkLogShift 1000ms var(--mk-ease) both;
+}
+.mk-bento-log-new {
+  animation: mkFadeIn 900ms var(--mk-ease) both;
+}
+
+/* ── f5 · Doc Search ──────────────────────────────────────────────────────────────────────── */
+
+.mk-bento-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+}
+.mk-bento-chip {
+  display: block;
+  flex: none;
+  max-width: 48%;
+  border-radius: 999px;
+  background: rgba(125, 255, 119, 0.38);
+  color: var(--mk-on-electric);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+/* ── f6 · Calendar and Inbox ──────────────────────────────────────────────────────────────── */
+
+.mk-bento-cal {
+  position: absolute;
+  left: 28px;
+  top: 28px;
+  width: 430px;
+}
+.mk-bento-inbox {
+  position: absolute;
+  left: 478px;
+  right: 28px;
+  top: 28px;
+}
+.mk-bento-cal-head {
+  padding: 10px 12px;
+}
+.mk-bento-inbox-head {
+  padding: 10px 14px;
+}
+.mk-bento-week {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  border-top: 1px solid rgba(55, 53, 47, 0.07);
+}
+.mk-bento-day {
+  min-width: 0;
+  min-height: 112px;
+  padding: 10px;
+}
+.mk-bento-day + .mk-bento-day {
+  border-left: 1px solid rgba(55, 53, 47, 0.07);
+}
+.mk-bento-day-name {
+  display: block;
+  font-size: 11px;
+  color: #8d8b86;
+}
+.mk-bento-day-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 2px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  font-size: 14px;
+  font-weight: 600;
+  color: #37352f;
+}
+.mk-bento-event {
+  display: block;
+  margin-top: 8px;
+  padding: 5px 7px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.mk-bento-unread {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--mk-bottle);
+}
+.mk-bento-phone .mk-bento-cal {
+  left: 16px;
+  right: 16px;
+  top: 18px;
+  width: auto;
+}
+.mk-bento-phone .mk-bento-inbox {
+  left: 16px;
+  right: 16px;
+  top: auto;
+  bottom: 18px;
+}
+.mk-bento-phone .mk-bento-day {
+  padding: 8px 5px;
+}
+.mk-bento-phone .mk-bento-day-name {
+  font-size: 10.5px;
+}
+.mk-bento-phone .mk-bento-day-num {
+  width: 24px;
+  height: 24px;
+  font-size: 13px;
+}
+.mk-bento-phone .mk-bento-event {
+  margin-top: 6px;
+  padding: 4px 5px;
+  font-size: 10px;
+  line-height: 1.25;
+}
+
+/* ── Breakpoints ──────────────────────────────────────────────────────────────────────────── */
+
+/* Desktop: the board, exactly. Fixed card heights; each panel starts at the board's offset. */
+@media (min-width: 1120px) {
+  .mk-bento-f1 {
+    grid-column: span 2;
+  }
+  .mk-bento-f6 {
+    grid-column: span 3;
+  }
+  .mk-bento-f1,
+  .mk-bento-f2 {
+    height: 470px;
+  }
+  .mk-bento-f3,
+  .mk-bento-f4,
+  .mk-bento-f5 {
+    height: 430px;
+  }
+  .mk-bento-f6 {
+    height: 250px;
+  }
+  .mk-bento-f6 .mk-bento-head {
+    max-width: 356px; /* the board's 300 px of copy plus the padding; the scene starts at 360 */
+  }
+  .mk-bento-f6 .mk-bento-panel {
+    left: 360px;
+    top: 0;
+  }
+}
+
+/* Tablets and phones: the copy in flow, then the panel under it. */
+@media (max-width: 1119.98px) {
+  .mk-bento-card {
+    display: flex;
+    flex-direction: column;
+  }
+  .mk-bento-head {
+    padding-bottom: 24px;
+  }
+  .mk-bento-panel {
+    position: relative;
+    left: auto;
+    right: auto;
+    top: auto;
+    bottom: auto;
+    /* Grows to the row's height, so paired cards end together and the scene keeps its place. */
+    flex: 1 0 var(--mk-bento-tph);
+  }
+}
+
+/* Tablets: two columns; f1 and f6 run full width (f6's calendar and inbox in a strip under the copy). */
+@media (min-width: 768px) and (max-width: 1119.98px) {
+  .mk-bento-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .mk-bento-f1,
+  .mk-bento-f6 {
+    grid-column: span 2;
+  }
+  .mk-bento-f6 .mk-bento-head {
+    max-width: none;
+  }
+}
+
+/* Phones: the phone board. One column, fixed panel heights, scenes re-laid for a 350 px card. */
+@media (max-width: 767.98px) {
+  .mk-bento {
+    padding: 100px 0 104px;
+  }
+  .mk-bento-h2 {
+    margin-top: 16px;
+  }
+  .mk-bento-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+    margin-top: 32px;
+  }
+  .mk-bento-head {
+    padding: 22px 22px 18px;
+    max-width: none;
+  }
+  .mk-bento-icon {
+    width: 30px;
+    height: 30px;
+  }
+  .mk-bento-desc {
+    margin-top: 10px;
+    font-size: 15px;
+    line-height: 1.55;
+  }
+  .mk-bento-panel {
+    flex: none;
+    height: var(--mk-bento-ph);
+  }
+  .mk-bento-sheet {
+    left: 16px;
+    right: 16px;
+    top: 18px;
+  }
+  .mk-bento-toast {
+    left: 16px;
+    right: 16px;
+  }
+  .mk-bento-desk {
+    display: none;
+  }
+  .mk-bento-phone {
+    display: block;
+  }
+}

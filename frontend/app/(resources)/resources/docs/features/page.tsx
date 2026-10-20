@@ -1,137 +1,104 @@
-import { FileText, History, Activity, Filter, Eye, Download } from "lucide-react"
 import Link from "next/link"
 import { BRAND_NAME } from "@/config/brand"
+import {
+    DocsBox,
+    DocsCode,
+    DocsGrid,
+    DocsH3,
+    DocsHeader,
+    DocsList,
+    DocsMiniCard,
+    DocsPanel,
+    DocsPre,
+    DocsSection,
+    DocsSteps,
+} from "@/components/marketing/v2/docs/docs-blocks"
 
 export default function FeaturesDocsPage() {
     return (
-        <div className="space-y-10">
-            <div>
-                <h1 className="text-3xl font-bold text-gray-900 mb-4">Features</h1>
-                <p className="text-lg text-gray-600 leading-relaxed">
-                    {BRAND_NAME} provides powerful tools to manage, preview, and track your Google Drive documents
-                    with an intuitive interface and advanced filtering capabilities.
-                </p>
-            </div>
+        <>
+            <DocsHeader title="Features">
+                {BRAND_NAME} provides powerful tools to manage, preview, and track your Google Drive documents
+                with an intuitive interface and advanced filtering capabilities.
+            </DocsHeader>
 
             {/* Document Preview */}
-            <div className="border-l-4 border-blue-500 pl-6 py-2">
-                <div className="flex items-center gap-3 mb-3">
-                    <Eye className="h-6 w-6 text-blue-600" />
-                    <h2 className="text-2xl font-bold text-gray-900 m-0">Document Preview</h2>
-                </div>
-                <p className="text-gray-600 mb-4">
-                    Preview your Google Docs, Sheets, and Slides directly within {BRAND_NAME} without leaving the dashboard.
+            <DocsSection title="Document Preview">
+                <p>Preview your Google Docs, Sheets, and Slides directly within {BRAND_NAME} without leaving the dashboard.</p>
+                <DocsSteps
+                    title="How to use:"
+                    steps={[
+                        "Navigate to your dashboard and locate any document",
+                        "Click the three-dot menu (⋮) next to the document",
+                        <>Select <strong>&quot;Preview&quot;</strong> from the dropdown</>,
+                        "The document opens in a side drawer with full Google Docs viewer",
+                    ]}
+                />
+                <p className="mk-docs-aside">
+                    <strong>Note:</strong> Preview mode is read-only. To edit, click &quot;Open in Google Docs&quot; from the preview drawer.
                 </p>
-                <div className="bg-gray-50 rounded-lg p-4 space-y-2">
-                    <h3 className="font-semibold text-gray-900">How to use:</h3>
-                    <ol className="list-decimal list-inside space-y-1 text-sm text-gray-600">
-                        <li>Navigate to your dashboard and locate any document</li>
-                        <li>Click the three-dot menu (⋮) next to the document</li>
-                        <li>Select <strong>"Preview"</strong> from the dropdown</li>
-                        <li>The document opens in a side drawer with full Google Docs viewer</li>
-                    </ol>
-                    <p className="text-xs text-gray-500 mt-3">
-                        <strong>Note:</strong> Preview mode is read-only. To edit, click "Open in Google Docs" from the preview drawer.
-                    </p>
-                </div>
-            </div>
+            </DocsSection>
 
             {/* Activity & Version History */}
-            <div className="border-l-4 border-purple-500 pl-6 py-2">
-                <div className="flex items-center gap-3 mb-3">
-                    <Activity className="h-6 w-6 text-purple-600" />
-                    <h2 className="text-2xl font-bold text-gray-900 m-0">Activity & Version History</h2>
-                </div>
-                <p className="text-gray-600 mb-4">
-                    Track all changes to your documents with a comprehensive activity timeline and version history.
-                </p>
-
-                <div className="grid gap-4 md:grid-cols-2 mb-4">
-                    <div className="bg-purple-50 border border-purple-100 rounded-lg p-4">
-                        <h3 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
-                            <Activity className="h-4 w-4 text-purple-600" />
-                            Activity Tab
-                        </h3>
-                        <p className="text-sm text-gray-600 mb-2">
-                            See a chronological timeline of all document events:
-                        </p>
-                        <ul className="text-sm text-gray-600 space-y-1 list-disc list-inside">
-                            <li>Document creation</li>
-                            <li>Edits and modifications</li>
-                            <li>Renames and moves</li>
-                            <li>Sharing permission changes</li>
-                        </ul>
-                        <p className="text-xs text-gray-500 mt-2">
-                            Shows actual user names who performed each action.
-                        </p>
-                    </div>
-
-                    <div className="bg-blue-50 border border-blue-100 rounded-lg p-4">
-                        <h3 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
-                            <History className="h-4 w-4 text-blue-600" />
-                            Version History
-                        </h3>
-                        <p className="text-sm text-gray-600 mb-2">
-                            Access and restore previous versions:
-                        </p>
-                        <ul className="text-sm text-gray-600 space-y-1 list-disc list-inside">
-                            <li>View all saved revisions</li>
-                            <li>See who made each change</li>
-                            <li>Download specific versions</li>
-                            <li>Compare changes over time</li>
-                        </ul>
-                        <p className="text-xs text-gray-500 mt-2">
-                            Supports both text documents and binary files.
-                        </p>
-                    </div>
-                </div>
-
-                <div className="bg-gray-50 rounded-lg p-4 space-y-2">
-                    <h3 className="font-semibold text-gray-900">How to access:</h3>
-                    <ol className="list-decimal list-inside space-y-1 text-sm text-gray-600">
-                        <li>Click the three-dot menu (⋮) next to any document</li>
-                        <li>Select <strong>"Version History"</strong></li>
-                        <li>Use the tabs to switch between <strong>Activity</strong> and <strong>History</strong></li>
-                    </ol>
-                </div>
-
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mt-4">
-                    <h3 className="font-semibold text-amber-900 mb-2">⚠️ Setup Required</h3>
-                    <p className="text-sm text-amber-800 mb-2">
-                        To see actual user names in the Activity tab (instead of "User"), you must:
-                    </p>
-                    <ol className="list-decimal list-inside space-y-1 text-sm text-amber-800">
+            <DocsSection title="Activity & Version History">
+                <p>Track all changes to your documents with a comprehensive activity timeline and version history.</p>
+                <DocsGrid cols={2}>
+                    <DocsBox tone="white" title="Activity Tab">
+                        <p>See a chronological timeline of all document events:</p>
+                        <DocsList
+                            items={[
+                                "Document creation",
+                                "Edits and modifications",
+                                "Renames and moves",
+                                "Sharing permission changes",
+                            ]}
+                        />
+                        <p className="mk-docs-small">Shows actual user names who performed each action.</p>
+                    </DocsBox>
+                    <DocsBox tone="white" title="Version History">
+                        <p>Access and restore previous versions:</p>
+                        <DocsList
+                            items={[
+                                "View all saved revisions",
+                                "See who made each change",
+                                "Download specific versions",
+                                "Compare changes over time",
+                            ]}
+                        />
+                        <p className="mk-docs-small">Supports both text documents and binary files.</p>
+                    </DocsBox>
+                </DocsGrid>
+                <DocsSteps
+                    title="How to access:"
+                    steps={[
+                        "Click the three-dot menu (⋮) next to any document",
+                        <>Select <strong>&quot;Version History&quot;</strong></>,
+                        <>Use the tabs to switch between <strong>Activity</strong> and <strong>History</strong></>,
+                    ]}
+                />
+                <DocsBox tone="amber" title="Setup Required">
+                    <p>To see actual user names in the Activity tab (instead of &quot;User&quot;), you must:</p>
+                    <ol className="mk-docs-steps">
                         <li>Enable the <strong>Google People API</strong> in your Google Cloud Console</li>
                         <li>Disconnect and reconnect your Google Drive account in {BRAND_NAME}</li>
                     </ol>
-                    <p className="text-xs text-amber-700 mt-2">
-                        This grants the necessary permissions to resolve user identities.
-                    </p>
-                </div>
-            </div>
+                    <p className="mk-docs-small">This grants the necessary permissions to resolve user identities.</p>
+                </DocsBox>
+            </DocsSection>
 
             {/* Smart Filtering */}
-            <div className="border-l-4 border-green-500 pl-6 py-2">
-                <div className="flex items-center gap-3 mb-3">
-                    <Filter className="h-6 w-6 text-green-600" />
-                    <h2 className="text-2xl font-bold text-gray-900 m-0">Smart Filtering with .appignore</h2>
-                </div>
-                <p className="text-gray-600 mb-4">
-                    Control which files appear in your {BRAND_NAME} dashboard using a <code className="bg-gray-100 px-1.5 py-0.5 rounded text-sm">.appignore</code> file
-                    in the <strong>application server root</strong> (the Next.js app working directory), similar to <code className="bg-gray-100 px-1.5 py-0.5 rounded text-sm">.gitignore</code>.
+            <DocsSection title="Smart Filtering with .appignore">
+                <p>
+                    Control which files appear in your {BRAND_NAME} dashboard using a <DocsCode>.appignore</DocsCode> file
+                    in the <strong>application server root</strong> (the Next.js app working directory), similar to <DocsCode>.gitignore</DocsCode>.
                 </p>
-
-                <div className="bg-gray-50 rounded-lg p-4 space-y-3">
-                    <h3 className="font-semibold text-gray-900">How it works:</h3>
-                    <p className="text-sm text-gray-600">
-                        Add a file named <code className="bg-gray-100 px-1.5 py-0.5 rounded text-sm">.appignore</code> next to your deployed app (e.g. <code className="bg-gray-100 px-1 rounded text-sm">frontend/.appignore</code> in this repo when running locally).
+                <DocsBox title="How it works:">
+                    <p>
+                        Add a file named <DocsCode>.appignore</DocsCode> next to your deployed app (e.g. <DocsCode>frontend/.appignore</DocsCode> in this repo when running locally).
                         Non-comment lines are treated as folder name patterns to exclude from Google Drive listings in {BRAND_NAME}.
                     </p>
-
-                    <div className="bg-white border border-gray-200 rounded p-3">
-                        <h4 className="text-xs font-semibold text-gray-700 mb-2">Example .appignore:</h4>
-                        <pre className="text-xs text-gray-800 font-mono">
-                            {`# Hide app metadata folders (matches repo default)
+                    <DocsH3>Example .appignore:</DocsH3>
+                    <DocsPre>{`# Hide app metadata folders (matches repo default)
 /.meta/**
 
 # Exclude all files in the Archive folder
@@ -145,91 +112,62 @@ file:1a2b3c4d5e6f7g8h9i0j
 
 # Exclude temporary files
 *~
-*.tmp`}
-                        </pre>
-                    </div>
-
-                    <div className="space-y-2">
-                        <h4 className="font-semibold text-gray-900 text-sm">Supported patterns:</h4>
-                        <ul className="text-sm text-gray-600 space-y-1 list-disc list-inside">
-                            <li><code className="bg-gray-100 px-1 rounded">FolderName/</code> - Exclude entire folder</li>
-                            <li><code className="bg-gray-100 px-1 rounded">*.extension</code> - Exclude by file type</li>
-                            <li><code className="bg-gray-100 px-1 rounded">file:FILE_ID</code> - Exclude specific file by Google Drive ID</li>
-                            <li><code className="bg-gray-100 px-1 rounded"># comment</code> - Add comments</li>
-                        </ul>
-                    </div>
-
-                    <p className="text-xs text-gray-500">
-                        <strong>Tip:</strong> Changes to <code className="bg-gray-100 px-1 rounded">.appignore</code> take effect after the server reloads patterns (short cache).
+*.tmp`}</DocsPre>
+                    <DocsH3>Supported patterns:</DocsH3>
+                    <DocsList
+                        items={[
+                            <><DocsCode>FolderName/</DocsCode> - Exclude entire folder</>,
+                            <><DocsCode>*.extension</DocsCode> - Exclude by file type</>,
+                            <><DocsCode>file:FILE_ID</DocsCode> - Exclude specific file by Google Drive ID</>,
+                            <><DocsCode># comment</DocsCode> - Add comments</>,
+                        ]}
+                    />
+                    <p className="mk-docs-small">
+                        <strong>Tip:</strong> Changes to <DocsCode>.appignore</DocsCode> take effect after the server reloads patterns (short cache).
                         Refresh your dashboard to see updated results.
                     </p>
-                </div>
-            </div>
+                </DocsBox>
+            </DocsSection>
 
             {/* Document Downloads */}
-            <div className="border-l-4 border-indigo-500 pl-6 py-2">
-                <div className="flex items-center gap-3 mb-3">
-                    <Download className="h-6 w-6 text-indigo-600" />
-                    <h2 className="text-2xl font-bold text-gray-900 m-0">Secure Downloads</h2>
-                </div>
-                <p className="text-gray-600 mb-4">
-                    Download documents and specific versions directly through {BRAND_NAME}&apos;s secure proxy.
-                </p>
-
-                <div className="bg-gray-50 rounded-lg p-4 space-y-2">
-                    <h3 className="font-semibold text-gray-900">Download options:</h3>
-                    <ul className="text-sm text-gray-600 space-y-2 list-disc list-inside">
-                        <li>
-                            <strong>Current version:</strong> Click the three-dot menu → "Download"
-                        </li>
-                        <li>
-                            <strong>Specific version:</strong> Open Version History → Click download icon next to any revision
-                        </li>
-                        <li>
-                            <strong>Format conversion:</strong> Google Docs are automatically converted to appropriate formats
-                            (Docs → .docx, Sheets → .xlsx, Slides → .pptx)
-                        </li>
-                    </ul>
-                    <p className="text-xs text-gray-500 mt-3">
+            <DocsSection title="Secure Downloads">
+                <p>Download documents and specific versions directly through {BRAND_NAME}&apos;s secure proxy.</p>
+                <DocsBox title="Download options:">
+                    <DocsList
+                        items={[
+                            <><strong>Current version:</strong> Click the three-dot menu → &quot;Download&quot;</>,
+                            <><strong>Specific version:</strong> Open Version History → Click download icon next to any revision</>,
+                            <>
+                                <strong>Format conversion:</strong> Google Docs are automatically converted to appropriate formats
+                                (Docs → .docx, Sheets → .xlsx, Slides → .pptx)
+                            </>,
+                        ]}
+                    />
+                    <p className="mk-docs-small">
                         All downloads are streamed through our secure infrastructure. See our{" "}
-                        <Link href="/resources/docs/security" className="text-blue-600 hover:underline">
-                            Security & Privacy
-                        </Link>{" "}
+                        <Link href="/resources/docs/security">Security & Privacy</Link>{" "}
                         page for details.
                     </p>
-                </div>
-            </div>
+                </DocsBox>
+            </DocsSection>
 
             {/* Quick Reference */}
-            <div className="bg-gradient-to-br from-blue-50 to-purple-50 border border-blue-200 rounded-lg p-6">
-                <h2 className="text-xl font-bold text-gray-900 mb-4">Quick Reference</h2>
-                <div className="grid gap-3 md:grid-cols-2">
-                    <div className="bg-white rounded p-3 shadow-sm">
-                        <h3 className="font-semibold text-sm text-gray-900 mb-1">Document Actions Menu</h3>
-                        <p className="text-xs text-gray-600">
-                            Click the <strong>⋮</strong> icon next to any document to access Preview, Version History, and Download options.
-                        </p>
-                    </div>
-                    <div className="bg-white rounded p-3 shadow-sm">
-                        <h3 className="font-semibold text-sm text-gray-900 mb-1">Filter Documents</h3>
-                        <p className="text-xs text-gray-600">
-                            Use the filter dropdown in the dashboard to show only specific file types (Docs, Sheets, Slides, PDFs, etc.).
-                        </p>
-                    </div>
-                    <div className="bg-white rounded p-3 shadow-sm">
-                        <h3 className="font-semibold text-sm text-gray-900 mb-1">Search</h3>
-                        <p className="text-xs text-gray-600">
-                            Use the search bar to find documents by name. Supports real-time filtering as you type.
-                        </p>
-                    </div>
-                    <div className="bg-white rounded p-3 shadow-sm">
-                        <h3 className="font-semibold text-sm text-gray-900 mb-1">Manage Connections</h3>
-                        <p className="text-xs text-gray-600">
-                            Visit the Connectors page to add, remove, or reconnect your Google Drive accounts.
-                        </p>
-                    </div>
-                </div>
-            </div>
-        </div>
+            <DocsPanel title="Quick Reference">
+                <DocsGrid cols={2}>
+                    <DocsMiniCard title="Document Actions Menu">
+                        Click the <strong>⋮</strong> icon next to any document to access Preview, Version History, and Download options.
+                    </DocsMiniCard>
+                    <DocsMiniCard title="Filter Documents">
+                        Use the filter dropdown in the dashboard to show only specific file types (Docs, Sheets, Slides, PDFs, etc.).
+                    </DocsMiniCard>
+                    <DocsMiniCard title="Search">
+                        Use the search bar to find documents by name. Supports real-time filtering as you type.
+                    </DocsMiniCard>
+                    <DocsMiniCard title="Manage Connections">
+                        Visit the Connectors page to add, remove, or reconnect your Google Drive accounts.
+                    </DocsMiniCard>
+                </DocsGrid>
+            </DocsPanel>
+        </>
     )
 }

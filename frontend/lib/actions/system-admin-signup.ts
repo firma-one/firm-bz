@@ -4,7 +4,8 @@ import { Prisma } from '@prisma/client'
 import { z } from 'zod'
 
 import { sendEmail } from '@/lib/email'
-import { renderEmail, ctaButton, escHtml, TEXT_DARK, TEXT_MUTED } from '@/lib/email-templates/base'
+import { BRAND_NAME } from '@/config/brand'
+import { renderEmail, ctaButton, emailFootnote, emailHeading, emailText, escHtml, EMAIL_COLORS, EMAIL_FONTS } from '@/lib/email-templates/base'
 import { prisma } from '@/lib/prisma'
 import { serverActionWrapper, type ActionResponse } from '@/lib/server-action-wrapper'
 import { isSystemAdminEmail } from '@/lib/system/admin-check'
@@ -52,31 +53,32 @@ function buildAdminSignupEmailHtml({
   actionLink: string
 }): string {
   const couponSection = couponCode
-    ? `<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f9f9fb;border:1px solid #e5e7eb;border-radius:6px;margin:20px 0;">
+    ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="${EMAIL_COLORS.GRAY}" style="background-color:${EMAIL_COLORS.GRAY};border-radius:10px;margin:24px 0 0;">
         <tr>
-          <td style="padding:16px 20px;text-align:center;">
-            <p style="margin:0 0 8px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:${TEXT_MUTED};">Discount Coupon</p>
-            <span style="font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,Courier,monospace;font-size:24px;font-weight:800;letter-spacing:0.12em;color:#1b1b1d;">${escHtml(couponCode)}</span>
+          <td style="padding:16px 20px;text-align:center;font-family:${EMAIL_FONTS.FONT};">
+            <p style="margin:0 0 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:${EMAIL_COLORS.LINK};">Discount coupon</p>
+            <span style="font-family:${EMAIL_FONTS.MONO};font-size:24px;font-weight:700;letter-spacing:0.12em;color:${EMAIL_COLORS.INK};">${escHtml(couponCode)}</span>
           </td>
         </tr>
       </table>`
     : ''
 
-  const body = `
-    <h2 style="margin:0 0 8px;font-size:20px;font-weight:700;color:${TEXT_DARK};letter-spacing:-0.01em;">Complete your signup</h2>
-    <p style="margin:0 0 16px;font-size:15px;color:${TEXT_MUTED};line-height:1.6;">Hi ${escHtml(fullName)},</p>
-    <p style="margin:0 0 20px;font-size:15px;color:${TEXT_MUTED};line-height:1.6;">
-      Your account setup is almost done. Confirm your email to activate access and continue to your workspace.
-    </p>
-    ${ctaButton('Confirm and Complete Signup', actionLink)}
-    ${couponSection}
-    <p style="margin:24px 0 0;font-size:12px;color:${TEXT_MUTED};line-height:1.6;">
-      This link is single-use and tied to your email address. If you did not expect this email, you can safely ignore it.
-    </p>
-  `
+  const body = [
+    emailHeading('Complete your signup'),
+    emailText(`Hi ${escHtml(fullName)},`),
+    emailText('Your account setup is almost done. Confirm your email to activate access and continue to your workspace.'),
+    ctaButton('Confirm and complete signup', actionLink),
+    couponSection,
+    emailFootnote('This link is single-use and tied to your email address. If you did not expect this email, you can safely ignore it.'),
+  ].join('\n')
 
   const title = couponCode ? 'Complete your signup and claim your coupon' : 'Complete your signup'
-  return renderEmail({ title, preheader: `Hi ${fullName}, confirm your email to activate your account.`, body })
+  return renderEmail({
+    title,
+    preheader: `Hi ${fullName}, confirm your email to activate your account.`,
+    body,
+    footerNote: `You're receiving this email because an account was set up for you on ${BRAND_NAME}.`,
+  })
 }
 
 async function assertSystemAdmin(): Promise<{ userId: string }> {

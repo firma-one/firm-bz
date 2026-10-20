@@ -10,8 +10,8 @@
     --blog-dark-bg: #1a1520;
 
     /**
-     * Kinetic marketing / firmä design system — accent lime (badges, CTAs, selection).
-     * Mirrors `KINETIC_COLORS.secondaryFixed` / `onSecondaryFixed` in config/kinetic-institution.ts
+     * Legacy Kinetic accent lime, exposed as Tailwind's ds-kinetic-* colors. Nothing uses it since the
+     * marketing redesign (the site's tokens are in components/marketing/v2/marketing-v2.css).
      */
     --ds-kinetic-lime: #72ff70;
     --ds-on-kinetic-lime: #002203;

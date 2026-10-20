@@ -2,312 +2,148 @@ import type { ReactNode } from "react"
 import { AlertTriangle, Check, Copyright, CreditCard, HardDrive, Mail, Scale } from "lucide-react"
 
 import { BrandName } from "@/components/brand/BrandName"
-import { KineticSectionIntro } from "@/components/kinetic/kinetic-section-intro"
-import { MarketingBreadcrumb } from "@/components/marketing/marketing-breadcrumb"
+import { DocView } from "@/components/marketing/v2/reading/doc-view"
+import { Checks, Clause, Clauses, LegalLead, LegalSection } from "@/components/marketing/v2/reading/legal-blocks"
+import { BRAND_NAME } from "@/config/brand"
 import { platformEmail } from "@/config/platform-domain"
-import { cn } from "@/lib/utils"
 
 export type TermsOfServiceVariant = "page" | "embedded"
 
-const headline = "[font-family:var(--font-kinetic-headline),system-ui,sans-serif]"
-const bodySans = "[font-family:var(--font-kinetic-body),system-ui,sans-serif]"
+/** The page's sections, in order: the "On this page" list and the headings' ids (`ai` is a deep link). */
+const SECTIONS = [
+  { id: "non-custodial-service-model", n: "01", title: "Non-custodial service model" },
+  { id: "subscription-and-usage", n: "02", title: "Subscription & usage" },
+  { id: "liability-disclaimer", n: "03", title: "Liability disclaimer" },
+  { id: "ai", n: "04", title: "AI assistant" },
+  { id: "intellectual-property", n: "05", title: "Intellectual property" },
+  { id: "contact", n: "06", title: "Contact" },
+] as const
 
-function TechnicalCard({
-  className,
-  children,
-}: {
-  className?: string
-  children: ReactNode
-}) {
+const TOC = SECTIONS.map(({ id, title }) => ({ id, text: title }))
+
+function Section({ index, children }: { index: number; children: ReactNode }) {
+  const { id, n, title } = SECTIONS[index]
   return (
-    <div
-      className={cn(
-        "rounded-sm border border-[#0b1321]/10 bg-white p-5 transition-all duration-200 md:p-6",
-        "hover:border-[#22c55e] hover:shadow-[0_4px_20px_-10px_rgba(0,255,65,0.2)]",
-        className
-      )}
-    >
+    <LegalSection id={id} n={n} title={title}>
       {children}
-    </div>
+    </LegalSection>
   )
 }
 
-function SectionHeading({ n, title }: { n: string; title: string }) {
-  return (
-    <h2
-      className={cn(
-        "flex items-center gap-4 text-2xl font-bold uppercase tracking-tighter sm:text-3xl",
-        headline
-      )}
-    >
-      <span className="text-[#22c55e]">{n}</span>
-      {title}
-    </h2>
-  )
-}
-
+/** Embedded (modal) variant only; the page variant uses the reading template's link style. */
 const mailLinkClass =
   "font-bold text-[#5a78ff] decoration-2 underline-offset-2 transition-colors hover:text-[#3d5ce0] hover:underline"
 
+/** `/terms`, on the marketing site's reading template. The Terms' wording lives here unchanged. */
 function TermsOfServicePageView() {
   const infoEmail = platformEmail("info")
 
   return (
-    <>
-      <MarketingBreadcrumb items={[{ label: "Terms of Service" }]} className="mb-8" />
+    <DocView
+      crumbs={[{ label: "Legal" }, { label: "Terms of Service", href: "/terms" }]}
+      title="Terms of Service"
+      dek={
+        <>
+          By using {BRAND_NAME}, you agree to these Terms. They govern the relationship between us and Strategic
+          Advisors, Consultants, and Firms who use our services to manage client portals.
+        </>
+      }
+      meta={
+        <>
+          Last updated <time dateTime="2026-01">January 2026</time>
+        </>
+      }
+      toc={TOC}
+    >
+      <Section index={0}>
+        <LegalLead>
+          {BRAND_NAME} operates on a <strong>Non-Custodial</strong> architecture. We provide an interface to
+          organize and govern files that reside in <strong>your</strong> Google Drive.
+        </LegalLead>
+        <Checks
+          items={[
+            "We do not take ownership of your intellectual property.",
+            "We do not store file content on our servers.",
+            "You retain full liability for the content you share via our platform.",
+          ]}
+        />
+      </Section>
 
-      <header className="mb-12 md:mb-16">
-        <div className="flex flex-col justify-between gap-6 border-b border-[#c6c6cc]/30 pb-8 md:flex-row md:items-end md:gap-8 md:pb-10">
-          <div className="min-w-0 max-w-2xl">
-            <KineticSectionIntro
-              heading="h1"
-              titleScale="hero"
-              badge={{
-                variant: "lime",
-                icon: <Scale className="ds-badge-kinetic__icon stroke-[2]" aria-hidden />,
-                label: "Legal framework // Agreement",
-                className: "mb-6",
-              }}
-              title={
-                <>
-                  <span className="text-[#1b1b1d]">Terms</span>{" "}
-                  <span className="text-[#5a78ff]">of Service</span>
-                </>
-              }
-              description={
-                <p
-                  className={cn(
-                    "max-w-xl border-l-2 border-[#5a78ff] py-1.5 pl-5 text-lg leading-relaxed text-[#45474c] md:text-xl",
-                    bodySans
-                  )}
-                >
-                  By using <BrandName className="inline [font-size:inherit] [line-height:inherit]" gradient />, you
-                  agree to these Terms. They govern the relationship between us and Strategic Advisors,
-                  Consultants, and Firms who use our services to manage client portals.
-                </p>
-              }
-              descriptionClassName=""
-            />
-          </div>
-          <div className="hidden shrink-0 text-right md:block">
-            <p
-              className={cn(
-                "mb-2 text-[10px] font-bold uppercase tracking-widest text-[#45474c]",
-                headline
-              )}
-            >
-              Status: Active documentation
-            </p>
-            <p className={cn("text-xs font-bold uppercase tracking-widest text-[#1b1b1d] md:text-sm", headline)}>
-              Last updated: Jan 2026
-            </p>
-          </div>
-        </div>
-      </header>
+      <Section index={1}>
+        <LegalLead>Access is provided on a subscription basis (monthly or annual).</LegalLead>
+        <Clauses>
+          <Clause icon={CreditCard} title="Fair use">
+            API limits may apply to prevent abuse of the Google Drive integration.
+          </Clause>
+          <Clause icon={HardDrive} title="Cancellation">
+            You may cancel at any time. Your portals remain active until the end of the billing cycle.
+          </Clause>
+          <Clause icon={AlertTriangle} title="Termination">
+            We reserve the right to suspend accounts that attempt to reverse-engineer our governance protocols.
+          </Clause>
+        </Clauses>
+      </Section>
 
-      <div className="space-y-20 md:space-y-24">
-        <section className="grid grid-cols-1 items-start gap-10 lg:grid-cols-12 lg:gap-12">
-          <div className="lg:col-span-4">
-            <SectionHeading n="01" title="Non-custodial service model" />
-            <p className="mt-4 text-sm leading-relaxed text-[#45474c]">
-              <BrandName className="inline [font-size:inherit] [line-height:inherit]" gradient /> operates on a{" "}
-              <strong className="text-[#1b1b1d]">Non-Custodial</strong> architecture. We provide an interface to
-              organize and govern files that reside in <strong className="text-[#1b1b1d]">your</strong> Google Drive.
-            </p>
-          </div>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:col-span-8">
-            <TechnicalCard className="flex items-start gap-4">
-              <Check className="mt-0.5 h-5 w-5 shrink-0 text-[#22c55e]" aria-hidden />
-              <p className="text-sm leading-relaxed text-[#45474c]">
-                We do not take ownership of your intellectual property.
-              </p>
-            </TechnicalCard>
-            <TechnicalCard className="flex items-start gap-4">
-              <Check className="mt-0.5 h-5 w-5 shrink-0 text-[#22c55e]" aria-hidden />
-              <p className="text-sm leading-relaxed text-[#45474c]">
-                We do not store file content on our servers.
-              </p>
-            </TechnicalCard>
-            <TechnicalCard className="flex items-start gap-4 md:col-span-2">
-              <Check className="mt-0.5 h-5 w-5 shrink-0 text-[#22c55e]" aria-hidden />
-              <p className="text-sm leading-relaxed text-[#45474c]">
-                You retain full liability for the content you share via our platform.
-              </p>
-            </TechnicalCard>
-          </div>
-        </section>
+      <Section index={2}>
+        <LegalLead>Governance tooling, not legal advice.</LegalLead>
+        <Clauses>
+          <Clause icon={Scale} title="As-is service">
+            {BRAND_NAME} is a tool for governance and organization. We are not a legal compliance firm. While our
+            tools assist in protecting your IP (&quot;Zombie Links&quot;), we do not guarantee against all forms of
+            data exfiltration by your clients. The service is provided &quot;AS IS&quot; without warranties of any
+            kind.
+          </Clause>
+        </Clauses>
+      </Section>
 
-        <section className="grid grid-cols-1 items-start gap-10 lg:grid-cols-12 lg:gap-12">
-          <div className="lg:col-span-4">
-            <SectionHeading n="02" title="Subscription & usage" />
-            <p className="mt-4 text-sm leading-relaxed text-[#45474c]">
-              Access is provided on a subscription basis (monthly or annual).
-            </p>
-          </div>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:col-span-8">
-            <TechnicalCard>
-              <div className="mb-4 flex items-center gap-2">
-                <CreditCard className="h-5 w-5 shrink-0 text-[#22c55e]" aria-hidden />
-                <h3 className={cn("text-[10px] font-bold uppercase tracking-widest", headline)}>Fair use</h3>
-              </div>
-              <p className="text-sm leading-relaxed text-[#45474c]">
-                API limits may apply to prevent abuse of the Google Drive integration.
-              </p>
-            </TechnicalCard>
-            <TechnicalCard>
-              <div className="mb-4 flex items-center gap-2">
-                <HardDrive className="h-5 w-5 shrink-0 text-[#5a78ff]" aria-hidden />
-                <h3 className={cn("text-[10px] font-bold uppercase tracking-widest", headline)}>Cancellation</h3>
-              </div>
-              <p className="text-sm leading-relaxed text-[#45474c]">
-                You may cancel at any time. Your portals remain active until the end of the billing cycle.
-              </p>
-            </TechnicalCard>
-            <TechnicalCard className="md:col-span-2">
-              <div className="mb-4 flex items-center gap-2">
-                <AlertTriangle className="h-5 w-5 shrink-0 text-[#22c55e]" aria-hidden />
-                <h3 className={cn("text-[10px] font-bold uppercase tracking-widest", headline)}>Termination</h3>
-              </div>
-              <p className="text-sm leading-relaxed text-[#45474c]">
-                We reserve the right to suspend accounts that attempt to reverse-engineer our governance protocols.
-              </p>
-            </TechnicalCard>
-          </div>
-        </section>
+      <Section index={3}>
+        <LegalLead>What Brio does, what it will not do, and who is accountable for the result.</LegalLead>
+        <Clauses>
+          <Clause icon={AlertTriangle} title="Output may be wrong">
+            Brio generates its answers, and generated answers can be incomplete or incorrect even when they read as
+            confident. Treat them as a starting point, not as a professional conclusion. You remain responsible for
+            checking anything you rely on, and for the advice you give your own clients.
+          </Clause>
+          <Clause icon={Check} title="You approve every change">
+            Brio can rename and move files and create folders. It proposes; you approve each change before
+            anything happens, and nothing happens without that approval. A change you approve is your decision and
+            your responsibility — it is recorded in your audit trail against both the assistant and your account.
+          </Clause>
+          <Clause icon={HardDrive} title="It never deletes">
+            Brio performs reversible operations only. It will not delete, trash or archive a file, a folder or a
+            member, and it will not remove anyone&apos;s access. Asked to, it declines and points you to where you
+            can do it yourself.
+          </Clause>
+          <Clause icon={CreditCard} title="AI credits">
+            AI features consume credits included with your plan. Credits reset each billing period, do not carry
+            over, and are not separately refundable. When they run out, AI features pause until the next period;
+            everything else keeps working.
+          </Clause>
+        </Clauses>
+      </Section>
 
-        <section className="grid grid-cols-1 items-start gap-10 lg:grid-cols-12 lg:gap-12">
-          <div className="lg:col-span-4">
-            <SectionHeading n="03" title="Liability disclaimer" />
-            <p className="mt-4 text-sm leading-relaxed text-[#45474c]">
-              Governance tooling, not legal advice.
-            </p>
-          </div>
-          <div className="lg:col-span-8">
-            <TechnicalCard>
-              <div className="mb-4 flex items-center gap-2">
-                <Scale className="h-5 w-5 shrink-0 text-[#5a78ff]" aria-hidden />
-                <h3 className={cn("text-[10px] font-bold uppercase tracking-widest", headline)}>As-is service</h3>
-              </div>
-              <p className="text-sm leading-relaxed text-[#45474c]">
-                <BrandName className="inline [font-size:inherit] [line-height:inherit]" gradient /> is a tool for governance and organization. We are
-                not a legal compliance firm. While our tools assist in protecting your IP (&quot;Zombie Links&quot;), we
-                do not guarantee against all forms of data exfiltration by your clients. The service is provided
-                &quot;AS IS&quot; without warranties of any kind.
-              </p>
-            </TechnicalCard>
-          </div>
-        </section>
+      <Section index={4}>
+        <LegalLead>Our platform and your responsibilities.</LegalLead>
+        <Clauses>
+          <Clause icon={Copyright} title="Platform rights">
+            The {BRAND_NAME} platform, including its source code, governance algorithms, and visual interfaces, is
+            the exclusive property of {BRAND_NAME}.
+          </Clause>
+        </Clauses>
+      </Section>
 
-        <section
-          id="ai"
-          className="scroll-mt-36 grid grid-cols-1 items-start gap-10 lg:grid-cols-12 lg:gap-12"
-        >
-          <div className="lg:col-span-4">
-            <SectionHeading n="04" title="AI assistant" />
-            <p className="mt-4 text-sm leading-relaxed text-[#45474c]">
-              What Brio does, what it will not do, and who is accountable for the result.
-            </p>
-          </div>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:col-span-8">
-            <TechnicalCard>
-              <div className="mb-4 flex items-center gap-2">
-                <AlertTriangle className="h-5 w-5 shrink-0 text-[#5a78ff]" aria-hidden />
-                <h3 className={cn("text-[10px] font-bold uppercase tracking-widest", headline)}>
-                  Output may be wrong
-                </h3>
-              </div>
-              <p className="text-sm leading-relaxed text-[#45474c]">
-                Brio generates its answers, and generated answers can be incomplete or incorrect
-                even when they read as confident. Treat them as a starting point, not as a
-                professional conclusion. You remain responsible for checking anything you rely on,
-                and for the advice you give your own clients.
-              </p>
-            </TechnicalCard>
-            <TechnicalCard>
-              <div className="mb-4 flex items-center gap-2">
-                <Check className="h-5 w-5 shrink-0 text-[#5a78ff]" aria-hidden />
-                <h3 className={cn("text-[10px] font-bold uppercase tracking-widest", headline)}>
-                  You approve every change
-                </h3>
-              </div>
-              <p className="text-sm leading-relaxed text-[#45474c]">
-                Brio can rename and move files and create folders. It proposes; you approve each
-                change before anything happens, and nothing happens without that approval. A change
-                you approve is your decision and your responsibility — it is recorded in your audit
-                trail against both the assistant and your account.
-              </p>
-            </TechnicalCard>
-            <TechnicalCard>
-              <div className="mb-4 flex items-center gap-2">
-                <HardDrive className="h-5 w-5 shrink-0 text-[#5a78ff]" aria-hidden />
-                <h3 className={cn("text-[10px] font-bold uppercase tracking-widest", headline)}>
-                  It never deletes
-                </h3>
-              </div>
-              <p className="text-sm leading-relaxed text-[#45474c]">
-                Brio performs reversible operations only. It will not delete, trash or archive a
-                file, a folder or a member, and it will not remove anyone&apos;s access. Asked to,
-                it declines and points you to where you can do it yourself.
-              </p>
-            </TechnicalCard>
-            <TechnicalCard>
-              <div className="mb-4 flex items-center gap-2">
-                <CreditCard className="h-5 w-5 shrink-0 text-[#5a78ff]" aria-hidden />
-                <h3 className={cn("text-[10px] font-bold uppercase tracking-widest", headline)}>
-                  AI credits
-                </h3>
-              </div>
-              <p className="text-sm leading-relaxed text-[#45474c]">
-                AI features consume credits included with your plan. Credits reset each billing
-                period, do not carry over, and are not separately refundable. When they run out, AI
-                features pause until the next period; everything else keeps working.
-              </p>
-            </TechnicalCard>
-          </div>
-        </section>
-
-        <section className="grid grid-cols-1 items-start gap-10 lg:grid-cols-12 lg:gap-12">
-          <div className="lg:col-span-4">
-            <SectionHeading n="05" title="Intellectual property" />
-            <p className="mt-4 text-sm leading-relaxed text-[#45474c]">Our platform and your responsibilities.</p>
-          </div>
-          <div className="lg:col-span-8">
-            <TechnicalCard>
-              <div className="mb-4 flex items-center gap-2">
-                <Copyright className="h-5 w-5 shrink-0 text-[#22c55e]" aria-hidden />
-                <h3 className={cn("text-[10px] font-bold uppercase tracking-widest", headline)}>Platform rights</h3>
-              </div>
-              <p className="text-sm leading-relaxed text-[#45474c]">
-                The <BrandName className="inline [font-size:inherit] [line-height:inherit]" gradient /> platform,
-                including its source code, governance algorithms, and visual interfaces, is the exclusive property of{" "}
-                <BrandName className="inline [font-size:inherit] [line-height:inherit]" gradient />.
-              </p>
-            </TechnicalCard>
-          </div>
-        </section>
-
-        <section className="grid grid-cols-1 items-start gap-10 lg:grid-cols-12 lg:gap-12">
-          <div className="lg:col-span-4">
-            <SectionHeading n="06" title="Contact" />
-            <p className="mt-4 text-sm leading-relaxed text-[#45474c]">Questions about these Terms.</p>
-          </div>
-          <div className="lg:col-span-8">
-            <TechnicalCard>
-              <div className="mb-4 flex items-center gap-2">
-                <Mail className="h-5 w-5 shrink-0 text-[#5a78ff]" aria-hidden />
-                <h3 className={cn("text-[10px] font-bold uppercase tracking-widest", headline)}>Reach us</h3>
-              </div>
-              <p className="text-sm leading-relaxed text-[#45474c]">
-                For questions regarding these Terms, please contact:{" "}
-                <a href={`mailto:${infoEmail}`} className={mailLinkClass}>
-                  {infoEmail}
-                </a>
-              </p>
-            </TechnicalCard>
-          </div>
-        </section>
-      </div>
-    </>
+      <Section index={5}>
+        <LegalLead>Questions about these Terms.</LegalLead>
+        <Clauses>
+          <Clause icon={Mail} title="Reach us">
+            For questions regarding these Terms, please contact:{" "}
+            <a href={`mailto:${infoEmail}`} className="mk-doc-link">
+              {infoEmail}
+            </a>
+          </Clause>
+        </Clauses>
+      </Section>
+    </DocView>
   )
 }
 

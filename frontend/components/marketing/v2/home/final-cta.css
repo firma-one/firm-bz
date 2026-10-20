@@ -1,0 +1,56 @@
+/*
+ * 11 · Final CTA. The top padding tracks the 6° slant (var(--mk-slant) is in vw), so the headline keeps the
+ * board's clearance under the slant's low corner at every width.
+ */
+
+.mk-final-cta {
+  text-align: center;
+  padding-top: 96px;
+  padding-bottom: 56px;
+}
+
+.mk-final-cta-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* The board's CTA buttons are a size up from the default pill, and Start free glows on the dark band. */
+.mk-final-cta-actions .mk-btn {
+  height: 54px;
+  font-size: 17px;
+}
+.mk-final-cta-actions .mk-btn--primary {
+  padding: 0 28px;
+  box-shadow: 0 0 36px -6px rgba(125, 255, 119, 0.6);
+}
+@media (hover: hover) {
+  .mk-final-cta-actions .mk-btn--primary:hover {
+    box-shadow: 0 0 48px -4px rgba(125, 255, 119, 0.75), 0 0 0 4px rgba(125, 255, 119, 0.22);
+  }
+  .mk-final-cta-actions .mk-btn--ghost-dark:hover {
+    background: rgba(255, 255, 255, 0.1);
+  }
+}
+
+@media (min-width: 768px) {
+  .mk-final-cta {
+    padding-top: calc(var(--mk-slant) + 79px);
+    padding-bottom: clamp(96px, 10.4vw, 150px);
+  }
+  .mk-final-cta-actions {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 14px;
+  }
+  .mk-final-cta-actions .mk-btn--primary {
+    box-shadow: 0 0 40px -6px rgba(125, 255, 119, 0.6);
+  }
+}
+
+@media (max-width: 767px) {
+  .mk-final-cta-wide {
+    display: none;
+  }
+}

@@ -1,10 +1,11 @@
 import { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 
-import { Header } from '@/components/layout/Header'
-import { Footer } from '@/components/layout/Footer'
-import { BlogListing } from '@/components/blog/blog-listing'
-import { MarketingBreadcrumb } from '@/components/marketing/marketing-breadcrumb'
+import { BlogListing } from '@/components/marketing/v2/reading/blog-listing'
+import { ReadingFinalCta } from '@/components/marketing/v2/reading/closing'
+import { categoryLabel, toCardData } from '@/components/marketing/v2/reading/format'
+import { blogListingData } from '@/components/marketing/v2/reading/listing-data'
+import { ListingHeader } from '@/components/marketing/v2/reading/listing-header'
 import { BRAND_NAME } from '@/config/brand'
 import { getPlatformSiteOrigin } from '@/config/platform-domain'
 import {
@@ -12,8 +13,7 @@ import {
   getAllCategories,
   getPostsByCategory,
 } from '@/lib/blog-utils'
-import { BLOG_BASE_PATH, MARKETING_PAGE_SHELL } from '@/lib/marketing/target-audience-nav'
-import { cn } from '@/lib/utils'
+import { BLOG_BASE_PATH } from '@/lib/marketing/target-audience-nav'
 
 interface CategoryPageProps {
   params: Promise<{
@@ -64,9 +64,6 @@ export async function generateStaticParams() {
   }))
 }
 
-const H = '[font-family:var(--font-kinetic-headline),system-ui,sans-serif]'
-const B = '[font-family:var(--font-kinetic-body),system-ui,sans-serif]'
-
 export default async function CategoryPage({ params }: CategoryPageProps) {
   const { category } = await params
   const categories = getAllCategories()
@@ -75,47 +72,31 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
     notFound()
   }
 
-  const posts = getPostsByCategory(category)
-  const categoryName = formatBlogCategoryName(category)
+  const { posts: allPosts, categories: pills } = blogListingData()
+  const posts = allPosts.filter((post) => post.category === category)
+  const label = categoryLabel(category)
 
   return (
-    <div className="relative flex min-h-screen flex-col">
-      <Header />
-
-      <main className={cn(MARKETING_PAGE_SHELL, 'relative z-10 w-full flex-1 pb-16 pt-24 md:pb-24 lg:pt-28')}>
-        <MarketingBreadcrumb
-          items={[
-            { label: 'Resources' },
-            { label: 'Blog', href: BLOG_BASE_PATH },
-            { label: categoryName },
-          ]}
-          className="mb-8 md:mb-10"
-        />
-
-        <header className="mb-12 md:mb-14">
-          <h1
-            className={`mb-3 text-4xl font-bold capitalize tracking-tighter text-[#1b1b1d] sm:text-5xl md:text-6xl ${H}`}
-          >
-            {categoryName}
-          </h1>
-          <p className={cn('text-lg text-[#45474c] md:text-xl', B)}>
-            {posts.length} {posts.length === 1 ? 'article' : 'articles'} in this category
-          </p>
-        </header>
-
-        {posts.length === 0 ? (
-          <p className={cn('text-center text-[#45474c]', B)}>No posts in this category yet. Check back soon!</p>
-        ) : (
-          <BlogListing
-            posts={posts}
-            categories={categories}
-            activeCategory={category}
-            showFeatured={false}
-          />
-        )}
-      </main>
-
-      <Footer />
-    </div>
+    <>
+      <ListingHeader
+        crumbs={[
+          { label: 'Resources' },
+          { label: 'Blog', href: BLOG_BASE_PATH },
+          { label, href: `${BLOG_BASE_PATH}/${category}` },
+        ]}
+        title={label}
+        lede={`${posts.length} ${posts.length === 1 ? 'article' : 'articles'} in this category`}
+      />
+      <BlogListing
+        posts={posts.map(toCardData)}
+        categories={pills}
+        allHref={BLOG_BASE_PATH}
+        allCount={allPosts.length}
+        activeCategory={category}
+        showFeatured={false}
+        gridTitle="All articles"
+      />
+      <ReadingFinalCta />
+    </>
   )
 }

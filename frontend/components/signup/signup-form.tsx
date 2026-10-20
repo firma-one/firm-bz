@@ -30,6 +30,18 @@ import { checkEmailExists, sendOTPWithTurnstile } from '@/app/actions/send-otp'
 import { sendEvent, ANALYTICS_EVENTS } from "@/lib/analytics"
 import { logger } from '@/lib/logger'
 import { persistCheckoutIntent } from '@/lib/marketing/checkout-intent'
+import { BRAND_NAME } from '@/config/brand'
+import {
+    AuthAlert,
+    AuthBack,
+    AuthChevron,
+    AuthDivider,
+    AuthField,
+    AuthFieldCheck,
+    AuthNote,
+    GoogleMark,
+    MicrosoftMark,
+} from '@/components/marketing/v2/auth/auth-ui'
 
 type OnboardingStep = SignupStepKey
 
@@ -89,10 +101,16 @@ function parseNameFromEmail(email: string): { firstName: string; lastName: strin
     }
 }
 
-export type SignupFormLayout = 'stacked-dark' | 'split-light'
+export type SignupFormLayout = 'stacked-dark' | 'split-light' | 'mk'
+
+/** Order of the steps, so the `mk` layout slides forward or back. */
+const STEP_RANK: Record<OnboardingStep, number> = { info: 0, 'auth-method': 1, 'otp-verify': 2, success: 3 }
 
 export interface SignupFormProps {
-    /** `split-light`: right-column surface from docs/design/v4/signin (light form); progress lives in parent. */
+    /**
+     * `split-light`: right-column surface from docs/design/v4/signin (light form); progress lives in parent.
+     * `mk`: the v2 marketing card (SignUp board) — renders inside `AuthShell`, progress lives in parent.
+     */
     layout?: SignupFormLayout
     /** Sync step to split layout (e.g. left column hero). */
     onStepChange?: (step: SignupStepKey) => void
@@ -120,6 +138,9 @@ export function SignupForm({
     const otpSendTurnstileErrorCount = useRef(0)
     const otpResendTurnstileErrorCount = useRef(0)
     const isSplitLight = layout === 'split-light'
+    const isMk = layout === 'mk'
+    /** Turnstile's light theme and flexible width suit both light layouts. */
+    const isLightSurface = isSplitLight || isMk
 
     // Form state
     const [step, setStep] = useState<OnboardingStep>('info')
@@ -138,6 +159,13 @@ export function SignupForm({
     const [existingAccountMessage, setExistingAccountMessage] = useState('')
     const [emailLocked, setEmailLocked] = useState(!!searchParams.get('email'))
 
+    // `mk` layout only: which way the step content slides in (derived from step changes; no flow logic).
+    const [shownStep, setShownStep] = useState<OnboardingStep>(step)
+    const [stepDir, setStepDir] = useState<'none' | 'fwd' | 'back'>('none')
+    if (shownStep !== step) {
+        setShownStep(step)
+        setStepDir(STEP_RANK[step] > STEP_RANK[shownStep] ? 'fwd' : 'back')
+    }
 
     useEffect(() => {
         onStepChange?.(step)
@@ -416,6 +444,351 @@ export function SignupForm({
         return qs ? `/signin?${qs}` : '/signin'
     })()
 
+    // The three Turnstile widgets, shared by every layout (callbacks unchanged; only placement varies).
+    const infoTurnstile = (
+        <Turnstile
+            ref={infoTurnstileRef}
+            className={isLightSurface ? 'min-w-0 w-full' : 'min-w-0'}
+            siteKey={
+                process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ||
+                '1x00000000000000000000AA'
+            }
+            options={turnstileOptions(isLightSurface)}
+            onSuccess={(token) => {
+                infoTurnstileErrorCount.current = 0
+                setTurnstileToken(token)
+                // Auto-trigger email check after Turnstile success
+                handleEmailCheckWithOTP(token)
+            }}
+            onError={() => {
+                infoTurnstileErrorCount.current += 1
+                if (infoTurnstileErrorCount.current > 1) {
+                    setError('Captcha verification failed. Please try again.')
+                    setShowTurnstile(false)
+                } else {
+                    setTurnstileToken(null)
+                    infoTurnstileRef.current?.reset()
+                }
+            }}
+            onExpire={() => {
+                setTurnstileToken(null)
+                infoTurnstileRef.current?.reset()
+            }}
+        />
+    )
+    const otpSendTurnstile = (
+        <Turnstile
+            ref={otpSendTurnstileRef}
+            className={isLightSurface ? 'min-w-0 w-full' : 'min-w-0'}
+            siteKey={
+                process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ||
+                '1x00000000000000000000AA'
+            }
+            options={turnstileOptions(isLightSurface)}
+            onSuccess={(token) => {
+                otpSendTurnstileErrorCount.current = 0
+                setTurnstileToken(token)
+                setError('')
+                sendOTPWithToken(token)
+            }}
+            onError={() => {
+                otpSendTurnstileErrorCount.current += 1
+                if (otpSendTurnstileErrorCount.current > 1) {
+                    setError('Captcha verification failed. Please try again.')
+                }
+                setTurnstileToken(null)
+                otpSendTurnstileRef.current?.reset()
+            }}
+            onExpire={() => {
+                setTurnstileToken(null)
+                otpSendTurnstileRef.current?.reset()
+            }}
+        />
+    )
+    const otpResendTurnstile = (
+        <Turnstile
+            ref={otpResendTurnstileRef}
+            className={isLightSurface ? 'min-w-0 w-full' : 'min-w-0'}
+            siteKey={
+                process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ||
+                '1x00000000000000000000AA'
+            }
+            options={turnstileOptions(isLightSurface)}
+            onSuccess={(token) => {
+                otpResendTurnstileErrorCount.current = 0
+                setTurnstileToken(token)
+                // Auto-trigger resend after Turnstile success
+                handleSendOTP()
+            }}
+            onError={() => {
+                otpResendTurnstileErrorCount.current += 1
+                if (otpResendTurnstileErrorCount.current > 1) {
+                    setError('Captcha verification failed. Please try again.')
+                }
+                setTurnstileToken(null)
+                otpResendTurnstileRef.current?.reset()
+            }}
+            onExpire={() => {
+                setTurnstileToken(null)
+                otpResendTurnstileRef.current?.reset()
+            }}
+        />
+    )
+
+    // `mk` layout (v2 marketing card, SignUp board): the same steps, state and handlers as the
+    // layouts below; only the presentation differs.
+    if (isMk) {
+        const stepClass = stepDir === 'none' ? undefined : `mk-auth-step--${stepDir}`
+        const errorAlert = error ? <AuthAlert>{error}</AuthAlert> : null
+        const applicableProviders =
+            step === 'auth-method'
+                ? getApplicableOAuthProviders(email).filter(
+                      p => p !== 'microsoft' || microsoftSignInEnabled
+                  )
+                : []
+        const hasOAuthOption = applicableProviders.length > 0
+
+        return (
+            <div className="w-full min-w-0">
+                {/* Step 1: details — email first; after we confirm it is new, the name fields */}
+                {step === 'info' && (
+                    <div key="info" className={stepClass}>
+                        <h1 className="mk-auth-title">
+                            Create your {BRAND_NAME} account and run every engagement from your Drive
+                        </h1>
+                        <form onSubmit={handleInfoSubmit} className="mt-[30px]">
+                            <div
+                                className={emailLocked && !emailVerifiedNewUser ? 'mk-auth-locked' : undefined}
+                                onClick={emailVerifiedNewUser ? undefined : () => setEmailLocked(false)}
+                            >
+                                <KineticFloatingEmailField
+                                    variant="mk"
+                                    ref={emailInputRef}
+                                    id="email"
+                                    label="Work email"
+                                    placeholder="you@example.com"
+                                    hint="We’ll email you a one-time code. No password needed."
+                                    value={email}
+                                    onValueChange={setEmail}
+                                    disabled={emailVerifiedNewUser}
+                                    required
+                                    onFocus={emailVerifiedNewUser ? undefined : () => setEmailLocked(false)}
+                                    onKeyDown={
+                                        emailVerifiedNewUser
+                                            ? undefined
+                                            : (e) => {
+                                                  if (e.key === 'Enter') {
+                                                      e.preventDefault()
+                                                      void handleInfoSubmit(e as unknown as React.FormEvent<Element>)
+                                                  }
+                                              }
+                                    }
+                                    endAdornment={<AuthFieldCheck on={emailVerifiedNewUser} />}
+                                    labelAction={
+                                        emailVerifiedNewUser ? (
+                                            <button
+                                                type="button"
+                                                onClick={handleBackToEmail}
+                                                className="mk-auth-text-btn"
+                                            >
+                                                Edit email
+                                            </button>
+                                        ) : null
+                                    }
+                                />
+                            </div>
+
+                            {existingAccountMessage && (
+                                <AuthNote>
+                                    {existingAccountMessage}{' '}
+                                    <Link href={signinHref}>Go to sign in</Link>
+                                </AuthNote>
+                            )}
+
+                            {showTurnstile && step === 'info' && !emailVerifiedNewUser && (
+                                <div className="mk-auth-turnstile">{infoTurnstile}</div>
+                            )}
+
+                            {emailVerifiedNewUser && (
+                                <div className="mk-auth-names mk-auth-reveal">
+                                    <AuthField id="firstName" label="First name">
+                                        <input
+                                            ref={firstNameInputRef}
+                                            id="firstName"
+                                            value={firstName}
+                                            onChange={(e) => setFirstName(e.target.value)}
+                                            placeholder="John"
+                                            autoComplete="given-name"
+                                            required
+                                            className="mk-auth-input"
+                                        />
+                                    </AuthField>
+                                    <AuthField id="lastName" label="Last name">
+                                        <input
+                                            id="lastName"
+                                            value={lastName}
+                                            onChange={(e) => setLastName(e.target.value)}
+                                            placeholder="Doe"
+                                            autoComplete="family-name"
+                                            required
+                                            className="mk-auth-input"
+                                        />
+                                    </AuthField>
+                                </div>
+                            )}
+
+                            {errorAlert}
+
+                            <button
+                                type="submit"
+                                disabled={
+                                    emailVerifiedNewUser
+                                        ? loading || !firstName?.trim() || !lastName?.trim()
+                                        : loading || !email.trim()
+                                }
+                                aria-busy={loading || undefined}
+                                className="mk-btn mk-btn--primary mk-auth-btn mt-[26px]"
+                            >
+                                {loading && <LoadingSpinner size="sm" />}
+                                {emailVerifiedNewUser ? 'Create account' : 'Continue'}
+                                {!loading && <AuthChevron />}
+                            </button>
+
+                            <p className="mk-auth-terms">
+                                By creating an account, you agree to the <Link href="/terms">Terms</Link> and{' '}
+                                <Link href="/privacy">Privacy Policy</Link>.
+                            </p>
+                        </form>
+                    </div>
+                )}
+
+                {/* Step 2: how to sign in — email code, or Google / Microsoft where they apply */}
+                {step === 'auth-method' && (
+                    <div key="auth-method" className={stepClass}>
+                        <AuthBack onClick={handleBackToNames} disabled={loading} />
+                        {/* As in the other layouts, the "how" heading only shows when there is a choice. */}
+                        {hasOAuthOption && <h1 className="mk-auth-title">How do you want to sign in?</h1>}
+                        <p className="mk-auth-lede">
+                            No passwords. Signing up as <strong>{email}</strong>.
+                        </p>
+
+                        {errorAlert}
+
+                        <button
+                            type="button"
+                            onClick={handleSendOTP}
+                            disabled={loading || (showTurnstile && !turnstileToken)}
+                            aria-busy={loading || undefined}
+                            className="mk-btn mk-btn--primary mk-auth-btn mt-7"
+                        >
+                            {loading && <LoadingSpinner size="sm" />}
+                            Email me a code
+                            {!loading && <AuthChevron />}
+                        </button>
+
+                        {showTurnstile && <div className="mk-auth-turnstile">{otpSendTurnstile}</div>}
+
+                        {hasOAuthOption && <AuthDivider>Or use</AuthDivider>}
+
+                        {applicableProviders.includes('google') && (
+                            <button
+                                type="button"
+                                onClick={handleGoogleSignIn}
+                                disabled={loading}
+                                className="mk-auth-oauth"
+                            >
+                                {loading ? <LoadingSpinner size="sm" /> : <GoogleMark />}
+                                Google
+                            </button>
+                        )}
+
+                        {applicableProviders.includes('microsoft') && (
+                            <button
+                                type="button"
+                                onClick={handleMicrosoftSignIn}
+                                disabled={loading}
+                                className="mk-auth-oauth"
+                            >
+                                {loading ? <LoadingSpinner size="sm" /> : <MicrosoftMark />}
+                                Microsoft
+                            </button>
+                        )}
+                    </div>
+                )}
+
+                {/* Step 3: the one-time code */}
+                {step === 'otp-verify' && (
+                    <div key="otp-verify" className={stepClass}>
+                        <h1 className="mk-auth-title">{isReturningUser ? 'Welcome back!' : 'Check your email'}</h1>
+                        <p className="mk-auth-lede">
+                            {isReturningUser ? (
+                                <>
+                                    We found your account. Enter the code sent to <strong>{email}</strong>
+                                </>
+                            ) : (
+                                <>
+                                    Enter the 6-digit code we sent to <strong>{email}</strong>.
+                                </>
+                            )}
+                        </p>
+
+                        <div className="mt-7">
+                            <OTPInput
+                                ref={otpInputRef}
+                                value={otpCode}
+                                onChange={setOtpCode}
+                                onComplete={(code) => handleVerifyOTP(code)}
+                                disabled={loading}
+                                loading={loading}
+                                variant="mk"
+                            />
+                        </div>
+
+                        {errorAlert}
+
+                        <button
+                            type="button"
+                            onClick={() => handleVerifyOTP()}
+                            disabled={loading || otpCode.length !== 6}
+                            aria-busy={loading || undefined}
+                            className="mk-btn mk-btn--primary mk-auth-btn mt-6"
+                        >
+                            {loading ? (
+                                <>
+                                    <LoadingSpinner size="sm" />
+                                    Verifying…
+                                </>
+                            ) : (
+                                'Verify code'
+                            )}
+                        </button>
+
+                        <p className="mk-auth-resend">
+                            Didn’t get it?{' '}
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setOtpCode('')
+                                    setTurnstileToken(null)
+                                    setShowTurnstile(true)
+                                    setTimeout(() => otpInputRef.current?.focus(), 0)
+                                }}
+                                disabled={loading}
+                                className="mk-auth-text-btn"
+                            >
+                                Resend code
+                            </button>
+                        </p>
+
+                        {showTurnstile && step === 'otp-verify' && (
+                            <div className="mk-auth-turnstile">{otpResendTurnstile}</div>
+                        )}
+                    </div>
+                )}
+            </div>
+        )
+    }
+
     return (
         <div
             className={`w-full min-w-0 overflow-x-hidden ${isSplitLight ? 'max-w-none mx-0' : 'max-w-md mx-auto'} ${B}`}
@@ -578,35 +951,7 @@ export function SignupForm({
                                             : 'flex w-full min-w-0 justify-center'
                                     }
                                 >
-                                    <Turnstile
-                                        ref={infoTurnstileRef}
-                                        className={isSplitLight ? 'min-w-0 w-full' : 'min-w-0'}
-                                        siteKey={
-                                            process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ||
-                                            '1x00000000000000000000AA'
-                                        }
-                                        options={turnstileOptions(isSplitLight)}
-                                        onSuccess={(token) => {
-                                            infoTurnstileErrorCount.current = 0
-                                            setTurnstileToken(token)
-                                            // Auto-trigger email check after Turnstile success
-                                            handleEmailCheckWithOTP(token)
-                                        }}
-                                        onError={() => {
-                                            infoTurnstileErrorCount.current += 1
-                                            if (infoTurnstileErrorCount.current > 1) {
-                                                setError('Captcha verification failed. Please try again.')
-                                                setShowTurnstile(false)
-                                            } else {
-                                                setTurnstileToken(null)
-                                                infoTurnstileRef.current?.reset()
-                                            }
-                                        }}
-                                        onExpire={() => {
-                                            setTurnstileToken(null)
-                                            infoTurnstileRef.current?.reset()
-                                        }}
-                                    />
+                                    {infoTurnstile}
                                 </div>
                             </div>
                         )}
@@ -855,33 +1200,7 @@ export function SignupForm({
                                             : 'flex w-full min-w-0 justify-center'
                                     }
                                 >
-                                    <Turnstile
-                                        ref={otpSendTurnstileRef}
-                                        className={isSplitLight ? 'min-w-0 w-full' : 'min-w-0'}
-                                        siteKey={
-                                            process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ||
-                                            '1x00000000000000000000AA'
-                                        }
-                                        options={turnstileOptions(isSplitLight)}
-                                        onSuccess={(token) => {
-                                            otpSendTurnstileErrorCount.current = 0
-                                            setTurnstileToken(token)
-                                            setError('')
-                                            sendOTPWithToken(token)
-                                        }}
-                                        onError={() => {
-                                            otpSendTurnstileErrorCount.current += 1
-                                            if (otpSendTurnstileErrorCount.current > 1) {
-                                                setError('Captcha verification failed. Please try again.')
-                                            }
-                                            setTurnstileToken(null)
-                                            otpSendTurnstileRef.current?.reset()
-                                        }}
-                                        onExpire={() => {
-                                            setTurnstileToken(null)
-                                            otpSendTurnstileRef.current?.reset()
-                                        }}
-                                    />
+                                    {otpSendTurnstile}
                                 </div>
                             </div>
                         )}
@@ -1078,33 +1397,7 @@ export function SignupForm({
                                             : 'flex w-full min-w-0 justify-center'
                                     }
                                 >
-                                    <Turnstile
-                                        ref={otpResendTurnstileRef}
-                                        className={isSplitLight ? 'min-w-0 w-full' : 'min-w-0'}
-                                        siteKey={
-                                            process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ||
-                                            '1x00000000000000000000AA'
-                                        }
-                                        options={turnstileOptions(isSplitLight)}
-                                        onSuccess={(token) => {
-                                            otpResendTurnstileErrorCount.current = 0
-                                            setTurnstileToken(token)
-                                            // Auto-trigger resend after Turnstile success
-                                            handleSendOTP()
-                                        }}
-                                        onError={() => {
-                                            otpResendTurnstileErrorCount.current += 1
-                                            if (otpResendTurnstileErrorCount.current > 1) {
-                                                setError('Captcha verification failed. Please try again.')
-                                            }
-                                            setTurnstileToken(null)
-                                            otpResendTurnstileRef.current?.reset()
-                                        }}
-                                        onExpire={() => {
-                                            setTurnstileToken(null)
-                                            otpResendTurnstileRef.current?.reset()
-                                        }}
-                                    />
+                                    {otpResendTurnstile}
                                 </div>
                             </div>
                         )}
