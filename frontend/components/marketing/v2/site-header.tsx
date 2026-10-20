@@ -20,7 +20,7 @@ type PhoneItem = Pick<NavMenuItem, 'label' | 'href' | 'icon' | 'external'>;
 
 /**
  * The phone menu: one group per dropdown, in the bar's order. A plain link that a dropdown already
- * lists (Brio, Tour) isn't repeated; one that isn't (Pricing) joins the group before it.
+ * lists isn't repeated; one that isn't (Pricing) joins the group before it.
  */
 const PHONE_GROUPS: { title: string; items: PhoneItem[] }[] = (() => {
   const listed = new Set(Object.values(NAV_MENUS).flatMap((m) => m.items.map((i) => i.href)));
@@ -80,7 +80,7 @@ export function SiteHeader() {
         <div className="ml-auto flex items-center gap-2 md:gap-3">
           {/* The wrapper owns visibility: .mk-btn sets display after Tailwind loads, so `hidden` on the link itself would lose. */}
           <span className="hidden sm:inline-flex">
-            <Link href="/signin" className="mk-btn mk-btn--sm !bg-white/55 !font-semibold" style={{ color: 'var(--mk-ink)' }}>
+            <Link href="/signin" className="mk-btn mk-btn--secondary mk-btn--sm">
               Sign in
               <ChevronRight size={14} strokeWidth={2.6} aria-hidden />
             </Link>

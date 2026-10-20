@@ -56,10 +56,12 @@ export const NAV_MENUS: Record<NavMenuId, { label: string; items: NavMenuItem[] 
   },
 };
 
-/** The header, left to right: dropdown menus and plain links. The tour lives in Product, beside the hero's own Take the tour. */
+/**
+ * The header, left to right: dropdown menus and plain links. Brio and the tour live in Product (the
+ * tour is also the hero's second button), so neither repeats in the bar.
+ */
 export const NAV_BAR: ({ kind: 'menu'; id: NavMenuId } | ({ kind: 'link' } & NavLink))[] = [
   { kind: 'menu', id: 'product' },
-  { kind: 'link', label: 'Brio', href: '/#brio', brio: true },
   { kind: 'link', label: 'Pricing', href: '/pricing', icon: 'pricing' },
   { kind: 'menu', id: 'resources' },
   { kind: 'menu', id: 'contact' },

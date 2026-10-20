@@ -144,8 +144,9 @@ but keep the email templates design minimal."
   outlines (`storage-icons.tsx`: Google Drive, OneDrive, SharePoint), as Deepak asked.
 - 2026-10-20 (later): header navigation restored to the old site's menus, as dropdowns timed from
   Stripe's live menu (`site-nav.tsx`): Product ▾ (How it works, Features, Brio, Built on your Drive, Who
-  it's for, Take the tour), Brio, Pricing, Resources ▾ (FAQs, Blog, Changelog, Trust Center), Contact ▾
-  (Get in touch, Book a demo). Tour left the bar (it's in Product and the hero). The panel stays put
+  it's for, Take the tour), Pricing, Resources ▾ (FAQs, Blog, Changelog, Trust Center), Contact ▾
+  (Get in touch, Book a demo). Brio and Tour left the bar (both are in Product; the tour is also in the
+  hero). Sign in is the bordered secondary pill, like the hero's Take the tour. The panel stays put
   under the bar, wipes open downward, eases its height between menus (300 ms) and carousels the menus:
   the new one slides 160 px in from the side you moved toward over 500 ms while the old one fades in
   120 ms; the arrow slides to the item. Every menu is two columns at one width. Icons are duotone, in

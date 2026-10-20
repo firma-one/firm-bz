@@ -24,8 +24,8 @@ export const FAQ_DATA: FAQItem[] = [
   },
   {
     question: `What are AI credits, and what happens when I run out?`,
-    answer: `One credit is one AI action — an engagement summary, a firm brief, or a chat answer. A natural-language document search costs half a credit. Every plan includes AI; the monthly allowance is what differs, from 25 on the free tier to 10,000 on Enterprise. Credits reset each billing period and do not roll over. If you exhaust them, everything already generated stays exactly where it is — published summaries, briefs and chat history remain readable. Only new generation pauses, and ordinary filtered search is never affected.`,
-    displayAnswer: `One credit is <strong>one AI action</strong> — an engagement summary, a firm brief, or a chat answer. A natural-language document search costs <strong>half</strong> a credit. Every plan includes AI; the monthly allowance is what differs, from 25 on the free tier to 10,000 on Enterprise. Credits reset each billing period and do not roll over. If you exhaust them, <strong>everything already generated stays exactly where it is</strong> — published summaries, briefs and chat history remain readable. Only new generation pauses, and ordinary filtered search is never affected.`,
+    answer: `One credit is one AI action — an engagement summary, a firm brief, or a chat answer. A natural-language document search costs half a credit. Every plan includes AI; the monthly allowance is what differs, from 25 on the free tier to 10,000 on Enterprise. Unused credits don't roll over. Running out never blocks your work: only the AI features pause, until your credits refill at the start of the next monthly cycle. Everything else in ${BRAND_NAME} keeps working as usual for your team and your clients — engagements, files, approvals, comments and filtered search — and everything Brio has already written stays readable.`,
+    displayAnswer: `One credit is <strong>one AI action</strong> — an engagement summary, a firm brief, or a chat answer. A natural-language document search costs <strong>half</strong> a credit. Every plan includes AI; the monthly allowance is what differs, from 25 on the free tier to 10,000 on Enterprise. Unused credits don't roll over. <strong>Running out never blocks your work:</strong> only the AI features pause, until your credits refill at the start of the next monthly cycle. Everything else in ${brandNameInlineHtml()} keeps working as usual for your team and your clients — engagements, files, approvals, comments and filtered search — and everything Brio has already written stays readable.`,
     category: "Features"
   },
   {
@@ -74,31 +74,31 @@ export const FAQ_DATA: FAQItem[] = [
     question: `Is ${BRAND_NAME} a good fit for marketing agencies and fractional marketing leaders?`,
     answer: `Yes. ${BRAND_NAME} is built for teams that juggle many clients and recurring deliverables—retainers, campaigns, and approvals—without migrating files off Google Drive. You get one branded portal per client engagement, clear access boundaries, and Wrap when the relationship ends.`,
     displayAnswer: `Yes. ${brandNameInlineHtml()} is built for teams that juggle many clients and recurring deliverables—retainers, campaigns, and approvals—without migrating files off Google Drive. You get one branded portal per client engagement, clear access boundaries, and Wrap when the relationship ends.`,
-    category: "Marketing",
+    category: "Use cases",
   },
   {
     question: `How does ${BRAND_NAME} help with campaign assets, approvals, and retainers if we keep files in Google Drive?`,
     answer: `${BRAND_NAME} does not duplicate your creative files—it maps your existing Drive folders into client-facing portals. Clients see a professional, on-brand experience while your team keeps working in Drive. Engagements align to how you bill (projects or retainers), and you can see who accessed what in the Audit Log.`,
     displayAnswer: `${brandNameInlineHtml()} does not duplicate your creative files—it maps your existing Drive folders into client-facing portals. Clients see a professional, on-brand experience while your team keeps working in Drive. Engagements align to how you bill (projects or retainers), and you can see who accessed what in the <strong>Audit Log</strong>.`,
-    category: "Marketing",
+    category: "Use cases",
   },
   {
     question: `Why use ${BRAND_NAME} instead of email and ad-hoc Google Drive links for agency clients?`,
     answer: `Email and one-off Drive links scatter versions, hide who saw what, and leave “zombie links” active after a project wraps. ${BRAND_NAME} centralizes access per engagement, preserves an audit trail, and lets you revoke access in one step with Wrap—so campaign and strategy IP does not leak after the engagement ends.`,
     displayAnswer: `Email and one-off Drive links scatter versions, hide who saw what, and leave “zombie links” active after a project wraps. ${brandNameInlineHtml()} centralizes access per engagement, preserves an audit trail, and lets you revoke access in one step with <strong>Wrap</strong>—so campaign and strategy IP does not leak after the engagement ends.`,
-    category: "Marketing",
+    category: "Use cases",
   },
   {
     question: `Can a strategic consultant or advisory partner use ${BRAND_NAME} for long-term client relationships?`,
     answer: `Yes. Advisory and consulting engagements map cleanly to Engagements in ${BRAND_NAME}: ongoing strategy work, board-ready packs, and shared folders stay organized under one portal per client. When an advisory mandate concludes, Wrap removes client access without deleting your Drive files.`,
     displayAnswer: `Yes. Advisory and consulting engagements map cleanly to Engagements in ${brandNameInlineHtml()}: ongoing strategy work, board-ready packs, and shared folders stay organized under one portal per client. When an advisory mandate concludes, <strong>Wrap</strong> removes client access without deleting your Drive files.`,
-    category: "Marketing",
+    category: "Use cases",
   },
   {
     question: `Does ${BRAND_NAME} work for multiple marketing clients at the same time?`,
     answer: `Yes. Create a separate Engagement for each client, map the right Drive folders, and manage permissions per relationship. The Audit Log shows which external domains touched which files—ideal for agencies and fractional leaders running parallel accounts.`,
     displayAnswer: `Yes. Create a separate <strong>Engagement</strong> for each client, map the right Drive folders, and manage permissions per relationship. The <strong>Audit Log</strong> shows which external domains touched which files—ideal for agencies and fractional leaders running parallel accounts.`,
-    category: "Marketing",
+    category: "Use cases",
   },
   {
     question: `What counts as an "active engagement"?`,
