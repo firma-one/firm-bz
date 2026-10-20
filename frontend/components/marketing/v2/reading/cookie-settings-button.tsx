@@ -1,8 +1,8 @@
 'use client';
 
 /**
- * Opens the cookie preferences dialog (the site-wide `CookieConsent`). It sits in the privacy
- * policy's cookie section, where the footer's "Cookie settings" link lands (`/privacy#cookies`).
+ * Opens the cookie preferences dialog (the site-wide `CookieConsent`) from the privacy policy's
+ * cookie section. The footer's "Cookie settings" opens the same dialog (`cookie-settings-link.tsx`).
  */
 import { SlidersHorizontal } from 'lucide-react';
 import { requestOpenCookieSettings } from '@/lib/cookie-consent-storage';

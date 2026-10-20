@@ -1,7 +1,7 @@
 /**
  * The page around the sign-in and sign-up cards (boards: SignIn, SignUp and their phone versions):
  * a white page with the dashed guides and a header hairline, the silk ribbon drawn live behind the
- * card, the logo home link, the card with its gray footer strip, and the small legal footer.
+ * card, the logo home link, the card with its gray footer strip, and the legal links in a frosted pill.
  * Sign-up passes its value points as `aside`; they sit left of the card from 1024 px and below it
  * on smaller screens.
  */
@@ -10,6 +10,7 @@ import Link from 'next/link';
 import { BrandMarkIcon } from '@/components/brand/BrandMarkIcon';
 import { BrandName } from '@/components/brand/BrandName';
 import { BRAND_NAME } from '@/config/brand';
+import { LegalLinks } from '../legal-links';
 import { PageGuides } from '../primitives';
 import { AuthRibbon } from './auth-ribbon';
 import '../marketing-v2.css';
@@ -51,11 +52,7 @@ export function AuthShell({
       </main>
 
       <footer className="mk-auth-footer mk-rail">
-        <span>
-          © {new Date().getFullYear()} {BRAND_NAME}
-        </span>
-        <Link href="/privacy">Privacy &amp; terms</Link>
-        <Link href="/contact">Support</Link>
+        <LegalLinks tone="light" support />
       </footer>
     </div>
   );

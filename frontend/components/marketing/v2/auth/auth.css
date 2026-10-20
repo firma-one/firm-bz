@@ -68,19 +68,7 @@
   position: relative;
   z-index: 1;
   width: 100%;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 22px;
-  padding-bottom: 30px;
-  font-size: 14px;
-  color: var(--mk-muted);
-}
-.mk-auth-footer a {
-  transition: color 200ms ease;
-}
-.mk-auth-footer a:hover {
-  color: var(--mk-ink);
+  padding-bottom: 28px;
 }
 
 /* Sign-up: value points beside the card from 1024 px; below that the card comes first. */

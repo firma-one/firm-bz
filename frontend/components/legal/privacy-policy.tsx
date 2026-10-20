@@ -21,7 +21,7 @@ export type PrivacyPolicyVariant = "page" | "embedded"
 
 /**
  * The page's sections, in order: the "On this page" list and the headings' ids. `ai`, `your-rights`
- * and `cookies` are long-standing deep links (the footer's "Cookie settings" opens `/privacy#cookies`).
+ * and `cookies` are long-standing deep links, so their ids stay put.
  */
 const SECTIONS = [
   { id: "information-we-collect", n: "01", title: "Information we collect" },

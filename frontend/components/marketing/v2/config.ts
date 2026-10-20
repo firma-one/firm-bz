@@ -95,12 +95,4 @@ export const FOOTER_COLUMNS: { title: string; links: NavLink[] }[] = [
       { label: 'Book a demo', href: DEMO_BOOKING_URL },
     ],
   },
-  {
-    title: 'Legal',
-    links: [
-      { label: 'Privacy', href: '/privacy' },
-      { label: 'Terms', href: '/terms' },
-      { label: 'Cookie settings', href: '/privacy#cookies' },
-    ],
-  },
 ];

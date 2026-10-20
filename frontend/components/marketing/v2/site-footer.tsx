@@ -4,6 +4,7 @@ import { BrandName } from '@/components/brand/BrandName';
 import { Brio } from '@/components/ui/brio';
 import { BRAND_NAME } from '@/config/brand';
 import { CONTACT_EMAIL, FOOTER_COLUMNS } from './config';
+import { LegalLinks } from './legal-links';
 import { PageGuides } from './primitives';
 
 const isExternal = (href: string) => /^https?:/.test(href);
@@ -44,13 +45,14 @@ export function SiteFooter() {
             </div>
           ))}
         </div>
-        <div className="mt-14 flex flex-wrap justify-between gap-3 border-t border-white/[0.08] pt-6 text-[13.5px] text-[var(--mk-on-dark-muted)]">
-          <span>
-            © {new Date().getFullYear()} {BRAND_NAME}. All rights reserved.
-          </span>
-          <a href={`mailto:${CONTACT_EMAIL}`} className="hover:!text-white">
-            {CONTACT_EMAIL}
-          </a>
+        {/* Bottom bar: the legal links (the same row as sign-in's), and the contact address. */}
+        <div className="mt-14 flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-t border-white/[0.08] pt-5">
+          <LegalLinks tone="dark" />
+          <div className="mk-legal mk-legal--dark -mx-2.5 text-[13.5px] text-[var(--mk-on-dark-muted)]">
+            <a href={`mailto:${CONTACT_EMAIL}`} className="mk-legal-link">
+              {CONTACT_EMAIL}
+            </a>
+          </div>
         </div>
       </div>
     </footer>
