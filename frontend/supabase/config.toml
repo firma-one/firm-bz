@@ -77,7 +77,8 @@ enabled = true
 # max_header_length = 4096
 
 [studio]
-enabled = true
+# Off to keep the local stack light (it and pg-meta were the heaviest containers). Set to true when you need it.
+enabled = false
 # Port to use for Supabase Studio.
 port = 54323
 # External URL of the API server that frontend connects to.
@@ -335,7 +336,8 @@ enabled = false
 # domain = "example.clerk.accounts.dev"
 
 [edge_runtime]
-enabled = true
+# Off: there are no edge functions in supabase/functions. Turn on if one is added.
+enabled = false
 # Supported request policies: `oneshot`, `per_worker`.
 # `per_worker` (default) — enables hot reload during local development.
 # `oneshot` — fallback mode if hot reload causes issues (e.g. in large repos or with symlinks).
@@ -349,7 +351,8 @@ deno_version = 2
 # secret_key = "env(SECRET_VALUE)"
 
 [analytics]
-enabled = true
+# Off: Logflare and Vector write logs into the same local Postgres and slowed it down.
+enabled = false
 port = 54327
 # Configure one of the supported backends: `postgres`, `bigquery`.
 backend = "postgres"
