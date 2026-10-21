@@ -13,11 +13,12 @@ import {
   useDraggable,
   useDroppable,
   type DragEndEvent,
+  type DragOverEvent,
   type DragStartEvent,
   type DraggableAttributes,
 } from '@dnd-kit/core'
 import type { SyntheticListenerMap } from '@dnd-kit/core/dist/hooks/utilities'
-import { Share2, User, Lock, ListTodo, CheckCircle, Eye, GripVertical, FolderOpen, Clock, Copy, Check, Search, MessagesSquare, Link2, ScanEye, X, RefreshCw, ChevronDown, ChevronLeft, ChevronRight, Filter, CheckCircle2, Trash2, BookOpenText, PenLine, PackagePlus, PackageCheck, CalendarDays, AlertTriangle, CalendarClock } from 'lucide-react'
+import { Share2, User, Lock, GripVertical, FolderOpen, Clock, Copy, Check, Search, MessagesSquare, Link2, ScanEye, X, RefreshCw, ChevronDown, ChevronLeft, ChevronRight, Filter, CheckCircle2, Trash2, BookOpenText, PackagePlus, CalendarDays, AlertTriangle, CalendarClock } from 'lucide-react'
 import { ProfileBubbleWithPopup } from '@/components/ui/profile-bubble-popup'
 import { DocumentBreadcrumb } from '@/components/ui/document-breadcrumb'
 import { DocumentIcon } from '@/components/ui/document-icon'
@@ -37,7 +38,12 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { ShareDetailPanel } from './share-detail-panel'
 import { DeliverableDetailPanel } from './deliverable-detail-panel'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { Hint, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { StatusIcon } from '@/components/ui/status-icon'
+import { StatusPill } from '@/components/ui/status-pill'
+import { interactiveCardClass } from '@/components/ui/interactive-card'
+import { STAGE_BAR_CLASSES, STAGE_LANE_CLASSES, STATUS, type LaneStage } from '@/lib/ui/status'
+import { FRESH_CHIP_CLASS, useApprovalFeedback } from '@/lib/ui/use-approval-feedback'
 import { SecureAccessModal } from './secure-access-modal'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { supabase } from '@/lib/supabase'
@@ -49,7 +55,7 @@ import { DocumentDocCommentsPane } from '@/components/projects/document-doc-comm
 import { DocumentPreviewPane } from '@/components/files/document-preview-pane'
 import { formatDistanceToNow } from 'date-fns'
 import { cn, formatFullDate } from '@/lib/utils'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { useProjectPersonaLabels } from '@/lib/hooks/use-project-persona-labels'
 import { useToast } from '@/components/ui/toast'
 import { getAllowedTransitions, type EngagementRoleSlug } from '@/lib/deliverable-stage-roles'
@@ -131,108 +137,18 @@ interface EngagementSharesTabProps {
 }
 
 /**
- * Per-lane theme: icon chip, count, progress bar and card accents. Colors come from the shared
- * status palette (lib/ui/status-colors.ts — To do gray, In progress blue, In review yellow, Approved
- * green) so the board, status pills and calendar agree. Lane headers are plain rows, Linear-style.
+ * Board lanes in the status language (.claude/plans/app-design-refinements.md, section 5): each lane
+ * is a StatusPill header over its cards, tinted by its stage. Labels, icons and colors all come from
+ * lib/ui/status.ts, so the Board reads the same as every other status in the app.
  */
-const LANE_THEME: Record<ActivityStatus, {
-  headerBg: string
-  headerBorder: string
-  iconBg: string
-  iconColor: string
-  labelColor: string
-  countBg: string
-  countColor: string
-  progressColor: string
-  cardIconBg: string
-  cardIconColor: string
-  docIdColor: string
-}> = {
-  to_do:{
-    headerBg: 'bg-transparent',
-    headerBorder: 'border-transparent',
-    iconBg: 'bg-tag-gray-bg',
-    iconColor: 'text-tag-gray-fg',
-    labelColor: 'text-fg',
-    countBg: 'bg-transparent',
-    countColor: 'text-fg-subtle',
-    progressColor: 'var(--ui-tag-gray-fg)',
-    cardIconBg: 'bg-tag-gray-bg',
-    cardIconColor: 'text-tag-gray-fg',
-    docIdColor: 'text-fg-subtle',
-  },
-  in_progress:{
-    headerBg: 'bg-transparent',
-    headerBorder: 'border-transparent',
-    iconBg: 'bg-tag-blue-bg',
-    iconColor: 'text-tag-blue-fg',
-    labelColor: 'text-fg',
-    countBg: 'bg-transparent',
-    countColor: 'text-fg-subtle',
-    progressColor: 'var(--ui-tag-blue-fg)',
-    cardIconBg: 'bg-tag-blue-bg',
-    cardIconColor: 'text-tag-blue-fg',
-    docIdColor: 'text-fg-subtle',
-  },
-  in_review:{
-    headerBg: 'bg-transparent',
-    headerBorder: 'border-transparent',
-    iconBg: 'bg-tag-yellow-bg',
-    iconColor: 'text-tag-yellow-fg',
-    labelColor: 'text-fg',
-    countBg: 'bg-transparent',
-    countColor: 'text-fg-subtle',
-    progressColor: 'var(--ui-tag-yellow-fg)',
-    cardIconBg: 'bg-tag-yellow-bg',
-    cardIconColor: 'text-tag-yellow-fg',
-    docIdColor: 'text-fg-subtle',
-  },
-  approved:{
-    headerBg: 'bg-transparent',
-    headerBorder: 'border-transparent',
-    iconBg: 'bg-tag-green-bg',
-    iconColor: 'text-tag-green-fg',
-    labelColor: 'text-fg',
-    countBg: 'bg-transparent',
-    countColor: 'text-fg-subtle',
-    progressColor: 'var(--ui-tag-green-fg)',
-    cardIconBg: 'bg-tag-green-bg',
-    cardIconColor: 'text-tag-green-fg',
-    docIdColor: 'text-fg-subtle',
-  },
-}
+const LANES: { status: ActivityStatus; stage: LaneStage; label: string }[] = (
+  ['to_do', 'in_progress', 'in_review', 'approved'] as const
+).map((status) => ({ status, stage: laneStage(status), label: STATUS.deliverable[status].label }))
 
-const LANES: {
-  status: ActivityStatus
-  label: string
-  icon: React.ReactNode
-  iconBg: string
-}[] = [
-    {
-      status: 'to_do',
-      label: 'To do',
-      icon: <ListTodo className={cn('h-3.5 w-3.5', LANE_THEME.to_do.iconColor)} />,
-      iconBg: LANE_THEME.to_do.iconBg,
-    },
-    {
-      status: 'in_progress',
-      label: 'In progress',
-      icon: <PenLine className={cn('h-3.5 w-3.5', LANE_THEME.in_progress.iconColor)} />,
-      iconBg: LANE_THEME.in_progress.iconBg,
-    },
-    {
-      status: 'in_review',
-      label: 'In review',
-      icon: <Eye className={cn('h-3.5 w-3.5', LANE_THEME.in_review.iconColor)} />,
-      iconBg: LANE_THEME.in_review.iconBg,
-    },
-    {
-      status: 'approved',
-      label: 'Approved',
-      icon: <CheckCircle className={cn('h-3.5 w-3.5', LANE_THEME.approved.iconColor)} />,
-      iconBg: LANE_THEME.approved.iconBg,
-    },
-  ]
+function laneStage(status: ActivityStatus): LaneStage {
+  // Every deliverable stage is a lane stage (asserted in lib/ui/status.test.ts).
+  return STATUS.deliverable[status].stage as LaneStage
+}
 
 function getInitials(nameOrEmail: string | null | undefined): string {
   // Remove UUIDs if they accidentally leak in
@@ -246,22 +162,15 @@ function DroppableLane({
   className,
 }: {
   id: string
-  children: React.ReactNode | ((isOver: boolean) => React.ReactNode)
+  children: React.ReactNode
   className?: string
 }) {
-  const { setNodeRef, isOver } = useDroppable({ id })
+  const { setNodeRef } = useDroppable({ id })
   return (
-    <div ref={setNodeRef} className={cn(className, isOver && 'bg-primary/5 rounded')}>
-      {typeof children === 'function' ? children(isOver) : children}
+    <div ref={setNodeRef} className={className}>
+      {children}
     </div>
   )
-}
-
-const CARD_ACCENT: Record<ActivityStatus, { iconPillBg: string }> = {
-  to_do: { iconPillBg: LANE_THEME.to_do.cardIconBg },
-  in_progress: { iconPillBg: LANE_THEME.in_progress.cardIconBg },
-  in_review: { iconPillBg: LANE_THEME.in_review.cardIconBg },
-  approved: { iconPillBg: LANE_THEME.approved.cardIconBg },
 }
 
 function DraggableCard({
@@ -272,7 +181,7 @@ function DraggableCard({
   getDocumentForMenu,
   showActions,
   canManage,
-  isApprovedLane,
+  justApproved,
   onShareSaved,
   handleSecureOpen,
   isRegrantingId,
@@ -302,7 +211,8 @@ function DraggableCard({
   getDocumentForMenu: (s: ShareRecord) => { id: string; name: string; mimeType?: string; externalId: string }
   showActions: boolean
   canManage: boolean
-  isApprovedLane: boolean
+  /** Just moved into Approved by this user: its status icon fades in (useApprovalFeedback). */
+  justApproved?: boolean
   onShareSaved?: () => void
   handleSecureOpen: (share: ShareRecord) => void
   isRegrantingId: string | null
@@ -329,8 +239,7 @@ function DraggableCard({
   onUntagAsDeliverable?: (doc: { id: string }) => void
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id })
-  const { setNodeRef: setDropRef, isOver } = useDroppable({ id })
-  const { iconPillBg } = CARD_ACCENT[laneStatus]
+  const { setNodeRef: setDropRef } = useDroppable({ id })
 
   const previewDoc = {
     id: share.documentId,
@@ -351,36 +260,34 @@ function DraggableCard({
       ref={(node) => { setNodeRef(node); setDropRef(node) }}
       layout
       initial={{ opacity: 0, scale: 0.98 }}
-      animate={{ opacity: isDragging ? 0 : 1, scale: 1 }}
+      // While it's dragged, the card's old spot stays behind at 35% (the lifted copy is the DragOverlay).
+      animate={{ opacity: isDragging ? 0.35 : 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.98 }}
       transition={{
         scale: { type: 'spring', stiffness: 400, damping: 30 },
-        opacity: { duration: isDragging ? 0.28 : 0.18, ease: 'easeOut' },
+        opacity: { duration: 0.18, ease: 'easeOut' },
       }}
       className={cn(
-        'relative rounded-card overflow-hidden select-none border transition-colors duration-150',
-        isDragging ? 'bg-transparent' : 'bg-surface hover:border-line-strong',
-        isDetailOpen && 'border-fg-subtle',
-        isDragging ? 'border-transparent' : 'border-line',
+        interactiveCardClass(),
+        'relative overflow-hidden select-none',
+        isDetailOpen && 'ring-1 ring-fg-subtle',
         isBlocked && 'opacity-60 blur-[1.5px] saturate-50',
-        isOver && !isDragging && 'ring-1 ring-primary/30 ring-inset',
         isSaving && 'pointer-events-none'
       )}
     >
       {isSaving && (
         <div className="absolute inset-0 z-20 flex items-center justify-center bg-white/60 backdrop-blur-[1px] rounded">
-          <LoadingSpinner size="sm" className="text-primary" />
+          <LoadingSpinner size="sm" className="text-fg-subtle" />
         </div>
       )}
       <ShareCardContent
         share={share}
-        iconPillBg={iconPillBg}
         laneStatus={laneStatus}
+        justApproved={justApproved}
         formatDate={formatDate}
         getDocumentForMenu={getDocumentForMenu}
         showActions={showActions}
         canManage={canManage}
-        isApprovedLane={isApprovedLane}
         onShareSaved={onShareSaved}
         handleSecureOpen={handleSecureOpen}
         isRegrantingId={isRegrantingId}
@@ -410,13 +317,12 @@ function DraggableCard({
 
 function ShareCardContent({
   share,
-  iconPillBg,
   laneStatus,
+  justApproved,
   formatDate,
   getDocumentForMenu,
   showActions,
   canManage,
-  isApprovedLane,
   onShareSaved,
   onClickTitle,
   handleSecureOpen,
@@ -440,13 +346,12 @@ function ShareCardContent({
   onUntagAsDeliverable,
 }: {
   share: ShareRecord
-  iconPillBg: string
   laneStatus?: ActivityStatus
+  justApproved?: boolean
   formatDate: (s: string) => string
   getDocumentForMenu: (s: ShareRecord) => { id: string; name: string; mimeType?: string; externalId: string }
   showActions: boolean
   canManage: boolean
-  isApprovedLane: boolean
   onShareSaved?: () => void
   onClickTitle?: () => void
   handleSecureOpen: (share: ShareRecord) => void
@@ -477,35 +382,33 @@ function ShareCardContent({
   const intakeApproveAction = isFolder ? 'approve-folder' : 'approve'
   const intakeRejectAction = isFolder ? 'reject-folder' : 'reject'
   const intakeWithdrawAction = isFolder ? 'withdraw-folder' : 'withdraw'
-  const laneTheme = laneStatus ? LANE_THEME[laneStatus] : undefined
-  const cardIconColor = laneTheme?.cardIconColor ?? 'text-primary'
-  const docIdColor = laneTheme?.docIdColor ?? 'text-primary'
+  const status = (laneStatus ?? share.activity?.status ?? 'to_do') as ActivityStatus
+  const { stage, label: statusLabel } = STATUS.deliverable[status]
+  // The status language: the stage's icon before the code (or the title), named for screen readers.
+  const statusIcon = (
+    <StatusIcon stage={stage} size={13} label={statusLabel} className={cn(justApproved && FRESH_CHIP_CLASS)} />
+  )
+  // Overdue is a red date, not a status. Same rule as the Overdue filter and the insights
+  // dashboard: past its due date and not yet approved.
+  const isOverdue = !!share.dueDate && !isFinalized && new Date(share.dueDate).getTime() < Date.now()
 
   return (
     <>
-      <div className={cn('border-b', isApprovedLane ? 'bg-[#0d9f5f]/[0.06] border-[#0d9f5f]/10' : 'bg-[#fdfdfe] border-[#f1f1f3]', isPending && 'opacity-80')}>
+      <div className={cn('border-b border-line', isPending && 'opacity-80')}>
         <div
-          className="flex items-center gap-2.5 px-3 pt-2.5 pb-2 group/drag"
+          className="flex items-center gap-2 px-3 pt-2.5 pb-2 group/drag"
           {...(dragListeners ?? {})}
           {...(dragAttributes ?? {})}
         >
           {dragListeners && (
-            <GripVertical className="h-4 w-4 shrink-0 text-fg-subtle group-hover/drag:text-fg-subtle cursor-grab active:cursor-grabbing transition-colors" />
+            <GripVertical className="-ml-1 h-4 w-4 shrink-0 text-fg-subtle cursor-grab active:cursor-grabbing transition-colors" />
           )}
-          <div className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded', iconPillBg)}>
-            {share.documentMimeType?.includes('folder') ? (
-              isFinalized
-                ? <PackageCheck className={cn('h-4 w-4', cardIconColor)} />
-                : <PackagePlus className={cn('h-4 w-4', cardIconColor)} />
-            ) : (
-              <DocumentIcon mimeType={share.documentMimeType ?? undefined} className="h-4 w-4" />
-            )}
-          </div>
           <div className="min-w-0 flex-1" onClick={onClickTitle}>
-            {/* Row 1: DOC ID (primary) */}
+            {/* Row 1: status and the deliverable's code */}
             {share.docId && (
               <div className="flex items-center gap-1.5 mb-0.5">
-                <span className={cn('text-[11px] font-bold font-mono tracking-wide', docIdColor)}>{share.docId}</span>
+                {statusIcon}
+                <span className="font-mono text-[11px] text-fg-subtle">{share.docId}</span>
                 {isFinalized && (
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -516,15 +419,10 @@ function ShareCardContent({
                 )}
               </div>
             )}
-            {/* Row 2: filename */}
-            <div
-              className={cn(
-                'truncate cursor-pointer transition-colors flex items-center gap-1.5',
-                share.docId
-                  ? 'text-[11px] font-medium text-[#5b5d64] hover:text-fg'
-                  : 'text-[13px] font-semibold text-fg hover:text-primary'
-              )}
-            >
+            {/* Row 2: the title */}
+            <div className="flex cursor-pointer items-center gap-1.5 truncate text-ui font-medium text-fg">
+              {!share.docId && statusIcon}
+              {!isFolder && <DocumentIcon mimeType={share.documentMimeType ?? undefined} className="h-3.5 w-3.5 shrink-0" />}
               <Tooltip>
                 <TooltipTrigger asChild>
                   {/* "01__Market & …" reads as "01 Market & …": the firm's ordering number muted. */}
@@ -583,7 +481,7 @@ function ShareCardContent({
       </div>
       {/* Intake actions — shown instead of normal content when pending */}
       {isPending && (
-        <div className="px-3 py-3 bg-white border-b border-line space-y-2" onClick={(e) => e.stopPropagation()}>
+        <div className="px-3 py-3 border-b border-line space-y-2" onClick={(e) => e.stopPropagation()}>
           {canManage && !isExternalPersona && (
             <div className="flex gap-2">
               <button
@@ -616,18 +514,18 @@ function ShareCardContent({
           )}
         </div>
       )}
-      <div className={cn('px-3 pb-3 pt-2 bg-white space-y-1.5', isPending && 'opacity-60')}>
+      <div className={cn('px-3 pb-3 pt-2 space-y-1.5', isPending && 'opacity-60')}>
         {/* Datetime + quick links */}
         <div className="flex items-center justify-between">
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className={cn('inline-flex items-center gap-1 text-[11px]', share.dueDate ? 'text-[#6b6d75]' : 'italic text-fg-subtle')}>
-                  <CalendarDays className="h-3.5 w-3.5 text-fg-subtle" />
-                  {share.dueDate ? formatFullDate(share.dueDate) : 'Not Set'}
+                <span className={cn('inline-flex items-center gap-1 text-small', isOverdue ? 'text-danger' : share.dueDate ? 'text-fg-muted' : 'text-fg-subtle')}>
+                  <CalendarDays className={cn('h-3.5 w-3.5', isOverdue ? 'text-danger' : 'text-fg-subtle')} />
+                  {share.dueDate ? formatFullDate(share.dueDate) : 'No due date'}
                 </span>
               </TooltipTrigger>
-              <TooltipContent variant="light" side="top">Due date</TooltipContent>
+              <TooltipContent variant="light" side="top">{isOverdue ? 'Overdue' : 'Due date'}</TooltipContent>
             </Tooltip>
           </TooltipProvider>
           <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
@@ -707,7 +605,7 @@ function ShareCardContent({
         </div>
         {/* Updated by */}
         <div className="flex items-center gap-1.5">
-          <span className="text-[10px] font-medium text-[#6b6d75] w-14 shrink-0 whitespace-nowrap">Updated by</span>
+          <span className="w-16 shrink-0 whitespace-nowrap text-caption text-fg-muted">Updated by</span>
           <TooltipProvider>
             <ProfileBubbleWithPopup
               name={(share.updatedByName || share.updatedByEmail) ?? (share.createdByName || share.createdByEmail || 'Team Member')}
@@ -724,10 +622,10 @@ function ShareCardContent({
           const pct = Math.round((approved / total) * 100)
           return (
             <div className="flex items-center gap-2 pt-0.5">
-              <div className="flex-1 h-1 rounded-full bg-line overflow-hidden">
-                <div className="h-full rounded-full bg-primary transition-all duration-300" style={{ width: `${pct}%` }} />
+              <div className="flex-1 h-1 rounded-full bg-surface-muted overflow-hidden">
+                <div className={cn('h-full rounded-full transition-all duration-ui-slow ease-ui-out', STAGE_BAR_CLASSES[stage as LaneStage])} style={{ width: `${pct}%` }} />
               </div>
-              <span className="text-[9px] font-semibold text-[#6b6d75] tabular-nums shrink-0">{approved}/{total}</span>
+              <span className="shrink-0 text-caption tabular-nums text-fg-subtle">{approved}/{total}</span>
             </div>
           )
         })()}
@@ -1641,6 +1539,10 @@ export function EngagementSharesTab({
   }, [rightPane.content])
 
   const { addToast } = useToast()
+  const approvalFeedback = useApprovalFeedback()
+  const reduceMotion = useReducedMotion()
+  /** The lane under the dragged card, when the user may drop there (section 5: the drop target). */
+  const [dropLane, setDropLane] = useState<ActivityStatus | null>(null)
 
   const {
     handleSecureOpen,
@@ -1693,6 +1595,7 @@ export function EngagementSharesTab({
     toDo: string[], inProgress: string[], inReview: string[], approved: string[],
     rollback: () => void,
     onComplete: () => void,
+    onSuccess?: () => void,
   ) => {
     try {
       const { data: { session } } = await supabase.auth.getSession()
@@ -1703,6 +1606,7 @@ export function EngagementSharesTab({
         body: JSON.stringify({ to_do: toDo, in_progress: inProgress, in_review: inReview, approved }),
       })
       if (!res.ok) throw new Error(`Order save failed: ${res.status}`)
+      onSuccess?.()
     } catch (e) {
       logger.error('Failed to save order', e instanceof Error ? e : new Error(String(e)), 'ProjectShares', {})
       rollback()
@@ -1774,10 +1678,23 @@ export function EngagementSharesTab({
         return
       }
       await refreshData()
+      // These used to finish silently on the Board (the Files view already confirms them; the
+      // titles match it). Approving gets the approval feedback: the toast, and the card's status
+      // icon fading in.
+      const share = shares.find((s) => s.documentId === documentId)
+      const name = share?.documentName
+      const folder = action.endsWith('-folder')
+      if (action === 'approve' || action === 'approve-folder') {
+        approvalFeedback.confirm({ id: share?.id ?? documentId, name, title: folder ? 'Folder approved' : 'File approved' })
+      } else if (action === 'reject' || action === 'reject-folder') {
+        addToast({ type: 'success', title: folder ? 'Folder rejected' : 'File rejected', message: name })
+      } else if (action === 'withdraw' || action === 'withdraw-folder') {
+        addToast({ type: 'success', title: folder ? 'Folder withdrawn' : 'Upload withdrawn', message: name })
+      }
     } finally {
       setIntakeActionInProgress(null)
     }
-  }, [projectId, refreshData, intakeActionInProgress])
+  }, [projectId, refreshData, intakeActionInProgress, shares, addToast, approvalFeedback])
 
   const formatDate = (dateString: string) => {
     try {
@@ -2061,28 +1978,48 @@ export function EngagementSharesTab({
     requestAnimationFrame(() => setDropZoneReady(true))
   }
 
+  /** The lane a drop over `overId` (a lane, or a card in one) lands in. */
+  const laneOf = (overId: string): ActivityStatus | null => {
+    if ((['to_do', 'in_progress', 'in_review', 'approved'] as string[]).includes(overId)) return overId as ActivityStatus
+    const overShare = shares.find((s) => s.id === overId)
+    return overShare ? ((overShare.activity?.status ?? 'to_do') as ActivityStatus) : null
+  }
+
+  /** Lanes the dragged card may move into: the same rules handleDragEnd enforces. */
+  const canDropInto = (shareId: string, lane: ActivityStatus) => {
+    const current = (shares.find((s) => s.id === shareId)?.activity?.status ?? 'to_do') as ActivityStatus
+    if (lane === current) return false
+    return roleSlug ? getAllowedTransitions(roleSlug, current).includes(lane) : false
+  }
+
+  const handleDragOver = (event: DragOverEvent) => {
+    const lane = event.over ? laneOf(String(event.over.id)) : null
+    setDropLane(lane && canDropInto(String(event.active.id), lane) ? lane : null)
+  }
+
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event
     setActiveId(null)
     setDropZoneReady(false)
+    setDropLane(null)
     if (!over) return
     const shareId = active.id as string
     const overId = String(over.id)
-    let targetLane: ActivityStatus
-    let insertIndex: number
-    if (['to_do', 'in_progress', 'in_review', 'approved'].includes(overId)) {
-      targetLane = overId as ActivityStatus
-      insertIndex = laneOrder[targetLane].length
-    } else {
-      const overShare = shares.find((s) => s.id === overId)
-      if (!overShare) return
-      targetLane = (overShare.activity?.status ?? 'to_do') as ActivityStatus
-      insertIndex = laneOrder[targetLane].indexOf(overId)
-      if (insertIndex < 0) insertIndex = laneOrder[targetLane].length
-    }
+    // Dropped back on its own (faded) spot: nothing moves.
+    if (overId === shareId) return
 
     const share = shares.find((s) => s.id === shareId)
     const currentLane = (share?.activity?.status ?? 'to_do') as ActivityStatus
+
+    const targetLane = laneOf(overId)
+    if (!targetLane) return
+    // Within a lane a card lands before the card it's dropped on. Into another lane it lands in the
+    // landing slot at the end, which is where the drop zone shows it going.
+    let insertIndex = laneOrder[targetLane].length
+    if (targetLane === currentLane && overId !== targetLane) {
+      const idx = laneOrder[targetLane].indexOf(overId)
+      if (idx >= 0) insertIndex = idx
+    }
 
     // Check allowed transitions — single source of truth from deliverable-stage-roles.ts
     const allowed = roleSlug ? getAllowedTransitions(roleSlug, currentLane) : []
@@ -2155,10 +2092,16 @@ export function EngagementSharesTab({
     setSavingId(shareId)
     const rollback = () => setShares(previousShares)
     const onComplete = () => setSavingId(null)
+    // Approving is the one move that deserves more than the card landing: a toast, and the card's
+    // status icon fades in green (section 4, approval feedback).
+    const approvedNow = targetLane === 'approved' && currentLane !== 'approved'
+    const onApproved = () => {
+      if (approvedNow && share) approvalFeedback.confirm({ id: shareId, name: share.documentName })
+    }
 
     if (canManage) {
       // EL: full reorder via shares/order (handles orderIndex + EC/EV flag updates)
-      saveOrder(finalToDo, finalInProgress, finalInReview, finalDone, rollback, onComplete)
+      saveOrder(finalToDo, finalInProgress, finalInReview, finalDone, rollback, onComplete, onApproved)
     } else {
       // EM / EC / EV: single-deliverable status change via sharing/activity
       const documentId = share?.documentId
@@ -2176,7 +2119,8 @@ export function EngagementSharesTab({
             const err = await res.json().catch(() => ({}))
             throw new Error(err.error ?? `Status ${res.status}`)
           }
-          addToast({ type: 'success', title: 'Stage updated', message: `Moved to ${STATUS_LABELS[targetLane]}.` })
+          if (approvedNow) onApproved()
+          else addToast({ type: 'success', title: 'Stage updated', message: `Moved to ${STATUS_LABELS[targetLane]}.` })
         } catch (e) {
           logger.error('Failed to update deliverable status', e instanceof Error ? e : new Error(String(e)), 'ProjectShares', {})
           rollback()
@@ -2386,134 +2330,125 @@ export function EngagementSharesTab({
               <DndContext
                 sensors={sensors}
                 onDragStart={handleDragStart}
+                onDragOver={handleDragOver}
                 onDragEnd={handleDragEnd}
+                onDragCancel={() => { setActiveId(null); setDropZoneReady(false); setDropLane(null) }}
               >
                 <div className="subtle-scrollbar overflow-x-auto min-h-[360px] pb-1">
                 <div
-                  className="grid gap-4 min-h-[360px] items-start"
+                  // At rest each lane is sized to its cards; while dragging every lane stretches to the
+                  // board's full height, so the whole column is a drop zone (section 5).
+                  className={cn('grid gap-3 min-h-[360px]', activeId ? 'items-stretch' : 'items-start')}
                   style={{ gridTemplateColumns: approvedCollapsed ? 'minmax(240px, 1fr) minmax(240px, 1fr) minmax(240px, 1fr) 36px' : 'repeat(4, minmax(240px, 1fr))' }}
                 >
                   {LANES.map((lane) => {
                     const laneCount = byLane[lane.status].length
-                    const totalCount = filteredShares.length
-                    const lanePct = totalCount > 0 ? (laneCount / totalCount) * 100 : 0
-                    const theme = LANE_THEME[lane.status]
+                    const laneClasses = STAGE_LANE_CLASSES[lane.stage]
+                    const isTarget = dropLane === lane.status
 
                     if (lane.status === 'approved' && approvedCollapsed) {
                       return (
-                        <motion.div
-                          key={lane.status}
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          className={cn('flex flex-col items-center rounded border overflow-hidden cursor-pointer select-none py-3 gap-2', theme.headerBg, theme.headerBorder)}
-                          onClick={() => setApprovedCollapsed(false)}
-                          title={`${laneCount} Approved — click to expand`}
-                        >
-                          <div className={cn('rounded p-1', lane.iconBg)}>
-                            {lane.icon}
-                          </div>
-                          <span className={cn('text-[10px] font-bold tabular-nums', theme.labelColor)}>{laneCount}</span>
-                          <div className="flex-1 flex items-center justify-center">
+                        <Hint key={lane.status} label={`${laneCount} approved · expand`} side="left">
+                          <motion.button
+                            type="button"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            className={cn('flex flex-col items-center gap-2 rounded-lg py-3 select-none', laneClasses.rest)}
+                            onClick={() => setApprovedCollapsed(false)}
+                            aria-label={`Expand Approved (${laneCount})`}
+                          >
+                            <StatusIcon stage={lane.stage} size={14} />
+                            <span className="text-caption tabular-nums text-fg-muted">{laneCount}</span>
                             <span
-                              className={cn('text-[10px] font-semibold whitespace-nowrap opacity-80', theme.labelColor)}
+                              className="flex-1 whitespace-nowrap text-caption text-fg-muted"
                               style={{ writingMode: 'vertical-lr', transform: 'rotate(180deg)' }}
                             >
-                              Approved
+                              {lane.label}
                             </span>
-                          </div>
-                          <ChevronRight className={cn('h-3 w-3 opacity-60', theme.labelColor)} />
-                        </motion.div>
+                            <ChevronRight className="h-3 w-3 text-fg-subtle" />
+                          </motion.button>
+                        </Hint>
                       )
                     }
 
+                    const cards = byLane[lane.status]
                     return (
-                      <motion.div
-                        key={lane.status}
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        className="flex flex-col"
-                      >
-                        {/* Swimlane header: its own card, separate from the body */}
-                        <div className={cn('flex flex-col overflow-hidden shrink-0', theme.headerBg)}>
-                          <div className="flex items-center gap-2 px-1 py-2">
-                            <div className={cn('rounded p-1', lane.iconBg)}>
-                              {lane.icon}
-                            </div>
-                            <span className={cn('text-ui font-medium', theme.labelColor)}>{lane.label}</span>
-                            <span className={cn('text-small ml-0.5 tabular-nums', theme.countColor)}>
-                              {totalCount > 0 ? `${laneCount}/${totalCount}` : laneCount}
-                            </span>
+                      <motion.div key={lane.status} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex min-w-0 flex-col">
+                        <DroppableLane
+                          id={lane.status}
+                          className={cn(
+                            'flex flex-1 flex-col gap-2 rounded-lg p-2 transition-colors duration-ui-base ease-ui-out',
+                            isTarget
+                              ? cn(laneClasses.target, 'outline-dashed outline-[1.5px] outline-offset-[-1.5px]')
+                              : laneClasses.rest
+                          )}
+                        >
+                          {/* Lane header: the stage's pill and the count */}
+                          <div className="flex h-7 items-center gap-2 px-1">
+                            <StatusPill kind="deliverable" status={lane.status} />
+                            <span className="text-small tabular-nums text-fg-subtle">{laneCount}</span>
                             {lane.status === 'approved' && (
-                              <button
-                                onClick={() => setApprovedCollapsed(true)}
-                                className={cn('ml-auto transition-colors shrink-0 opacity-60 hover:opacity-100', theme.labelColor)}
-                                title="Collapse Approved column"
-                              >
-                                <ChevronLeft className="h-3.5 w-3.5" />
-                              </button>
+                              <Hint label="Collapse Approved">
+                                <button
+                                  type="button"
+                                  onClick={() => setApprovedCollapsed(true)}
+                                  aria-label="Collapse Approved"
+                                  className="ml-auto rounded-control p-0.5 text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg-muted"
+                                >
+                                  <ChevronLeft className="h-3.5 w-3.5" />
+                                </button>
+                              </Hint>
                             )}
                           </div>
-                          {/* Mini progress bar */}
-                          <div className="h-0.5 rounded-full bg-surface-muted shrink-0">
+                          <AnimatePresence mode="popLayout">
+                            {cards.map((share) => (
+                              <DraggableCard
+                                key={share.id}
+                                id={share.id}
+                                share={share}
+                                laneStatus={lane.status}
+                                formatDate={formatDate}
+                                getDocumentForMenu={getDocumentForMenu}
+                                showActions
+                                canManage={canManage}
+                                justApproved={approvalFeedback.isFresh(share.id)}
+                                onShareSaved={refreshData}
+                                handleSecureOpen={handleSecureOpenShare}
+                                isRegrantingId={isRegrantingId}
+                                onOpenComments={handleOpenComments}
+                                onOpenPreview={handleOpenPreview}
+                                extCollaboratorLabel={projExtCollaborator}
+                                viewerLabel={projViewer}
+                                onParentFolderClick={onOpenInFiles ? handleOpenParentFolder : undefined}
+                                onOpenInFilesForFolder={onOpenInFiles ? handleOpenInFilesForFolder : undefined}
+                                onOpenDetail={handleOpenDeliverableDetail}
+                                isDetailOpen={share.id === openDeliverableId}
+                                isPaneOpen={!!openDeliverableId}
+                                isExternalPersona={restrictToSharedOnly}
+                                isExternalViewer={isExternalViewer}
+                                deeplinkBase={deeplinkBase}
+                                generalFolderId={generalFolderId}
+                                currentUserId={currentUserId}
+                                onIntakeAction={handleIntakeAction}
+                                intakeActionInProgress={intakeActionInProgress}
+                                isSaving={savingId === share.id}
+                                onUntagAsDeliverable={handleUntagAsDeliverable}
+                              />
+                            ))}
+                          </AnimatePresence>
+                          {/* The landing slot: where the dragged card will go. */}
+                          {isTarget && dropZoneReady && (
                             <div
-                              className="h-full transition-all duration-300"
-                              style={{ width: `${lanePct}%`, backgroundColor: theme.progressColor }}
-                            />
-                          </div>
-                        </div>
-                        {/* Swimlane body: gray container sized to its contents, not the tallest column */}
-                        <DroppableLane id={lane.status} className="flex flex-col mt-1 rounded-card bg-surface-subtle p-1.5 gap-1.5">
-                          {(isOver) => (
-                            <>
-                              <AnimatePresence mode="popLayout">
-                                {byLane[lane.status].filter(s => s.id !== activeId).map((share) => (
-                                  <DraggableCard
-                                    key={share.id}
-                                    id={share.id}
-                                    share={share}
-                                    laneStatus={lane.status}
-                                    formatDate={formatDate}
-                                    getDocumentForMenu={getDocumentForMenu}
-                                    showActions
-                                    canManage={canManage}
-                                    isApprovedLane={lane.status === 'approved'}
-                                    onShareSaved={refreshData}
-                                    handleSecureOpen={handleSecureOpenShare}
-                                    isRegrantingId={isRegrantingId}
-                                    onOpenComments={handleOpenComments}
-                                    onOpenPreview={handleOpenPreview}
-                                    extCollaboratorLabel={projExtCollaborator}
-                                    viewerLabel={projViewer}
-                                    onParentFolderClick={onOpenInFiles ? handleOpenParentFolder : undefined}
-                                    onOpenInFilesForFolder={onOpenInFiles ? handleOpenInFilesForFolder : undefined}
-                                    onOpenDetail={handleOpenDeliverableDetail}
-                                    isDetailOpen={share.id === openDeliverableId}
-                                    isPaneOpen={!!openDeliverableId}
-                                    isExternalPersona={restrictToSharedOnly}
-                                    isExternalViewer={isExternalViewer}
-                                    deeplinkBase={deeplinkBase}
-                                    generalFolderId={generalFolderId}
-                                    currentUserId={currentUserId}
-                                    onIntakeAction={handleIntakeAction}
-                                    intakeActionInProgress={intakeActionInProgress}
-                                    isSaving={savingId === share.id}
-                                    onUntagAsDeliverable={handleUntagAsDeliverable}
-                                  />
-                                ))}
-                              </AnimatePresence>
-                              {(activeId ? dropZoneReady : true) && byLane[lane.status].filter(s => s.id !== activeId).length === 0 && (
-                                <div
-                                  className={cn(
-                                    'h-[164px] rounded border border-dashed flex items-center justify-center text-[11px] font-medium transition-colors',
-                                    isOver
-                                      ? 'border-primary/40 text-primary bg-primary/5'
-                                      : 'border-[#d8d9dd] text-[#b4b5ba]'
-                                  )}
-                                >
-                                  Drop here
-                                </div>
+                              className={cn(
+                                'flex h-[104px] shrink-0 items-center justify-center rounded-card border-[1.5px] border-dashed bg-white/65 text-small font-medium',
+                                laneClasses.slot
                               )}
-                            </>
+                            >
+                              Move to {lane.label}
+                            </div>
+                          )}
+                          {!activeId && cards.length === 0 && (
+                            <p className="px-1 pb-1 text-small text-fg-subtle">No deliverables</p>
                           )}
                         </DroppableLane>
                       </motion.div>
@@ -2522,26 +2457,21 @@ export function EngagementSharesTab({
                 </div>
                 </div>
 
-                <DragOverlay dropAnimation={{ duration: 200, easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)' }}>
+                <DragOverlay dropAnimation={reduceMotion ? null : { duration: 200, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)' }}>
                   {activeId ? (() => {
                     const share = shares.find((s) => s.id === activeId)
                     if (!share) return null
                     const status = (share.activity?.status ?? 'to_do') as ActivityStatus
-                    const accent = CARD_ACCENT[status]
                     return (
-                      <div
-                        className="rounded overflow-hidden w-[280px] border border-line bg-white shadow-xl scale-[1.03]"
-                        style={{ cursor: 'grabbing' }}
-                      >
+                      // The lifted card: a deeper card shadow and a slight tilt (level under reduced motion).
+                      <div className={cn(interactiveCardClass({ lifted: true }), 'w-[280px] overflow-hidden')} style={{ cursor: 'grabbing' }}>
                         <ShareCardContent
                           share={share}
-                          iconPillBg={CARD_ACCENT[status].iconPillBg}
                           laneStatus={status}
                           formatDate={formatDate}
                           getDocumentForMenu={getDocumentForMenu}
                           showActions={false}
                           canManage={false}
-                          isApprovedLane={false}
                           handleSecureOpen={handleSecureOpenShare}
                           isRegrantingId={isRegrantingId}
                           onOpenComments={handleOpenComments}

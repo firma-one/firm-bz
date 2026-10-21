@@ -1,8 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { AlertTriangle, ArrowUpRight, Briefcase, CheckCircle2, ChevronLeft, ChevronRight, Inbox, ListChecks, MailWarning, MessagesSquare, RefreshCw, TrendingUp, UserMinus, Users } from 'lucide-react'
-import { ActionSection, type ActionItem, type ActionSeverity } from '@/components/dashboard/action-list'
+import { AlertTriangle, ArrowUpRight, ChevronLeft, Inbox, ListChecks, MailWarning, MessagesSquare, RefreshCw, TrendingUp, UserMinus } from 'lucide-react'
+import { ActionList, type ActionItem, type ActionSeverity } from '@/components/dashboard/action-list'
 import { formatValue } from '@/components/dashboard/pipeline-bar'
 import { Hint } from '@/components/ui/tooltip'
 import { ShimmerBlock } from '@/components/ui/shimmer'
@@ -10,9 +10,10 @@ import { cn, formatRelativeTime } from '@/lib/utils'
 import { firmActionCount, type FirmActionsData } from '@/lib/insights/firm-actions'
 
 /*
- * The firm Action Center (.claude/plans/firm-overview-redesign.md): two groups side by side, as on the
- * engagement — Engagements and Clients — each item a thing to do, opening the list to do it from.
- * Everything clear is one line. Presentational: the app feeds it from the firm insights route, the
+ * The firm Action Center (.claude/plans/firm-overview-redesign.md, restyled by
+ * app-design-refinements.md): one Linear-style list, as on the engagement, each item a thing to do,
+ * opening the list to do it from. Engagements and Clients group only the passed checks, and
+ * everything clear is one line. Presentational: the app feeds it from the firm insights route, the
  * tour from its sample firm.
  */
 
@@ -113,7 +114,6 @@ export function FirmActions({ data, loading = false, onRefresh, links }: {
     links: FirmActionLinks
 }) {
     const [view, setView] = useState<Kind | null>(null)
-    const [showChecks, setShowChecks] = useState(false)
 
     const item = (kind: Kind): ActionItem => ({
         key: kind,
@@ -127,14 +127,6 @@ export function FirmActions({ data, loading = false, onRefresh, links }: {
     const engagements = (['overdue', 'threads', 'setup', 'invites'] as const).map(item)
     const clients = (['idle', 'prospects'] as const).map(item)
     const attention = data ? firmActionCount(data) : 0
-    const checks = engagements.length + clients.length
-    // Opened from the all-clear line, the checks show at once rather than behind two more toggles.
-    const groups = (opened: boolean) => (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <ActionSection title="Engagements" icon={Briefcase} items={engagements} defaultShowClear={opened} />
-            <ActionSection title="Clients" icon={Users} items={clients} defaultShowClear={opened} />
-        </div>
-    )
 
     return (
         <section className="flex flex-col gap-4">
@@ -159,9 +151,10 @@ export function FirmActions({ data, loading = false, onRefresh, links }: {
             </div>
 
             {!data ? (
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2" aria-busy="true">
-                    <ShimmerBlock className="h-10 w-full" />
-                    <ShimmerBlock className="h-10 w-full" />
+                <div className="flex flex-col gap-2" aria-busy="true">
+                    <ShimmerBlock className="h-9 w-full" />
+                    <ShimmerBlock className="h-9 w-full" />
+                    <ShimmerBlock className="h-8 w-48" />
                 </div>
             ) : view ? (
                 <div key={view} className="flex flex-col gap-2 animate-in fade-in duration-200">
@@ -181,27 +174,15 @@ export function FirmActions({ data, loading = false, onRefresh, links }: {
                     <p className="px-2 text-small text-fg-subtle">{KINDS[view].how}</p>
                     <div className="flex flex-col">{rowsFor(view, data, links)}</div>
                 </div>
-            ) : attention === 0 ? (
-                // Nothing to do is one line, not two groups of zeros.
-                <div className="flex flex-col gap-3">
-                    <div className="flex items-center gap-2 px-2 text-small">
-                        <CheckCircle2 className="h-4 w-4 shrink-0 text-action" />
-                        <span className="text-fg-muted">All clear</span>
-                        <span className="text-fg-subtle">·</span>
-                        <button
-                            type="button"
-                            onClick={() => setShowChecks((v) => !v)}
-                            aria-expanded={showChecks}
-                            className="inline-flex items-center gap-1 rounded-control text-fg-subtle transition-colors hover:text-fg-muted"
-                        >
-                            {checks} checks passed
-                            <ChevronRight className={`h-3.5 w-3.5 transition-transform ${showChecks ? 'rotate-90' : ''}`} />
-                        </button>
-                    </div>
-                    {showChecks && groups(true)}
-                </div>
             ) : (
-                groups(false)
+                // One list, Linear-style; Engagements and Clients group only the passed checks, and when
+                // nothing needs doing the whole Action Center is one "All clear" line.
+                <ActionList
+                    groups={[
+                        { title: 'Engagements', items: engagements },
+                        { title: 'Clients', items: clients },
+                    ]}
+                />
             )}
         </section>
     )

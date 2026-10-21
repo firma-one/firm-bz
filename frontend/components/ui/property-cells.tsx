@@ -4,9 +4,9 @@ import * as React from "react"
 import { format } from "date-fns"
 import { Check, Loader2, Search, X } from "lucide-react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { StatusPill } from "@/components/ui/tag"
+import { StatusPill } from "@/components/ui/status-pill"
 import { cn } from "@/lib/utils"
-import type { StatusKind } from "@/lib/ui/status-colors"
+import type { StatusKind } from "@/lib/ui/status"
 import { initialsOf } from '@/lib/initials'
 
 /*
@@ -48,18 +48,17 @@ export function StatusProperty({
     options,
     onChange,
     disabled,
-    overdue,
 }: {
     kind: StatusKind
     value: string
     options: string[]
     onChange: (next: string) => unknown | Promise<unknown>
     disabled?: boolean
-    overdue?: boolean
 }) {
     const [open, setOpen] = React.useState(false)
     const { saving, run } = useSaving(onChange)
-    const pill = <StatusPill kind={kind} status={value} overdue={overdue} />
+    // The status language (lib/ui/status.ts). Overdue is shown on the date, not here.
+    const pill = <StatusPill kind={kind} status={value} />
     if (disabled) return <span className="inline-flex h-7 items-center px-1.5">{pill}</span>
     return (
         <Popover open={open} onOpenChange={setOpen}>

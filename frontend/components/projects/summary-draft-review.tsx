@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { AlertTriangle, Check, ChevronRight, Copy, RefreshCw, Square } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Hint } from '@/components/ui/tooltip'
 import { Brio } from '@/components/ui/brio'
 import { BrioSections } from '@/components/ui/brio-sections'
 import { StreamingText } from '@/components/ui/streaming-text'
@@ -241,15 +242,23 @@ export function SummaryDraftReview({
                             {busyAction === 'dismiss' && <RefreshCw className="h-3 w-3 animate-spin" />}
                             Discard
                         </Button>
-                        <Button
-                            size="sm"
-                            onClick={onPublish}
-                            disabled={busy || empty || blocked}
-                            title={blocked ? `Fill in ${unfilledSections.join(' and ')} first` : undefined}
-                        >
-                            {busyAction === 'publish' && <RefreshCw className="h-3 w-3 animate-spin" />}
-                            Publish
-                        </Button>
+                        {(() => {
+                            const publish = (
+                                <Button size="sm" onClick={onPublish} disabled={busy || empty || blocked}>
+                                    {busyAction === 'publish' && <RefreshCw className="h-3 w-3 animate-spin" />}
+                                    Publish
+                                </Button>
+                            )
+                            // Why it's disabled, in the app's Hint rather than a native title. A disabled
+                            // button gets no pointer events, so the Hint sits on a focusable wrapper.
+                            return blocked ? (
+                                <Hint label={`Fill in ${unfilledSections.join(' and ')} first`}>
+                                    <span tabIndex={0} className="inline-flex rounded-control focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action/30">
+                                        {publish}
+                                    </span>
+                                </Hint>
+                            ) : publish
+                        })()}
                     </div>
                 </div>
             )}

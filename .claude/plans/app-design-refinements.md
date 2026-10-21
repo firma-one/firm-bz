@@ -1,6 +1,6 @@
 # App design refinements: Notion's language, one status language, more feedback
 
-Status: **design approved** (2026-10-22). Wave 1 in progress on `dev`. Build in three waves (section 6),
+Status: **design approved** (2026-10-22). Wave 1 committed on `dev` (97fcc8f3); Wave 2 built, in review. Build in three waves (section 6),
 each committed on `dev` and reviewed before the next.
 
 **Direction:** stay conservative. Keep Notion's design language: black, gray and white, with Notion's
@@ -194,6 +194,24 @@ dragging".
 | Engagement Overview Action Center (`EngagementActionCenterV2`) and Firm Overview `FirmActions` | The `ActionSection` list |
 | Engagement Summary card and Publish (`engagement-insights-dashboard.tsx`, `summary-draft-review.tsx`) | `BrioByline`; publishing gets a toast (none today); the header's text buttons become 28px icon buttons with `Hint` and an `aria-label`: Edit (pencil; Add, a plus, when there's no summary yet), Copy, and Rewrite with Brio (the sparkle, in Brio's green) |
 | Client intake Approve buttons (`handleIntakeAction`) | Approval feedback; **none today** |
+
+**Built 2026-10-22 (on `dev`), with these calls made along the way:**
+- Into another lane, a dropped card lands in the landing slot at the end of that lane (where the
+  drop zone shows it going), not before the card under the pointer. Within a lane, reordering is
+  unchanged.
+- The engagement header's chip comes from the shared `StatusProperty` cell, so the client header,
+  the engagement and client settings forms and the Add Client and Add Engagement dialogs got the new
+  `StatusPill` now rather than in Wave 3. The old dot-style `StatusPill` (`components/ui/tag.tsx`)
+  and the old `ActionSection` stay, unused or deprecated, until sign-off.
+- Approving a document inside a deliverable (the detail pane's document rows) also gets the approval
+  feedback, and a failed change there now reverts with an error instead of failing silently.
+- The Board's intake actions confirm with the same titles the Files view already uses ("File
+  approved", "Folder rejected", "Upload withdrawn").
+- The Summary card's relative "2d ago" chip went: the byline dates the summary now.
+- The tour's own copies (`demo-engagement-board.tsx`, `demo-summary-card.tsx`) and its Action Center
+  were updated to match, so `/tour` shows Wave 2.
+- Not checked in a browser: the drag state on the real Board (the app needs a sign-in; the tour's
+  Board is static). Type-checked and tested only.
 
 ### Wave 3: everywhere else
 

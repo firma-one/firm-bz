@@ -51,6 +51,45 @@ export const STAGE_ICON_CLASSES: Record<StatusStage, string> = {
     problem: 'text-status-problem-icon',
 }
 
+/** Stages that appear as Board lanes, the only ones with lane and progress-bar tokens. */
+export type LaneStage = 'not-started' | 'underway' | 'waiting' | 'done'
+
+/**
+ * A lane of grouped work (section 5 of the plan). `rest`: half the stage tint and a hairline in its
+ * hue, sized to its cards. `target`: the lane under a dragged card, full tint and a dashed outline.
+ * `slot`: the dashed landing slot where the card will go.
+ */
+export const STAGE_LANE_CLASSES: Record<LaneStage, { rest: string; target: string; slot: string }> = {
+    'not-started': {
+        rest: 'bg-status-not-started-lane shadow-[inset_0_0_0_1px_var(--ui-status-not-started-lane-line)]',
+        target: 'bg-status-not-started-lane-target outline-status-not-started-lane-target-line',
+        slot: 'border-status-not-started-lane-target-line text-status-not-started-fg',
+    },
+    underway: {
+        rest: 'bg-status-underway-lane shadow-[inset_0_0_0_1px_var(--ui-status-underway-lane-line)]',
+        target: 'bg-status-underway-lane-target outline-status-underway-lane-target-line',
+        slot: 'border-status-underway-lane-target-line text-status-underway-fg',
+    },
+    waiting: {
+        rest: 'bg-status-waiting-lane shadow-[inset_0_0_0_1px_var(--ui-status-waiting-lane-line)]',
+        target: 'bg-status-waiting-lane-target outline-status-waiting-lane-target-line',
+        slot: 'border-status-waiting-lane-target-line text-status-waiting-fg',
+    },
+    done: {
+        rest: 'bg-status-done-lane shadow-[inset_0_0_0_1px_var(--ui-status-done-lane-line)]',
+        target: 'bg-status-done-lane-target outline-status-done-lane-target-line',
+        slot: 'border-status-done-lane-target-line text-status-done-fg',
+    },
+}
+
+/** Progress-bar fill in the stage's soft hue. */
+export const STAGE_BAR_CLASSES: Record<LaneStage, string> = {
+    'not-started': 'bg-status-not-started-bar',
+    underway: 'bg-status-underway-bar',
+    waiting: 'bg-status-waiting-bar',
+    done: 'bg-status-done-bar',
+}
+
 export type StatusEntry = { stage: StatusStage; label: string }
 
 /** Each lifecycle and the enum its values come from. */

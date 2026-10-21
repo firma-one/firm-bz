@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
 import { ClientStatus, ConnectorStatus, EngagementStatus, InvitationStatus, TicketStatus } from '@prisma/client'
-import { STAGES, STAGE_LABEL, STATUS, statusOf, type StatusKind } from './status'
+import { STAGES, STAGE_LABEL, STAGE_LANE_CLASSES, STATUS, statusOf, type StatusKind } from './status'
 
 // The enums each lifecycle is read from at runtime. ActivityStatus is a TypeScript union, not a
 // Prisma enum, so its values are listed here.
@@ -34,6 +34,17 @@ describe('status language', () => {
         const css = readFileSync(resolve(__dirname, '../../app/ui-tokens.css'), 'utf8')
         for (const stage of STAGES) {
             for (const part of ['bg', 'fg', 'icon']) expect(css).toContain(`--ui-status-${stage}-${part}:`)
+        }
+        for (const stage of Object.keys(STAGE_LANE_CLASSES)) {
+            for (const part of ['bar', 'lane', 'lane-line', 'lane-target', 'lane-target-line']) {
+                expect(css).toContain(`--ui-status-${stage}-${part}:`)
+            }
+        }
+    })
+
+    it('gives every Board lane a stage with lane tokens', () => {
+        for (const value of ENUM_VALUES.deliverable) {
+            expect(Object.keys(STAGE_LANE_CLASSES)).toContain(STATUS.deliverable[value as 'to_do'].stage)
         }
     })
 

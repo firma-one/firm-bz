@@ -16,7 +16,7 @@ import {
   SelectTrigger,
 } from '@/components/ui/select'
 import {
-  CheckCircle, PenLine, Eye, ListTodo, Loader2,
+  Loader2,
   Folder, MoreVertical,
   Info, MessagesSquare, Settings as SettingsIcon,
   UserPlus, ChevronDown, X, ScanEye, FolderOpen, Check, CircleDot, CalendarClock, UserRound, ListChecks,
@@ -32,7 +32,9 @@ import { DocumentIcon } from '@/components/ui/document-icon'
 import { DocumentActionMenu } from '@/components/ui/document-action-menu'
 import { DateTimePicker } from '@/components/ui/date-time-picker'
 import { Button } from '@/components/ui/button'
-import { StatusPill } from '@/components/ui/tag'
+import { StatusPill } from '@/components/ui/status-pill'
+import { FRESH_CHIP_CLASS, useApprovalFeedback } from '@/lib/ui/use-approval-feedback'
+import { STAGE_BAR_CLASSES, STATUS, type LaneStage } from '@/lib/ui/status'
 import { PropertyList, PropertyRow } from '@/components/ui/property-list'
 import { DateProperty, PersonAvatar, PersonProperty, type PersonOption } from '@/components/ui/property-cells'
 import type { ActivityStatus } from '@/lib/sharing-settings'
@@ -113,12 +115,8 @@ const STAGE_LABELS: Record<ActivityStatus, string> = {
   approved: 'Approved',
 }
 
-const STAGE_ICON: Record<ActivityStatus, React.ReactNode> = {
-  to_do: <ListTodo className="h-3.5 w-3.5" />,
-  in_progress: <PenLine className="h-3.5 w-3.5" />,
-  in_review: <Eye className="h-3.5 w-3.5" />,
-  approved: <CheckCircle className="h-3.5 w-3.5" />,
-}
+/** Progress bars take the deliverable's stage hue (every deliverable stage is a lane stage). */
+const laneStageOf = (status: ActivityStatus) => STATUS.deliverable[status].stage as LaneStage
 
 const FIELD_LABEL = 'block mb-1.5 text-small font-medium text-fg-muted'
 
@@ -161,6 +159,8 @@ function SubtaskRow({
   members?: EngagementMember[]
 }) {
   const [saving, setSaving] = useState(false)
+  const { addToast } = useToast()
+  const approvalFeedback = useApprovalFeedback()
   const [subtaskDueDate, setSubtaskDueDate] = useState(subtask.dueDate ?? '')
   const [savingSubtaskDue, setSavingSubtaskDue] = useState(false)
   const [savingAssignee, setSavingAssignee] = useState(false)
@@ -206,20 +206,29 @@ function SubtaskRow({
 
   const handleStatusChange = useCallback(async (newStatus: string) => {
     const s = newStatus as ActivityStatus
+    const previous = status
     onStatusChange(subtask.id, s)
     setSaving(true)
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session?.access_token) return
-      await fetch(`/api/projects/${projectId}/documents/${subtask.documentId}/sharing/activity`, {
+      const res = await fetch(`/api/projects/${projectId}/documents/${subtask.documentId}/sharing/activity`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
         body: JSON.stringify({ status: s }),
       })
+      if (!res.ok) {
+        // The change was shown optimistically; put it back and say so instead of failing silently.
+        onStatusChange(subtask.id, previous)
+        addToast({ type: 'error', title: 'Failed to update status', message: 'Please try again.' })
+        return
+      }
+      // Approving a document gets the same feedback as approving a deliverable (none before).
+      if (s === 'approved') approvalFeedback.confirm({ id: subtask.id, name: subtask.fileName })
     } finally {
       setSaving(false)
     }
-  }, [subtask.id, subtask.documentId, projectId, onStatusChange])
+  }, [subtask.id, subtask.documentId, subtask.fileName, projectId, status, onStatusChange, addToast, approvalFeedback])
 
   const handleTrash = useCallback(async () => {
     try {
@@ -309,7 +318,7 @@ function SubtaskRow({
             </Tooltip>
           )}
           {/* Stage badge */}
-          <StatusPill kind="deliverable" status={status} className="shrink-0" />
+          <StatusPill kind="deliverable" status={status} className={cn('shrink-0', approvalFeedback.isFresh(subtask.id) && FRESH_CHIP_CLASS)} />
         </TooltipProvider>
         <div className="shrink-0">
           <DocumentActionMenu
@@ -359,7 +368,7 @@ function SubtaskRow({
                     aria-label="Document status"
                     className={cn(CHIP, disabled && 'pointer-events-none')}
                   >
-                    <StatusPill kind="deliverable" status={status} />
+                    <StatusPill kind="deliverable" status={status} className={cn(approvalFeedback.isFresh(subtask.id) && FRESH_CHIP_CLASS)} />
                     {saving && <Loader2 className="h-3 w-3 animate-spin" />}
                   </button>
                 </DropdownMenuTrigger>
@@ -528,6 +537,7 @@ export function DeliverableDetailPanel({
   initialTab,
 }: DeliverableDetailPanelProps) {
   const { addToast } = useToast()
+  const approvalFeedback = useApprovalFeedback()
   const { paneSize } = useRightPane()
   const showExtras = paneSize !== 'small'
   const [activeTab, setActiveTab] = useState<Tab>(initialTab ?? 'details')
@@ -756,7 +766,9 @@ export function DeliverableDetailPanel({
       }
       setStatus(next)
       onStatusChange?.(next)
-      addToast({ type: 'success', title: 'Stage updated', message: `Moved to ${STAGE_LABELS[next]}.` })
+      // Approval gets its own feedback: "Approved · {name}" and the pill fading in green.
+      if (next === 'approved') approvalFeedback.confirm({ id: documentId, name: fileName })
+      else addToast({ type: 'success', title: 'Stage updated', message: `Moved to ${STAGE_LABELS[next]}.` })
     } finally {
       setMovingStatus(false)
     }
@@ -836,7 +848,7 @@ export function DeliverableDetailPanel({
         ) : (
           <>
             <span className="inline-flex h-7 items-center px-1.5">
-              <StatusPill kind="deliverable" status={status} />
+              <StatusPill kind="deliverable" status={status} className={cn(approvalFeedback.isFresh(documentId) && FRESH_CHIP_CLASS)} />
             </span>
             {/* Single-option action button for restricted roles (EC, EV, EM) */}
             {allowedTransitions.length === 1 && (() => {
@@ -893,7 +905,7 @@ export function DeliverableDetailPanel({
           {subtasks.length > 0 ? (
             <span className="inline-flex h-7 items-center gap-2 px-1.5">
               <span className="h-1.5 w-20 overflow-hidden rounded-full bg-surface-muted">
-                <span className="block h-full rounded-full bg-action" style={{ width: `${Math.round((approvedSubtasks / subtasks.length) * 100)}%` }} />
+                <span className={cn('block h-full rounded-full', STAGE_BAR_CLASSES[laneStageOf(status)])} style={{ width: `${Math.round((approvedSubtasks / subtasks.length) * 100)}%` }} />
               </span>
               <span className="text-small tabular-nums text-fg-muted">{approvedSubtasks} of {subtasks.length} documents approved</span>
             </span>
@@ -967,7 +979,7 @@ export function DeliverableDetailPanel({
                       <>
                         <div className="h-1 flex-1 overflow-hidden rounded-full bg-surface-muted">
                           <div
-                            className="h-full rounded-full bg-action transition-all duration-300"
+                            className={cn('h-full rounded-full transition-all duration-ui-slow ease-ui-out', STAGE_BAR_CLASSES[laneStageOf(status)])}
                             style={{ width: `${pct}%` }}
                           />
                         </div>
