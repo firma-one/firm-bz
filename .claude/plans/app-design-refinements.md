@@ -1,122 +1,246 @@
-# App design refinements: Notion's language, a little more feedback
+# App design refinements: Notion's language, one status language, more feedback
 
-Status: **draft for Deepak's review** (2026-10-21). Nothing is built yet.
+Status: **design approved** (2026-10-22). Wave 1 in progress on `dev`. Build in three waves (section 6),
+each committed on `dev` and reviewed before the next.
 
-**Direction, revised 2026-10-21 (later):** stay conservative. Keep Notion's design language: black,
-gray and white, with Notion's colored chips (tags). No new color: no gradients, no colored rings or
-glows, no tinted fills, no accent-colored Brio treatment. The firm's theme color stays only where it
-already is (primary buttons, links, focus rings). What remains is structure, feedback and motion.
+**Direction:** stay conservative. Keep Notion's design language: black, gray and white, with Notion's
+colored chips. No new decorative color: no gradients, no colored rings or glows, no accent-colored Brio
+treatment. The firm's theme color stays only where it already is (primary buttons, links, focus rings).
+Color appears for three things only: **status**, **danger** and **Brio's mark**.
 
-Mockups: the "App Design Refinements" canvas (https://claude.ai/artifact/4o62ia8m5eLBaYXCna1uo2),
-redrawn in this direction on 2026-10-21: the refined Engagement Overview, the Action Center (today vs
-the Linear-style list), Brio's byline, and the Board (Notion card shadow, a hovered card, a just-approved
-card and its toast). The earlier colorful boards (tiles, gradient Brio edge, accent ring, theming) are
-removed.
+Mockups: the "App Design Refinements" canvas (https://claude.ai/artifact/4o62ia8m5eLBaYXCna1uo2). It
+holds only approved designs: the refined Engagement Overview, the Action Center as a Linear-style list,
+Brio's work (icon actions and the byline), the Board at rest (a just-approved card and its toast), the
+Board while dragging, and the status sheet (the seven stages and every lifecycle mapped onto them).
 
-Scope: the authenticated app (`app/(app)`), across every screen. Not the marketing site, `/tour` (it
-reuses the app's shell pieces and picks the changes up), legal pages or `/system`.
+Scope: the authenticated app (`app/(app)`), every screen. Not the marketing site, legal pages or
+`/system`. `/tour` reuses the app's shell pieces, so it picks the changes up and doubles as the visual
+check.
 
-This plan **amends `.claude/plans/ui-ux-overhaul.md`** (Phase 6) in two places: line 317 "Cards have
-none (border only)" gains the Notion card shadow for draggable and openable cards (below), and line
-320 "120ms ease on hover … remove the arrival animations" gains the motion tokens and the one expand
-transition. Line 683 ("no shadow on in-page cards") still holds for page sections.
+This plan **amends `.claude/plans/ui-ux-overhaul.md`** (Phase 6): line 317 "Cards have none (border
+only)" gains the Notion card shadow for cards you open or drag; line 320 "120ms ease on hover … remove
+the arrival animations" gains the motion tokens and the few transitions below. Line 683 ("no shadow on
+in-page cards") still holds for page sections. Wave 1 adds a short design system section there that
+points here.
 
 ---
 
 ## 1. Principles
 
-1. **Notion's palette, unchanged.** Black, warm grays and white; Notion's tag colors for chips and
-   statuses. No new hues, no gradients.
-2. **Red only for danger,** as today (overdue, destructive, errors).
-3. **Depth means you can pick it up.** Cards you open or drag (Board cards, Home "Continue" cards,
-   gallery and workspace cards) get Notion's own card shadow,
-   `0 0 0 1px rgba(15,15,15,.1), 0 2px 4px rgba(15,15,15,.1)`, and a warm hover background, as
-   Notion's boards and galleries do. No lift, no glow. Page sections stay flat.
-4. **Work queues stay Linear.** The Action Center, Inbox and Home "Needs you" are dense lists with the
-   count at the end of the row. (Decision A.)
-5. **Brio says what it wrote, in plain text.** A byline on Brio-written content; no special colors or
-   edges.
-6. **Every approval gives feedback.** Several approve actions are silent today; each gets a toast and,
-   where the item is on screen, its Notion green "Approved" chip appearing.
-7. **Motion is quiet, tokenized and respects reduced motion,** including framer-motion, the toast tick
+1. **Notion's palette.** Black, warm grays and white. Status uses Notion's lighter, pastel hues
+   through the status language (section 2). User-chosen labels keep Notion's tag palette.
+2. **One status language.** Every lifecycle in the app maps onto the same seven stages, each with one
+   icon and one pastel. People learn it on the Board and read it everywhere.
+3. **Red only for danger:** overdue dates, destructive actions, errors and the "Needs fixing" stage.
+4. **Depth means you can pick it up.** Cards you open or drag get Notion's card shadow,
+   `0 0 0 1px rgba(15,15,15,.1), 0 2px 4px rgba(15,15,15,.1)`, and a warm hover background. No lift, no
+   glow. Page sections stay flat.
+5. **Work queues stay Linear.** The Action Center, Inbox and Home "Needs you" are dense lists with the
+   count at the end of the row.
+6. **Brio says what it wrote, in plain text,** and its actions are icon buttons with tooltips.
+7. **Every state change the user makes gives feedback.** Approvals that are silent today get a toast
+   and, where the item is on screen, its green "Approved" chip.
+8. **Motion is quiet, tokenized and respects reduced motion,** including framer-motion, the toast tick
    and `tailwindcss-animate` (none of which do today).
 
-## 2. Tokens (app/ui-tokens.css + tailwind.config.js)
+## 2. The status language
+
+### Stages
+
+| Stage | Icon | Pill (bg / text) | Icon color | Meaning |
+|---|---|---|---|---|
+| Not started | empty circle | `#ebeae7` / `#5f5e5b` | `#9b9a97` | Nothing has happened yet |
+| Underway | half-filled circle | `#e1eef7` / `#2b6491` | `#5a9bd4` | Work is moving |
+| Waiting on someone | three-quarter circle | `#f9eecf` / `#8a6418` | `#dba940` | A review, a reply or an acceptance |
+| Done | filled check | `#dfeedd` / `#2f6b4b` | `#5aa77a` | Finished and accepted |
+| Paused | pause circle | `#f1e8e4` / `#7a5443` | `#b28a77` | Stopped for now, can resume |
+| Closed | muted filled check | `#ebeae7` / `#5f5e5b` | `#b9b8b5` | Over, kept for the record |
+| Needs fixing | filled alert circle | `#fbe4e4` / `#a8352f` | `#d9625a` | Expired, failed or revoked |
+
+Values are from the canvas; they become tokens (`--ui-status-<stage>-bg|fg|icon`). Pill text clears
+4.5:1 on its pill (4.6 to 5.5:1, checked). The pastel icons do **not** reach 3:1 (about 1.7 to 3.6:1), so
+an icon is never the only cue: it always sits next to a label (the pill) or inside a labeled lane, and
+where it stands alone (before a card's code, in a sidebar row) it carries visually hidden text naming the
+status. "Overdue" is not a stage: it's a red date on whatever stage the item is in.
+
+### Every lifecycle, mapped
+
+| Lifecycle (enum) | Values → stage | Where it shows |
+|---|---|---|
+| Deliverable stage (`ActivityStatus`) | To Do → Not started · In Progress → Underway · In Review → Waiting · Approved → Done | Board, detail pane, Inbox, calendar, Home |
+| Engagement (`EngagementStatus`) | Planned → Not started · Active → Underway · Paused → Paused · Completed → Done | Engagement header, sidebar, tables, Home |
+| Client (`ClientStatus`) | Prospect → Not started · Active → Underway · On hold → Paused · Past → Closed | All clients, client header |
+| Invitation (`InvitationStatus`) | Pending → Waiting · Accepted, Joined → Done · Superseded → Closed · Expired, Error → Needs fixing | Members, Action Center |
+| Storage connection (`ConnectorStatus`) | Active ("Connected") → Done · Expired, Revoked, Error → Needs fixing | Settings, Files |
+| Support ticket (`TicketStatus`) | New → Not started · In progress → Underway · Resolved → Done · Closed → Closed | Support |
+
+`DocumentStatus` (file processing) and `DocumentSharingPermissionStatus` stay internal and aren't shown
+as statuses.
+
+### In code
+
+- **`lib/ui/status.ts`:** a registry of `Record<Enum, { stage, label }>` per lifecycle. TypeScript makes
+  each record exhaustive, so a new enum value can't ship without a stage.
+- **`StatusIcon`** (`components/ui/status-icon.tsx`): the stage's icon at 13 to 16px, `aria-hidden`.
+- **`StatusPill`**: the icon plus the label in the stage's pill colors. Used wherever a status is
+  shown, including as group headers (Board lanes, Home "By status").
+- A test asserts every enum value of every lifecycle above has a registry entry and a label.
+
+## 3. Patterns
+
+| Pattern | What it is | Where |
+|---|---|---|
+| Status | `StatusPill` / `StatusIcon` | Every status in the app (section 2's table) |
+| Things you open or drag | `InteractiveCard`: Notion card shadow, warm hover, focus ring | Board cards, Home "Continue", client gallery, workspace and firm pickers |
+| Groups of work | Lanes: a status pill header, sized to their contents at rest, stretched into drop zones while dragging | Board; any grouped view with drag |
+| Work queues | Linear-style list rows: icon, label, muted explanation, count at the end | Action Center (engagement and firm), Inbox, Home "Needs you" |
+| Brio and feedback | `BrioByline`, icon actions with `Hint`, toasts with the green chip | Engagement summary, firm brief, approvals and other state changes |
+| Loading the workspace | `WorkspaceLoader`: white canvas, a small gray arc, one muted line; no card | Auth check, `/d` landing, the arrival overlay |
+
+## 4. Tokens and shared pieces
+
+**Tokens** (`app/ui-tokens.css` + `tailwind.config.js`):
 
 | Token | Value | Use |
 |---|---|---|
 | `--ui-shadow-card` | `0 0 0 1px rgba(15,15,15,.1), 0 2px 4px rgba(15,15,15,.1)` | Cards you open or drag |
+| `--ui-status-*` | Section 2 | Status pills, icons, Board lane tints and hairlines |
 | `--ui-ease-out` | `cubic-bezier(0.2, 0.8, 0.2, 1)` | Expands and enters |
 | `--ui-dur-fast/base/slow` | `120ms / 200ms / 320ms` | Hover / enter / expand |
 
-Tailwind: `shadow-card`, `ease-ui-out`, `duration-ui-*`. No color tokens are added.
+Tailwind: `shadow-card`, `bg-status-*`, `text-status-*`, `ease-ui-out`, `duration-ui-*`.
 
-## 3. Shared pieces
+**Shared pieces:**
 
-- **`InteractiveCard`** (new, `components/ui/interactive-card.tsx`): `rounded-card` with
-  `shadow-card` and the warm hover background (`surface-hover`), plus the focus ring. Replaces the
-  hand-rolled classes in `ContinueSection`, the `ClientList` gallery, `WorkspaceCard` and `FirmList`,
-  and is the shell of the Board's `DraggableCard`. (Their current `border` + `hover:border-line-strong`
-  becomes the shadow's 1px ring.)
-- **`ActionSection`** (`components/dashboard/action-list.tsx`, shared by the engagement and firm
-  Action Centers): one list, one row per check (icon, label, short muted explanation, count at the
-  end), hover background. Delivery and Housekeeping merge into one list and are grouped only inside
-  the disclosure. The "N checks passed" disclosure gets a height-and-fade transition
-  (`--ui-dur-slow`) and a turning chevron; the clear checks inside are muted rows with a gray check.
-  Severity stays in the icon color (red only for critical, as today).
+- **`InteractiveCard`** (new, `components/ui/interactive-card.tsx`): `rounded-card` with `shadow-card`,
+  the warm hover background (`surface-hover`) and the focus ring. Replaces the hand-rolled classes in
+  `ContinueSection`, the `ClientList` gallery, `WorkspaceCard` and `FirmList`, and is the shell of the
+  Board's `DraggableCard`. Their current `border` + `hover:border-line-strong` becomes the shadow's 1px
+  ring.
+- **`ActionSection`** (`components/dashboard/action-list.tsx`, shared by the engagement and firm Action
+  Centers): one list, one row per check (icon, label, short muted explanation, count at the end), hover
+  background. Delivery and Housekeeping merge into one list and are grouped only inside the disclosure.
+  "N checks passed" gets a height-and-fade transition (`--ui-dur-slow`) and a turning chevron; the
+  clear checks inside are muted rows with a gray check. Severity stays in the icon color (red only for
+  critical).
 - **`BrioByline`** (new, next to `components/ui/brio.tsx`): "Written by Brio · reviewed and published
-  by {name} · {date}" in the muted text color, under Brio-written content. The `<Brio>` mark itself is
-  unchanged.
-- **Approval feedback** (`lib/ui/use-approval-feedback.ts`): one helper that shows the success toast
-  and, when the item is on screen, lets its "Approved" chip fade in. No rings or celebrations.
+  by {name} · {date}" in muted text under Brio-written content. The `<Brio>` mark is unchanged.
+- **Approval feedback** (`lib/ui/use-approval-feedback.ts`): shows the success toast and, when the item
+  is on screen, lets its "Approved" chip fade in. No rings or celebrations. The same helper serves
+  other state changes (an invitation accepted, a storage connection restored).
+- **Tooltips: always the app's `Hint`** (`components/ui/tooltip.tsx`: Radix, the light variant, white
+  with `shadow-popover`, 300ms delay). Never a native `title` attribute: browsers draw and time it
+  differently, which is why `Hint` exists. Every icon-only button gets `Hint` plus an `aria-label`
+  (the tooltip isn't announced as the button's name). The older `Tip` (`components/ui/tip.tsx`, legacy
+  slate classes, 3 importers) isn't used for new work. Native `title` attributes on surfaces each wave
+  touches are swapped for `Hint` along the way (about 148 remain in `components/projects`, `home` and
+  `dashboard`).
 - **Toast** (`components/ui/toast.tsx`, ~30 callers): the success tick gets a reduced-motion fallback.
 - **Motion:** wrap the app shell in framer's `<MotionConfig reducedMotion="user">`, and add one
   `motion-reduce` rule for the `tailwindcss-animate` enter/exit classes.
 
-## 4. Rollout by surface (highest traffic first)
+## 5. Board lanes (decided 2026-10-22)
 
-| # | Surface | Change |
-|---|---|---|
-| 1 | Engagement Overview Action Center (`EngagementActionCenterV2`) and Firm Overview `FirmActions` | The `ActionSection` list above |
-| 2 | Board (`DraggableCard`, `engagement-shares-tab.tsx`) | `InteractiveCard` shell (Notion card shadow); approval feedback on drag to Approved (admins get **no feedback today**); the drag overlay uses `shadow-card` scaled up instead of `shadow-xl`; the hard-coded Approved-lane tint `#0d9f5f` moves to Notion's green tag token |
-| 3 | Engagement Summary card and Publish (`engagement-insights-dashboard.tsx`, `summary-draft-review.tsx`) | `BrioByline`; publishing gets a toast (none today) |
-| 4 | Home "Continue where you left off" (`home-view.tsx`) | `InteractiveCard` |
-| 5 | Deliverable detail pane (stage Select, document status) | Approval feedback; document approval has **no feedback today** |
-| 6 | Client intake Approve buttons (`handleIntakeAction`) | Approval feedback; **none today** |
-| 7 | Firm Overview brief (`ai-firm-brief.tsx`) | Its existing "Written by Brio …" footer moves to `BrioByline` styling (no publisher: the brief has no review step) |
-| 8 | Toast | Reduced-motion fallback |
-| 9 | Pickers and galleries (`WorkspaceCard`, `ClientList` gallery, `FirmList`) | `InteractiveCard` |
-| 10 | Files: Brio task cards (`agent-prompt-card.tsx`, still on legacy gray classes) | Move to the app's tokens |
+Canvas boards: "Board · at rest" (with a just-approved card and its toast) and "Board · while
+dragging".
 
-Unchanged on purpose: the Ask Brio launcher and panel, status tags and Board lane colors (Notion's
-hues), engagement and firm Overview cards (flat).
+- **Status:** each lane's header is a `StatusPill` (icon, name) with the count beside it. The same
+  `StatusIcon` sits before each card's code, replacing the boxed package tile. Progress bars use the
+  stage's soft hue. The hard-coded Approved tint `#0d9f5f` goes.
+- **At rest, the middle ground:** each lane is a rounded container **sized to its cards** (it does not
+  stretch to the tallest lane), with about half the stage tint and a 1px hairline in the lane's hue.
+  Short lanes end with their last card, so empty space stays white. Rough values: To Do `#f9f9f8` /
+  `rgba(55,53,47,.07)`, In Progress `#f7fafd` / blue at .18, In Review `#fefbf4` / yellow at .2,
+  Approved `#f6faf5` / green at .18.
+- **Cards:** `InteractiveCard`. Overdue dates are the only red.
+- **While dragging:**
+  - Every lane stretches to the board's full height, so the whole column is a drop zone.
+  - The lane under the pointer is the target. It gets the full tint, a 1.5px dashed outline in its hue
+    and a dashed landing slot where the card will go ("Move to In Review").
+  - The dragged card lifts with a deeper shadow and a slight tilt (about 2.5°), and its old spot fades
+    to about 35% opacity.
+  - Lanes the user can't drop into (Approved for non-admins, per `deliverable-stage-roles.ts`) don't
+    highlight as targets.
+  - Under reduced motion there's no tilt and no stretch animation; the states just switch.
+- **Drop and approval:** the drag overlay uses the card shadow scaled up instead of `shadow-xl`.
+  Dropping into Approved plays the approval feedback; admins get **no feedback today**.
 
-## 5. Data change (for the byline)
+## 6. Rollout: three waves, each reviewed before the next
+
+### Wave 1: foundation (almost no visible change)
+
+- Tokens: the card shadow, the status palette, motion.
+- `lib/ui/status.ts`, `StatusIcon`, `StatusPill`, with the exhaustiveness test.
+- `InteractiveCard`, `BrioByline`, the approval-feedback helper.
+- `MotionConfig` and the reduced-motion rule; the toast's reduced-motion fallback.
+- The design system section in `ui-ux-overhaul.md` (stage table, patterns, color budget), pointing
+  here; amend lines 317 and 320.
+- **The workspace loader** (added 2026-10-22 at Deepak's request). Sign-in drew three different
+  loaders: the auth check (a slate gradient), `/d` resolving where to land (a white card with
+  `shadow-xl` on the legacy `#f9f9fb`, "Loading your workspace..." and "This will only take a
+  moment"), and the arrival overlay (the same card, then a large brand-colored check and "Welcome
+  back!"). One `WorkspaceLoader` (`components/app/workspace-loader.tsx`) now draws all three: the
+  white canvas, a small gray arc and one muted line, no card or shadow; the welcome step uses the
+  status language's Done check, "Welcome back, {name}" and "Your workspace is ready." It stays
+  fully opaque (the shell loads behind it) and fades rather than zooms.
+
+### Wave 2: the engagement core
+
+| Surface | Change |
+|---|---|
+| Board (`DraggableCard`, `engagement-shares-tab.tsx`) | Section 5 |
+| Deliverable detail pane (`deliverable-detail-panel.tsx`) | The stage selector shows `StatusIcon`s; approval feedback (document approval has **no feedback today**) |
+| Engagement header (`engagement` page header) | Its status chip becomes a `StatusPill` |
+| Engagement Overview Action Center (`EngagementActionCenterV2`) and Firm Overview `FirmActions` | The `ActionSection` list |
+| Engagement Summary card and Publish (`engagement-insights-dashboard.tsx`, `summary-draft-review.tsx`) | `BrioByline`; publishing gets a toast (none today); the header's text buttons become 28px icon buttons with `Hint` and an `aria-label`: Edit (pencil; Add, a plus, when there's no summary yet), Copy, and Rewrite with Brio (the sparkle, in Brio's green) |
+| Client intake Approve buttons (`handleIntakeAction`) | Approval feedback; **none today** |
+
+### Wave 3: everywhere else
+
+| Surface | Change |
+|---|---|
+| Home (`home-view.tsx`) | "Continue" cards become `InteractiveCard`; "My engagements" groups and rows use `StatusPill`; "Needs you" rows use `StatusIcon` |
+| Inbox (`inbox-view.tsx`) | Items show the deliverable's `StatusIcon` |
+| Sidebar engagement rows (`sidebar-v2.tsx`) | The engagement's `StatusIcon` instead of the small dot |
+| Client and engagement tables, client header | Status columns and chips use `StatusPill` |
+| Calendar (`calendar-view`) and Home agenda | Deliverable due chips lead with `StatusIcon` |
+| Members and invitations | Invitation status uses `StatusPill`; resend gets feedback |
+| Storage connection (Settings, Files) | Connection health uses `StatusPill` (Connected / Needs fixing) |
+| Firm Overview brief (`ai-firm-brief.tsx`) | Its "Written by Brio …" footer moves to `BrioByline` styling (no publisher: the brief has no review step) |
+| Pickers and galleries (`WorkspaceCard`, `ClientList` gallery, `FirmList`) | `InteractiveCard` |
+| Files: Brio task cards (`agent-prompt-card.tsx`, legacy gray classes) | Move to the app's tokens |
+| Support tickets | Ticket status uses `StatusPill` |
+
+Unchanged on purpose: the Ask Brio launcher and panel; engagement and firm Overview cards (flat);
+user-chosen labels (Notion's tag palette).
+
+## 7. Data change (for the byline)
 
 - The engagement summary already stores `publishedByUserId`, `source ('ai'|'manual')` and the draft's
   `reviewedByUserId` in `Engagement.settings.insightsSummary` (`lib/ai/engagement-summary.ts`).
-- The insights API (`lib/insights/engagement-insights.ts`) sends only the text and `publishedAt`.
-  Add `source` and the publisher's display name (members are already loaded there). No migration.
-- Show the byline only when `source` is `'ai'`; a hand-edited summary says "Edited by {name}".
-  Older records without `publishedByUserId` show "Written by Brio · {date}".
+- The insights API (`lib/insights/engagement-insights.ts`) sends only the text and `publishedAt`. Add
+  `source` and the publisher's display name (members are already loaded there). No migration.
+- Show the byline only when `source` is `'ai'`; a hand-edited summary says "Edited by {name}". Older
+  records without `publishedByUserId` show "Written by Brio · {date}".
 - Everyone who can see the summary sees the byline, clients included (Decision D).
 
-## 6. Decisions
+## 8. Keeping it consistent
+
+- The design system section in `ui-ux-overhaul.md` is the reference: stages, patterns, color budget.
+- The registry's exhaustiveness test catches unmapped statuses.
+- After each wave: a browser pass on `/tour` with reduced motion on and off.
+- Checks per wave: `tsc`; the existing component tests (`firm-actions.test.tsx` and friends); new
+  tests for the status registry, the byline mapping and the merged Action Center list.
+
+## 9. Decisions
 
 - **A. Action Center.** Decided 2026-10-21: the Linear-style list.
-- **B. Brio's color.** Superseded by the conservative direction: Brio gets no new color treatment;
-  the `<Brio>` mark stays as it is.
-- **C. Status tags.** Decided 2026-10-21: keep Notion's hues (Board lanes included).
+- **B. Brio's color.** Superseded by the conservative direction: no new color treatment for Brio; the
+  `<Brio>` mark stays as it is.
+- **C. Status colors.** Decided 2026-10-21 (Notion's hues), refined 2026-10-22 (pastel versions,
+  Linear-style icons, the middle-ground lanes), and extended app-wide by F.
 - **D. Byline for client users.** Decided 2026-10-21: everyone sees the publisher's name.
-- **E. Branch.** Decided 2026-10-21: ship the website overhaul first, then start this on a fresh
-  branch from the updated `dev`.
-
-## 7. Order of work
-
-1. Tokens, Tailwind names, `MotionConfig` and the reduced-motion rule.
-2. `InteractiveCard`, the `ActionSection` list and transition, `BrioByline`, approval feedback, toast.
-3. Surfaces 1–3 (the engagement pages), then 4–10.
-4. Amend the two lines in `ui-ux-overhaul.md` and point them here.
-5. Checks: `tsc`; the existing component tests (`firm-actions.test.tsx` and friends); new tests for the
-   byline mapping and the merged Action Center list; a browser pass on `/tour` with reduced motion on
-   and off.
+- **E. Branch.** Decided 2026-10-21: the website shipped first (PR #126, 2026-10-22). Revised
+  2026-10-22: built directly on `dev`, no feature branch.
+- **F. App-wide status language.** Decided 2026-10-22: every lifecycle maps onto the seven stages
+  (section 2), rolled out in three waves (section 6).

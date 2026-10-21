@@ -10,7 +10,7 @@ import { LandingBlockerModal } from '@/components/app/landing-blocker-modal'
  * component keeps both moments visually identical, so they read as one continuous
  * loading state rather than two different flashes.
  */
-export function DLoadingFallback({ message = 'Loading your workspace...' }: { message?: string }) {
+export function DLoadingFallback({ message = 'Loading your workspace' }: { message?: string }) {
     return (
         <>
             <AppShellSkeleton />

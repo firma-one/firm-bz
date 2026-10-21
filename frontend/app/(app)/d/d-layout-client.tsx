@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, MotionConfig, motion } from 'framer-motion'
 import { usePathname } from 'next/navigation'
 import { AuthGuard } from '@/components/auth/auth-guard'
 import { AppTopbar } from '@/components/app/app-topbar'
@@ -366,6 +366,9 @@ export function DLayoutClient({
     sidebarCollapsed?: boolean
 }) {
     return (
+        // Every framer animation in the app drops its movement when the OS asks for reduced motion
+        // (opacity still fades). The CSS side is the motion-reduce rule in app/globals.css.
+        <MotionConfig reducedMotion="user">
         <UiShellProvider sidebarCollapsed={sidebarCollapsed}>
         <OnboardingProvider>
             <SidebarFirmsProvider firms={initialFirms}>
@@ -389,5 +392,6 @@ export function DLayoutClient({
             </SidebarFirmsProvider>
         </OnboardingProvider>
         </UiShellProvider>
+        </MotionConfig>
     )
 }

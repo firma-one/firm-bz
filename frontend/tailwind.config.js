@@ -34,7 +34,17 @@ module.exports = {
 			},
 			boxShadow: {
 				popover: 'var(--ui-shadow-popover)',
-				dialog: 'var(--ui-shadow-dialog)'
+				dialog: 'var(--ui-shadow-dialog)',
+				card: 'var(--ui-shadow-card)',
+				'card-drag': 'var(--ui-shadow-card-drag)'
+			},
+			transitionTimingFunction: {
+				'ui-out': 'var(--ui-ease-out)'
+			},
+			transitionDuration: {
+				'ui-fast': 'var(--ui-dur-fast)',
+				'ui-base': 'var(--ui-dur-base)',
+				'ui-slow': 'var(--ui-dur-slow)'
 			},
 			fontFamily: {
 				headline: ['Space Grotesk', 'system-ui', 'sans-serif'],
@@ -174,7 +184,19 @@ module.exports = {
 					'pink-fg': 'var(--ui-tag-pink-fg)',
 					'red-bg': 'var(--ui-tag-red-bg)',
 					'red-fg': 'var(--ui-tag-red-fg)'
-				}
+				},
+				/** Status language (lib/ui/status.ts): bg-status-underway-bg, text-status-done-fg … */
+				status: Object.fromEntries(
+					['not-started', 'underway', 'waiting', 'done', 'paused', 'closed', 'problem'].map((stage) => [
+						stage,
+						Object.fromEntries(
+							['bg', 'fg', 'icon', 'bar', 'lane', 'lane-line', 'lane-target', 'lane-target-line'].map((part) => [
+								part,
+								`var(--ui-status-${stage}-${part})`,
+							])
+						),
+					])
+				)
 			}
 		}
 	},

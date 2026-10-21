@@ -758,4 +758,20 @@
     opacity: 1;
     filter: none;
   }
+
+  /* tailwindcss-animate's enter/exit (dialogs, popovers, menus, toasts): keep the fade, drop the
+     slide, zoom and spin. framer animations get the same treatment from MotionConfig in the app
+     shell. !important because the slide-in-from-* / zoom-in-* utilities set these same properties,
+     often under a data-[state] variant that would otherwise outrank this rule. */
+  .animate-in,
+  .animate-out {
+    --tw-enter-translate-x: 0 !important;
+    --tw-enter-translate-y: 0 !important;
+    --tw-enter-scale: 1 !important;
+    --tw-enter-rotate: 0 !important;
+    --tw-exit-translate-x: 0 !important;
+    --tw-exit-translate-y: 0 !important;
+    --tw-exit-scale: 1 !important;
+    --tw-exit-rotate: 0 !important;
+  }
 }

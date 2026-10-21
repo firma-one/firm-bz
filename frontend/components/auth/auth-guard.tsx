@@ -3,7 +3,7 @@
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth-context'
-import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { WorkspaceLoader } from '@/components/app/workspace-loader'
 import { logger } from '@/lib/logger'
 
 interface AuthGuardProps {
@@ -25,13 +25,10 @@ export function AuthGuard({ children }: AuthGuardProps) {
     }
   }, [user, loading, router])
 
-  // Show full-page loader while checking authentication
+  // Full-page loader while checking authentication: the same screen as /d's landing loader, so
+  // sign-in reads as one continuous loading moment.
   if (loading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50 flex items-center justify-center">
-        <LoadingSpinner size="lg" message="Loading your workspace" />
-      </div>
-    )
+    return <WorkspaceLoader />
   }
 
   // Don't render children if not authenticated (will redirect)

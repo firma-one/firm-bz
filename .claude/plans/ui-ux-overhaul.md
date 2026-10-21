@@ -301,7 +301,9 @@ page is unchanged and moves from the default tab to a sidebar item.
   | pink | `#F5E0E9` | `#C14C8A` |
   | red | `#FFE2DD` | `#D44C47` |
 
-- **One status map** in `lib/ui/status-colors.ts` replaces the seven duplicates:
+- **One status map** in `lib/ui/status-colors.ts` replaces the seven duplicates. *Superseded
+  2026-10-22 by the status language (`lib/ui/status.ts`, see "Design system" below); callers
+  move over in waves 2 and 3 of `app-design-refinements.md`.*
 
   | Status | Values → color |
   |---|---|
@@ -314,10 +316,46 @@ page is unchanged and moves from the default tab to a sidebar item.
 | Aspect | Spec |
 |---|---|
 | Radius | `4px` controls and tags · `6px` cards and menus · `10px` dialogs · `full` avatars (round) |
-| Shadows | Cards have none (border only). Popovers: `0 0 0 1px rgba(15,15,15,.05), 0 3px 6px rgba(15,15,15,.1), 0 9px 24px rgba(15,15,15,.2)`. Dialogs: a larger version of the popover shadow. Scrim: `rgba(15,15,15,.6)`, the only one in the app. |
+| Shadows | Page cards and sections have none (border only). Cards you open or drag (Board cards, Home "Continue", the client gallery, workspace and firm pickers) get Notion's card shadow `0 0 0 1px rgba(15,15,15,.1), 0 2px 4px rgba(15,15,15,.1)` (`shadow-card`, amended 2026-10-22, `app-design-refinements.md`). Popovers: `0 0 0 1px rgba(15,15,15,.05), 0 3px 6px rgba(15,15,15,.1), 0 9px 24px rgba(15,15,15,.2)`. Dialogs: a larger version of the popover shadow. Scrim: `rgba(15,15,15,.6)`, the only one in the app. |
 | Density | Sidebar item 28px tall · list and table row 36px · button heights 28/32/36. Page content max-width 1200px, with 96→16px side gutters (desktop → mobile). |
 | Icons | lucide only; 16px, `strokeWidth={1.75}`, `--fg-muted` by default; one close icon (`X`) everywhere |
-| Motion | 120ms ease on hover and background changes. Remove `active:scale-95` and the arrival animations. |
+| Motion | 120ms ease on hover and background changes. Remove `active:scale-95` and the arrival animations. Amended 2026-10-22: tokens `--ui-ease-out` and `--ui-dur-fast/base/slow` (120/200/320ms, `ease-ui-out`, `duration-ui-*`) for hover, enter and expand, plus the few transitions in `app-design-refinements.md` (the Action Center disclosure, Board drop zones, a status chip fading in after a change). Reduced motion is respected once, app-wide: `MotionConfig reducedMotion="user"` in the app shell and a `motion-reduce` rule for `tailwindcss-animate`. |
+
+### Design system (refinements, 2026-10-22)
+
+The reference for the refined design language; details, rationale and the rollout are in
+`.claude/plans/app-design-refinements.md`.
+
+**Color budget.** Black, warm grays and white. Color is reserved for: the status language below,
+danger (red: overdue dates, destructive actions, errors, "Needs fixing"), Brio's mark, and the firm's
+action color (buttons, links, focus). User-chosen labels keep Notion's tag palette. No gradients,
+colored rings or glows.
+
+**The status language.** Every lifecycle maps onto seven stages (`lib/ui/status.ts`, tokens
+`--ui-status-<stage>-*`, rendered by `StatusPill` and `StatusIcon`). The icon is never the only cue.
+
+| Stage | Icon | Lifecycles |
+|---|---|---|
+| Not started | empty circle | To do · Planned · Prospect · New ticket |
+| Underway | half circle | In progress · Active engagement · Active client · Ticket in progress |
+| Waiting on someone | three-quarter circle | In review · Invitation pending |
+| Done | filled check | Approved · Completed · Accepted/Joined · Connected · Resolved |
+| Paused | pause circle | Paused engagement · Client on hold |
+| Closed | muted check | Past client · Superseded invitation · Closed ticket |
+| Needs fixing | alert circle | Expired/failed invitation · Expired/revoked/failed connection |
+
+"Overdue" is a red date on whatever stage the item is in, not a stage.
+
+**Patterns.**
+
+| Pattern | Component | Where |
+|---|---|---|
+| Status | `StatusPill` / `StatusIcon` | Every status in the app |
+| Things you open or drag | `InteractiveCard` (`shadow-card`, warm hover, focus ring) | Board cards, Home "Continue", client gallery, workspace and firm pickers |
+| Groups of work | Lanes with a status pill header, sized to their cards, stretched into drop zones while dragging | Board |
+| Work queues | Linear-style rows: icon, label, muted explanation, count at the end; clear checks fold into "N checks passed" | Action Center, Inbox, Home "Needs you" |
+| Brio and feedback | `BrioByline`, icon actions with `Hint` (never a native `title`), success toast plus the chip fading in (`useApprovalFeedback`) | Engagement summary, firm brief, approvals and other state changes |
+| Loading the workspace | `WorkspaceLoader`: white canvas, a small gray arc, one muted line; no card | Auth check, `/d` landing, the arrival overlay |
 
 ### How the token layer works with the toggle
 
