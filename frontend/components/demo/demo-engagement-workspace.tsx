@@ -9,7 +9,7 @@ import { Hint } from '@/components/ui/tooltip'
 import { EngagementHeader } from '@/components/projects/engagement-header'
 import { EngagementTabsList } from '@/components/projects/engagement-tabs'
 import { DemoClient, DemoEngagement, countFilesInEngagement } from '@/lib/demo/static-demo-data'
-import { getDeliverableStatusMap, getDemoDeliverables } from '@/lib/demo/demo-deliverables'
+import { getDeliverableDueMap, getDeliverableStatusMap, getDemoDeliverables } from '@/lib/demo/demo-deliverables'
 import { DemoFileList } from '@/components/demo/demo-file-list'
 import { DemoEngagementOverview } from '@/components/demo/demo-engagement-overview'
 import { DemoEngagementBoard } from '@/components/demo/demo-engagement-board'
@@ -108,7 +108,7 @@ export function DemoEngagementWorkspace({ client, engagement }: DemoEngagementWo
                         <DemoEngagementOverview engagement={engagement} />
                     </TabsContent>
                     <TabsContent value="files" className="m-0 flex h-full min-h-0 flex-col data-[state=inactive]:hidden">
-                        <DemoFileList folders={engagement.folders} deliverableStatusByFolderId={getDeliverableStatusMap(engagement)} />
+                        <DemoFileList folders={engagement.folders} deliverableStatusByFolderId={getDeliverableStatusMap(engagement)} deliverableDueByFolderId={getDeliverableDueMap(engagement)} />
                     </TabsContent>
                     <TabsContent value="board" className="m-0 h-full">
                         <DemoEngagementBoard engagement={engagement} />

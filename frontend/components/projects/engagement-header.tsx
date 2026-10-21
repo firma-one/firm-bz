@@ -160,19 +160,19 @@ export function EngagementHeader({
                     </Prop>
                 )}
 
-                <Prop label="Start date" icon={<CalendarDays className="h-3.5 w-3.5" />}>
+                <Prop label="Start" icon={<CalendarDays className="h-3.5 w-3.5" />}>
                     <DateProperty
                         value={kickoffDate}
-                        placeholder="Start date"
+                        placeholder="Start"
                         disabled={!canManage || isCompleted}
                         onChange={(next) => save({ kickoffDate: next }, "start date")}
                     />
                 </Prop>
 
-                <Prop label="Due date" icon={<Flag className="h-3.5 w-3.5" />}>
+                <Prop label="Due" icon={<Flag className="h-3.5 w-3.5" />}>
                     <DateProperty
                         value={dueDate}
-                        placeholder="Due date"
+                        placeholder="Due"
                         highlightOverdue={!isCompleted}
                         disabled={!canManage || isCompleted}
                         onChange={(next) => save({ dueDate: next }, "due date")}

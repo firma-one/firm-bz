@@ -475,7 +475,7 @@ function SubtaskRow({
               <DateTimePicker
                 value={subtaskDueDate}
                 onChange={(iso) => handleSubtaskDueDateChange(iso)}
-                placeholder="Due date"
+                placeholder="Due"
                 disabled={isDeliverableApproved}
                 className="h-7 w-auto border-transparent bg-transparent px-1.5 text-small shadow-none hover:bg-surface-selected"
               />

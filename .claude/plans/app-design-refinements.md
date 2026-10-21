@@ -356,3 +356,27 @@ Date · Event (the scope's icon and the action as a tag, red only for a deletion
 Engagement or File; firm-wide log only) · Details (takes the remaining width; the "approved by" clause
 muted) · Where (Client › Engagement, firm-wide log only; firm events name the firm) · Actor. The table is `table-fixed` so the set widths hold. The CSV export keeps
 its columns.
+
+## 11. Files (decided 2026-10-22)
+
+From the canvas's section 7 (the full "views" redesign was judged too extreme; these parts were kept):
+
+- **One toolbar row.** Breadcrumb and item count on the left ("5", or "4 of 6" while filtered), filter pills
+  and two quiet 28px icons (Search, Refresh) on the right; it wraps on a narrow pane. The separate count row
+  is gone.
+- **Selection bar.** While files are selected, the same row reads "N selected · Download · Move to trash ·
+  Clear (Esc)". Bulk Download and Trash no longer sit in the toolbar, disabled, the rest of the time.
+- **Row tools on hover.** Preview, Copy link and ⋯ show on hover or focus, while the row is selected or its
+  menu is open, and always on touch screens.
+- **Deliverables toggle.** A toggle pill shows only deliverables, what's inside them, and the folders above
+  them.
+- **Status and Due columns.** Status is the deliverable's stage (the Board's pill); Due is editable in place
+  for files and deliverable folders. For a deliverable or anything inside one, an empty value reads
+  "Not set"; other rows show a dash. Columns hide from the right as the pane narrows: Size, Modified,
+  Owner, Due, then Status.
+- **"Due", everywhere.** Field labels, column headers, tooltips and placeholders say "Due" (and "Start"),
+  not "Due date". Sentences keep "due date".
+- **Document action menu.** Stays three levels for now, made compact: 288px wide, 13px text, 26px rows,
+  14px icons, a tighter header. Submenus slide 4px and fade in 100ms, without the zoom.
+- **The tour mirrors every change** (`components/demo/*`), including the action menu, which the tour
+  copies because the real one needs a signed-in session.

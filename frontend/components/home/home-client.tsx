@@ -162,7 +162,7 @@ export function MyEngagementsList({
                                     trailing={
                                         <>
                                             {e.dueDate && (
-                                                <Hint label="Due date">
+                                                <Hint label="Due">
                                                     <span className="hidden tabular-nums sm:inline">
                                                         {format(new Date(e.dueDate), "MMM d")}
                                                     </span>

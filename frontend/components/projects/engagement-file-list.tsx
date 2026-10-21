@@ -12,7 +12,7 @@ import { LoadingAnnouncement, ShimmerBar, ShimmerBlock } from "@/components/ui/s
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { FilterMenuLabel, FilterMenuRow, FilterPill, summarizePicks } from "@/components/ui/filter-pill"
 import { CoffeeIcon, type CoffeeIconHandle } from "@/components/ui/coffee-icon"
-import { SquarePlus, Upload, FolderUp, X, Folder, File as FileIcon, ArrowUp, ArrowDown, ChevronRight, Search, List as ListIcon, LayoutGrid, ChevronDown, User, FileText, FileSpreadsheet, Presentation, ListChecks, PenTool, Map as MapIcon, LayoutTemplate, FileCode, AlertCircle, ShieldCheck, Maximize2, Minimize2, CheckCircle2, XCircle, Trash2, Layout, Code, Laptop, RefreshCw, Info, Share2, Layers, Building2, Users, Briefcase, Lock, FolderLock, Inbox, Sparkles, Link2, ExternalLink, MessagesSquare, CircleChevronLeft, Download, MoreVertical, Clock, Copy, FolderInput, Loader2, Pencil, Hash, Type, UserRound, Clock3, Flag, HardDrive, Plus } from 'lucide-react'
+import { SquarePlus, Upload, FolderUp, X, Folder, File as FileIcon, ArrowUp, ArrowDown, ChevronRight, Search, List as ListIcon, LayoutGrid, ChevronDown, User, FileText, FileSpreadsheet, Presentation, ListChecks, PenTool, Map as MapIcon, LayoutTemplate, FileCode, AlertCircle, ShieldCheck, Maximize2, Minimize2, CheckCircle2, XCircle, Trash2, Layout, Code, Laptop, RefreshCw, Info, Share2, Layers, Building2, Users, Briefcase, Lock, FolderLock, Inbox, Sparkles, Link2, ExternalLink, MessagesSquare, CircleChevronLeft, Download, MoreVertical, Clock, Copy, FolderInput, Loader2, Pencil, Hash, Type, UserRound, Clock3, Flag, HardDrive, Plus, PackageCheck, CircleDot } from 'lucide-react'
 import Fuse from 'fuse.js'
 import { config } from "@/lib/config"
 import { DocumentIcon } from '@/components/ui/document-icon'
@@ -44,6 +44,7 @@ import {
     DialogFooter
 } from '@/components/ui/dialog'
 import {
+    Hint,
     Tooltip,
     TooltipContent,
     TooltipProvider,
@@ -72,6 +73,7 @@ import { EngagementFileRow } from '@/components/projects/engagement-file-row'
 import {
     FILE_TABLE_GRID_COLS_CLASS,
     FILE_TABLE_CONTAINER_CLASS,
+    STATUS_COL_CLASS,
     OWNER_COL_CLASS,
     DATE_MODIFIED_COL_CLASS,
     DUE_DATE_COL_CLASS,
@@ -260,6 +262,14 @@ function CopyMoveSubmitButton({ label, submitting, disabled, onClick }: { label:
     )
 }
 
+/** The toolbar's quiet icons (Search, Refresh): 28px, no border, a 14px glyph like the filter pills'. */
+const TOOLBAR_ICON_CLASS =
+    'inline-flex h-7 w-7 items-center justify-center rounded-control text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg disabled:pointer-events-none disabled:opacity-40'
+
+/** A bulk action in the selection bar: a label beside its icon, so a destructive one is never a bare glyph. */
+const SELECTION_ACTION_CLASS =
+    'inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-control px-2 text-small text-fg transition-colors hover:bg-surface-hover'
+
 /** Loading placeholder for the Files table: 34px rows on the table's own grid, lines included. */
 function FileTableSkeleton({ rows = 8 }: { rows?: number }) {
     return (
@@ -274,9 +284,10 @@ function FileTableSkeleton({ rows = 8 }: { rows?: number }) {
                         <ShimmerBar style={{ width: `${38 + ((i * 23) % 40)}%` }} />
                     </span>
                     <span className="col-span-2" />
+                    <span className={`items-center ${STATUS_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><ShimmerBar className="w-16" /></span>
+                    <span className={`items-center ${DUE_DATE_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><ShimmerBar className="w-12" /></span>
                     <span className={`items-center ${OWNER_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><ShimmerBar className="w-20" /></span>
                     <span className={`items-center ${DATE_MODIFIED_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><ShimmerBar className="w-16" /></span>
-                    <span className={`items-center ${DUE_DATE_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><ShimmerBar className="w-12" /></span>
                     <span className={`items-center ${FILE_SIZE_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><ShimmerBar className="w-8" /></span>
                 </div>
             ))}
@@ -854,6 +865,8 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
     const [filterOwner, setFilterOwner] = useState<'any' | 'me' | 'not-me' | 'private-me'>('any')
     const [peopleFilterOpen, setPeopleFilterOpen] = useState(false)
     const [filterModified, setFilterModified] = useState<'any' | '7d' | '30d' | 'year'>('any')
+    /** Files' "Deliverables" toggle: only deliverables, what's inside them, and the folders that lead to them. */
+    const [deliverablesOnly, setDeliverablesOnly] = useState(false)
     const [highlightedFileId, setHighlightedFileId] = useState<string | null>(null)
     const [actionMenuOpenFileId, setActionMenuOpenFileId] = useState<string | null>(null)
     const [isRefreshing, setIsRefreshing] = useState(false)
@@ -869,6 +882,17 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
 
     // Bulk selection state
     const [selectedFileIds, setSelectedFileIds] = useState<Set<string>>(new Set())
+    // Esc clears a selection, as the selection bar's "Clear" says — unless a dialog or menu has the key.
+    useEffect(() => {
+        if (selectedFileIds.size === 0) return
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key !== 'Escape' || e.defaultPrevented) return
+            if (document.querySelector('[role="dialog"], [role="menu"], [role="listbox"]')) return
+            setSelectedFileIds(new Set())
+        }
+        window.addEventListener('keydown', onKey)
+        return () => window.removeEventListener('keydown', onKey)
+    }, [selectedFileIds.size])
 
     // Selection is scoped to the current folder: reset it when navigating away.
     // Rows switch to "click toggles selection" mode whenever size > 0, so a stale
@@ -2135,6 +2159,11 @@ const handleRefresh = async () => {
             })
         }
 
+        if (deliverablesOnly) {
+            // The deliverables, everything inside them, and the folders above them (so you can still get there).
+            result = result.filter(f => f.isDeliverable || sharedExternalIds.has(f.id) || ancestorFolderIds.has(f.id) || descendantIds.has(f.id))
+        }
+
         const direction = sortConfig.direction === 'asc' ? 1 : -1
         const getSortValue = (f: DriveFile): string | number => {
             if (sortConfig.sortBy === 'name') return f.name
@@ -2154,7 +2183,7 @@ const handleRefresh = async () => {
             return [...folders, ...rest]
         }
         return result.sort(cmp)
-    }, [files, sortConfig, filterTypes, filterOwner, filterModified, session?.user?.email, breadcrumbs])
+    }, [files, sortConfig, filterTypes, filterOwner, filterModified, deliverablesOnly, sharedExternalIds, ancestorFolderIds, descendantIds, session?.user?.email, breadcrumbs])
 
     /** Notion-style column header: muted small text with a column-type icon. */
     const TableHeader = ({ label, icon }: { label: string; icon?: React.ReactNode }) => (
@@ -2171,9 +2200,11 @@ const handleRefresh = async () => {
             onDrop={handleDrop}
         >
             {/* Top Bar: Breadcrumbs & Actions — renders on background, outside the content card */}
-            <div className="px-0 pt-1 pb-2 flex flex-col gap-2.5 shrink-0 z-20">
+            {/* One row: where you are and how many on the left, filters and quiet icons on the right.
+                While files are selected, the selection bar takes the row. Wraps when the pane is narrow. */}
+            <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 pt-1 pb-2 z-20">
                 {/* Breadcrumbs: root always visible (as dropdown when canManage); truncate middle */}
-                <div className="flex items-center text-xs font-medium text-fg-muted min-w-0">
+                <div className={cn("flex min-w-0 flex-1 basis-60 items-center gap-2 text-xs font-medium text-fg-muted", selectedFileIds.size > 0 && "hidden")}>
                     <div className="subtle-scrollbar flex min-w-0 items-center overflow-x-auto whitespace-nowrap">
                         {(() => {
                             const ROOT_INDEX = 0
@@ -2296,7 +2327,38 @@ const handleRefresh = async () => {
                             )
                         })()}
                     </div>
+                    {/* How many, beside where — it used to take a row of its own */}
+                    {!loading && files.length > 0 && (
+                        <span className="shrink-0 text-caption font-normal tabular-nums text-fg-subtle" aria-label={`${sortedFiles.length} of ${files.length} items`}>
+                            {sortedFiles.length === files.length ? files.length : `${sortedFiles.length} of ${files.length}`}
+                        </span>
+                    )}
                 </div>
+
+                {/* Selection bar: while files are selected, their bulk actions take this row */}
+                {selectedFileIds.size > 0 && (
+                    <div role="toolbar" aria-label={`${selectedFileIds.size} selected`} className="flex h-8 min-w-0 flex-1 items-center gap-0.5">
+                        <span className="mr-1.5 whitespace-nowrap text-small font-medium tabular-nums text-fg">{selectedFileIds.size} selected</span>
+                        <span aria-hidden className="mr-1 h-4 w-px bg-line-strong" />
+                        {!restrictToSharedOnly && (
+                            <>
+                                <button type="button" onClick={handleBulkDownload} className={SELECTION_ACTION_CLASS}>
+                                    <Download className="h-3.5 w-3.5 text-fg-muted" />
+                                    Download
+                                </button>
+                                <button type="button" onClick={handleBulkTrashClick} className={cn(SELECTION_ACTION_CLASS, "text-danger hover:text-danger")}>
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                    Move to trash
+                                </button>
+                            </>
+                        )}
+                        <span className="flex-1" />
+                        <button type="button" onClick={() => setSelectedFileIds(new Set())} className={cn(SELECTION_ACTION_CLASS, "text-fg-muted")}>
+                            Clear
+                            <kbd className="rounded-control border border-line px-1 font-sans text-caption text-fg-subtle">Esc</kbd>
+                        </button>
+                    </div>
+                )}
 
                 {/* New Document button portaled into the workspace nav bar slot */}
                 {navSlot && createPortal(
@@ -2479,13 +2541,22 @@ const handleRefresh = async () => {
                     navSlot
                 )}
 
-                {/* Toolbar: Filters + right-side actions */}
-                <div className="flex items-center justify-between gap-4">
+                {/* Toolbar: filters, then the quiet icons */}
+                <div className={cn("ml-auto flex shrink-0 items-center gap-3", selectedFileIds.size > 0 && "hidden")}>
                     {/* Left: Filters — Notion's filter-bar pills and menus, the same parts as Doc
                         Search (components/ui/filter-pill.tsx). Empty: a quiet outlined pill. Set:
                         filled in the accent and reading "Type: Folders, Documents", with an x.
                         Sort always has a value, so it stays neutral. */}
                     <div className="flex flex-wrap items-center gap-1.5">
+                        {!restrictToSharedOnly && (
+                            <FilterPill
+                                disabled={loading}
+                                icon={<PackageCheck />}
+                                label="Deliverables"
+                                pressed={deliverablesOnly}
+                                onClick={() => setDeliverablesOnly((v) => !v)}
+                            />
+                        )}
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                                 <FilterPill
@@ -2596,10 +2667,11 @@ const handleRefresh = async () => {
                             </DropdownMenuContent>
                         </DropdownMenu>
 
-                        {(filterTypes.size > 0 || filterOwner !== 'any' || filterModified !== 'any') && (
+                        {(deliverablesOnly || filterTypes.size > 0 || filterOwner !== 'any' || filterModified !== 'any') && (
                             <button
                                 type="button"
                                 onClick={() => {
+                                    setDeliverablesOnly(false)
                                     setFilterTypes(new Set())
                                     setFilterOwner('any')
                                     setFilterModified('any')
@@ -2611,90 +2683,19 @@ const handleRefresh = async () => {
                         )}
                     </div>
 
-                    {/* Right: Refresh & Search (search lives in right sidebar only) */}
-                    <div className="flex items-center gap-2">
-                        {!restrictToSharedOnly && (
-                        <>
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    disabled={selectedFileIds.size === 0}
-                                    onClick={handleBulkDownload}
-                                    className={cn(
-                                        "h-9 w-9 p-0 rounded-full transition-colors",
-                                        selectedFileIds.size > 0
-                                            ? "bg-slate-900 text-white border-slate-900 hover:bg-slate-700 hover:border-slate-700"
-                                            : "border-line text-fg-subtle bg-white disabled:opacity-40"
-                                    )}
-                                >
-                                    <Download className="h-4 w-4" />
-                                </Button>
-                            </TooltipTrigger>
-                            <TooltipContent side="bottom" className="text-xs">
-                                {selectedFileIds.size > 0 ? `Download ${selectedFileIds.size} item${selectedFileIds.size > 1 ? 's' : ''} as ZIP` : 'Select files to download'}
-                            </TooltipContent>
-                        </Tooltip>
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    disabled={selectedFileIds.size === 0}
-                                    onClick={handleBulkTrashClick}
-                                    className={cn(
-                                        "h-9 w-9 p-0 rounded-full transition-colors",
-                                        selectedFileIds.size > 0
-                                            ? "bg-red-600 text-white border-red-600 hover:bg-red-700 hover:border-red-700"
-                                            : "border-line text-fg-subtle bg-white disabled:opacity-40"
-                                    )}
-                                >
-                                    <Trash2 className="h-4 w-4" />
-                                </Button>
-                            </TooltipTrigger>
-                            <TooltipContent side="bottom" className="text-xs">
-                                {selectedFileIds.size > 0 ? `Move ${selectedFileIds.size} item${selectedFileIds.size > 1 ? 's' : ''} to trash` : 'Select files to move to trash'}
-                            </TooltipContent>
-                        </Tooltip>
-                        </>
-                        )}
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    disabled={loading || isRefreshing}
-                                    onClick={handleRefresh}
-                                    className="h-9 w-9 p-0 rounded-full border-line text-fg-muted hover:bg-surface-hover hover:text-fg"
-                                >
-                                    <RefreshCw className={cn("h-4 w-4", isRefreshing ? "animate-spin" : files.some(f => f.indexingStatus === 'PROCESSING') && "animate-pulse")} />
-                                </Button>
-                            </TooltipTrigger>
-                            <TooltipContent side="bottom" className="text-xs">
-                                Refresh list (e.g. after renaming in Google Docs)
-                            </TooltipContent>
-                        </Tooltip>
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={openSearchPanel}
-                                    className="h-9 w-9 p-0 rounded-full border-line text-fg-muted hover:bg-surface-hover hover:text-fg"
-                                    aria-label="Search engagement files"
-                                >
-                                    <Search className="h-4 w-4" />
-                                </Button>
-                            </TooltipTrigger>
-                            <TooltipContent side="bottom" className="text-xs">
-                                Search engagement files
-                            </TooltipContent>
-                        </Tooltip>
+                    {/* Right: Search & Refresh as quiet 28px icons. Bulk download and trash live in the selection bar. */}
+                    <div className="flex items-center gap-0.5">
+                        <span aria-hidden className="mr-1.5 h-4 w-px bg-line-strong" />
+                        <Hint label="Search engagement files" side="bottom">
+                            <button type="button" onClick={openSearchPanel} aria-label="Search engagement files" className={TOOLBAR_ICON_CLASS}>
+                                <Search className="h-3.5 w-3.5" />
+                            </button>
+                        </Hint>
+                        <Hint label="Refresh list (e.g. after renaming in Google Docs)" side="bottom">
+                            <button type="button" disabled={loading || isRefreshing} onClick={handleRefresh} aria-label="Refresh list" className={TOOLBAR_ICON_CLASS}>
+                                <RefreshCw className={cn("h-3.5 w-3.5", isRefreshing ? "animate-spin" : files.some(f => f.indexingStatus === 'PROCESSING') && "animate-pulse")} />
+                            </button>
+                        </Hint>
                     </div>
                 </div>
             </div >
@@ -2849,14 +2850,6 @@ const handleRefresh = async () => {
                     )
                 }
 
-                {/* Item count */}
-                {files.length > 0 && (
-                    <div className="px-1 pb-1.5">
-                        <span className="text-caption font-normal text-fg-subtle tabular-nums">
-                            {files.length} {files.length === 1 ? 'item' : 'items'}
-                        </span>
-                    </div>
-                )}
 
                 {/* Fixed Table Header (Compact) */}
                 <div className="sticky top-0 bg-surface border-y border-line overflow-hidden pl-1 pr-2 h-[34px] flex flex-col justify-center shrink-0 z-10 group">
@@ -2883,9 +2876,10 @@ const handleRefresh = async () => {
                         </div>
                         {/* Quick actions column: no label, Notion-style */}
                         <div className="col-span-2" aria-hidden />
+                        <div className={`items-center ${STATUS_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Status" icon={<CircleDot />} /></div>
+                        <div className={`items-center ${DUE_DATE_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Due" icon={<Flag />} /></div>
                         <div className={`items-center ${OWNER_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Owner" icon={<UserRound />} /></div>
                         <div className={`items-center ${DATE_MODIFIED_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Modified" icon={<Clock3 />} /></div>
-                        <div className={`items-center ${DUE_DATE_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Due" icon={<Flag />} /></div>
                         <div className={`items-center ${FILE_SIZE_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Size" icon={<HardDrive />} /></div>
                     </div>
                 </div>

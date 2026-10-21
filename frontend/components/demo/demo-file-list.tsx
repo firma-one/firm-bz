@@ -1,41 +1,59 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
     ArrowDownUp,
+    Bookmark,
     Briefcase,
+    Calendar,
     ChevronRight,
+    CircleDot,
+    Clock,
     Clock3,
     Copy,
     Download,
+    Edit3,
+    ExternalLink,
+    Eye,
     FileText,
     Flag,
     Folder,
+    FolderLock,
+    FolderOpen,
     HardDrive,
     Hash,
     Info,
     Link2,
+    MessagesSquare,
     MoreVertical,
+    Move,
+    Package,
     PackageCheck,
     PackagePlus,
     RefreshCw,
     ScanEye,
-    Share2,
+    Search,
     Trash2,
     Type,
     User,
     UserRound,
+    XCircle,
 } from 'lucide-react'
 import { DocumentIcon } from '@/components/ui/document-icon'
 import { Checkbox } from '@/components/ui/checkbox'
 import { FilterPill } from '@/components/ui/filter-pill'
 import { Hint } from '@/components/ui/tooltip'
 import { RelativeDateTime } from '@/components/ui/relative-date-time'
+import { StatusPill } from '@/components/ui/status-pill'
+import { DateProperty } from '@/components/ui/property-cells'
 import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuSeparator,
+    DropdownMenuSub,
+    DropdownMenuSubContent,
+    DropdownMenuSubTrigger,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import {
@@ -46,8 +64,9 @@ import {
     FILE_TABLE_CONTAINER_CLASS,
     FILE_TABLE_GRID_COLS_CLASS,
     OWNER_COL_CLASS,
+    STATUS_COL_CLASS,
 } from '@/components/projects/engagement-file-table-grid'
-import { cn, formatFileSize } from '@/lib/utils'
+import { cn, formatFileSize, formatFullDate, formatSmartDateTime } from '@/lib/utils'
 import { initialsOf } from '@/lib/initials'
 import type { DemoFolder, DemoFile } from '@/lib/demo/static-demo-data'
 import type { DeliverableStatus } from '@/lib/demo/demo-deliverables'
@@ -69,6 +88,14 @@ const MIME_BY_TYPE: Record<string, string> = {
 
 const OWNER = 'Alex Jordan'
 const NOT_IN_DEMO = 'Not available in this demo'
+
+/** The toolbar's quiet icons, as engagement-file-list.tsx draws them: 28px, no border, a 14px glyph. */
+const TOOLBAR_ICON_CLASS =
+    'inline-flex h-7 w-7 items-center justify-center rounded-control text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg [&_svg]:h-3.5 [&_svg]:w-3.5'
+
+/** A bulk action in the selection bar, as engagement-file-list.tsx draws it. */
+const SELECTION_ACTION_CLASS =
+    'inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-control px-2 text-small text-fg transition-colors hover:bg-surface-hover'
 
 function TableHeader({ label, icon }: { label: string; icon: React.ReactNode }) {
     return (
@@ -95,29 +122,147 @@ function QuickAction({ icon, label }: { icon: React.ReactNode; label: string }) 
     )
 }
 
-function RowActionMenu({ fileName }: { fileName: string }) {
+/** As document-action-menu.tsx's COMPACT_MENU_CLASS: 13px text, 26px rows, 14px icons, submenus included. */
+const COMPACT_MENU_CLASS =
+    '[&_[role=menuitem]]:py-1 [&_[role=menuitem]]:text-small [&_[role=menuitem]_svg]:h-3.5 [&_[role=menuitem]_svg]:w-3.5'
+
+const TYPE_LABEL: Record<string, string> = {
+    pdf: 'PDF', doc: 'Document', docx: 'Document', md: 'Document', sheet: 'Spreadsheet', xlsx: 'Spreadsheet',
+    slide: 'Presentation', pptx: 'Presentation', jpg: 'Image', jpeg: 'Image', png: 'Image', zip: 'Archive',
+}
+
+/** A menu row that does nothing in the demo; the menu stays open so the whole menu can be read. */
+function DemoMenuItem({ icon, children, danger = false }: { icon: React.ReactNode; children: React.ReactNode; danger?: boolean }) {
+    return (
+        <DropdownMenuItem onSelect={(e) => e.preventDefault()} className={cn('flex cursor-pointer items-center gap-2', danger && 'text-danger focus:text-danger')}>
+            <span className={cn('flex shrink-0', danger ? 'text-danger' : 'text-fg-muted')}>{icon}</span>
+            {children}
+        </DropdownMenuItem>
+    )
+}
+
+function DemoSubmenu({ icon, label, children }: { icon: React.ReactNode; label: string; children: React.ReactNode }) {
+    return (
+        <DropdownMenuSub>
+            <DropdownMenuSubTrigger className="flex cursor-pointer items-center gap-2">
+                <span className="flex shrink-0 text-fg-muted">{icon}</span>
+                <span>{label}</span>
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className="w-max min-w-48 max-w-72">{children}</DropdownMenuSubContent>
+        </DropdownMenuSub>
+    )
+}
+
+/**
+ * Static counterpart to document-action-menu.tsx, which can't run here (it needs a signed-in session):
+ * the same compact header and the same items, grouped the same way, for a file or a folder. Every
+ * action is inert.
+ */
+function RowActionMenu({ entry, name, docId, deliverableStatus, dueDate }: {
+    entry: Entry
+    name: string
+    docId?: string | null
+    deliverableStatus?: DeliverableStatus
+    dueDate?: string | null
+}) {
+    const isFolder = entry.kind === 'folder'
+    const type = isFolder ? 'Folder' : TYPE_LABEL[entry.file.type] ?? 'File'
+    const size = isFolder ? undefined : entry.file.size
+    const modified = isFolder ? undefined : entry.file.modifiedTime
     return (
         <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-                <button
-                    type="button"
-                    data-demo-tour="document-action-trigger"
-                    onClick={(e) => e.stopPropagation()}
-                    className="inline-flex h-7 w-7 items-center justify-center rounded-control text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg data-[state=open]:bg-surface-hover data-[state=open]:text-fg"
-                    aria-label={`Actions for ${fileName}`}
-                >
-                    <MoreVertical className="h-4 w-4" />
-                </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-[220px]">
-                <DropdownMenuItem disabled className="gap-2"><Download className="h-3.5 w-3.5" /> Download</DropdownMenuItem>
-                <DropdownMenuItem disabled className="gap-2"><Share2 className="h-3.5 w-3.5" /> Share</DropdownMenuItem>
-                <DropdownMenuItem disabled className="gap-2"><Link2 className="h-3.5 w-3.5" /> Copy link</DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem disabled className="gap-2"><Copy className="h-3.5 w-3.5" /> Duplicate</DropdownMenuItem>
-                <DropdownMenuItem disabled className="gap-2"><Info className="h-3.5 w-3.5" /> View details</DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem disabled className="gap-2 text-danger"><Trash2 className="h-3.5 w-3.5" /> Move to trash</DropdownMenuItem>
+            <Hint label="More actions">
+                <DropdownMenuTrigger asChild>
+                    <button
+                        type="button"
+                        data-demo-tour="document-action-trigger"
+                        onClick={(e) => e.stopPropagation()}
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-control text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg data-[state=open]:bg-surface-hover data-[state=open]:text-fg"
+                        aria-label={`Actions for ${name}`}
+                    >
+                        <MoreVertical className="h-4 w-4" />
+                    </button>
+                </DropdownMenuTrigger>
+            </Hint>
+            <DropdownMenuContent align="end" sideOffset={0} className={cn('flex w-72 flex-col overflow-hidden p-0', COMPACT_MENU_CLASS)} onClick={(e) => e.stopPropagation()}>
+                <div className="flex-none border-b border-line px-3 py-2">
+                    <div className="flex items-start gap-2.5">
+                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-control bg-surface-muted">
+                            {isFolder
+                                ? <Folder className="h-4 w-4 fill-surface-muted text-fg-muted" />
+                                : <DocumentIcon mimeType={MIME_BY_TYPE[entry.file.type] ?? 'application/octet-stream'} className="h-4 w-4" />}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                            <div className="flex items-start gap-1">
+                                <h3 className="min-w-0 cursor-default break-words text-small font-medium leading-snug text-fg line-clamp-2">{name}</h3>
+                                <Hint label={NOT_IN_DEMO}>
+                                    <button type="button" aria-label="Copy name" className="mt-0.5 shrink-0 rounded-control p-0.5 text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg">
+                                        <Copy className="h-3 w-3" />
+                                    </button>
+                                </Hint>
+                            </div>
+                            <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-caption text-fg-muted">
+                                {docId && <span className="font-mono text-caption text-fg-subtle">{docId}</span>}
+                                {deliverableStatus && <StatusPill kind="deliverable" status={deliverableStatus} />}
+                                <span>{type}{size ? <> · {formatFileSize(size)}</> : null}</span>
+                            </div>
+                            {modified && <p className="mt-0.5 text-caption text-fg-subtle">Modified {formatSmartDateTime(modified)} by {OWNER}</p>}
+                        </div>
+                    </div>
+                </div>
+                <div className="min-h-0 overflow-y-auto p-1">
+                    {isFolder ? (
+                        <>
+                            <DemoMenuItem icon={<Link2 />}>Copy link</DemoMenuItem>
+                            {deliverableStatus
+                                ? <DemoMenuItem icon={<XCircle />}>Untag as deliverable</DemoMenuItem>
+                                : <DemoMenuItem icon={<Package />}>Promote as deliverable</DemoMenuItem>}
+                            <DemoSubmenu icon={<FolderOpen />} label="Organize">
+                                <DemoMenuItem icon={<Edit3 />}>Rename</DemoMenuItem>
+                                <DemoMenuItem icon={<Move />}>Move</DemoMenuItem>
+                                <DropdownMenuSeparator />
+                                <DemoMenuItem icon={<FolderLock />}>Make private</DemoMenuItem>
+                            </DemoSubmenu>
+                            <DropdownMenuSeparator />
+                            <DemoSubmenu icon={<ExternalLink />} label="Drive actions">
+                                <DemoMenuItem icon={<ExternalLink />}>Open folder in Drive UI</DemoMenuItem>
+                            </DemoSubmenu>
+                        </>
+                    ) : (
+                        <>
+                            <DemoMenuItem icon={<Eye />}>Open</DemoMenuItem>
+                            <DemoMenuItem icon={<Link2 />}>Copy link</DemoMenuItem>
+                            <DemoMenuItem icon={<Download />}>Download</DemoMenuItem>
+                            <DemoMenuItem icon={<MessagesSquare />}>Comment</DemoMenuItem>
+                            <DropdownMenuSeparator />
+                            <DemoMenuItem icon={<Bookmark />}>Bookmark</DemoMenuItem>
+                            <DemoMenuItem icon={<Calendar />}>
+                                <span>Due</span>
+                                <span className="ml-auto pl-3 tabular-nums text-fg-subtle">{dueDate ? formatFullDate(dueDate) : 'Not set'}</span>
+                            </DemoMenuItem>
+                            <DropdownMenuSeparator />
+                            <DemoSubmenu icon={<FolderOpen />} label="Organize">
+                                <DemoMenuItem icon={<Edit3 />}>Rename</DemoMenuItem>
+                                <DemoMenuItem icon={<Copy />}>Duplicate</DemoMenuItem>
+                                <DemoMenuItem icon={<Copy />}>Copy</DemoMenuItem>
+                                <DemoMenuItem icon={<Move />}>Move</DemoMenuItem>
+                                <DropdownMenuSeparator />
+                                <DemoMenuItem icon={<FolderLock />}>Make private</DemoMenuItem>
+                            </DemoSubmenu>
+                            <DemoSubmenu icon={<Info />} label="Details">
+                                <DemoMenuItem icon={<Info />}>File information</DemoMenuItem>
+                                <DemoMenuItem icon={<Clock />}>Activity stream</DemoMenuItem>
+                                <DemoMenuItem icon={<Clock />}>Version history</DemoMenuItem>
+                            </DemoSubmenu>
+                            <DemoSubmenu icon={<ExternalLink />} label="Drive actions">
+                                <DemoMenuItem icon={<ExternalLink />}>Open containing folder in Google Drive</DemoMenuItem>
+                            </DemoSubmenu>
+                        </>
+                    )}
+                    <DropdownMenuSeparator />
+                    <DemoMenuItem icon={<Trash2 />} danger>Move to trash</DemoMenuItem>
+                    <p className="px-2 pb-1 pt-1.5 text-caption text-fg-subtle">Actions aren&apos;t available in this demo.</p>
+                </div>
             </DropdownMenuContent>
         </DropdownMenu>
     )
@@ -125,24 +270,53 @@ function RowActionMenu({ fileName }: { fileName: string }) {
 
 type Entry = { kind: 'folder'; folder: DemoFolder } | { kind: 'file'; file: DemoFile }
 
+const entryId = (entry: Entry) => (entry.kind === 'folder' ? entry.folder.id : entry.file.id)
+
 /** Static counterpart to engagement-file-row.tsx: the same grid, cells and quick actions. */
-function EntryRow({ entry, onOpenFolder, deliverableStatus }: { entry: Entry; onOpenFolder?: () => void; deliverableStatus?: DeliverableStatus }) {
+function EntryRow({
+    entry,
+    onOpenFolder,
+    deliverableStatus,
+    dueDate,
+    tracked,
+    pinTools = false,
+    selected,
+    onToggleSelect,
+}: {
+    entry: Entry
+    onOpenFolder?: () => void
+    deliverableStatus?: DeliverableStatus
+    dueDate?: string | null
+    /** A deliverable or something inside one: an empty Status or Due reads "Not set", not a dash. */
+    tracked: boolean
+    /** The first row keeps its tools showing: the guided tour points at its ⋯, which would otherwise wait for a hover. */
+    pinTools?: boolean
+    selected: boolean
+    onToggleSelect: () => void
+}) {
     const isFolder = entry.kind === 'folder'
     const docId = isFolder ? entry.folder.docId : entry.file.docId
     const name = isFolder ? entry.folder.name.replace(/_+/g, ' ').trim() : entry.file.name
     const approved = deliverableStatus === 'approved'
+    const empty = <span className="text-small text-fg-subtle">{tracked ? 'Not set' : '—'}</span>
 
     return (
         <div
             onClick={isFolder ? onOpenFolder : undefined}
             className={`${FILE_TABLE_GRID_COLS_CLASS} ${cn(
                 'group relative grid h-[34px] items-center gap-4 overflow-hidden pl-1 pr-2 text-ui transition-colors',
-                approved ? 'bg-action/5 hover:bg-action/10' : 'hover:bg-surface-hover',
+                selected ? 'bg-surface-selected' : approved ? 'bg-action/5 hover:bg-action/10' : 'hover:bg-surface-hover',
                 isFolder ? 'cursor-pointer' : 'cursor-default',
             )}`}
         >
-            <div className="flex h-4 w-4 flex-shrink-0 items-center justify-center" onClick={(e) => e.stopPropagation()}>
-                <Checkbox checked={false} className="pointer-events-none h-4 w-4" />
+            <div
+                className="flex h-4 w-4 flex-shrink-0 cursor-pointer items-center justify-center"
+                onClick={(e) => {
+                    e.stopPropagation()
+                    onToggleSelect()
+                }}
+            >
+                <Checkbox checked={selected} className="pointer-events-none h-4 w-4" />
             </div>
 
             <div className="flex min-w-0 items-center">
@@ -158,19 +332,34 @@ function EntryRow({ entry, onOpenFolder, deliverableStatus }: { entry: Entry; on
                     )}
                 </span>
                 <span className="min-w-0 truncate text-fg">{name}</span>
+                {/* The deliverable marker steps aside once the Status column has room to say it. */}
                 {deliverableStatus && (
                     <Hint label={approved ? 'Deliverable — approved' : 'Deliverable'}>
-                        <span className={cn('inline-flex shrink-0 items-center', approved ? 'text-action' : 'text-fg-subtle')}>
+                        <span className={cn('inline-flex shrink-0 items-center @[49rem]/file-table:hidden', approved ? 'text-action' : 'text-fg-subtle')}>
                             {approved ? <PackageCheck className="h-3.5 w-3.5" /> : <PackagePlus className="h-3.5 w-3.5" />}
                         </span>
                     </Hint>
                 )}
             </div>
 
-            <div className="col-span-2 flex items-center justify-end gap-0.5">
+            {/* Row tools on hover or focus (always on touch screens), and while the row is in use */}
+            <div
+                className={cn(
+                    'col-span-2 flex items-center justify-end gap-0.5 transition-opacity duration-ui-fast',
+                    !selected && !pinTools && 'opacity-0 focus-within:opacity-100 group-hover:opacity-100 has-[[data-state=open]]:opacity-100 [@media(hover:none)]:opacity-100',
+                )}
+            >
                 {!isFolder && <QuickAction icon={<ScanEye />} label="Preview" />}
                 <QuickAction icon={<Link2 />} label="Copy link" />
-                <RowActionMenu fileName={name} />
+                <RowActionMenu entry={entry} name={name} docId={docId} deliverableStatus={deliverableStatus} dueDate={dueDate} />
+            </div>
+
+            <div className={`min-w-0 items-center ${STATUS_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}>
+                {deliverableStatus ? <StatusPill kind="deliverable" status={deliverableStatus} /> : empty}
+            </div>
+
+            <div className={`items-center ${DUE_DATE_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}>
+                {dueDate ? <DateProperty value={dueDate} onChange={() => undefined} disabled highlightOverdue /> : empty}
             </div>
 
             <div className={`min-w-0 items-center gap-1.5 ${OWNER_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}>
@@ -186,10 +375,6 @@ function EntryRow({ entry, onOpenFolder, deliverableStatus }: { entry: Entry; on
                 )}
             </div>
 
-            <div className={`items-center ${DUE_DATE_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}>
-                <span className="text-fg-subtle">—</span>
-            </div>
-
             <div className={`items-center ${FILE_SIZE_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}>
                 {!isFolder && entry.file.size ? (
                     <span className="tabular-nums text-fg-muted">{formatFileSize(entry.file.size)}</span>
@@ -202,100 +387,201 @@ function EntryRow({ entry, onOpenFolder, deliverableStatus }: { entry: Entry; on
 }
 
 /**
- * Static counterpart to engagement-file-list.tsx + engagement-file-row.tsx: the same breadcrumb,
- * filter pills, item count and table (shared grid, collapsing columns), all inert except folder
- * navigation. Top-level deliverable folders carry the marker the Board tab also shows.
+ * Static counterpart to engagement-file-list.tsx + engagement-file-row.tsx: the same one-row toolbar
+ * (breadcrumb and count, filter pills, quiet icons), selection bar and table (shared grid, collapsing
+ * columns, Status and Due). Folder navigation, selection and the Deliverables toggle work; the other
+ * filters and every action are inert. Top-level deliverable folders carry the Board's status and due date.
  */
-export function DemoFileList({ folders, deliverableStatusByFolderId }: { folders: DemoFolder[]; deliverableStatusByFolderId?: Record<string, DeliverableStatus> }) {
+export function DemoFileList({
+    folders,
+    deliverableStatusByFolderId,
+    deliverableDueByFolderId,
+}: {
+    folders: DemoFolder[]
+    deliverableStatusByFolderId?: Record<string, DeliverableStatus>
+    deliverableDueByFolderId?: Record<string, string | null>
+}) {
     const [path, setPath] = useState<DemoFolder[]>([])
+    const [selected, setSelected] = useState<Set<string>>(new Set())
+    const [deliverablesOnly, setDeliverablesOnly] = useState(false)
 
-    const currentFolders = path.length === 0 ? folders : path[path.length - 1].subfolders
-    const currentFiles = path.length === 0 ? [] : path[path.length - 1].files
+    const allFolders = path.length === 0 ? folders : path[path.length - 1].subfolders
+    const allFiles = path.length === 0 ? [] : path[path.length - 1].files
+    // Deliverables: the deliverable folders at the top, and everything inside one.
+    const insideDeliverable = path.length > 0 && !!deliverableStatusByFolderId?.[path[0].id]
+    const currentFolders = !deliverablesOnly || insideDeliverable
+        ? allFolders
+        : path.length === 0 ? allFolders.filter((f) => deliverableStatusByFolderId?.[f.id]) : []
+    const currentFiles = !deliverablesOnly || insideDeliverable ? allFiles : []
     const itemCount = currentFolders.length + currentFiles.length
+    const totalCount = allFolders.length + allFiles.length
+    const entries: Entry[] = [
+        ...currentFolders.map((folder) => ({ kind: 'folder' as const, folder })),
+        ...currentFiles.map((file) => ({ kind: 'file' as const, file })),
+    ]
+    const allSelected = entries.length > 0 && entries.every((e) => selected.has(entryId(e)))
+
+    const toggle = (id: string) =>
+        setSelected((prev) => {
+            const next = new Set(prev)
+            if (next.has(id)) next.delete(id)
+            else next.add(id)
+            return next
+        })
+    const openFolder = (next: DemoFolder[]) => {
+        setSelected(new Set())
+        setPath(next)
+    }
+
+    // Esc clears a selection, as in the app.
+    useEffect(() => {
+        if (selected.size === 0) return
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key !== 'Escape' || e.defaultPrevented) return
+            if (document.querySelector('[role="dialog"], [role="menu"]')) return
+            setSelected(new Set())
+        }
+        window.addEventListener('keydown', onKey)
+        return () => window.removeEventListener('keydown', onKey)
+    }, [selected.size])
 
     return (
         <div className="flex min-h-0 flex-1 flex-col">
-            {/* Breadcrumb */}
-            <div className="flex shrink-0 items-center pb-2 text-ui">
-                <button
-                    type="button"
-                    onClick={() => setPath([])}
-                    className={cn('flex items-center rounded-control px-1.5 py-1 transition-colors hover:bg-surface-hover', path.length === 0 ? 'text-fg' : 'text-fg-muted')}
-                    aria-label="Files root"
-                >
-                    <Briefcase className="h-3.5 w-3.5 text-fg-subtle" />
-                </button>
-                {path.map((folder, i) => (
-                    <div key={folder.id} className="flex min-w-0 items-center">
-                        <ChevronRight className="mx-0.5 h-3.5 w-3.5 shrink-0 text-fg-subtle" />
-                        <button
-                            type="button"
-                            onClick={() => setPath(path.slice(0, i + 1))}
-                            className={cn(
-                                'flex min-w-0 max-w-[200px] items-center gap-1.5 rounded-control px-1.5 py-1 transition-colors hover:bg-surface-hover',
-                                i === path.length - 1 ? 'font-medium text-fg' : 'text-fg-muted',
-                            )}
-                        >
-                            <Folder className="h-3.5 w-3.5 shrink-0 text-fg-subtle" />
-                            <span className="truncate">{folder.name.replace(/_+/g, ' ').trim()}</span>
+            {/* One row: where you are and how many, then filters and quiet icons; the selection bar takes it while selecting */}
+            <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 pb-2">
+                {selected.size > 0 ? (
+                    <div role="toolbar" aria-label={`${selected.size} selected`} className="flex h-8 min-w-0 flex-1 items-center gap-0.5">
+                        <span className="mr-1.5 whitespace-nowrap text-small font-medium tabular-nums text-fg">{selected.size} selected</span>
+                        <span aria-hidden className="mr-1 h-4 w-px bg-line-strong" />
+                        <Hint label={NOT_IN_DEMO}>
+                            <button type="button" className={SELECTION_ACTION_CLASS}>
+                                <Download className="h-3.5 w-3.5 text-fg-muted" />
+                                Download
+                            </button>
+                        </Hint>
+                        <Hint label={NOT_IN_DEMO}>
+                            <button type="button" className={cn(SELECTION_ACTION_CLASS, 'text-danger hover:text-danger')}>
+                                <Trash2 className="h-3.5 w-3.5" />
+                                Move to trash
+                            </button>
+                        </Hint>
+                        <span className="flex-1" />
+                        <button type="button" onClick={() => setSelected(new Set())} className={cn(SELECTION_ACTION_CLASS, 'text-fg-muted')}>
+                            Clear
+                            <kbd className="rounded-control border border-line px-1 font-sans text-caption text-fg-subtle">Esc</kbd>
                         </button>
                     </div>
-                ))}
-            </div>
+                ) : (
+                    <>
+                        <div className="flex min-w-0 flex-1 basis-60 items-center gap-2 text-xs font-medium text-fg-muted">
+                            <div className="flex min-w-0 items-center">
+                                <button
+                                    type="button"
+                                    onClick={() => openFolder([])}
+                                    className={cn('flex items-center rounded-control px-1.5 py-1 transition-colors hover:bg-surface-hover', path.length === 0 ? 'text-fg' : 'text-fg-muted')}
+                                    aria-label="Files root"
+                                >
+                                    <Briefcase className="h-3.5 w-3.5 text-fg-subtle" />
+                                </button>
+                                {path.map((folder, i) => (
+                                    <div key={folder.id} className="flex min-w-0 items-center">
+                                        <ChevronRight className="mx-0.5 h-3.5 w-3.5 shrink-0 text-fg-subtle" />
+                                        <button
+                                            type="button"
+                                            onClick={() => openFolder(path.slice(0, i + 1))}
+                                            className={cn(
+                                                'flex min-w-0 max-w-[200px] items-center gap-1.5 rounded-control px-1.5 py-1 transition-colors hover:bg-surface-hover',
+                                                i === path.length - 1 ? 'text-fg' : 'text-fg-muted',
+                                            )}
+                                        >
+                                            <Folder className="h-3.5 w-3.5 shrink-0 text-fg-subtle" />
+                                            <span className="truncate">{folder.name.replace(/_+/g, ' ').trim()}</span>
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                            {totalCount > 0 && (
+                                <span className="shrink-0 text-caption font-normal tabular-nums text-fg-subtle" aria-label={`${itemCount} of ${totalCount} items`}>
+                                    {itemCount === totalCount ? totalCount : `${itemCount} of ${totalCount}`}
+                                </span>
+                            )}
+                        </div>
 
-            {/* Toolbar */}
-            <div className="flex shrink-0 items-center justify-between gap-4 pb-3">
-                <Hint label="Filters aren't available in this demo" side="bottom">
-                    <div className="flex items-center gap-1.5">
-                        <FilterPill icon={<FileText />} label="Type" />
-                        <FilterPill icon={<User />} label="People" />
-                        <FilterPill icon={<Clock3 />} label="Modified" />
-                        <FilterPill icon={<ArrowDownUp />} label="Sort" />
-                    </div>
-                </Hint>
-                <div className="flex items-center gap-0.5">
-                    <QuickAction icon={<Download />} label="Download selected" />
-                    <QuickAction icon={<Trash2 />} label="Move selected to trash" />
-                    <QuickAction icon={<RefreshCw />} label="Refresh" />
-                </div>
+                        <div className="ml-auto flex shrink-0 items-center gap-3">
+                            <div className="flex items-center gap-1.5">
+                                <FilterPill
+                                    icon={<PackageCheck />}
+                                    label="Deliverables"
+                                    pressed={deliverablesOnly}
+                                    onClick={() => {
+                                        setSelected(new Set())
+                                        setDeliverablesOnly((v) => !v)
+                                    }}
+                                />
+                                <Hint label="Filters aren't available in this demo" side="bottom">
+                                    <div className="flex items-center gap-1.5">
+                                        <FilterPill icon={<FileText />} label="Type" />
+                                        <FilterPill icon={<User />} label="People" />
+                                        <FilterPill icon={<Clock3 />} label="Modified" />
+                                        <FilterPill icon={<ArrowDownUp />} label="Sort" />
+                                    </div>
+                                </Hint>
+                            </div>
+                            <div className="flex items-center gap-0.5">
+                                <span aria-hidden className="mr-1.5 h-4 w-px bg-line-strong" />
+                                <Hint label={NOT_IN_DEMO} side="bottom">
+                                    <button type="button" aria-label="Search engagement files" className={TOOLBAR_ICON_CLASS}><Search /></button>
+                                </Hint>
+                                <Hint label={NOT_IN_DEMO} side="bottom">
+                                    <button type="button" aria-label="Refresh list" className={TOOLBAR_ICON_CLASS}><RefreshCw /></button>
+                                </Hint>
+                            </div>
+                        </div>
+                    </>
+                )}
             </div>
 
             <div className={`flex min-h-0 flex-1 flex-col ${FILE_TABLE_CONTAINER_CLASS}`}>
-                {itemCount > 0 && (
-                    <div className="px-1 pb-1.5">
-                        <span className="text-caption tabular-nums text-fg-subtle">{itemCount} {itemCount === 1 ? 'item' : 'items'}</span>
-                    </div>
-                )}
-
                 <div className="sticky top-0 z-10 flex h-[34px] shrink-0 flex-col justify-center overflow-hidden border-y border-line bg-surface pl-1 pr-2">
                     <div className={`grid items-center gap-4 ${FILE_TABLE_GRID_COLS_CLASS}`}>
-                        <div className="flex h-4 w-4 items-center justify-center"><Checkbox checked={false} className="pointer-events-none h-4 w-4" /></div>
+                        <div
+                            className="flex h-4 w-4 cursor-pointer items-center justify-center"
+                            onClick={() => setSelected(allSelected ? new Set() : new Set(entries.map(entryId)))}
+                        >
+                            <Checkbox checked={allSelected} className="pointer-events-none h-4 w-4" />
+                        </div>
                         <div className="flex items-center"><TableHeader label="ID" icon={<Hash />} /></div>
                         <div className={`flex items-center ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Name" icon={<Type />} /></div>
                         <div className="col-span-2" aria-hidden />
+                        <div className={`items-center ${STATUS_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Status" icon={<CircleDot />} /></div>
+                        <div className={`items-center ${DUE_DATE_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Due" icon={<Flag />} /></div>
                         <div className={`items-center ${OWNER_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Owner" icon={<UserRound />} /></div>
                         <div className={`items-center ${DATE_MODIFIED_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Modified" icon={<Clock3 />} /></div>
-                        <div className={`items-center ${DUE_DATE_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Due" icon={<Flag />} /></div>
                         <div className={`items-center ${FILE_SIZE_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Size" icon={<HardDrive />} /></div>
                     </div>
                 </div>
 
                 <div className="flex-1 divide-y divide-line overflow-y-auto [&>.group:last-child]:border-b [&>.group:last-child]:border-line">
-                    {currentFolders.map((folder) => (
-                        <EntryRow
-                            key={folder.id}
-                            entry={{ kind: 'folder', folder }}
-                            onOpenFolder={() => setPath([...path, folder])}
-                            deliverableStatus={deliverableStatusByFolderId?.[folder.id]}
-                        />
-                    ))}
-                    {currentFiles.map((file) => (
-                        <EntryRow key={file.id} entry={{ kind: 'file', file }} />
-                    ))}
+                    {entries.map((entry, index) => {
+                        const id = entryId(entry)
+                        return (
+                            <EntryRow
+                                key={id}
+                                entry={entry}
+                                onOpenFolder={entry.kind === 'folder' ? () => openFolder([...path, entry.folder]) : undefined}
+                                deliverableStatus={entry.kind === 'folder' ? deliverableStatusByFolderId?.[id] : undefined}
+                                dueDate={entry.kind === 'folder' ? deliverableDueByFolderId?.[id] : undefined}
+                                tracked={insideDeliverable || (entry.kind === 'folder' && !!deliverableStatusByFolderId?.[id])}
+                                pinTools={index === 0}
+                                selected={selected.has(id)}
+                                onToggleSelect={() => toggle(id)}
+                            />
+                        )
+                    })}
                     {itemCount === 0 && (
                         <div className="flex h-48 flex-col items-center justify-center gap-2 text-center">
                             <Folder className="h-6 w-6 text-fg-subtle" />
-                            <p className="text-small text-fg-muted">This folder is empty</p>
+                            <p className="text-small text-fg-muted">{deliverablesOnly && totalCount > 0 ? 'No deliverables in this folder' : 'This folder is empty'}</p>
                         </div>
                     )}
                 </div>

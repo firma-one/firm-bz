@@ -525,7 +525,7 @@ function ShareCardContent({
                   {share.dueDate ? formatFullDate(share.dueDate) : 'No due date'}
                 </span>
               </TooltipTrigger>
-              <TooltipContent variant="light" side="top">{isOverdue ? 'Overdue' : 'Due date'}</TooltipContent>
+              <TooltipContent variant="light" side="top">{isOverdue ? 'Overdue' : 'Due'}</TooltipContent>
             </Tooltip>
           </TooltipProvider>
           <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>

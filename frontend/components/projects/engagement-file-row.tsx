@@ -13,6 +13,7 @@ import { ProfileBubbleWithPopup } from '@/components/ui/profile-bubble-popup'
 import { RelativeDateTime } from '@/components/ui/relative-date-time'
 import { DateProperty } from '@/components/ui/property-cells'
 import { Checkbox } from '@/components/ui/checkbox'
+import { StatusPill } from '@/components/ui/status-pill'
 import {
     Tooltip,
     TooltipContent,
@@ -23,6 +24,7 @@ import { formatFileSize } from '@/lib/utils'
 import { DriveFile } from '@/lib/types'
 import {
     FILE_TABLE_GRID_COLS_CLASS,
+    STATUS_COL_CLASS,
     OWNER_COL_CLASS,
     DATE_MODIFIED_COL_CLASS,
     DUE_DATE_COL_CLASS,
@@ -203,8 +205,17 @@ export function EngagementFileRow({
     const isFolderApproved = isFolder && file.isDeliverable && (file as any).deliverableStatus === 'approved'
     const canMutateFile = canEdit && !locked && !isIntakeRow && !isInsideApprovedDeliverable && !isFolderApproved
     const canOrganizeTree = canManage && !locked && !isIntakeRow && !isFolderApproved && !isInsideApprovedDeliverable
-    const canEditDueDate = canManage && !isFolder && !locked && !isIntakeRow
+    // A deliverable folder's due date is the deliverable's (the Board's); other folders have none.
+    const canEditDueDate = canManage && (!isFolder || !!file.isDeliverable) && !isFolderApproved && !locked && !isIntakeRow
+    // The Status column shows a deliverable's stage; the row's deliverable badge steps aside while it's visible.
+    const hasStatus = !!file.isDeliverable && !!file.deliverableStatus
+    // A deliverable and everything inside one is tracked, so an empty Status or Due reads "Not set"; other rows show a dash.
+    const isTracked = !!file.isDeliverable || isInsideApprovedDeliverable
+        || (isGuest ? descendantIdsForGuest : isEC ? descendantIdsForEC : descendantIds).has(file.id)
+    const emptyTrackedValue = isTracked ? 'Not set' : '—'
     const isIndexing = !isFolder && !!file.projectDocumentId && file.indexingStatus === 'PROCESSING'
+    // Row tools appear on hover or keyboard focus, and stay while the row is in use.
+    const toolsPinned = isActionMenuOpen || isSelected || isIndexing || file.id === activePreviewDocId || file.id === highlightedFileId
 
     async function handleRemoveBookmark(e: React.MouseEvent) {
         e.stopPropagation()
@@ -371,7 +382,7 @@ export function EngagementFileRow({
                     {(showBadge || isIntakeRow) ? (
                         <Tooltip>
                             <TooltipTrigger asChild>
-                                <span className={`inline-flex items-center shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium border ${
+                                <span className={`${hasStatus && !isIntakeRow ? '@[49rem]/file-table:hidden ' : ''}inline-flex items-center shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium border ${
                                     isIntakeRow
                                         ? 'bg-primary/10 text-primary border-primary/30'
                                         : (isFolderApproved || isInsideApprovedDeliverable)
@@ -445,8 +456,11 @@ export function EngagementFileRow({
                     ) : null}
             </div>
 
-            {/* Quick icons */}
-            <div className="flex items-center justify-end">
+            {/* Quick icons: on hover or focus (always on touch screens), and while the row is in use */}
+            <div className={cn(
+                "flex items-center justify-end transition-opacity duration-ui-fast",
+                !toolsPinned && "opacity-0 focus-within:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
+            )}>
                 <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
 
                     {!isFolder && file.documentType !== 'LINK' && (
@@ -563,6 +577,67 @@ export function EngagementFileRow({
                 </div>
             </div>
 
+            {/* Status Column: a deliverable's stage, the same pill as on the Board */}
+            <div className={cn('min-w-0 items-center', STATUS_COL_CLASS, FILE_TABLE_COL_LINE_CLASS)}>
+                {hasStatus ? (
+                    <StatusPill kind="deliverable" status={file.deliverableStatus!} />
+                ) : (
+                    <span className={cn('text-[0.8125rem]', isTracked ? 'text-fg-subtle' : 'text-[#45474c]/40')}>{emptyTrackedValue}</span>
+                )}
+            </div>
+
+            {/* Due Column — leads edit it in place (Notion-style); everyone else sees the relative date.
+                Files and deliverable folders both have one. */}
+            <div className={cn('min-w-0 whitespace-nowrap', DUE_DATE_COL_CLASS, FILE_TABLE_COL_LINE_CLASS)} onClick={(e) => { if (canEditDueDate) e.stopPropagation() }}>
+                {canEditDueDate ? (
+                    <FileDueDateCell
+                        projectId={projectId}
+                        documentId={(file as { projectDocumentId?: string }).projectDocumentId || file.id}
+                        dueDate={file.dueDate ?? null}
+                        placeholder={emptyTrackedValue}
+                        onSaved={(next) => { file.dueDate = next ?? undefined }}
+                        onError={(message) => onAddToast({ type: 'error', title: "Couldn't set due date", message })}
+                    />
+                ) : (
+                    <>
+                    {file.dueDate ? (() => {
+                        const due = new Date(file.dueDate)
+                        const now = Date.now()
+                        const diffMs = due.getTime() - now
+                        const diffDays = diffMs / 86400000
+                        const isUrgent = diffDays >= 0 && diffDays <= 7
+                        const isOverdue = diffDays < 0
+
+                        let relativeLabel: string
+                        if (isOverdue) {
+                            const days = Math.floor(-diffDays)
+                            relativeLabel = days === 0 ? 'today' : days === 1 ? '1d overdue' : `${days}d overdue`
+                        } else {
+                            const days = Math.floor(diffDays)
+                            relativeLabel = days === 0 ? 'today' : days === 1 ? 'in 1d' : `in ${days}d`
+                        }
+
+                        const colorClass = isOverdue || isUrgent ? 'text-red-500' : 'text-fg-muted'
+                        const iconColor = isOverdue || isUrgent ? 'text-red-300 hover:text-red-500' : 'text-line hover:text-fg-muted'
+
+                        return (
+                            <RelativeDateTime
+                                date={file.dueDate}
+                                displayFormat="short"
+                                textClassName={`text-[0.8125rem] ${colorClass}`}
+                                iconClassName={iconColor}
+                                tooltipSide="top"
+                                tooltipPrefix="Due on:"
+                                overrideDisplayText={relativeLabel}
+                            />
+                        )
+                    })() : (
+                        <span className={cn('text-[0.8125rem]', isTracked ? 'text-fg-subtle' : 'text-[#45474c]/40')}>{emptyTrackedValue}</span>
+                    )}
+                    </>
+                )}
+            </div>
+
             {/* Owner Column */}
             <div className={cn('min-w-0', OWNER_COL_CLASS, FILE_TABLE_COL_LINE_CLASS)}>
                 {(() => {
@@ -617,56 +692,6 @@ export function EngagementFileRow({
                 )}
             </div>
 
-            {/* Due Date Column — leads edit it in place (Notion-style); everyone else sees the relative date */}
-            <div className={cn('min-w-0 whitespace-nowrap', DUE_DATE_COL_CLASS, FILE_TABLE_COL_LINE_CLASS)} onClick={(e) => { if (canEditDueDate) e.stopPropagation() }}>
-                {canEditDueDate ? (
-                    <FileDueDateCell
-                        projectId={projectId}
-                        documentId={(file as { projectDocumentId?: string }).projectDocumentId || file.id}
-                        dueDate={file.dueDate ?? null}
-                        onSaved={(next) => { file.dueDate = next ?? undefined }}
-                        onError={(message) => onAddToast({ type: 'error', title: "Couldn't set due date", message })}
-                    />
-                ) : (
-                    <>
-                    {!isFolder && file.dueDate ? (() => {
-                        const due = new Date(file.dueDate)
-                        const now = Date.now()
-                        const diffMs = due.getTime() - now
-                        const diffDays = diffMs / 86400000
-                        const isUrgent = diffDays >= 0 && diffDays <= 7
-                        const isOverdue = diffDays < 0
-
-                        let relativeLabel: string
-                        if (isOverdue) {
-                            const days = Math.floor(-diffDays)
-                            relativeLabel = days === 0 ? 'today' : days === 1 ? '1d overdue' : `${days}d overdue`
-                        } else {
-                            const days = Math.floor(diffDays)
-                            relativeLabel = days === 0 ? 'today' : days === 1 ? 'in 1d' : `in ${days}d`
-                        }
-
-                        const colorClass = isOverdue || isUrgent ? 'text-red-500' : 'text-fg-muted'
-                        const iconColor = isOverdue || isUrgent ? 'text-red-300 hover:text-red-500' : 'text-line hover:text-fg-muted'
-
-                        return (
-                            <RelativeDateTime
-                                date={file.dueDate}
-                                displayFormat="short"
-                                textClassName={`text-[0.8125rem] ${colorClass}`}
-                                iconClassName={iconColor}
-                                tooltipSide="top"
-                                tooltipPrefix="Due on:"
-                                overrideDisplayText={relativeLabel}
-                            />
-                        )
-                    })() : (
-                        <span className="text-[0.8125rem] text-[#45474c]/40">—</span>
-                    )}
-                    </>
-                )}
-            </div>
-
             {/* File Size Column */}
             <div className={cn('text-left', FILE_SIZE_COL_CLASS, FILE_TABLE_COL_LINE_CLASS)}>
                 {isFolder ? (
@@ -691,17 +716,20 @@ export function EngagementFileRow({
     )
 }
 
-/** Inline due-date editor for one file — the same endpoint the row menu's "Set Due Date" uses. */
+/** Inline Due editor for one file or deliverable folder — the same endpoint the row menu's "Due" uses. */
 function FileDueDateCell({
     projectId,
     documentId,
     dueDate,
+    placeholder,
     onSaved,
     onError,
 }: {
     projectId: string
     documentId: string
     dueDate: string | null
+    /** What an empty cell reads: "Not set" for a deliverable or what's inside one, otherwise a dash. */
+    placeholder: string
     onSaved: (next: string | null) => void
     onError: (message: string) => void
 }) {
@@ -710,7 +738,7 @@ function FileDueDateCell({
     return (
         <DateProperty
             value={value}
-            placeholder="—"
+            placeholder={placeholder}
             highlightOverdue
             onChange={async (next) => {
                 const { getSession } = await import('@/lib/supabase')

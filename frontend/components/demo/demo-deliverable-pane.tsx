@@ -1,12 +1,14 @@
 'use client'
 
 import { useState } from 'react'
-import { CalendarClock, CheckCircle, Eye, Info, ListTodo, MessagesSquare, PackageCheck, PackagePlus, PenLine, Settings as SettingsIcon, XSquare } from 'lucide-react'
+import { CalendarClock, Info, MessagesSquare, PackageCheck, PackagePlus, Settings as SettingsIcon, XSquare } from 'lucide-react'
 import { DocumentIcon } from '@/components/ui/document-icon'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
+import { StatusPill } from '@/components/ui/status-pill'
+import { STAGE_BAR_CLASSES, STATUS, type LaneStage } from '@/lib/ui/status'
 import { DemoFolder } from '@/lib/demo/static-demo-data'
-import { DeliverableStatus, DemoDeliverable } from '@/lib/demo/demo-deliverables'
+import { DemoDeliverable } from '@/lib/demo/demo-deliverables'
 
 const MIME_BY_TYPE: Record<string, string> = {
     pdf: 'application/pdf',
@@ -17,27 +19,6 @@ const MIME_BY_TYPE: Record<string, string> = {
     xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     slide: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
     pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-}
-
-const STAGE_LABELS: Record<DeliverableStatus, string> = {
-    to_do: 'To Do',
-    in_progress: 'In Progress',
-    in_review: 'In Review',
-    approved: 'Approved',
-}
-
-const STAGE_ICON_SMALL: Record<DeliverableStatus, React.ReactNode> = {
-    to_do: <ListTodo className="h-3 w-3" />,
-    in_progress: <PenLine className="h-3 w-3" />,
-    in_review: <Eye className="h-3 w-3" />,
-    approved: <CheckCircle className="h-3 w-3" />,
-}
-
-const STAGE_COLOR: Record<DeliverableStatus, string> = {
-    to_do: 'bg-[#f3b52f] text-white',
-    in_progress: 'bg-[#3b5bfd] text-white',
-    in_review: 'bg-[#7c3aed] text-white',
-    approved: 'bg-[#0d9f5f] text-white',
 }
 
 type Tab = 'details' | 'comments' | 'delivery'
@@ -104,12 +85,8 @@ export function DemoDeliverablePane({ deliverable, onClose, embedded = false }: 
 
             {/* Stage badge row */}
             <div className="px-4 py-2.5 border-b border-[#e5e7eb] flex items-center justify-between gap-2">
-                <span className="inline-flex items-center gap-1.5 h-9 px-2 rounded border border-[#e5e7eb] bg-white text-[10px] font-bold font-mono uppercase tracking-widest text-[#45474c]">
-                    <span className={cn('flex items-center justify-center h-5 w-5 rounded shrink-0', STAGE_COLOR[deliverable.status])}>
-                        {STAGE_ICON_SMALL[deliverable.status]}
-                    </span>
-                    {STAGE_LABELS[deliverable.status]}
-                </span>
+                {/* The stage in the status language, the same pill as on the Board */}
+                <StatusPill kind="deliverable" status={deliverable.status} />
                 {dueLabel && (
                     <span className={cn('inline-flex items-center gap-1.5 h-9 px-2.5 rounded border border-[#e5e7eb] bg-white text-xs font-medium', dueLabel.color)}>
                         <CalendarClock className="h-3.5 w-3.5 shrink-0 opacity-70" />
@@ -157,8 +134,8 @@ export function DemoDeliverablePane({ deliverable, onClose, embedded = false }: 
                             </label>
                             {subtasks.length > 0 && (
                                 <>
-                                    <div className="flex-1 h-1.5 rounded-full bg-[#e5e7eb] overflow-hidden">
-                                        <div className="h-full rounded-full bg-primary transition-all duration-300" style={{ width: `${pct}%` }} />
+                                    <div className="flex-1 h-1.5 rounded-full bg-surface-muted overflow-hidden">
+                                        <div className={cn('h-full rounded-full transition-all duration-300', STAGE_BAR_CLASSES[STATUS.deliverable[deliverable.status].stage as LaneStage])} style={{ width: `${pct}%` }} />
                                     </div>
                                     <span className="text-[10px] font-semibold text-[#9a9ba0] shrink-0 tabular-nums">
                                         {approvedCount}/{subtasks.length}

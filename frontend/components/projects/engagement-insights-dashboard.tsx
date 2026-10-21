@@ -784,7 +784,7 @@ function EngagementActionCenter({ data, loading, engagementBase, projectId, setR
                             </SectionBlock>
                         )}
                         {upcomingDocs.length > 0 && (
-                            <SectionBlock title="Document Due Dates" icon={CalendarClock}>
+                            <SectionBlock title="Documents due" icon={CalendarClock}>
                                 <div className="space-y-2">
                                     {upcomingDocs.slice(0, 6).map(d => <ACDocDueRow key={d.documentId} item={d} engagementBase={engagementBase} />)}
                                 </div>
@@ -1693,7 +1693,7 @@ function DeliveryTimeline({ deliverables, engagementCreatedAt, kickoffDate, enga
                             criticalTicks.push({ ms: engStartMs, pctVal: engStartPct, label: engStartLabel, color: '#6ee7b7' })
                         criticalTicks.push({ ms: nowMs, pctVal: todayPct, label: 'today', color: 'var(--color-primary, #6366f1)' })
                         if (engDueInWindow && engDueMs !== null && engDuePct !== null)
-                            criticalTicks.push({ ms: engDueMs, pctVal: engDuePct, label: 'Engagement\nDue Date', color: engDueColor })
+                            criticalTicks.push({ ms: engDueMs, pctVal: engDuePct, label: 'Engagement\ndue', color: engDueColor })
 
                         // Filter the 5 interval ticks — suppress any that land within 6% of a critical tick
                         const filteredTickMs = tickMs.filter(ms => {
@@ -1779,7 +1779,7 @@ function DeliveryTimeline({ deliverables, engagementCreatedAt, kickoffDate, enga
                                                 color: engDueColor,
                                             }}
                                         >
-                                            Engagement<br />Due Date
+                                            Engagement<br />due
                                         </span>
                                     )}
                                 </div>
@@ -2112,7 +2112,7 @@ function EngagementHealthBody({ health, deliverables, planningHygiene, commentTh
         { label: 'Completed', hex: RING.green, value: approved },
         { label: 'On Track', hex: RING.blue, value: onTrack },
         { label: 'Overdue', hex: RING.red, value: overdue },
-        { label: 'No Due Date', hex: RING.gray, value: noDue },
+        { label: 'No due date', hex: RING.gray, value: noDue },
     ]
     const onSchedulePct = total > 0 ? Math.round(((total - overdue) / total) * 100) : 0
 
@@ -2207,7 +2207,7 @@ function EngagementHealthBody({ health, deliverables, planningHygiene, commentTh
                 <div id="ring-schedule" className="flex flex-col items-center gap-3 scroll-mt-24">
                     <p className="text-sm font-semibold text-fg-muted flex items-center gap-1.5">
                         <CalendarClock className="h-4 w-4 text-fg-subtle" /> Delivery Schedule
-                        <InfoTip ariaLabel="About Delivery Schedule" text="Due-date adherence across deliverables. Completed = approved. On Track = has a due date and not late. Overdue = due date has passed and not yet approved. No Due Date = no target set. Center shows % on schedule." />
+                        <InfoTip ariaLabel="About Delivery Schedule" text="Due-date adherence across deliverables. Completed = approved. On Track = has a due date and not late. Overdue = due date has passed and not yet approved. No due date = no target set. Center shows % on schedule." />
                     </p>
                     <RingWithLegend
                         items={scheduleItems}

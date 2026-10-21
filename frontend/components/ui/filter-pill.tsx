@@ -21,19 +21,23 @@ export interface FilterPillProps extends Omit<React.ButtonHTMLAttributes<HTMLBut
     relaxed?: boolean
     /** Neutral styling even with a value — for controls that always have one, like Sort. */
     neutral?: boolean
+    /** Makes the pill an on/off toggle (Files' "Deliverables"): filled while on, no menu chevron. */
+    pressed?: boolean
 }
 
 /** The pill itself. Use it as a DropdownMenuTrigger's child; it forwards the ref. */
 export const FilterPill = React.forwardRef<HTMLButtonElement, FilterPillProps>(function FilterPill(
-    { icon, label, value, onClear, relaxed = false, neutral = false, className, ...props },
+    { icon, label, value, onClear, relaxed = false, neutral = false, pressed, className, ...props },
     ref
 ) {
-    const isSet = value !== undefined && value !== null && value !== ""
-    const filled = isSet && !neutral && !relaxed
+    const isToggle = pressed !== undefined
+    const isSet = !isToggle && value !== undefined && value !== null && value !== ""
+    const filled = isToggle ? pressed : isSet && !neutral && !relaxed
     return (
         <button
             ref={ref}
             type="button"
+            aria-pressed={isToggle ? pressed : undefined}
             {...props}
             className={cn(
                 "inline-flex h-7 max-w-[18rem] items-center gap-1.5 rounded-full border px-2.5 text-small transition-colors outline-none focus-visible:ring-2 focus-visible:ring-action/30",
@@ -69,7 +73,7 @@ export const FilterPill = React.forwardRef<HTMLButtonElement, FilterPillProps>(f
                 >
                     <X className="h-3 w-3" />
                 </span>
-            ) : (
+            ) : isToggle ? null : (
                 <ChevronDown className="h-3 w-3 shrink-0 text-fg-subtle" />
             )}
         </button>

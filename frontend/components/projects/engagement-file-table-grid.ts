@@ -6,29 +6,28 @@
  * Name keeps a hard minimum width (180px) so it never gets crushed. The metadata
  * columns collapse (track width 0, cell hidden) progressively as the table
  * container narrows, via container queries scoped to FILE_TABLE_CONTAINER_CLASS.
- * Hide order (first to hide -> last): Due date -> File size -> Date modified ->
- * Owner. ID, Name, and Quick actions always stay visible.
+ * They hide from the right: Size -> Modified -> Owner -> Due -> Status. Status and Due
+ * stay longest because they are what a deliverable is tracked by. ID, Name and the
+ * quick actions always stay visible.
  *
- * There are exactly 9 grid tracks, matching 8 rendered cells (Quick spans 2 tracks):
- * [1] checkbox(24px) [2] id(72px) [3] name(minmax 180px,1fr) [4-5] quick (2 tracks,
- * minmax(124px,10%) + 10%) [6] owner(14%) [7] date modified(minmax 112px,12%)
- * [8] due date(10%) [9] file size(8%). Every track must be claimed by a cell — an
- * unclaimed track, or reassigning which cell a track's width belongs to, causes grid
- * misalignment (cells overlapping/shifting) even when the cell itself is `hidden`.
+ * There are exactly 10 grid tracks, one per rendered cell (the header's quick-actions
+ * spacer spans 2): [1] checkbox(24px) [2] id(72px) [3] name(minmax 180px,1fr)
+ * [4] badges(minmax 124px,10%) [5] quick(10%) [6] status(128px) [7] due(112px)
+ * [8] owner(150px) [9] modified(124px) [10] size(84px). Hidden cells are always the
+ * trailing ones, so a visible cell never slides into a hidden column's empty track.
  *
  * Breakpoints: a column appears only once the row can hold it. A row needs the fixed
- * tracks (24 + 72 + 180 + 124 = 400px), the 8 gaps between the 9 tracks (8 x 16 =
- * 128px — a hidden track still keeps its gap), the row's padding and a scrollbar
- * (18px), plus every visible percentage track. Solving for the container width W:
- *   ID + Name + Quick            fits from ~605px  (below this the rows scroll sideways)
- *   + Owner (14%)                fits from ~713px  -> @[45rem]
- *   + Date modified (>=112px)    fits from ~860px  -> @[54rem]
- *   + File size (8%)             fits from ~961px  -> @[61rem]
- *   + Due date (10%)             fits from ~1166px -> @[74rem]
- * The earlier @lg/@xl/@3xl/@4xl breakpoints (512–896px) left out the gaps, so with a
- * side panel open the row overflowed: File size slid out of view, and the modified
- * date wrapped onto a second line taller than the row, which put a vertical scrollbar
- * on a five-row list. Date modified keeps a 112px floor so "Sep 24, 2026" never wraps.
+ * tracks (24 + 72 + 180 + 124 = 400px), the 9 gaps between the 10 tracks (9 x 16 =
+ * 144px — a hidden track still keeps its gap), the row's padding and a scrollbar
+ * (30px), Quick's 10%, plus every visible metadata track. Solving for the container width W
+ * (Badges is 124px until W reaches 1240px, then 10%):
+ *   ID + Name + Quick            fits from ~638px  (below this the rows scroll sideways)
+ *   + Status (128px)             fits from ~780px  -> @[49rem]
+ *   + Due (112px)                fits from ~905px  -> @[57rem]
+ *   + Owner (150px)              fits from ~1071px -> @[68rem]
+ *   + Modified (124px)           fits from ~1209px -> @[76rem]
+ *   + Size (84px)                fits from ~1310px -> @[82rem]
+ * Date modified and Due keep fixed widths so "Sep 24, 2026" never wraps.
  *
  * IMPORTANT: every Tailwind class below is written as a literal string (no template
  * interpolation) because Tailwind's content scanner matches source text directly —
@@ -40,16 +39,17 @@ export const FILE_TABLE_CONTAINER_CLASS = '@container/file-table'
 
 /** Applied to the header row's and each data row's outer grid element, alongside "grid". */
 export const FILE_TABLE_GRID_COLS_CLASS =
-    'grid-cols-[24px_72px_minmax(180px,1fr)_minmax(124px,10%)_10%_0px_0px_0px_0px] ' +
-    '@[45rem]/file-table:grid-cols-[24px_72px_minmax(180px,1fr)_minmax(124px,10%)_10%_14%_0px_0px_0px] ' +
-    '@[54rem]/file-table:grid-cols-[24px_72px_minmax(180px,1fr)_minmax(124px,10%)_10%_14%_minmax(112px,12%)_0px_0px] ' +
-    '@[61rem]/file-table:grid-cols-[24px_72px_minmax(180px,1fr)_minmax(124px,10%)_10%_14%_minmax(112px,12%)_0px_8%] ' +
-    '@[74rem]/file-table:grid-cols-[24px_72px_minmax(180px,1fr)_minmax(124px,10%)_10%_14%_minmax(112px,12%)_10%_8%]'
+    'grid-cols-[24px_72px_minmax(180px,1fr)_minmax(124px,10%)_10%_0px_0px_0px_0px_0px] ' +
+    '@[49rem]/file-table:grid-cols-[24px_72px_minmax(180px,1fr)_minmax(124px,10%)_10%_128px_0px_0px_0px_0px] ' +
+    '@[57rem]/file-table:grid-cols-[24px_72px_minmax(180px,1fr)_minmax(124px,10%)_10%_128px_112px_0px_0px_0px] ' +
+    '@[68rem]/file-table:grid-cols-[24px_72px_minmax(180px,1fr)_minmax(124px,10%)_10%_128px_112px_150px_0px_0px] ' +
+    '@[76rem]/file-table:grid-cols-[24px_72px_minmax(180px,1fr)_minmax(124px,10%)_10%_128px_112px_150px_124px_0px] ' +
+    '@[82rem]/file-table:grid-cols-[24px_72px_minmax(180px,1fr)_minmax(124px,10%)_10%_128px_112px_150px_124px_84px]'
 
 /**
  * Notion's database grid, as NotionTable draws it (.claude/plans/app-design-refinements.md, section 10):
  * a 34px header with a line above and below, 34px rows with a line between and after, and a column line
- * in the gap before Name, Owner, Modified, Due and Size. The checkbox is the gutter and the quick
+ * in the gap before Name, Status, Due, Owner, Modified and Size. The checkbox is the gutter and the quick
  * actions are the row's own tools, so neither has a line before it.
  *
  * The line is taller than the row, and the row (and the header) clip it with overflow-hidden, so it
@@ -58,11 +58,13 @@ export const FILE_TABLE_GRID_COLS_CLASS =
 export const FILE_TABLE_COL_LINE_CLASS =
     'relative before:absolute before:-left-2 before:top-1/2 before:h-12 before:w-px before:-translate-y-1/2 before:bg-line'
 
-/** Hidden below 45rem, flex from 45rem up. */
-export const OWNER_COL_CLASS = 'hidden @[45rem]/file-table:flex'
-/** Hidden below 54rem, flex from 54rem up. */
-export const DATE_MODIFIED_COL_CLASS = 'hidden @[54rem]/file-table:flex'
-/** Hidden below 61rem, flex from 61rem up. */
-export const FILE_SIZE_COL_CLASS = 'hidden @[61rem]/file-table:flex'
-/** Hidden below 74rem, flex from 74rem up — hides first as space runs out. */
-export const DUE_DATE_COL_CLASS = 'hidden @[74rem]/file-table:flex'
+/** Hidden below 49rem, flex from 49rem up — the last metadata column to hide. */
+export const STATUS_COL_CLASS = 'hidden @[49rem]/file-table:flex'
+/** Hidden below 57rem, flex from 57rem up. */
+export const DUE_DATE_COL_CLASS = 'hidden @[57rem]/file-table:flex'
+/** Hidden below 68rem, flex from 68rem up. */
+export const OWNER_COL_CLASS = 'hidden @[68rem]/file-table:flex'
+/** Hidden below 76rem, flex from 76rem up. */
+export const DATE_MODIFIED_COL_CLASS = 'hidden @[76rem]/file-table:flex'
+/** Hidden below 82rem, flex from 82rem up — the first to hide as space runs out. */
+export const FILE_SIZE_COL_CLASS = 'hidden @[82rem]/file-table:flex'

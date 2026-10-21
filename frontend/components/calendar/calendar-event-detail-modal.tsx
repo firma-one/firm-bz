@@ -59,7 +59,7 @@ function DueDate({ date }: { date: string | null }) {
           {date ? formatFullDate(date) : 'Not Set'}
         </span>
       </TooltipTrigger>
-      <TooltipContent variant="light" side="top">Due Date</TooltipContent>
+      <TooltipContent variant="light" side="top">Due</TooltipContent>
     </Tooltip>
   )
 }

@@ -305,6 +305,8 @@ export function demoWork(now: Date): MyWork {
         }] : []),
     ]
 
+    // A due deliverable carries its stage, so Home's chip leads with the status icon as in the app.
+    const dueStatus = new Map(nextDeliverables().map(({ engagement, deliverable }) => [`rem-due-${engagement.slug}`, deliverable.status]))
     const dueSoon: MyWork['dueSoon'] = demoReminders(now)
         .filter((r) => r.dateValue)
         .map((r) => ({
@@ -316,7 +318,7 @@ export function demoWork(now: Date): MyWork {
             href: r.ctaUrl ?? '/tour',
             dueDate: r.dateValue!,
             overdue: (r.delta ?? 0) < 0,
-            status: null,
+            status: dueStatus.get(r.id) ?? null,
         }))
 
     return { engagements, needsYou, dueSoon }

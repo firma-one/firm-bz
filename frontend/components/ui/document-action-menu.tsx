@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { DateTimePicker } from "@/components/ui/date-time-picker"
 import { DocumentIcon } from "@/components/ui/document-icon"
 import { UserAvatarWithTooltip } from "@/components/ui/user-avatar-with-tooltip"
-import { formatFileSize, formatFullDate, formatSmartDateTime } from "@/lib/utils"
+import { cn, formatFileSize, formatFullDate, formatSmartDateTime } from "@/lib/utils"
 import { DocumentEditPanelContent, DocumentPreviewPanelContent, getDocumentEditUrl } from "@/components/files/document-edit-sheet"
 import { DocumentPreviewPane } from "@/components/files/document-preview-pane"
 import { useRightPane } from "@/lib/right-pane-context"
@@ -69,6 +69,13 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { useDownloadProgress } from "@/lib/download-progress-context"
 import { SetupReminderModal } from "@/components/ui/setup-reminder-modal"
 import { useAuth } from "@/lib/auth-context"
+
+/**
+ * Compact rows for this menu and its submenus (which render inside it): 13px text, 26px rows, 14px
+ * icons. The base DropdownMenuItem is sized for roomier menus; this one is long, so it runs tighter.
+ */
+const COMPACT_MENU_CLASS =
+  '[&_[role=menuitem]]:py-1 [&_[role=menuitem]]:text-small [&_[role=menuitem]_svg]:h-3.5 [&_[role=menuitem]_svg]:w-3.5'
 
 const VERSION_LOCK_TOOLTIP =
   'Finalize locks the document — all collaborators become view-only. Return to Draft restores each collaborator\'s prior access level based on their role and sharing settings.'
@@ -523,7 +530,7 @@ export function DocumentActionMenu({
               size="sm"
               disabled={disabled}
               aria-label="More actions"
-              className="text-fg-muted hover:text-fg hover:bg-surface-hover h-8 w-8 p-0 disabled:opacity-30 disabled:cursor-not-allowed"
+              className="text-fg-muted hover:text-fg hover:bg-surface-hover h-7 w-7 p-0 disabled:opacity-30 disabled:cursor-not-allowed"
             >
               {triggerIcon ?? <MoreHorizontal className="h-4 w-4" />}
             </Button>
@@ -535,7 +542,7 @@ export function DocumentActionMenu({
           avoidCollisions
           collisionPadding={8}
           sideOffset={0}
-          className="w-80 p-0 flex flex-col overflow-hidden"
+          className={cn("w-72 p-0 flex flex-col overflow-hidden", COMPACT_MENU_CLASS)}
           style={{ maxHeight: 'var(--radix-dropdown-menu-content-available-height)' }}
           onClick={(e) => e.stopPropagation()}
           onCloseAutoFocus={(e) => e.preventDefault()} // Prevent focus jump causing scroll
@@ -545,15 +552,15 @@ export function DocumentActionMenu({
           )}
           {/* What this is, before what you can do with it: the name in full (two lines), its code and
               stage in the status language where known, its type and size, and who changed it last. */}
-          <div className="px-3 py-2.5 border-b border-line flex-none">
+          <div className="px-3 py-2 border-b border-line flex-none">
             <div className="flex items-start gap-2.5">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-control bg-surface-muted">
-                <DocumentIcon mimeType={document.mimeType} className="h-5 w-5" />
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-control bg-surface-muted">
+                <DocumentIcon mimeType={document.mimeType} className="h-4 w-4" />
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-start gap-1">
                   <Hint label={document.name} side="bottom">
-                    <h3 className="min-w-0 cursor-default select-text break-words text-ui font-medium leading-snug text-fg line-clamp-2">
+                    <h3 className="min-w-0 cursor-default select-text break-words text-small font-medium leading-snug text-fg line-clamp-2">
                       {document.name}
                     </h3>
                   </Hint>
@@ -568,7 +575,7 @@ export function DocumentActionMenu({
                     </button>
                   </Hint>
                 </div>
-                <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-small text-fg-muted">
+                <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-caption text-fg-muted">
                   {document.docId && <span className="font-mono text-caption text-fg-subtle">{document.docId}</span>}
                   {stageKnown && <StatusPill kind="deliverable" status={deliverableStatus!} />}
                   <span>
@@ -588,7 +595,7 @@ export function DocumentActionMenu({
             </div>
           </div>
 
-          <div className="p-2 overflow-y-auto min-h-0">
+          <div className="p-1 overflow-y-auto min-h-0">
             {/* Intake pending actions — shown at the top when applicable */}
             {(onApproveIntake || onRejectIntake || onWithdrawIntake) && (
               <>
@@ -597,7 +604,7 @@ export function DocumentActionMenu({
                     onSelect={() => onApproveIntake(document)}
                     className="flex cursor-pointer items-center gap-2"
                   >
-                    <CheckCircle2 className="h-4 w-4 text-action" />
+                    <CheckCircle2 className="h-3.5 w-3.5 text-action" />
                     <span>Approve</span>
                   </DropdownMenuItem>
                 )}
@@ -606,7 +613,7 @@ export function DocumentActionMenu({
                     onSelect={() => onRejectIntake(document)}
                     className="flex cursor-pointer items-center gap-2 text-danger focus:text-danger"
                   >
-                    <XCircle className="h-4 w-4 text-danger" />
+                    <XCircle className="h-3.5 w-3.5 text-danger" />
                     <span>Reject</span>
                   </DropdownMenuItem>
                 )}
@@ -615,7 +622,7 @@ export function DocumentActionMenu({
                     onSelect={() => onWithdrawIntake(document)}
                     className="flex cursor-pointer items-center gap-2"
                   >
-                    <X className="h-4 w-4 text-fg-muted" />
+                    <X className="h-3.5 w-3.5 text-fg-muted" />
                     <span>Withdraw upload</span>
                   </DropdownMenuItem>
                 )}
@@ -629,7 +636,7 @@ export function DocumentActionMenu({
                     onSelect={() => onApproveFolder(document)}
                     className="flex cursor-pointer items-center gap-2"
                   >
-                    <CheckCircle2 className="h-4 w-4 text-action" />
+                    <CheckCircle2 className="h-3.5 w-3.5 text-action" />
                     <span>Approve folder upload</span>
                   </DropdownMenuItem>
                 )}
@@ -638,16 +645,16 @@ export function DocumentActionMenu({
                     onSelect={() => onRejectFolder(document)}
                     className="flex cursor-pointer items-center gap-2 text-danger focus:text-danger"
                   >
-                    <XCircle className="h-4 w-4 text-danger" />
+                    <XCircle className="h-3.5 w-3.5 text-danger" />
                     <span>Reject folder</span>
                   </DropdownMenuItem>
                 )}
                 {onWithdrawFolder && (
                   <DropdownMenuItem
                     onSelect={() => onWithdrawFolder(document)}
-                    className="flex items-center gap-2 px-2 py-1.5 cursor-pointer text-ui text-tag-orange-fg focus:text-tag-orange-fg"
+                    className="flex items-center gap-2 px-2 py-1 cursor-pointer text-small text-tag-orange-fg focus:text-tag-orange-fg"
                   >
-                    <FolderUp className="h-4 w-4 text-tag-orange-fg" />
+                    <FolderUp className="h-3.5 w-3.5 text-tag-orange-fg" />
                     <span>Withdraw folder</span>
                   </DropdownMenuItem>
                 )}
@@ -666,7 +673,7 @@ export function DocumentActionMenu({
                   }}
                   className="flex cursor-pointer items-center gap-2"
                 >
-                  <Link2 className="h-4 w-4 text-fg-muted" />
+                  <Link2 className="h-3.5 w-3.5 text-fg-muted" />
                   <span>Copy link</span>
                 </DropdownMenuItem>
                 {showShareModal && projectId && (
@@ -677,9 +684,9 @@ export function DocumentActionMenu({
                           <DropdownMenuItem
                             aria-disabled="true"
                             onSelect={(e) => e.preventDefault()}
-                            className="flex items-center gap-2 px-2 py-1.5 text-ui opacity-50 cursor-not-allowed"
+                            className="flex items-center gap-2 px-2 py-1 text-small opacity-50 cursor-not-allowed"
                           >
-                            <XCircle className="h-4 w-4" />
+                            <XCircle className="h-3.5 w-3.5" />
                             <span>Untag as deliverable</span>
                           </DropdownMenuItem>
                         </TooltipTrigger>
@@ -696,9 +703,9 @@ export function DocumentActionMenu({
                         }
                         setShowUntagConfirm(true)
                       }}
-                      className="flex items-center gap-2 px-2 py-1.5 cursor-pointer text-ui text-danger focus:text-danger"
+                      className="flex items-center gap-2 px-2 py-1 cursor-pointer text-small text-danger focus:text-danger"
                     >
-                      <XCircle className="h-4 w-4" />
+                      <XCircle className="h-3.5 w-3.5" />
                       <span>Untag as deliverable</span>
                     </DropdownMenuItem>
                   ) : isAncestorShared ? (
@@ -708,9 +715,9 @@ export function DocumentActionMenu({
                           <DropdownMenuItem
                             aria-disabled="true"
                             onSelect={(e) => e.preventDefault()}
-                            className="flex items-center gap-2 px-2 py-1.5 text-ui opacity-50 cursor-not-allowed"
+                            className="flex items-center gap-2 px-2 py-1 text-small opacity-50 cursor-not-allowed"
                           >
-                            <Package className="h-4 w-4 text-fg-subtle" />
+                            <Package className="h-3.5 w-3.5 text-fg-subtle" />
                             <span>Promote as deliverable</span>
                           </DropdownMenuItem>
                         </TooltipTrigger>
@@ -726,7 +733,7 @@ export function DocumentActionMenu({
                             onSelect={() => { setTagDeliverableDueDate(""); setShowTagDeliverableModal(true) }}
                             className="flex cursor-pointer items-center gap-2"
                           >
-                            <Package className="h-4 w-4 text-fg-subtle" />
+                            <Package className="h-3.5 w-3.5 text-fg-subtle" />
                             <span>Promote as deliverable</span>
                           </DropdownMenuItem>
                         </TooltipTrigger>
@@ -739,8 +746,8 @@ export function DocumentActionMenu({
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <div className="flex items-center gap-2 px-2 py-1.5 text-ui text-fg-subtle opacity-50 cursor-not-allowed select-none">
-                          <FolderOpen className="h-4 w-4" />
+                        <div className="flex items-center gap-2 px-2 py-1 text-small text-fg-subtle opacity-50 cursor-not-allowed select-none">
+                          <FolderOpen className="h-3.5 w-3.5" />
                           <span>Organize</span>
                         </div>
                       </TooltipTrigger>
@@ -752,48 +759,48 @@ export function DocumentActionMenu({
                 ) : (onCopyDocument || onMoveDocument || onRenameDocument || onDuplicateDocument || canManage) && (
                   <DropdownMenuSub>
                     <DropdownMenuSubTrigger className="flex cursor-pointer items-center gap-2">
-                      <FolderOpen className="h-4 w-4 text-fg-muted" />
+                      <FolderOpen className="h-3.5 w-3.5 text-fg-muted" />
                       <span>Organize</span>
                     </DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent className="w-max min-w-56 max-w-80">
+                    <DropdownMenuSubContent className="w-max min-w-48 max-w-72">
                       {onRenameDocument && (
                         isApprovedDeliverable ? (
-                          <div className="flex items-center gap-2 px-2 py-1.5 text-ui text-fg-subtle opacity-40 cursor-not-allowed select-none">
-                            <Edit3 className="h-4 w-4" /><span>Rename</span>
+                          <div className="flex items-center gap-2 px-2 py-1 text-small text-fg-subtle opacity-40 cursor-not-allowed select-none">
+                            <Edit3 className="h-3.5 w-3.5" /><span>Rename</span>
                           </div>
                         ) : (
                           <DropdownMenuItem onSelect={() => onRenameDocument(document)} className="flex cursor-pointer items-center gap-2">
-                            <Edit3 className="h-4 w-4 text-fg-muted" />
+                            <Edit3 className="h-3.5 w-3.5 text-fg-muted" />
                             <span>Rename</span>
                           </DropdownMenuItem>
                         )
                       )}
                       {onDuplicateDocument && (
                         isApprovedDeliverable ? (
-                          <div className="flex items-center gap-2 px-2 py-1.5 text-ui text-fg-subtle opacity-40 cursor-not-allowed select-none">
-                            <Copy className="h-4 w-4" /><span>Duplicate</span>
+                          <div className="flex items-center gap-2 px-2 py-1 text-small text-fg-subtle opacity-40 cursor-not-allowed select-none">
+                            <Copy className="h-3.5 w-3.5" /><span>Duplicate</span>
                           </div>
                         ) : (
                           <DropdownMenuItem onSelect={() => onDuplicateDocument(document)} className="flex cursor-pointer items-center gap-2">
-                            <Copy className="h-4 w-4 text-fg-muted" />
+                            <Copy className="h-3.5 w-3.5 text-fg-muted" />
                             <span>Duplicate</span>
                           </DropdownMenuItem>
                         )
                       )}
                       {onCopyDocument && (
                         <DropdownMenuItem onSelect={() => onCopyDocument(document)} className="flex cursor-pointer items-center gap-2">
-                          <Copy className="h-4 w-4 text-fg-muted" />
+                          <Copy className="h-3.5 w-3.5 text-fg-muted" />
                           <span>Copy</span>
                         </DropdownMenuItem>
                       )}
                       {onMoveDocument && (
                         isApprovedDeliverable ? (
-                          <div className="flex items-center gap-2 px-2 py-1.5 text-ui text-fg-subtle opacity-40 cursor-not-allowed select-none">
-                            <Move className="h-4 w-4" /><span>Move</span>
+                          <div className="flex items-center gap-2 px-2 py-1 text-small text-fg-subtle opacity-40 cursor-not-allowed select-none">
+                            <Move className="h-3.5 w-3.5" /><span>Move</span>
                           </div>
                         ) : (
                           <DropdownMenuItem onSelect={() => onMoveDocument(document)} className="flex cursor-pointer items-center gap-2">
-                            <Move className="h-4 w-4 text-fg-muted" />
+                            <Move className="h-3.5 w-3.5 text-fg-muted" />
                             <span>Move</span>
                           </DropdownMenuItem>
                         )
@@ -801,8 +808,8 @@ export function DocumentActionMenu({
                       {(canManage && (onMakePrivate || onMakePublic)) && <DropdownMenuSeparator />}
                       {canManage && !document.isPrivate && onMakePrivate && (
                         isApprovedDeliverable ? (
-                          <div className="flex items-center gap-2 px-2 py-1.5 text-ui text-fg-subtle opacity-40 cursor-not-allowed select-none">
-                            <FolderLock className="h-4 w-4" /><span>Make private</span>
+                          <div className="flex items-center gap-2 px-2 py-1 text-small text-fg-subtle opacity-40 cursor-not-allowed select-none">
+                            <FolderLock className="h-3.5 w-3.5" /><span>Make private</span>
                           </div>
                         ) : document.isSharedWithExternal ? (
                           <TooltipProvider>
@@ -810,9 +817,9 @@ export function DocumentActionMenu({
                               <TooltipTrigger asChild>
                                 <div
                                   onClick={(e) => { e.stopPropagation(); setPrivateInfoOpen((v) => !v) }}
-                                  className="flex items-center gap-2 px-2 py-1.5 text-ui text-fg-subtle cursor-pointer opacity-50 rounded-control hover:bg-surface-hover"
+                                  className="flex items-center gap-2 px-2 py-1 text-small text-fg-subtle cursor-pointer opacity-50 rounded-control hover:bg-surface-hover"
                                 >
-                                  <FolderLock className="h-4 w-4 text-fg-subtle" />
+                                  <FolderLock className="h-3.5 w-3.5 text-fg-subtle" />
                                   <span>Make private</span>
                                   <Info className="h-3.5 w-3.5 ml-auto text-fg-subtle" />
                                 </div>
@@ -824,19 +831,19 @@ export function DocumentActionMenu({
                           </TooltipProvider>
                         ) : (
                           <DropdownMenuItem onClick={() => onMakePrivate(document)} className="flex cursor-pointer items-center gap-2">
-                            <FolderLock className="h-4 w-4 text-fg-subtle" />
+                            <FolderLock className="h-3.5 w-3.5 text-fg-subtle" />
                             <span>Make private</span>
                           </DropdownMenuItem>
                         )
                       )}
                       {canManage && document.isPrivate && onMakePublic && (
                         isApprovedDeliverable ? (
-                          <div className="flex items-center gap-2 px-2 py-1.5 text-ui text-fg-subtle opacity-40 cursor-not-allowed select-none">
-                            <FolderUp className="h-4 w-4" /><span>Make public</span>
+                          <div className="flex items-center gap-2 px-2 py-1 text-small text-fg-subtle opacity-40 cursor-not-allowed select-none">
+                            <FolderUp className="h-3.5 w-3.5" /><span>Make public</span>
                           </div>
                         ) : (
                           <DropdownMenuItem onClick={() => onMakePublic(document)} className="flex cursor-pointer items-center gap-2">
-                            <FolderUp className="h-4 w-4 text-fg-muted" />
+                            <FolderUp className="h-3.5 w-3.5 text-fg-muted" />
                             <span>Make public</span>
                           </DropdownMenuItem>
                         )
@@ -849,10 +856,10 @@ export function DocumentActionMenu({
                   <DropdownMenuSeparator />
                   <DropdownMenuSub>
                     <DropdownMenuSubTrigger className="flex cursor-pointer items-center gap-2">
-                      <ExternalLink className="h-4 w-4 text-fg-muted" />
+                      <ExternalLink className="h-3.5 w-3.5 text-fg-muted" />
                       <span>Drive actions</span>
                     </DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent className="w-max min-w-56 max-w-80">
+                    <DropdownMenuSubContent className="w-max min-w-48 max-w-72">
                       <DropdownMenuItem
                         onClick={() => {
                           // webViewLink is the provider-correct URL (Google's Drive UI link or
@@ -880,8 +887,8 @@ export function DocumentActionMenu({
                       <Tooltip>
                         <TooltipTrigger asChild>
                           {isApprovedDeliverable ? (
-                            <div className="flex items-center gap-2 px-2 py-1.5 text-ui text-fg-subtle opacity-50 cursor-not-allowed select-none">
-                              <Trash2 className="h-4 w-4" />
+                            <div className="flex items-center gap-2 px-2 py-1 text-small text-fg-subtle opacity-50 cursor-not-allowed select-none">
+                              <Trash2 className="h-3.5 w-3.5" />
                               <span>{document.documentType === 'LINK' ? 'Delete' : 'Move to trash'}</span>
                             </div>
                           ) : (
@@ -890,7 +897,7 @@ export function DocumentActionMenu({
                               onSelect={() => onDeleteDocument!(document)}
                               className="flex cursor-pointer items-center gap-2 text-danger focus:text-danger"
                             >
-                              <Trash2 className="h-4 w-4" />
+                              <Trash2 className="h-3.5 w-3.5" />
                               <span>{document.documentType === 'LINK' ? 'Delete' : 'Move to trash'}</span>
                             </DropdownMenuItem>
                           )}
@@ -918,8 +925,8 @@ export function DocumentActionMenu({
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <div className="flex items-center gap-2 px-2 py-1.5 text-ui text-fg-subtle opacity-50 cursor-not-allowed select-none">
-                          <Eye className="h-4 w-4" />
+                        <div className="flex items-center gap-2 px-2 py-1 text-small text-fg-subtle opacity-50 cursor-not-allowed select-none">
+                          <Eye className="h-3.5 w-3.5" />
                           <span>Open</span>
                         </div>
                       </TooltipTrigger>
@@ -944,7 +951,7 @@ export function DocumentActionMenu({
                     }}
                     className="flex cursor-pointer items-center gap-2"
                   >
-                    <Eye className="h-4 w-4 text-fg-muted" />
+                    <Eye className="h-3.5 w-3.5 text-fg-muted" />
                     <span>Open</span>
                   </DropdownMenuItem>
                 )}
@@ -959,7 +966,7 @@ export function DocumentActionMenu({
                   }}
                   className="flex cursor-pointer items-center gap-2"
                 >
-                  <Link2 className="h-4 w-4 text-fg-muted" />
+                  <Link2 className="h-3.5 w-3.5 text-fg-muted" />
                   <span>Copy link</span>
                 </DropdownMenuItem>
 
@@ -970,7 +977,7 @@ export function DocumentActionMenu({
                     onClick={() => { handleDownload(document); onDownloadDocument?.(document) }}
                     className="flex cursor-pointer items-center gap-2"
                   >
-                    <Download className="h-4 w-4 text-fg-subtle" />
+                    <Download className="h-3.5 w-3.5 text-fg-subtle" />
                     <span>Download</span>
                   </DropdownMenuItem>
                 )}
@@ -984,7 +991,7 @@ export function DocumentActionMenu({
                         const docIdForComments = (document as any)?.projectDocumentId || document.id
                         rightPane.setTitle('Comments')
                         rightPane.setHeaderActions(null)
-                        rightPane.setHeaderIcon(<DocumentIcon mimeType={document.mimeType} className="h-4 w-4" />)
+                        rightPane.setHeaderIcon(<DocumentIcon mimeType={document.mimeType} className="h-3.5 w-3.5" />)
                         rightPane.setHeaderSubtitle('Append-only. Visible to all project members.')
                         rightPane.setContent(
                           <DocumentDocCommentsPane
@@ -1000,7 +1007,7 @@ export function DocumentActionMenu({
                     }}
                     className="flex cursor-pointer items-center gap-2"
                   >
-                    <MessagesSquare className="h-4 w-4 text-fg-muted" />
+                    <MessagesSquare className="h-3.5 w-3.5 text-fg-muted" />
                     <span>Comment</span>
                   </DropdownMenuItem>
                 )}
@@ -1068,9 +1075,9 @@ export function DocumentActionMenu({
                       addToast({ type: 'error', title: 'Failed', message: e instanceof Error ? e.message : 'Failed to update bookmark.' })
                     }
                   }}
-                  className="flex items-center gap-2 px-2 py-1.5 text-ui data-[disabled]:opacity-50 data-[disabled]:pointer-events-none"
+                  className="flex items-center gap-2 px-2 py-1 text-small data-[disabled]:opacity-50 data-[disabled]:pointer-events-none"
                 >
-                  <Bookmark className={`h-4 w-4 ${existingBookmarkId ? 'fill-current text-fg' : 'text-fg-muted'}`} />
+                  <Bookmark className={`h-3.5 w-3.5 ${existingBookmarkId ? 'fill-current text-fg' : 'text-fg-muted'}`} />
                   <span>{existingBookmarkId ? 'Remove bookmark' : 'Bookmark'}</span>
                 </DropdownMenuItem>
                     </span>
@@ -1084,9 +1091,9 @@ export function DocumentActionMenu({
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <div className="flex items-center gap-2 px-2 py-1.5 text-ui text-fg-subtle opacity-50 cursor-not-allowed select-none">
-                          <Calendar className="h-4 w-4 text-fg-subtle" />
-                          <span>Due date</span>
+                        <div className="flex items-center gap-2 px-2 py-1 text-small text-fg-subtle opacity-50 cursor-not-allowed select-none">
+                          <Calendar className="h-3.5 w-3.5 text-fg-subtle" />
+                          <span>Due</span>
                           <span className={`ml-auto pl-3 text-small tabular-nums ${dueOverdue ? 'text-danger' : 'text-fg-subtle'}`}>{dueDate ? formatFullDate(dueDate) : 'Not set'}</span>
                         </div>
                       </TooltipTrigger>
@@ -1100,8 +1107,8 @@ export function DocumentActionMenu({
                     onClick={() => setShowDueDatePicker(true)}
                     className="flex cursor-pointer items-center gap-2"
                   >
-                    <Calendar className="h-4 w-4 text-fg-muted" />
-                    <span>Due date</span>
+                    <Calendar className="h-3.5 w-3.5 text-fg-muted" />
+                    <span>Due</span>
                     <span className={`ml-auto pl-3 text-small tabular-nums ${dueOverdue ? 'text-danger' : 'text-fg-subtle'}`}>{dueDate ? formatFullDate(dueDate) : 'Not set'}</span>
                   </DropdownMenuItem>
                 )}
@@ -1109,8 +1116,8 @@ export function DocumentActionMenu({
                   const doc = document as { lock?: { type?: string } | null }
                   const isAlreadyLocked = doc.lock?.type === 'finalize'
                   if (isAlreadyLocked) return (
-                    <DropdownMenuItem disabled className="flex items-center gap-2 px-2 py-1.5 text-ui text-fg-subtle opacity-50 cursor-not-allowed data-[disabled]:pointer-events-none">
-                      <BadgeCheck className="h-4 w-4 shrink-0" />
+                    <DropdownMenuItem disabled className="flex items-center gap-2 px-2 py-1 text-small text-fg-subtle opacity-50 cursor-not-allowed data-[disabled]:pointer-events-none">
+                      <BadgeCheck className="h-3.5 w-3.5 shrink-0" />
                       <span className="whitespace-nowrap">Accepted</span>
                     </DropdownMenuItem>
                   )
@@ -1120,7 +1127,7 @@ export function DocumentActionMenu({
                       onClick={() => void handleAcceptDocument()}
                       className="flex cursor-pointer items-center gap-2 data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
                     >
-                      <BadgeCheck className="h-4 w-4 shrink-0 text-action" />
+                      <BadgeCheck className="h-3.5 w-3.5 shrink-0 text-action" />
                       <span className="whitespace-nowrap">Accept</span>
                     </DropdownMenuItem>
                   )
@@ -1133,8 +1140,8 @@ export function DocumentActionMenu({
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <div className="flex items-center gap-2 px-2 py-1.5 text-ui text-fg-subtle opacity-50 cursor-not-allowed select-none">
-                          <FolderOpen className="h-4 w-4" />
+                        <div className="flex items-center gap-2 px-2 py-1 text-small text-fg-subtle opacity-50 cursor-not-allowed select-none">
+                          <FolderOpen className="h-3.5 w-3.5" />
                           <span>Organize</span>
                         </div>
                       </TooltipTrigger>
@@ -1146,36 +1153,36 @@ export function DocumentActionMenu({
                 ) : (onCopyDocument || onMoveDocument || onRenameDocument || onDuplicateDocument || canManage) && (
                   <DropdownMenuSub>
                     <DropdownMenuSubTrigger className="flex cursor-pointer items-center gap-2">
-                      <FolderOpen className="h-4 w-4 text-fg-muted" />
+                      <FolderOpen className="h-3.5 w-3.5 text-fg-muted" />
                       <span>Organize</span>
                     </DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent className="w-max min-w-56 max-w-80">
+                    <DropdownMenuSubContent className="w-max min-w-48 max-w-72">
                       {onRenameDocument && (
                         isApprovedDeliverable ? (
-                          <div className="flex items-center gap-2 px-2 py-1.5 text-ui text-fg-subtle opacity-40 cursor-not-allowed select-none">
-                            <Edit3 className="h-4 w-4" /><span>Rename</span>
+                          <div className="flex items-center gap-2 px-2 py-1 text-small text-fg-subtle opacity-40 cursor-not-allowed select-none">
+                            <Edit3 className="h-3.5 w-3.5" /><span>Rename</span>
                           </div>
                         ) : (
                           <DropdownMenuItem
                             onSelect={() => onRenameDocument(document)}
                             className="flex cursor-pointer items-center gap-2"
                           >
-                            <Edit3 className="h-4 w-4 text-fg-muted" />
+                            <Edit3 className="h-3.5 w-3.5 text-fg-muted" />
                             <span>Rename</span>
                           </DropdownMenuItem>
                         )
                       )}
                       {onDuplicateDocument && document.documentType !== 'LINK' && (
                         isApprovedDeliverable ? (
-                          <div className="flex items-center gap-2 px-2 py-1.5 text-ui text-fg-subtle opacity-40 cursor-not-allowed select-none">
-                            <Copy className="h-4 w-4" /><span>Duplicate</span>
+                          <div className="flex items-center gap-2 px-2 py-1 text-small text-fg-subtle opacity-40 cursor-not-allowed select-none">
+                            <Copy className="h-3.5 w-3.5" /><span>Duplicate</span>
                           </div>
                         ) : (
                           <DropdownMenuItem
                             onSelect={() => onDuplicateDocument(document)}
                             className="flex cursor-pointer items-center gap-2"
                           >
-                            <Copy className="h-4 w-4 text-fg-muted" />
+                            <Copy className="h-3.5 w-3.5 text-fg-muted" />
                             <span>Duplicate</span>
                           </DropdownMenuItem>
                         )
@@ -1185,21 +1192,21 @@ export function DocumentActionMenu({
                           onSelect={() => onCopyDocument(document)}
                           className="flex cursor-pointer items-center gap-2"
                         >
-                          <Copy className="h-4 w-4 text-fg-muted" />
+                          <Copy className="h-3.5 w-3.5 text-fg-muted" />
                           <span>Copy</span>
                         </DropdownMenuItem>
                       )}
                       {onMoveDocument && document.documentType !== 'LINK' && (
                         isApprovedDeliverable ? (
-                          <div className="flex items-center gap-2 px-2 py-1.5 text-ui text-fg-subtle opacity-40 cursor-not-allowed select-none">
-                            <Move className="h-4 w-4" /><span>Move</span>
+                          <div className="flex items-center gap-2 px-2 py-1 text-small text-fg-subtle opacity-40 cursor-not-allowed select-none">
+                            <Move className="h-3.5 w-3.5" /><span>Move</span>
                           </div>
                         ) : (
                           <DropdownMenuItem
                             onSelect={() => onMoveDocument(document)}
                             className="flex cursor-pointer items-center gap-2"
                           >
-                            <Move className="h-4 w-4 text-fg-muted" />
+                            <Move className="h-3.5 w-3.5 text-fg-muted" />
                             <span>Move</span>
                           </DropdownMenuItem>
                         )
@@ -1210,15 +1217,15 @@ export function DocumentActionMenu({
                           onSelect={() => onCrossEngagementCopy(document)}
                           className="flex cursor-pointer items-center gap-2"
                         >
-                          <Building2 className="h-4 w-4 flex-shrink-0 text-fg-subtle" />
+                          <Building2 className="h-3.5 w-3.5 flex-shrink-0 text-fg-subtle" />
                           <span className="whitespace-nowrap">Copy to another engagement…</span>
                         </DropdownMenuItem>
                       )}
                       {(canManage && (onMakePrivate || onMakePublic)) && <DropdownMenuSeparator />}
                       {canManage && !document.isPrivate && onMakePrivate && (
                         isApprovedDeliverable ? (
-                          <div className="flex items-center gap-2 px-2 py-1.5 text-ui text-fg-subtle opacity-40 cursor-not-allowed select-none">
-                            <FolderLock className="h-4 w-4" /><span>Make private</span>
+                          <div className="flex items-center gap-2 px-2 py-1 text-small text-fg-subtle opacity-40 cursor-not-allowed select-none">
+                            <FolderLock className="h-3.5 w-3.5" /><span>Make private</span>
                           </div>
                         ) : document.isSharedWithExternal ? (
                           <TooltipProvider>
@@ -1226,9 +1233,9 @@ export function DocumentActionMenu({
                               <TooltipTrigger asChild>
                                 <div
                                   onClick={(e) => { e.stopPropagation(); setPrivateInfoOpen((v) => !v) }}
-                                  className="flex items-center gap-2 px-2 py-1.5 text-ui text-fg-subtle cursor-pointer opacity-50 rounded-control hover:bg-surface-hover"
+                                  className="flex items-center gap-2 px-2 py-1 text-small text-fg-subtle cursor-pointer opacity-50 rounded-control hover:bg-surface-hover"
                                 >
-                                  <FolderLock className="h-4 w-4 text-fg-subtle" />
+                                  <FolderLock className="h-3.5 w-3.5 text-fg-subtle" />
                                   <span>Make private</span>
                                   <Info className="h-3.5 w-3.5 ml-auto text-fg-subtle" />
                                 </div>
@@ -1243,22 +1250,22 @@ export function DocumentActionMenu({
                             onClick={() => onMakePrivate(document)}
                             className="flex cursor-pointer items-center gap-2"
                           >
-                            <FolderLock className="h-4 w-4 text-fg-subtle" />
+                            <FolderLock className="h-3.5 w-3.5 text-fg-subtle" />
                             <span>Make private</span>
                           </DropdownMenuItem>
                         )
                       )}
                       {canManage && document.isPrivate && onMakePublic && (
                         isApprovedDeliverable ? (
-                          <div className="flex items-center gap-2 px-2 py-1.5 text-ui text-fg-subtle opacity-40 cursor-not-allowed select-none">
-                            <FolderUp className="h-4 w-4" /><span>Make public</span>
+                          <div className="flex items-center gap-2 px-2 py-1 text-small text-fg-subtle opacity-40 cursor-not-allowed select-none">
+                            <FolderUp className="h-3.5 w-3.5" /><span>Make public</span>
                           </div>
                         ) : (
                           <DropdownMenuItem
                             onClick={() => onMakePublic(document)}
                             className="flex cursor-pointer items-center gap-2"
                           >
-                            <FolderUp className="h-4 w-4 text-fg-muted" />
+                            <FolderUp className="h-3.5 w-3.5 text-fg-muted" />
                             <span>Make public</span>
                           </DropdownMenuItem>
                         )
@@ -1270,15 +1277,15 @@ export function DocumentActionMenu({
                 {document.documentType !== 'LINK' && (
                 <DropdownMenuSub>
                   <DropdownMenuSubTrigger className="flex cursor-pointer items-center gap-2">
-                    <Info className="h-4 w-4 text-fg-muted" />
+                    <Info className="h-3.5 w-3.5 text-fg-muted" />
                     <span>Details</span>
                   </DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent className="w-max min-w-56 max-w-80">
+                  <DropdownMenuSubContent className="w-max min-w-48 max-w-72">
                     <DropdownMenuItem
                       onClick={() => {
                         onOpenInfoPane?.(document.id)
                         rightPane.setTitle('File information')
-                        rightPane.setHeaderIcon(<DocumentIcon mimeType={document.mimeType} className="h-4 w-4" />)
+                        rightPane.setHeaderIcon(<DocumentIcon mimeType={document.mimeType} className="h-3.5 w-3.5" />)
                         rightPane.setHeaderSubtitle('')
                         rightPane.setHeaderActions(null)
                         rightPane.setContent(
@@ -1347,14 +1354,14 @@ export function DocumentActionMenu({
                       }}
                       className="flex cursor-pointer items-center gap-2"
                     >
-                      <Info className="h-4 w-4 text-fg-muted" />
+                      <Info className="h-3.5 w-3.5 text-fg-muted" />
                       <span>File information</span>
                     </DropdownMenuItem>
                     <DropdownMenuItem
                       onClick={() => {
                         onOpenActivityPane?.(document.id)
                         rightPane.setTitle('Activity stream')
-                        rightPane.setHeaderIcon(<DocumentIcon mimeType={document.mimeType} className="h-4 w-4" />)
+                        rightPane.setHeaderIcon(<DocumentIcon mimeType={document.mimeType} className="h-3.5 w-3.5" />)
                         rightPane.setHeaderSubtitle('Last 30 days')
                         rightPane.setHeaderActions(null)
                         rightPane.setContent(<DocumentActivityPane document={document} />)
@@ -1362,7 +1369,7 @@ export function DocumentActionMenu({
                       }}
                       className="flex cursor-pointer items-center gap-2"
                     >
-                      <Clock className="h-4 w-4 text-fg-muted" />
+                      <Clock className="h-3.5 w-3.5 text-fg-muted" />
                       <span>Activity stream</span>
                     </DropdownMenuItem>
                     {document.documentType !== 'LINK' && (
@@ -1370,7 +1377,7 @@ export function DocumentActionMenu({
                       onClick={() => {
                         onOpenVersionPane?.(document.id)
                         rightPane.setTitle('Version history')
-                        rightPane.setHeaderIcon(<DocumentIcon mimeType={document.mimeType} className="h-4 w-4" />)
+                        rightPane.setHeaderIcon(<DocumentIcon mimeType={document.mimeType} className="h-3.5 w-3.5" />)
                         rightPane.setHeaderSubtitle('Full history')
                         rightPane.setHeaderActions(null)
                         rightPane.setContent(<DocumentHistoryPane document={document} />)
@@ -1379,7 +1386,7 @@ export function DocumentActionMenu({
                       }}
                       className="flex cursor-pointer items-center gap-2"
                     >
-                      <Clock className="h-4 w-4 text-fg-muted" />
+                      <Clock className="h-3.5 w-3.5 text-fg-muted" />
                       <span>Version history</span>
                     </DropdownMenuItem>
                     )}
@@ -1390,10 +1397,10 @@ export function DocumentActionMenu({
                 <>
                   <DropdownMenuSub>
                     <DropdownMenuSubTrigger className="flex cursor-pointer items-center gap-2">
-                      <ExternalLink className="h-4 w-4 text-fg-muted" />
+                      <ExternalLink className="h-3.5 w-3.5 text-fg-muted" />
                       <span>Drive actions</span>
                     </DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent className="w-max min-w-56 max-w-80">
+                    <DropdownMenuSubContent className="w-max min-w-48 max-w-72">
                       <DropdownMenuItem
                         onClick={() => {
                           const parentId = document.parents?.[0]
@@ -1405,7 +1412,7 @@ export function DocumentActionMenu({
                         }}
                         className="flex cursor-pointer items-center gap-2"
                       >
-                        <ExternalLink className="h-4 w-4 text-fg-subtle" />
+                        <ExternalLink className="h-3.5 w-3.5 text-fg-subtle" />
                         <span>Open containing folder in Google Drive</span>
                       </DropdownMenuItem>
                     </DropdownMenuSubContent>
@@ -1420,8 +1427,8 @@ export function DocumentActionMenu({
                       <Tooltip>
                         <TooltipTrigger asChild>
                           {isApprovedDeliverable ? (
-                            <div className="flex items-center gap-2 px-2 py-1.5 text-ui text-fg-subtle opacity-50 cursor-not-allowed select-none">
-                              <Trash2 className="h-4 w-4" />
+                            <div className="flex items-center gap-2 px-2 py-1 text-small text-fg-subtle opacity-50 cursor-not-allowed select-none">
+                              <Trash2 className="h-3.5 w-3.5" />
                               <span>{document.documentType === 'LINK' ? 'Delete' : 'Move to trash'}</span>
                             </div>
                           ) : (
@@ -1430,7 +1437,7 @@ export function DocumentActionMenu({
                               onSelect={() => onDeleteDocument!(document)}
                               className="flex cursor-pointer items-center gap-2 text-danger focus:text-danger"
                             >
-                              <Trash2 className="h-4 w-4" />
+                              <Trash2 className="h-3.5 w-3.5" />
                               <span>{document.documentType === 'LINK' ? 'Delete' : 'Move to trash'}</span>
                             </DropdownMenuItem>
                           )}
@@ -1472,7 +1479,7 @@ export function DocumentActionMenu({
         extra={
           <div>
             <label className="mb-2 block text-small font-medium text-fg-muted">
-              Due date (optional)
+              Due (optional)
             </label>
             <DateTimePicker
               value={tagDeliverableDueDate}
@@ -1575,7 +1582,7 @@ export function DocumentActionMenu({
                   </div>
                   <div>
                     <h3 className="text-sm font-medium text-fg">
-                      Set Due Date
+                      Set due date
                     </h3>
                     <p className="text-xs text-fg-muted">
                       {document.name}
