@@ -4,6 +4,7 @@ import type React from 'react'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
+import { StatusPill } from '@/components/ui/status-pill'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -717,10 +718,12 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
                             </button>
                           </div>
                         )}
-                        <div className="flex items-center gap-1.5 mt-0.5">
-                          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isActive ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-                          <p className={`text-xs ${isActive ? 'text-fg-muted' : 'text-fg-subtle'}`}>
-                            {isActive ? (connector.email || 'Connected') : 'Disconnected — reconnect to restore access'}
+                        {/* Connection health in the status language: Connected (Done), or what needs
+                            fixing (Expired, Access revoked, Connection error). */}
+                        <div className="mt-1 flex min-w-0 items-center gap-1.5">
+                          <StatusPill kind="connector" status={connector.status} className="shrink-0" />
+                          <p className="truncate text-xs text-fg-muted">
+                            {isActive ? connector.email : 'Reconnect to restore access'}
                           </p>
                         </div>
                       </div>
@@ -933,10 +936,12 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
                             </button>
                           </div>
                         )}
-                        <div className="flex items-center gap-1.5 mt-0.5">
-                          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isActive ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-                          <p className={`text-xs ${isActive ? 'text-fg-muted' : 'text-fg-subtle'}`}>
-                            {isActive ? (connector.email || 'Connected') : 'Disconnected — reconnect to restore access'}
+                        {/* Connection health in the status language: Connected (Done), or what needs
+                            fixing (Expired, Access revoked, Connection error). */}
+                        <div className="mt-1 flex min-w-0 items-center gap-1.5">
+                          <StatusPill kind="connector" status={connector.status} className="shrink-0" />
+                          <p className="truncate text-xs text-fg-muted">
+                            {isActive ? connector.email : 'Reconnect to restore access'}
                           </p>
                         </div>
                       </div>

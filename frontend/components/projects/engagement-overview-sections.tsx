@@ -13,7 +13,10 @@ import {
     ListChecks,
     Users,
 } from 'lucide-react'
-import { Donut, RING, ScoreDeductions } from './insight-rings'
+import { DATA, Donut, ScoreDeductions, tint } from './insight-rings'
+import { StatusPill } from '@/components/ui/status-pill'
+import { Hint } from '@/components/ui/tooltip'
+import { STAGE_PILL_CLASSES, STATUS, type StatusStage } from '@/lib/ui/status'
 import {
     ChartBlock,
     InfoHint,
@@ -38,11 +41,26 @@ import type { DeliverableStage } from '@/lib/insights/engagement-insights'
 
 const DAY_MS = 86400000
 
+/** Each stage as the Board shows it: its label from the status registry, its bar hue (DATA). */
 export const STAGE_META: Record<DeliverableStage, { label: string; hex: string }> = {
-    to_do: { label: 'To Do', hex: RING.amber },
-    in_progress: { label: 'In Progress', hex: RING.blue },
-    in_review: { label: 'In Review', hex: RING.indigo },
-    approved: { label: 'Approved', hex: RING.green },
+    to_do: { label: STATUS.deliverable.to_do.label, hex: DATA.notStarted },
+    in_progress: { label: STATUS.deliverable.in_progress.label, hex: DATA.underway },
+    in_review: { label: STATUS.deliverable.in_review.label, hex: DATA.waiting },
+    approved: { label: STATUS.deliverable.approved.label, hex: DATA.done },
+}
+
+/** A good / needs attention / at risk band in the status palette's done, waiting and problem. */
+export const BAND_STAGE = { good: 'done', warning: 'waiting', critical: 'problem' } as const satisfies Record<string, StatusStage>
+const BAND_HEX = { good: DATA.done, warning: DATA.waiting, critical: DATA.problem }
+const BAND_TEXT = { good: 'text-status-done-fg', warning: 'text-status-waiting-fg', critical: 'text-status-problem-fg' }
+
+/** A band as a pill in its stage's colors: a judgment, not a status, so no status icon. */
+export function BandPill({ band, children, className }: { band: keyof typeof BAND_STAGE; children: React.ReactNode; className?: string }) {
+    return (
+        <span className={cn('inline-flex h-5 items-center whitespace-nowrap rounded-control px-1.5 text-caption', STAGE_PILL_CLASSES[BAND_STAGE[band]], className)}>
+            {children}
+        </span>
+    )
 }
 export const STAGE_ORDER: DeliverableStage[] = ['to_do', 'in_progress', 'in_review', 'approved']
 
@@ -157,7 +175,8 @@ export function DeliverablesTimeline({ deliverables, startDate, dueDate, nowMs }
                     {visible.map((d) => {
                         const left = at(d.startMs)
                         const width = Math.max(1, at(d.endMs) - left)
-                        const color = d.isOverdue ? RING.red : STAGE_META[d.stage].hex
+                        // Overdue is the only red: the part of the bar past its due date.
+                        const color = d.isOverdue ? DATA.problem : STAGE_META[d.stage].hex
                         const dateText = d.stage === 'approved'
                             ? (d.finalizedAt ? `Approved ${shortDate(new Date(d.finalizedAt).getTime())}` : 'Approved')
                             : d.dueDate ? `Due ${shortDate(new Date(d.dueDate).getTime())}` : 'No due date'
@@ -167,28 +186,32 @@ export function DeliverablesTimeline({ deliverables, startDate, dueDate, nowMs }
                             <div key={d.id} className="grid grid-cols-[minmax(0,1fr)_7.5rem] items-center gap-4 border-b border-line py-1.5 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_minmax(0,33%)_7.5rem]">
                                 <div className="flex min-w-0 items-center gap-2">
                                     {d.docId && <span className="shrink-0 rounded-[4px] bg-surface-muted px-1 font-mono text-caption text-fg-muted">{d.docId}</span>}
-                                    <span className="truncate text-small text-fg" title={d.name}>{d.name}</span>
+                                    <Hint label={d.name}>
+                                        <span className="truncate text-small text-fg">{d.name}</span>
+                                    </Hint>
                                 </div>
                                 <div className="relative hidden h-6 sm:block">
                                     {/* The track: the whole span of the axis, so a short bar reads as a
                                         part of the engagement rather than a fragment. */}
                                     <div className="absolute inset-x-0 inset-y-1.5 rounded-[4px] bg-surface-muted" />
                                     {engDueMs !== null && engDueMs >= minMs && engDueMs <= maxMs && (
-                                        <div className="absolute inset-y-0 w-px bg-line-strong" style={{ left: `${at(engDueMs)}%` }} title={`Engagement due ${shortDate(engDueMs)}`} />
+                                        <Hint label={`Engagement due ${shortDate(engDueMs)}`}>
+                                            <div className="absolute inset-y-0 w-px bg-line-strong" style={{ left: `${at(engDueMs)}%` }} />
+                                        </Hint>
                                     )}
                                     <div className="absolute inset-y-0 border-l border-dashed border-fg-subtle" style={{ left: `${at(nowMs)}%` }} />
-                                    <div
-                                        className={cn('absolute inset-y-1.5 overflow-hidden rounded-[4px]', d.openEnded ? 'border border-dashed border-line-strong' : '')}
-                                        style={{ left: `${left}%`, width: `${width}%`, backgroundColor: `${color}26` }}
-                                        title={`${d.docId ?? ''} ${d.name} · ${STAGE_META[d.stage].label} · ${dateText}`}
-                                    >
-                                        <div className="h-full" style={{ width: `${STAGE_FILL_PCT[d.stage]}%`, backgroundColor: color, opacity: 0.85 }} />
-                                    </div>
+                                    <Hint label={`${d.docId ? `${d.docId} · ` : ''}${STAGE_META[d.stage].label} · ${dateText}`}>
+                                        <div
+                                            className={cn('absolute inset-y-1.5 overflow-hidden rounded-[4px]', d.openEnded ? 'border border-dashed border-line-strong' : '')}
+                                            style={{ left: `${left}%`, width: `${width}%`, backgroundColor: tint(color, 28) }}
+                                        >
+                                            <div className="h-full" style={{ width: `${STAGE_FILL_PCT[d.stage]}%`, backgroundColor: color }} />
+                                        </div>
+                                    </Hint>
                                 </div>
                                 <div className="flex min-w-0 flex-col items-end">
-                                    <Tag color={d.isOverdue ? 'red' : d.stage === 'approved' ? 'green' : d.stage === 'to_do' ? 'yellow' : d.stage === 'in_review' ? 'purple' : 'blue'} dot>
-                                        {d.isOverdue ? 'Overdue' : STAGE_META[d.stage].label}
-                                    </Tag>
+                                    {/* The stage as on the Board; overdue is the red date below, not a pill. */}
+                                    <StatusPill kind="deliverable" status={d.stage} />
                                     <span className={cn('text-caption', d.isOverdue ? 'text-danger' : 'text-fg-subtle')}>{dateText}</span>
                                 </div>
                             </div>
@@ -325,7 +348,7 @@ function TimelineBlock({ r }: { r: ReportInputs }) {
     const daysLeft = Math.round((endMs! - r.nowMs) / DAY_MS)
     const usedPct = Math.round(Math.max(0, Math.min(100, ((r.nowMs - startMs!) / (endMs! - startMs!)) * 100)))
     const late = daysLeft < 0
-    const barHex = late ? RING.red : usedPct >= 85 ? RING.amber : RING.blue
+    const barHex = late ? DATA.problem : usedPct >= 85 ? DATA.waiting : DATA.underway
     const headline = late ? `${-daysLeft} day${daysLeft === -1 ? '' : 's'} overdue` : daysLeft === 0 ? 'Due today' : `${daysLeft} day${daysLeft === 1 ? '' : 's'} left`
 
     const byDue = (a: OverviewDeliverable, b: OverviewDeliverable) => new Date(a.dueDate!).getTime() - new Date(b.dueDate!).getTime()
@@ -417,8 +440,8 @@ export const HEALTH_SCORE_INFO =
  * export widens `#ring-health > :last-child`; that is now this body, which has no width cap.)
  */
 function HealthScoreCard({ health }: { health: HealthScoreInput }) {
-    const hex = health.level === 'good' ? RING.green : health.level === 'warning' ? RING.amber : RING.red
-    const textClass = health.level === 'good' ? 'text-green-600' : health.level === 'warning' ? 'text-amber-600' : 'text-red-600'
+    const hex = BAND_HEX[health.level]
+    const textClass = BAND_TEXT[health.level]
     const levelLabel = health.level === 'good' ? 'Healthy' : health.level === 'warning' ? 'Needs attention' : 'Critical'
     const penalties = [...health.penalties].sort((a, b) => b.points - a.points)
     const deducted = penalties.reduce((s, p) => s + p.points, 0)
@@ -442,7 +465,7 @@ function HealthScoreCard({ health }: { health: HealthScoreInput }) {
                 <div className="min-w-0">
                     <p className={`text-ui font-medium ${textClass}`}>{levelLabel}</p>
                     {deducted > 0 && (
-                        <p className="mt-0.5 text-caption text-fg-subtle">100 − <span className="font-medium text-red-500">{deducted}</span> = <span className={`font-semibold ${textClass}`}>{health.score}</span></p>
+                        <p className="mt-0.5 text-caption text-fg-subtle">100 − <span className="font-medium text-status-problem-fg">{deducted}</span> = <span className={`font-semibold ${textClass}`}>{health.score}</span></p>
                     )}
                 </div>
             </div>
@@ -465,13 +488,13 @@ export function OverviewDetails({ report: r }: { report: ReportInputs }) {
     const inFlight = !!ph && (ph.deliverableTotal > 0 || ph.docTotal > 0)
     const missing = ph ? (ph.deliverableTotal - ph.deliverableWithDueDate) + (ph.docTotal - ph.docWithDueDate) + (ph.docTotal - ph.docWithAssignee) : 0
     const coverage = (have: number, of: number) => of > 0 ? Math.round((have / of) * 100) : 0
-    const coverageHex = (have: number, of: number) => have >= of ? RING.green : RING.amber
+    const coverageHex = (have: number, of: number) => have >= of ? DATA.done : DATA.waiting
 
     const commentTotal = r.comments.resolved + r.comments.flaggedOpen + r.comments.unanswered
     const commentItems: ChartSegment[] = [
-        { label: 'Resolved', hex: RING.green, value: r.comments.resolved },
-        { label: 'Flagged open', hex: RING.amber, value: r.comments.flaggedOpen },
-        { label: 'Unanswered', hex: RING.red, value: r.comments.unanswered },
+        { label: 'Resolved', hex: DATA.done, value: r.comments.resolved },
+        { label: 'Flagged open', hex: DATA.waiting, value: r.comments.flaggedOpen },
+        { label: 'Unanswered', hex: DATA.problem, value: r.comments.unanswered },
     ]
     const ftrTotal = r.firstTimeRight.firstTime + r.firstTimeRight.reworked
 
@@ -487,7 +510,7 @@ export function OverviewDetails({ report: r }: { report: ReportInputs }) {
                             info="Share of deliverables approved against share of the engagement's time used. Delivered below time elapsed means the work is behind the clock."
                         >
                             {hasRange && total > 0 ? (
-                                <PaceBars deliveredPct={r.deliveredPct} timePct={r.timePct} hex={{ delivered: RING.green, time: 'var(--ui-line-strong)' }} />
+                                <PaceBars deliveredPct={r.deliveredPct} timePct={r.timePct} hex={{ delivered: DATA.done, time: 'var(--ui-line-strong)' }} />
                             ) : (
                                 <Empty>{hasRange ? 'Tracks once there is a deliverable.' : 'Tracks once the engagement has a due date.'}</Empty>
                             )}
@@ -540,7 +563,7 @@ export function OverviewDetails({ report: r }: { report: ReportInputs }) {
                                 tone={ftrTotal > 0 && r.firstTimeRight.reworked > r.firstTimeRight.firstTime ? 'warning' : undefined}
                             />
                             {r.inFlightWithRework > 0 && (
-                                <p className="mt-1.5 flex items-start gap-1 text-caption text-tag-orange-fg">
+                                <p className="mt-1.5 flex items-start gap-1 text-caption text-status-waiting-fg">
                                     <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
                                     {r.inFlightWithRework} in-flight deliverable{r.inFlightWithRework === 1 ? ' has' : 's have'} already been reworked.
                                 </p>
@@ -586,7 +609,8 @@ export function TeamSection({ joined, invited, roles, internal, external }: {
             title: 'On team vs invited',
             info: 'People who have joined the engagement against invitations not yet accepted.',
             aside: teamTotal > 0 ? `${Math.round((joined / teamTotal) * 100)}% joined` : undefined,
-            items: [{ label: 'On team', hex: RING.green, value: joined }, { label: 'Invited', hex: RING.gray, value: invited }],
+            // An invitation waiting to be accepted is the status language's Waiting; joined is Done.
+            items: [{ label: 'On team', hex: DATA.done, value: joined }, { label: 'Invited', hex: DATA.waiting, value: invited }],
             empty: 'No one on the team yet.',
         },
         {
@@ -600,7 +624,8 @@ export function TeamSection({ joined, invited, roles, internal, external }: {
             title: 'Internal vs external',
             info: 'Firm-side members (Admins and Members) against client-side members (Collaborators and Reviewers).',
             aside: roleTotal > 0 ? `${Math.round((internal / roleTotal) * 100)}% internal` : undefined,
-            items: [{ label: 'Internal', hex: RING.green, value: internal }, { label: 'External', hex: RING.indigo, value: external }],
+            // Not a status: the categorical grays.
+            items: [{ label: 'Internal', hex: DATA.category1, value: internal }, { label: 'External', hex: DATA.category3, value: external }],
             empty: 'No members yet.',
         },
     ]
@@ -646,8 +671,8 @@ export function FileOrganizationSection({ score, penalties, checks, show = showA
     checks: FileCheck[]
     show?: Show
 }) {
-    const hex = score >= 80 ? RING.green : score >= 50 ? RING.amber : RING.red
-    const tag = score >= 80 ? { text: 'Good', color: 'green' as const } : score >= 60 ? { text: 'Fair', color: 'yellow' as const } : { text: 'Needs attention', color: 'red' as const }
+    const hex = score >= 80 ? DATA.done : score >= 50 ? DATA.waiting : DATA.problem
+    const band = score >= 80 ? { text: 'Good', band: 'good' as const } : score >= 60 ? { text: 'Fair', band: 'warning' as const } : { text: 'Needs attention', band: 'critical' as const }
     const sorted = [...penalties].sort((a, b) => b.points - a.points)
     const deducted = sorted.reduce((s, p) => s + p.points, 0)
     const visibleChecks = checks.filter((c) => show(c.id))
@@ -666,13 +691,13 @@ export function FileOrganizationSection({ score, penalties, checks, show = showA
                     <div className="flex items-baseline gap-2">
                         <span className="text-[28px] font-bold leading-none tabular-nums text-fg">{score}</span>
                         <span className="text-small text-fg-subtle">/ 100</span>
-                        <Tag color={tag.color} className="ml-1 self-center">{tag.text}</Tag>
+                        <BandPill band={band.band} className="ml-1 self-center">{band.text}</BandPill>
                     </div>
                     <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-muted">
                         <div className="h-full rounded-full" style={{ width: `${score}%`, backgroundColor: hex }} />
                     </div>
                     {deducted > 0 && (
-                        <p className="text-caption text-fg-subtle">100 − <span className="font-medium text-red-500">{deducted}</span> = <span className="font-semibold text-fg">{score}</span></p>
+                        <p className="text-caption text-fg-subtle">100 − <span className="font-medium text-status-problem-fg">{deducted}</span> = <span className="font-semibold text-fg">{score}</span></p>
                     )}
                     <ScoreDeductions penalties={sorted} emptyText="All clear — no issues found" className="w-full" />
                 </div>
@@ -686,7 +711,7 @@ export function FileOrganizationSection({ score, penalties, checks, show = showA
                                 label={c.label}
                                 valueText={c.count > 0 ? `${c.count} of ${c.of}` : 'None'}
                                 pct={c.of > 0 ? (c.count / c.of) * 100 : 0}
-                                hex={RING.amber}
+                                hex={DATA.waiting}
                                 muted={c.count === 0}
                                 info={c.info}
                             />

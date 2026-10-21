@@ -3,6 +3,7 @@
 import type { ReactNode } from 'react'
 import { Building2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { interactiveCardClass } from '@/components/ui/interactive-card'
 
 const HEX = /^#[0-9A-Fa-f]{6}$/
 
@@ -74,9 +75,9 @@ export function WorkspaceCard({
             onClick={onClick}
             disabled={disabled}
             className={cn(
-                'group flex h-40 flex-col rounded-card border border-line bg-surface p-3.5 text-left transition-colors',
-                'hover:border-line-strong hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action/30',
-                'disabled:cursor-not-allowed disabled:opacity-60'
+                // The shared card shell: shadow, warm hover, focus ring, disabled state.
+                interactiveCardClass(),
+                'group flex h-40 flex-col p-3.5'
             )}
         >
             <div className="flex items-start justify-between gap-2">

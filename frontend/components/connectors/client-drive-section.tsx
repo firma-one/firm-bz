@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
+import { StatusIcon } from '@/components/ui/status-icon'
 import { SquareCheck, Square, ExternalLink } from 'lucide-react'
 import { GoogleDriveProductMark } from '@/components/ui/google-drive-icon'
 import { OneDriveIcon } from '@/components/ui/onedrive-icon'
@@ -116,8 +117,10 @@ export function ClientDriveSection({
             <p className="text-[0.8125rem] font-semibold text-fg truncate leading-snug">
               {name || email || (provider === 'onedrive' ? 'Microsoft account' : 'Google account')}
             </p>
-            <p className={`text-xs mt-0.5 ${isActive ? 'text-fg-muted' : 'text-fg-subtle'}`}>
-              {isActive ? (email || 'Connected') : 'Disconnected — reconnect in Firm Settings'}
+            {/* Connection health in the status language: Done when connected, Needs fixing when not. */}
+            <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-fg-muted">
+              <StatusIcon stage={isActive ? 'done' : 'problem'} size={13} />
+              <span className="truncate">{isActive ? (email || 'Connected') : 'Disconnected — reconnect in Firm Settings'}</span>
             </p>
           </div>
           <Button

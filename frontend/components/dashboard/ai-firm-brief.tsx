@@ -1,11 +1,13 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { AlertCircle, Check, Clock, Copy, Square } from 'lucide-react'
+import { AlertCircle, Check, Clock, Copy, Sparkles, Square } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
 import { formatRelativeTime } from '@/lib/utils'
-import { ASSISTANT, ASSISTANT_POLICY } from '@/lib/ai/assistant'
+import { ASSISTANT, ASSISTANT_POLICY, BRIO_GREEN } from '@/lib/ai/assistant'
+import { Hint } from '@/components/ui/tooltip'
 import { Brio } from '@/components/ui/brio'
+import { BrioByline } from '@/components/ui/brio-byline'
 import { ShimmerBar } from '@/components/ui/shimmer'
 import { BrioReading, BrioSections, StreamingBrioSections } from '@/components/ui/brio-sections'
 import { fetchWithTimeout, AI_TIMEOUT_MS } from '@/lib/ai/fetch-timeout'
@@ -136,6 +138,8 @@ export function useFirmBrief(firmId: string) {
 }
 
 const CONTROL = 'inline-flex h-7 items-center gap-1.5 rounded-control border border-line bg-surface px-2 text-small transition-colors hover:border-line-strong hover:bg-surface-hover disabled:cursor-default disabled:opacity-50'
+/** The header's actions: 28px icon buttons, as on the engagement summary. */
+const ICON_BUTTON = 'inline-flex h-7 w-7 items-center justify-center rounded-control text-fg-muted transition-colors duration-ui-fast hover:bg-surface-hover hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action/30 disabled:cursor-default disabled:opacity-50'
 
 /**
  * Today's brief as a card, with the Engagement Summary's header: title, how old it is, Copy, and
@@ -193,19 +197,24 @@ export function FirmBriefCard({ brief, loading = false, refreshing = false, stre
                         </span>
                     )}
                 </div>
-                <div className="flex shrink-0 items-center gap-2 print:hidden">
-                    <button type="button" onClick={copy} disabled={busy} aria-label="Copy the brief to the clipboard" className={`${CONTROL} text-fg-muted hover:text-fg`}>
-                        {copied ? <Check className="h-3 w-3 text-action" /> : <Copy className="h-3 w-3" />}
-                        {copied ? 'Copied' : 'Copy'}
-                    </button>
+                <div className="flex shrink-0 items-center gap-0.5 print:hidden">
+                    {/* As on the engagement summary: icon actions named by a Hint and an aria-label;
+                        Stop stays a labeled button while Brio writes. */}
+                    <Hint label={copied ? 'Copied' : 'Copy as Markdown'}>
+                        <button type="button" onClick={copy} disabled={busy} aria-label="Copy the brief as Markdown" className={ICON_BUTTON}>
+                            {copied ? <Check className="h-4 w-4 text-status-done-icon" /> : <Copy className="h-4 w-4" />}
+                        </button>
+                    </Hint>
                     {refreshing && onStop ? (
                         <button type="button" onClick={onStop} className={`${CONTROL} text-fg-muted hover:text-fg`}>
                             <Square className="h-3 w-3 fill-current" /> Stop
                         </button>
                     ) : onRewrite && (
-                        <button type="button" onClick={onRewrite} disabled={busy} className={`${CONTROL} font-medium text-action`}>
-                            Rewrite with <Brio />
-                        </button>
+                        <Hint label={<>Rewrite with <Brio /></>}>
+                            <button type="button" onClick={onRewrite} disabled={busy} aria-label={`Rewrite with ${ASSISTANT.name}`} className={ICON_BUTTON}>
+                                <Sparkles className="h-4 w-4" style={{ color: BRIO_GREEN }} />
+                            </button>
+                        </Hint>
                     )}
                 </div>
             </div>
@@ -231,9 +240,11 @@ export function FirmBriefCard({ brief, loading = false, refreshing = false, stre
                 <BrioSections content={brief.content} className="px-4 py-3 text-fg-muted" />
             )}
 
-            <p className="mt-auto border-t border-line px-4 py-2 text-caption text-fg-subtle">
-                Written by <Brio /> from {source}. {ASSISTANT_POLICY.short}
-            </p>
+            {/* The byline every piece of Brio's work carries, in plain text. No publisher: the brief
+                has no review step. */}
+            <BrioByline className="mt-auto border-t border-line px-4 py-2.5">
+                from {source}. {ASSISTANT_POLICY.short}
+            </BrioByline>
         </div>
     )
 }

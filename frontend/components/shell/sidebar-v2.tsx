@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState, type ReactNode } from "react"
+import { useEffect, useMemo, useState, type ReactElement, type ReactNode } from "react"
 import Link from "next/link"
 import { usePathname, useSearchParams } from "next/navigation"
 import {
@@ -31,7 +31,9 @@ import { useAuth } from "@/lib/auth-context"
 import { buildBillingPageHref } from "@/lib/billing/build-billing-page-href"
 import { AccessLock } from "@/components/ui/access-lock"
 import { firmPath, firmTabPath, groupFirmListPath } from "@/lib/navigation/firm-paths"
-import { ENGAGEMENT_STATUS, TAG_DOT_CLASSES, type EngagementStatusValue } from "@/lib/ui/status-colors"
+import { StatusIcon } from "@/components/ui/status-icon"
+import { Hint } from "@/components/ui/tooltip"
+import { statusOf } from "@/lib/ui/status"
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -95,15 +97,17 @@ export function SidebarItem({
             {trailing}
         </>
     )
+    // `title` shows in the app's Hint, to the right, not as a native tooltip.
+    const withHint = (el: ReactElement) => (title ? <Hint label={title} side="right">{el}</Hint> : el)
     if (href) {
-        return (
-            <Link href={href} className={classes} aria-current={active ? "page" : undefined} title={title}>
+        return withHint(
+            <Link href={href} className={classes} aria-current={active ? "page" : undefined}>
                 {content}
             </Link>
         )
     }
-    return (
-        <button type="button" onClick={onClick} className={cn(classes, "w-full text-left")} title={title}>
+    return withHint(
+        <button type="button" onClick={onClick} className={cn(classes, "w-full text-left")}>
             {content}
         </button>
     )
@@ -324,15 +328,16 @@ export function SidebarV2({
             <div className="flex items-center gap-1 px-2 pb-1 pt-2">
                 <WorkspaceSwitcher />
                 {onCollapse && (
-                    <button
-                        type="button"
-                        onClick={onCollapse}
-                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-control text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg-muted"
-                        title="Collapse sidebar  ["
-                        aria-label="Collapse sidebar"
-                    >
-                        <PanelLeftClose className="h-4 w-4" />
-                    </button>
+                    <Hint label={<>Collapse sidebar <Kbd>[</Kbd></>} side="bottom">
+                        <button
+                            type="button"
+                            onClick={onCollapse}
+                            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-control text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg-muted"
+                            aria-label="Collapse sidebar"
+                        >
+                            <PanelLeftClose className="h-4 w-4" />
+                        </button>
+                    </Hint>
                 )}
             </div>
 
@@ -384,27 +389,16 @@ export function SidebarV2({
                         shownClients.map((c) => (
                             <ClientGroup key={c.id} name={c.name} defaultOpen={c.containsActive || shownClients.length <= 4} storageId={`${firmSlug}_${c.id}`}>
                                 {(c.open.length > 0 ? c.open : c.engagements.filter((e) => pathname.startsWith(e.href))).map((e) => {
-                                    const style = ENGAGEMENT_STATUS[e.status as EngagementStatusValue]
+                                    const status = statusOf("engagement", e.status)
                                     return (
                                         <SidebarItem
                                             key={e.id}
                                             href={e.href}
                                             className="pl-6"
-                                            // Notion-style page icon; the status rides on it as a small corner dot.
-                                            icon={
-                                                <span className="relative flex text-fg-subtle group-hover:text-fg-muted">
-                                                    <Briefcase />
-                                                    <span
-                                                        aria-hidden
-                                                        className={cn(
-                                                            "absolute -bottom-0.5 -right-0.5 h-1.5 w-1.5 rounded-full ring-2 ring-surface-sidebar",
-                                                            TAG_DOT_CLASSES[style?.color ?? "gray"]
-                                                        )}
-                                                    />
-                                                </span>
-                                            }
+                                            // The engagement's status icon (Linear-style), named for screen readers.
+                                            icon={<StatusIcon stage={status.stage} label={status.label} />}
                                             label={e.name}
-                                            title={`${e.name} · ${style?.label ?? e.status}`}
+                                            title={`${e.name} · ${status.label}`}
                                             active={pathname.startsWith(e.href)}
                                         />
                                     )

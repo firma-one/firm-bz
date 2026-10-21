@@ -11,6 +11,7 @@ import { Kbd } from "@/components/ui/kbd"
 import { PageHeading } from "@/components/ui/page-heading"
 import { Tag } from "@/components/ui/tag"
 import { Hint } from "@/components/ui/tooltip"
+import { StatusIcon } from "@/components/ui/status-icon"
 import { cn } from "@/lib/utils"
 import { FirmFilter, UnavailableFirmsNote } from "@/components/home/firm-filter"
 import type { UnavailableFirm } from "@/lib/home/home-firms"
@@ -315,7 +316,10 @@ export function InboxView({
                         <ItemTime item={item} />
                     </span>
                 </span>
-                <span className="truncate text-small text-fg-muted">{labelOf(item)}</span>
+                <span className="flex min-w-0 items-center gap-1.5 text-small text-fg-muted">
+                    {item.stage && <StatusIcon stage={item.stage} size={13} />}
+                    <span className="truncate">{labelOf(item)}</span>
+                </span>
             </span>
         </button>
     )

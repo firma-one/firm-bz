@@ -1,4 +1,5 @@
 import type { ReminderWithContext } from "@/lib/actions/user-reminders"
+import type { StatusStage } from "@/lib/ui/status"
 
 /** Dispatched on window after any Inbox change, so the shell refreshes its badges. */
 export const INBOX_CHANGED_EVENT = "firma:inbox-changed"
@@ -41,6 +42,19 @@ export type InboxItem = {
     overdue: boolean
     /** Reminder due-date label from the reminder engine ("Due today", "3 days overdue"). */
     dueLabel: string | null
+    /** The stage a notification reports, drawn as its StatusIcon beside the label (null for the rest). */
+    stage?: StatusStage | null
+}
+
+/**
+ * Notifications that report a state change, in the status language: an upload waiting for review,
+ * a document the client accepted, an invitation accepted, a document sent back.
+ */
+const NOTIFICATION_STAGE: Record<string, StatusStage> = {
+    DOCUMENT_STAGING_INTAKE: "waiting",
+    DOCUMENT_ACCEPTED_BY_CLIENT: "done",
+    ENGAGEMENT_INVITE_ACCEPTED: "done",
+    DOCUMENT_REJECTED: "problem",
 }
 
 function humanizeType(type: string): string {
@@ -83,6 +97,7 @@ export function notificationToItem(n: ApiNotification): InboxItem {
         unread: n.readAt === null,
         overdue: false,
         dueLabel: null,
+        stage: NOTIFICATION_STAGE[n.type] ?? null,
     }
 }
 

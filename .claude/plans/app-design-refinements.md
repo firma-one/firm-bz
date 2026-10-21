@@ -1,6 +1,6 @@
 # App design refinements: Notion's language, one status language, more feedback
 
-Status: **design approved** (2026-10-22). Wave 1 committed on `dev` (97fcc8f3); Wave 2 built, in review. Build in three waves (section 6),
+Status: **design approved** (2026-10-22). Wave 1 committed on `dev` (97fcc8f3), Wave 2 (16acccb0); Wave 3 built, in review. Build in three waves (section 6),
 each committed on `dev` and reviewed before the next.
 
 **Direction:** stay conservative. Keep Notion's design language: black, gray and white, with Notion's
@@ -228,9 +228,50 @@ dragging".
 | Pickers and galleries (`WorkspaceCard`, `ClientList` gallery, `FirmList`) | `InteractiveCard` |
 | Files: Brio task cards (`agent-prompt-card.tsx`, legacy gray classes) | Move to the app's tokens |
 | Support tickets | Ticket status uses `StatusPill` |
+| Engagement Overview data visuals (`insight-rings.tsx`, `engagement-overview-sections.tsx`, `overview-charts.tsx`), added 2026-10-22 | One data palette, the Board's. See "Data colors" below |
+
+**Data colors (added 2026-10-22, at Deepak's request).** The Overview drew its charts from its own
+`RING` palette (Tailwind amber-300, brand blue `#5A78FF`, indigo-400, brand green `#069668`, red-400,
+slate-300), which contradicted the Board: To Do amber and In Review indigo on the Overview, gray and
+amber on the Board; the deliverable list's chips had To Do yellow and In Review purple. The mapping:
+
+| Visual | Becomes |
+|---|---|
+| Deliverable stages (deliverable list bars, Status donut) | The stage bar hues: To do gray, In progress blue, In review amber, Approved green |
+| Deliverable list chips | `StatusPill`; an overdue due date in red; no "Overdue" pill |
+| An overdue deliverable's bar | `--ui-status-problem-bar`, the only red |
+| Health and score bands (Overall Health, File Organization score and its chip) | Good: done green · needs attention: waiting amber · at risk: problem red |
+| Score deductions | High red · Medium amber · Low gray |
+| Pace | Delivered in done green; "Behind pace" amber, red only when far behind |
+| Comment responsiveness | Resolved done · Flagged open waiting · Unanswered problem |
+| Team: on team vs invited | Joined done · Invited waiting (the invitation mapping) |
+| Categorical (by role, internal vs external) | Two warm grays: these aren't statuses, so they borrow no status color |
+
+Rules: data visuals use the status tokens only; the firm's action color never appears in a chart (a
+firm's theme would otherwise change what its charts mean); `RING` is retired.
 
 Unchanged on purpose: the Ask Brio launcher and panel; engagement and firm Overview cards (flat);
 user-chosen labels (Notion's tag palette).
+
+**Wave 3 built 2026-10-22 (on `dev`), with these calls made along the way:**
+- The Inbox's notifications carry no deliverable stage, so the icon follows the notification type:
+  an upload to review is Waiting, a document the client accepted or an invitation accepted is Done,
+  a rejected document is Needs fixing. Other notifications and reminders keep no icon.
+- The Home agenda's overdue chips and the calendar's deliverable and document chips lead with the
+  stage icon; engagement events keep their briefcase.
+- Resending an invitation already showed a toast; it now uses the shared feedback (the toast,
+  "Invitation resent · {email}", and the pill fading in), in all three member lists.
+- The firm brief got the engagement summary's icon actions too (Copy, Rewrite with Brio), not only
+  the byline, so Brio's two pieces of writing look the same.
+- Pace: on pace is Done, behind is Waiting, and only far behind (delivery more than 35 points under
+  the clock) is red. The pace rule in `lib/insights/pace.ts` (and so the firm Overview) is unchanged.
+- Roles and internal vs external use a four-step warm gray ramp (`--ui-data-category-1…4`).
+- `SidebarItem`'s tooltip is now a `Hint` for every sidebar row, and the collapse button's too.
+- A prospect in the client gallery keeps its dashed edge instead of the card shadow.
+- Left as they were: the support ticket status dropdowns (the select's trigger clips a pill), the
+  tour's own Members, Calendar and Inbox copies, and the legacy, unrendered charts in
+  `engagement-insights-dashboard.tsx` (`EngagementHealthBody`, `DeliveryTimeline`), which still
+  use the deprecated `RING`.
 
 ## 7. Data change (for the byline)
 
@@ -246,6 +287,8 @@ user-chosen labels (Notion's tag palette).
 
 - The design system section in `ui-ux-overhaul.md` is the reference: stages, patterns, color budget.
 - The registry's exhaustiveness test catches unmapped statuses.
+- Charts and data visuals take their colors from the status tokens (or the two categorical grays),
+  never from the action color or a hand-picked hex (Wave 3, "Data colors").
 - After each wave: a browser pass on `/tour` with reduced motion on and off.
 - Checks per wave: `tsc`; the existing component tests (`firm-actions.test.tsx` and friends); new
   tests for the status registry, the byline mapping and the merged Action Center list.

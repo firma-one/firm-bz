@@ -15,6 +15,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Button } from '@/components/ui/button'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { cn } from '@/lib/utils'
+import { StatusIcon } from '@/components/ui/status-icon'
+import { statusOf } from '@/lib/ui/status'
 import './calendar-view.css'
 
 const EVENT_TYPE_ICON: Record<CalendarEventType, typeof Briefcase> = {
@@ -63,19 +65,24 @@ function renderEventContent(arg: EventContentArg, eventsById: Map<string, Calend
   const fullEvent = eventsById.get(arg.event.id)
   const label = EVENT_TYPE_LABEL[type] ?? 'Engagement'
   const name = fullEvent ? eventFullName(fullEvent) : arg.event.title
+  // Deliverables and documents lead with their stage's icon (the status language), named for
+  // screen readers and in the tooltip; engagement events keep their briefcase.
+  const status = (type === 'deliverable' || type === 'document') && fullEvent?.status ? statusOf('deliverable', fullEvent.status) : null
 
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <div className="flex items-center gap-1 min-w-0 px-0.5">
-          <Icon className="h-3 w-3 shrink-0 opacity-70" />
+          {status
+            ? <StatusIcon stage={status.stage} size={12} label={status.label} />
+            : <Icon className="h-3 w-3 shrink-0 opacity-70" />}
           <span className="truncate">{arg.event.title}</span>
         </div>
       </TooltipTrigger>
       <TooltipContent variant="light" side="top" className="max-w-[240px]">
         <div className="flex items-center gap-1.5 text-fg-subtle">
           <Icon className="h-3.5 w-3.5 shrink-0" />
-          <span className="text-caption">{label}</span>
+          <span className="text-caption">{label}{status && ` · ${status.label}`}</span>
         </div>
         <div className="mt-1 font-medium text-fg">{name}</div>
       </TooltipContent>

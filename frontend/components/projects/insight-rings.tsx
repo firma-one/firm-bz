@@ -54,7 +54,7 @@ export function Donut({ segments, total, size = 120, thickness = 14, trackColor 
                 {/* Only the colored arcs lift, softly; the track stays flat. */}
                 <g style={{ filter: 'drop-shadow(0 1px 1.5px rgba(15, 23, 42, 0.16))' }}>
                     {arcs.map((a, i) => (
-                        <circle key={i} cx={c} cy={c} r={R} fill="none" stroke={a.hex} strokeWidth={thickness}
+                        <circle key={i} cx={c} cy={c} r={R} fill="none" style={{ stroke: a.hex }} strokeWidth={thickness}
                             strokeLinecap={arcs.length === 1 && a.len < C - 1 ? 'round' : 'butt'}
                             strokeDasharray={`${a.len} ${C - a.len}`} strokeDashoffset={a.offset} />
                     ))}
@@ -70,7 +70,32 @@ export function Donut({ segments, total, size = 120, thickness = 14, trackColor 
     )
 }
 
-// Soft, modern pastel palette shared by all rings, anchored on Firma brand green.
+/**
+ * Data colors (.claude/plans/app-design-refinements.md, Wave 3 "Data colors"): the status
+ * language's bar hues, so the Overview's charts read like the Board. Statuses and health bands use
+ * the stages; data that isn't a status uses the categorical gray ramp. Never the action color: a
+ * firm's theme would otherwise change what its charts mean. Values are CSS variables, so tint them
+ * with color-mix(), not by appending an alpha to a hex.
+ */
+export const DATA = {
+    notStarted: 'var(--ui-status-not-started-bar)',
+    underway: 'var(--ui-status-underway-bar)',
+    waiting: 'var(--ui-status-waiting-bar)',
+    done: 'var(--ui-status-done-bar)',
+    problem: 'var(--ui-status-problem-bar)',
+    category1: 'var(--ui-data-category-1)',
+    category2: 'var(--ui-data-category-2)',
+    category3: 'var(--ui-data-category-3)',
+    category4: 'var(--ui-data-category-4)',
+} as const
+
+/** A data color at `pct`% over transparent, e.g. the pale track behind a bar. */
+export const tint = (color: string, pct: number) => `color-mix(in srgb, ${color} ${pct}%, transparent)`
+
+/**
+ * @deprecated Replaced by DATA (the Overview's charts now share the Board's palette). Kept until the
+ * refinements are signed off; nothing renders with it.
+ */
 export const RING = {
     amber:  '#fcd34d', // amber-300
     blue:   '#5A78FF', // Firma brand blue
@@ -130,7 +155,7 @@ export function ConcentricRings({ rings, size = 128, centerTop, centerBottom }: 
                         <g key={i}>
                             <circle cx={c} cy={c} r={R} fill="none" stroke="rgba(55, 53, 47, 0.07)" strokeWidth={thickness} />
                             {arc > 0 && (
-                                <circle cx={c} cy={c} r={R} fill="none" stroke={r.hex} strokeWidth={thickness} strokeDasharray={`${arc} ${C}`} strokeLinecap="round" style={{ filter: 'drop-shadow(0 1px 1.5px rgba(15, 23, 42, 0.16))' }} />
+                                <circle cx={c} cy={c} r={R} fill="none" strokeWidth={thickness} strokeDasharray={`${arc} ${C}`} strokeLinecap="round" style={{ stroke: r.hex, filter: 'drop-shadow(0 1px 1.5px rgba(15, 23, 42, 0.16))' }} />
                             )}
                         </g>
                     )
@@ -151,7 +176,7 @@ export function PlanningGapRow({ hex, label, missing, total }: { hex: string; la
         <div className="flex items-center gap-2 text-xs">
             <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: hex }} />
             <span className="text-fg-muted truncate flex-1">{label}</span>
-            <span className={`shrink-0 font-medium tabular-nums ${missing > 0 ? 'text-amber-600' : 'text-fg-subtle'}`}>{missing}/{total} not set</span>
+            <span className={`shrink-0 font-medium tabular-nums ${missing > 0 ? 'text-status-waiting-fg' : 'text-fg-subtle'}`}>{missing}/{total} not set</span>
         </div>
     )
 }
@@ -167,10 +192,11 @@ export function ScoreDeductions({ penalties, emptyText, className = '' }: {
     className?: string
 }) {
     // Severity as plain colored text — a tinted chip here read as decoration rather than meaning.
-    const severity = (pts: number) => pts >= 15 ? { text: 'High', cls: 'text-red-600' } : pts >= 8 ? { text: 'Medium', cls: 'text-amber-600' } : { text: 'Low', cls: 'text-fg-subtle' }
-    const deductClass = (pts: number) => pts >= 15 ? 'text-red-600 font-bold' : pts >= 8 ? 'text-amber-600 font-semibold' : 'text-fg-subtle font-medium'
+    // Severity in the status palette: High is problem red, Medium waiting amber, Low gray.
+    const severity = (pts: number) => pts >= 15 ? { text: 'High', cls: 'text-status-problem-fg' } : pts >= 8 ? { text: 'Medium', cls: 'text-status-waiting-fg' } : { text: 'Low', cls: 'text-fg-subtle' }
+    const deductClass = (pts: number) => pts >= 15 ? 'text-status-problem-fg font-bold' : pts >= 8 ? 'text-status-waiting-fg font-semibold' : 'text-fg-subtle font-medium'
     if (penalties.length === 0) {
-        return <p className={`pt-3 border-t border-line text-[11px] text-green-600 font-medium text-center ${className}`}>{emptyText}</p>
+        return <p className={`pt-3 border-t border-line text-[11px] text-status-done-fg font-medium text-center ${className}`}>{emptyText}</p>
     }
     return (
         <div className={`pt-3 border-t border-line flex flex-col gap-2 ${className}`}>
@@ -179,7 +205,7 @@ export function ScoreDeductions({ penalties, emptyText, className = '' }: {
                 const sev = severity(p.points)
                 return (
                     <div key={p.label} className="flex items-center gap-1.5 text-[11px]">
-                        <span className={`h-2 w-2 rounded-full shrink-0 ${p.points >= 15 ? 'bg-red-400' : p.points >= 8 ? 'bg-amber-400' : 'bg-slate-300'}`} />
+                        <span className={`h-2 w-2 rounded-full shrink-0 ${p.points >= 15 ? 'bg-status-problem-bar' : p.points >= 8 ? 'bg-status-waiting-bar' : 'bg-status-not-started-bar'}`} />
                         <span className="text-fg-muted truncate flex-1">{p.label}</span>
                         <span className={`shrink-0 text-[11px] font-medium ${sev.cls}`}>{sev.text}</span>
                         <span className={`tabular-nums shrink-0 ${deductClass(p.points)}`}>−{p.points}</span>

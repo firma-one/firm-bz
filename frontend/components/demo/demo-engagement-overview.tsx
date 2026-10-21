@@ -21,7 +21,7 @@ import {
 } from 'lucide-react'
 import { InsightCard } from '@/components/dashboard/insight-card'
 import { ActionList, attentionCount, type ActionItem } from '@/components/dashboard/action-list'
-import { RING } from '@/components/projects/insight-rings'
+import { DATA } from '@/components/projects/insight-rings'
 import {
     DeliverablesTimeline,
     FileOrganizationSection,
@@ -223,9 +223,9 @@ export function DemoEngagementOverview({ engagement }: { engagement: DemoEngagem
                         joined={3}
                         invited={1}
                         roles={[
-                            { label: 'Admin', hex: RING.green, value: 1 },
-                            { label: 'Member', hex: RING.blue, value: 1 },
-                            { label: 'Collaborator', hex: RING.indigo, value: 1 },
+                            { label: 'Admin', hex: DATA.category1, value: 1 },
+                            { label: 'Member', hex: DATA.category2, value: 1 },
+                            { label: 'Collaborator', hex: DATA.category3, value: 1 },
                         ]}
                         internal={2}
                         external={1}

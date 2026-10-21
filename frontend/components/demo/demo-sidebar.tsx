@@ -37,7 +37,8 @@ import { AccessLock } from '@/components/ui/access-lock'
 import { Hint } from '@/components/ui/tooltip'
 import { ClientGroup, CountBadge, SidebarItem, SidebarSection } from '@/components/shell/sidebar-v2'
 import { FirmMark } from '@/components/shell/workspace-switcher'
-import { ENGAGEMENT_STATUS, TAG_DOT_CLASSES } from '@/lib/ui/status-colors'
+import { StatusIcon } from '@/components/ui/status-icon'
+import { statusOf } from '@/lib/ui/status'
 import { cn } from '@/lib/utils'
 import { DEMO_FIRM } from '@/lib/demo/static-demo-data'
 
@@ -60,7 +61,7 @@ export function demoFirmView(pathname: string, tab: string | null): string | nul
 export function DemoSidebar({ inboxCount }: { inboxCount: number }) {
     const pathname = usePathname() ?? ''
     const view = demoFirmView(pathname, useSearchParams()?.get('tab') ?? null)
-    const active = ENGAGEMENT_STATUS.ACTIVE
+    const active = statusOf('engagement', 'ACTIVE')
 
     return (
         <nav aria-label="Main" className="flex h-full w-full flex-col bg-surface-sidebar text-fg">
@@ -133,15 +134,7 @@ export function DemoSidebar({ inboxCount }: { inboxCount: number }) {
                                         key={e.slug}
                                         href={href}
                                         className="pl-6"
-                                        icon={
-                                            <span className="relative flex text-fg-subtle group-hover:text-fg-muted">
-                                                <Briefcase />
-                                                <span
-                                                    aria-hidden
-                                                    className={cn('absolute -bottom-0.5 -right-0.5 h-1.5 w-1.5 rounded-full ring-2 ring-surface-sidebar', TAG_DOT_CLASSES[active.color])}
-                                                />
-                                            </span>
-                                        }
+                                        icon={<StatusIcon stage={active.stage} label={active.label} />}
                                         label={e.name}
                                         active={pathname.startsWith(href)}
                                     />

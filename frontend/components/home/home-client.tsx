@@ -4,7 +4,9 @@ import { useMemo, useState } from "react"
 import { Briefcase, Building2, Users } from "lucide-react"
 import { formatDistanceToNowStrict, format } from "date-fns"
 import { ListGroup, ListRow } from "@/components/ui/list-row"
-import { StatusPill } from "@/components/ui/tag"
+import { StatusPill } from "@/components/ui/status-pill"
+import { StatusIcon } from "@/components/ui/status-icon"
+import { statusOf } from "@/lib/ui/status"
 import { EmptyPanel } from "@/components/ui/empty-panel"
 import { cn } from "@/lib/utils"
 import { Hint } from "@/components/ui/tooltip"
@@ -57,7 +59,6 @@ function ClientAndFirm({ client, firm }: { client: string; firm?: string }) {
 }
 
 const STATUS_ORDER = ["ACTIVE", "PLANNED", "PAUSED", "COMPLETED"]
-const STATUS_TITLES: Record<string, string> = { ACTIVE: "Active", PLANNED: "Planned", PAUSED: "Paused", COMPLETED: "Completed" }
 
 /**
  * Linear-style "My engagements": open by default, grouped by client or status — and, on the
@@ -138,12 +139,13 @@ export function MyEngagementsList({
                     {groups.map(([key, items]) => (
                         <ListGroup
                             key={key}
-                            title={grouping === "status" ? STATUS_TITLES[key] ?? key : key}
+                            title={grouping === "status" ? statusOf("engagement", key).label : key}
                             count={items.length}
                             icon={
                                 grouping === "firm" ? <Building2 className={GROUP_ICON_CLASS} aria-hidden />
                                 : grouping === "client" ? <Users className={GROUP_ICON_CLASS} aria-hidden />
-                                : undefined
+                                // By status, each group leads with its stage's icon (the status language).
+                                : <StatusIcon stage={statusOf("engagement", key).stage} />
                             }
                         >
                             {items.map((e) => (

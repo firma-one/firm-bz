@@ -63,7 +63,7 @@ import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Hint, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { ActionList, type ActionItem } from '@/components/dashboard/action-list'
-import { ConcentricRings, Donut, PlanningGapRow, RING, RingWithLegend, ScoreDeductions } from './insight-rings'
+import { ConcentricRings, DATA, Donut, PlanningGapRow, RING, RingWithLegend, ScoreDeductions } from './insight-rings'
 import { DocumentIcon } from '@/components/ui/document-icon'
 import type { EngagementInsightsResponse, UnansweredThreadItem, DocumentDueDateItem, RecentDocumentItem, SensitiveFileItem, DeliverableProgress, DeliverableStage, EngagementHealthScore, PlanningHygiene, CommentThreads, EngagementPace, FirstTimeRight } from '@/app/api/projects/[projectId]/insights/route'
 import { updateEngagementInsightsSummary, approveEngagementAiSummary, dismissEngagementAiSummary } from '@/lib/actions/project'
@@ -333,12 +333,13 @@ function TeamStatusBody({ data }: { data: EngagementInsightsResponse }) {
 // ─── Shares Progress Card ────────────────────────────────────────────────────
 
 
-// Palette for role rings — leans on the shared RING palette so team rings match the health rings.
+// Roles aren't statuses, so the team bars use the categorical gray ramp (DATA), darkest for the
+// firm side's lead, lightest for the client side's reviewer.
 const ROLE_META: Record<string, { label: string; hex: string }> = {
-    eng_admin:            { label: 'Admin',        hex: RING.green },   // Engagement Lead — firm side, top authority
-    eng_member:           { label: 'Member',       hex: RING.blue },    // Team Member — firm side
-    eng_ext_collaborator: { label: 'Collaborator', hex: RING.indigo },  // External Collaborator — client side
-    eng_viewer:           { label: 'Reviewer',     hex: RING.amber },   // External Reviewer — client side
+    eng_admin:            { label: 'Admin',        hex: DATA.category1 },  // Engagement Lead — firm side, top authority
+    eng_member:           { label: 'Member',       hex: DATA.category2 },  // Team Member — firm side
+    eng_ext_collaborator: { label: 'Collaborator', hex: DATA.category3 },  // External Collaborator — client side
+    eng_viewer:           { label: 'Reviewer',     hex: DATA.category4 },  // External Reviewer — client side
 }
 const INTERNAL_ROLES = new Set(['eng_admin', 'eng_member'])
 
@@ -347,7 +348,7 @@ function teamSectionProps(data: EngagementInsightsResponse) {
     const roleEntries = Object.entries(data.membersByRole).filter(([, c]) => c > 0)
     const roles: ChartSegment[] = roleEntries.map(([role, count]) => ({
         label: ROLE_META[role]?.label ?? role,
-        hex: ROLE_META[role]?.hex ?? RING.gray,
+        hex: ROLE_META[role]?.hex ?? DATA.category4,
         value: count,
     }))
     const internal = roleEntries.filter(([role]) => INTERNAL_ROLES.has(role)).reduce((s, [, c]) => s + c, 0)

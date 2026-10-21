@@ -15,7 +15,8 @@ import {
     NotionTableHeader,
     NotionTableRow,
 } from '@/components/ui/notion-table'
-import { StatusPill, Tag } from '@/components/ui/tag'
+import { Tag } from '@/components/ui/tag'
+import { StatusPill } from '@/components/ui/status-pill'
 import { PersonAvatar } from '@/components/ui/property-cells'
 import { EmptyPanel } from '@/components/ui/empty-panel'
 import { ShimmerBar, ShimmerBlock } from '@/components/ui/shimmer'

@@ -3,7 +3,7 @@
 import React from 'react'
 import { Info } from 'lucide-react'
 import { Hint } from '@/components/ui/tooltip'
-import { Tag } from '@/components/ui/tag'
+import { STAGE_PILL_CLASSES, type StatusStage } from '@/lib/ui/status'
 import { cn } from '@/lib/utils'
 import { paceStatus } from '@/lib/insights/pace'
 
@@ -124,6 +124,16 @@ export function Meter({ label, valueText, pct, hex, muted = false, info }: {
 /** Where delivery stands against the clock, as a tag. The rule lives in lib, shared with the Firm Overview. */
 export { paceStatus }
 
+/**
+ * Pace in the status palette (app-design-refinements.md, "Data colors"): on pace is Done, behind is
+ * Waiting, and only far behind (delivery more than 35 points under the clock) is red. The rule that
+ * names the state (lib/insights/pace.ts) is unchanged; this only colors it.
+ */
+function paceStage(deliveredPct: number, timePct: number, color: 'green' | 'yellow' | 'red'): StatusStage {
+    if (color === 'green') return 'done'
+    return timePct - deliveredPct > 35 ? 'problem' : 'waiting'
+}
+
 /** Delivered against time elapsed, two short bars on one scale, so behind-pace is visible. */
 export function PaceBars({ deliveredPct, timePct, hex }: { deliveredPct: number; timePct: number; hex: { delivered: string; time: string } }) {
     const status = paceStatus(deliveredPct, timePct)
@@ -140,7 +150,11 @@ export function PaceBars({ deliveredPct, timePct, hex }: { deliveredPct: number;
             ))}
             {/* A flex row, not a plain block: the PDF export (html2canvas) paints an inline tag's
                 background over its own text, which left an empty pink chip. */}
-            <div className="flex"><Tag color={status.color} dot>{status.text}</Tag></div>
+            <div className="flex">
+                <span className={cn('inline-flex h-5 items-center whitespace-nowrap rounded-control px-1.5 text-caption', STAGE_PILL_CLASSES[paceStage(deliveredPct, timePct, status.color)])}>
+                    {status.text}
+                </span>
+            </div>
         </div>
     )
 }
@@ -158,7 +172,7 @@ export function Stat({ label, value, caption, emptyCaption, info, tone }: {
     info?: string
     tone?: 'good' | 'warning' | 'bad'
 }) {
-    const toneClass = tone === 'bad' ? 'text-danger' : tone === 'warning' ? 'text-tag-orange-fg' : 'text-fg'
+    const toneClass = tone === 'bad' ? 'text-danger' : tone === 'warning' ? 'text-status-waiting-fg' : 'text-fg'
     return (
         <div className="flex min-w-0 flex-col gap-1">
             <div className="flex items-center gap-1.5">

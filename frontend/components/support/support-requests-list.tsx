@@ -1,5 +1,6 @@
 'use client'
 
+import { StatusPill } from '@/components/ui/status-pill'
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { TicketType } from '@prisma/client'
 import { AlertCircle, Lightbulb, HelpCircle, MessagesSquare, Copy, Check, Eye, Clock, ChevronDown, RefreshCw, Search, X, CircleChevronLeft } from "lucide-react"
@@ -47,13 +48,6 @@ const TYPE_CONFIG = {
   [TicketType.BUG]: { label: 'Bug Report', icon: AlertCircle, color: 'text-rose-500', bgColor: 'bg-rose-50' },
   [TicketType.REQUEST]: { label: 'Feature Request', icon: Lightbulb, color: 'text-amber-500', bgColor: 'bg-amber-50' },
   [TicketType.ENQUIRY]: { label: 'General Enquiry', icon: HelpCircle, color: 'text-sky-500', bgColor: 'bg-sky-50' },
-}
-
-const STATUS_COLORS: Record<string, string> = {
-  NEW: 'bg-sky-50 text-sky-500 border-sky-200',
-  IN_PROGRESS: 'bg-amber-50 text-amber-500 border-amber-200',
-  RESOLVED: 'bg-emerald-50 text-emerald-500 border-emerald-200',
-  CLOSED: 'bg-surface-subtle text-slate-400 border-slate-200',
 }
 
 const ALL_STATUSES = ['NEW', 'IN_PROGRESS', 'RESOLVED', 'CLOSED']
@@ -445,7 +439,6 @@ export function SupportRequestsList({ firmSlug }: SupportRequestsListProps) {
               const config = TYPE_CONFIG[request.type]
               const Icon = config.icon
               const commentCount = Array.isArray(request.comments) ? request.comments.length : 0
-              const statusColor = STATUS_COLORS[request.status || 'NEW']
 
               const isCommentActive = request.ticketNumber === activeCommentTicketId
               const isDetailsActive = request.ticketNumber === activeDetailsTicketId
@@ -537,9 +530,8 @@ export function SupportRequestsList({ firmSlug }: SupportRequestsListProps) {
 
                   {/* Status */}
                   <td className="px-3 py-2 overflow-hidden" style={{ width: '125px' }}>
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border whitespace-nowrap ${statusColor}`}>
-                      {(request.status || 'NEW').replace(/_/g, ' ')}
-                    </span>
+                    {/* The status language: New, In progress, Resolved, Closed (lib/ui/status.ts). */}
+                    <StatusPill kind="ticket" status={request.status || 'NEW'} />
                   </td>
 
                   {/* Created */}

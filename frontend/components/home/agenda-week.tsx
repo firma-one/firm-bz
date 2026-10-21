@@ -10,6 +10,8 @@ import { EmptyPanel } from "@/components/ui/empty-panel"
 import { ShimmerBar } from "@/components/ui/shimmer"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
+import { StatusIcon } from "@/components/ui/status-icon"
+import { statusOf } from "@/lib/ui/status"
 
 type AgendaEventType = CalendarEventType | "reminder"
 
@@ -50,6 +52,8 @@ export type AgendaDueItem = {
     context: string
     href: string
     date: string
+    /** The deliverable's stage or the engagement's status; the chip leads with its StatusIcon. */
+    status?: string | null
 }
 
 const TYPE_ICON: Record<AgendaEventType, typeof Briefcase> = {
@@ -162,13 +166,14 @@ export function AgendaWeek({
                         </span>
                         {shownOverdue.map((d) => {
                             const Icon = DUE_KIND_ICON[d.kind]
+                            const status = d.status && d.kind !== "reminder" ? statusOf(d.kind, d.status) : null
                             return (
                                 <ChipTooltip key={d.id} title={d.title} detail={`${d.context} · due ${format(new Date(d.date), "MMM d")}`}>
                                     <Link
                                         href={d.href}
                                         className="flex min-w-0 max-w-[18rem] items-center gap-1 rounded bg-tag-red-bg px-1.5 py-0.5 text-caption font-medium text-tag-red-fg transition-[filter] hover:brightness-95"
                                     >
-                                        <Icon className="h-3 w-3 shrink-0" />
+                                        {status ? <StatusIcon stage={status.stage} size={12} label={status.label} /> : <Icon className="h-3 w-3 shrink-0" />}
                                         <span className="truncate">{d.title}</span>
                                         <span className="shrink-0 font-normal tabular-nums opacity-80">· {format(new Date(d.date), "MMM d")}</span>
                                     </Link>
