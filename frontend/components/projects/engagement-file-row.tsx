@@ -11,7 +11,10 @@ import { SharedFolderIcon } from '@/components/ui/folder-shared-icon'
 import { DocumentActionMenu } from '@/components/ui/document-action-menu'
 import { ProfileBubbleWithPopup } from '@/components/ui/profile-bubble-popup'
 import { RelativeDateTime } from '@/components/ui/relative-date-time'
-import { DateProperty } from '@/components/ui/property-cells'
+import { DateProperty, StatusProperty } from '@/components/ui/property-cells'
+import { getAllowedTransitions, type EngagementRoleSlug } from '@/lib/deliverable-stage-roles'
+import { statusOf } from '@/lib/ui/status'
+import type { ActivityStatus } from '@/lib/sharing-settings'
 import { Checkbox } from '@/components/ui/checkbox'
 import { StatusPill } from '@/components/ui/status-pill'
 import {
@@ -116,6 +119,8 @@ export interface EngagementFileRowProps {
     hideBadges?: boolean
     /** When true, the current folder is an approved deliverable — disable all write operations. */
     isInsideApprovedDeliverable?: boolean
+    /** The viewer's engagement role: decides which stages they may move a row to (as on the Board). */
+    roleSlug?: EngagementRoleSlug | null
 }
 
 export function EngagementFileRow({
@@ -185,6 +190,7 @@ export function EngagementFileRow({
     bookmarkId,
     hideBadges = false,
     isInsideApprovedDeliverable = false,
+    roleSlug = null,
 }: EngagementFileRowProps) {
     const isDeeplinkHighlight = file.id === highlightedFileId
     const isFolder = (file.mimeType ?? (file as { type?: string }).type) === 'application/vnd.google-apps.folder'
@@ -213,6 +219,10 @@ export function EngagementFileRow({
     const isTracked = !!file.isDeliverable || isInsideApprovedDeliverable
         || (isGuest ? descendantIdsForGuest : isEC ? descendantIdsForEC : descendantIds).has(file.id)
     const emptyTrackedValue = isTracked ? 'Not set' : '—'
+    // A row's own stage: the deliverable's, or a document's inside one.
+    const statusValue = file.activityStatus ?? (file.isDeliverable ? file.deliverableStatus : null) ?? null
+    // Changeable in place on tracked rows, until the deliverable is approved; the role decides which moves.
+    const canEditStatus = isTracked && !!roleSlug && !!file.projectDocumentId && !isIntakeRow && !isFolderApproved && !isInsideApprovedDeliverable
     const isIndexing = !isFolder && !!file.projectDocumentId && file.indexingStatus === 'PROCESSING'
     // Row tools appear on hover or keyboard focus, and stay while the row is in use.
     const toolsPinned = isActionMenuOpen || isSelected || isIndexing || file.id === activePreviewDocId || file.id === highlightedFileId
@@ -577,13 +587,25 @@ export function EngagementFileRow({
                 </div>
             </div>
 
-            {/* Status Column: a deliverable's stage, the same pill as on the Board */}
-            <div className={cn('min-w-0 items-center', STATUS_COL_CLASS, FILE_TABLE_COL_LINE_CLASS)}>
-                {hasStatus ? (
-                    <StatusPill kind="deliverable" status={file.deliverableStatus!} />
-                ) : (
-                    <span className={cn('text-[0.8125rem]', isTracked ? 'text-fg-subtle' : 'text-[#45474c]/40')}>{emptyTrackedValue}</span>
-                )}
+            {/* Status Column: the stage of a deliverable or a document inside one, the same pill as on the Board.
+                It changes in place, to the stages the viewer's role may move it to (lib/deliverable-stage-roles.ts). */}
+            <div className={cn('min-w-0 items-center', STATUS_COL_CLASS, FILE_TABLE_COL_LINE_CLASS)} onClick={(e) => { if (canEditStatus) e.stopPropagation() }}>
+                <FileStatusCell
+                    projectId={projectId}
+                    documentId={file.projectDocumentId ?? file.id}
+                    fileName={file.name}
+                    isFolder={isFolder}
+                    status={statusValue}
+                    roleSlug={canEditStatus ? roleSlug : null}
+                    emptyLabel={emptyTrackedValue}
+                    emptyClassName={isTracked ? 'text-fg-subtle' : 'text-[#45474c]/40'}
+                    onSaved={(next) => {
+                        file.activityStatus = next
+                        if (file.isDeliverable) file.deliverableStatus = next
+                        onShareSaved()
+                    }}
+                    onAddToast={onAddToast}
+                />
             </div>
 
             {/* Due Column — leads edit it in place (Notion-style); everyone else sees the relative date.
@@ -713,6 +735,95 @@ export function EngagementFileRow({
                 </div>
             )}
         </div>
+    )
+}
+
+const STAGES: ActivityStatus[] = ['to_do', 'in_progress', 'in_review', 'approved']
+
+/**
+ * The Status cell. Read-only unless the viewer may move this row; then a picker offering only the
+ * stages their role allows from here (getAllowedTransitions, as the Board and the server use). A
+ * deliverable can't be approved while a document inside it isn't — the Board's rule, checked first.
+ */
+function FileStatusCell({
+    projectId,
+    documentId,
+    fileName,
+    isFolder,
+    status,
+    roleSlug,
+    emptyLabel,
+    emptyClassName,
+    onSaved,
+    onAddToast,
+}: {
+    projectId: string
+    documentId: string
+    fileName: string
+    isFolder: boolean
+    status: ActivityStatus | null
+    /** null when the row can't be changed here. */
+    roleSlug: EngagementRoleSlug | null
+    emptyLabel: string
+    emptyClassName: string
+    onSaved: (next: ActivityStatus) => void
+    onAddToast: (toast: { type: string; title: string; message: string }) => void
+}) {
+    const [value, setValue] = React.useState<ActivityStatus | null>(status)
+    React.useEffect(() => { setValue(status) }, [status])
+    // A document with no stage yet is at "to do" as far as the rules go.
+    const allowed = roleSlug ? getAllowedTransitions(roleSlug, value ?? 'to_do') : []
+    if (allowed.length === 0) {
+        return value
+            ? <StatusPill kind="deliverable" status={value} />
+            : <span className={cn('text-[0.8125rem]', emptyClassName)}>{emptyLabel}</span>
+    }
+    return (
+        <StatusProperty
+            kind="deliverable"
+            value={value}
+            placeholder={emptyLabel}
+            options={STAGES.filter((s) => s === value || allowed.includes(s))}
+            onChange={async (next) => {
+                const stage = next as ActivityStatus
+                const { getSession } = await import('@/lib/supabase')
+                const session = await getSession()
+                const headers = { 'Content-Type': 'application/json', ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) }
+                if (stage === 'approved' && isFolder) {
+                    const res = await fetch(`/api/projects/${projectId}/documents/${encodeURIComponent(documentId)}/subtasks`, { headers })
+                    const data = await res.json().catch(() => ({}))
+                    const unapproved = ((data.subtasks ?? []) as { status: string | null }[]).filter((t) => t.status !== 'approved').length
+                    if (!res.ok || unapproved > 0) {
+                        onAddToast({
+                            type: 'error',
+                            title: 'Cannot approve yet',
+                            message: res.ok
+                                ? `${unapproved} document${unapproved > 1 ? 's' : ''} still need to be approved before this deliverable can be approved.`
+                                : 'Could not check the documents inside it. Please try again.',
+                        })
+                        return
+                    }
+                }
+                const res = await fetch(`/api/projects/${projectId}/documents/${encodeURIComponent(documentId)}/sharing/activity`, {
+                    method: 'PATCH',
+                    headers,
+                    body: JSON.stringify({ status: stage }),
+                })
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}))
+                    onAddToast({ type: 'error', title: "Couldn't change the stage", message: err.error ?? 'Please try again.' })
+                    return
+                }
+                setValue(stage)
+                onSaved(stage)
+                onAddToast({
+                    type: 'success',
+                    title: stage === 'approved' ? 'Approved' : 'Stage updated',
+                    message: `${fileName} · ${statusOf('deliverable', stage).label}`,
+                })
+                window.dispatchEvent(new CustomEvent('pockett-notifications-updated'))
+            }}
+        />
     )
 }
 

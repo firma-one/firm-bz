@@ -45,7 +45,10 @@ import { FilterPill } from '@/components/ui/filter-pill'
 import { Hint } from '@/components/ui/tooltip'
 import { RelativeDateTime } from '@/components/ui/relative-date-time'
 import { StatusPill } from '@/components/ui/status-pill'
-import { DateProperty } from '@/components/ui/property-cells'
+import { DateProperty, StatusProperty } from '@/components/ui/property-cells'
+import { useToast } from '@/components/ui/toast'
+import { getAllowedTransitions } from '@/lib/deliverable-stage-roles'
+import { statusOf } from '@/lib/ui/status'
 import { DuePickerPanel } from '@/components/ui/due-picker'
 import { formatDue, isPastDue, readDue } from '@/lib/ui/due-date'
 import {
@@ -90,6 +93,12 @@ const MIME_BY_TYPE: Record<string, string> = {
 
 const OWNER = 'Alex Jordan'
 const NOT_IN_DEMO = 'Not available in this demo'
+const STAGES: DeliverableStatus[] = ['to_do', 'in_progress', 'in_review', 'approved']
+
+/** Every file inside a folder, at any depth. */
+function filesIn(folder: DemoFolder): DemoFile[] {
+    return [...folder.files, ...folder.subfolders.flatMap(filesIn)]
+}
 
 /** The toolbar's quiet icons, as engagement-file-list.tsx draws them: 28px, no border, a 14px glyph. */
 const TOOLBAR_ICON_CLASS =
@@ -305,6 +314,9 @@ function EntryRow({
     selected,
     onToggleSelect,
     onSetDue,
+    status,
+    statusEditable,
+    onSetStatus,
 }: {
     entry: Entry
     onOpenFolder?: () => void
@@ -317,6 +329,11 @@ function EntryRow({
     selected: boolean
     onToggleSelect: () => void
     onSetDue: (next: string | null) => void
+    /** The row's own stage: the deliverable's, or a document's inside one. */
+    status: DeliverableStatus | null
+    /** As in the app: changeable on tracked rows until their deliverable is approved. */
+    statusEditable: boolean
+    onSetStatus: (next: DeliverableStatus) => void
 }) {
     const isFolder = entry.kind === 'folder'
     const docId = isFolder ? entry.folder.docId : entry.file.docId
@@ -379,7 +396,16 @@ function EntryRow({
             </div>
 
             <div className={`min-w-0 items-center ${STATUS_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}>
-                {deliverableStatus ? <StatusPill kind="deliverable" status={deliverableStatus} /> : empty}
+                {statusEditable ? (
+                    <StatusProperty
+                        kind="deliverable"
+                        value={status}
+                        placeholder={tracked ? 'Not set' : '—'}
+                        // The tour's visitor is the engagement lead, so the lead's moves (as on the tour's Board).
+                        options={STAGES.filter((s) => s === status || getAllowedTransitions('eng_admin', status ?? 'to_do').includes(s))}
+                        onChange={(next) => onSetStatus(next as DeliverableStatus)}
+                    />
+                ) : status ? <StatusPill kind="deliverable" status={status} /> : empty}
             </div>
 
             <div className={`items-center ${DUE_DATE_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}>
@@ -431,8 +457,28 @@ export function DemoFileList({
     const [path, setPath] = useState<DemoFolder[]>([])
     const [selected, setSelected] = useState<Set<string>>(new Set())
     const [deliverablesOnly, setDeliverablesOnly] = useState(false)
-    // Due dates set on the tour, by row: the one edit the demo keeps (until the page reloads).
+    // Due dates and stages set on the tour, by row: the edits the demo keeps (until the page reloads).
     const [dueOverrides, setDueOverrides] = useState<Record<string, string | null>>({})
+    const [statusOverrides, setStatusOverrides] = useState<Record<string, DeliverableStatus>>({})
+    const { addToast } = useToast()
+    const statusFor = (entry: Entry): DeliverableStatus | null => {
+        const id = entryId(entry)
+        return statusOverrides[id] ?? (entry.kind === 'folder' ? deliverableStatusByFolderId?.[id] ?? null : null)
+    }
+    const deliverableApproved = path.length > 0 && (statusOverrides[path[0].id] ?? deliverableStatusByFolderId?.[path[0].id]) === 'approved'
+    // As in the app (and the Board): a deliverable isn't approved while a document inside it isn't.
+    const setStatus = (entry: Entry, next: DeliverableStatus) => {
+        if (next === 'approved' && entry.kind === 'folder') {
+            const unapproved = filesIn(entry.folder).filter((f) => statusOverrides[f.id] !== 'approved').length
+            if (unapproved > 0) {
+                addToast({ type: 'error', title: 'Cannot approve yet', message: `${unapproved} document${unapproved > 1 ? 's' : ''} still need to be approved before this deliverable can be approved.` })
+                return
+            }
+        }
+        setStatusOverrides((prev) => ({ ...prev, [entryId(entry)]: next }))
+        const name = entry.kind === 'folder' ? entry.folder.name.replace(/_+/g, ' ').trim() : entry.file.name
+        addToast({ type: 'success', title: next === 'approved' ? 'Approved' : 'Stage updated', message: `${name} · ${statusOf('deliverable', next).label}` })
+    }
 
     const allFolders = path.length === 0 ? folders : path[path.length - 1].subfolders
     const allFiles = path.length === 0 ? [] : path[path.length - 1].files
@@ -595,7 +641,10 @@ export function DemoFileList({
                                 key={id}
                                 entry={entry}
                                 onOpenFolder={entry.kind === 'folder' ? () => openFolder([...path, entry.folder]) : undefined}
-                                deliverableStatus={entry.kind === 'folder' ? deliverableStatusByFolderId?.[id] : undefined}
+                                deliverableStatus={entry.kind === 'folder' ? (statusOverrides[id] ?? deliverableStatusByFolderId?.[id]) : undefined}
+                                status={statusFor(entry)}
+                                statusEditable={(insideDeliverable && !deliverableApproved) || (entry.kind === 'folder' && !!deliverableStatusByFolderId?.[id] && statusFor(entry) !== 'approved')}
+                                onSetStatus={(next) => setStatus(entry, next)}
                                 dueDate={id in dueOverrides ? dueOverrides[id] : entry.kind === 'folder' ? deliverableDueByFolderId?.[id] : null}
                                 onSetDue={(next) => setDueOverrides((prev) => ({ ...prev, [id]: next }))}
                                 tracked={insideDeliverable || (entry.kind === 'folder' && !!deliverableStatusByFolderId?.[id])}

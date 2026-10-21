@@ -254,6 +254,8 @@ export interface DriveFile {
   isDeliverable?: boolean
   /** Activity status of this deliverable folder (only set when isDeliverable=true). */
   deliverableStatus?: 'to_do' | 'in_progress' | 'in_review' | 'approved' | null
+  /** This document's own stage, deliverable or not — a document inside a deliverable has one too. */
+  activityStatus?: 'to_do' | 'in_progress' | 'in_review' | 'approved' | null
   /** Jira-style short ID (e.g. "VDK-43") assigned to this document. */
   docId?: string | null
   /** 'LINK' for a non-connector-backed external URL row created via "New Link"; absent/'FILE' otherwise. */

@@ -49,17 +49,21 @@ export function StatusProperty({
     options,
     onChange,
     disabled,
+    placeholder = "Empty",
 }: {
     kind: StatusKind
-    value: string
+    /** null shows the placeholder, as a document with no stage yet. */
+    value: string | null
+    /** The statuses to offer. Leave out moves the viewer can't make (Files lists only allowed ones). */
     options: string[]
     onChange: (next: string) => unknown | Promise<unknown>
     disabled?: boolean
+    placeholder?: string
 }) {
     const [open, setOpen] = React.useState(false)
     const { saving, run } = useSaving(onChange)
     // The status language (lib/ui/status.ts). Overdue is shown on the date, not here.
-    const pill = <StatusPill kind={kind} status={value} />
+    const pill = value ? <StatusPill kind={kind} status={value} /> : <span className="text-small"><Empty label={placeholder} /></span>
     if (disabled) return <span className="inline-flex h-7 items-center px-1.5">{pill}</span>
     return (
         <Popover open={open} onOpenChange={setOpen}>

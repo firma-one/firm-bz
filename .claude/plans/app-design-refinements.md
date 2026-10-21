@@ -374,6 +374,13 @@ From the canvas's section 7 (the full "views" redesign was judged too extreme; t
   for files and deliverable folders. For a deliverable or anything inside one, an empty value reads
   "Not set"; other rows show a dash. Columns hide from the right as the pane narrows: Size, Modified,
   Owner, Due, then Status.
+- **Status changes in place.** On a deliverable or a document inside one, the Status cell is a picker
+  offering only the stages the viewer's role may move it to, from `getAllowedTransitions` — the rules the
+  Board and the server already share (lead: one step either way, and approve; member: one step either way,
+  no approval; external collaborator: In progress → In review; viewer: In review → In progress; nothing
+  leaves Approved). As on the Board, a deliverable isn't approved while a document inside it isn't. The
+  listing now returns every document's own stage (`activityStatus`), so documents inside a deliverable
+  show theirs. The tour's visitor gets the lead's moves.
 - **"Due", everywhere.** Field labels, column headers, tooltips and placeholders say "Due" (and "Start"),
   not "Due date". Sentences keep "due date".
 - **Document action menu.** Stays three levels for now, made compact: 288px wide, 13px text, 26px rows,

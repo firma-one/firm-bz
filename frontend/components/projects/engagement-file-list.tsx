@@ -25,6 +25,7 @@ import { DocumentDocCommentsPane } from '@/components/projects/document-doc-comm
 import { formatFileSize } from '@/lib/utils'
 import { clientTabPath, firmSettingsPath } from '@/lib/navigation/firm-paths'
 import { DriveFile } from '@/lib/types'
+import type { EngagementRoleSlug } from '@/lib/deliverable-stage-roles'
 import { useAuth } from '@/lib/auth-context'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -97,6 +98,8 @@ interface EngagementFileListProps {
     isFirmAdmin?: boolean
     /** When true (e.g. user is eng_ext_collaborator or eng_viewer), only show files/folders that are shared to External Collaborator or Guest. */
     restrictToSharedOnly?: boolean
+    /** The viewer's engagement role: which stages they may move a row to in the Status column. */
+    roleSlug?: EngagementRoleSlug | null
     /** Optional; used for secure-open modal thumbnail. */
     firmId?: string
     groupSlug?: string
@@ -295,7 +298,7 @@ function FileTableSkeleton({ rows = 8 }: { rows?: number }) {
     )
 }
 
-export function EngagementFileList({ projectId, connectorRootFolderId, clientConnectorId, clientConnectorType, workspaceRootLocation, rootFolderName = 'Engagement Files', orgName, clientName, projectName, canEdit = false, canManage = false, isFirmAdmin = false, restrictToSharedOnly = false, firmId, groupSlug, orgSlug, firmSandboxOnly = false, navSlot, clientSlug, connectorAccountEmail, onFileCountChange }: EngagementFileListProps) {
+export function EngagementFileList({ projectId, connectorRootFolderId, clientConnectorId, clientConnectorType, workspaceRootLocation, rootFolderName = 'Engagement Files', orgName, clientName, projectName, canEdit = false, canManage = false, isFirmAdmin = false, restrictToSharedOnly = false, roleSlug = null, firmId, groupSlug, orgSlug, firmSandboxOnly = false, navSlot, clientSlug, connectorAccountEmail, onFileCountChange }: EngagementFileListProps) {
     const isOneDriveClient = clientConnectorType === 'ONEDRIVE'
     /** Display name of the client's storage provider — used in user-facing copy so it never hardcodes "Google Drive". */
     const storageProviderName = isOneDriveClient ? 'OneDrive' : 'Google Drive'
@@ -3013,6 +3016,7 @@ const handleRefresh = async () => {
                                     onDrop={handleItemDrop}
                                     onItemClick={handleItemClick}
                                     isProjectLead={isProjectLead}
+                                    roleSlug={roleSlug}
                                     restrictToSharedOnly={restrictToSharedOnly}
                                     viewAsPersonaSlug={viewAsPersonaSlug}
                                     canManage={canManage && !currentFolderIsApprovedDeliverable}
