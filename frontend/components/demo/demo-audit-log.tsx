@@ -35,7 +35,7 @@ export type DemoAuditRow = {
 /**
  * Static counterpart to AuditWithFilters (components/audit/audit-with-filters.tsx): the same filter
  * pills, count line and grid table, over rows the demo builds from its sample data. The filters
- * are shown but inert. `showScope` is the firm-wide log: a Scope filter and a Where column.
+ * are shown but inert. `showScope` is the firm-wide log: a Scope filter, and Scope and Where columns.
  */
 export function DemoAuditLog({ rows, showScope = true }: { rows: DemoAuditRow[]; showScope?: boolean }) {
     const sorted = [...rows].sort((a, b) => a.offsetDays - b.offsetDays)
@@ -61,6 +61,7 @@ export function DemoAuditLog({ rows, showScope = true }: { rows: DemoAuditRow[];
                     <NotionTableHeader className="sticky top-0 z-[1] bg-surface">
                         <NotionTableHead icon={<Clock3 />} className="w-[170px]">Date</NotionTableHead>
                         <NotionTableHead icon={<Activity />} className="w-[150px]">Event</NotionTableHead>
+                        {showScope && <NotionTableHead icon={<Layers />} className="w-[120px]">Scope</NotionTableHead>}
                         <NotionTableHead icon={<Type />}>Details</NotionTableHead>
                         {showScope && <NotionTableHead icon={<Briefcase />} className="w-[240px]">Where</NotionTableHead>}
                         <NotionTableHead icon={<User />} className="w-[180px]">Actor</NotionTableHead>
@@ -89,6 +90,7 @@ export function DemoAuditLog({ rows, showScope = true }: { rows: DemoAuditRow[];
                                                 <Tag color={row.eventAction === 'Deleted' ? 'red' : 'gray'}>{row.eventAction}</Tag>
                                             </div>
                                         </NotionTableCell>
+                                        {showScope && <NotionTableCell className="truncate text-fg-muted">{row.eventScope}</NotionTableCell>}
                                         <NotionTableCell>
                                             <span className="block truncate">{row.details}</span>
                                         </NotionTableCell>

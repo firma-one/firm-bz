@@ -348,7 +348,7 @@ Every table is `NotionTable` (`components/ui/notion-table.tsx`), drawn as Notion
 - `variant="hairline"` keeps the earlier row-dividers-only style for any table that should stay quieter.
 
 Audit is the first table built on it, with the columns from the canvas mock (option B):
-Date · Event (the scope's icon and the action as a tag, red only for a deletion) · Details (takes the
-remaining width; the "approved by" clause muted) · Where (Client › Engagement, firm-wide log only; firm
-events name the firm) · Actor. The table is `table-fixed` so the set widths hold. The CSV export keeps
+Date · Event (the scope's icon and the action as a tag, red only for a deletion) · Scope (Firm, Client,
+Engagement or File; firm-wide log only) · Details (takes the remaining width; the "approved by" clause
+muted) · Where (Client › Engagement, firm-wide log only; firm events name the firm) · Actor. The table is `table-fixed` so the set widths hold. The CSV export keeps
 its columns.

@@ -1101,6 +1101,7 @@ export function AuditWithFilters({
                 </span>
               </NotionTableHead>
               <NotionTableHead icon={<Activity />} className="w-[150px]">Event</NotionTableHead>
+              {showClientProjectFilters && <NotionTableHead icon={<Layers />} className="w-[120px]">Scope</NotionTableHead>}
               <NotionTableHead icon={<Type />}>Details</NotionTableHead>
               {showClientProjectFilters && <NotionTableHead icon={<Briefcase />} className="w-[240px]">Where</NotionTableHead>}
               <NotionTableHead icon={<User />} className="w-[180px]">Actor</NotionTableHead>
@@ -1165,6 +1166,9 @@ export function AuditWithFilters({
                   <NotionTableCell>
                     <EventCell eventType={ev.eventType} />
                   </NotionTableCell>
+                  {showClientProjectFilters && (
+                    <NotionTableCell className="truncate text-fg-muted">{eventScope(ev.eventType)}</NotionTableCell>
+                  )}
                   {/* The table is fixed, so Details takes the room the set columns leave and truncates inside it. */}
                   <NotionTableCell>
                     <DetailCell ev={ev} />
