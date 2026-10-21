@@ -740,6 +740,8 @@ function FileDueDateCell({
             value={value}
             placeholder={placeholder}
             highlightOverdue
+            allowTime
+            compact
             onChange={async (next) => {
                 const { getSession } = await import('@/lib/supabase')
                 const session = await getSession()

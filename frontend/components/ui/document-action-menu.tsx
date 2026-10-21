@@ -1,12 +1,13 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
-import { createPortal } from "react-dom"
+import { useState, useCallback, useRef } from "react"
 import { Button } from "@/components/ui/button"
-import { DateTimePicker } from "@/components/ui/date-time-picker"
+import { DateProperty } from "@/components/ui/property-cells"
 import { DocumentIcon } from "@/components/ui/document-icon"
 import { UserAvatarWithTooltip } from "@/components/ui/user-avatar-with-tooltip"
-import { cn, formatFileSize, formatFullDate, formatSmartDateTime } from "@/lib/utils"
+import { cn, formatFileSize, formatSmartDateTime } from "@/lib/utils"
+import { DuePickerPanel } from "@/components/ui/due-picker"
+import { formatDue, isPastDue, readDue } from "@/lib/ui/due-date"
 import { DocumentEditPanelContent, DocumentPreviewPanelContent, getDocumentEditUrl } from "@/components/files/document-edit-sheet"
 import { DocumentPreviewPane } from "@/components/files/document-preview-pane"
 import { useRightPane } from "@/lib/right-pane-context"
@@ -34,7 +35,6 @@ import {
   Info,
   Eye,
   X,
-  XSquare,
   FolderLock,
   FolderUp,
   MessagesSquare,
@@ -49,6 +49,7 @@ import {
   Loader2,
   PackageMinus,
   Package,
+  Flag,
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -212,16 +213,17 @@ export function DocumentActionMenu({
   connectorAccountEmail,
   isOneDriveClient = false,
 }: DocumentActionMenuProps) {
-  const [showDueDatePicker, setShowDueDatePicker] = useState(false)
+  // Controlled, so picking a due date in the Due submenu can close the whole menu.
+  const [menuOpen, setMenuOpen] = useState(false)
   const [showUntagConfirm, setShowUntagConfirm] = useState(false)
   const [showTagDeliverableModal, setShowTagDeliverableModal] = useState(false)
   const [tagDeliverableDueDate, setTagDeliverableDueDate] = useState<string>("")
   const [existingBookmarkId, setExistingBookmarkId] = useState<string | null>(null)
   /** Drive id or project document UUID — disables Finalize row while request in flight */
   const [finalizeLockActiveId, setFinalizeLockActiveId] = useState<string | null>(null)
-  const [selectedDueDate, setSelectedDueDate] = useState<string>("")
+  // Bumped after a due date saves: the value lives on `document`, so this redraws the Due row.
+  const [, setDueVersion] = useState(0)
   const [hasCopiedName, setHasCopiedName] = useState(false)
-  const [mounted, setMounted] = useState(false)
   const [privateInfoOpen, setPrivateInfoOpen] = useState(false)
   const [showReminderModal, setShowReminderModal] = useState(false)
   const [reminderMembers, setReminderMembers] = useState<{ userId: string; email: string; name: string; role: string; avatarUrl?: string | null }[]>([])
@@ -236,11 +238,6 @@ export function DocumentActionMenu({
   const canOpenWithGoogleDoc = mime.includes('document') || mime.includes('vnd.google-apps.document')
   const canOpenWithGoogleSheet = mime.includes('spreadsheet') || mime.includes('vnd.google-apps.spreadsheet')
   const canOpenWithGoogleSlide = mime.includes('presentation') || mime.includes('vnd.google-apps.presentation')
-
-  // Ensure we're on the client side
-  useEffect(() => {
-    setMounted(true)
-  }, [])
 
   // Handle copy name
   const handleCopyName = (e: React.MouseEvent, text: string) => {
@@ -277,8 +274,7 @@ export function DocumentActionMenu({
       }
 
       document.dueDate = dateTime || null
-      setSelectedDueDate(dateTime)
-      setShowDueDatePicker(false)
+      setDueVersion((v) => v + 1)
 
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('pockett-notifications-updated'))
@@ -498,12 +494,13 @@ export function DocumentActionMenu({
     : 'Items in the Google Drive trash are permanently deleted after 30 days.'
   const modifiedAt = [document.modifiedTime, document.createdTime].find((t) => t && !Number.isNaN(new Date(t).getTime())) as string | undefined
   // The due date shown on its menu item; red when overdue (past due and not yet approved).
-  const dueDate = document.dueDate && !Number.isNaN(new Date(document.dueDate).getTime()) ? new Date(document.dueDate) : null
-  const dueOverdue = !!dueDate && dueDate.getTime() < Date.now() && deliverableStatus !== 'approved' && !isApprovedDeliverable
+  const due = readDue(document.dueDate)
+  const dueOverdue = !!due && isPastDue(due) && deliverableStatus !== 'approved' && !isApprovedDeliverable
 
   return (
     <>
-      <DropdownMenu onOpenChange={async (open) => {
+      <DropdownMenu open={menuOpen} onOpenChange={async (open) => {
+        setMenuOpen(open)
         onOpenChange?.(open)
         if (open) {
           const projectDocumentId = (document as any)?.projectDocumentId as string | undefined
@@ -1094,7 +1091,7 @@ export function DocumentActionMenu({
                         <div className="flex items-center gap-2 px-2 py-1 text-small text-fg-subtle opacity-50 cursor-not-allowed select-none">
                           <Calendar className="h-3.5 w-3.5 text-fg-subtle" />
                           <span>Due</span>
-                          <span className={`ml-auto pl-3 text-small tabular-nums ${dueOverdue ? 'text-danger' : 'text-fg-subtle'}`}>{dueDate ? formatFullDate(dueDate) : 'Not set'}</span>
+                          <span className={`ml-auto pl-3 text-small tabular-nums ${dueOverdue ? 'text-danger' : 'text-fg-subtle'}`}>{due ? formatDue(due) : 'Not set'}</span>
                         </div>
                       </TooltipTrigger>
                       <TooltipContent side="right" className="text-xs max-w-48">
@@ -1103,14 +1100,31 @@ export function DocumentActionMenu({
                     </Tooltip>
                   </TooltipProvider>
                 ) : (
-                  <DropdownMenuItem
-                    onClick={() => setShowDueDatePicker(true)}
-                    className="flex cursor-pointer items-center gap-2"
-                  >
-                    <Calendar className="h-3.5 w-3.5 text-fg-muted" />
-                    <span>Due</span>
-                    <span className={`ml-auto pl-3 text-small tabular-nums ${dueOverdue ? 'text-danger' : 'text-fg-subtle'}`}>{dueDate ? formatFullDate(dueDate) : 'Not set'}</span>
-                  </DropdownMenuItem>
+                  <DropdownMenuSub>
+                    <DropdownMenuSubTrigger className="flex cursor-pointer items-center gap-2">
+                      <Calendar className="h-3.5 w-3.5 text-fg-muted" />
+                      <span className="flex flex-1 items-center">
+                        Due
+                        <span className={`ml-auto pl-3 text-small tabular-nums ${dueOverdue ? 'text-danger' : 'text-fg-subtle'}`}>{due ? formatDue(due) : 'Not set'}</span>
+                      </span>
+                    </DropdownMenuSubTrigger>
+                    {/* The shared date picker (due-picker.tsx) opens beside the row — no modal. A day saves
+                        and closes the menu; adding a time keeps it open until you're done. */}
+                    <DropdownMenuSubContent className="w-auto p-0" sideOffset={6}>
+                      <DuePickerPanel
+                        value={document.dueDate ?? null}
+                        allowTime
+                        label="Due"
+                        onCommit={(next, close) => {
+                          void handleDueDateChange(next ?? '')
+                          if (close) {
+                            setMenuOpen(false)
+                            onOpenChange?.(false)
+                          }
+                        }}
+                      />
+                    </DropdownMenuSubContent>
+                  </DropdownMenuSub>
                 )}
                 {!mime.includes('folder') && document.documentType !== 'LINK' && isExternalViewer && projectId && (() => {
                   const doc = document as { lock?: { type?: string } | null }
@@ -1477,15 +1491,17 @@ export function DocumentActionMenu({
         subtitle={document.name}
         description="This will share the folder externally and add it to the Board."
         extra={
-          <div>
-            <label className="mb-2 block text-small font-medium text-fg-muted">
-              Due (optional)
-            </label>
-            <DateTimePicker
-              value={tagDeliverableDueDate}
-              onChange={setTagDeliverableDueDate}
-              placeholder="Choose date and time"
-              className="w-full"
+          // A Due property row, as on the engagement header: optional, and the same picker as everywhere.
+          <div className="flex items-center gap-2">
+            <span className="flex w-24 shrink-0 items-center gap-1.5 text-small text-fg-muted">
+              <Flag className="h-3.5 w-3.5 text-fg-subtle" />
+              Due
+            </span>
+            <DateProperty
+              value={tagDeliverableDueDate || null}
+              onChange={(next) => setTagDeliverableDueDate(next ?? '')}
+              placeholder="Not set"
+              allowTime
             />
           </div>
         }
@@ -1564,57 +1580,6 @@ export function DocumentActionMenu({
         }}
       />
 
-      {/* Still using Portal for Date Picker as it is a complex modal. Could use Dialog too but sticking to scope. */}
-      {showDueDatePicker && mounted && typeof window !== 'undefined' && window.document?.body && createPortal(
-        <div
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[999999]"
-          onClick={() => setShowDueDatePicker(false)}
-        >
-          <div
-            className="modal-content z-[1000000] mx-4 w-full max-w-md rounded-dialog bg-surface shadow-dialog"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="p-4 border-b border-line">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-control bg-tag-orange-bg text-tag-orange-fg">
-                    <Calendar className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-medium text-fg">
-                      Set due date
-                    </h3>
-                    <p className="text-xs text-fg-muted">
-                      {document.name}
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setShowDueDatePicker(false)}
-                  className="text-fg-subtle hover:text-fg-muted p-1 rounded hover:bg-surface-hover transition-colors"
-                >
-                  <XSquare className="h-5 w-5" />
-                </button>
-              </div>
-            </div>
-
-            <div className="p-4">
-              <div className="mb-2">
-                <label className="block text-sm font-medium text-fg-muted mb-2">
-                  Select due date and time
-                </label>
-                <DateTimePicker
-                  value={selectedDueDate}
-                  onChange={handleDueDateChange}
-                  placeholder="Choose date and time"
-                  className="w-full"
-                />
-              </div>
-            </div>
-          </div>
-        </div>,
-        window.document.body
-      )}
     </>
   )
 }

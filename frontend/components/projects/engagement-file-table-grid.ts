@@ -12,7 +12,7 @@
  *
  * There are exactly 10 grid tracks, one per rendered cell (the header's quick-actions
  * spacer spans 2): [1] checkbox(24px) [2] id(72px) [3] name(minmax 180px,1fr)
- * [4] badges(minmax 124px,10%) [5] quick(10%) [6] status(128px) [7] due(112px)
+ * [4] badges(minmax 124px,10%) [5] quick(10%) [6] status(128px) [7] due(128px)
  * [8] owner(150px) [9] modified(124px) [10] size(84px). Hidden cells are always the
  * trailing ones, so a visible cell never slides into a hidden column's empty track.
  *
@@ -23,11 +23,12 @@
  * (Badges is 124px until W reaches 1240px, then 10%):
  *   ID + Name + Quick            fits from ~638px  (below this the rows scroll sideways)
  *   + Status (128px)             fits from ~780px  -> @[49rem]
- *   + Due (112px)                fits from ~905px  -> @[57rem]
- *   + Owner (150px)              fits from ~1071px -> @[68rem]
- *   + Modified (124px)           fits from ~1209px -> @[76rem]
- *   + Size (84px)                fits from ~1310px -> @[82rem]
- * Date modified and Due keep fixed widths so "Sep 24, 2026" never wraps.
+ *   + Due (128px)                fits from ~922px  -> @[58rem]
+ *   + Owner (150px)              fits from ~1088px -> @[68rem]
+ *   + Modified (124px)           fits from ~1226px -> @[77rem]
+ *   + Size (84px)                fits from ~1330px -> @[84rem]
+ * Date modified and Due keep fixed widths so "Sep 24, 2026" never wraps; Due's 128px holds a day with
+ * a time in its compact form ("Oct 30 · 3:30 PM").
  *
  * IMPORTANT: every Tailwind class below is written as a literal string (no template
  * interpolation) because Tailwind's content scanner matches source text directly —
@@ -41,10 +42,10 @@ export const FILE_TABLE_CONTAINER_CLASS = '@container/file-table'
 export const FILE_TABLE_GRID_COLS_CLASS =
     'grid-cols-[24px_72px_minmax(180px,1fr)_minmax(124px,10%)_10%_0px_0px_0px_0px_0px] ' +
     '@[49rem]/file-table:grid-cols-[24px_72px_minmax(180px,1fr)_minmax(124px,10%)_10%_128px_0px_0px_0px_0px] ' +
-    '@[57rem]/file-table:grid-cols-[24px_72px_minmax(180px,1fr)_minmax(124px,10%)_10%_128px_112px_0px_0px_0px] ' +
-    '@[68rem]/file-table:grid-cols-[24px_72px_minmax(180px,1fr)_minmax(124px,10%)_10%_128px_112px_150px_0px_0px] ' +
-    '@[76rem]/file-table:grid-cols-[24px_72px_minmax(180px,1fr)_minmax(124px,10%)_10%_128px_112px_150px_124px_0px] ' +
-    '@[82rem]/file-table:grid-cols-[24px_72px_minmax(180px,1fr)_minmax(124px,10%)_10%_128px_112px_150px_124px_84px]'
+    '@[58rem]/file-table:grid-cols-[24px_72px_minmax(180px,1fr)_minmax(124px,10%)_10%_128px_128px_0px_0px_0px] ' +
+    '@[68rem]/file-table:grid-cols-[24px_72px_minmax(180px,1fr)_minmax(124px,10%)_10%_128px_128px_150px_0px_0px] ' +
+    '@[77rem]/file-table:grid-cols-[24px_72px_minmax(180px,1fr)_minmax(124px,10%)_10%_128px_128px_150px_124px_0px] ' +
+    '@[84rem]/file-table:grid-cols-[24px_72px_minmax(180px,1fr)_minmax(124px,10%)_10%_128px_128px_150px_124px_84px]'
 
 /**
  * Notion's database grid, as NotionTable draws it (.claude/plans/app-design-refinements.md, section 10):
@@ -60,11 +61,11 @@ export const FILE_TABLE_COL_LINE_CLASS =
 
 /** Hidden below 49rem, flex from 49rem up — the last metadata column to hide. */
 export const STATUS_COL_CLASS = 'hidden @[49rem]/file-table:flex'
-/** Hidden below 57rem, flex from 57rem up. */
-export const DUE_DATE_COL_CLASS = 'hidden @[57rem]/file-table:flex'
+/** Hidden below 58rem, flex from 58rem up. */
+export const DUE_DATE_COL_CLASS = 'hidden @[58rem]/file-table:flex'
 /** Hidden below 68rem, flex from 68rem up. */
 export const OWNER_COL_CLASS = 'hidden @[68rem]/file-table:flex'
-/** Hidden below 76rem, flex from 76rem up. */
-export const DATE_MODIFIED_COL_CLASS = 'hidden @[76rem]/file-table:flex'
-/** Hidden below 82rem, flex from 82rem up — the first to hide as space runs out. */
-export const FILE_SIZE_COL_CLASS = 'hidden @[82rem]/file-table:flex'
+/** Hidden below 77rem, flex from 77rem up. */
+export const DATE_MODIFIED_COL_CLASS = 'hidden @[77rem]/file-table:flex'
+/** Hidden below 84rem, flex from 84rem up — the first to hide as space runs out. */
+export const FILE_SIZE_COL_CLASS = 'hidden @[84rem]/file-table:flex'

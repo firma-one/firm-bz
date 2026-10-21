@@ -1,8 +1,9 @@
 "use client"
 
 import * as React from "react"
-import { format } from "date-fns"
 import { Check, Loader2, Search, X } from "lucide-react"
+import { DuePickerPanel } from "@/components/ui/due-picker"
+import { formatDue, isPastDue, readDue } from "@/lib/ui/due-date"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { StatusPill } from "@/components/ui/status-pill"
 import { cn } from "@/lib/utils"
@@ -91,43 +92,35 @@ export function StatusProperty({
 // ── Date ──────────────────────────────────────────────────────────────────────
 
 /** Parses a stored value for display. A bare `yyyy-MM-dd` is a local calendar day, not UTC midnight. */
-function parseDateValue(value: string): Date {
-    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
-    return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(value)
-}
-
-function toInputValue(iso: string | null): string {
-    if (!iso) return ""
-    // A bare calendar day is already the answer — parsing it would read it as UTC midnight and
-    // show the previous day west of Greenwich.
-    if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso
-    const d = new Date(iso)
-    return Number.isNaN(d.getTime()) ? "" : format(d, "yyyy-MM-dd")
-}
-
 export function DateProperty({
     value,
     onChange,
     disabled,
     placeholder = "Empty",
     highlightOverdue = false,
+    allowTime = false,
+    compact = false,
 }: {
-    /** ISO date-time or null. */
+    /** "yyyy-MM-dd", an ISO date-time, or null. */
     value: string | null
-    /** Receives an ISO date (yyyy-MM-dd) or null to clear. */
+    /** Receives "yyyy-MM-dd" for a day, an ISO instant for a day with a time, or null to clear. */
     onChange: (next: string | null) => unknown | Promise<unknown>
     disabled?: boolean
     placeholder?: string
     /** Show past dates in red — for due dates. */
     highlightOverdue?: boolean
+    /** Let the picker add a time, and show it beside the day. */
+    allowTime?: boolean
+    /** For a narrow table cell: leaves out this year's year, on one line. */
+    compact?: boolean
 }) {
     const [open, setOpen] = React.useState(false)
     const { saving, run } = useSaving(onChange)
-    const date = value ? parseDateValue(value) : null
-    const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0)
-    const overdue = highlightOverdue && date !== null && date < startOfToday
-    const label = date && !Number.isNaN(date.getTime()) ? (
-        <span className={cn("tabular-nums", overdue && "text-danger")}>{format(date, "MMM d, yyyy")}</span>
+    const parts = readDue(value)
+    const shown = parts && !allowTime ? { ...parts, time: null } : parts
+    const overdue = highlightOverdue && !!shown && isPastDue(shown)
+    const label = shown ? (
+        <span className={cn("truncate whitespace-nowrap tabular-nums", overdue && "text-danger")}>{formatDue(shown, { compact })}</span>
     ) : (
         <Empty label={placeholder} />
     )
@@ -140,30 +133,17 @@ export function DateProperty({
                     {saving && <Loader2 className="h-3 w-3 animate-spin text-fg-subtle" />}
                 </button>
             </PopoverTrigger>
-            <PopoverContent className="w-60 p-2" onClick={(e) => e.stopPropagation()}>
-                <input
-                    type="date"
-                    autoFocus
-                    defaultValue={toInputValue(value)}
-                    onChange={(e) => {
-                        if (!e.target.value) return
-                        setOpen(false)
-                        void run(e.target.value)
+            {/* The shared picker (due-picker.tsx): a pick saves at once and closes, unless a time is being set. */}
+            <PopoverContent align="start" className="w-auto p-0" onClick={(e) => e.stopPropagation()}>
+                <DuePickerPanel
+                    value={value}
+                    allowTime={allowTime}
+                    label={placeholder}
+                    onCommit={(next, close) => {
+                        if (close) setOpen(false)
+                        void run(next)
                     }}
-                    className="h-8 w-full rounded-control border border-line-strong bg-surface px-2 text-ui text-fg focus:border-action/60 focus:outline-none focus:ring-2 focus:ring-action/20"
                 />
-                {value && (
-                    <button
-                        type="button"
-                        onClick={() => {
-                            setOpen(false)
-                            void run(null)
-                        }}
-                        className="mt-1 flex h-8 w-full items-center gap-2 rounded-control px-2 text-small text-fg-muted hover:bg-surface-hover hover:text-fg"
-                    >
-                        <X className="h-3.5 w-3.5" /> Clear date
-                    </button>
-                )}
             </PopoverContent>
         </Popover>
     )

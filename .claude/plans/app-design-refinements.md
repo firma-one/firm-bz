@@ -380,3 +380,22 @@ From the canvas's section 7 (the full "views" redesign was judged too extreme; t
   14px icons, a tighter header. Submenus slide 4px and fade in 100ms, without the zoom.
 - **The tour mirrors every change** (`components/demo/*`), including the action menu, which the tour
   copies because the real one needs a signed-in session.
+
+## 12. Due: one date picker (decided 2026-10-22)
+
+The "Set due date" modal is retired: a modal whose only content was a field that opened a second popover,
+time required, and a "UTC+05:30 · TZ" badge. One panel (`components/ui/due-picker.tsx`) now sets every due
+date, in place:
+
+- **Where:** beside the document menu's Due row (a submenu), under a table cell or header property
+  (`DateProperty`), and as a Due row in the Promote dialog.
+- **Date first:** a field that reads typed dates ("fri", "next week", "in 3 days", "oct 30", "10/30") and
+  saves on Enter; quick picks (Today, Tomorrow, Next week, In 2 weeks) that preview their day in the
+  calendar on hover; a Monday-first calendar where today is in the accent and the chosen day filled. A pick
+  saves at once and closes.
+- **Time only if added:** "Add time" shows a half-hour time list and the time zone (short, full name on
+  hover). Engagement Start and Due stay days.
+- **Stored values** (`lib/ui/due-date.ts`): a day alone is saved as "yyyy-MM-dd" (stored at UTC midnight,
+  read back as that day); a day with a time as an ISO instant. Table cells show the compact form
+  ("Oct 30 · 3:30 PM"), so Files' Due column is 128px.
+- The tour's menu and Due cells use the same panel; Due is the one action that works there.

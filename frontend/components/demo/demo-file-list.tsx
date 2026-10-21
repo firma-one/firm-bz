@@ -46,6 +46,8 @@ import { Hint } from '@/components/ui/tooltip'
 import { RelativeDateTime } from '@/components/ui/relative-date-time'
 import { StatusPill } from '@/components/ui/status-pill'
 import { DateProperty } from '@/components/ui/property-cells'
+import { DuePickerPanel } from '@/components/ui/due-picker'
+import { formatDue, isPastDue, readDue } from '@/lib/ui/due-date'
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -66,7 +68,7 @@ import {
     OWNER_COL_CLASS,
     STATUS_COL_CLASS,
 } from '@/components/projects/engagement-file-table-grid'
-import { cn, formatFileSize, formatFullDate, formatSmartDateTime } from '@/lib/utils'
+import { cn, formatFileSize, formatSmartDateTime } from '@/lib/utils'
 import { initialsOf } from '@/lib/initials'
 import type { DemoFolder, DemoFile } from '@/lib/demo/static-demo-data'
 import type { DeliverableStatus } from '@/lib/demo/demo-deliverables'
@@ -158,19 +160,23 @@ function DemoSubmenu({ icon, label, children }: { icon: React.ReactNode; label: 
  * the same compact header and the same items, grouped the same way, for a file or a folder. Every
  * action is inert.
  */
-function RowActionMenu({ entry, name, docId, deliverableStatus, dueDate }: {
+function RowActionMenu({ entry, name, docId, deliverableStatus, dueDate, onSetDue }: {
     entry: Entry
     name: string
     docId?: string | null
     deliverableStatus?: DeliverableStatus
     dueDate?: string | null
+    /** Due is the one action that works on the tour: it sets the row's Due cell. */
+    onSetDue: (next: string | null) => void
 }) {
+    const [open, setOpen] = useState(false)
     const isFolder = entry.kind === 'folder'
+    const due = readDue(dueDate)
     const type = isFolder ? 'Folder' : TYPE_LABEL[entry.file.type] ?? 'File'
     const size = isFolder ? undefined : entry.file.size
     const modified = isFolder ? undefined : entry.file.modifiedTime
     return (
-        <DropdownMenu>
+        <DropdownMenu open={open} onOpenChange={setOpen}>
             <Hint label="More actions">
                 <DropdownMenuTrigger asChild>
                     <button
@@ -236,10 +242,26 @@ function RowActionMenu({ entry, name, docId, deliverableStatus, dueDate }: {
                             <DemoMenuItem icon={<MessagesSquare />}>Comment</DemoMenuItem>
                             <DropdownMenuSeparator />
                             <DemoMenuItem icon={<Bookmark />}>Bookmark</DemoMenuItem>
-                            <DemoMenuItem icon={<Calendar />}>
-                                <span>Due</span>
-                                <span className="ml-auto pl-3 tabular-nums text-fg-subtle">{dueDate ? formatFullDate(dueDate) : 'Not set'}</span>
-                            </DemoMenuItem>
+                            <DropdownMenuSub>
+                                <DropdownMenuSubTrigger className="flex cursor-pointer items-center gap-2">
+                                    <span className="flex shrink-0 text-fg-muted"><Calendar /></span>
+                                    <span className="flex flex-1 items-center">
+                                        Due
+                                        <span className={cn('ml-auto pl-3 tabular-nums', due && isPastDue(due) ? 'text-danger' : 'text-fg-subtle')}>{due ? formatDue(due) : 'Not set'}</span>
+                                    </span>
+                                </DropdownMenuSubTrigger>
+                                <DropdownMenuSubContent className="w-auto p-0" sideOffset={6}>
+                                    <DuePickerPanel
+                                        value={dueDate ?? null}
+                                        allowTime
+                                        label="Due"
+                                        onCommit={(next, close) => {
+                                            onSetDue(next)
+                                            if (close) setOpen(false)
+                                        }}
+                                    />
+                                </DropdownMenuSubContent>
+                            </DropdownMenuSub>
                             <DropdownMenuSeparator />
                             <DemoSubmenu icon={<FolderOpen />} label="Organize">
                                 <DemoMenuItem icon={<Edit3 />}>Rename</DemoMenuItem>
@@ -261,7 +283,7 @@ function RowActionMenu({ entry, name, docId, deliverableStatus, dueDate }: {
                     )}
                     <DropdownMenuSeparator />
                     <DemoMenuItem icon={<Trash2 />} danger>Move to trash</DemoMenuItem>
-                    <p className="px-2 pb-1 pt-1.5 text-caption text-fg-subtle">Actions aren&apos;t available in this demo.</p>
+                    <p className="px-2 pb-1 pt-1.5 text-caption text-fg-subtle">Due works here; the other actions aren&apos;t available in this demo.</p>
                 </div>
             </DropdownMenuContent>
         </DropdownMenu>
@@ -282,6 +304,7 @@ function EntryRow({
     pinTools = false,
     selected,
     onToggleSelect,
+    onSetDue,
 }: {
     entry: Entry
     onOpenFolder?: () => void
@@ -293,6 +316,7 @@ function EntryRow({
     pinTools?: boolean
     selected: boolean
     onToggleSelect: () => void
+    onSetDue: (next: string | null) => void
 }) {
     const isFolder = entry.kind === 'folder'
     const docId = isFolder ? entry.folder.docId : entry.file.docId
@@ -351,7 +375,7 @@ function EntryRow({
             >
                 {!isFolder && <QuickAction icon={<ScanEye />} label="Preview" />}
                 <QuickAction icon={<Link2 />} label="Copy link" />
-                <RowActionMenu entry={entry} name={name} docId={docId} deliverableStatus={deliverableStatus} dueDate={dueDate} />
+                <RowActionMenu entry={entry} name={name} docId={docId} deliverableStatus={deliverableStatus} dueDate={dueDate} onSetDue={onSetDue} />
             </div>
 
             <div className={`min-w-0 items-center ${STATUS_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}>
@@ -359,7 +383,10 @@ function EntryRow({
             </div>
 
             <div className={`items-center ${DUE_DATE_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}>
-                {dueDate ? <DateProperty value={dueDate} onChange={() => undefined} disabled highlightOverdue /> : empty}
+                {/* As in the app: files and deliverable folders take a Due; other folders have none */}
+                {!isFolder || deliverableStatus ? (
+                    <DateProperty value={dueDate ?? null} onChange={onSetDue} placeholder={tracked ? 'Not set' : '—'} highlightOverdue allowTime={!isFolder} compact />
+                ) : empty}
             </div>
 
             <div className={`min-w-0 items-center gap-1.5 ${OWNER_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}>
@@ -404,6 +431,8 @@ export function DemoFileList({
     const [path, setPath] = useState<DemoFolder[]>([])
     const [selected, setSelected] = useState<Set<string>>(new Set())
     const [deliverablesOnly, setDeliverablesOnly] = useState(false)
+    // Due dates set on the tour, by row: the one edit the demo keeps (until the page reloads).
+    const [dueOverrides, setDueOverrides] = useState<Record<string, string | null>>({})
 
     const allFolders = path.length === 0 ? folders : path[path.length - 1].subfolders
     const allFiles = path.length === 0 ? [] : path[path.length - 1].files
@@ -567,7 +596,8 @@ export function DemoFileList({
                                 entry={entry}
                                 onOpenFolder={entry.kind === 'folder' ? () => openFolder([...path, entry.folder]) : undefined}
                                 deliverableStatus={entry.kind === 'folder' ? deliverableStatusByFolderId?.[id] : undefined}
-                                dueDate={entry.kind === 'folder' ? deliverableDueByFolderId?.[id] : undefined}
+                                dueDate={id in dueOverrides ? dueOverrides[id] : entry.kind === 'folder' ? deliverableDueByFolderId?.[id] : null}
+                                onSetDue={(next) => setDueOverrides((prev) => ({ ...prev, [id]: next }))}
                                 tracked={insideDeliverable || (entry.kind === 'folder' && !!deliverableStatusByFolderId?.[id])}
                                 pinTools={index === 0}
                                 selected={selected.has(id)}
