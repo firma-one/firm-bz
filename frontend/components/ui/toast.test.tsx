@@ -10,7 +10,7 @@ function Raise({ toasts }: { toasts: Omit<Toast, 'id'>[] }) {
 
 function SecondRaise({ onUndo }: { onUndo: () => void }) {
   const { addToast } = useToast()
-  return <button onClick={() => addToast({ type: 'success', title: 'Moved to Bin', message: 'b.pdf moved', action: { label: 'Undo', onClick: onUndo } })}>raise second</button>
+  return <button onClick={() => addToast({ type: 'success', title: 'Moved to trash', message: 'b.pdf moved', action: { label: 'Undo', onClick: onUndo } })}>raise second</button>
 }
 
 const renderWith = (...toasts: Omit<Toast, 'id'>[]) =>
@@ -79,12 +79,12 @@ describe('Toast', () => {
     render(
       <ToastProvider>
         <Raise toasts={[
-          { type: 'success', title: 'Moved to Bin', message: 'a.pdf moved', action: { label: 'Undo', onClick: first } },
+          { type: 'success', title: 'Moved to trash', message: 'a.pdf moved', action: { label: 'Undo', onClick: first } },
         ]} />
         <SecondRaise onUndo={second} />
       </ToastProvider>
     )
-    raise('Moved to Bin')
+    raise('Moved to trash')
     fireEvent.click(screen.getByRole('button', { name: 'raise second' }))
     expect(region()!.textContent).toContain('b.pdf moved')
     expect(region()!.textContent).not.toContain('a.pdf moved')

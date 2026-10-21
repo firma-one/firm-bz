@@ -10,12 +10,12 @@ import { wasRestoredFromBin } from './trash-undo'
 beforeEach(() => adapter.getFileMetadata.mockReset())
 
 describe('wasRestoredFromBin', () => {
-    it('is true only when the provider says the item is out of the Bin', async () => {
+    it('is true only when the provider says the item is out of the trash', async () => {
         adapter.getFileMetadata.mockResolvedValueOnce({ id: 'f', name: 'f', trashed: false })
         expect(await wasRestoredFromBin('conn', 'f')).toBe(true)
     })
 
-    it('is false while the item is still in the Bin', async () => {
+    it('is false while the item is still in the trash', async () => {
         adapter.getFileMetadata.mockResolvedValueOnce({ id: 'f', name: 'f', trashed: true })
         expect(await wasRestoredFromBin('conn', 'f')).toBe(false)
     })

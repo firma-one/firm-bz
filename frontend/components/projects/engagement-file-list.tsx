@@ -288,7 +288,12 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
     /** Display name of the client's storage provider — used in user-facing copy so it never hardcodes "Google Drive". */
     const storageProviderName = isOneDriveClient ? 'OneDrive' : 'Google Drive'
     /** Provider's own name for the trash location. */
-    const storageBinName = isOneDriveClient ? 'Recycle bin' : 'Google Drive Bin'
+    // OneDrive's "Recycle bin" is Microsoft's own name for it; Google's is the trash.
+    const storageBinName = isOneDriveClient ? 'OneDrive recycle bin' : 'Google Drive trash'
+    // How long the provider keeps trashed items: Google 30 days; Microsoft 30 on personal OneDrive, up to 93 on work accounts.
+    const storageRetention = isOneDriveClient
+        ? 'It keeps items for 30 days (up to 93 on work accounts).'
+        : 'Items there are permanently deleted after 30 days.'
     const { session } = useAuth()
     const sessionRef = useRef(session)
     const onFileCountChangeRef = useRef(onFileCountChange)
@@ -1535,7 +1540,7 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
             addToast({
                 type: 'error',
                 title: 'Cannot delete',
-                message: 'One or more selected items are Approved Deliverables and cannot be moved to Bin.',
+                message: 'One or more selected items are approved deliverables and can\'t be moved to the trash.',
                 duration: 6000,
             } as any)
             return
@@ -1566,7 +1571,7 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
                 })
                 if (!res.ok) {
                     const err = await res.json().catch(() => ({}))
-                    throw new Error(err.error || 'Failed to move to bin')
+                    throw new Error(err.error || 'Failed to move to trash')
                 }
                 setTrashQueue(prev => prev.map(i => i.id === item.id ? { ...i, status: 'done' } : i))
             } catch (e: any) {
@@ -2650,7 +2655,7 @@ const handleRefresh = async () => {
                                 </Button>
                             </TooltipTrigger>
                             <TooltipContent side="bottom" className="text-xs">
-                                {selectedFileIds.size > 0 ? `Move ${selectedFileIds.size} item${selectedFileIds.size > 1 ? 's' : ''} to Bin` : 'Select files to move to Bin'}
+                                {selectedFileIds.size > 0 ? `Move ${selectedFileIds.size} item${selectedFileIds.size > 1 ? 's' : ''} to trash` : 'Select files to move to trash'}
                             </TooltipContent>
                         </Tooltip>
                         </>
@@ -2760,8 +2765,8 @@ const handleRefresh = async () => {
                         >
                             <span className="text-[11px] font-medium">
                                 {trashQueue.some(i => i.status === 'pending')
-                                    ? `Moving to Bin… ${trashQueue.filter(i => i.status === 'done').length}/${trashQueue.length}`
-                                    : `Moved to Bin ${trashQueue.filter(i => i.status === 'done').length}/${trashQueue.length}`
+                                    ? `Moving to trash… ${trashQueue.filter(i => i.status === 'done').length}/${trashQueue.length}`
+                                    : `Moved to trash ${trashQueue.filter(i => i.status === 'done').length}/${trashQueue.length}`
                                 }
                             </span>
                             <div className="flex items-center gap-2 text-fg-muted">
@@ -3556,32 +3561,32 @@ const handleRefresh = async () => {
                     </DialogContent>
                 </Dialog>
 
-                {/* Move to Bin confirmation dialog */}
+                {/* Move to trash confirmation dialog */}
                 <ConfirmDialog
                     open={!!trashConfirmTarget}
                     onOpenChange={(open) => { if (!open) setTrashConfirmTarget(null) }}
                     icon={<Trash2 className="h-3.5 w-3.5" />}
                     iconVariant="red"
-                    title="Move to Bin"
+                    title="Move to trash"
                     subtitle={`This file will be moved to ${storageBinName}.`}
-                    description={<><span className="font-semibold text-fg">{trashConfirmTarget?.name}</span>{' '}will be moved to your {storageBinName}. Items there are permanently deleted after 30 days.</>}
-                    confirmLabel="Move to Bin"
+                    description={<><span className="font-semibold text-fg">{trashConfirmTarget?.name}</span>{' '}will be moved to your {storageBinName}. {storageRetention}</>}
+                    confirmLabel="Move to trash"
                     confirmVariant="red"
                     onCancel={() => setTrashConfirmTarget(null)}
                     onConfirm={handleTrashConfirmed}
                     loading={trashConfirming}
                 />
 
-                {/* Bulk Move to Bin confirmation dialog */}
+                {/* Bulk Move to trash confirmation dialog */}
                 <ConfirmDialog
                     open={bulkTrashConfirmOpen}
                     onOpenChange={(open) => { if (!open) { setBulkTrashConfirmOpen(false); setPendingBulkTrashIds(new Set()) } }}
                     icon={<Trash2 className="h-3.5 w-3.5" />}
                     iconVariant="red"
-                    title="Move to Bin"
+                    title="Move to trash"
                     subtitle={`${pendingBulkTrashIds.size} item${pendingBulkTrashIds.size > 1 ? 's' : ''} will be moved to ${storageBinName}.`}
-                    description={<>{pendingBulkTrashIds.size} item{pendingBulkTrashIds.size > 1 ? 's' : ''} will be moved to your {storageBinName}. Items there are permanently deleted after 30 days.</>}
-                    confirmLabel="Move to Bin"
+                    description={<>{pendingBulkTrashIds.size} item{pendingBulkTrashIds.size > 1 ? 's' : ''} will be moved to your {storageBinName}. {storageRetention}</>}
+                    confirmLabel="Move to trash"
                     confirmVariant="red"
                     onCancel={() => { setBulkTrashConfirmOpen(false); setPendingBulkTrashIds(new Set()) }}
                     onConfirm={handleBulkTrashConfirmed}

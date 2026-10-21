@@ -12,30 +12,30 @@ const FILE = { id: 'f1', name: 'podcast-ep04.jpg', mimeType: 'image/jpeg', docum
 
 /** Opens the menu from its trigger, as the keyboard does. */
 async function openMenu() {
-  const trigger = screen.getByTitle('More actions')
+  const trigger = screen.getByRole('button', { name: 'More actions' })
   trigger.focus()
   fireEvent.keyDown(trigger, { key: 'Enter' })
   return screen.findByRole('menu')
 }
 
 describe('DocumentActionMenu — items that open a dialog', () => {
-  it('Move to Bin closes the menu, so it cannot cover the confirmation', async () => {
+  it('Move to trash closes the menu, so it cannot cover the confirmation', async () => {
     const onDelete = vi.fn()
     const onOpenChange = vi.fn()
     render(<DocumentActionMenu document={FILE} onDeleteDocument={onDelete} onOpenChange={onOpenChange} />)
     await openMenu()
-    fireEvent.click(screen.getByRole('menuitem', { name: /Move to Bin/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /Move to trash/ }))
     expect(onDelete).toHaveBeenCalledWith(FILE)
     expect(onOpenChange).toHaveBeenLastCalledWith(false)
     await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
   })
 
-  it('Promote as Deliverable closes the menu and shows its dialog', async () => {
+  it('Promote as deliverable closes the menu and shows its dialog', async () => {
     render(<DocumentActionMenu document={{ ...FILE, mimeType: 'application/vnd.google-apps.folder' }} canManage showShareModal projectId="e1" onMarkAsDeliverable={vi.fn()} />)
     await openMenu()
-    fireEvent.click(screen.getByRole('menuitem', { name: /Promote as Deliverable/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /Promote as deliverable/ }))
     await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
-    expect(screen.getByRole('dialog').textContent).toContain('Promote as Deliverable')
+    expect(screen.getByRole('dialog').textContent).toContain('Promote as deliverable')
     // Closing the dialog leaves the page clickable: no layer is left blocking pointer events.
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())

@@ -44,19 +44,19 @@ function setup(opts: { canUndoTrash?: boolean; storageBinName?: string } = {}) {
     return { result, fetchFiles }
 }
 
-/** Moves the file to the Bin the way the UI does: open the confirmation, wait, confirm. */
+/** Moves the file to the trash the way the UI does: open the confirmation, wait, confirm. */
 async function moveToBin(result: { current: ReturnType<typeof useEngagementFileOps> }) {
     act(() => { result.current.handleTrash(FILE) })
     act(() => { vi.advanceTimersByTime(700) })
     await act(async () => { await result.current.handleTrashConfirmed() })
 }
 
-describe('Moved to Bin — Undo', () => {
-    it('offers Undo, which takes the file back out of the Bin and refreshes the list', async () => {
+describe('Moved to trash — Undo', () => {
+    it('offers Undo, which takes the file back out of the trash and refreshes the list', async () => {
         const { result, fetchFiles } = setup({ canUndoTrash: true })
         await moveToBin(result)
         const toast = addToast.mock.calls[0][0]
-        expect(toast).toMatchObject({ title: 'Moved to Bin', message: 'podcast-ep04.jpg moved to Google Drive Bin', action: { label: 'Undo' } })
+        expect(toast).toMatchObject({ title: 'Moved to trash', message: 'podcast-ep04.jpg moved to Google Drive trash', action: { label: 'Undo' } })
 
         await act(async () => { toast.action.onClick() })
         await act(async () => { await Promise.resolve() })
@@ -66,7 +66,7 @@ describe('Moved to Bin — Undo', () => {
         expect(fetchFiles).toHaveBeenLastCalledWith('folder-1', true)
     })
 
-    it('has no Undo where the provider can\'t restore, and names its Bin', async () => {
+    it('has no Undo where the provider can\'t restore, and names its trash', async () => {
         const { result } = setup({ canUndoTrash: false, storageBinName: 'Recycle bin' })
         await moveToBin(result)
         const toast = addToast.mock.calls[0][0]

@@ -273,6 +273,21 @@ user-chosen labels (Notion's tag palette).
   `engagement-insights-dashboard.tsx` (`EngagementHealthBody`, `DeliveryTimeline`), which still
   use the deprecated `RING`.
 
+**Document action menu (added 2026-10-22, at Deepak's request):**
+- Grouped by intent: Open, Copy link, Download · Bookmark, Due date · Organize ›, Details ›, Drive
+  actions › · Move to trash, last. Folders follow the same order.
+- The header names the file in full (two lines), then its code and `StatusPill` where the stage is
+  known, its real type (an .xlsx said "Document": every OOXML mime type contains "document"), and
+  "Modified {date} by {name}".
+- The due date shows on its item, red when overdue. The bookmark fills in the text color, not green.
+- "Info" became "Details"; labels are sentence case; tooltips are `Hint`; submenus size to their
+  longest label ("Copy to another engagement…" was cut off).
+- "Bin" became "trash" across the app (American English): menus, confirmations, toasts, the Undo
+  route's errors, comments and tests. OneDrive keeps its own "Recycle bin".
+- Not built: a Status submenu. The Files listing doesn't carry a file's stage (only deliverable
+  folders have one), so it needs that data first; where the stage is known (the Board, the detail
+  pane) it already has its own control.
+
 ## 7. Data change (for the byline)
 
 - The engagement summary already stores `publishedByUserId`, `source ('ai'|'manual')` and the draft's

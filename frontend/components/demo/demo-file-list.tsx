@@ -116,7 +116,7 @@ function RowActionMenu({ fileName }: { fileName: string }) {
                 <DropdownMenuItem disabled className="gap-2"><Copy className="h-3.5 w-3.5" /> Duplicate</DropdownMenuItem>
                 <DropdownMenuItem disabled className="gap-2"><Info className="h-3.5 w-3.5" /> View details</DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem disabled className="gap-2 text-danger"><Trash2 className="h-3.5 w-3.5" /> Move to Bin</DropdownMenuItem>
+                <DropdownMenuItem disabled className="gap-2 text-danger"><Trash2 className="h-3.5 w-3.5" /> Move to trash</DropdownMenuItem>
             </DropdownMenuContent>
         </DropdownMenu>
     )
@@ -254,7 +254,7 @@ export function DemoFileList({ folders, deliverableStatusByFolderId }: { folders
                 </Hint>
                 <div className="flex items-center gap-0.5">
                     <QuickAction icon={<Download />} label="Download selected" />
-                    <QuickAction icon={<Trash2 />} label="Move selected to Bin" />
+                    <QuickAction icon={<Trash2 />} label="Move selected to trash" />
                     <QuickAction icon={<RefreshCw />} label="Refresh" />
                 </div>
             </div>

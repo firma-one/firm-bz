@@ -98,7 +98,7 @@ export interface ConnectorFileMetadata {
   mimeType?: string
   /** Provider-specific: Google Drive shared drive id. Indicates SHARED location when non-null. */
   driveId?: string | null
-  /** In the provider's Bin. Google reports it; OneDrive returns no metadata for a deleted item. */
+  /** In the provider's trash. Google reports it; OneDrive returns no metadata for a deleted item. */
   trashed?: boolean
 }
 
@@ -131,7 +131,7 @@ export interface IConnectorPermissionAdapter {
   /** Move a file to trash (soft delete). */
   trashFile(connectionId: string, fileId: string): Promise<void>
   /**
-   * Take a file out of the trash (Undo on "Moved to Bin"). Optional: OneDrive leaves it out,
+   * Take a file out of the trash (Undo on "Moved to trash"). Optional: OneDrive leaves it out,
    * because Graph's driveItem restore works only on OneDrive Personal.
    */
   restoreFile?(connectionId: string, fileId: string): Promise<void>

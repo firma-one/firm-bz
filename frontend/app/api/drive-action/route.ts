@@ -209,7 +209,7 @@ export async function POST(request: NextRequest) {
                     await safeInngestSend('file.delete.requested', reconcile)
                 }
 
-                // Engagement-scoped audit: record file removed (moved to bin) when engagementId is provided
+                // Engagement-scoped audit: record file removed (moved to trash) when engagementId is provided
                 if (engagementId) {
                     try {
                         const engagement = await prisma.engagement.findFirst({
@@ -244,7 +244,7 @@ export async function POST(request: NextRequest) {
                 break
 
             case 'restore': {
-                // Undo on "Moved to Bin". Engagement-scoped only, so every gate above applies: edit
+                // Undo on "Moved to trash". Engagement-scoped only, so every gate above applies: edit
                 // rights, the engagement's own connector, a file inside its tree.
                 if (!fileId || typeof engagementId !== 'string' || !engagementId) {
                     return NextResponse.json({ error: 'fileId and projectId are required for restore' }, { status: 400 })
@@ -254,13 +254,13 @@ export async function POST(request: NextRequest) {
 
                 // Inside the Undo window the file's record is still here. After it, the cleanup has
                 // removed it, and a restore would bring the file back as a new item without its
-                // ID or comments: that is for the provider's own Bin.
+                // ID or comments: that is for the provider's own trash.
                 const restoredDoc = await prisma.engagementDocument.findFirst({
                     where: { engagementId, externalId: fileId },
                     select: { id: true, firmId: true, engagement: { select: { clientId: true } } },
                 })
                 if (!restoredDoc) {
-                    return NextResponse.json({ error: 'Too late to undo. You can still restore it from the Bin in your storage.' }, { status: 409 })
+                    return NextResponse.json({ error: 'Too late to undo. You can still restore it from the trash in your storage.' }, { status: 409 })
                 }
 
                 const restoreConnectorId = connectorId || connectors[0].id
@@ -270,20 +270,20 @@ export async function POST(request: NextRequest) {
                 }
                 const restoreMeta = await restoreAdapter.getFileMetadata(restoreConnectorId, fileId)
                 if (!restoreMeta) {
-                    return NextResponse.json({ error: 'This item is no longer in the Bin.' }, { status: 404 })
+                    return NextResponse.json({ error: 'This item is no longer in the trash.' }, { status: 404 })
                 }
-                // Already out of the Bin (a second click, or restored in the provider): nothing to do.
+                // Already out of the trash (a second click, or restored in the provider): nothing to do.
                 if (restoreMeta.trashed) {
                     const parentId = restoreMeta.parents?.[0]
                     const parentMeta = parentId ? await restoreAdapter.getFileMetadata(restoreConnectorId, parentId) : null
                     if (parentMeta?.trashed) {
-                        return NextResponse.json({ error: 'Its folder is in the Bin too. Restore the folder first.' }, { status: 409 })
+                        return NextResponse.json({ error: 'Its folder is in the trash too. Restore the folder first.' }, { status: 409 })
                     }
                     try {
                         await restoreAdapter.restoreFile(restoreConnectorId, fileId)
                     } catch (err) {
                         logger.error(`[restore] Failed to restore fileId=${fileId}`, err as Error)
-                        return NextResponse.json({ error: 'Couldn’t restore it. Try again, or restore it from the Bin in your storage.' }, { status: 500 })
+                        return NextResponse.json({ error: 'Couldn’t restore it. Try again, or restore it from the trash in your storage.' }, { status: 500 })
                     }
                 }
 

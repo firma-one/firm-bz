@@ -152,7 +152,7 @@ export interface GoogleDriveFile {
   metadata?: any
   /** Present when the file lives in a shared drive (Drive API `driveId`). */
   driveId?: string | null
-  /** In the Drive Bin. Only getFileMetadata asks for it. */
+  /** In the Drive trash. Only getFileMetadata asks for it. */
   trashed?: boolean
   /** Storage consumed by the file (in bytes, as a string). Present for native Google files (Docs, Sheets, Slides) that have no `size` field. */
   quotaBytesUsed?: string
