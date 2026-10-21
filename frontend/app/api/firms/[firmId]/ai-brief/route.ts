@@ -5,7 +5,7 @@ import { userSettingsPlus } from '@/lib/user-settings-plus'
 import { findFirmInPermissions } from '@/lib/permission-helpers'
 import { logger } from '@/lib/logger'
 import { isAiConfigured } from '@/lib/ai/client'
-import { generateFirmBrief, isBriefFresh, streamFirmBrief, type FirmBrief } from '@/lib/ai/firm-brief'
+import { briefFingerprint, generateFirmBrief, isBriefFresh, streamFirmBrief, type FirmBrief } from '@/lib/ai/firm-brief'
 import { assertWithinAiCreditCap, AiCreditLimitError } from '@/lib/ai/credit-cap'
 import { aiLimitResponse } from '@/lib/ai/guarded-client'
 import type { FirmInsightsResponse } from '../insights/route'
@@ -88,7 +88,7 @@ async function streamRewrite(request: NextRequest, firmId: string, userId?: stri
                 // Settings read again here, not at the start: the stream takes seconds, and the
                 // firm's settings may have changed meanwhile.
                 const { settings } = await readCachedBrief(firmId)
-                const brief: FirmBrief = { content, generatedAt }
+                const brief: FirmBrief = { content, generatedAt, fingerprint: briefFingerprint(insights) }
                 await prisma.firm.update({
                     where: { id: firmId },
                     data: { settings: { ...settings, aiBrief: brief } as never },
@@ -123,6 +123,8 @@ async function regenerate(
     firmId: string,
     existingSettings: Record<string, unknown>,
     userId?: string,
+    /** Already loaded by the caller (GET compares them with the cached brief first). */
+    loaded?: FirmInsightsResponse | null,
 ): Promise<FirmBrief | null> {
     // Gated here, not at the route entry: a cached brief serves without a model call, so reading
     // one must not consume credits. Returns null on breach, which callers already treat as
@@ -137,13 +139,13 @@ async function regenerate(
         throw error
     }
 
-    const insights = await loadInsights(request, firmId)
+    const insights = loaded ?? await loadInsights(request, firmId)
     if (!insights) return null
 
     const content = await generateFirmBrief(insights, { firmId, userId })
     if (!content) return null
 
-    const brief: FirmBrief = { content, generatedAt: new Date().toISOString() }
+    const brief: FirmBrief = { content, generatedAt: new Date().toISOString(), fingerprint: briefFingerprint(insights) }
     await prisma.firm.update({
         where: { id: firmId },
         data: { settings: { ...existingSettings, aiBrief: brief } as never },
@@ -151,7 +153,11 @@ async function regenerate(
     return brief
 }
 
-/** Returns the cached brief when under an hour old, otherwise generates one. */
+/**
+ * Returns the cached brief when it's under an hour old and was written from the facts the
+ * Overview's cards show now (briefFingerprint); otherwise writes a new one. The comparison needs
+ * the firm's insights, read without a model call, so serving a cached brief still costs no credits.
+ */
 export async function GET(request: NextRequest, { params }: { params: Promise<{ firmId: string }> }) {
     try {
         const { firmId } = await params
@@ -161,9 +167,13 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         if (!isAiConfigured()) return NextResponse.json({ brief: null, configured: false })
 
         const { settings, brief } = await readCachedBrief(firmId)
-        if (isBriefFresh(brief)) return NextResponse.json({ brief, configured: true })
+        const insights = isBriefFresh(brief) ? await loadInsights(request, firmId) : null
+        // Without insights to compare (the fetch failed), an age-fresh brief is served as before.
+        if (isBriefFresh(brief, insights ? briefFingerprint(insights) : undefined)) {
+            return NextResponse.json({ brief, configured: true })
+        }
 
-        const fresh = await regenerate(request, firmId, settings, auth.userId)
+        const fresh = await regenerate(request, firmId, settings, auth.userId, insights)
         // Fall back to the stale brief rather than showing nothing when generation fails.
         return NextResponse.json({ brief: fresh ?? brief, configured: true })
     } catch (error) {

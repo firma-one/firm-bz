@@ -1,5 +1,7 @@
+import { createHash } from 'crypto'
 import type { FirmInsightsResponse } from '@/app/api/firms/[firmId]/insights/route'
 import { logger } from '@/lib/logger'
+import { engagementPace, PACE_META, type PaceKey } from '@/lib/insights/firm-engagement-pace'
 import { AI_MODEL, completeText } from './client'
 import { getGuardedAnthropic, meterAiCall } from './guarded-client'
 import { assertWithinAiCreditCap } from './credit-cap'
@@ -7,14 +9,60 @@ import { assertWithinAiCreditCap } from './credit-cap'
 export interface FirmBrief {
     content: string
     generatedAt: string
+    /**
+     * The facts the Overview's cards count (briefFingerprint) when this was written. Briefs saved
+     * before it existed have none, and read as stale once.
+     */
+    fingerprint?: string
 }
 
 export const BRIEF_MAX_AGE_MS = 60 * 60 * 1000
 
-export function isBriefFresh(brief: FirmBrief | null | undefined): boolean {
+/**
+ * Fresh means under an hour old AND written from the same facts the Engagements card shows now:
+ * an engagement falling behind, a deliverable going overdue or an engagement starting makes the
+ * cached brief stale at once, so it never says "nothing needs attention" beside a card that does.
+ * Without `fingerprint` (no insights to compare), age alone decides.
+ */
+export function isBriefFresh(brief: FirmBrief | null | undefined, fingerprint?: string): boolean {
     if (!brief?.generatedAt) return false
     const age = Date.now() - new Date(brief.generatedAt).getTime()
-    return age >= 0 && age < BRIEF_MAX_AGE_MS
+    if (!(age >= 0 && age < BRIEF_MAX_AGE_MS)) return false
+    return fingerprint === undefined || brief.fingerprint === fingerprint
+}
+
+/** Pace keys the Engagements card counts as needing attention ("N need attention"). */
+const ATTENTION_KEYS: PaceKey[] = ['overdue', 'behind', 'slightly_behind']
+
+/**
+ * The Overview's view of each active engagement, by the card's own rule (engagementPace), so the
+ * brief and the card can't disagree about what needs attention.
+ */
+function engagementFacts(data: FirmInsightsResponse, nowMs: number) {
+    const rows = data.engagementRows ?? []
+    const paced = rows.map((r) => ({ row: r, pace: engagementPace(r, nowMs) }))
+    return {
+        attention: paced.filter((p) => ATTENTION_KEYS.includes(p.pace.key)),
+        overdueDeliverables: rows.filter((r) => r.deliverables.overdue > 0),
+        untracked: paced.filter((p) => p.pace.key === 'no_due_date' || p.pace.key === 'no_deliverables'),
+        active: rows.length,
+    }
+}
+
+/**
+ * What the cached brief has to match: which engagements need attention and why, overdue deliverable
+ * counts, what can't be tracked yet, and how many engagements are active. Days and percentages are
+ * left out, so the brief isn't rewritten every day an engagement merely stays behind.
+ */
+export function briefFingerprint(data: FirmInsightsResponse, nowMs = Date.now()): string {
+    const f = engagementFacts(data, nowMs)
+    const facts = {
+        attention: f.attention.map((p) => `${p.row.engagementId}:${p.pace.key}`).sort(),
+        overdueDeliverables: f.overdueDeliverables.map((r) => `${r.engagementId}:${r.deliverables.overdue}`).sort(),
+        untracked: f.untracked.map((p) => `${p.row.engagementId}:${p.pace.key}`).sort(),
+        active: f.active,
+    }
+    return createHash('sha1').update(JSON.stringify(facts)).digest('hex').slice(0, 16)
 }
 
 /**
@@ -36,7 +84,9 @@ Produce EXACTLY these three sections, each as a markdown heading on its own line
 Rules:
 - 1-2 sentences per section. Plain prose, no bullet points or nested headings.
 - Where things stand: the shape of the firm right now — active work, pipeline, recent movement.
-- Needs attention: what is most urgent or most at risk today. If nothing is, say so plainly.
+- Needs attention: what is most urgent or most at risk today. It must cover every engagement under
+  "Needs attention (the Overview's count)" and every overdue deliverable in the snapshot. Say that
+  nothing needs attention only when the snapshot lists neither.
 - Worth watching: what is not urgent yet but is trending the wrong way. If nothing is, say so.
 - Be specific. Name clients and engagements, give counts, say how many days overdue.
 - You are NOT given monetary amounts, and must never state or estimate one. Pipeline is described
@@ -83,6 +133,38 @@ export function buildSnapshot(data: FirmInsightsResponse): string {
             ? ` ${data.clientPipelineBreakdown.length} client(s) carry pipeline value.`
             : '')
     )
+
+    // The Overview's own judgment of each engagement (the Engagements card and its rows), so the
+    // brief reads the same facts the reader sees beside it. Without these the brief only knew
+    // engagement due dates and called a firm with work behind pace "nothing at risk".
+    const facts = engagementFacts(data, Date.now())
+    if (facts.attention.length > 0) {
+        lines.push(
+            `Needs attention (the Overview's count): ${facts.attention.length} engagement(s): ` +
+            facts.attention.slice(0, 6).map(({ row, pace }) => {
+                const what = `${row.name} (${row.clientName})`
+                if (pace.key === 'overdue') return `${what} is ${Math.abs(pace.daysLeft ?? 0)}d past its due date`
+                return `${what} is ${PACE_META[pace.key].label.toLowerCase()}: ` +
+                    `${pace.deliveredPct ?? 0}% of deliverables approved with ${pace.timePct ?? 0}% of its time used`
+            }).join('; ') + '.'
+        )
+    }
+    if (facts.overdueDeliverables.length > 0) {
+        lines.push(
+            'Overdue deliverables: ' +
+            facts.overdueDeliverables.slice(0, 6)
+                .map((r) => `${r.deliverables.overdue} in ${r.name} (${r.clientName})`)
+                .join('; ') + '.'
+        )
+    }
+    if (facts.untracked.length > 0) {
+        lines.push(
+            "Can't be tracked yet: " +
+            facts.untracked.slice(0, 6)
+                .map(({ row, pace }) => `${row.name} (${row.clientName}) has ${pace.key === 'no_due_date' ? 'no due date' : 'no deliverables'}`)
+                .join('; ') + '.'
+        )
+    }
 
     if (data.overdueDueDates > 0 || data.nearingDueDates > 0) {
         lines.push(`Due dates: ${data.overdueDueDates} overdue, ${data.nearingDueDates} due within 7 days.`)

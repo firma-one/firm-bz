@@ -25,6 +25,7 @@ vi.mock('@/lib/prisma', () => ({
 vi.mock('@/lib/ai/firm-brief', () => ({
     generateFirmBrief: vi.fn(),
     isBriefFresh: () => false,
+    briefFingerprint: () => 'fp-now',
     streamFirmBrief: stream,
 }))
 
@@ -60,7 +61,7 @@ describe('POST /api/firms/[firmId]/ai-brief?stream=1', () => {
         // Saved alongside the firm's other settings, which it keeps.
         expect(firmUpdate).toHaveBeenCalledWith({
             where: { id: 'f1' },
-            data: { settings: { theme: 'kept', aiBrief: expect.objectContaining({ content: '## Where things stand\nAll quiet.' }) } },
+            data: { settings: { theme: 'kept', aiBrief: expect.objectContaining({ content: '## Where things stand\nAll quiet.', fingerprint: 'fp-now' }) } },
         })
     })
 

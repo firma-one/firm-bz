@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildSnapshot } from './firm-brief'
+import { briefFingerprint, buildSnapshot, isBriefFresh } from './firm-brief'
 import type { FirmInsightsResponse } from '@/app/api/firms/[firmId]/insights/route'
 
 /**
@@ -99,5 +99,64 @@ describe('buildSnapshot — per-user data', () => {
         expect(snap).not.toContain('Initech Holdings')
         expect(snap).not.toContain('divorce')
         expect(snap).not.toMatch(/reminder/i)
+    })
+})
+
+/**
+ * The brief sits beside the Engagements card, so it must read the same facts: the card's own pace
+ * rule, overdue deliverables and what can't be tracked yet. It once said "nothing is at risk" beside
+ * a card counting an engagement behind pace with a deliverable overdue.
+ */
+describe('buildSnapshot — the Overview\'s facts', () => {
+    const DAY = 86400000
+    const iso = (days: number) => new Date(Date.now() + days * DAY).toISOString()
+    const row = (over: Record<string, unknown> = {}) => ({
+        engagementId: 'e1', name: 'Q2 Go-To-Market Positioning', slug: 'q2', clientName: 'DataSentry', clientSlug: 'ds',
+        startDate: iso(-20), dueDate: iso(80), lead: null,
+        deliverables: { total: 2, toDo: 1, inProgress: 1, inReview: 0, approved: 0, overdue: 1 },
+        ...over,
+    })
+
+    it('lists what the card counts as needing attention, with why', () => {
+        const snap = buildSnapshot(firm({ engagementRows: [row()] }))
+        expect(snap).toContain("Needs attention (the Overview's count): 1 engagement(s): Q2 Go-To-Market Positioning (DataSentry) is behind pace: 0% of deliverables approved with 20% of its time used.")
+        expect(snap).toContain('Overdue deliverables: 1 in Q2 Go-To-Market Positioning (DataSentry).')
+    })
+
+    it('says which engagements cannot be tracked yet', () => {
+        const snap = buildSnapshot(firm({ engagementRows: [row({ engagementId: 'e2', name: 'DPDP Platform Mock', dueDate: null })] }))
+        expect(snap).toContain("Can't be tracked yet: DPDP Platform Mock (DataSentry) has no due date.")
+        expect(snap).not.toContain('Needs attention (the Overview')
+    })
+
+    it('adds nothing when every engagement is on pace', () => {
+        const snap = buildSnapshot(firm({ engagementRows: [row({ deliverables: { total: 2, toDo: 0, inProgress: 0, inReview: 0, approved: 2, overdue: 0 } })] }))
+        expect(snap).not.toMatch(/Needs attention|Overdue deliverables|Can't be tracked/)
+    })
+})
+
+describe('briefFingerprint and isBriefFresh', () => {
+    const DAY = 86400000
+    const now = Date.now()
+    const iso = (days: number) => new Date(now + days * DAY).toISOString()
+    const onPace = { engagementId: 'e1', name: 'GTM', slug: 'gtm', clientName: 'Acme', clientSlug: 'a', startDate: iso(-20), dueDate: iso(80), lead: null,
+        deliverables: { total: 2, toDo: 0, inProgress: 0, inReview: 0, approved: 2, overdue: 0 } }
+    const behind = { ...onPace, deliverables: { ...onPace.deliverables, approved: 0, toDo: 2 } }
+
+    it('changes when an engagement falls behind, not when a day merely passes', () => {
+        const a = briefFingerprint(firm({ engagementRows: [onPace] }), now)
+        expect(briefFingerprint(firm({ engagementRows: [behind] }), now)).not.toBe(a)
+        expect(briefFingerprint(firm({ engagementRows: [onPace] }), now + DAY)).toBe(a)
+    })
+
+    it('treats an hour-fresh brief as stale once the facts behind it change', () => {
+        const fp = briefFingerprint(firm({ engagementRows: [onPace] }), now)
+        const brief = { content: 'x', generatedAt: new Date().toISOString(), fingerprint: fp }
+        expect(isBriefFresh(brief, fp)).toBe(true)
+        expect(isBriefFresh(brief, briefFingerprint(firm({ engagementRows: [behind] }), now))).toBe(false)
+        // Saved before fingerprints existed: replaced once.
+        expect(isBriefFresh({ content: 'x', generatedAt: new Date().toISOString() }, fp)).toBe(false)
+        // Nothing to compare with: age alone, as before.
+        expect(isBriefFresh(brief)).toBe(true)
     })
 })
