@@ -1,5 +1,5 @@
 import { BRAND_NAME } from '@/config/brand'
-import { renderEmail, ctaButton, escHtml, TEXT_DARK, TEXT_MUTED } from './base'
+import { renderEmail, ctaButton, detailCard, emailFootnote, emailHeading, escHtml } from './base'
 
 const STATUS_LABELS: Record<string, string> = {
   to_do: 'To Do',
@@ -30,26 +30,13 @@ export function renderDocumentStatusChangedEmail(params: DocumentStatusChangedEm
 
   const headline = isRejection ? 'Changes were requested' : 'Document status changed'
 
-  const body = `
-    <h2 style="margin:0 0 16px;font-size:20px;font-weight:700;color:${TEXT_DARK};letter-spacing:-0.01em;">${escHtml(headline)}</h2>
-
-    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f9f9fb;border:1px solid #e5e7eb;border-radius:6px;margin-bottom:20px;">
-      <tr>
-        <td style="padding:16px 20px;">
-          <p style="margin:0 0 6px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:${TEXT_MUTED};">File</p>
-          <p style="margin:0;font-size:15px;font-weight:600;color:${TEXT_DARK};">${escHtml(fileName)}</p>
-          <p style="margin:6px 0 0;font-size:13px;color:${TEXT_MUTED};">${escHtml(engagementName)}</p>
-          <p style="margin:10px 0 0;font-size:13px;color:${TEXT_MUTED};">${oldStatusLabel ? `${escHtml(oldStatusLabel)} → ` : ''}<strong style="color:${TEXT_DARK};">${escHtml(newStatusLabel)}</strong></p>
-        </td>
-      </tr>
-    </table>
-
-    ${ctaUrl ? ctaButton('View document →', ctaUrl) : ''}
-
-    <p style="margin:24px 0 0;font-size:12px;color:${TEXT_MUTED};line-height:1.6;">
-      You can turn this email off in Firm Settings → Event Notifications.
-    </p>
-  `
+  const statusLine = `<p style="margin:10px 0 0;font-size:13px;line-height:1.5;color:#3F5650;">${oldStatusLabel ? `${escHtml(oldStatusLabel)} → ` : ''}<strong style="color:#05271C;">${escHtml(newStatusLabel)}</strong></p>`
+  const body = [
+    emailHeading(headline),
+    detailCard({ label: 'File', title: fileName, lines: [engagementName], extraHtml: statusLine }),
+    ctaUrl ? ctaButton('View document', ctaUrl) : '',
+    emailFootnote('You can turn this email off in Firm Settings → Event Notifications.'),
+  ].join('\n')
 
   return { subject, html: renderEmail({ title: subject, preheader: `${fileName} — ${newStatusLabel}`, body }) }
 }

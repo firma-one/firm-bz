@@ -5,6 +5,7 @@ import Link from "next/link"
 import {
   BarChart3,
   Check,
+  ChevronRight,
   Cookie,
   Lock,
   Shield,
@@ -24,20 +25,32 @@ const DEFAULT_PREFERENCES: CookieConsentUIPreferences = {
   analytics: false,
 }
 
-const headlineFont = "[font-family:var(--font-kinetic-headline),system-ui,sans-serif]"
-const bodyFont = "[font-family:var(--font-kinetic-body),system-ui,sans-serif]"
-const labelFont = "[font-family:var(--font-header-label),system-ui,sans-serif]"
+/*
+ * Visuals follow the marketing site's green system (components/marketing/v2/marketing-v2.css). Literal
+ * values rather than the `.mk` tokens: this banner renders on every route, inside or outside that scope.
+ */
+const displayFont = "[font-family:var(--font-header-label),'Space_Grotesk',system-ui,sans-serif]"
+const bodyFont = "[font-family:var(--font-inter),Inter,system-ui,sans-serif]"
+const pill =
+  "inline-flex h-11 items-center justify-center rounded-full px-5 text-[14.5px] font-semibold leading-none transition-[transform,box-shadow,background-color] duration-300 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#009669] focus-visible:ring-offset-2"
+const pillPrimary = cn(
+  pill,
+  "bg-[#7DFF77] font-bold text-[#03281B] shadow-[inset_0_0_0_1px_rgba(3,40,27,0.16),0_12px_26px_-12px_rgba(0,150,105,0.7)] hover:shadow-[inset_0_0_0_1px_rgba(3,40,27,0.16),0_14px_30px_-10px_rgba(0,150,105,0.85),0_0_0_4px_rgba(125,255,119,0.25)]",
+)
+const pillSecondary = cn(pill, "bg-white text-[#05271C] shadow-[0_0_0_1px_rgba(5,39,28,0.14)] hover:bg-[#F6FAF8]")
 
-function KineticSwitch({
+function ConsentSwitch({
   checked,
   onCheckedChange,
   disabled,
   id,
+  label,
 }: {
   checked: boolean
   onCheckedChange: (next: boolean) => void
   disabled?: boolean
   id?: string
+  label: string
 }) {
   return (
     <button
@@ -45,28 +58,24 @@ function KineticSwitch({
       type="button"
       role="switch"
       aria-checked={checked}
+      aria-label={label}
       disabled={disabled}
       onClick={() => !disabled && onCheckedChange(!checked)}
       className={cn(
-        "relative inline-flex h-6 w-12 shrink-0 items-center rounded-full transition-colors duration-300",
-        disabled && "cursor-not-allowed opacity-90",
-        !disabled && checked && "bg-[#72ff70]",
-        !disabled && !checked && "bg-[#eae7e9]",
-        disabled && "bg-[#72ff70]/40",
+        "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors duration-300",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#009669] focus-visible:ring-offset-2",
+        disabled ? "cursor-not-allowed bg-[#009669]/45" : checked ? "bg-[#009669]" : "bg-[#D9E3DE]",
       )}
     >
       <span
         className={cn(
-          "pointer-events-none absolute left-1 inline-block h-4 w-4 rounded-sm bg-white shadow-sm transition-transform duration-300 ease-out",
-          checked ? "translate-x-6" : "translate-x-0",
+          "pointer-events-none absolute left-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-white shadow-[0_1px_3px_rgba(3,40,27,0.25)] transition-transform duration-300 ease-out",
+          checked ? "translate-x-5" : "translate-x-0",
         )}
         aria-hidden
-      />
-      {disabled ? (
-        <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-white/90 shadow-sm">
-          <Lock className="h-3 w-3 text-[#1b1b1d]" aria-hidden strokeWidth={2} />
-        </span>
-      ) : null}
+      >
+        {disabled ? <Lock className="h-2.5 w-2.5 text-[#007A55]" strokeWidth={2.6} /> : null}
+      </span>
     </button>
   )
 }
@@ -188,25 +197,22 @@ export function CookieConsent() {
 
   return (
     <>
-      {/* Light scrim when only banner (page stays usable) — v4 initial banner */}
+      {/* Light scrim while the banner shows (the page stays usable) */}
       {showBanner && !showDetails ? (
-        <div
-          className="pointer-events-none fixed inset-0 z-[60] bg-[#0B1321]/20 backdrop-blur-[2px]"
-          aria-hidden
-        />
+        <div className="pointer-events-none fixed inset-0 z-[60] bg-[rgba(4,22,15,0.16)] backdrop-blur-[2px]" aria-hidden />
       ) : null}
 
-      {/* Cookie settings modal — v4 customization modal */}
+      {/* Cookie settings */}
       {showBanner && showDetails ? (
         <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-[#0B1321]/60 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-[rgba(4,22,15,0.55)] p-4 backdrop-blur-sm"
           onPointerDown={handleModalBackdropPointerDown}
           role="presentation"
         >
           <div
             className={cn(
-              "relative w-full max-w-lg overflow-hidden rounded-lg border border-[#c6c6cc]/15 bg-white shadow-[0_25px_80px_-12px_rgba(27,27,29,0.25)]",
-              headlineFont,
+              "relative w-full max-w-[520px] overflow-hidden rounded-[18px] bg-white text-[#05271C] shadow-[0_0_0_1px_rgba(5,39,28,0.08),0_40px_90px_-30px_rgba(3,40,27,0.55)]",
+              bodyFont,
             )}
             onPointerDown={(e) => e.stopPropagation()}
             role="dialog"
@@ -217,115 +223,68 @@ export function CookieConsent() {
             <button
               type="button"
               onClick={handleBackFromDetails}
-              className={cn(
-                "absolute right-6 top-6 rounded-md text-[#45474c] transition-colors hover:text-[#1b1b1d]",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5a78ff]/40 focus-visible:ring-offset-2",
-              )}
+              className="absolute right-5 top-5 inline-flex h-9 w-9 items-center justify-center rounded-full text-[#4F625B] transition-colors hover:bg-[#F6FAF8] hover:text-[#05271C] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#009669]"
               aria-label="Close cookie settings"
             >
               <X className="h-5 w-5" strokeWidth={2} />
             </button>
 
-            <div className="p-8 pb-4 pr-14">
-              <div className="mb-4 flex items-center gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#141c2a]">
-                  <Cookie className="h-5 w-5 text-white" strokeWidth={2} />
-                </div>
-                <h2
-                  id="cookie-settings-title"
-                  className="text-2xl font-bold tracking-tight text-[#1b1b1d]"
-                >
-                  Cookie Settings
+            <div className="px-7 pb-2 pr-16 pt-7">
+              <div className="flex items-center gap-3">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#EFFFF1] shadow-[inset_0_0_0_1px_rgba(0,150,105,0.18)]">
+                  <Cookie className="h-5 w-5 text-[#009669]" strokeWidth={2} aria-hidden />
+                </span>
+                <h2 id="cookie-settings-title" className={cn("text-[24px] font-bold leading-tight tracking-[-0.02em]", displayFont)}>
+                  Cookie settings
                 </h2>
               </div>
-              <p
-                id="cookie-settings-desc"
-                className={cn("text-sm leading-relaxed text-[#45474c]", bodyFont)}
-              >
+              <p id="cookie-settings-desc" className="mt-3 text-[15px] leading-relaxed text-[#3F5650]">
                 We use cookies to optimize your experience on firmä. Manage your preferences below.
               </p>
             </div>
 
-            <div className="px-8 py-2">
-              <div className="flex flex-col gap-0">
-                {/* Necessary */}
-                <div className="flex items-center justify-between gap-4 py-5">
-                  <div className="min-w-0 pr-2">
-                    <div className="mb-1 flex flex-wrap items-center gap-2">
-                      <span className="text-lg font-bold tracking-tight text-[#1b1b1d]">Necessary</span>
-                      <span
-                        className={cn(
-                          "rounded-full bg-[#eae7e9] px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-[#45474c]",
-                          labelFont,
-                        )}
-                      >
-                        Required
-                      </span>
-                    </div>
-                    <p className={cn("text-sm text-[#45474c]/80", bodyFont)}>Required for basic functionality.</p>
-                  </div>
-                  <div className="relative flex shrink-0 items-center pt-1">
-                    <KineticSwitch checked disabled onCheckedChange={() => {}} />
-                  </div>
-                </div>
-
-                <div className="h-px bg-[#c6c6cc]/10" aria-hidden />
-
-                {/* Analytics */}
-                <div className="flex items-center justify-between gap-4 py-5">
-                  <div className="flex min-w-0 items-start gap-3 pr-2">
-                    <BarChart3 className="mt-0.5 h-5 w-5 shrink-0 text-[#5a78ff]" strokeWidth={2} />
-                    <div>
-                      <span className="text-lg font-bold tracking-tight text-[#1b1b1d]">Analytics</span>
-                      <p className={cn("mt-1 text-sm text-[#45474c]/80", bodyFont)}>
-                        Used to improve our platform performance.
-                      </p>
-                    </div>
-                  </div>
-                  <KineticSwitch
-                    checked={preferences.analytics}
-                    onCheckedChange={(v) => setPreferences((p) => ({ ...p, analytics: v }))}
-                  />
-                </div>
-
-                <div className="py-3">
-                  <Link
-                    href="/privacy"
-                    className={cn(
-                      "inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#45474c] transition-colors hover:text-[#006e16]",
-                      labelFont,
-                    )}
-                  >
-                    Read full privacy policy
-                    <span className="text-[10px] font-bold" aria-hidden>
-                      ↗
+            <div className="px-7">
+              <div className="flex items-center justify-between gap-4 border-b border-[#E3EBE7] py-5">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className={cn("text-[17px] font-bold tracking-[-0.01em]", displayFont)}>Necessary</span>
+                    <span className="rounded-full bg-[#F6FAF8] px-2.5 py-0.5 text-[12px] font-semibold text-[#4F625B] shadow-[inset_0_0_0_1px_rgba(5,39,28,0.08)]">
+                      Always on
                     </span>
-                  </Link>
+                  </div>
+                  <p className="mt-1 text-[14px] text-[#3F5650]">Required for basic functionality.</p>
                 </div>
+                <ConsentSwitch checked disabled onCheckedChange={() => {}} label="Necessary cookies, always on" />
+              </div>
+
+              <div className="flex items-center justify-between gap-4 py-5">
+                <div className="flex min-w-0 items-start gap-3">
+                  <BarChart3 className="mt-1 h-5 w-5 shrink-0 text-[#009669]" strokeWidth={2} aria-hidden />
+                  <div>
+                    <span className={cn("text-[17px] font-bold tracking-[-0.01em]", displayFont)}>Analytics</span>
+                    <p className="mt-1 text-[14px] text-[#3F5650]">Used to improve our platform performance.</p>
+                  </div>
+                </div>
+                <ConsentSwitch
+                  checked={preferences.analytics}
+                  onCheckedChange={(v) => setPreferences((p) => ({ ...p, analytics: v }))}
+                  label="Analytics cookies"
+                />
+              </div>
+
+              <div className="pb-6">
+                <Link href="/privacy" className="inline-flex items-center gap-1 text-[14px] font-semibold text-[#007A55] hover:underline">
+                  Read the privacy policy
+                  <ChevronRight className="h-4 w-4" strokeWidth={2.4} aria-hidden />
+                </Link>
               </div>
             </div>
 
-            <div className="flex flex-col gap-3 bg-[#f6f3f4] p-6 sm:flex-row sm:justify-end">
-              <button
-                type="button"
-                onClick={handleBackFromDetails}
-                className={cn(
-                  "order-2 rounded-lg border border-[#c6c6cc]/30 bg-white px-6 py-3 text-sm font-bold text-[#1b1b1d] transition-colors hover:bg-[#f6f3f4] sm:order-1",
-                  labelFont,
-                  "uppercase tracking-widest",
-                )}
-              >
+            <div className="flex flex-col-reverse gap-2.5 bg-[#F6FAF8] px-7 py-5 shadow-[inset_0_1px_0_#E3EBE7] sm:flex-row sm:justify-end">
+              <button type="button" onClick={handleBackFromDetails} className={pillSecondary}>
                 Back
               </button>
-              <button
-                type="button"
-                onClick={handleSavePreferences}
-                className={cn(
-                  "order-1 rounded px-8 py-3 text-sm font-bold uppercase tracking-widest text-[#002203] shadow-lg shadow-[#72ff70]/25 transition-all duration-200 sm:order-2",
-                  "bg-[#72ff70] hover:brightness-105 active:scale-[0.98]",
-                  labelFont,
-                )}
-              >
+              <button type="button" onClick={handleSavePreferences} className={cn(pillPrimary, "px-6")}>
                 Save settings
               </button>
             </div>
@@ -333,105 +292,77 @@ export function CookieConsent() {
         </div>
       ) : null}
 
-      {/* Main banner — v4 kinetic institution */}
+      {/* Banner */}
       {showBanner && !showDetails ? (
-        <div className="pointer-events-auto fixed bottom-8 left-1/2 z-[70] w-[calc(100%-2rem)] max-w-4xl -translate-x-1/2">
+        <div className="pointer-events-auto fixed bottom-6 left-1/2 z-[70] w-[calc(100%-2rem)] max-w-[880px] -translate-x-1/2">
           <div
             className={cn(
-              "relative flex overflow-hidden rounded-lg border border-[#c6c6cc]/15 bg-white/70 shadow-[0_40px_100px_-20px_rgba(27,27,29,0.12)] backdrop-blur-[20px]",
+              "flex flex-col gap-5 rounded-[18px] bg-white p-5 text-[#05271C] shadow-[0_0_0_1px_rgba(5,39,28,0.08),0_30px_70px_-24px_rgba(3,40,27,0.45)] md:flex-row md:items-center md:gap-8 md:p-6",
+              bodyFont,
             )}
           >
-            <div className="w-1 shrink-0 bg-[#72ff70] md:w-2" aria-hidden />
-            <div className="flex min-w-0 flex-1 flex-col gap-6 p-6 md:flex-row md:items-center md:gap-8 md:p-8">
-              <div className="min-w-0 flex-1 space-y-3">
-                <div className="flex items-center gap-3">
-                  <Shield className="h-5 w-5 shrink-0 text-[#006e16]" strokeWidth={2} aria-hidden />
-                  <h3
-                    className={cn(
-                      "text-lg font-bold uppercase tracking-tight text-[#1b1b1d]",
-                      headlineFont,
-                    )}
-                  >
-                    Privacy architecture
-                  </h3>
-                </div>
-                <p className={cn("text-sm leading-relaxed text-[#45474c]", bodyFont)}>
-                  We value your privacy. We use cookies to enhance your experience and analyze our traffic. Our
-                  system treats data with institutional precision and kinetic speed. See our{" "}
-                  <Link href="/privacy" className="font-semibold text-[#006e16] underline underline-offset-2 hover:text-[#00530e]">
+            <div className="flex min-w-0 flex-1 items-start gap-3.5">
+              <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#EFFFF1] shadow-[inset_0_0_0_1px_rgba(0,150,105,0.18)]">
+                <Shield className="h-[18px] w-[18px] text-[#009669]" strokeWidth={2} aria-hidden />
+              </span>
+              <div className="min-w-0">
+                <h3 className={cn("text-[18px] font-bold leading-tight tracking-[-0.015em]", displayFont)}>Your privacy</h3>
+                <p className="mt-1.5 text-[14.5px] leading-relaxed text-[#3F5650]">
+                  We use cookies that the site needs to work and, with your consent, analytics to understand our traffic. See
+                  our{" "}
+                  <Link href="/privacy" className="font-semibold text-[#007A55] underline underline-offset-2 hover:text-[#05271C]">
                     Privacy Policy
                   </Link>
                   .
                 </p>
               </div>
-              <div className="flex w-full shrink-0 flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-end md:w-auto md:flex-none">
-                <button
-                  type="button"
-                  onClick={handleRejectNonEssential}
-                  className={cn(
-                    "px-4 py-2 text-xs font-bold uppercase tracking-widest text-[#1b1b1d]/60 transition-colors hover:text-[#1b1b1d]",
-                    labelFont,
-                  )}
-                >
-                  Reject non-essential
-                </button>
-                <button
-                  type="button"
-                  onClick={handleCustomize}
-                  className={cn(
-                    "w-full rounded-lg border border-[#c6c6cc] px-6 py-3 text-xs font-bold uppercase tracking-widest text-[#1b1b1d] transition-all hover:bg-[#eae7e9] sm:w-auto",
-                    labelFont,
-                  )}
-                >
-                  Customize settings
-                </button>
-                <button
-                  type="button"
-                  onClick={handleAcceptAll}
-                  className={cn(
-                    "w-full rounded-lg bg-[#72ff70] px-8 py-3 text-xs font-bold uppercase tracking-widest text-[#002203] shadow-[0_10px_20px_-10px_rgba(114,255,112,0.45)] transition-all hover:brightness-110 sm:w-auto",
-                    labelFont,
-                  )}
-                >
-                  Accept all
-                </button>
-              </div>
             </div>
-            <div className="pointer-events-none absolute right-0 top-0 hidden p-1 lg:block" aria-hidden>
-              <div className="h-8 w-8 border-r border-t border-[#c6c6cc]/30" />
+            <div className="flex w-full shrink-0 flex-col-reverse items-stretch gap-2 sm:flex-row sm:items-center sm:justify-end md:w-auto">
+              <button
+                type="button"
+                onClick={handleRejectNonEssential}
+                className={cn(pill, "px-4 text-[#3F5650] hover:bg-[#F6FAF8] hover:text-[#05271C]")}
+              >
+                Reject non-essential
+              </button>
+              <button type="button" onClick={handleCustomize} className={pillSecondary}>
+                Customize
+              </button>
+              <button type="button" onClick={handleAcceptAll} className={cn(pillPrimary, "px-6")}>
+                Accept all
+              </button>
             </div>
           </div>
         </div>
       ) : null}
 
-      {/* Confirmation toast — v4 confirmation state */}
+      {/* Saved */}
       {showSavedToast ? (
         <div
-          className="animate-in fade-in slide-in-from-bottom-4 fixed bottom-10 left-1/2 z-[100] flex w-[calc(100vw-2rem)] max-w-none -translate-x-1/2 duration-500 sm:w-auto sm:max-w-[min(100vw-2rem,36rem)]"
+          className="animate-in fade-in slide-in-from-bottom-4 fixed bottom-8 left-1/2 z-[100] flex w-[calc(100vw-2rem)] -translate-x-1/2 duration-500 sm:w-auto sm:max-w-[min(100vw-2rem,36rem)]"
           role="status"
           aria-live="polite"
         >
           <div
             className={cn(
-              "flex w-full items-center gap-3 rounded-2xl border border-[#c6c6cc]/15 bg-white/90 px-4 py-3 shadow-[0_20px_50px_rgba(0,0,0,0.1)] backdrop-blur-xl sm:gap-4 sm:rounded-full sm:px-5",
+              "flex w-full items-center gap-3 rounded-2xl bg-white px-4 py-3 text-[#05271C] shadow-[0_0_0_1px_rgba(5,39,28,0.08),0_20px_44px_-18px_rgba(3,40,27,0.45)] sm:rounded-full sm:px-5",
+              bodyFont,
             )}
           >
-            <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#00f93f]/90">
-              <Check className="h-3.5 w-3.5 text-[#006e16]" strokeWidth={3} aria-hidden />
-            </div>
-            <div className="flex min-w-0 flex-1 flex-col gap-0.5 text-left sm:flex-row sm:items-center sm:gap-2 sm:text-left">
-              <span className={cn("text-sm font-bold tracking-tight text-[#1b1b1d]", headlineFont)}>
-                Preferences saved.
-              </span>
-              <span className={cn("text-xs text-[#45474c]", bodyFont)}>Your experience is now optimized.</span>
-            </div>
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#7DFF77]">
+              <Check className="h-3.5 w-3.5 text-[#03281B]" strokeWidth={3} aria-hidden />
+            </span>
+            <span className="min-w-0 flex-1 text-[14px]">
+              <strong className="font-semibold">Preferences saved.</strong>{" "}
+              <span className="text-[#3F5650]">Change them anytime from Cookie settings in the footer.</span>
+            </span>
             <button
               type="button"
               onClick={() => {
                 clearToastTimer()
                 setShowSavedToast(false)
               }}
-              className="ml-1 rounded-full p-1 text-[#45474c] transition-colors hover:bg-[#eae7e9]"
+              className="ml-1 inline-flex h-7 w-7 items-center justify-center rounded-full text-[#4F625B] transition-colors hover:bg-[#F6FAF8]"
               aria-label="Dismiss"
             >
               <X className="h-4 w-4" strokeWidth={2} />

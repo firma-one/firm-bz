@@ -1,0 +1,582 @@
+/*
+ * Home §3 · Meet Brio: the dark slanted band with the "A day with Brio" scroll story.
+ * Desktop (>= 1024 px): four moments in a row, a horizontal line through the dots.
+ * Below 1024 px: the phone board's vertical timeline, the line drawing downward on the left.
+ * The line's fill is written to the DOM by the scroll handler (transform only); everything else is
+ * opacity and transform transitions on the moment cards.
+ */
+
+/* ── Band ─────────────────────────────────────────────────────────────────────────────────── */
+
+/* The board sets no line-height inside this band, so text sits at the font's own "normal". */
+.mk-brio.mk-band {
+  padding: clamp(104px, 17.36vw, 250px) 0 clamp(104px, 18.06vw, 260px);
+  color: #e8f5ee;
+  line-height: normal;
+}
+@media (max-width: 767px) {
+  .mk-brio .mk-dark-mesh {
+    background-size: 200% 200%;
+  }
+}
+
+/* ── Intro ────────────────────────────────────────────────────────────────────────────────── */
+
+.mk-brio-intro {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 48px 80px;
+  align-items: flex-start;
+}
+.mk-brio-intro-main {
+  flex: 1.2 1 440px;
+  min-width: 0;
+}
+.mk-brio-lockup {
+  margin: 0;
+  font-family: var(--mk-font-display);
+  font-size: 58px;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  color: #ffffff;
+}
+.mk-brio-tagline {
+  margin: 8px 0 0;
+  font-size: 14.5px;
+  color: #9fb8ae;
+}
+.mk-brio-h2 {
+  margin: 40px 0 0;
+  max-width: 640px;
+  font-family: var(--mk-font-display);
+  font-weight: 700;
+  font-size: clamp(38px, 4vw, 60px);
+  line-height: 1.02;
+  letter-spacing: -0.035em;
+  color: #ffffff;
+  text-wrap: balance;
+}
+.mk-brio-lede {
+  margin: 22px 0 0;
+  max-width: 560px;
+  font-size: 18.5px;
+  line-height: 1.6;
+  color: #b5c9c1;
+}
+.mk-brio-on-white {
+  color: #ffffff;
+}
+
+/* "How Brio is kept in its lane": beside the intro from 768 px, after the timeline on phones. */
+.mk-brio-lane {
+  flex: 1 1 340px;
+  min-width: 0;
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 24px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow: inset 0 0 0 1px rgba(125, 255, 119, 0.16);
+  font-size: 15.5px;
+  color: #e3efe9;
+}
+.mk-brio-lane-chip {
+  align-self: flex-start;
+  margin: 0;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: #7dff77;
+  color: #03281b;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.mk-brio-lane ul {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.mk-brio-lane li {
+  display: flex;
+  gap: 12px;
+}
+.mk-brio-lane li > svg {
+  display: block;
+  flex: none;
+  margin-top: 2px;
+}
+.mk-brio-lane--phone {
+  max-width: none;
+  margin-top: 26px;
+  gap: 12px;
+  padding: 18px;
+  border-radius: 14px;
+  font-size: 14.5px;
+}
+.mk-brio-lane--phone ul {
+  gap: 12px;
+}
+.mk-brio-lane--phone li {
+  gap: 10px;
+}
+.mk-brio-lane--phone li > svg {
+  margin-top: 3px;
+}
+
+/* ── "A day with Brio" ────────────────────────────────────────────────────────────────────── */
+
+.mk-brio-day {
+  margin-top: 88px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 16px;
+}
+.mk-brio-day h3 {
+  margin: 0;
+  font-family: var(--mk-font-display);
+  font-weight: 700;
+  font-size: 28px;
+  letter-spacing: -0.02em;
+  color: #ffffff;
+}
+.mk-brio-day p {
+  margin: 0;
+  font-size: 15px;
+  color: #9fb8ae;
+}
+
+/* ── Timeline ─────────────────────────────────────────────────────────────────────────────── */
+
+.mk-brio-tl {
+  position: relative;
+  margin-top: 28px;
+}
+.mk-brio-track,
+.mk-brio-fill {
+  position: absolute;
+  border-radius: 1px;
+  pointer-events: none;
+}
+.mk-brio-track {
+  background: rgba(255, 255, 255, 0.12);
+}
+.mk-brio-fill {
+  box-shadow: 0 0 12px rgba(125, 255, 119, 0.55);
+  will-change: transform;
+  transition: transform 160ms linear;
+}
+.mk-brio-moments {
+  position: relative;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.mk-brio-m {
+  min-width: 0;
+}
+
+/* The dot: a dark socket, and the lit dot that pops in when the line reaches it. */
+.mk-brio-dot {
+  position: relative;
+  display: block;
+  flex: none;
+  width: 12px;
+  height: 12px;
+}
+.mk-brio-dot > span {
+  position: absolute;
+  inset: 0;
+  border-radius: 6px;
+}
+.mk-brio-dot-base {
+  background: #0e3a2b;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.28);
+}
+.mk-brio-dot-on {
+  background: #7dff77;
+  box-shadow: 0 0 0 4px rgba(125, 255, 119, 0.18), 0 0 14px rgba(125, 255, 119, 0.6);
+  transition: opacity 500ms var(--mk-ease);
+}
+
+.mk-brio-label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #ddede6;
+}
+
+@media (min-width: 1024px) {
+  .mk-brio-track,
+  .mk-brio-fill {
+    left: 6px;
+    right: 4px;
+    top: 5px;
+    height: 2px;
+  }
+  .mk-brio-fill {
+    background: linear-gradient(90deg, #7dff77, #3cf2c0 70%, #7dff77);
+    transform-origin: left center;
+    transform: scaleX(0);
+  }
+  .mk-brio-moments {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 16px;
+    align-items: stretch;
+  }
+  .mk-brio-m {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .mk-brio-label {
+    margin-top: -2px;
+  }
+  .mk-brio-card {
+    flex: 1;
+  }
+}
+
+@media (max-width: 1023px) {
+  .mk-brio-tl {
+    max-width: 600px;
+    padding-left: 26px;
+  }
+  .mk-brio-track,
+  .mk-brio-fill {
+    left: 5px;
+    top: 9px;
+    bottom: 30px;
+    width: 2px;
+  }
+  .mk-brio-fill {
+    background: linear-gradient(180deg, #7dff77, #3cf2c0 70%, #7dff77);
+    transform-origin: center top;
+    transform: scaleY(0);
+  }
+  .mk-brio-m {
+    position: relative;
+    padding-bottom: 26px;
+  }
+  .mk-brio-m:last-child {
+    padding-bottom: 0;
+  }
+  .mk-brio-dot {
+    position: absolute;
+    left: -26px;
+    top: 3px;
+  }
+  .mk-brio-card {
+    margin-top: 10px;
+  }
+}
+
+/* Chips beside a moment's time: NOW (pulsing, during the workday), NEXT (outside it), NEW. */
+.mk-brio-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+.mk-brio-chip--now {
+  background: rgba(125, 255, 119, 0.16);
+  color: #7dff77;
+  animation: mkFadeIn 500ms var(--mk-ease) both;
+}
+.mk-brio-chip--next {
+  background: rgba(255, 255, 255, 0.08);
+  color: #b5c9c1;
+  animation: mkFadeIn 500ms var(--mk-ease) both;
+}
+.mk-brio-chip--new {
+  background: #7dff77;
+  color: #03281b;
+  letter-spacing: normal;
+}
+.mk-brio-now-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 3px;
+  background: #7dff77;
+  animation: mkNowPulse 1.6s ease-in-out infinite;
+}
+
+/* ── Moment cards (product UI on white) ───────────────────────────────────────────────────── */
+
+.mk-brio-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: #ffffff;
+  border-radius: 14px;
+  padding: 16px;
+  font-family: var(--mk-font-body);
+  font-size: 13px;
+  color: #37352f;
+  box-shadow: 0 30px 60px -30px rgba(0, 0, 0, 0.7);
+  will-change: transform, opacity;
+  transition: opacity 900ms var(--mk-ease), transform 900ms var(--mk-ease);
+}
+.mk-brio-art {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.mk-brio-green {
+  color: #009669;
+}
+.mk-brio-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 8px;
+}
+.mk-brio-sep {
+  color: #c9c8c4;
+}
+.mk-brio-title {
+  font-weight: 600;
+  white-space: nowrap;
+}
+.mk-brio-meta {
+  margin-left: auto;
+  color: #8d8b86;
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+.mk-brio-brief {
+  line-height: 1.55;
+  min-height: 82px;
+}
+.mk-brio-caret {
+  display: inline-block;
+  width: 1.5px;
+  height: 14px;
+  margin-left: 1px;
+  vertical-align: -2px;
+  background: #009669;
+  animation: mkCaret 1s steps(1) infinite;
+}
+.mk-brio-copy {
+  line-height: 1.55;
+}
+
+/* Ask: the question bubble, then Brio's streamed answer. */
+.mk-brio-q-row {
+  display: flex;
+  justify-content: flex-end;
+}
+.mk-brio-q {
+  padding: 7px 11px;
+  border-radius: 12px 12px 4px 12px;
+  background: #f1f1ef;
+  transition: opacity 600ms var(--mk-ease), transform 700ms var(--mk-ease);
+}
+.mk-brio-a {
+  min-height: 92px;
+  transition: opacity 500ms var(--mk-ease);
+}
+.mk-brio-a-who {
+  margin-bottom: 2px;
+  font-size: 12.5px;
+}
+.mk-brio-think {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px 0;
+}
+.mk-brio-think > span {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #009669;
+  animation: mkBrioDot 1.2s ease-in-out infinite;
+}
+.mk-brio-think > span:nth-child(2) {
+  animation-delay: 160ms;
+}
+.mk-brio-think > span:nth-child(3) {
+  animation-delay: 320ms;
+}
+
+/* The client update: the drafted sections tick in, then "Review and publish" is pressed. */
+.mk-brio-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12.5px;
+}
+.mk-brio-tick {
+  transition: opacity 600ms var(--mk-ease), transform 700ms var(--mk-ease);
+}
+.mk-brio-tick > span {
+  color: #37352f;
+}
+.mk-brio-btn {
+  padding: 6px 12px;
+  border-radius: 5px;
+  background: #047857;
+  color: #ffffff;
+  font-weight: 500;
+  font-size: 12.5px;
+}
+.mk-brio-btn--start {
+  align-self: flex-start;
+}
+.mk-brio-btn--ghost {
+  padding: 6px 10px;
+  background: none;
+  color: inherit;
+  font-weight: 400;
+  border: 1px solid rgba(55, 53, 47, 0.16);
+}
+.mk-brio-actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* Tidy the files: the old name is struck through, the new one slides in under it. */
+.mk-brio-rename {
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: #f7f7f5;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.mk-brio-old {
+  position: relative;
+  display: inline-block;
+  color: #8d8b86;
+}
+.mk-brio-strike {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 52%;
+  height: 1px;
+  background: #8d8b86;
+  transform-origin: left center;
+  transition: transform 600ms var(--mk-ease);
+}
+.mk-brio-new {
+  display: block;
+  transition: opacity 700ms var(--mk-ease), transform 800ms var(--mk-ease);
+}
+
+.mk-brio-foot {
+  margin: auto 0 0;
+  padding-top: 10px;
+  border-top: 1px solid rgba(55, 53, 47, 0.08);
+  color: #007a55;
+  font-size: 12px;
+  font-weight: 500;
+  transition: opacity 700ms var(--mk-ease);
+}
+
+/* Off-screen, the timeline's small loops (NOW pulse, caret, thinking dots) hold still. */
+.mk-brio-tl[data-paused] .mk-brio-now-dot,
+.mk-brio-tl[data-paused] .mk-brio-caret,
+.mk-brio-tl[data-paused] .mk-brio-think > span {
+  animation-play-state: paused;
+}
+
+/* ── Credits line ─────────────────────────────────────────────────────────────────────────── */
+
+.mk-brio-credits {
+  margin: 40px 0 0;
+  font-size: 15px;
+  color: #9fb8ae;
+}
+.mk-brio-credits-name {
+  color: #ddede6;
+}
+
+/* ── Tablet (768–1023 px): vertical timeline, roomier cards need less reserved height ──────── */
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  .mk-brio-brief {
+    min-height: 42px;
+  }
+  .mk-brio-a {
+    min-height: 64px;
+  }
+}
+
+/* ── Phones (< 768 px): the phone board's sizes and order ─────────────────────────────────── */
+
+@media (max-width: 767px) {
+  .mk-brio-lockup {
+    font-size: 44px;
+  }
+  .mk-brio-tagline {
+    margin-top: 6px;
+    font-size: 13px;
+  }
+  .mk-brio-h2 {
+    margin-top: 28px;
+    font-size: 38px;
+  }
+  .mk-brio-lede {
+    margin-top: 14px;
+    font-size: 16px;
+  }
+  .mk-brio-day {
+    margin-top: 32px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+  .mk-brio-day h3 {
+    font-size: 24px;
+  }
+  .mk-brio-day p {
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  .mk-brio-tl {
+    margin-top: 22px;
+  }
+  .mk-brio-label {
+    font-size: 13px;
+  }
+  .mk-brio-card {
+    padding: 14px;
+  }
+  .mk-brio-brief {
+    min-height: 62px;
+  }
+  .mk-brio-a {
+    min-height: 108px;
+  }
+  .mk-brio-credits {
+    margin-top: 22px;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+}
+
+/* Copy and boxes that differ between the phone board and the desktop board (last, so they win). */
+@media (max-width: 767px) {
+  .mk-brio-wide {
+    display: none;
+  }
+}
+@media (min-width: 768px) {
+  .mk-brio-narrow {
+    display: none;
+  }
+}

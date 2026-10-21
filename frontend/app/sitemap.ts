@@ -57,6 +57,19 @@ export default function sitemap(): MetadataRoute.Sitemap {
         changeFrequency: 'monthly',
         priority: 0.8,
       },
+      {
+        url: `${baseUrl}/resources/changelog`,
+        lastModified: new Date(),
+        changeFrequency: 'weekly',
+        priority: 0.5,
+      },
+      // Audience pages (rebuilt with the marketing redesign).
+      ...['marketing-agencies', 'fractional-execs', 'fractional-cmos', 'fulltime-cmos'].map((slug) => ({
+        url: `${baseUrl}/landing/${slug}`,
+        lastModified: new Date(),
+        changeFrequency: 'monthly' as const,
+        priority: 0.7,
+      })),
     ]
 
     // Blog category pages

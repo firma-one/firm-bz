@@ -1,0 +1,136 @@
+/*
+ * 9 · Pricing teaser. Desktop and tablet: two full plan cards with their checklists and buttons. Phones
+ * (the phone board): compact cards, name and price on one row, one summary line, no buttons.
+ */
+
+.mk-pricing-teaser-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.mk-pricing-teaser-card {
+  min-width: 0;
+  border-radius: 16px;
+  padding: 20px;
+  box-sizing: border-box;
+  background: #ffffff;
+  box-shadow: 0 0 0 1px rgba(5, 39, 28, 0.08);
+}
+/* Standard: a 2 px gradient rim around a white card. */
+.mk-pricing-teaser-rim {
+  min-width: 0;
+  border-radius: 17px;
+  padding: 2px;
+  box-sizing: border-box;
+  background: linear-gradient(140deg, #7dff77, #00c49a 45%, #009669);
+}
+.mk-pricing-teaser-rim > .mk-pricing-teaser-card {
+  height: 100%;
+  border-radius: 15px;
+  box-shadow: none;
+}
+
+.mk-pricing-teaser-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.mk-pricing-teaser-amount {
+  font-family: var(--mk-font-display);
+  font-size: 34px;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 1.15;
+  color: var(--mk-ink);
+}
+.mk-pricing-teaser-amount--green {
+  background: linear-gradient(90deg, #009669, #00c49a);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.mk-pricing-teaser-badge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--mk-electric);
+  color: var(--mk-on-electric);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.mk-pricing-teaser-list {
+  margin-top: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 15.5px;
+  color: #24403a;
+}
+
+.mk-pricing-teaser-card .mk-pricing-teaser-cta {
+  display: flex;
+  width: 100%;
+  height: 50px;
+  margin-top: 30px;
+  font-size: 16px;
+  gap: 4px;
+}
+.mk-pricing-teaser-card .mk-btn--secondary {
+  box-shadow: 0 0 0 1px rgba(5, 39, 28, 0.16);
+}
+
+/* Phone-only and desktop-only pieces. */
+.mk-pricing-teaser .mk-pricing-teaser-desk {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  .mk-pricing-teaser .mk-pricing-teaser-phone {
+    display: none;
+  }
+  .mk-pricing-teaser .mk-pricing-teaser-desk {
+    display: revert;
+  }
+  .mk-pricing-teaser .mk-pricing-teaser-card .mk-pricing-teaser-cta {
+    display: flex;
+  }
+  .mk-pricing-teaser .mk-pricing-teaser-list.mk-pricing-teaser-desk {
+    display: flex;
+  }
+
+  .mk-pricing-teaser-grid {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: 20px;
+  }
+  .mk-pricing-teaser-grid > * {
+    flex: 1 1 340px;
+  }
+  .mk-pricing-teaser-card {
+    border-radius: 20px;
+    padding: 34px;
+    box-shadow: 0 0 0 1px rgba(5, 39, 28, 0.08), 0 18px 40px -28px rgba(3, 40, 27, 0.35);
+  }
+  .mk-pricing-teaser-rim {
+    border-radius: 21px;
+    box-shadow: 0 30px 60px -30px rgba(0, 150, 105, 0.6);
+  }
+  .mk-pricing-teaser-rim > .mk-pricing-teaser-card {
+    border-radius: 19px;
+    padding: 32px;
+  }
+  .mk-pricing-teaser-head {
+    display: block;
+  }
+  .mk-pricing-teaser-amount {
+    font-size: 54px;
+  }
+  .mk-pricing-teaser-badge {
+    padding: 3px 10px;
+    font-size: 12px;
+  }
+}

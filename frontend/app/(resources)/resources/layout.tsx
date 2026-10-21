@@ -1,8 +1,6 @@
-/**
- * Resources (blog, docs, FAQ, changelog, trust center) share the marketing site's look:
- * `.marketing-site` keeps their heading color (app/ui-tokens.css). `display: contents` leaves
- * each section's own layout untouched — custom properties still inherit through it.
- */
+import { MarketingPage } from '@/components/marketing/v2/marketing-page'
+
+/** Resources (blog, docs, FAQ, changelog, trust center) live in the marketing site's shell. */
 export default function ResourcesLayout({ children }: { children: React.ReactNode }) {
-  return <div className="marketing-site contents">{children}</div>
+  return <MarketingPage>{children}</MarketingPage>
 }

@@ -1,5 +1,5 @@
 import type { Metadata } from "next"
-import { AudienceLanding } from "@/components/landing/audience-landing"
+import { AudiencePageV2 } from "@/components/marketing/v2/audience/audience-page"
 import { fractionalCMOContent } from "@/lib/marketing/audience-content"
 import { getPostsByAudienceId } from "@/lib/blog-utils"
 import { BRAND_NAME } from "@/config/brand"
@@ -86,7 +86,7 @@ export default function FractionalCMOPage() {
           }),
         }}
       />
-      <AudienceLanding content={fractionalCMOContent} blogPosts={blogPosts} />
+      <AudiencePageV2 content={fractionalCMOContent} blogPosts={blogPosts} />
     </>
   )
 }

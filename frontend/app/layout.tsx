@@ -40,7 +40,7 @@ const siteTitle = `${BRAND_NAME} | Professional Client Portal atop Google Drive`
 const siteOrigin = getPlatformSiteOrigin()
 
 const defaultDescription =
-  'Turn Google Drive into a professional client portal for marketing agencies, fractional leaders, consultants, and advisors. Secure, non-custodial file sharing. Protect Intellectual Property with time-bombed links and one-click revocation.'
+  'A client workspace on the Google Drive or OneDrive you already use, for consultancies, agencies and fractional leaders: every deliverable on a Board, every approval in one thread, and Brio, the assistant for client delivery. Your files never leave your Drive.'
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteOrigin),
@@ -56,9 +56,9 @@ export const metadata: Metadata = {
     'Professional Services Automation',
     'Non-Custodial Security',
     'Document Management',
-    'Time-Bombed Links',
+    'Client Workspace',
     'Google Drive Integration',
-    'Project Wrap',
+    'AI Assistant for Client Delivery',
     'Advisory Tools',
     'Virtual Data Room',
   ],
@@ -147,7 +147,7 @@ export default async function RootLayout({
               "applicationCategory": "ProductivityApplication",
               "operatingSystem": "Web, Browser",
               "description": `${BRAND_NAME} helps marketing agencies, fractional executives, strategic consultants, and advisory partners create secure, white-labeled client portals from Google Drive folders without moving files—also used by audit, training, and consulting teams.`,
-              "featureList": "Non-custodial file sharing, Client Portals, Marketing and advisory workflows, Project Wrap, Time-bombed links, Audit Logs",
+              "featureList": "Non-custodial file sharing, Client Portals, Deliverable Board, Approvals and comments, Client reminders, Brio AI assistant, Audit Logs",
               "offers": {
                 "@type": "Offer",
                 "price": "0",

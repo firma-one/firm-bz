@@ -18,10 +18,13 @@ export function Brio({
     noIcon = false,
     /** Pin to firmä green instead of following the surrounding text color. */
     fixedColor = false,
+    /** Extra classes for the sparkle alone (the marketing site's glow and twinkle, its color on dark bands). */
+    iconClassName,
 }: {
     className?: string
     noIcon?: boolean
     fixedColor?: boolean
+    iconClassName?: string
 }) {
     const name = (
         <span>
@@ -32,7 +35,9 @@ export function Brio({
                 to ~5px in body text, where two uppercase letters stop resolving. Bolder and at
                 full opacity for the same reason — the earlier `opacity-60` compounded it. Scaling
                 still takes over above ~16px, so headings keep their proportion. */}
+            {/* aria-hidden: screen readers say "Brio", not "BrioAI" (the name and subscript have no space). */}
             <sub
+                aria-hidden
                 className="relative bottom-0 ml-[0.15em] align-baseline font-bold uppercase tracking-[0.06em] opacity-80"
                 style={{ fontSize: 'max(9px, 0.45em)' }}
             >
@@ -54,7 +59,7 @@ export function Brio({
                 <Sparkles
                     strokeWidth={2}
                     aria-hidden
-                    className="h-[0.82em] w-[0.82em]"
+                    className={cn('h-[0.82em] w-[0.82em]', iconClassName)}
                     style={fixedColor ? { color: BRIO_GREEN } : undefined}
                 />
             </span>

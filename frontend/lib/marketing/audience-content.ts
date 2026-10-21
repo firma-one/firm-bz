@@ -11,6 +11,8 @@ export interface AudienceContent {
   audienceLabel: string
   audienceSubtitle: string
   heroHeadline: string
+  /** The trailing phrase of `heroHeadline` that the v2 hero sets in bottle green. */
+  heroAccent?: string
   heroSubheading: string
   ctaText: string
   problemTitle: string
@@ -39,6 +41,7 @@ export const fractionalCMOContent: AudienceContent = {
   audienceLabel: "For Fractional CMOs",
   audienceSubtitle: "Fractional CMO",
   heroHeadline: "If your work is not visible, it is undervalued",
+  heroAccent: "it is undervalued",
   heroSubheading:
     "Stop sending Drive links and PDFs. Show clients the value of your work with a professional portal. Transform how they perceive your strategy. Justify retainers. Land more clients.",
   ctaText: "See How Top CMOs Present Their Work",
@@ -62,7 +65,7 @@ export const fractionalCMOContent: AudienceContent = {
       icon: "dollar",
       title: "Higher Retainer Renewal Rates",
       description:
-        "Clients who see organized, professional delivery renew 3x more often. You lose fewer clients to perceived low value. That's 1-2 extra retainers per year, worth $12-24K.",
+        "Clients who see organized, professional delivery renew more often. You lose fewer clients to perceived low value, and every retainer you keep is one you don't have to replace.",
     },
     {
       icon: "alert",
@@ -71,16 +74,10 @@ export const fractionalCMOContent: AudienceContent = {
         "Stop sending messy Drive links and email attachments that scream 'amateur.' A professional portal fixes the perception problem instantly. Protects the premium brand you've built.",
     },
     {
-      icon: "shield",
-      title: "Control Your IP & Engagement Lifecycle",
-      description:
-        "Lock down frameworks, tag internal-only docs, set expiration dates. When engagements end, one click makes everything view-only. Your IP is protected, engagements wrap cleanly.",
-    },
-    {
       icon: "checkmark",
       title: "20-40 Hours Freed Per Month",
       description:
-        "Eliminate email threads, version confusion, repetitive explanation calls. A CMO managing 5-8 clients recovers nearly a full work day per month.",
+        "Eliminate email threads, version confusion, repetitive explanation calls. The more clients you lead, the more hours you get back each month.",
     },
   ],
   perceptionShiftTitle: "The Perception Shift",
@@ -103,7 +100,7 @@ export const fractionalCMOContent: AudienceContent = {
   faqs: [
     {
       q: "How does Firma help fractional CMOs stand out?",
-      a: "Most fractional CMOs deliver via email or Drive links. Clients see scattered, disorganized handoffs. Firma gives you a branded, professional portal where clients experience your work as premium and intentional. The same strategy, better perceived. That perception shift is worth $2-3K per client per year.",
+      a: "Most fractional CMOs deliver via email or Drive links. Clients see scattered, disorganized handoffs. Firma gives you a branded, professional portal where clients experience your work as premium and intentional. The same strategy, better perceived.",
     },
     {
       q: "What exactly do clients see?",
@@ -111,7 +108,7 @@ export const fractionalCMOContent: AudienceContent = {
     },
     {
       q: "How does this help me raise rates or win more retainers?",
-      a: "Clients perceive premium delivery when work is organized and presented professionally. A branded portal makes you look like a high-end agency, not a freelancer. Clients who can visualize your work are 3x more likely to renew retainers and 2x less likely to push back on price.",
+      a: "Clients perceive premium delivery when work is organized and presented professionally. A branded portal makes you look like a high-end agency, not a freelancer. Clients who can see your work are more likely to renew retainers and less likely to push back on price.",
     },
     {
       q: "Do clients need a login?",
@@ -123,19 +120,19 @@ export const fractionalCMOContent: AudienceContent = {
     },
     {
       q: "What about my files—are they secure?",
-      a: "Your files stay in YOUR Google Drive. We don't store or copy them. You control access: decide who sees what, set expiration dates, revoke instantly. You get an audit trail showing every time a client opens something. Full control, full transparency.",
+      a: "Your files stay in YOUR Google Drive. We don't store or copy them. You control access: decide who sees what and revoke instantly. You get an audit trail showing every time a client opens something. Full control, full transparency.",
     },
     {
       q: "Can I lock down sensitive frameworks?",
-      a: "Yes. Tag internal-only docs and frameworks so they never accidentally get shared. Set expiration dates on sensitive materials. When an engagement ends, one click makes the portal view-only—clean handoff with no awkward 'access denied' messages.",
+      a: "Yes. Tag internal docs and frameworks as Never Share, so they can never be shared with a client by accident. And when an engagement ends, everything you explicitly shared with that client is revoked.",
     },
     {
       q: "How much time does this save per month?",
-      a: "You eliminate: email status update threads, 'where's my report?' messages, PDF versioning confusion, and redundant explanation calls. Conservative estimate: 4-6 hours per month per client. For a CMO managing 5-8 clients, that's 20-48 hours monthly recovered.",
+      a: "You eliminate: email status update threads, 'where's my report?' messages, PDF versioning confusion, and redundant explanation calls. That's hours back every month for each client, and it adds up quickly when you lead several.",
     },
     {
       q: "What's the real business impact?",
-      a: "Conservative ROI math: If this helps you win 1 extra retainer client per year (worth $12-24K) or reduces churn by 1 client, ROI is immediate. Most CMOs see both. Plus, clients perceive your work as worth more, so you can raise rates.",
+      a: "Simple math: if this helps you win one extra retainer client a year, or keep one you would otherwise lose, it pays for itself. Plus, clients perceive your work as worth more, so you can raise rates.",
     },
     {
       q: "How is this different from just using Drive or email?",
@@ -150,6 +147,7 @@ export const fulltimeCMOContent: AudienceContent = {
   audienceLabel: "For Fulltime CMOs",
   audienceSubtitle: "Fulltime CMO",
   heroHeadline: "Unite your team around one shared vision",
+  heroAccent: "one shared vision",
   heroSubheading:
     "Stop operating in silos. Give your entire team—product, sales, leadership—one unified workspace for strategy, execution, and alignment. Your strategy becomes visible. Your impact becomes undeniable.",
   ctaText: "See How Leadership Teams Align",
@@ -157,7 +155,7 @@ export const fulltimeCMOContent: AudienceContent = {
   problems: [
     "Marketing, product, and sales work in different tools. No shared truth about strategy.",
     "Leadership asks 'where's the strategy?' and your docs are scattered across drives and emails.",
-    "Team meetings waste 30% of time on status updates instead of moving strategy forward.",
+    "Team meetings lose time to status updates instead of moving strategy forward.",
     "Executives don't see your work, so they can't advocate for marketing or approve budgets.",
   ],
   problemBoxTitle: "What Most Teams Do:",
@@ -261,6 +259,7 @@ export const agencyContent: AudienceContent = {
   audienceLabel: "For Marketing Agencies",
   audienceSubtitle: "Marketing Agencies",
   heroHeadline: "Your client work deserves a premium home",
+  heroAccent: "a premium home",
   heroSubheading:
     "Stop competing on price. Give clients a branded, professional workspace where they see the value of your work. They'll renew because they perceive you as premium. Reduce churn. Raise rates. Stand out.",
   ctaText: "See How Top Agencies Deliver",
@@ -288,7 +287,7 @@ export const agencyContent: AudienceContent = {
     },
     {
       icon: "checkmark",
-      title: "Reduce Client Churn by 15-25%",
+      title: "Reduce Client Churn",
       description:
         "When clients see organized, professional delivery, they renew. One less client to replace is worth thousands. Recovery rate jumps when you show value instead of hoping they remember it.",
     },
@@ -296,7 +295,7 @@ export const agencyContent: AudienceContent = {
       icon: "checkmark",
       title: "Pricing Power: Raise Rates",
       description:
-        "Premium perception justifies premium pricing. Clients who see professional delivery are 2x less likely to push back on rates and more willing to expand scope.",
+        "Premium perception justifies premium pricing. Clients who see professional delivery are less likely to push back on rates and more willing to expand scope.",
     },
     {
       icon: "checkmark",
@@ -325,7 +324,7 @@ export const agencyContent: AudienceContent = {
   faqs: [
     {
       q: "How much time does this save per month?",
-      a: "You eliminate email threads, 'where's my report?' calls, PDF versioning, and 'can you send me X again?' messages. Conservative estimate: 15-25 hours per month per client. For an agency managing 5-10 clients, that's 75-250 hours monthly recovered.",
+      a: "You eliminate email threads, 'where's my report?' calls, PDF versioning, and 'can you send me X again?' messages. That's hours back every month for each client, across every client you manage.",
     },
     {
       q: "Can I really white-label this?",
@@ -356,12 +355,61 @@ export const agencyContent: AudienceContent = {
       a: "Yes. Pull analytics from your campaigns, embed them in the portal, and clients see impact in real time. They stop asking 'are we getting results?' when they see the dashboard.",
     },
     {
-      q: "What happens when a project ends?",
-      a: "One click converts the portal to view-only. Clients can see their final deliverables forever, but can't add new files or comments. Clean, professional project closure. They remember you organized their work.",
+      q: "Is my client work secure if it's shared with clients?",
+      a: "Your files stay in your Google Drive. Clients only see what you decide to share. You control access and revoke instantly. You get an audit trail of every access. Full control, zero compromise.",
+    },
+  ],
+}
+
+// Fractional executives (every fractional leadership role) - client-facing delivery model.
+// The page body was a hand-written copy of the fractional CMO page, so it shares that copy; the hero,
+// the FAQ (the questions the page's FAQPage JSON-LD has always carried) and the demo link are its own.
+export const fractionalExecsContent: AudienceContent = {
+  ...fractionalCMOContent,
+  audienceId: "fractional-execs",
+  audienceLabel: "For Fractional Executives",
+  audienceSubtitle: "Fractional Executives",
+  heroHeadline: "Fractional CFO, COO, CMO or CISO? Make your work visible.",
+  heroAccent: "Make your work visible.",
+  heroSubheading:
+    "If your work is not visible, it is undervalued. Stop sending Drive links and PDFs: give every client you lead one professional portal for your strategy, reports and deliverables. Justify retainers. Land more clients.",
+  ctaText: "Book a Demo",
+  faqs: [
+    {
+      q: "How does Firma help fractional CMOs present work to clients?",
+      a: "Firma provides a professional, branded client portal where fractional CMOs can present their work with context and narrative. Instead of sending raw Drive links or PDF emails, clients see a structured, polished presentation of your strategy, reports, and performance data—making your work more visible and valuable.",
     },
     {
-      q: "Is my client work secure if it's shared with clients?",
-      a: "Your files stay in your Google Drive. Clients only see what you decide to share. You control access, set expiration dates, and revoke instantly. You get an audit trail of every access. Full control, zero compromise.",
+      q: "What's included in the monthly marketing report portal?",
+      a: "The monthly marketing report portal is a live, interactive workspace where clients can view their campaign performance, strategic insights, and actionable recommendations. It replaces static PDFs with a dynamic experience that keeps clients engaged and aware of the value you're delivering.",
+    },
+    {
+      q: "Do clients need to create a login?",
+      a: "Yes, but onboarding takes less than 1 minute. You send them an invite email link. They click it, set up their login instantly (no password reset emails or complexity), and they're in. Frictionless first-time access.",
+    },
+    {
+      q: "How do I track which clients have viewed my reports?",
+      a: "Firma provides an audit trail showing when clients access documents, which pages they view, and how long they spend in the portal. This gives you visibility into client engagement and helps you understand which recommendations are being reviewed.",
+    },
+    {
+      q: "Is it safe to share confidential strategy docs through Firma?",
+      a: "Absolutely. Firma uses non-custodial architecture, meaning your files stay in your Google Drive and you maintain full control. You can tag sensitive frameworks as 'Never Share' and revoke access instantly. All data is encrypted in transit and at rest.",
+    },
+    {
+      q: "Can I customize the portal with my branding?",
+      a: "Yes. Firma is fully white-labeled, so clients see your brand, logo, and custom domain. The Firma product stays in the background, making it feel like a proprietary tool built just for your firm.",
+    },
+    {
+      q: "How long does it take to set up a client portal?",
+      a: "Setup takes minutes. Connect your Google Drive, select the folders you want to share, map them to client projects, and you're done. No technical skills required—the interface is intuitive and self-guided.",
+    },
+    {
+      q: "Do I need technical skills to use Firma?",
+      a: "No. Firma is designed for non-technical users. The setup is guided, the interface is intuitive, and support is available if you need it. You don't need to manage servers, code, or infrastructure.",
+    },
+    {
+      q: "How does Firma compare to sending reports via email or Drive links?",
+      a: "Email and Drive links feel transactional and impersonal—clients often miss updates or lose context. Firma creates a dedicated, branded workspace that feels premium and intentional. Clients see your work is organized, professional, and valued. Plus, you get visibility into engagement and can update content in real-time without sending new emails.",
     },
   ],
 }

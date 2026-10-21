@@ -33,10 +33,25 @@ export function computeSignupProgressIndex(
   return 0
 }
 
-export type SignupStepProgressVariant = 'kineticDark' | 'light'
+export type SignupStepProgressVariant = 'kineticDark' | 'light' | 'mk'
+
+/** Steps the v2 marketing sign-up card counts: details → how to sign in → code. */
+const MK_STEPS = 3
+
+/**
+ * 1-based step for the `mk` card ("Step 2 of 3"): details (email + name) is 1, choosing how to sign in
+ * is 2, the code is 3. Google OAuth leaves from step 2; `success` keeps every bar filled.
+ */
+export function signupMkStepNumber(step: SignupStepKey): number {
+  if (step === 'auth-method') return 2
+  if (step === 'otp-verify' || step === 'success') return 3
+  return 1
+}
 
 /**
  * Four-segment progress: `kineticDark` for navy hero; `light` for the signup card (right column).
+ * `mk`: the v2 marketing card's "Step N of 3" with three bars (follows `step`; needs
+ * `marketing/v2/auth/auth.css`).
  */
 export function SignupStepProgress({
   step,
@@ -55,6 +70,31 @@ export function SignupStepProgress({
   className?: string
   'aria-label'?: string
 }) {
+  if (variant === 'mk') {
+    const current = signupMkStepNumber(step)
+    return (
+      <div className={cn('mk-auth-progress', className)}>
+        {/* Keyed so the label fades when the step changes. */}
+        <span key={current} className="mk-auth-progress-label mk-auth-fade" aria-hidden>
+          Step {current} of {MK_STEPS}
+        </span>
+        <span
+          role="progressbar"
+          aria-valuemin={1}
+          aria-valuemax={MK_STEPS}
+          aria-valuenow={current}
+          aria-valuetext={`Step ${current} of ${MK_STEPS}`}
+          aria-label={ariaLabel}
+          className="mk-auth-progress-bars"
+        >
+          {Array.from({ length: MK_STEPS }).map((_, i) => (
+            <span key={i} data-on={i < current || undefined} />
+          ))}
+        </span>
+      </div>
+    )
+  }
+
   const active =
     activeIndexProp !== undefined
       ? activeIndexProp

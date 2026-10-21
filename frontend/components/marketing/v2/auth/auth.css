@@ -1,0 +1,781 @@
+/*
+ * Sign-in and sign-up on the v2 marketing system (boards: SignIn, SignUp, SignInPhone, SignUpPhone).
+ * A white page with the dashed guides and a header hairline; the form card is the hero, with the silk
+ * ribbon drawn live behind it. Every class is prefixed `mk-auth-` and lives under `.mk` (tokens from
+ * marketing-v2.css). Phones (< 768 px) follow the phone boards; everything above follows the desktop
+ * boards. Motion is transform and opacity only.
+ */
+
+/* ── Page ─────────────────────────────────────────────────────────────────────────────────── */
+
+.mk-auth {
+  position: relative;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.mk-auth-hairline {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 88px;
+  height: 1px;
+  background: rgba(5, 39, 28, 0.08);
+  pointer-events: none;
+}
+
+.mk-auth-ribbon {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.mk-auth-header {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 88px;
+  padding-top: 30px;
+}
+.mk-auth-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.mk-auth-logo-icon {
+  width: 28px;
+  height: 28px;
+}
+.mk-auth-logo-name {
+  font-size: 26px;
+  line-height: 1;
+}
+
+.mk-auth-main {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  padding: 42px var(--mk-gutter) 48px;
+}
+
+.mk-auth-footer {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  padding-bottom: 28px;
+}
+
+/* Sign-up: value points beside the card from 1024 px; below that the card comes first. */
+.mk-auth--signup .mk-auth-main {
+  width: 100%;
+  max-width: var(--mk-rail);
+  margin: 0 auto;
+  box-sizing: border-box;
+  padding: 34px var(--mk-gutter) 48px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 48px;
+}
+.mk-auth-aside {
+  align-self: stretch;
+  min-width: 0;
+}
+@media (min-width: 1024px) {
+  .mk-auth--signup .mk-auth-main {
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: space-between;
+  }
+  .mk-auth--signup .mk-auth-aside {
+    order: -1;
+    align-self: auto;
+    flex: 0 1 470px;
+    padding-top: 64px;
+  }
+  .mk-auth--signup .mk-auth-card-col {
+    flex: 0 1 576px;
+  }
+}
+
+/* ── Card ─────────────────────────────────────────────────────────────────────────────────── */
+
+.mk-auth-card-col {
+  width: 100%;
+  max-width: 576px;
+  min-width: 0;
+}
+.mk-auth-card {
+  position: relative;
+  background: #ffffff;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 0 0 1px rgba(5, 39, 28, 0.06), 0 15px 35px rgba(5, 39, 28, 0.12), 0 5px 15px rgba(0, 0, 0, 0.08);
+  animation: mkAuthCardIn 900ms cubic-bezier(0.22, 1, 0.36, 1) 80ms both;
+}
+.mk-auth-card-body {
+  padding: 52px 64px 44px;
+}
+.mk-auth--signup .mk-auth-card-body {
+  padding: 44px 64px 40px;
+}
+.mk-auth-card-foot {
+  padding: 22px 24px;
+  background: var(--mk-gray);
+  border-top: 1px solid rgba(5, 39, 28, 0.06);
+  text-align: center;
+  font-size: 15px;
+  color: var(--mk-body);
+}
+.mk-auth-card-foot a {
+  font-weight: 700;
+  color: var(--mk-bottle-dark);
+}
+.mk-auth-card-foot a:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* Step content slides in from the side it came from (forward from the right, back from the left). */
+.mk-auth-step--fwd {
+  animation: mkAuthStepIn 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.mk-auth-step--back {
+  animation: mkAuthStepInBack 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+/* The sign-in hook's exit class nudges down 8 px; here the outgoing step only fades. */
+.mk-auth .mk-auth-step.translate-y-2 {
+  --tw-translate-y: 0px;
+}
+/* Content that appears inside a step (the name fields, the sign-in options). */
+.mk-auth-reveal {
+  animation: mkAuthReveal 480ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.mk-auth-fade {
+  animation: mkFadeIn 300ms ease both;
+}
+
+/* ── Type ─────────────────────────────────────────────────────────────────────────────────── */
+
+.mk-auth-title {
+  margin: 0;
+  font-family: var(--mk-font-display);
+  font-weight: 600;
+  font-size: 30px;
+  line-height: 1.22;
+  letter-spacing: -0.02em;
+  color: var(--mk-ink);
+  text-wrap: balance;
+}
+.mk-auth--signup .mk-auth-title {
+  font-size: 28px;
+}
+.mk-auth-lede {
+  margin: 12px 0 0;
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--mk-body);
+  overflow-wrap: anywhere;
+}
+.mk-auth-lede strong {
+  font-weight: 600;
+  color: var(--mk-ink);
+}
+
+/* ── Progress ("Step 1 of 3") ─────────────────────────────────────────────────────────────── */
+
+.mk-auth-progress {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+.mk-auth-progress-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--mk-bottle-dark);
+}
+.mk-auth-progress-bars {
+  display: grid;
+  grid-template-columns: repeat(3, 28px);
+  gap: 5px;
+}
+.mk-auth-progress-bars > span {
+  position: relative;
+  height: 3px;
+  border-radius: 2px;
+  overflow: hidden;
+  background: rgba(5, 39, 28, 0.12);
+}
+.mk-auth-progress-bars > span::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--mk-bottle);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 420ms var(--mk-ease);
+}
+.mk-auth-progress-bars > span[data-on]::after {
+  transform: none;
+}
+
+/* ── Fields ───────────────────────────────────────────────────────────────────────────────── */
+
+.mk-auth-field {
+  display: block;
+  min-width: 0;
+}
+.mk-auth-label-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.mk-auth-label {
+  display: block;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--mk-ink);
+}
+.mk-auth-control {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 48px;
+  padding: 0 14px;
+  box-sizing: border-box;
+  border-radius: 8px;
+  background: #ffffff;
+  border: 1px solid rgba(5, 39, 28, 0.16);
+  box-shadow: 0 1px 1px rgba(5, 39, 28, 0.04);
+  cursor: text;
+  transition: border-color 220ms ease, box-shadow 220ms ease, background-color 220ms ease;
+}
+@media (hover: hover) {
+  .mk-auth-control:hover {
+    border-color: rgba(5, 39, 28, 0.28);
+  }
+}
+.mk-auth-control:focus-within {
+  border-color: var(--mk-bottle);
+  box-shadow: 0 0 0 3px rgba(0, 150, 105, 0.18);
+}
+.mk-auth-control[data-disabled] {
+  background: var(--mk-gray);
+  border-color: rgba(5, 39, 28, 0.12);
+  box-shadow: none;
+  cursor: default;
+}
+.mk-auth-input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  font: inherit;
+  font-size: 16px;
+  color: var(--mk-ink);
+}
+.mk .mk-auth-input:focus-visible {
+  outline: none;
+}
+.mk-auth-input::placeholder {
+  color: rgba(79, 98, 91, 0.62);
+}
+.mk-auth-input:disabled {
+  opacity: 1;
+  color: var(--mk-body);
+  -webkit-text-fill-color: var(--mk-body);
+  cursor: default;
+}
+.mk-auth-input:-webkit-autofill,
+.mk-auth-input:-webkit-autofill:hover,
+.mk-auth-input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 40px #ffffff inset;
+  -webkit-text-fill-color: var(--mk-ink);
+}
+.mk-auth-hint {
+  margin: 8px 0 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--mk-muted);
+}
+/* A prefilled ?email= reads as set aside until the person clicks into it (as in the old layout). */
+.mk-auth-locked .mk-auth-control {
+  opacity: 0.55;
+}
+.mk-auth-names {
+  margin-top: 20px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+/* The verified check inside a field: pops in. */
+.mk-auth-check {
+  flex: none;
+  display: inline-flex;
+  margin-left: auto;
+  color: var(--mk-bottle);
+  opacity: 0;
+  transform: scale(0.5);
+  transition: opacity 240ms ease, transform 320ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.mk-auth-check[data-on] {
+  opacity: 1;
+  transform: none;
+}
+
+/* ── Buttons ──────────────────────────────────────────────────────────────────────────────── */
+
+.mk-auth-btn {
+  width: 100%;
+  height: 50px;
+  padding: 0 22px;
+  font-size: 16px;
+  box-shadow: inset 0 0 0 1px rgba(3, 40, 27, 0.16), 0 12px 26px -12px rgba(0, 150, 105, 0.65);
+  transition: transform 450ms var(--mk-ease), box-shadow 300ms var(--mk-ease), opacity 250ms ease;
+}
+.mk-auth-btn:disabled {
+  cursor: default;
+  opacity: 0.5;
+  transform: none;
+  box-shadow: inset 0 0 0 1px rgba(3, 40, 27, 0.16);
+}
+/* A button that is busy keeps full strength; its spinner says why it is not clickable. */
+.mk-auth-btn[aria-busy='true'] {
+  opacity: 1;
+}
+@media (hover: hover) {
+  .mk-auth-btn:disabled:hover {
+    box-shadow: inset 0 0 0 1px rgba(3, 40, 27, 0.16);
+  }
+  .mk-auth-btn:disabled:hover svg {
+    transform: none;
+  }
+}
+
+/* Keyboard focus keeps the pill shape (the site-wide focus ring would square it to 6 px). */
+.mk-auth .mk-auth-btn:focus-visible,
+.mk-auth .mk-auth-oauth:focus-visible {
+  border-radius: 999px;
+}
+
+/* Google / Microsoft: white pills. */
+.mk-auth-oauth {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  height: 48px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: 999px;
+  background: #ffffff;
+  color: var(--mk-ink);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  box-shadow: 0 0 0 1px rgba(5, 39, 28, 0.16), 0 1px 2px rgba(5, 39, 28, 0.06);
+  transition: box-shadow 300ms var(--mk-ease), background-color 300ms var(--mk-ease), transform 450ms var(--mk-ease);
+}
+.mk-auth-oauth + .mk-auth-oauth {
+  margin-top: 10px;
+}
+.mk-auth-oauth > svg {
+  flex: none;
+}
+@media (hover: hover) {
+  .mk-auth-oauth:not(:disabled):hover {
+    background: #fbfdfc;
+    box-shadow: 0 0 0 1px rgba(5, 39, 28, 0.26), 0 8px 20px -12px rgba(5, 39, 28, 0.35);
+    transform: translate3d(0, -1px, 0);
+  }
+}
+.mk-auth-oauth:not(:disabled):active {
+  transform: scale(0.98);
+  transition-duration: 120ms;
+}
+.mk-auth-oauth:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+/* "‹ Back" and other text buttons in bottle green. */
+.mk-auth-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 0 16px -4px;
+  padding: 4px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--mk-bottle-dark);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.mk-auth-back svg {
+  transition: transform 200ms ease-out;
+}
+@media (hover: hover) {
+  .mk-auth-back:not(:disabled):hover svg {
+    transform: translate3d(-2px, 0, 0);
+  }
+}
+.mk-auth-back:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+.mk-auth-text-btn {
+  padding: 2px 4px;
+  margin: -2px -4px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--mk-bottle-dark);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.mk-auth-text-btn:not(:disabled):hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.mk-auth-text-btn:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+/* "Or sign in with" */
+.mk-auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 26px 0 18px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--mk-body);
+}
+.mk-auth-divider::before,
+.mk-auth-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: rgba(5, 39, 28, 0.1);
+}
+
+.mk-auth-terms {
+  margin: 16px 0 0;
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--mk-muted);
+}
+.mk-auth .mk-auth-terms a {
+  color: var(--mk-ink);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-color: rgba(5, 39, 28, 0.35);
+}
+.mk-auth .mk-auth-terms a:hover {
+  text-decoration-color: currentColor;
+}
+
+.mk-auth-resend {
+  margin: 18px 0 0;
+  text-align: center;
+  font-size: 14.5px;
+  color: var(--mk-body);
+}
+.mk-auth-resend .mk-auth-text-btn {
+  font-size: inherit;
+}
+
+/* ── Messages ─────────────────────────────────────────────────────────────────────────────── */
+
+.mk-auth-alert {
+  margin-top: 16px;
+  padding: 11px 14px;
+  border-radius: 8px;
+  background: #fff5f3;
+  border: 1px solid rgba(186, 26, 26, 0.16);
+  color: #8c1d18;
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  animation: mkFadeIn 240ms ease both;
+}
+.mk-auth-note {
+  margin: 12px 0 0;
+  padding: 11px 14px;
+  border-radius: 8px;
+  background: var(--mk-gray);
+  border: 1px solid rgba(5, 39, 28, 0.08);
+  color: var(--mk-body);
+  font-size: 14px;
+  line-height: 1.5;
+  animation: mkFadeIn 240ms ease both;
+}
+.mk-auth .mk-auth-note a {
+  font-weight: 700;
+  color: var(--mk-bottle-dark);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.mk-auth-turnstile {
+  margin-top: 16px;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.mk-auth-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 320px;
+  color: var(--mk-bottle);
+}
+
+/* ── One-time code ────────────────────────────────────────────────────────────────────────── */
+
+.mk-auth-otp {
+  display: grid;
+  gap: 8px;
+  cursor: text;
+}
+.mk-auth-otp-box {
+  position: relative;
+  height: 60px;
+  min-width: 0;
+  border-radius: 12px;
+  background: #ffffff;
+  border: 1px solid rgba(5, 39, 28, 0.14);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--mk-font-display);
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--mk-ink);
+  font-variant-numeric: tabular-nums;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+.mk-auth-otp-box[data-filled] {
+  border-color: rgba(5, 39, 28, 0.24);
+}
+.mk-auth-otp-box[data-active] {
+  border-color: var(--mk-bottle);
+  box-shadow: 0 0 0 4px rgba(0, 150, 105, 0.14);
+}
+.mk-auth-otp-box[data-loading] {
+  animation: mkAuthOtpPulse 1.2s ease-in-out infinite;
+}
+.mk-auth-otp-caret {
+  display: inline-block;
+  width: 2px;
+  height: 26px;
+  background: var(--mk-bottle);
+  animation: mkCaret 1s steps(1) infinite;
+}
+
+/* ── Sign-up value points: each marked by a bar on the first guide line ───────────────────── */
+
+.mk-auth-points {
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+}
+@media (min-width: 768px) and (max-width: 1023px) {
+  .mk-auth-points {
+    max-width: 470px;
+  }
+}
+.mk-auth-point {
+  position: relative;
+  padding-left: 20px;
+  animation: mkAuthPointIn 700ms cubic-bezier(0.22, 1, 0.36, 1) var(--mk-delay, 0ms) both;
+}
+.mk-auth-point-bar {
+  position: absolute;
+  left: -0.5px;
+  top: 2px;
+  width: 2px;
+  height: 24px;
+  border-radius: 1px;
+  background: var(--mk-bottle);
+  transform-origin: top;
+  animation: mkAuthBarGrow 520ms cubic-bezier(0.22, 1, 0.36, 1) calc(var(--mk-delay, 0ms) + 140ms) both;
+}
+.mk-auth-point-title {
+  margin: 0;
+  font-family: var(--mk-font-body);
+  font-size: 17.5px;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: 0;
+  color: var(--mk-ink);
+}
+.mk-auth-point-body {
+  margin: 8px 0 0;
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--mk-body);
+}
+
+/* ── Phones (the 390 px boards) ───────────────────────────────────────────────────────────── */
+
+@media (max-width: 767px) {
+  .mk-auth-hairline {
+    top: 70px;
+  }
+  .mk-auth-header {
+    height: 70px;
+    padding-top: 22px;
+  }
+  .mk-auth-logo-icon {
+    width: 24px;
+    height: 24px;
+  }
+  .mk-auth-logo-name {
+    font-size: 23px;
+  }
+  .mk-auth-main {
+    padding: 100px var(--mk-gutter) 24px;
+  }
+  .mk-auth--signup .mk-auth-main {
+    padding: 100px var(--mk-gutter) 0;
+  }
+  .mk-auth-card-body {
+    padding: 30px 22px 26px;
+  }
+  .mk-auth--signup .mk-auth-card-body {
+    padding: 26px 22px 24px;
+  }
+  .mk-auth-title {
+    font-size: 25px;
+  }
+  .mk-auth--signup .mk-auth-title {
+    font-size: 24px;
+  }
+  .mk-auth-footer {
+    padding-bottom: 24px;
+  }
+  .mk-auth--signup .mk-auth-footer {
+    padding-top: 40px;
+  }
+  .mk-auth-points {
+    gap: 28px;
+    /* Keeps the copy clear of the ribbon's tail at the right edge. */
+    padding-right: 12px;
+  }
+  .mk-auth-point-title {
+    font-size: 16.5px;
+  }
+  .mk-auth-point-body {
+    font-size: 15px;
+  }
+}
+
+/* ── Keyframes ────────────────────────────────────────────────────────────────────────────── */
+
+@keyframes mkAuthCardIn {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 28px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes mkAuthStepIn {
+  from {
+    opacity: 0;
+    transform: translate3d(18px, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes mkAuthStepInBack {
+  from {
+    opacity: 0;
+    transform: translate3d(-18px, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes mkAuthReveal {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 8px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes mkAuthPointIn {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 12px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes mkAuthBarGrow {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+@keyframes mkAuthOtpPulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+/*
+ * The sign-in step class from use-sign-in-flow.ts names this keyframe (it used to live in the old
+ * view's inline <style>). The step wrapper sets --mk-auth-step-from: +18px going forward, -18px back.
+ */
+@keyframes signinFadeSlideIn {
+  from {
+    opacity: 0;
+    transform: translate3d(var(--mk-auth-step-from, 18px), 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}

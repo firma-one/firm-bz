@@ -83,18 +83,62 @@ export async function creditsUsedSince(groupId: string, since: Date): Promise<nu
 }
 
 /**
- * Start of the current billing period, derived from its end.
- *
- * `Subscription` stores `currentPeriodEnd` but no start, so a month is stepped back from the end
- * rather than adding a column. Using calendar months (not 30 days) keeps the window aligned with
- * the invoice the customer is reading. With no subscription — free plan — the calendar month is
- * the honest fallback: there is no billing period to align to.
+ * `anchor` moved by whole calendar months in UTC, keeping its time of day. The day of the month is
+ * clamped to the target month's length, and always taken from the anchor rather than from the
+ * previous step, so a subscription billed on the 31st gets Feb 28 (or 29) and then the 31st again,
+ * never drifting to the 28th for good.
  */
+function addMonthsUtc(anchor: Date, months: number): Date {
+    const target = new Date(Date.UTC(
+        anchor.getUTCFullYear(),
+        anchor.getUTCMonth() + months,
+        1,
+        anchor.getUTCHours(),
+        anchor.getUTCMinutes(),
+        anchor.getUTCSeconds(),
+        anchor.getUTCMilliseconds(),
+    ))
+    const daysInMonth = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate()
+    target.setUTCDate(Math.min(anchor.getUTCDate(), daysInMonth))
+    return target
+}
+
+/** Far enough for any real subscription (a century of months); only a corrupt date gets near it. */
+const MAX_MONTH_STEPS = 1200
+
+/**
+ * The monthly credit window that contains `now`: when this month's allowance started counting, and
+ * when it refills.
+ *
+ * Every plan's allowance is monthly, whatever the billing interval. `Subscription` stores
+ * `currentPeriodEnd` but no start, so the window is found from the end: for a monthly plan it is the
+ * month before it; for an annual plan, whose period end is up to a year away, it steps back whole
+ * months from the end until the window holds `now`. Calendar months (not 30 days), anchored to the
+ * billing day, keep the window aligned with the invoice the customer is reading. A period end that
+ * has already passed (the renewal webhook is late) steps forward instead, so credits still refill on
+ * time rather than staying spent until the sync lands.
+ *
+ * With no subscription — free plan — the calendar month is the honest fallback: there is no billing
+ * period to align to.
+ */
+export function creditPeriod(periodEnd: Date | null | undefined, now: Date = new Date()): { start: Date; end: Date } {
+    if (!periodEnd || Number.isNaN(periodEnd.getTime())) {
+        return {
+            start: new Date(now.getFullYear(), now.getMonth(), 1),
+            end: new Date(now.getFullYear(), now.getMonth() + 1, 1),
+        }
+    }
+    // Window i runs from (periodEnd + i - 1 months) to (periodEnd + i months); i = 0 is the month
+    // that ends at the period end.
+    let i = 0
+    while (addMonthsUtc(periodEnd, i - 1) > now && i > -MAX_MONTH_STEPS) i--
+    while (addMonthsUtc(periodEnd, i) <= now && i < MAX_MONTH_STEPS) i++
+    return { start: addMonthsUtc(periodEnd, i - 1), end: addMonthsUtc(periodEnd, i) }
+}
+
+/** Start of the monthly credit window that contains `now`. See {@link creditPeriod}. */
 export function creditPeriodStart(periodEnd: Date | null | undefined, now: Date = new Date()): Date {
-    if (!periodEnd) return new Date(now.getFullYear(), now.getMonth(), 1)
-    const start = new Date(periodEnd)
-    start.setMonth(start.getMonth() - 1)
-    return start
+    return creditPeriod(periodEnd, now).start
 }
 
 export interface AiCreditUsage {
@@ -175,7 +219,7 @@ export const CREDIT_WINDOW_LABEL: Record<CreditWindow, string> = {
     sixHours: '6 hours',
     day: 'day',
     week: 'week',
-    period: 'billing period',
+    period: 'month',
 }
 
 /** Start instant for a window, relative to now (or the billing period for `period`). */

@@ -1,299 +1,250 @@
-import { BarChart3, Shield, AlertTriangle, Clock, Users, FileWarning, Activity } from "lucide-react"
+import { AlertTriangle } from "lucide-react"
 import { BRAND_NAME } from "@/config/brand"
-import { DocSection } from "@/components/docs/doc-section"
-import { InfoBox } from "@/components/docs/info-box"
-import { ActivityHubPreview } from "@/components/docs/insights/ActivityHubPreview"
-import { SummaryStoragePreview } from "@/components/docs/insights/SummaryStoragePreview"
+import {
+    DocsBox,
+    DocsGrid,
+    DocsH3,
+    DocsHeader,
+    DocsList,
+    DocsMiniCard,
+    DocsNote,
+    DocsPanel,
+    DocsSection,
+    DocsTile,
+} from "@/components/marketing/v2/docs/docs-blocks"
+import { ActivityHubPreview, SummaryStoragePreview } from "@/components/marketing/v2/docs/docs-insights-previews"
+
+const ICON = { size: 18, strokeWidth: 2.2, "aria-hidden": true } as const
 
 export default function InsightsPage() {
     return (
-        <div className="space-y-10">
-            <div>
-                <h1 className="text-3xl font-bold text-gray-900 mb-4">Insights</h1>
-                <p className="text-lg text-gray-600 leading-relaxed">
-                    Get real-time security insights and analytics about your Google Drive documents.
-                    Identify risks, track sharing patterns, and ensure compliance.
-                </p>
-            </div>
+        <>
+            <DocsHeader section="Dashboard" title="Insights">
+                Get real-time security insights and analytics about your Google Drive documents.
+                Identify risks, track sharing patterns, and ensure compliance.
+            </DocsHeader>
 
             {/* Overview */}
-            <DocSection title="Drive Insights Overview" icon={BarChart3} color="blue">
-                <p className="text-gray-600 mb-4">
+            <DocsSection title="Drive Insights Overview">
+                <p>
                     The Insights page provides a comprehensive view of your Google Drive security posture and document sharing patterns.
                 </p>
 
                 {/* Live Preview for Stats & Storage */}
                 <SummaryStoragePreview />
 
-                <div className="grid gap-6 md:grid-cols-2 mb-4 mt-8">
-                    <div>
-                        <h3 className="font-semibold text-gray-900 mb-2">Summary Cards:</h3>
-                        <ul className="text-sm text-gray-600 space-y-2">
-                            <li className="flex gap-2">
-                                <span className="font-medium text-purple-600 min-w-[120px]">Stale Documents:</span>
-                                <span>Files not accessed in &gt;90 days. Candidates for cleanup.</span>
-                            </li>
-                            <li className="flex gap-2">
-                                <span className="font-medium text-purple-600 min-w-[120px]">Large Files:</span>
-                                <span>Files larger than 100MB taking up significant quota.</span>
-                            </li>
-                            <li className="flex gap-2">
-                                <span className="font-medium text-green-600 min-w-[120px]">Sensitive Content:</span>
-                                <span>Files flagged with potential sensitive info (PII, Financial).</span>
-                            </li>
-                            <li className="flex gap-2">
-                                <span className="font-medium text-green-600 min-w-[120px]">Risky Shares:</span>
-                                <span>Publicly accessible files or external shares to unsecured domains.</span>
-                            </li>
-                        </ul>
-                    </div>
-                    <div>
-                        <h3 className="font-semibold text-gray-900 mb-2">Storage Analysis:</h3>
-                        <p className="text-sm text-gray-600 mb-3">
-                            Visual breakdown of your storage usage by file type.
-                        </p>
-                        <ul className="text-sm text-gray-600 space-y-1 list-disc list-inside">
-                            <li>Track quota usage across Video, Image, Document, and Audio files</li>
-                            <li>Identify which file types are consuming the most space</li>
-                            <li>Direct link to Google One storage management</li>
-                        </ul>
-                    </div>
-                </div>
-            </DocSection>
+                <DocsGrid cols={2}>
+                    <DocsBox tone="white" title="Summary Cards:">
+                        <DocsList
+                            items={[
+                                <><strong>Stale Documents:</strong> Files not accessed in &gt;90 days. Candidates for cleanup.</>,
+                                <><strong>Large Files:</strong> Files larger than 100MB taking up significant quota.</>,
+                                <><strong>Sensitive Content:</strong> Files flagged with potential sensitive info (PII, Financial).</>,
+                                <><strong>Risky Shares:</strong> Publicly accessible files or external shares to unsecured domains.</>,
+                            ]}
+                        />
+                    </DocsBox>
+                    <DocsBox tone="white" title="Storage Analysis:">
+                        <p>Visual breakdown of your storage usage by file type.</p>
+                        <DocsList
+                            items={[
+                                "Track quota usage across Video, Image, Document, and Audio files",
+                                "Identify which file types are consuming the most space",
+                                "Direct link to Google One storage management",
+                            ]}
+                        />
+                    </DocsBox>
+                </DocsGrid>
+            </DocsSection>
 
             {/* Activity Hub (New Feature) */}
-            <DocSection title="Activity Hub" icon={Activity} color="indigo">
-                <p className="text-gray-600 mb-6">
-                    The Activity Hub is your central command center for file operations. It aggregates activity from various sources to give you a complete picture of what's happening in your Drive.
+            <DocsSection title="Activity Hub">
+                <p>
+                    The Activity Hub is your central command center for file operations. It aggregates activity from various sources to give you a complete picture of what&apos;s happening in your Drive.
                 </p>
 
                 {/* Live Preview Component */}
                 <ActivityHubPreview />
 
-                <div className="grid gap-6 md:grid-cols-2 mt-8">
-                    <div>
-                        <h3 className="font-semibold text-gray-900 mb-2">Tabs Breakdown:</h3>
-                        <ul className="text-sm text-gray-600 space-y-2">
-                            <li className="flex gap-2">
-                                <span className="font-medium text-indigo-600 min-w-[70px]">Recent:</span>
-                                <span>Time-based feed of files you've interacted with (Viewed, Edited, Created). Perfect for resuming work.</span>
+                <DocsGrid cols={2}>
+                    <DocsBox tone="white" title="Tabs Breakdown:">
+                        <DocsList
+                            items={[
+                                <><strong>Recent:</strong> Time-based feed of files you&apos;ve interacted with (Viewed, Edited, Created). Perfect for resuming work.</>,
+                                <><strong>Trending:</strong> High-activity files sorted by engagement volume. See what&apos;s hot in your organization.</>,
+                                <><strong>Storage:</strong> Identify large and stale files. Use the &quot;Cleanup Candidate&quot; badge to reclaim space efficiently.</>,
+                                <><strong>Sharing:</strong> Comprehensive view of sharing relationships. &quot;Shared With You&quot; vs &quot;Shared By You&quot;.</>,
+                            ]}
+                        />
+                    </DocsBox>
+                    <DocsBox tone="white" title="Smart Badges:">
+                        <ul className="mk-docs-badges">
+                            <li>
+                                <span className="mk-docs-badge mk-docs-badge--risk">RISK</span>
+                                Critical issues like &quot;Public Link&quot; or sensitive content exposure.
                             </li>
-                            <li className="flex gap-2">
-                                <span className="font-medium text-indigo-600 min-w-[70px]">Trending:</span>
-                                <span>High-activity files sorted by engagement volume. See what's hot in your organization.</span>
+                            <li>
+                                <span className="mk-docs-badge mk-docs-badge--attention">ATTENTION</span>
+                                Warnings like &quot;External Share&quot; or &quot;Stale Access&quot;.
                             </li>
-                            <li className="flex gap-2">
-                                <span className="font-medium text-indigo-600 min-w-[70px]">Storage:</span>
-                                <span>Identify large and stale files. Use the "Cleanup Candidate" badge to reclaim space efficiently.</span>
-                            </li>
-                            <li className="flex gap-2">
-                                <span className="font-medium text-indigo-600 min-w-[70px]">Sharing:</span>
-                                <span>Comprehensive view of sharing relationships. "Shared With You" vs "Shared By You".</span>
+                            <li>
+                                <span className="mk-docs-badge mk-docs-badge--shared">SHARED</span>
+                                Indicates files that have active sharing permissions.
                             </li>
                         </ul>
-                    </div>
-                    <div>
-                        <h3 className="font-semibold text-gray-900 mb-2">Smart Badges:</h3>
-                        <div className="space-y-3">
-                            <div className="flex items-start gap-3">
-                                <div className="mt-1 h-2 w-2 rounded-full bg-red-500 flex-shrink-0" />
-                                <div>
-                                    <span className="text-sm font-medium text-gray-900">RISK</span>
-                                    <p className="text-xs text-gray-600">Critical issues like "Public Link" or sensitive content exposure.</p>
-                                </div>
-                            </div>
-                            <div className="flex items-start gap-3">
-                                <div className="mt-1 h-2 w-2 rounded-full bg-amber-500 flex-shrink-0" />
-                                <div>
-                                    <span className="text-sm font-medium text-gray-900">ATTENTION</span>
-                                    <p className="text-xs text-gray-600">Warnings like "External Share" or "Stale Access".</p>
-                                </div>
-                            </div>
-                            <div className="flex items-start gap-3">
-                                <div className="mt-1 h-2 w-2 rounded-full bg-purple-500 flex-shrink-0" />
-                                <div>
-                                    <span className="text-sm font-medium text-gray-900">SHARED</span>
-                                    <p className="text-xs text-gray-600">Indicates files that have active sharing permissions.</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </DocSection>
+                    </DocsBox>
+                </DocsGrid>
+            </DocsSection>
 
             {/* Security Alerts */}
-            <DocSection title="Security Alerts & Risk Detection" icon={Shield} color="red">
-                <p className="text-gray-600 mb-4">
-                    {BRAND_NAME} automatically scans your Drive for security risks and alerts you to potential issues.
-                </p>
-                <div className="space-y-4">
-                    <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                        <div className="flex items-center gap-2 mb-2">
-                            <AlertTriangle className="h-5 w-5 text-red-600" />
-                            <h3 className="font-semibold text-gray-900">High-Risk Alerts</h3>
-                        </div>
-                        <p className="text-sm text-gray-600 mb-2">Critical security issues that need immediate attention:</p>
-                        <ul className="text-sm text-gray-600 space-y-1 list-disc list-inside">
-                            <li>Files shared publicly with "Anyone with the link"</li>
-                            <li>Sensitive documents with broad access</li>
-                            <li>Files with external domain sharing</li>
-                            <li>Documents with edit permissions to unknown users</li>
-                        </ul>
-                    </div>
-                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-                        <div className="flex items-center gap-2 mb-2">
-                            <AlertTriangle className="h-5 w-5 text-amber-600" />
-                            <h3 className="font-semibold text-gray-900">Medium-Risk Alerts</h3>
-                        </div>
-                        <p className="text-sm text-gray-600 mb-2">Issues that should be reviewed:</p>
-                        <ul className="text-sm text-gray-600 space-y-1 list-disc list-inside">
-                            <li>Files shared with large groups</li>
-                            <li>Documents with many collaborators</li>
-                            <li>Stale share links (not accessed in 90+ days)</li>
-                            <li>Files in shared drives with broad permissions</li>
-                        </ul>
-                    </div>
-                </div>
-                <InfoBox type="tip" title="Taking Action">
+            <DocsSection title="Security Alerts & Risk Detection">
+                <p>{BRAND_NAME} automatically scans your Drive for security risks and alerts you to potential issues.</p>
+                <DocsGrid cols={2}>
+                    <DocsTile tone="red" icon={<AlertTriangle {...ICON} />} title="High-Risk Alerts">
+                        <p>Critical security issues that need immediate attention:</p>
+                        <DocsList
+                            items={[
+                                'Files shared publicly with "Anyone with the link"',
+                                "Sensitive documents with broad access",
+                                "Files with external domain sharing",
+                                "Documents with edit permissions to unknown users",
+                            ]}
+                        />
+                    </DocsTile>
+                    <DocsTile tone="amber" icon={<AlertTriangle {...ICON} />} title="Medium-Risk Alerts">
+                        <p>Issues that should be reviewed:</p>
+                        <DocsList
+                            items={[
+                                "Files shared with large groups",
+                                "Documents with many collaborators",
+                                "Stale share links (not accessed in 90+ days)",
+                                "Files in shared drives with broad permissions",
+                            ]}
+                        />
+                    </DocsTile>
+                </DocsGrid>
+                <DocsNote type="tip" title="Taking Action">
                     <p>
                         Click on any alert to see the affected files. You can then review permissions
-                        and make changes directly in Google Drive by clicking "Open in Google Drive".
+                        and make changes directly in Google Drive by clicking &quot;Open in Google Drive&quot;.
                     </p>
-                </InfoBox>
-            </DocSection>
+                </DocsNote>
+            </DocsSection>
 
             {/* File Sharing Analytics */}
-            <DocSection title="File Sharing Analytics" icon={Users} color="purple">
-                <p className="text-gray-600 mb-4">
-                    Understand how your files are being shared and who has access.
-                </p>
-                <div className="bg-gray-50 rounded-lg p-4 space-y-3">
-                    <h3 className="font-semibold text-gray-900">Sharing Metrics:</h3>
-                    <ul className="text-sm text-gray-600 space-y-2 list-disc list-inside">
-                        <li><strong>Total shared files:</strong> Number of files with sharing enabled</li>
-                        <li><strong>Public files:</strong> Files accessible to anyone with the link</li>
-                        <li><strong>External shares:</strong> Files shared outside your organization</li>
-                        <li><strong>Internal shares:</strong> Files shared within your organization</li>
-                        <li><strong>Most shared files:</strong> Documents with the most collaborators</li>
-                    </ul>
-                </div>
-                <div className="grid gap-4 md:grid-cols-2 mt-4">
-                    <div className="bg-purple-50 border border-purple-100 rounded-lg p-4">
-                        <h3 className="font-semibold text-gray-900 mb-2">Sharing Trends</h3>
-                        <p className="text-sm text-gray-600">
+            <DocsSection title="File Sharing Analytics">
+                <p>Understand how your files are being shared and who has access.</p>
+                <DocsBox title="Sharing Metrics:">
+                    <DocsList
+                        items={[
+                            <><strong>Total shared files:</strong> Number of files with sharing enabled</>,
+                            <><strong>Public files:</strong> Files accessible to anyone with the link</>,
+                            <><strong>External shares:</strong> Files shared outside your organization</>,
+                            <><strong>Internal shares:</strong> Files shared within your organization</>,
+                            <><strong>Most shared files:</strong> Documents with the most collaborators</>,
+                        ]}
+                    />
+                </DocsBox>
+                <DocsGrid cols={2}>
+                    <DocsBox tone="white" title="Sharing Trends">
+                        <p>
                             Track how sharing patterns change over time. Identify spikes in external
                             sharing or increases in public file exposure.
                         </p>
-                    </div>
-                    <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-4">
-                        <h3 className="font-semibold text-gray-900 mb-2">Collaboration Insights</h3>
-                        <p className="text-sm text-gray-600">
+                    </DocsBox>
+                    <DocsBox tone="white" title="Collaboration Insights">
+                        <p>
                             See which teams or individuals are most active in sharing and collaborating
                             on documents.
                         </p>
-                    </div>
-                </div>
-            </DocSection>
+                    </DocsBox>
+                </DocsGrid>
+            </DocsSection>
 
             {/* Expiring Shares */}
-            <DocSection title="Expiring Share Links" icon={Clock} color="amber">
-                <p className="text-gray-600 mb-4">
-                    Track share links that are about to expire or have recently expired.
-                </p>
-                <div className="bg-gray-50 rounded-lg p-4 space-y-3">
-                    <h3 className="font-semibold text-gray-900">What's tracked:</h3>
-                    <ul className="text-sm text-gray-600 space-y-2 list-disc list-inside">
-                        <li>Share links expiring in the next 7 days</li>
-                        <li>Recently expired links (last 30 days)</li>
-                        <li>Files with time-limited access</li>
-                        <li>Temporary collaborator permissions</li>
-                    </ul>
-                </div>
-                <InfoBox type="info" title="Proactive Management">
+            <DocsSection title="Expiring Share Links">
+                <p>Track share links that are about to expire or have recently expired.</p>
+                <DocsBox title="What's tracked:">
+                    <DocsList
+                        items={[
+                            "Share links expiring in the next 7 days",
+                            "Recently expired links (last 30 days)",
+                            "Files with time-limited access",
+                            "Temporary collaborator permissions",
+                        ]}
+                    />
+                </DocsBox>
+                <DocsNote type="info" title="Proactive Management">
                     <p>
                         Get notified before share links expire so you can renew them if needed or
                         ensure access is properly removed for security.
                     </p>
-                </InfoBox>
-            </DocSection>
+                </DocsNote>
+            </DocsSection>
 
             {/* Public Files */}
-            <DocSection title="Public File Detection" icon={FileWarning} color="red">
-                <p className="text-gray-600 mb-4">
-                    Identify files that are publicly accessible and may pose a security risk.
-                </p>
-                <div className="bg-red-50 border border-red-200 rounded-lg p-4 space-y-3">
-                    <h3 className="font-semibold text-gray-900">Public file categories:</h3>
-                    <ul className="text-sm text-gray-600 space-y-2 list-disc list-inside">
-                        <li><strong>"Anyone with the link":</strong> Files accessible to anyone who has the URL</li>
-                        <li><strong>"Public on the web":</strong> Files indexed by search engines</li>
-                        <li><strong>Domain-wide sharing:</strong> Files shared with entire organization</li>
-                    </ul>
-                </div>
-                <InfoBox type="warning" title="Security Risk">
+            <DocsSection title="Public File Detection">
+                <p>Identify files that are publicly accessible and may pose a security risk.</p>
+                <DocsBox tone="red" title="Public file categories:">
+                    <DocsList
+                        items={[
+                            <><strong>&quot;Anyone with the link&quot;:</strong> Files accessible to anyone who has the URL</>,
+                            <><strong>&quot;Public on the web&quot;:</strong> Files indexed by search engines</>,
+                            <><strong>Domain-wide sharing:</strong> Files shared with entire organization</>,
+                        ]}
+                    />
+                </DocsBox>
+                <DocsNote type="warning" title="Security Risk">
                     <p>
                         Public files can be accessed by anyone, including competitors, malicious actors,
                         or search engines. Review these files regularly and restrict access when appropriate.
                     </p>
-                    <p className="mt-2">
-                        <strong>Best practice:</strong> Only make files public if they're intended for
+                    <p>
+                        <strong>Best practice:</strong> Only make files public if they&apos;re intended for
                         public consumption (e.g., marketing materials, public documentation).
                     </p>
-                </InfoBox>
-            </DocSection>
+                </DocsNote>
+            </DocsSection>
 
             {/* Sensitive Data */}
-            <DocSection title="Sensitive Data Identification" icon={Shield} color="indigo">
-                <p className="text-gray-600 mb-4">
-                    {BRAND_NAME} helps identify files that may contain sensitive information.
-                </p>
-                <div className="bg-gray-50 rounded-lg p-4 space-y-3">
-                    <h3 className="font-semibold text-gray-900">Detection patterns:</h3>
-                    <ul className="text-sm text-gray-600 space-y-2 list-disc list-inside">
-                        <li>Files with keywords like "confidential", "private", "internal"</li>
-                        <li>Financial documents (invoices, budgets, reports)</li>
-                        <li>HR documents (resumes, contracts, reviews)</li>
-                        <li>Legal documents (agreements, NDAs, contracts)</li>
-                    </ul>
-                </div>
-                <InfoBox type="tip" title="Coming Soon">
+            <DocsSection title="Sensitive Data Identification">
+                <p>{BRAND_NAME} helps identify files that may contain sensitive information.</p>
+                <DocsBox>
+                    <DocsH3>Detection patterns:</DocsH3>
+                    <DocsList
+                        items={[
+                            'Files with keywords like "confidential", "private", "internal"',
+                            "Financial documents (invoices, budgets, reports)",
+                            "HR documents (resumes, contracts, reviews)",
+                            "Legal documents (agreements, NDAs, contracts)",
+                        ]}
+                    />
+                </DocsBox>
+                <DocsNote type="tip" title="Coming Soon">
                     <p>
                         Advanced content scanning to detect PII (personally identifiable information),
                         credit card numbers, social security numbers, and other sensitive data patterns.
                     </p>
-                </InfoBox>
-            </DocSection>
+                </DocsNote>
+            </DocsSection>
 
             {/* How to Use Insights */}
-            <div className="bg-gradient-to-br from-blue-50 to-purple-50 border border-blue-200 rounded-lg p-6">
-                <h2 className="text-xl font-bold text-gray-900 mb-4">How to Use Insights</h2>
-                <div className="grid gap-3 md:grid-cols-2">
-                    <div className="bg-white rounded p-3 shadow-sm">
-                        <h3 className="font-semibold text-sm text-gray-900 mb-1">Regular Reviews</h3>
-                        <p className="text-xs text-gray-600">
-                            Check your Insights dashboard weekly to stay on top of security risks and sharing patterns.
-                        </p>
-                    </div>
-                    <div className="bg-white rounded p-3 shadow-sm">
-                        <h3 className="font-semibold text-sm text-gray-900 mb-1">Act on Alerts</h3>
-                        <p className="text-xs text-gray-600">
-                            Address high-risk alerts immediately. Review and update file permissions as needed.
-                        </p>
-                    </div>
-                    <div className="bg-white rounded p-3 shadow-sm">
-                        <h3 className="font-semibold text-sm text-gray-900 mb-1">Track Trends</h3>
-                        <p className="text-xs text-gray-600">
-                            Monitor how your sharing patterns change over time. Look for unusual spikes or patterns.
-                        </p>
-                    </div>
-                    <div className="bg-white rounded p-3 shadow-sm">
-                        <h3 className="font-semibold text-sm text-gray-900 mb-1">Educate Your Team</h3>
-                        <p className="text-xs text-gray-600">
-                            Use insights to educate your team about secure file sharing practices and policies.
-                        </p>
-                    </div>
-                </div>
-            </div>
-        </div>
+            <DocsPanel title="How to Use Insights">
+                <DocsGrid cols={2}>
+                    <DocsMiniCard title="Regular Reviews">
+                        Check your Insights dashboard weekly to stay on top of security risks and sharing patterns.
+                    </DocsMiniCard>
+                    <DocsMiniCard title="Act on Alerts">
+                        Address high-risk alerts immediately. Review and update file permissions as needed.
+                    </DocsMiniCard>
+                    <DocsMiniCard title="Track Trends">
+                        Monitor how your sharing patterns change over time. Look for unusual spikes or patterns.
+                    </DocsMiniCard>
+                    <DocsMiniCard title="Educate Your Team">
+                        Use insights to educate your team about secure file sharing practices and policies.
+                    </DocsMiniCard>
+                </DocsGrid>
+            </DocsPanel>
+        </>
     )
 }

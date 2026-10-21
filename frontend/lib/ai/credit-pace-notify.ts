@@ -41,6 +41,7 @@ function formatRunOut(date: Date): string {
 export async function maybeNotifyCreditPace(params: {
     groupId: string
     status: AiCreditStatus
+    /** The monthly credit window (see `creditPeriod`), not the subscription's billing period. */
     periodStart: Date
     periodEnd: Date | null
 }): Promise<void> {
@@ -88,8 +89,8 @@ export async function maybeNotifyCreditPace(params: {
                     projectedExhaustion: pace.projectedExhaustion.toISOString(),
                 },
                 channels: { inApp: true },
-                // Once per group per billing period. The unique index on dedupeKey is what enforces
-                // this; skipDuplicates silently drops every later attempt.
+                // Once per group per monthly credit window. The unique index on dedupeKey is what
+                // enforces this; skipDuplicates silently drops every later attempt.
                 dedupeKey: `ai-credits-pace:${groupId}:${periodEnd.toISOString()}`,
             }],
             skipDuplicates: true,

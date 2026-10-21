@@ -1,0 +1,524 @@
+/*
+ * Audience landing pages (/landing/*) on the v2 system. Built from the home page's parts: white hero
+ * with a compact silk ribbon, card grids on flat gray bands (MkCard hover kit), a dark slanted band for
+ * the three principles, the home FAQ disclosures and the reading pages' post cards.
+ *
+ * The fixed header is 76 px tall (64 px on phones); the hero's top padding clears it.
+ * Only transform and opacity animate; markers pop in on a card's first scroll-in (`mk-reveal`).
+ */
+
+/* ── Hero ─────────────────────────────────────────────────────────────────────────────────── */
+
+.mk-aud-hero {
+  position: relative;
+  overflow: hidden;
+  background: #ffffff;
+  /* The fixed header (64 px) plus 36 px. */
+  padding-top: 100px;
+}
+.mk-aud-hero-copy {
+  position: relative;
+  z-index: 2;
+}
+.mk-aud-hero-title {
+  margin-top: 18px;
+  max-width: 820px;
+  color: var(--mk-ink);
+}
+.mk-aud-hero-lede {
+  margin: 18px 0 0;
+  max-width: 640px;
+}
+.mk-aud-hero-actions {
+  margin-top: 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.mk-aud-hero-demo {
+  align-self: center;
+  margin-top: 4px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--mk-bottle-dark) !important;
+  text-decoration: underline;
+  text-decoration-color: rgba(0, 122, 85, 0.35);
+  text-underline-offset: 4px;
+  transition: text-decoration-color 200ms var(--mk-ease);
+}
+@media (hover: hover) {
+  .mk-aud-hero-demo:hover {
+    text-decoration-color: currentColor;
+  }
+}
+
+/* Phones and tablets: the ribbon runs across a strip under the buttons, clear of the copy. */
+.mk-aud-hero-strip {
+  position: relative;
+  margin-top: 28px;
+  aspect-ratio: 100 / 30;
+}
+.mk-aud-hero-wash {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  .mk-aud-hero {
+    padding-top: 136px;
+  }
+  .mk-aud-hero-title {
+    margin-top: 24px;
+  }
+  .mk-aud-hero-lede {
+    margin-top: 24px;
+  }
+  .mk-aud-hero-actions {
+    margin-top: 34px;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 14px;
+  }
+  .mk-aud-hero-demo {
+    align-self: auto;
+    margin: 0 0 0 6px;
+  }
+  .mk-aud-hero-strip {
+    margin-top: 36px;
+    aspect-ratio: 100 / 22;
+  }
+}
+
+/* From 1024 px the ribbon wraps the right side behind the white wash; the copy stays left of it. */
+@media (min-width: 1024px) {
+  .mk-aud-hero {
+    padding: 148px 0 124px;
+  }
+  .mk-aud-hero-title {
+    max-width: 620px;
+  }
+  .mk-aud-hero-lede {
+    max-width: 560px;
+  }
+  .mk-aud-hero-strip {
+    display: none;
+  }
+  .mk-aud-hero-wash {
+    display: block;
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(100deg, rgba(255, 255, 255, 0.96) 0%, rgba(255, 255, 255, 0.85) 30%, rgba(255, 255, 255, 0) 58%);
+  }
+}
+@media (min-width: 1280px) {
+  .mk-aud-hero-title {
+    max-width: 780px;
+  }
+  .mk-aud-hero-lede {
+    max-width: 620px;
+  }
+}
+
+/* ── Section heads ────────────────────────────────────────────────────────────────────────── */
+
+.mk-aud-band {
+  padding: 72px 0;
+  line-height: normal;
+}
+@media (min-width: 768px) {
+  .mk-aud-band {
+    padding: clamp(88px, 7.78vw, 112px) 0;
+  }
+}
+.mk-aud-h2 {
+  margin-top: 18px;
+  max-width: 820px;
+  color: var(--mk-bottle);
+}
+.mk-aud-h2-lead {
+  color: var(--mk-ink);
+}
+.mk-aud-lede {
+  margin: 16px 0 0;
+  max-width: 640px;
+  font-size: 17px;
+  line-height: 1.6;
+  color: var(--mk-body);
+}
+@media (min-width: 768px) {
+  .mk-aud-h2 {
+    margin-top: 20px;
+  }
+  .mk-aud-lede {
+    margin-top: 20px;
+    font-size: 19px;
+  }
+}
+
+/* ── Cards (shared) ───────────────────────────────────────────────────────────────────────── */
+
+.mk-aud-card {
+  /* Its own stacking context, so the spotlight sits under the copy without positioning the copy. */
+  isolation: isolate;
+  min-width: 0;
+  overflow: hidden;
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: var(--mk-shadow-card);
+  padding: 24px;
+}
+.mk-aud-card .mk-card-glow--spot {
+  z-index: -1;
+}
+@media (min-width: 768px) {
+  .mk-aud-card {
+    padding: 28px;
+  }
+}
+.mk-aud-card-title {
+  margin: 0;
+  font-family: var(--mk-font-display);
+  font-weight: 700;
+  font-size: 21px;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  color: var(--mk-ink);
+  text-wrap: balance;
+}
+.mk-aud-card-body {
+  margin: 10px 0 0;
+  font-size: 15.5px;
+  line-height: 1.6;
+  color: var(--mk-body);
+}
+@media (min-width: 768px) {
+  .mk-aud-card-title {
+    font-size: 22px;
+  }
+}
+
+/* The pastel tile behind a card's icon or number (the product panels' mesh). */
+.mk-aud-tile {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background-color: var(--mk-panel);
+  background-image: radial-gradient(at 0% 0%, #e9ffb0 0px, transparent 60%), radial-gradient(at 100% 100%, #a9f2c8 0px, transparent 60%),
+    radial-gradient(at 100% 0%, #c4f6ea 0px, transparent 60%);
+  box-shadow: inset 0 0 0 1px rgba(5, 39, 28, 0.06);
+  color: var(--mk-bottle-dark);
+}
+.mk-aud-num {
+  font-family: var(--mk-font-display);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+/* ✕ and ✓ markers in the lists. */
+.mk-aud-mark {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-top: 1px;
+  border-radius: 999px;
+}
+.mk-aud-mark--no {
+  background: #e9ecea;
+  color: #6b7a74;
+}
+.mk-aud-mark--yes {
+  background: var(--mk-electric);
+  color: var(--mk-on-electric);
+}
+
+.mk-aud-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.mk-aud-list > li {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 13px 0;
+  font-size: 15.5px;
+  line-height: 1.5;
+}
+.mk-aud-list > li + li {
+  border-top: 1px solid rgba(5, 39, 28, 0.07);
+}
+
+/* ── The challenge (gray): four pain points beside "what most do" ─────────────────────────── */
+
+.mk-aud-challenge {
+  margin-top: 36px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+.mk-aud-problems {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+.mk-aud-problem {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.mk-aud-problem-text {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.5;
+  letter-spacing: -0.005em;
+  color: var(--mk-ink);
+}
+.mk-aud-usual .mk-aud-card-title {
+  font-size: 19px;
+}
+.mk-aud-usual .mk-aud-list {
+  margin-top: 10px;
+}
+.mk-aud-usual .mk-aud-list > li {
+  color: var(--mk-body);
+}
+
+@media (min-width: 768px) {
+  .mk-aud-challenge {
+    margin-top: 48px;
+    gap: 20px;
+  }
+  .mk-aud-problems {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px;
+  }
+  .mk-aud-problem {
+    gap: 22px;
+  }
+  .mk-aud-problem-text {
+    font-size: 18px;
+  }
+}
+/* Desktop: the pain points take two of three columns; "what most do" fills the third, full height. */
+@media (min-width: 1024px) {
+  .mk-aud-challenge {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .mk-aud-problems {
+    grid-column: span 2;
+    grid-template-columns: subgrid;
+  }
+  /* The list's rows share the card's full height, so it stands as tall as the two rows beside it. */
+  .mk-aud-usual {
+    display: flex;
+    flex-direction: column;
+  }
+  .mk-aud-usual .mk-aud-list {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+  .mk-aud-usual .mk-aud-list > li {
+    flex: 1;
+    align-items: center;
+  }
+}
+
+/* ── Principles (dark, slanted): three glass cards ────────────────────────────────────────── */
+
+.mk-aud-principles.mk-band {
+  padding: calc(var(--mk-slant) + 48px) 0 calc(var(--mk-slant) + 56px);
+  line-height: normal;
+}
+@media (min-width: 768px) {
+  .mk-aud-principles.mk-band {
+    padding: calc(var(--mk-slant) + 64px) 0 calc(var(--mk-slant) + 72px);
+  }
+}
+.mk-aud-principles .mk-aud-h2 {
+  margin-top: 0;
+  color: #ffffff;
+}
+.mk-aud-principles .mk-aud-lede {
+  color: var(--mk-on-dark-body);
+}
+.mk-aud-principles .mk-dark-mesh {
+  background-size: 200% 200%;
+}
+.mk-aud-grid {
+  margin: 36px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+@media (min-width: 768px) {
+  .mk-aud-grid {
+    margin-top: 48px;
+    gap: 20px;
+  }
+  .mk-aud-grid--4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (min-width: 1024px) {
+  .mk-aud-grid--3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* An icon card: the tile on top; on tablets a three-card row reads as wide rows, tile beside the copy. */
+.mk-aud-feature {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+/* Four outcomes sit two by two; from 1024 px the wide cards read better with the tile beside the copy. */
+@media (min-width: 1024px) {
+  .mk-aud-grid--4 .mk-aud-feature {
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 22px;
+  }
+}
+@media (min-width: 768px) and (max-width: 1023px) {
+  .mk-aud-grid--3 .mk-aud-feature {
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 22px;
+  }
+}
+
+.mk-aud-glass {
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow: inset 0 0 0 1px rgba(125, 255, 119, 0.16);
+}
+.mk-aud-glass .mk-aud-card-title {
+  color: #ffffff;
+}
+.mk-aud-glass .mk-aud-card-body {
+  color: var(--mk-on-dark-body);
+}
+.mk-aud-glass .mk-aud-tile {
+  background: rgba(125, 255, 119, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(125, 255, 119, 0.22);
+  color: var(--mk-electric);
+}
+
+/* ── The shift (white): without / with ────────────────────────────────────────────────────── */
+
+.mk-aud-shift {
+  margin-top: 36px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+@media (min-width: 768px) {
+  .mk-aud-shift {
+    margin-top: 48px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px;
+  }
+}
+.mk-aud-shift-tag {
+  display: inline-block;
+  padding: 5px 13px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1.4;
+}
+.mk-aud-shift .mk-aud-list {
+  margin-top: 14px;
+}
+.mk-aud-without {
+  background: var(--mk-gray);
+  box-shadow: inset 0 0 0 1px rgba(5, 39, 28, 0.07);
+}
+.mk-aud-without .mk-aud-shift-tag {
+  background: #ffffff;
+  color: var(--mk-muted);
+  box-shadow: inset 0 0 0 1px rgba(5, 39, 28, 0.1);
+}
+.mk-aud-without .mk-aud-list > li {
+  color: var(--mk-body);
+}
+.mk-aud-with {
+  box-shadow: 0 0 0 1px rgba(5, 39, 28, 0.08), 0 36px 72px -36px rgba(3, 40, 27, 0.4);
+}
+/* A soft pastel wash at the top of the "with" card. */
+.mk-aud-with::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 120px;
+  z-index: -1;
+  pointer-events: none;
+  background-image: radial-gradient(at 0% 0%, rgba(233, 255, 176, 0.9) 0px, transparent 60%),
+    radial-gradient(at 100% 0%, rgba(196, 246, 234, 0.9) 0px, transparent 60%);
+  -webkit-mask: linear-gradient(#000, transparent);
+  mask: linear-gradient(#000, transparent);
+}
+.mk-aud-with .mk-aud-shift-tag {
+  background: var(--mk-electric);
+  color: var(--mk-on-electric);
+}
+.mk-aud-with .mk-aud-list > li {
+  color: var(--mk-ink);
+  font-weight: 500;
+}
+.mk-aud-shift-close {
+  margin: 32px 0 0;
+  max-width: 820px;
+  font-family: var(--mk-font-display);
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: -0.02em;
+  color: var(--mk-ink);
+  text-wrap: pretty;
+}
+@media (min-width: 768px) {
+  .mk-aud-shift-close {
+    margin-top: 44px;
+    font-size: 26px;
+  }
+}
+
+/* ── FAQ: the home disclosures, on a grid so an odd last question keeps its column ───────── */
+
+.mk-faq-teaser-grid.mk-aud-faq-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr));
+}
+
+/* ── Related reading (gray) ───────────────────────────────────────────────────────────────── */
+
+.mk-aud-reading-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px 32px;
+}
+.mk-aud-reading-head .mk-aud-h2 {
+  margin-top: 0;
+}
+.mk-aud-reading-all {
+  font-size: 16px;
+}

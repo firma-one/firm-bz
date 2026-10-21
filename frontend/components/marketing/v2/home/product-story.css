@@ -1,0 +1,292 @@
+/*
+ * 4 · Product story ("How it works").
+ * Desktop and tablet: four ARIA tabs over one pastel stage, the four panels stacked in one grid cell.
+ * Phone (< 768 px): no carousel. Step 02 shows in full with its Board stacked top to bottom, and
+ * steps 01, 03 and 04 follow as cards.
+ */
+
+.mk-story {
+  padding: 96px 0 128px;
+  /* The board renders at the browser's default line height; every explicit value below overrides it. */
+  line-height: normal;
+}
+.mk-story-title {
+  margin-top: 20px;
+  max-width: 860px;
+  font-size: clamp(38px, 4vw, 60px);
+  color: var(--mk-bottle);
+}
+.mk-story-lede {
+  margin: 22px 0 0;
+  max-width: 640px;
+  font-size: 19px;
+  line-height: 1.6;
+  color: var(--mk-body);
+  text-wrap: pretty;
+}
+
+/* Step number tile (01–04), shared by the tabs and the phone cards. */
+.mk-story-num {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border-radius: 9px;
+  background: linear-gradient(140deg, #7dff77, #00c49a);
+  color: var(--mk-on-electric);
+  font-family: var(--mk-font-display);
+  font-size: 13px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── Tabs ─────────────────────────────────────────────────────────────────────────────────── */
+
+.mk-story-tabs {
+  margin-top: 48px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+.mk-story-tab {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  text-align: left;
+  border: 0;
+  margin: 0;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  padding: 14px 16px 18px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.45);
+  box-shadow: inset 0 0 0 1px rgba(5, 39, 28, 0.08);
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 450ms var(--mk-ease);
+}
+.mk .mk-story-tab:focus-visible {
+  border-radius: 16px;
+}
+.mk-story-tab:active {
+  transform: scale(0.985);
+  transition-duration: 120ms;
+}
+/* The raised white card of the active tab, faded in as a layer (opacity only). */
+.mk-story-tab-raise {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: #ffffff;
+  box-shadow: 0 0 0 1px rgba(5, 39, 28, 0.1), 0 18px 40px -26px rgba(3, 40, 27, 0.45);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 400ms ease;
+}
+.mk-story-tab-body {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+.mk-story-tab-track {
+  display: block;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(5, 39, 28, 0.08);
+  overflow: hidden;
+}
+.mk-story-tab-fill {
+  display: block;
+  height: 3px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #7dff77, #00c49a);
+  transform: scaleX(0);
+  transform-origin: left center;
+}
+.mk-story-tab-fill.is-run {
+  animation: mk-story-fill 6000ms linear both;
+}
+.mk-story-tab-fill.is-full {
+  transform: none;
+}
+.mk-story-tab-head {
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.mk-story-tab .mk-story-num {
+  opacity: 0.5;
+  transition: opacity 400ms ease;
+}
+.mk-story-tab-label {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--mk-muted);
+}
+.mk-story-tab-title {
+  margin-top: 10px;
+  font-family: var(--mk-font-display);
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+  color: var(--mk-muted);
+  transition: color 400ms ease;
+}
+.mk-story-tab[aria-selected='true'] .mk-story-tab-raise,
+.mk-story-tab[aria-selected='true'] .mk-story-num {
+  opacity: 1;
+}
+.mk-story-tab[aria-selected='true'] .mk-story-tab-label {
+  color: var(--mk-bottle-dark);
+}
+.mk-story-tab[aria-selected='true'] .mk-story-tab-title {
+  color: var(--mk-ink);
+}
+@media (hover: hover) {
+  .mk-story-tab[aria-selected='false']:hover .mk-story-tab-raise {
+    opacity: 0.5;
+  }
+}
+
+@keyframes mk-story-fill {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+/* ── Stage ────────────────────────────────────────────────────────────────────────────────── */
+
+.mk-story-stage {
+  margin-top: 16px;
+  border-radius: 28px;
+  padding: 44px;
+  box-sizing: border-box;
+  overflow: hidden;
+  background-color: var(--mk-panel);
+  /* baseVals().panel2 */
+  background-image: radial-gradient(at 100% 0%, #e9ffb0 0px, transparent 55%),
+    radial-gradient(at 0% 30%, #c4f6ea 0px, transparent 55%), radial-gradient(at 30% 100%, #a9f2c8 0px, transparent 55%),
+    radial-gradient(at 100% 100%, #d9ffd4 0px, transparent 55%);
+}
+.mk-story-stack {
+  display: grid;
+}
+.mk-story-panel {
+  grid-area: 1 / 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  /* Top-aligned: the stage takes the tallest panel's height, so centering left shorter panels
+     floating in a band of empty panel. */
+  justify-content: flex-start;
+  gap: 26px;
+}
+.mk-story-copy {
+  margin: 0;
+  align-self: stretch;
+  max-width: 640px;
+  font-size: 17px;
+  line-height: 1.65;
+  color: var(--mk-body);
+  text-wrap: pretty;
+}
+
+/* Tablet: two rows of tabs, a slimmer stage frame (the wide screens scale to fit). */
+@media (max-width: 1023px) {
+  .mk-story-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .mk-story-tab-title {
+    text-wrap: balance;
+  }
+  .mk-story-stage {
+    padding: 28px;
+    border-radius: 24px;
+  }
+}
+
+/* ── Phone ────────────────────────────────────────────────────────────────────────────────── */
+
+.mk-story-phone {
+  display: none;
+}
+@media (max-width: 767px) {
+  .mk-story {
+    padding: 48px 0;
+  }
+  .mk-story-title {
+    margin-top: 16px;
+    font-size: 38px;
+  }
+  .mk-story-lede,
+  .mk-story-desk {
+    display: none;
+  }
+  .mk-story-phone {
+    display: block;
+    padding-top: 32px;
+  }
+}
+.mk-story-phone-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.mk-story-phone-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--mk-bottle-dark);
+}
+.mk-story-phone-title {
+  margin: 12px 0 0;
+  font-family: var(--mk-font-display);
+  font-weight: 700;
+  font-size: 26px;
+  line-height: 1.1;
+  letter-spacing: -0.025em;
+  color: var(--mk-ink);
+}
+.mk-story-phone-copy {
+  margin: 10px 0 0;
+  font-size: 15.5px;
+  line-height: 1.6;
+  color: var(--mk-body);
+  text-wrap: pretty;
+}
+/* 12 px from the screen edges, so it reaches 8 px into the 20 px gutter. */
+.mk-story-phone-panel {
+  margin: 20px -8px 0;
+  border-radius: 20px;
+  padding: 16px;
+  background-color: var(--mk-panel);
+  background-image: radial-gradient(at 100% 0%, #e9ffb0 0px, transparent 55%),
+    radial-gradient(at 0% 30%, #c4f6ea 0px, transparent 55%), radial-gradient(at 30% 100%, #a9f2c8 0px, transparent 55%),
+    radial-gradient(at 100% 100%, #d9ffd4 0px, transparent 55%);
+}
+.mk-story-phone-steps {
+  margin: 28px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.mk-story-phone-step {
+  padding: 16px;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 0 0 1px rgba(5, 39, 28, 0.08);
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  font-size: 16px;
+  font-weight: 700;
+}

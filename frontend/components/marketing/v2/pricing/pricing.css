@@ -1,0 +1,1007 @@
+/*
+ * /pricing (board: "Pricing — sample inner page", 1440 wide). Values are the board's; tablet and phone
+ * follow the site's breakpoints (768 / 1024). Motion is transform and opacity only.
+ * Rules that refine a shared token class (.mk-page, .mk-section, .mk-btn) are scoped under `.mk` so
+ * they win regardless of stylesheet order.
+ */
+
+/* ── Shared bits ──────────────────────────────────────────────────────────────────────────── */
+
+.mk-pricing-check {
+  flex: none;
+  color: var(--mk-bottle);
+}
+
+/* A value that rolls with the billing toggle (see roll-swap.tsx). */
+.mk-pricing-swap {
+  display: inline-grid;
+}
+.mk-pricing-swap--block {
+  display: grid;
+}
+.mk-pricing-swap > span {
+  grid-area: 1 / 1;
+  transition: transform 600ms var(--mk-roll), opacity 220ms var(--mk-ease);
+}
+.mk-pricing-swap > [data-pos='on'] {
+  transition: transform 600ms var(--mk-roll), opacity 380ms var(--mk-ease) 90ms;
+}
+.mk-pricing-swap > [data-pos='before'],
+.mk-pricing-swap > [data-pos='after'] {
+  opacity: 0;
+  pointer-events: none;
+  user-select: none;
+}
+.mk-pricing-swap > [data-pos='before'] {
+  transform: translate3d(0, -0.5em, 0);
+}
+.mk-pricing-swap > [data-pos='after'] {
+  transform: translate3d(0, 0.5em, 0);
+}
+
+/* ── 1 · Hero ─────────────────────────────────────────────────────────────────────────────── */
+
+.mk-pricing-hero {
+  position: relative;
+  overflow: hidden;
+  background: #ffffff;
+  /* The fixed header (76 px) plus the board's 64 px. */
+  padding: 140px 0 104px;
+}
+.mk-pricing-wash {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(100deg, rgba(255, 255, 255, 0.96) 0%, rgba(255, 255, 255, 0.85) 30%, rgba(255, 255, 255, 0) 58%);
+}
+.mk-pricing-hero-head,
+.mk-pricing-cards-rail {
+  position: relative;
+  z-index: 2;
+}
+
+.mk-pricing-chip {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 14px 5px 5px;
+  border-radius: 999px;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--mk-ink);
+  background: rgba(255, 255, 255, 0.8);
+  box-shadow: 0 0 0 1px rgba(5, 39, 28, 0.08), 0 6px 18px -10px rgba(5, 39, 28, 0.35);
+}
+.mk-pricing-chip-badge {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  background: var(--mk-electric);
+  color: var(--mk-on-electric);
+}
+
+.mk .mk-pricing-title {
+  margin-top: 26px;
+  max-width: 820px;
+}
+.mk-pricing-lede {
+  margin: 24px 0 0;
+  max-width: 600px;
+}
+
+/* Billing toggle: the pressed side's white pill fades in (opacity), the text darkens. */
+.mk-pricing-toggle {
+  margin-top: 32px;
+  display: inline-flex;
+  padding: 4px;
+  gap: 4px;
+  border-radius: 999px;
+  background: var(--mk-gray);
+  box-shadow: inset 0 0 0 1px rgba(5, 39, 28, 0.08);
+}
+.mk-pricing-toggle-btn,
+.mk-pricing-tab {
+  position: relative;
+  isolation: isolate;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--mk-body);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: color 200ms ease;
+}
+.mk-pricing-toggle-btn--annual {
+  padding: 0 8px 0 18px;
+}
+.mk-pricing-toggle-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: #ffffff;
+  box-shadow: 0 0 0 1px rgba(5, 39, 28, 0.08), 0 4px 10px -4px rgba(3, 40, 27, 0.25);
+  opacity: 0;
+  transform: scale(0.94);
+  transition: opacity 200ms ease, transform 350ms var(--mk-ease);
+}
+.mk-pricing-toggle-btn[aria-pressed='true'] {
+  color: var(--mk-ink);
+}
+.mk-pricing-toggle-btn[aria-pressed='true']::before {
+  opacity: 1;
+  transform: none;
+}
+.mk-pricing-toggle-btn:active::before {
+  transform: scale(0.97);
+}
+@media (hover: hover) {
+  .mk-pricing-toggle-btn[aria-pressed='false']:hover {
+    color: var(--mk-ink);
+  }
+}
+.mk .mk-pricing-toggle-btn:focus-visible,
+.mk .mk-pricing-tab:focus-visible,
+.mk .mk-pricing-cta:focus-visible,
+.mk .mk-pricing-final-btn:focus-visible,
+.mk .mk-pricing-tip-btn:focus-visible {
+  border-radius: 999px;
+}
+.mk-pricing-save {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1.4;
+  background: var(--mk-electric);
+  color: var(--mk-on-electric);
+}
+
+/* Phones: the ribbon strip between the toggle and the first card (pricing-ribbon.tsx). */
+.mk-pricing-strip {
+  display: none;
+}
+
+/* Plan cards. */
+.mk-pricing-cards-rail {
+  margin-top: 40px;
+}
+.mk-pricing-cards {
+  display: grid;
+  grid-template-columns: repeat(var(--mk-pricing-cols, 3), minmax(0, 1fr));
+  gap: 20px;
+}
+.mk-pricing-card {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 32px;
+  box-sizing: border-box;
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: 0 0 0 1px rgba(5, 39, 28, 0.08), 0 24px 48px -28px rgba(3, 40, 27, 0.35);
+}
+.mk-pricing-card--featured {
+  box-shadow: 0 0 0 2px var(--mk-bottle), 0 30px 60px -30px rgba(0, 150, 105, 0.5);
+}
+.mk-pricing-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.mk-pricing-card-name {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--mk-ink);
+}
+.mk-pricing-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 11px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1.4;
+  background: var(--mk-electric);
+  color: var(--mk-on-electric);
+}
+.mk-pricing-badge--soon {
+  background: rgba(5, 39, 28, 0.06);
+  color: var(--mk-body);
+}
+.mk-pricing-card-desc {
+  margin: 8px 0 0;
+  min-height: 46px;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--mk-muted);
+}
+
+.mk-pricing-price {
+  margin-top: 22px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.mk-pricing-amount {
+  font-family: var(--mk-font-display);
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  color: var(--mk-ink);
+}
+.mk-pricing-amount--lg {
+  font-size: 56px;
+  line-height: 1;
+}
+.mk-pricing-amount--sm {
+  font-size: 24px;
+  line-height: 1.2;
+}
+.mk-pricing-amount--green {
+  color: var(--mk-bottle);
+}
+.mk-pricing-per {
+  font-size: 15px;
+  color: var(--mk-muted);
+}
+.mk-pricing-per--sm {
+  font-size: 13.5px;
+}
+.mk-pricing-note {
+  margin: 8px 0 0;
+  min-height: 20px;
+  font-size: 13.5px;
+  line-height: 20px;
+  color: var(--mk-muted);
+}
+
+.mk-pricing-cta-wrap {
+  margin-top: 22px;
+}
+.mk .mk-pricing-cta {
+  display: flex;
+  width: 100%;
+  height: 50px;
+  padding: 0 20px;
+  font-size: 16px;
+  font-weight: 700;
+}
+.mk .mk-pricing-cta--primary {
+  box-shadow: inset 0 0 0 1px rgba(3, 40, 27, 0.16), 0 12px 26px -12px rgba(0, 150, 105, 0.65);
+}
+.mk .mk-pricing-cta--secondary {
+  box-shadow: 0 0 0 1px rgba(5, 39, 28, 0.16), 0 1px 2px rgba(5, 39, 28, 0.06);
+}
+@media (hover: hover) {
+  .mk .mk-pricing-cta--primary:hover {
+    box-shadow: inset 0 0 0 1px rgba(3, 40, 27, 0.16), 0 16px 32px -12px rgba(0, 150, 105, 0.85), 0 0 0 4px rgba(125, 255, 119, 0.25);
+  }
+  .mk .mk-pricing-cta--secondary:hover {
+    box-shadow: 0 0 0 1px rgba(5, 39, 28, 0.24), 0 10px 22px -14px rgba(5, 39, 28, 0.45);
+  }
+}
+
+.mk-pricing-list {
+  margin: 24px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 11px;
+  font-size: 15px;
+  line-height: 1.5;
+  color: #24403a;
+}
+.mk-pricing-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.mk-pricing-list .mk-pricing-check {
+  margin-top: 3px;
+}
+
+/* Larger firms: one row per launching-later plan. */
+.mk-pricing-later {
+  margin: 18px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.mk-pricing-later-row {
+  padding: 16px 0;
+  border-top: 1px solid rgba(5, 39, 28, 0.08);
+}
+.mk-pricing-later-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.mk-pricing-later-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--mk-ink);
+}
+.mk-pricing-later-line {
+  margin: 6px 0 0;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--mk-body);
+}
+.mk-pricing-later-cta {
+  margin-top: auto;
+  padding-top: 18px;
+}
+
+/* Every plan includes. */
+.mk-pricing-includes {
+  margin: 48px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px 30px;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--mk-ink);
+}
+.mk-pricing-includes li {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.mk-pricing-includes .mk-pricing-includes-label {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--mk-muted);
+}
+
+/* Small desktop: a little less card padding, and the headline kept clear of the ribbon. */
+@media (min-width: 1024px) and (max-width: 1279px) {
+  .mk .mk-pricing-title {
+    max-width: min(820px, 72%);
+  }
+  .mk-pricing-card {
+    padding: 28px;
+  }
+}
+
+/* Tablet: Free and the launched plans two up; Larger firms full width with its plans side by side. */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .mk .mk-pricing-title {
+    max-width: 74%;
+  }
+  .mk-pricing-lede {
+    max-width: 66%;
+  }
+  .mk-pricing-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .mk-pricing-card--later {
+    grid-column: 1 / -1;
+  }
+  .mk-pricing-later {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    column-gap: 28px;
+  }
+  .mk-pricing-later-cta .mk-pricing-cta {
+    display: inline-flex;
+    width: auto;
+    padding: 0 32px;
+  }
+}
+
+/* Phones: one column; the ribbon runs behind the top of the first card. */
+@media (max-width: 767px) {
+  .mk-pricing-hero {
+    /* The fixed header (64 px) plus 36 px. */
+    padding: 100px 0 72px;
+  }
+  .mk-pricing-wash {
+    display: none;
+  }
+  .mk-pricing-chip {
+    align-items: center;
+    gap: 9px;
+    padding-right: 12px;
+    border-radius: 18px;
+    font-size: 13px;
+    text-wrap: balance;
+  }
+  .mk .mk-pricing-title {
+    margin-top: 22px;
+  }
+  .mk-pricing-lede {
+    margin-top: 18px;
+  }
+  .mk-pricing-toggle {
+    margin-top: 28px;
+  }
+  .mk-pricing-toggle-btn {
+    height: 42px;
+  }
+  .mk-pricing-strip {
+    display: block;
+    position: relative;
+    height: 44vw;
+    margin: 4px calc(-1 * var(--mk-gutter)) -14vw;
+    pointer-events: none;
+    -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 24%, #000 72%, transparent 100%);
+    mask-image: linear-gradient(180deg, transparent 0%, #000 24%, #000 72%, transparent 100%);
+  }
+  .mk-pricing-cards-rail {
+    margin-top: 0;
+  }
+  .mk-pricing-cards {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+  .mk-pricing-card {
+    padding: 24px;
+  }
+  .mk-pricing-card-desc {
+    min-height: 0;
+  }
+  .mk-pricing-includes {
+    margin-top: 36px;
+    gap: 12px 22px;
+  }
+  .mk-pricing-includes .mk-pricing-includes-label {
+    flex-basis: 100%;
+  }
+}
+
+/* ── 2 · Compare every plan (gray) ────────────────────────────────────────────────────────── */
+
+.mk-pricing-compare {
+  padding: 112px 0;
+}
+.mk-pricing-compare-lede {
+  margin: 16px 0 0;
+  max-width: 640px;
+  font-size: 18px;
+  line-height: 1.6;
+  color: var(--mk-body);
+}
+
+.mk-pricing-table-card {
+  margin-top: 40px;
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: 0 0 0 1px rgba(5, 39, 28, 0.08), 0 24px 48px -28px rgba(3, 40, 27, 0.35);
+}
+.mk-pricing-table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  border-spacing: 0;
+}
+/* 2.3fr of the board's 2.3 + 5 × 1fr grid. */
+.mk-pricing-col-feature {
+  width: 31.5%;
+}
+.mk-pricing-table th,
+.mk-pricing-table td {
+  font-weight: 400;
+  text-align: left;
+  vertical-align: middle;
+}
+.mk-pricing-table thead tr {
+  border-bottom: 1px solid rgba(5, 39, 28, 0.08);
+}
+.mk-pricing-table .mk-pricing-th-feature {
+  padding: 22px 24px 18px;
+  vertical-align: bottom;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mk-muted);
+}
+.mk-pricing-table .mk-pricing-th-plan {
+  padding: 22px 12px 18px;
+  text-align: center;
+  vertical-align: top;
+}
+.mk-pricing-table [data-hi] {
+  background: rgba(125, 255, 119, 0.1);
+}
+.mk-pricing-th-name {
+  display: block;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.4;
+  color: var(--mk-ink);
+}
+.mk-pricing-th-note {
+  display: block;
+  margin-top: 4px;
+  min-height: 18px;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 18px;
+  color: var(--mk-muted);
+}
+[data-hi] > .mk-pricing-th-note,
+[data-hi] .mk-pricing-th-note {
+  color: var(--mk-bottle-dark);
+}
+.mk-pricing-table .mk-pricing-cat th {
+  padding: 12px 24px;
+  background: rgba(5, 39, 28, 0.03);
+  border-bottom: 1px solid rgba(5, 39, 28, 0.06);
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mk-body);
+}
+.mk-pricing-row {
+  border-bottom: 1px solid rgba(5, 39, 28, 0.06);
+}
+.mk-pricing-table tbody:last-child .mk-pricing-row:last-child {
+  border-bottom: 0;
+}
+.mk-pricing-table .mk-pricing-row th {
+  padding: 15px 24px;
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--mk-ink);
+}
+.mk-pricing-table .mk-pricing-row td {
+  padding: 15px 10px;
+  text-align: center;
+  font-size: 14.5px;
+  line-height: 1.45;
+  color: #24403a;
+}
+/* Row hover: a faint wash laid over each cell (keeps Standard's tint). */
+@media (hover: hover) {
+  .mk-pricing-row:hover > th,
+  .mk-pricing-row:hover > td {
+    box-shadow: inset 0 0 0 999px rgba(5, 39, 28, 0.022);
+  }
+}
+
+.mk-pricing-dash {
+  color: #9fb8ae;
+}
+.mk-pricing-beta {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 11px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1.4;
+  background: rgba(5, 39, 28, 0.06);
+  color: var(--mk-body);
+}
+.mk-pricing-cell-text {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* Feature label with its info button right after the last word. */
+.mk-pricing-row-label > span {
+  overflow-wrap: anywhere;
+}
+.mk-pricing-tip-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin: -4px -4px -4px 3px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #9fb8ae;
+  vertical-align: middle;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: color 150ms ease, background-color 150ms ease;
+}
+.mk-pricing-tip-btn::after {
+  content: '';
+  position: absolute;
+  inset: -10px;
+}
+.mk-pricing-tip-btn[aria-expanded='true'] {
+  color: var(--mk-bottle);
+  background: rgba(0, 150, 105, 0.1);
+}
+@media (hover: hover) {
+  .mk-pricing-tip-btn:hover {
+    color: var(--mk-bottle);
+    background: rgba(0, 150, 105, 0.1);
+  }
+}
+
+.mk-pricing-tip {
+  z-index: 40;
+  box-sizing: border-box;
+  width: max-content;
+  max-width: min(340px, calc(100vw - 32px));
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 0 0 1px rgba(5, 39, 28, 0.08), 0 20px 44px -18px rgba(3, 40, 27, 0.42);
+  font-size: 13.5px;
+  font-weight: 400;
+  line-height: 1.55;
+  letter-spacing: normal;
+  text-align: left;
+  text-transform: none;
+  white-space: normal;
+  color: var(--mk-body);
+  animation: mkFadeIn 160ms ease-out;
+}
+.mk-pricing-tip p {
+  margin: 0;
+}
+.mk-pricing-tip-text {
+  white-space: pre-line;
+}
+.mk-pricing-tip-personas {
+  display: grid;
+  gap: 8px;
+}
+.mk-pricing-tip-personas strong {
+  font-weight: 700;
+  color: var(--mk-ink);
+}
+.mk-pricing-tip .mk-pricing-tip-foot {
+  padding-top: 8px;
+  border-top: 1px solid rgba(5, 39, 28, 0.08);
+  color: var(--mk-muted);
+}
+
+/* Phones: a plan picker and that plan's column as a list. */
+.mk-pricing-phone-compare {
+  display: none;
+}
+.mk-pricing-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.mk-pricing-tab {
+  height: 42px;
+  padding: 0 16px;
+  background: #ffffff;
+  box-shadow: 0 0 0 1px rgba(5, 39, 28, 0.12);
+  transition: color 200ms ease, box-shadow 200ms ease, background-color 200ms ease;
+}
+.mk-pricing-tab[aria-selected='true'] {
+  background: var(--mk-electric);
+  color: var(--mk-on-electric);
+  box-shadow: inset 0 0 0 1px rgba(3, 40, 27, 0.16), 0 8px 18px -10px rgba(0, 150, 105, 0.7);
+}
+.mk-pricing-tab:active {
+  transform: scale(0.97);
+}
+.mk-pricing-panel {
+  margin-top: 16px;
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: 0 0 0 1px rgba(5, 39, 28, 0.08), 0 24px 48px -28px rgba(3, 40, 27, 0.35);
+  overflow: hidden;
+  animation: mkFadeIn 320ms var(--mk-ease) both;
+}
+.mk-pricing-panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 18px 16px;
+  border-bottom: 1px solid rgba(5, 39, 28, 0.08);
+}
+.mk-pricing-panel-head[data-hi] {
+  background: rgba(125, 255, 119, 0.1);
+}
+.mk-pricing-panel-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--mk-ink);
+}
+.mk-pricing-panel-head .mk-pricing-th-note {
+  margin: 0;
+  min-height: 0;
+}
+.mk-pricing-pcat {
+  margin: 0;
+  padding: 10px 18px;
+  background: rgba(5, 39, 28, 0.03);
+  border-bottom: 1px solid rgba(5, 39, 28, 0.06);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  line-height: 1.5;
+  text-transform: uppercase;
+  color: var(--mk-body);
+}
+.mk-pricing-plist {
+  margin: 0;
+}
+.mk-pricing-prow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 13px 18px;
+  border-bottom: 1px solid rgba(5, 39, 28, 0.06);
+}
+.mk-pricing-panel section:last-child .mk-pricing-prow:last-child {
+  border-bottom: 0;
+}
+.mk-pricing-prow dt {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--mk-ink);
+}
+.mk-pricing-prow dd {
+  flex: 0 1 auto;
+  max-width: 46%;
+  margin: 0;
+  display: flex;
+  justify-content: flex-end;
+  text-align: right;
+  font-size: 14.5px;
+  line-height: 1.45;
+  color: #24403a;
+}
+.mk-pricing-prow dd .mk-pricing-cell-text {
+  align-items: flex-end;
+}
+
+/* Tablet: the same table, tighter. */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .mk-pricing-table .mk-pricing-th-feature,
+  .mk-pricing-table .mk-pricing-cat th,
+  .mk-pricing-table .mk-pricing-row th {
+    padding-left: 18px;
+    padding-right: 14px;
+  }
+  .mk-pricing-table .mk-pricing-th-plan {
+    padding: 20px 6px 16px;
+  }
+  .mk-pricing-th-name {
+    font-size: 14.5px;
+  }
+  .mk-pricing-th-note {
+    font-size: 11.5px;
+  }
+  .mk-pricing-table .mk-pricing-row th {
+    font-size: 14px;
+  }
+  .mk-pricing-table .mk-pricing-row td {
+    padding: 13px 6px;
+    font-size: 13.5px;
+  }
+  .mk-pricing-beta {
+    padding: 3px 9px;
+    font-size: 11.5px;
+  }
+}
+
+@media (max-width: 767px) {
+  .mk-pricing-compare {
+    padding: 72px 0;
+  }
+  .mk-pricing-compare-lede {
+    font-size: 16.5px;
+  }
+  .mk-pricing-table-card {
+    display: none;
+  }
+  .mk-pricing-phone-compare {
+    display: block;
+    margin-top: 28px;
+  }
+}
+
+/* ── 3 · FAQ (white) ──────────────────────────────────────────────────────────────────────── */
+
+.mk-pricing-faq {
+  padding: 112px 0 128px;
+}
+.mk-pricing-faq-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 440px) minmax(0, 1fr);
+  gap: 64px;
+}
+.mk-pricing-faq-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 11px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1.4;
+  background: rgba(125, 255, 119, 0.38);
+  color: var(--mk-on-electric);
+}
+.mk .mk-pricing-faq-title {
+  margin-top: 18px;
+}
+.mk-pricing-faq-more {
+  margin: 16px 0 0;
+  font-size: 17px;
+  line-height: 1.6;
+  color: var(--mk-body);
+}
+.mk .mk-pricing-faq-more a {
+  font-weight: 600;
+  color: var(--mk-bottle-dark);
+  text-decoration: underline;
+  text-decoration-color: rgba(0, 122, 85, 0.35);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+  transition: text-decoration-color 200ms ease;
+}
+@media (hover: hover) {
+  .mk .mk-pricing-faq-more a:hover {
+    text-decoration-color: currentColor;
+  }
+}
+
+.mk-pricing-faq-list {
+  border-top: 1px solid rgba(5, 39, 28, 0.1);
+}
+.mk-pricing-faq-item {
+  border-bottom: 1px solid rgba(5, 39, 28, 0.1);
+}
+.mk-pricing-faq-q {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 22px 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--mk-ink);
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: color 200ms ease;
+}
+@media (hover: hover) {
+  .mk-pricing-faq-q:hover {
+    color: var(--mk-bottle-dark);
+  }
+}
+.mk-pricing-faq-chev {
+  flex: none;
+  display: inline-flex;
+  color: var(--mk-bottle);
+  transition: transform 250ms var(--mk-ease);
+}
+.mk-pricing-faq-chev[data-open] {
+  transform: rotate(180deg);
+}
+.mk-pricing-faq-a {
+  padding: 0 48px 24px 0;
+  font-size: 16px;
+  line-height: 1.7;
+  color: var(--mk-body);
+  animation: mkFadeIn 320ms var(--mk-ease) both;
+}
+.mk-pricing-faq-a[hidden] {
+  display: none;
+}
+.mk-pricing-faq-a p {
+  margin: 0;
+}
+.mk-pricing-faq-a p + p {
+  margin-top: 12px;
+}
+
+@media (max-width: 1023px) {
+  .mk-pricing-faq-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 36px;
+  }
+}
+@media (max-width: 767px) {
+  .mk-pricing-faq {
+    padding: 72px 0 88px;
+  }
+  .mk-pricing-faq-more {
+    font-size: 16px;
+  }
+  .mk-pricing-faq-q {
+    padding: 20px 0;
+    font-size: 17px;
+  }
+  .mk-pricing-faq-a {
+    padding-right: 0;
+    font-size: 15.5px;
+  }
+}
+
+/* ── 4 · Final CTA (dark, top slant) ──────────────────────────────────────────────────────── */
+
+.mk-pricing-final {
+  padding: 230px 0 150px;
+}
+.mk-pricing-final-lede {
+  margin: 22px auto 0;
+  max-width: 560px;
+  font-size: 19px;
+  line-height: 1.6;
+  color: var(--mk-on-dark-body);
+  text-wrap: pretty;
+}
+.mk-pricing-final-actions {
+  margin-top: 38px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 14px;
+}
+.mk .mk-pricing-final-btn {
+  height: 54px;
+  padding: 0 26px;
+  font-size: 17px;
+}
+.mk .mk-pricing-final-btn--primary {
+  padding: 0 28px;
+  box-shadow: 0 0 40px -6px rgba(125, 255, 119, 0.6);
+}
+@media (hover: hover) {
+  .mk .mk-pricing-final-btn--primary:hover {
+    box-shadow: 0 0 48px -4px rgba(125, 255, 119, 0.75), 0 0 0 4px rgba(125, 255, 119, 0.22);
+  }
+}
+@media (max-width: 767px) {
+  .mk-pricing-final {
+    padding: calc(var(--mk-slant) + 72px) 0 96px;
+  }
+  .mk-pricing-final-lede {
+    font-size: 17px;
+  }
+  .mk-pricing-final-actions {
+    margin-top: 32px;
+    gap: 12px;
+  }
+}

@@ -1,6 +1,7 @@
 import nodemailer from 'nodemailer'
 import { logger } from './logger'
 import { BRAND_NAME } from '@/config/brand'
+import { renderEmail } from './email-templates/base'
 
 const transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST,
@@ -23,6 +24,14 @@ export interface EmailAttachment {
     contentType: string
 }
 
+/**
+ * Every email goes out in the firmä shell. Templates render a full document themselves; a bare
+ * fragment (a few <p> tags from a notice) is wrapped here, so nothing is sent unstyled.
+ */
+function withEmailShell(subject: string, html: string): string {
+    return /<html[\s>]/i.test(html) ? html : renderEmail({ title: subject, body: html })
+}
+
 export async function sendEmail(to: string, subject: string, html: string, attachments?: EmailAttachment[]) {
     if (!process.env.SMTP_HOST) {
         logger.warn("SMTP_HOST not configured. Email not sent", 'Email', { subject, to })
@@ -39,7 +48,7 @@ export async function sendEmail(to: string, subject: string, html: string, attac
             from: process.env.SMTP_FROM || DEFAULT_EMAIL_FROM,
             to,
             subject,
-            html,
+            html: withEmailShell(subject, html),
             ...(attachments?.length ? { attachments } : {}),
         })
         // Log email delivery without exposing full email address

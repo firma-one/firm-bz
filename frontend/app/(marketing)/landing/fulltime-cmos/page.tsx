@@ -1,5 +1,5 @@
 import type { Metadata } from "next"
-import { AudienceLanding } from "@/components/landing/audience-landing"
+import { AudiencePageV2 } from "@/components/marketing/v2/audience/audience-page"
 import { fulltimeCMOContent } from "@/lib/marketing/audience-content"
 import { getPostsByAudienceId } from "@/lib/blog-utils"
 import { BRAND_NAME } from "@/config/brand"
@@ -86,7 +86,7 @@ export default function FulltimeCMOPage() {
           }),
         }}
       />
-      <AudienceLanding content={fulltimeCMOContent} blogPosts={blogPosts} />
+      <AudiencePageV2 content={fulltimeCMOContent} blogPosts={blogPosts} />
     </>
   )
 }

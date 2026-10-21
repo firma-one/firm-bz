@@ -1,19 +1,14 @@
+import type { Metadata } from "next"
+
 import { PrivacyPolicy } from "@/components/legal/privacy-policy"
-import { Footer } from "@/components/layout/Footer"
-import { Header } from "@/components/layout/Header"
-import { MARKETING_PAGE_SHELL } from "@/lib/marketing/target-audience-nav"
-import { cn } from "@/lib/utils"
+import { BRAND_NAME } from "@/config/brand"
 
+export const metadata: Metadata = {
+  title: `Privacy Policy | ${BRAND_NAME}`,
+  description: `How ${BRAND_NAME} collects, uses and safeguards your information, what its AI assistant sends, and the rights you have.`,
+}
+
+/** Renders inside the v2 marketing shell; the policy brings its own reading-template layout. */
 export default function PrivacyPolicyPage() {
-  return (
-    <div className="relative flex min-h-screen flex-col">
-      <Header />
-
-      <main className={cn(MARKETING_PAGE_SHELL, "relative z-10 w-full flex-1 pb-16 md:pb-24")}>
-        <PrivacyPolicy variant="page" />
-      </main>
-
-      <Footer />
-    </div>
-  )
+  return <PrivacyPolicy variant="page" />
 }

@@ -80,7 +80,31 @@ export async function serverActionWrapper<T>(
 
         return {
             success: false,
-            error: error instanceof Error ? error.message : 'An unexpected error occurred'
+            error: userFacingMessage(error)
         }
     }
+}
+
+/** Prisma error codes for "the database could not be reached", as opposed to a query that failed. */
+const DATABASE_UNREACHABLE_CODES = new Set(['P1001', 'P1002', 'P1008', 'P1017'])
+
+/**
+ * The message a generic failure shows the user.
+ *
+ * Messages that actions throw on purpose ("Captcha validation failed. Please try again.") are written
+ * for people and pass through. A Prisma error is not: it carries the query, the database host and
+ * port, and the driver's wording, which mean nothing to a user and describe the infrastructure to
+ * anyone who looks. Those are replaced; the full error is already in the log above.
+ */
+export function userFacingMessage(error: unknown): string {
+    if (!(error instanceof Error)) return 'An unexpected error occurred'
+    if (error.name.startsWith('PrismaClient')) {
+        const code = (error as Error & { code?: unknown; errorCode?: unknown }).code
+            ?? (error as Error & { errorCode?: unknown }).errorCode
+        if (error.name === 'PrismaClientInitializationError' || (typeof code === 'string' && DATABASE_UNREACHABLE_CODES.has(code))) {
+            return 'We couldn’t reach our servers just now. Please try again in a moment.'
+        }
+        return 'Something went wrong on our side. Please try again.'
+    }
+    return error.message
 }

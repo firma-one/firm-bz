@@ -1,0 +1,248 @@
+/* Trust Center systems map (elkjs layout, React Flow canvas). Prefix: mk-trust-map-. */
+
+.mk-trust-map {
+  margin-top: 48px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 20px;
+  align-items: stretch;
+}
+@media (max-width: 1023px) {
+  .mk-trust-map {
+    grid-template-columns: minmax(0, 1fr);
+    margin-top: 36px;
+  }
+}
+
+.mk-trust-map-canvas {
+  position: relative;
+  min-width: 0;
+  border-radius: 18px;
+  background: var(--mk-gray);
+  box-shadow: inset 0 0 0 1px var(--mk-ring);
+  overflow: hidden;
+}
+.mk-trust-map-loading {
+  position: absolute;
+  inset: 0;
+}
+
+/* React Flow, on the green system. */
+.mk-trust-map .react-flow {
+  --xy-background-color: transparent;
+  --xy-edge-stroke: #9db5ab;
+  --xy-edge-stroke-width: 1.5;
+  --xy-edge-label-background-color: #ffffff;
+  --xy-edge-label-color: var(--mk-body);
+  --xy-attribution-background-color: transparent;
+  font-family: var(--mk-font-body);
+}
+.mk-trust-map .react-flow__node {
+  /* Nodes are plain positioned boxes; the button inside carries the look. */
+  border: 0;
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+  cursor: default;
+}
+.mk-trust-map .react-flow__edge-textbg {
+  fill: #ffffff;
+}
+.mk-trust-map .react-flow__edge-text {
+  font-size: 11.5px;
+  font-weight: 600;
+  fill: var(--mk-body);
+}
+.mk-trust-map .mk-trust-map-edge .react-flow__edge-path {
+  transition: stroke 300ms var(--mk-ease);
+}
+.mk-trust-map .mk-trust-map-edge.is-on .react-flow__edge-path {
+  stroke: var(--mk-bottle);
+  stroke-width: 2;
+}
+.mk-trust-map .mk-trust-map-edge.is-on .react-flow__edge-text {
+  fill: var(--mk-bottle-dark);
+}
+.mk-trust-map-handle {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* The boxes. */
+.mk-trust-map-node {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  padding: 12px 14px;
+  box-sizing: border-box;
+  border: 0;
+  border-radius: 14px;
+  background: #ffffff;
+  color: var(--mk-ink);
+  text-align: left;
+  cursor: pointer;
+  box-shadow: 0 0 0 1px rgba(5, 39, 28, 0.1), 0 12px 26px -18px rgba(3, 40, 27, 0.45);
+  transition: transform 400ms var(--mk-ease), box-shadow 300ms var(--mk-ease);
+  -webkit-tap-highlight-color: transparent;
+}
+@media (hover: hover) {
+  .mk-trust-map-node:hover {
+    transform: translate3d(0, -2px, 0);
+  }
+}
+.mk-trust-map-node:active {
+  transform: scale(0.97);
+}
+.mk-trust-map-node.is-selected {
+  box-shadow: 0 0 0 2px var(--mk-bottle), 0 0 0 6px rgba(125, 255, 119, 0.28), 0 14px 30px -18px rgba(3, 40, 27, 0.5);
+}
+.mk-trust-map-node--primary {
+  background: var(--mk-forest);
+  color: #ffffff;
+  box-shadow: 0 0 0 1px rgba(125, 255, 119, 0.35), 0 18px 34px -18px rgba(3, 40, 27, 0.7);
+}
+.mk-trust-map-node--primary.is-selected {
+  box-shadow: 0 0 0 2px var(--mk-electric), 0 0 0 6px rgba(125, 255, 119, 0.25), 0 18px 34px -18px rgba(3, 40, 27, 0.7);
+}
+.mk-trust-map-kind {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mk-bottle-dark);
+}
+.mk-trust-map-node--primary .mk-trust-map-kind {
+  color: var(--mk-electric);
+}
+.mk-trust-map-title {
+  font-family: var(--mk-font-display);
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  line-height: 1.15;
+}
+.mk-trust-map-node--primary .mk-trust-map-title {
+  font-size: 22px;
+}
+.mk-trust-map-sub {
+  font-size: 12.5px;
+  line-height: 1.3;
+  color: var(--mk-body);
+}
+.mk-trust-map-node--primary .mk-trust-map-sub {
+  color: #c9dbd3;
+}
+/* Phones: compact boxes, three to a row. */
+@media (max-width: 767px) {
+  .mk-trust-map-node {
+    padding: 9px 9px;
+    gap: 2px;
+    border-radius: 12px;
+  }
+  .mk-trust-map-kind {
+    font-size: 9.5px;
+    letter-spacing: 0.04em;
+  }
+  .mk-trust-map-title {
+    font-size: 13.5px;
+  }
+  .mk-trust-map-node--primary .mk-trust-map-title {
+    font-size: 18px;
+  }
+  .mk-trust-map-sub {
+    font-size: 11px;
+  }
+}
+
+/* Zoom buttons. */
+.mk-trust-map .mk-trust-map-controls {
+  box-shadow: none;
+  margin: 12px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #ffffff;
+  box-shadow: 0 0 0 1px rgba(5, 39, 28, 0.1), 0 8px 20px -14px rgba(3, 40, 27, 0.4);
+}
+.mk-trust-map .mk-trust-map-controls .react-flow__controls-button {
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-bottom: 1px solid rgba(5, 39, 28, 0.08);
+  background: #ffffff;
+  color: var(--mk-ink);
+}
+.mk-trust-map .mk-trust-map-controls .react-flow__controls-button:hover {
+  background: var(--mk-gray);
+}
+.mk-trust-map .mk-trust-map-controls .react-flow__controls-button svg {
+  fill: currentColor;
+}
+
+/* The side panel. */
+.mk-trust-map-panel {
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: inset 0 0 0 1px var(--mk-ring);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+}
+.mk-trust-map-panel-kind {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mk-bottle-dark);
+}
+.mk-trust-map-panel-title {
+  margin: 6px 0 0;
+  font-family: var(--mk-font-display);
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  color: var(--mk-ink);
+}
+.mk-trust-map-panel-detail {
+  margin: 12px 0 0;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--mk-body);
+}
+.mk-trust-map-panel-points {
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--mk-ink);
+}
+.mk-trust-map-panel-points li {
+  position: relative;
+  padding-left: 26px;
+}
+.mk-trust-map-panel-points li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--mk-electric)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2303281B' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E")
+    center / 11px no-repeat;
+}
+.mk-trust-map-panel-hint {
+  margin: auto 0 0;
+  padding-top: 18px;
+  font-size: 12.5px;
+  color: var(--mk-muted);
+}

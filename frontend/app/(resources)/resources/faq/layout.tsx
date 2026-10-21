@@ -4,7 +4,6 @@ import type { ReactNode } from "react"
 import { FAQ_DATA } from "@/data/faq-data"
 import { BRAND_NAME } from "@/config/brand"
 import { getPlatformSiteOrigin } from "@/config/platform-domain"
-import { KINETIC_COLORS } from "@/config/kinetic-institution"
 
 const siteOrigin = getPlatformSiteOrigin()
 const faqPath = "/resources/faq" as const
@@ -77,9 +76,7 @@ const faqJsonLd = {
   })),
 }
 
-/**
- * Same kinetic surface as `(marketing)/layout.tsx` — FAQ lives under `/resources/*` but keeps marketing chrome.
- */
+/** Resources shell (v2) wraps this; the layout adds only the FAQPage structured data. */
 export default function ResourcesFaqLayout({ children }: { children: ReactNode }) {
   return (
     <>
@@ -87,25 +84,7 @@ export default function ResourcesFaqLayout({ children }: { children: ReactNode }
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
       />
-      <div
-        className="relative min-h-screen overflow-x-hidden font-sans antialiased [font-family:var(--font-kinetic-body),system-ui,sans-serif] selection:bg-[#72ff70] selection:text-[#002203]"
-        style={{
-          backgroundColor: KINETIC_COLORS.surface,
-          color: KINETIC_COLORS.onSurface,
-        }}
-      >
-        <div className="pointer-events-none fixed inset-0 z-0">
-          <div
-            className="absolute top-[-18%] right-[-8%] h-[min(88vw,680px)] w-[min(88vw,680px)] rounded-full opacity-35 blur-[100px]"
-            style={{ background: "radial-gradient(circle, #72ff7044 0%, transparent 72%)" }}
-          />
-          <div
-            className="absolute bottom-[-22%] left-[-12%] h-[min(78vw,520px)] w-[min(78vw,520px)] rounded-full opacity-25 blur-[90px]"
-            style={{ background: "radial-gradient(circle, #5a78ff33 0%, transparent 70%)" }}
-          />
-        </div>
-        <div className="relative z-10 min-h-screen pt-24 lg:pt-28">{children}</div>
-      </div>
+      {children}
     </>
   )
 }
