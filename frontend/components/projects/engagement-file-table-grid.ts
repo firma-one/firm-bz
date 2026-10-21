@@ -10,11 +10,12 @@
  * stay longest because they are what a deliverable is tracked by. ID, Name and the
  * quick actions always stay visible.
  *
- * There are exactly 10 grid tracks, one per rendered cell (the header's quick-actions
- * spacer spans 2): [1] checkbox(24px) [2] id(72px) [3] name(minmax 180px,1fr)
+ * There are exactly 10 grid tracks: [1] checkbox(24px) [2] id(72px) [3] name(minmax 180px,1fr)
  * [4] badges(minmax 124px,10%) [5] quick(10%) [6] status(128px) [7] due(128px)
- * [8] owner(150px) [9] modified(124px) [10] size(84px). Hidden cells are always the
- * trailing ones, so a visible cell never slides into a hidden column's empty track.
+ * [8] owner(150px) [9] modified(124px) [10] size(84px). The Name cell spans tracks 3–5 and
+ * holds the badges and quick actions at its end, so when a row has none showing (tools appear
+ * only on hover) the name runs on into that space. Hidden cells are always the trailing
+ * ones, so a visible cell never slides into a hidden column's empty track.
  *
  * Breakpoints: a column appears only once the row can hold it. A row needs the fixed
  * tracks (24 + 72 + 180 + 124 = 400px), the 9 gaps between the 10 tracks (9 x 16 =

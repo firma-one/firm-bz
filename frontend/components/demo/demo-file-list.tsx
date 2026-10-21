@@ -363,7 +363,8 @@ function EntryRow({
                 <span className="truncate text-small tabular-nums text-fg-subtle">{docId}</span>
             </div>
 
-            <div className={`flex min-w-0 items-center gap-3 ${FILE_TABLE_COL_LINE_CLASS}`}>
+            {/* Name spans the badge and tool tracks, as in the app: the name runs on into the space the tools leave */}
+            <div className={`col-span-3 flex min-w-0 items-center gap-3 ${FILE_TABLE_COL_LINE_CLASS}`}>
                 <span className="flex h-4 w-4 flex-shrink-0 items-center justify-center">
                     {isFolder ? (
                         deliverableStatus ? <DeliverableIcon hint /> : <Folder className="h-4 w-4 fill-surface-muted text-fg-muted" />
@@ -371,7 +372,7 @@ function EntryRow({
                         <DocumentIcon mimeType={MIME_BY_TYPE[entry.file.type] ?? 'application/octet-stream'} className="h-4 w-4" />
                     )}
                 </span>
-                <span className="min-w-0 truncate text-fg">{name}</span>
+                <span className="min-w-0 flex-1 truncate text-fg">{name}</span>
                 {/* The deliverable marker steps aside once the Status column has room to say it. */}
                 {deliverableStatus && (
                     <Hint label={approved ? 'Deliverable — approved' : 'Deliverable'}>
@@ -380,18 +381,18 @@ function EntryRow({
                         </span>
                     </Hint>
                 )}
-            </div>
 
-            {/* Row tools on hover or focus (always on touch screens), and while the row is in use */}
-            <div
-                className={cn(
-                    'col-span-2 flex items-center justify-end gap-0.5 transition-opacity duration-ui-fast',
-                    !selected && !pinTools && 'opacity-0 focus-within:opacity-100 group-hover:opacity-100 has-[[data-state=open]]:opacity-100 [@media(hover:none)]:opacity-100',
-                )}
-            >
-                {!isFolder && <QuickAction icon={<ScanEye />} label="Preview" />}
-                <QuickAction icon={<Link2 />} label="Copy link" />
-                <RowActionMenu entry={entry} name={name} docId={docId} deliverableStatus={deliverableStatus} dueDate={dueDate} onSetDue={onSetDue} />
+                {/* Row tools on hover or focus (always on touch screens), and while the row is in use; at rest they take no width */}
+                <div
+                    className={cn(
+                        'flex shrink-0 items-center justify-end gap-0.5 transition-opacity duration-ui-fast',
+                        !selected && !pinTools && 'max-w-0 overflow-hidden opacity-0 focus-within:max-w-none focus-within:opacity-100 group-hover:max-w-none group-hover:opacity-100 has-[[data-state=open]]:max-w-none has-[[data-state=open]]:opacity-100 [@media(hover:none)]:max-w-none [@media(hover:none)]:opacity-100',
+                    )}
+                >
+                    {!isFolder && <QuickAction icon={<ScanEye />} label="Preview" />}
+                    <QuickAction icon={<Link2 />} label="Copy link" />
+                    <RowActionMenu entry={entry} name={name} docId={docId} deliverableStatus={deliverableStatus} dueDate={dueDate} onSetDue={onSetDue} />
+                </div>
             </div>
 
             <div className={`min-w-0 items-center ${STATUS_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}>
@@ -622,8 +623,7 @@ export function DemoFileList({
                             <Checkbox checked={allSelected} className="pointer-events-none h-4 w-4" />
                         </div>
                         <div className="flex items-center"><TableHeader label="ID" icon={<Hash />} /></div>
-                        <div className={`flex items-center ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Name" icon={<Type />} /></div>
-                        <div className="col-span-2" aria-hidden />
+                        <div className={`col-span-3 flex items-center ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Name" icon={<Type />} /></div>
                         <div className={`items-center ${STATUS_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Status" icon={<CircleDot />} /></div>
                         <div className={`items-center ${DUE_DATE_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Due" icon={<Flag />} /></div>
                         <div className={`items-center ${OWNER_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Owner" icon={<UserRound />} /></div>

@@ -282,11 +282,10 @@ function FileTableSkeleton({ rows = 8 }: { rows?: number }) {
                 <div key={i} className={`grid h-[34px] items-center gap-4 overflow-hidden pl-1 pr-2 ${FILE_TABLE_GRID_COLS_CLASS}`} style={{ opacity: 1 - i * 0.09 }}>
                     <ShimmerBlock className="h-3.5 w-3.5" />
                     <ShimmerBar className="w-10" />
-                    <span className={`flex min-w-0 items-center gap-2 ${FILE_TABLE_COL_LINE_CLASS}`}>
+                    <span className={`col-span-3 flex min-w-0 items-center gap-2 ${FILE_TABLE_COL_LINE_CLASS}`}>
                         <ShimmerBlock />
                         <ShimmerBar style={{ width: `${38 + ((i * 23) % 40)}%` }} />
                     </span>
-                    <span className="col-span-2" />
                     <span className={`items-center ${STATUS_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><ShimmerBar className="w-16" /></span>
                     <span className={`items-center ${DUE_DATE_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><ShimmerBar className="w-12" /></span>
                     <span className={`items-center ${OWNER_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><ShimmerBar className="w-20" /></span>
@@ -2873,11 +2872,10 @@ const handleRefresh = async () => {
                         <div className="flex items-center">
                             <TableHeader label="ID" icon={<Hash />} />
                         </div>
-                        <div className={`flex items-center ${FILE_TABLE_COL_LINE_CLASS}`}>
+                        {/* Name spans the badge and quick-action tracks too, as each row's Name cell does */}
+                        <div className={`col-span-3 flex items-center ${FILE_TABLE_COL_LINE_CLASS}`}>
                             <TableHeader label="Name" icon={<Type />} />
                         </div>
-                        {/* Quick actions column: no label, Notion-style */}
-                        <div className="col-span-2" aria-hidden />
                         <div className={`items-center ${STATUS_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Status" icon={<CircleDot />} /></div>
                         <div className={`items-center ${DUE_DATE_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Due" icon={<Flag />} /></div>
                         <div className={`items-center ${OWNER_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Owner" icon={<UserRound />} /></div>

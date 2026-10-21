@@ -311,8 +311,9 @@ export function EngagementFileRow({
                 )}
             </div>
 
-            {/* Name Column: icon and name (deeplink = skewed pastel marker on file name only) */}
-            <div className={cn("flex items-center gap-3 min-w-0", FILE_TABLE_COL_LINE_CLASS)}>
+            {/* Name Column: icon and name (deeplink = skewed pastel marker on file name only), then the row's badges
+                and tools. It spans the Name, badge and tool tracks, so the name runs on into whatever space they leave. */}
+            <div className={cn("col-span-3 flex items-center gap-3 min-w-0", FILE_TABLE_COL_LINE_CLASS)}>
                 <div className="flex-shrink-0 w-4 h-4 flex items-center justify-center">
                     {isFolder && file.isDeliverable ? (
                         <DeliverableIcon hint />
@@ -382,216 +383,217 @@ export function EngagementFileRow({
                         </TooltipContent>
                     </Tooltip>
                 </div>
-            </div>
 
-            {/* Badges — hidden when hideBadges=true (e.g. medium pane) to prevent icon overflow */}
-            <div className={cn("flex items-center justify-end gap-1 pr-2", hideBadges && "invisible")} onClick={(e) => e.stopPropagation()}>
-                    {bookmarkId && (
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <button
-                                    type="button"
-                                    className="h-7 w-7 inline-flex items-center justify-center rounded-md text-primary hover:bg-red-50 hover:text-red-500 transition-colors"
-                                    aria-label="Remove bookmark"
-                                    onClick={handleRemoveBookmark}
-                                >
-                                    <Bookmark className="h-4 w-4 fill-current" />
-                                </button>
-                            </TooltipTrigger>
-                            <TooltipContent side="top" className="text-xs">Bookmarked — click to remove</TooltipContent>
-                        </Tooltip>
-                    )}
-                    {(showBadge || isIntakeRow) ? (
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <span className={`${hasStatus && !isIntakeRow ? '@[49rem]/file-table:hidden ' : ''}inline-flex items-center shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium border ${
-                                    isIntakeRow
-                                        ? 'bg-primary/10 text-primary border-primary/30'
-                                        : (isFolderApproved || isInsideApprovedDeliverable)
-                                            ? 'bg-primary text-white/70 border-primary'
-                                            : isAncestorShared
-                                                ? 'bg-primary/5 text-primary/50 border-primary/20'
-                                                : 'bg-primary/10 text-primary border-primary/30'
-                                }`}>
-                                    {/* Approved or not, a deliverable's mark is folder-plus; the badge's fill says approved */}
-                                    {isIntakeRow ? <Share2 className="h-3 w-3" /> : <FolderPlus className="h-3.5 w-3.5" />}
-                                </span>
-                            </TooltipTrigger>
-                            <TooltipContent side="top">
-                                {isIntakeRow
-                                    ? 'Pending Review'
-                                    : (isFolderApproved || isInsideApprovedDeliverable)
-                                        ? 'Deliverable — Approved'
-                                        : isAncestorShared
-                                            ? 'Inside a Deliverable folder'
-                                            : 'Deliverable'}
-                            </TooltipContent>
-                        </Tooltip>
-                    ) : null}
-                    {file.lock?.type === 'finalize' && !isFolder ? (
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                {isProjectLead ? (
+                {/* Badges — hidden when hideBadges=true (e.g. medium pane) to prevent icon overflow */}
+                <div className={cn("flex shrink-0 items-center justify-end gap-1", hideBadges && "hidden")} onClick={(e) => e.stopPropagation()}>
+                        {bookmarkId && (
+                            <Tooltip>
+                                <TooltipTrigger asChild>
                                     <button
                                         type="button"
-                                        onClick={(e) => { e.stopPropagation(); onUnlockConfirm(file) }}
-                                        className="inline-flex items-center shrink-0 px-1.5 py-0.5 rounded text-[10px] font-normal bg-surface-subtle text-fg-subtle border border-line hover:bg-amber-50 hover:text-amber-600 hover:border-amber-200 transition-colors"
+                                        className="h-7 w-7 inline-flex items-center justify-center rounded-md text-primary hover:bg-red-50 hover:text-red-500 transition-colors"
+                                        aria-label="Remove bookmark"
+                                        onClick={handleRemoveBookmark}
                                     >
-                                        <Lock className="h-3 w-3" />
+                                        <Bookmark className="h-4 w-4 fill-current" />
                                     </button>
-                                ) : (
-                                    <span className="inline-flex items-center shrink-0 px-1.5 py-0.5 rounded text-[10px] font-normal bg-surface-subtle text-fg-subtle border border-line">
-                                        <Lock className="h-3 w-3" />
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="text-xs">Bookmarked — click to remove</TooltipContent>
+                            </Tooltip>
+                        )}
+                        {(showBadge || isIntakeRow) ? (
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <span className={`${hasStatus && !isIntakeRow ? '@[49rem]/file-table:hidden ' : ''}inline-flex items-center shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium border ${
+                                        isIntakeRow
+                                            ? 'bg-primary/10 text-primary border-primary/30'
+                                            : (isFolderApproved || isInsideApprovedDeliverable)
+                                                ? 'bg-primary text-white/70 border-primary'
+                                                : isAncestorShared
+                                                    ? 'bg-primary/5 text-primary/50 border-primary/20'
+                                                    : 'bg-primary/10 text-primary border-primary/30'
+                                    }`}>
+                                        {/* Approved or not, a deliverable's mark is folder-plus; the badge's fill says approved */}
+                                        {isIntakeRow ? <Share2 className="h-3 w-3" /> : <FolderPlus className="h-3.5 w-3.5" />}
                                     </span>
-                                )}
-                            </TooltipTrigger>
-                            <TooltipContent side="top">
-                                {isProjectLead
-                                    ? 'Document Finalized — read-only. Click to Return to Draft'
-                                    : 'Document Finalized — read-only. Engagement Lead can Return to Draft'}
-                            </TooltipContent>
-                        </Tooltip>
-                    ) : null}
-                    {file.isPrivate && !isFolder ? (
-                        <span className="inline-flex items-center gap-1 shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium bg-orange-50 text-orange-700 border border-orange-200">
-                            <FolderLock className="h-3 w-3" />
-                            Private
-                            {(canManage && file.lock?.type !== 'finalize') && (
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
+                                </TooltipTrigger>
+                                <TooltipContent side="top">
+                                    {isIntakeRow
+                                        ? 'Pending Review'
+                                        : (isFolderApproved || isInsideApprovedDeliverable)
+                                            ? 'Deliverable — Approved'
+                                            : isAncestorShared
+                                                ? 'Inside a Deliverable folder'
+                                                : 'Deliverable'}
+                                </TooltipContent>
+                            </Tooltip>
+                        ) : null}
+                        {file.lock?.type === 'finalize' && !isFolder ? (
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    {isProjectLead ? (
                                         <button
                                             type="button"
-                                            onClick={(e) => { e.stopPropagation(); onPrivacy(file, false) }}
-                                            className="ml-0.5 rounded-full text-orange-500 hover:text-orange-700 hover:bg-orange-100 p-0.5"
+                                            onClick={(e) => { e.stopPropagation(); onUnlockConfirm(file) }}
+                                            className="inline-flex items-center shrink-0 px-1.5 py-0.5 rounded text-[10px] font-normal bg-surface-subtle text-fg-subtle border border-line hover:bg-amber-50 hover:text-amber-600 hover:border-amber-200 transition-colors"
                                         >
-                                            <FolderUp className="h-3 w-3" />
+                                            <Lock className="h-3 w-3" />
                                         </button>
-                                    </TooltipTrigger>
-                                    <TooltipContent side="top" className="text-xs">Make Public</TooltipContent>
-                                </Tooltip>
-                            )}
-                        </span>
-                    ) : null}
-            </div>
+                                    ) : (
+                                        <span className="inline-flex items-center shrink-0 px-1.5 py-0.5 rounded text-[10px] font-normal bg-surface-subtle text-fg-subtle border border-line">
+                                            <Lock className="h-3 w-3" />
+                                        </span>
+                                    )}
+                                </TooltipTrigger>
+                                <TooltipContent side="top">
+                                    {isProjectLead
+                                        ? 'Document Finalized — read-only. Click to Return to Draft'
+                                        : 'Document Finalized — read-only. Engagement Lead can Return to Draft'}
+                                </TooltipContent>
+                            </Tooltip>
+                        ) : null}
+                        {file.isPrivate && !isFolder ? (
+                            <span className="inline-flex items-center gap-1 shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium bg-orange-50 text-orange-700 border border-orange-200">
+                                <FolderLock className="h-3 w-3" />
+                                Private
+                                {(canManage && file.lock?.type !== 'finalize') && (
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <button
+                                                type="button"
+                                                onClick={(e) => { e.stopPropagation(); onPrivacy(file, false) }}
+                                                className="ml-0.5 rounded-full text-orange-500 hover:text-orange-700 hover:bg-orange-100 p-0.5"
+                                            >
+                                                <FolderUp className="h-3 w-3" />
+                                            </button>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="top" className="text-xs">Make Public</TooltipContent>
+                                    </Tooltip>
+                                )}
+                            </span>
+                        ) : null}
+                </div>
 
-            {/* Quick icons: on hover or focus (always on touch screens), and while the row is in use */}
-            <div className={cn(
-                "flex items-center justify-end transition-opacity duration-ui-fast",
-                !toolsPinned && "opacity-0 focus-within:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
-            )}>
-                <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                {/* Quick icons: on hover or focus (always on touch screens), and while the row is in use. At rest they
+                    take no width, so the name can use it. */}
+                <div className={cn(
+                    "flex shrink-0 items-center justify-end transition-opacity duration-ui-fast",
+                    !toolsPinned && "max-w-0 overflow-hidden opacity-0 focus-within:max-w-none focus-within:opacity-100 group-hover:max-w-none group-hover:opacity-100 [@media(hover:none)]:max-w-none [@media(hover:none)]:opacity-100"
+                )}>
+                    <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
 
-                    {!isFolder && file.documentType !== 'LINK' && (
+                        {!isFolder && file.documentType !== 'LINK' && (
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <button
+                                        type="button"
+                                        className={cn(
+                                            'h-7 w-7 rounded-md inline-flex items-center justify-center disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-fg-muted',
+                                            file.id === activePreviewDocId
+                                                ? 'text-fg-muted bg-surface-muted'
+                                                : 'text-fg-muted hover:text-fg-muted hover:bg-surface-hover'
+                                        )}
+                                        aria-label="Preview"
+                                        aria-pressed={file.id === activePreviewDocId}
+                                        disabled={isIntakeRow}
+                                        onClick={() => onOpenPreviewPane(file.id)}
+                                    >
+                                        <ScanEye className="h-4 w-4" />
+                                    </button>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="text-xs">Preview</TooltipContent>
+                            </Tooltip>
+                        )}
+
                         <Tooltip>
                             <TooltipTrigger asChild>
                                 <button
                                     type="button"
                                     className={cn(
                                         'h-7 w-7 rounded-md inline-flex items-center justify-center disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-fg-muted',
-                                        file.id === activePreviewDocId
+                                        file.id === highlightedFileId
                                             ? 'text-fg-muted bg-surface-muted'
                                             : 'text-fg-muted hover:text-fg-muted hover:bg-surface-hover'
                                     )}
-                                    aria-label="Preview"
-                                    aria-pressed={file.id === activePreviewDocId}
+                                    aria-label="Copy link"
+                                    aria-pressed={file.id === highlightedFileId}
                                     disabled={isIntakeRow}
-                                    onClick={() => onOpenPreviewPane(file.id)}
+                                    onClick={() => {
+                                        const docId = file.projectDocumentId || file.id
+                                        const base = typeof window !== 'undefined' ? window.location.href.replace(/#.*$/, '') : ''
+                                        const url = base ? `${base}#doc-file:${docId}` : ''
+                                        if (!url) return
+                                        navigator.clipboard.writeText(url).then(() => {
+                                            onAddToast({ type: 'success', title: 'Link copied', message: 'Document link copied to clipboard.' })
+                                        }).catch(() => {
+                                            const ta = document.createElement('textarea')
+                                            ta.value = url
+                                            document.body.appendChild(ta)
+                                            ta.select()
+                                            document.execCommand('copy')
+                                            document.body.removeChild(ta)
+                                            onAddToast({ type: 'success', title: 'Link copied', message: 'Document link copied to clipboard.' })
+                                        })
+                                    }}
                                 >
-                                    <ScanEye className="h-4 w-4" />
+                                    <Link2 className="h-4 w-4" />
                                 </button>
                             </TooltipTrigger>
-                            <TooltipContent side="top" className="text-xs">Preview</TooltipContent>
+                            <TooltipContent side="top" className="text-xs">Copy link</TooltipContent>
                         </Tooltip>
-                    )}
 
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <button
-                                type="button"
-                                className={cn(
-                                    'h-7 w-7 rounded-md inline-flex items-center justify-center disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-fg-muted',
-                                    file.id === highlightedFileId
-                                        ? 'text-fg-muted bg-surface-muted'
-                                        : 'text-fg-muted hover:text-fg-muted hover:bg-surface-hover'
-                                )}
-                                aria-label="Copy link"
-                                aria-pressed={file.id === highlightedFileId}
-                                disabled={isIntakeRow}
-                                onClick={() => {
-                                    const docId = file.projectDocumentId || file.id
-                                    const base = typeof window !== 'undefined' ? window.location.href.replace(/#.*$/, '') : ''
-                                    const url = base ? `${base}#doc-file:${docId}` : ''
-                                    if (!url) return
-                                    navigator.clipboard.writeText(url).then(() => {
-                                        onAddToast({ type: 'success', title: 'Link copied', message: 'Document link copied to clipboard.' })
-                                    }).catch(() => {
-                                        const ta = document.createElement('textarea')
-                                        ta.value = url
-                                        document.body.appendChild(ta)
-                                        ta.select()
-                                        document.execCommand('copy')
-                                        document.body.removeChild(ta)
-                                        onAddToast({ type: 'success', title: 'Link copied', message: 'Document link copied to clipboard.' })
-                                    })
-                                }}
-                            >
-                                <Link2 className="h-4 w-4" />
-                            </button>
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className="text-xs">Copy link</TooltipContent>
-                    </Tooltip>
+                        {isIndexing && (
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <span className="h-7 w-7 inline-flex items-center justify-center text-fg-subtle">
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                    </span>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="text-xs">Indexing in progress</TooltipContent>
+                            </Tooltip>
+                        )}
 
-                    {isIndexing && (
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <span className="h-7 w-7 inline-flex items-center justify-center text-fg-subtle">
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                </span>
-                            </TooltipTrigger>
-                            <TooltipContent side="top" className="text-xs">Indexing in progress</TooltipContent>
-                        </Tooltip>
-                    )}
-
-                    <DocumentActionMenu
-                        document={file}
-                        disabled={isIntakeRow}
-                        triggerIcon={<MoreVertical className="h-4 w-4" />}
-                        deeplinkBase={typeof window !== 'undefined' ? window.location.href.replace(/#.*$/, '') : ''}
-                        showShareModal={isProjectLead && !isIntakeRow}
-                        isAncestorShared={isAncestorShared}
-                        isDeliverable={isFolder && !!file.isDeliverable}
-                        isApprovedDeliverable={isFolderApproved || isInsideApprovedDeliverable}
-                        deliverableStatus={(file as any).deliverableStatus ?? undefined}
-                        isEngagementLead={isProjectLead}
-                        isExternalUser={isEC || isGuest}
-                        isExternalViewer={isGuest}
-                        projectId={projectId}
-                        orgSlug={orgSlug}
-                        onShareSaved={onShareSaved}
-                        onMarkAsDeliverable={onMarkAsDeliverable}
-                        onUntagAsDeliverable={(isInsideApprovedDeliverable || isFolderApproved) ? undefined : onUntagAsDeliverable}
-                        canManage={canOrganizeTree}
-                        currentFolderType={currentFolderType}
-                        onOpenCommentPane={(docId) => onOpenCommentPane(docId)}
-                        onOpenInfoPane={(docId) => onOpenInfoPane(docId)}
-                        onOpenActivityPane={(docId) => onOpenActivityPane(docId)}
-                        onOpenVersionPane={(docId) => onOpenVersionPane(docId)}
-                        onRenameDocument={canEdit && !locked && !isIntakeRow ? (doc) => onOpenRename(doc as DriveFile) : undefined}
-                        onDuplicateDocument={canEdit && !locked && !isIntakeRow ? (doc) => onDuplicate(doc as DriveFile) : undefined}
-                        onCopyDocument={generalFolderId && canEdit && !locked && !isIntakeRow ? (doc) => onOpenCopyMove(doc as DriveFile, 'copy') : undefined}
-                        onMoveDocument={generalFolderId && canEdit && !locked && !isIntakeRow ? (doc) => onOpenCopyMove(doc as DriveFile, 'move') : undefined}
-                        onCrossEngagementCopy={isProjectLead && canMutateFile ? (doc) => onOpenCrossEngagement(doc as DriveFile) : undefined}
-                        onDeleteDocument={canMutateFile ? (doc) => onTrash(doc as DriveFile) : undefined}
-                        onMakePrivate={canManage && !locked && !isIntakeRow && !file.isPrivate ? () => onPrivacy(file, true) : undefined}
-                        onMakePublic={canManage && !locked && !isIntakeRow && file.isPrivate ? () => onPrivacy(file, false) : undefined}
-                        onOpenChange={(open) => onActionMenuOpenChange(open)}
-                        onOpenDocument={(doc) => {
-                            const d = doc as DriveFile
-                            onOpenDocument(d)
-                        }}
-                        connectorAccountEmail={connectorAccountEmail}
-                        isOneDriveClient={isOneDriveClient}
-                    />
+                        <DocumentActionMenu
+                            document={file}
+                            disabled={isIntakeRow}
+                            triggerIcon={<MoreVertical className="h-4 w-4" />}
+                            deeplinkBase={typeof window !== 'undefined' ? window.location.href.replace(/#.*$/, '') : ''}
+                            showShareModal={isProjectLead && !isIntakeRow}
+                            isAncestorShared={isAncestorShared}
+                            isDeliverable={isFolder && !!file.isDeliverable}
+                            isApprovedDeliverable={isFolderApproved || isInsideApprovedDeliverable}
+                            deliverableStatus={(file as any).deliverableStatus ?? undefined}
+                            isEngagementLead={isProjectLead}
+                            isExternalUser={isEC || isGuest}
+                            isExternalViewer={isGuest}
+                            projectId={projectId}
+                            orgSlug={orgSlug}
+                            onShareSaved={onShareSaved}
+                            onMarkAsDeliverable={onMarkAsDeliverable}
+                            onUntagAsDeliverable={(isInsideApprovedDeliverable || isFolderApproved) ? undefined : onUntagAsDeliverable}
+                            canManage={canOrganizeTree}
+                            currentFolderType={currentFolderType}
+                            onOpenCommentPane={(docId) => onOpenCommentPane(docId)}
+                            onOpenInfoPane={(docId) => onOpenInfoPane(docId)}
+                            onOpenActivityPane={(docId) => onOpenActivityPane(docId)}
+                            onOpenVersionPane={(docId) => onOpenVersionPane(docId)}
+                            onRenameDocument={canEdit && !locked && !isIntakeRow ? (doc) => onOpenRename(doc as DriveFile) : undefined}
+                            onDuplicateDocument={canEdit && !locked && !isIntakeRow ? (doc) => onDuplicate(doc as DriveFile) : undefined}
+                            onCopyDocument={generalFolderId && canEdit && !locked && !isIntakeRow ? (doc) => onOpenCopyMove(doc as DriveFile, 'copy') : undefined}
+                            onMoveDocument={generalFolderId && canEdit && !locked && !isIntakeRow ? (doc) => onOpenCopyMove(doc as DriveFile, 'move') : undefined}
+                            onCrossEngagementCopy={isProjectLead && canMutateFile ? (doc) => onOpenCrossEngagement(doc as DriveFile) : undefined}
+                            onDeleteDocument={canMutateFile ? (doc) => onTrash(doc as DriveFile) : undefined}
+                            onMakePrivate={canManage && !locked && !isIntakeRow && !file.isPrivate ? () => onPrivacy(file, true) : undefined}
+                            onMakePublic={canManage && !locked && !isIntakeRow && file.isPrivate ? () => onPrivacy(file, false) : undefined}
+                            onOpenChange={(open) => onActionMenuOpenChange(open)}
+                            onOpenDocument={(doc) => {
+                                const d = doc as DriveFile
+                                onOpenDocument(d)
+                            }}
+                            connectorAccountEmail={connectorAccountEmail}
+                            isOneDriveClient={isOneDriveClient}
+                        />
+                    </div>
                 </div>
             </div>
 

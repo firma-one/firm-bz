@@ -367,7 +367,8 @@ From the canvas's section 7 (the full "views" redesign was judged too extreme; t
 - **Selection bar.** While files are selected, the second row reads "N selected · Download · Move to trash ·
   Clear (Esc)". Bulk Download and Trash no longer sit in the toolbar, disabled, the rest of the time.
 - **Row tools on hover.** Preview, Copy link and ⋯ show on hover or focus, while the row is selected or its
-  menu is open, and always on touch screens.
+  menu is open, and always on touch screens. The Name cell spans the badge and tool tracks, and hidden tools
+  take no width, so a name runs on as far as the row allows.
 - **Deliverables toggle.** A toggle pill shows only deliverables, what's inside them, and the folders above
   them.
 - **Status and Due columns.** Status is the deliverable's stage (the Board's pill); Due is editable in place
