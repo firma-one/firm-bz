@@ -332,3 +332,23 @@ types take the warm gray ramp (they're categories); a prospect's "Soon" is a Wai
   2026-10-22: built directly on `dev`, no feature branch.
 - **F. App-wide status language.** Decided 2026-10-22: every lifecycle maps onto the seven stages
   (section 2), rolled out in three waves (section 6).
+- **G. The standard table.** Decided 2026-10-21: the database grid (section 10), picked from four
+  drawings on the canvas (open, hairline rows, grid, contained).
+
+## 10. The standard table
+
+Every table is `NotionTable` (`components/ui/notion-table.tsx`), drawn as Notion's database grid:
+
+- Hairlines above and below the header, between rows and between columns; no outer border on the sides.
+- 34px header and rows; a muted header with a typed icon per column; hover and selected tints.
+- A trailing actions column (`NotionTableActions`, `NotionTableActionsHead`) with no column line before
+  it; its contents show on row hover.
+- Lines sit on cells, not rows (`border-separate`), so a sticky header keeps them. A hand-written row
+  (a group header, a loading row) puts `border-b border-line` on its cell.
+- `variant="hairline"` keeps the earlier row-dividers-only style for any table that should stay quieter.
+
+Audit is the first table built on it, with the columns from the canvas mock (option B):
+Date · Event (the scope's icon and the action as a tag, red only for a deletion) · Details (takes the
+remaining width; the "approved by" clause muted) · Where (Client › Engagement, firm-wide log only; firm
+events name the firm) · Actor. The table is `table-fixed` so the set widths hold. The CSV export keeps
+its columns.

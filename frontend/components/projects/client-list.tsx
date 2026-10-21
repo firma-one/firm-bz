@@ -85,11 +85,11 @@ export function ClientList({ clients, groupSlug, orgSlug, viewMode = 'list', isR
                 </NotionTableHeader>
                 <NotionTableBody>
                     {isRefreshing && (
-                        <tr className="h-9 border-b border-line" aria-hidden>
-                            <td colSpan={5} className="px-2 first:pl-1">
+                        <NotionTableRow aria-hidden>
+                            <NotionTableCell colSpan={5}>
                                 <span className="flex items-center gap-2"><ShimmerBlock className="h-5 w-5" /><ShimmerBar className="w-40" /></span>
-                            </td>
-                        </tr>
+                            </NotionTableCell>
+                        </NotionTableRow>
                     )}
                     {clients.map((client) => {
                         const href = linkFor(client)

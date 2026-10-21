@@ -10,6 +10,7 @@ import { AtSign, Clock3, Mail, Plus, RefreshCw, Shield, Trash2, Type, UserMinus,
 import {
     NotionTable,
     NotionTableActions,
+    NotionTableActionsHead,
     NotionTableBody,
     NotionTableCell,
     NotionTableHead,
@@ -182,7 +183,7 @@ export function FirmMembersTab({ firmId, groupSlug, orgSlug, canManage = false }
                         <NotionTableHead icon={<AtSign />} className="hidden md:table-cell">Email</NotionTableHead>
                         <NotionTableHead icon={<Shield />}>Role</NotionTableHead>
                         <NotionTableHead icon={<Clock3 />} className="hidden sm:table-cell">Added</NotionTableHead>
-                        <th className="w-px" aria-label="Actions" />
+                        <NotionTableActionsHead />
                     </NotionTableHeader>
                     <NotionTableBody>
                         {members.map((member) => {

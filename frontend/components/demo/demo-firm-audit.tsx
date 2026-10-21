@@ -21,6 +21,7 @@ function buildAuditRows(firm: DemoFirm): AuditRow[] {
             eventAction: 'Created',
             details: client.name,
             actorName: ACTORS[ci % ACTORS.length],
+            client: client.name,
             icon: Users,
         })
         client.engagements.forEach((engagement, ei) => {
@@ -30,6 +31,8 @@ function buildAuditRows(firm: DemoFirm): AuditRow[] {
                 eventAction: 'Created',
                 details: engagement.name,
                 actorName: ACTORS[(ci + ei) % ACTORS.length],
+                client: client.name,
+                engagement: engagement.name,
                 icon: Briefcase,
             })
             const firstFile = engagement.folders[0]?.files[0]?.name
@@ -40,6 +43,8 @@ function buildAuditRows(firm: DemoFirm): AuditRow[] {
                     eventAction: 'Shared',
                     details: firstFile,
                     actorName: ACTORS[(ci + ei + 1) % ACTORS.length],
+                    client: client.name,
+                    engagement: engagement.name,
                     icon: Share2,
                 })
             }

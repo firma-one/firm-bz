@@ -14,6 +14,8 @@ import {
   FolderLock,
   Layers,
   Activity,
+  Clock3,
+  Type,
   User,
   Loader2,
   Lock,
@@ -38,11 +40,23 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import {
+  Hint,
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import {
+  NotionTable,
+  NotionTableActions,
+  NotionTableActionsHead,
+  NotionTableBody,
+  NotionTableCell,
+  NotionTableHead,
+  NotionTableHeader,
+  NotionTableRow,
+} from '@/components/ui/notion-table'
+import { Tag } from '@/components/ui/tag'
 import { RelativeDateTime } from '@/components/ui/relative-date-time'
 import { DateTimePicker } from '@/components/ui/date-time-picker'
 import { FilterMenuLabel, FilterMenuRow, FilterMenuSearch, FilterPill, summarizePicks } from '@/components/ui/filter-pill'
@@ -363,6 +377,10 @@ function DetailCell({ ev }: { ev: AuditEventRow }) {
   if (!raw) return <span className="text-fg-subtle">—</span>
 
   const isJson = isJsonObject(raw)
+  // The approval clause is a note on the item, so it reads muted after the item's name.
+  const approval = approvalSuffix(ev.metadata ?? {})
+  const note = approval && raw.endsWith(approval) ? approval : ''
+  const main = note ? raw.slice(0, -note.length) : raw
 
   const handleCopy = () => {
     navigator.clipboard.writeText(raw).then(() => {
@@ -372,13 +390,16 @@ function DetailCell({ ev }: { ev: AuditEventRow }) {
   }
 
   return (
-    <div className="flex items-center gap-1.5 group max-w-xs">
+    <div className="group flex min-w-0 items-center gap-1.5">
       {isJson ? (
-        <code className="block max-w-[260px] truncate rounded-control bg-surface-muted px-1.5 py-0.5 font-mono text-caption text-fg-muted" title={raw}>
+        <code className="block min-w-0 truncate rounded-control bg-surface-muted px-1.5 py-0.5 font-mono text-caption text-fg-muted" title={raw}>
           {raw}
         </code>
       ) : (
-        <span className="truncate text-fg-muted max-w-[260px]" title={raw}>{raw}</span>
+        <span className="min-w-0 truncate text-fg" title={raw}>
+          {main}
+          {note && <span className="text-fg-muted">{note}</span>}
+        </span>
       )}
       <button
         type="button"
@@ -391,6 +412,37 @@ function DetailCell({ ev }: { ev: AuditEventRow }) {
           : <Copy className="h-3 w-3 text-fg-subtle" />
         }
       </button>
+    </div>
+  )
+}
+
+const DELETED_EVENT_TYPES: readonly string[] = EVENT_ACTION_OPTIONS.find((a) => a.value === 'DELETED')?.eventTypes ?? []
+
+/** What happened: the scope's icon, then the action as a tag. Only a deletion is red. */
+function EventCell({ eventType }: { eventType: string }) {
+  const scope = eventScope(eventType)
+  const icon = <span className="flex shrink-0"><EventIcon eventType={eventType} /></span>
+  return (
+    <div className="flex items-center gap-2">
+      {scope === '—' ? icon : <Hint label={`${scope} event`}>{icon}</Hint>}
+      <Tag color={DELETED_EVENT_TYPES.includes(eventType) ? 'red' : 'gray'}>{eventAction(eventType)}</Tag>
+    </div>
+  )
+}
+
+/** Client › Engagement in one column, so neither truncates the other away. Firm events name the firm. */
+function WhereCell({ ev, firmName }: { ev: AuditEventRow; firmName: string }) {
+  if (!ev.clientName && !ev.projectName) {
+    return eventScope(ev.eventType) === 'Firm'
+      ? <span className="block truncate text-fg-muted" title={firmName}>{firmName}</span>
+      : <span className="text-fg-subtle">—</span>
+  }
+  const path = [ev.clientName, ev.projectName].filter(Boolean).join(' › ')
+  return (
+    <div className="flex min-w-0 items-center gap-1" title={path}>
+      {ev.clientName && <span className={ev.projectName ? 'max-w-[50%] shrink-0 truncate text-fg-muted' : 'min-w-0 truncate text-fg'}>{ev.clientName}</span>}
+      {ev.clientName && ev.projectName && <span className="shrink-0 text-fg-subtle">›</span>}
+      {ev.projectName && <span className="min-w-0 truncate text-fg">{ev.projectName}</span>}
     </div>
   )
 }
@@ -1024,115 +1076,105 @@ export function AuditWithFilters({
         ) : events.length === 0 ? (
           <EmptyPanel compact icon={<FolderLock />} title="No audit events" description="Nothing matches these filters yet." />
         ) : (
-          <table className="w-full border-collapse text-left text-ui">
-            <thead className="sticky top-0 z-[1] border-b border-line bg-surface">
-              <tr>
-                <th className="h-8 px-2 text-small font-normal text-fg-muted first:pl-1 w-[160px]">
-                  <span className="inline-flex items-center gap-1.5">
-                    Date
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <button
-                            type="button"
-                            role="switch"
-                            aria-checked={showFullDate}
-                            onClick={() => setShowFullDate((v) => !v)}
-                            className={`inline-flex h-4 w-7 shrink-0 items-center rounded-full transition-colors focus-visible:outline-none ${showFullDate ? 'bg-action' : 'bg-line-strong'}`}
-                          >
-                            <span className={`h-3 w-3 rounded-full bg-white shadow-sm transition-transform ${showFullDate ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
-                          </button>
-                        </TooltipTrigger>
-                        <TooltipContent side="top">Toggle datetime format</TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  </span>
-                </th>
-                {showClientProjectFilters && <th className="h-8 px-2 text-small font-normal text-fg-muted first:pl-1 w-[120px]">Client</th>}
-                {showClientProjectFilters && <th className="h-8 px-2 text-small font-normal text-fg-muted first:pl-1 w-[120px]">Engagement</th>}
-                <th className="h-8 px-2 text-small font-normal text-fg-muted first:pl-1 w-[130px]">Event scope</th>
-                <th className="h-8 px-2 text-small font-normal text-fg-muted first:pl-1 w-[130px]">Event type</th>
-                <th className="h-8 px-2 text-small font-normal text-fg-muted first:pl-1 min-w-[80px]">Details</th>
-                <th className="h-8 px-2 text-small font-normal text-fg-muted first:pl-1 w-[200px]">Actor</th>
-                <th className="h-8 w-8 px-1 text-right">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <button
-                        type="button"
-                        className={`inline-flex items-center justify-center h-6 w-6 rounded hover:bg-surface-hover transition-colors ${sortCol !== 'date' || sortDir !== 'desc' ? 'text-action' : 'text-fg-subtle'}`}
-                        title="Sort"
-                      >
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                          <line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="14" y2="12" /><line x1="3" y1="18" x2="8" y2="18" />
-                        </svg>
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-[200px]">
-                      <DropdownMenuLabel className="py-1 text-caption font-normal text-fg-subtle">Sort by</DropdownMenuLabel>
-                      {SORT_COLS.filter((c) => showClientProjectFilters || (c.value !== 'client' && c.value !== 'project')).map((c) => (
-                        <DropdownMenuCheckboxItem
-                          key={c.value}
-                          checked={sortCol === c.value}
-                          onCheckedChange={() => setSortCol(c.value)}
+          <NotionTable scrollContainer={false} className="table-fixed">
+            <NotionTableHeader className="sticky top-0 z-[1] bg-surface">
+              {/* The long format ("Oct 12, 2026 · Mon, Oct 12, 2026 17:39 GMT+5:30") runs up to ~360px of text. */}
+              <NotionTableHead icon={<Clock3 />} className={showFullDate ? 'w-[380px]' : 'w-[170px]'}>
+                <span className="inline-flex items-center gap-1.5">
+                  Date
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={showFullDate}
+                          onClick={() => setShowFullDate((v) => !v)}
+                          className={`inline-flex h-4 w-7 shrink-0 items-center rounded-full transition-colors focus-visible:outline-none ${showFullDate ? 'bg-action' : 'bg-line-strong'}`}
                         >
-                          {c.label}
-                        </DropdownMenuCheckboxItem>
-                      ))}
-                      <DropdownMenuSeparator />
-                      <DropdownMenuLabel className="py-1 text-caption font-normal text-fg-subtle">Sort direction</DropdownMenuLabel>
+                          <span className={`h-3 w-3 rounded-full bg-white shadow-sm transition-transform ${showFullDate ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top">Toggle datetime format</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </span>
+              </NotionTableHead>
+              <NotionTableHead icon={<Activity />} className="w-[150px]">Event</NotionTableHead>
+              <NotionTableHead icon={<Type />}>Details</NotionTableHead>
+              {showClientProjectFilters && <NotionTableHead icon={<Briefcase />} className="w-[240px]">Where</NotionTableHead>}
+              <NotionTableHead icon={<User />} className="w-[180px]">Actor</NotionTableHead>
+              <NotionTableActionsHead aria-label="Sort" className="w-8 px-1 text-right">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      className={`inline-flex items-center justify-center h-6 w-6 rounded hover:bg-surface-hover transition-colors ${sortCol !== 'date' || sortDir !== 'desc' ? 'text-action' : 'text-fg-subtle'}`}
+                      title="Sort"
+                    >
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                        <line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="14" y2="12" /><line x1="3" y1="18" x2="8" y2="18" />
+                      </svg>
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-[200px]">
+                    <DropdownMenuLabel className="py-1 text-caption font-normal text-fg-subtle">Sort by</DropdownMenuLabel>
+                    {SORT_COLS.filter((c) => showClientProjectFilters || (c.value !== 'client' && c.value !== 'project')).map((c) => (
                       <DropdownMenuCheckboxItem
-                        checked={sortDir === 'desc'}
-                        onCheckedChange={() => setSortDir('desc')}
+                        key={c.value}
+                        checked={sortCol === c.value}
+                        onCheckedChange={() => setSortCol(c.value)}
                       >
-                        {sortCol === 'date' ? 'Newest first' : 'Z to A'}
+                        {c.label}
                       </DropdownMenuCheckboxItem>
-                      <DropdownMenuCheckboxItem
-                        checked={sortDir === 'asc'}
-                        onCheckedChange={() => setSortDir('asc')}
-                      >
-                        {sortCol === 'date' ? 'Oldest first' : 'A to Z'}
-                      </DropdownMenuCheckboxItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
+                    ))}
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel className="py-1 text-caption font-normal text-fg-subtle">Sort direction</DropdownMenuLabel>
+                    <DropdownMenuCheckboxItem
+                      checked={sortDir === 'desc'}
+                      onCheckedChange={() => setSortDir('desc')}
+                    >
+                      {sortCol === 'date' ? 'Newest first' : 'Z to A'}
+                    </DropdownMenuCheckboxItem>
+                    <DropdownMenuCheckboxItem
+                      checked={sortDir === 'asc'}
+                      onCheckedChange={() => setSortDir('asc')}
+                    >
+                      {sortCol === 'date' ? 'Oldest first' : 'A to Z'}
+                    </DropdownMenuCheckboxItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </NotionTableActionsHead>
+            </NotionTableHeader>
+            <NotionTableBody>
               {visibleEvents.map((ev) => (
-                <tr key={ev.id} className="h-9 border-b border-line transition-colors hover:bg-surface-hover">
-                  <td className="px-2 py-1 first:pl-1 whitespace-nowrap">
+                <NotionTableRow key={ev.id}>
+                  {/* Clipped, so a date that outgrows its column truncates instead of running into Event. */}
+                  <NotionTableCell className="overflow-hidden whitespace-nowrap">
                     <TooltipProvider>
                       <RelativeDateTime
                         date={ev.eventAt}
                         displayFormat={showFullDate ? 'verbose' : 'short'}
                         tooltipSide="right"
-                        textClassName="text-fg-muted text-ui"
+                        className="max-w-full"
+                        textClassName="min-w-0 truncate text-fg-muted text-ui"
+                        iconClassName="hidden"
                       />
                     </TooltipProvider>
-                  </td>
-                  {showClientProjectFilters && (
-                    <>
-                      <td className="max-w-[120px] truncate px-2 py-1 text-fg-muted" title={ev.clientName ?? ''}>
-                        {ev.clientName ?? '—'}
-                      </td>
-                      <td className="max-w-[120px] truncate px-2 py-1 text-fg-muted" title={ev.projectName ?? ''}>
-                        {ev.projectName ?? '—'}
-                      </td>
-                    </>
-                  )}
-                  <td className="px-2 py-1 first:pl-1">
-                    <div className="flex items-center gap-2">
-                      <EventIcon eventType={ev.eventType} />
-                      <span className="text-fg-muted text-ui">{eventScope(ev.eventType)}</span>
-                    </div>
-                  </td>
-                  <td className="px-2 py-1 first:pl-1">
-                    <span className="text-fg">{eventAction(ev.eventType)}</span>
-                  </td>
-                  <td className="px-2 py-1 first:pl-1 text-ui">
+                  </NotionTableCell>
+                  <NotionTableCell>
+                    <EventCell eventType={ev.eventType} />
+                  </NotionTableCell>
+                  {/* The table is fixed, so Details takes the room the set columns leave and truncates inside it. */}
+                  <NotionTableCell>
                     <DetailCell ev={ev} />
-                  </td>
-                  <td className="px-2 py-1 first:pl-1 text-ui">
+                  </NotionTableCell>
+                  {showClientProjectFilters && (
+                    <NotionTableCell>
+                      <WhereCell ev={ev} firmName={exportTitle} />
+                    </NotionTableCell>
+                  )}
+                  <NotionTableCell className="text-ui">
                     {ev.actorUserId ? (
                       <div className="flex items-center gap-1.5">
                         <UserAvatarWithTooltip
@@ -1145,12 +1187,12 @@ export function AuditWithFilters({
                     ) : (
                       <span className="text-fg-subtle">System</span>
                     )}
-                  </td>
-                  <td className="px-1" />
-                </tr>
+                  </NotionTableCell>
+                  <NotionTableActions aria-hidden />
+                </NotionTableRow>
               ))}
-            </tbody>
-          </table>
+            </NotionTableBody>
+          </NotionTable>
         )}
 
         <div ref={sentinelRef} className="flex items-center justify-center py-3">
