@@ -346,6 +346,10 @@ Every table is `NotionTable` (`components/ui/notion-table.tsx`), drawn as Notion
 - Lines sit on cells, not rows (`border-separate`), so a sticky header keeps them. A hand-written row
   (a group header, a loading row) puts `border-b border-line` on its cell.
 - `variant="hairline"` keeps the earlier row-dividers-only style for any table that should stay quieter.
+- The Files list is a CSS grid, not a table (drag and drop, selection, columns that hide as the pane
+  narrows), so it draws the same look itself: `FILE_TABLE_COL_LINE_CLASS` in
+  `engagement-file-table-grid.ts` puts a column line in the gap before Name, Owner, Modified, Due and
+  Size; header and rows are 34px, the header has lines above and below, and the rows end on a line.
 
 Audit is the first table built on it, with the columns from the canvas mock (option B):
 Date · Event (the scope's icon and the action as a tag, red only for a deletion) · Scope (Firm, Client,

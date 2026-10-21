@@ -76,6 +76,7 @@ import {
     DATE_MODIFIED_COL_CLASS,
     DUE_DATE_COL_CLASS,
     FILE_SIZE_COL_CLASS,
+    FILE_TABLE_COL_LINE_CLASS,
 } from '@/components/projects/engagement-file-table-grid'
 import { useEngagementUpload } from '@/components/projects/hooks/use-engagement-upload'
 import { useEngagementFileOps } from '@/components/projects/hooks/use-engagement-file-ops'
@@ -259,24 +260,24 @@ function CopyMoveSubmitButton({ label, submitting, disabled, onClick }: { label:
     )
 }
 
-/** Loading placeholder for the Files table: 36px rows on the table's own grid. */
+/** Loading placeholder for the Files table: 34px rows on the table's own grid, lines included. */
 function FileTableSkeleton({ rows = 8 }: { rows?: number }) {
     return (
-        <div aria-busy="true">
+        <div aria-busy="true" className="divide-y divide-line border-b border-line">
             <LoadingAnnouncement label="Loading files" />
             {Array.from({ length: rows }).map((_, i) => (
-                <div key={i} className={`grid h-9 items-center gap-4 pl-1 pr-2 ${FILE_TABLE_GRID_COLS_CLASS}`} style={{ opacity: 1 - i * 0.09 }}>
+                <div key={i} className={`grid h-[34px] items-center gap-4 overflow-hidden pl-1 pr-2 ${FILE_TABLE_GRID_COLS_CLASS}`} style={{ opacity: 1 - i * 0.09 }}>
                     <ShimmerBlock className="h-3.5 w-3.5" />
                     <ShimmerBar className="w-10" />
-                    <span className="flex min-w-0 items-center gap-2">
+                    <span className={`flex min-w-0 items-center gap-2 ${FILE_TABLE_COL_LINE_CLASS}`}>
                         <ShimmerBlock />
                         <ShimmerBar style={{ width: `${38 + ((i * 23) % 40)}%` }} />
                     </span>
                     <span className="col-span-2" />
-                    <span className={`items-center ${OWNER_COL_CLASS}`}><ShimmerBar className="w-20" /></span>
-                    <span className={`items-center ${DATE_MODIFIED_COL_CLASS}`}><ShimmerBar className="w-16" /></span>
-                    <span className={`items-center ${DUE_DATE_COL_CLASS}`}><ShimmerBar className="w-12" /></span>
-                    <span className={`items-center ${FILE_SIZE_COL_CLASS}`}><ShimmerBar className="w-8" /></span>
+                    <span className={`items-center ${OWNER_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><ShimmerBar className="w-20" /></span>
+                    <span className={`items-center ${DATE_MODIFIED_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><ShimmerBar className="w-16" /></span>
+                    <span className={`items-center ${DUE_DATE_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><ShimmerBar className="w-12" /></span>
+                    <span className={`items-center ${FILE_SIZE_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><ShimmerBar className="w-8" /></span>
                 </div>
             ))}
         </div>
@@ -2858,7 +2859,7 @@ const handleRefresh = async () => {
                 )}
 
                 {/* Fixed Table Header (Compact) */}
-                <div className="sticky top-0 bg-surface border-b border-line pl-1 pr-2 h-8 flex flex-col justify-center shrink-0 z-10 group">
+                <div className="sticky top-0 bg-surface border-y border-line overflow-hidden pl-1 pr-2 h-[34px] flex flex-col justify-center shrink-0 z-10 group">
                     <div className={`grid gap-4 items-center ${FILE_TABLE_GRID_COLS_CLASS}`}>
                         {/* Select-all checkbox column */}
                         <div
@@ -2877,15 +2878,15 @@ const handleRefresh = async () => {
                         <div className="flex items-center">
                             <TableHeader label="ID" icon={<Hash />} />
                         </div>
-                        <div className="flex items-center">
+                        <div className={`flex items-center ${FILE_TABLE_COL_LINE_CLASS}`}>
                             <TableHeader label="Name" icon={<Type />} />
                         </div>
                         {/* Quick actions column: no label, Notion-style */}
                         <div className="col-span-2" aria-hidden />
-                        <div className={`items-center ${OWNER_COL_CLASS}`}><TableHeader label="Owner" icon={<UserRound />} /></div>
-                        <div className={`items-center ${DATE_MODIFIED_COL_CLASS}`}><TableHeader label="Modified" icon={<Clock3 />} /></div>
-                        <div className={`items-center ${DUE_DATE_COL_CLASS}`}><TableHeader label="Due" icon={<Flag />} /></div>
-                        <div className={`items-center ${FILE_SIZE_COL_CLASS}`}><TableHeader label="Size" icon={<HardDrive />} /></div>
+                        <div className={`items-center ${OWNER_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Owner" icon={<UserRound />} /></div>
+                        <div className={`items-center ${DATE_MODIFIED_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Modified" icon={<Clock3 />} /></div>
+                        <div className={`items-center ${DUE_DATE_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Due" icon={<Flag />} /></div>
+                        <div className={`items-center ${FILE_SIZE_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Size" icon={<HardDrive />} /></div>
                     </div>
                 </div>
 
@@ -2988,7 +2989,7 @@ const handleRefresh = async () => {
                             </p>
                         </div>
                     ) : (
-                        <div className={cn("divide-y divide-line", isUploading && "opacity-50 transition-opacity")}>
+                        <div className={cn("divide-y divide-line border-b border-line", isUploading && "opacity-50 transition-opacity")}>
                             {sortedFiles.map((file) => (
                                 <EngagementFileRow
                                     key={file.id}

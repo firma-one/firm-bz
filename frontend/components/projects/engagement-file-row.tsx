@@ -27,6 +27,7 @@ import {
     DATE_MODIFIED_COL_CLASS,
     DUE_DATE_COL_CLASS,
     FILE_SIZE_COL_CLASS,
+    FILE_TABLE_COL_LINE_CLASS,
 } from '@/components/projects/engagement-file-table-grid'
 
 export interface EngagementFileRowProps {
@@ -231,7 +232,7 @@ export function EngagementFileRow({
             onDragLeave={onDragLeave}
             onDrop={(e) => onDrop(e, file)}
             className={`${FILE_TABLE_GRID_COLS_CLASS} ${cn(
-                "group grid gap-4 h-9 pl-1 pr-2 transition-colors items-center cursor-default relative text-ui",
+                "group grid gap-4 h-[34px] overflow-hidden pl-1 pr-2 transition-colors items-center cursor-default relative text-ui",
                 isFolder && selectedFileIdsSize === 0 && "cursor-pointer",
                 (isFolderApproved || isInsideApprovedDeliverable) && "bg-primary/5 hover:bg-primary/10",
                 (isIntakeRow || file.lock?.type === 'finalize' || (file.isPrivate && !isFolder)) ? "hover:bg-surface-hover opacity-60" : !(isFolderApproved || isInsideApprovedDeliverable) && "hover:bg-surface-hover",
@@ -280,7 +281,7 @@ export function EngagementFileRow({
             </div>
 
             {/* Name Column: icon and name (deeplink = skewed pastel marker on file name only) */}
-            <div className="flex items-center gap-3 min-w-0">
+            <div className={cn("flex items-center gap-3 min-w-0", FILE_TABLE_COL_LINE_CLASS)}>
                 <div className="flex-shrink-0 w-4 h-4 flex items-center justify-center">
                     {isFolder && showBadge ? (
                         <SharedFolderIcon
@@ -563,7 +564,7 @@ export function EngagementFileRow({
             </div>
 
             {/* Owner Column */}
-            <div className={`min-w-0 ${OWNER_COL_CLASS}`}>
+            <div className={cn('min-w-0', OWNER_COL_CLASS, FILE_TABLE_COL_LINE_CLASS)}>
                 {(() => {
                     const ownerName = file.owners?.[0]?.displayName
                         || file.lastModifyingUser?.displayName
@@ -601,9 +602,9 @@ export function EngagementFileRow({
                 })()}
             </div>
 
-            {/* Date Modified Column. Rows are a fixed h-9, so a date must never wrap onto a second line:
-                it would stick out of the row, and on the last row put a vertical scrollbar on the list. */}
-            <div className={cn('min-w-0 whitespace-nowrap', DATE_MODIFIED_COL_CLASS)}>
+            {/* Date Modified Column. Rows are a fixed 34px, so a date must never wrap onto a second line:
+                the row clips it, and the second line would be cut in half. */}
+            <div className={cn('min-w-0 whitespace-nowrap', DATE_MODIFIED_COL_CLASS, FILE_TABLE_COL_LINE_CLASS)}>
                 {file.modifiedTime ? (
                     <RelativeDateTime
                         date={file.modifiedTime}
@@ -617,7 +618,7 @@ export function EngagementFileRow({
             </div>
 
             {/* Due Date Column — leads edit it in place (Notion-style); everyone else sees the relative date */}
-            <div className={cn('min-w-0 whitespace-nowrap', DUE_DATE_COL_CLASS)} onClick={(e) => { if (canEditDueDate) e.stopPropagation() }}>
+            <div className={cn('min-w-0 whitespace-nowrap', DUE_DATE_COL_CLASS, FILE_TABLE_COL_LINE_CLASS)} onClick={(e) => { if (canEditDueDate) e.stopPropagation() }}>
                 {canEditDueDate ? (
                     <FileDueDateCell
                         projectId={projectId}
@@ -667,7 +668,7 @@ export function EngagementFileRow({
             </div>
 
             {/* File Size Column */}
-            <div className={`text-left ${FILE_SIZE_COL_CLASS}`}>
+            <div className={cn('text-left', FILE_SIZE_COL_CLASS, FILE_TABLE_COL_LINE_CLASS)}>
                 {isFolder ? (
                     <span className="text-[0.8125rem] text-[#45474c]/40">—</span>
                 ) : file.size ? (

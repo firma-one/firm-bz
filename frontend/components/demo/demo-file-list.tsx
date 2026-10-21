@@ -42,6 +42,7 @@ import {
     DATE_MODIFIED_COL_CLASS,
     DUE_DATE_COL_CLASS,
     FILE_SIZE_COL_CLASS,
+    FILE_TABLE_COL_LINE_CLASS,
     FILE_TABLE_CONTAINER_CLASS,
     FILE_TABLE_GRID_COLS_CLASS,
     OWNER_COL_CLASS,
@@ -135,7 +136,7 @@ function EntryRow({ entry, onOpenFolder, deliverableStatus }: { entry: Entry; on
         <div
             onClick={isFolder ? onOpenFolder : undefined}
             className={`${FILE_TABLE_GRID_COLS_CLASS} ${cn(
-                'group relative grid h-9 items-center gap-4 pl-1 pr-2 text-ui transition-colors',
+                'group relative grid h-[34px] items-center gap-4 overflow-hidden pl-1 pr-2 text-ui transition-colors',
                 approved ? 'bg-action/5 hover:bg-action/10' : 'hover:bg-surface-hover',
                 isFolder ? 'cursor-pointer' : 'cursor-default',
             )}`}
@@ -148,7 +149,7 @@ function EntryRow({ entry, onOpenFolder, deliverableStatus }: { entry: Entry; on
                 <span className="truncate text-small tabular-nums text-fg-subtle">{docId}</span>
             </div>
 
-            <div className="flex min-w-0 items-center gap-3">
+            <div className={`flex min-w-0 items-center gap-3 ${FILE_TABLE_COL_LINE_CLASS}`}>
                 <span className="flex h-4 w-4 flex-shrink-0 items-center justify-center">
                     {isFolder ? (
                         <Folder className="h-4 w-4 fill-surface-muted text-fg-muted" />
@@ -172,12 +173,12 @@ function EntryRow({ entry, onOpenFolder, deliverableStatus }: { entry: Entry; on
                 <RowActionMenu fileName={name} />
             </div>
 
-            <div className={`min-w-0 items-center gap-1.5 ${OWNER_COL_CLASS}`}>
+            <div className={`min-w-0 items-center gap-1.5 ${OWNER_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}>
                 <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-surface-muted text-[9px] font-medium text-fg-muted">{initialsOf(OWNER)}</span>
                 <span className="truncate text-fg-muted">{OWNER}</span>
             </div>
 
-            <div className={`items-center ${DATE_MODIFIED_COL_CLASS}`}>
+            <div className={`items-center ${DATE_MODIFIED_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}>
                 {!isFolder ? (
                     <RelativeDateTime date={entry.file.modifiedTime} textClassName="text-ui text-fg-muted" iconClassName="hidden" tooltipSide="top" />
                 ) : (
@@ -185,11 +186,11 @@ function EntryRow({ entry, onOpenFolder, deliverableStatus }: { entry: Entry; on
                 )}
             </div>
 
-            <div className={`items-center ${DUE_DATE_COL_CLASS}`}>
+            <div className={`items-center ${DUE_DATE_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}>
                 <span className="text-fg-subtle">—</span>
             </div>
 
-            <div className={`items-center ${FILE_SIZE_COL_CLASS}`}>
+            <div className={`items-center ${FILE_SIZE_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}>
                 {!isFolder && entry.file.size ? (
                     <span className="tabular-nums text-fg-muted">{formatFileSize(entry.file.size)}</span>
                 ) : (
@@ -266,20 +267,20 @@ export function DemoFileList({ folders, deliverableStatusByFolderId }: { folders
                     </div>
                 )}
 
-                <div className="sticky top-0 z-10 flex h-8 shrink-0 flex-col justify-center border-b border-line bg-surface pl-1 pr-2">
+                <div className="sticky top-0 z-10 flex h-[34px] shrink-0 flex-col justify-center overflow-hidden border-y border-line bg-surface pl-1 pr-2">
                     <div className={`grid items-center gap-4 ${FILE_TABLE_GRID_COLS_CLASS}`}>
                         <div className="flex h-4 w-4 items-center justify-center"><Checkbox checked={false} className="pointer-events-none h-4 w-4" /></div>
                         <div className="flex items-center"><TableHeader label="ID" icon={<Hash />} /></div>
-                        <div className="flex items-center"><TableHeader label="Name" icon={<Type />} /></div>
+                        <div className={`flex items-center ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Name" icon={<Type />} /></div>
                         <div className="col-span-2" aria-hidden />
-                        <div className={`items-center ${OWNER_COL_CLASS}`}><TableHeader label="Owner" icon={<UserRound />} /></div>
-                        <div className={`items-center ${DATE_MODIFIED_COL_CLASS}`}><TableHeader label="Modified" icon={<Clock3 />} /></div>
-                        <div className={`items-center ${DUE_DATE_COL_CLASS}`}><TableHeader label="Due" icon={<Flag />} /></div>
-                        <div className={`items-center ${FILE_SIZE_COL_CLASS}`}><TableHeader label="Size" icon={<HardDrive />} /></div>
+                        <div className={`items-center ${OWNER_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Owner" icon={<UserRound />} /></div>
+                        <div className={`items-center ${DATE_MODIFIED_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Modified" icon={<Clock3 />} /></div>
+                        <div className={`items-center ${DUE_DATE_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Due" icon={<Flag />} /></div>
+                        <div className={`items-center ${FILE_SIZE_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Size" icon={<HardDrive />} /></div>
                     </div>
                 </div>
 
-                <div className="flex-1 divide-y divide-line overflow-y-auto">
+                <div className="flex-1 divide-y divide-line overflow-y-auto [&>.group:last-child]:border-b [&>.group:last-child]:border-line">
                     {currentFolders.map((folder) => (
                         <EntryRow
                             key={folder.id}

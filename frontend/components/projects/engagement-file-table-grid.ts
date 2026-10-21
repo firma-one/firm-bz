@@ -46,6 +46,18 @@ export const FILE_TABLE_GRID_COLS_CLASS =
     '@[61rem]/file-table:grid-cols-[24px_72px_minmax(180px,1fr)_minmax(124px,10%)_10%_14%_minmax(112px,12%)_0px_8%] ' +
     '@[74rem]/file-table:grid-cols-[24px_72px_minmax(180px,1fr)_minmax(124px,10%)_10%_14%_minmax(112px,12%)_10%_8%]'
 
+/**
+ * Notion's database grid, as NotionTable draws it (.claude/plans/app-design-refinements.md, section 10):
+ * a 34px header with a line above and below, 34px rows with a line between and after, and a column line
+ * in the gap before Name, Owner, Modified, Due and Size. The checkbox is the gutter and the quick
+ * actions are the row's own tools, so neither has a line before it.
+ *
+ * The line is taller than the row, and the row (and the header) clip it with overflow-hidden, so it
+ * meets the row lines exactly. -left-2 is half the grid's gap-4. A hidden column draws no line.
+ */
+export const FILE_TABLE_COL_LINE_CLASS =
+    'relative before:absolute before:-left-2 before:top-1/2 before:h-12 before:w-px before:-translate-y-1/2 before:bg-line'
+
 /** Hidden below 45rem, flex from 45rem up. */
 export const OWNER_COL_CLASS = 'hidden @[45rem]/file-table:flex'
 /** Hidden below 54rem, flex from 54rem up. */
