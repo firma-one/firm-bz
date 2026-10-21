@@ -3,9 +3,9 @@
 import React from 'react'
 import { Info } from 'lucide-react'
 import { Hint } from '@/components/ui/tooltip'
-import { STAGE_PILL_CLASSES, type StatusStage } from '@/lib/ui/status'
+import { STAGE_PILL_CLASSES } from '@/lib/ui/status'
 import { cn } from '@/lib/utils'
-import { paceStatus } from '@/lib/insights/pace'
+import { paceStage, paceStatus } from '@/lib/insights/pace'
 
 /*
  * The charts of the engagement Overview, after the rings (.claude/plans/engagement-overview-redesign.md).
@@ -124,16 +124,6 @@ export function Meter({ label, valueText, pct, hex, muted = false, info }: {
 /** Where delivery stands against the clock, as a tag. The rule lives in lib, shared with the Firm Overview. */
 export { paceStatus }
 
-/**
- * Pace in the status palette (app-design-refinements.md, "Data colors"): on pace is Done, behind is
- * Waiting, and only far behind (delivery more than 35 points under the clock) is red. The rule that
- * names the state (lib/insights/pace.ts) is unchanged; this only colors it.
- */
-function paceStage(deliveredPct: number, timePct: number, color: 'green' | 'yellow' | 'red'): StatusStage {
-    if (color === 'green') return 'done'
-    return timePct - deliveredPct > 35 ? 'problem' : 'waiting'
-}
-
 /** Delivered against time elapsed, two short bars on one scale, so behind-pace is visible. */
 export function PaceBars({ deliveredPct, timePct, hex }: { deliveredPct: number; timePct: number; hex: { delivered: string; time: string } }) {
     const status = paceStatus(deliveredPct, timePct)
@@ -151,7 +141,7 @@ export function PaceBars({ deliveredPct, timePct, hex }: { deliveredPct: number;
             {/* A flex row, not a plain block: the PDF export (html2canvas) paints an inline tag's
                 background over its own text, which left an empty pink chip. */}
             <div className="flex">
-                <span className={cn('inline-flex h-5 items-center whitespace-nowrap rounded-control px-1.5 text-caption', STAGE_PILL_CLASSES[paceStage(deliveredPct, timePct, status.color)])}>
+                <span className={cn('inline-flex h-5 items-center whitespace-nowrap rounded-control px-1.5 text-caption', STAGE_PILL_CLASSES[paceStage(status.color)])}>
                     {status.text}
                 </span>
             </div>

@@ -1,4 +1,5 @@
-import { paceStatus } from './pace'
+import { paceStage, paceStatus } from './pace'
+import type { StatusStage } from '@/lib/ui/status'
 import type { TagColor } from '@/lib/ui/status-colors'
 
 /**
@@ -24,13 +25,18 @@ export type PaceKey = 'overdue' | 'behind' | 'slightly_behind' | 'on_pace' | 'no
 /** Worst first: the order of the list and of the Engagements card's bar. */
 export const PACE_ORDER: PaceKey[] = ['overdue', 'behind', 'slightly_behind', 'on_pace', 'no_deliverables', 'no_due_date']
 
-export const PACE_META: Record<PaceKey, { label: string; tag: TagColor }> = {
-    overdue: { label: 'Overdue', tag: 'red' },
-    behind: { label: 'Behind pace', tag: 'orange' },
-    slightly_behind: { label: 'Slightly behind', tag: 'yellow' },
-    on_pace: { label: 'On pace', tag: 'green' },
-    no_deliverables: { label: 'No deliverables yet', tag: 'gray' },
-    no_due_date: { label: 'No due date', tag: 'gray' },
+/**
+ * Each key's label, and its stage in the status language (lib/insights/pace.ts paceStage): past due is
+ * the only red, behind is Waiting, on pace is Done, and "can't judge yet" is Not started. `tag` is the
+ * older Notion tag color, kept for the marketing site's static mocks.
+ */
+export const PACE_META: Record<PaceKey, { label: string; tag: TagColor; stage: StatusStage }> = {
+    overdue: { label: 'Overdue', tag: 'red', stage: 'problem' },
+    behind: { label: 'Behind pace', tag: 'orange', stage: paceStage('red') },
+    slightly_behind: { label: 'Slightly behind', tag: 'yellow', stage: paceStage('yellow') },
+    on_pace: { label: 'On pace', tag: 'green', stage: paceStage('green') },
+    no_deliverables: { label: 'No deliverables yet', tag: 'gray', stage: 'not-started' },
+    no_due_date: { label: 'No due date', tag: 'gray', stage: 'not-started' },
 }
 
 export interface EngagementPace {

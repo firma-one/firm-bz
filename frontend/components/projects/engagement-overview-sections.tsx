@@ -54,13 +54,18 @@ export const BAND_STAGE = { good: 'done', warning: 'waiting', critical: 'problem
 const BAND_HEX = { good: DATA.done, warning: DATA.waiting, critical: DATA.problem }
 const BAND_TEXT = { good: 'text-status-done-fg', warning: 'text-status-waiting-fg', critical: 'text-status-problem-fg' }
 
-/** A band as a pill in its stage's colors: a judgment, not a status, so no status icon. */
-export function BandPill({ band, children, className }: { band: keyof typeof BAND_STAGE; children: React.ReactNode; className?: string }) {
+/** A judgment in a stage's colors (pace, a score band): not a status, so no status icon. */
+export function StagePill({ stage, children, className }: { stage: StatusStage; children: React.ReactNode; className?: string }) {
     return (
-        <span className={cn('inline-flex h-5 items-center whitespace-nowrap rounded-control px-1.5 text-caption', STAGE_PILL_CLASSES[BAND_STAGE[band]], className)}>
+        <span className={cn('inline-flex h-5 items-center whitespace-nowrap rounded-control px-1.5 text-caption', STAGE_PILL_CLASSES[stage], className)}>
             {children}
         </span>
     )
+}
+
+/** A score band as a pill: good, needs attention, or at risk. */
+export function BandPill({ band, children, className }: { band: keyof typeof BAND_STAGE; children: React.ReactNode; className?: string }) {
+    return <StagePill stage={BAND_STAGE[band]} className={className}>{children}</StagePill>
 }
 export const STAGE_ORDER: DeliverableStage[] = ['to_do', 'in_progress', 'in_review', 'approved']
 

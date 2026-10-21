@@ -247,7 +247,7 @@ amber on the Board; the deliverable list's chips had To Do yellow and In Review 
 | An overdue deliverable's bar | `--ui-status-problem-bar`, the only red |
 | Health and score bands (Overall Health, File Organization score and its chip) | Good: done green · needs attention: waiting amber · at risk: problem red |
 | Score deductions | High red · Medium amber · Low gray |
-| Pace | Delivered in done green; "Behind pace" amber, red only when far behind |
+| Pace | Delivered in done green; behind (slightly or not) amber; red only for past due (the firm's Overdue), never for pace alone. One rule, `paceStage` in `lib/insights/pace.ts`, for both Overviews |
 | Comment responsiveness | Resolved done · Flagged open waiting · Unanswered problem |
 | Team: on team vs invited | Joined done · Invited waiting (the invitation mapping) |
 | Categorical (by role, internal vs external) | Two warm grays: these aren't statuses, so they borrow no status color |
@@ -268,8 +268,9 @@ user-chosen labels (Notion's tag palette).
   "Invitation resent · {email}", and the pill fading in), in all three member lists.
 - The firm brief got the engagement summary's icon actions too (Copy, Rewrite with Brio), not only
   the byline, so Brio's two pieces of writing look the same.
-- Pace: on pace is Done, behind is Waiting, and only far behind (delivery more than 35 points under
-  the clock) is red. The pace rule in `lib/insights/pace.ts` (and so the firm Overview) is unchanged.
+- Pace: on pace is Done, behind is Waiting. A first cut made "far behind" red on the engagement
+  Overview only; replaced the same day by one rule for both Overviews (`paceStage`), where red is
+  kept for past due.
 - Roles and internal vs external use a four-step warm gray ramp (`--ui-data-category-1…4`).
 - `SidebarItem`'s tooltip is now a `Hint` for every sidebar row, and the collapse button's too.
 - A prospect in the client gallery keeps its dashed edge instead of the card shadow.
@@ -292,6 +293,12 @@ user-chosen labels (Notion's tag palette).
 - Not built: a Status submenu. The Files listing doesn't carry a file's stage (only deliverable
   folders have one), so it needs that data first; where the stage is known (the Board, the detail
   pane) it already has its own control.
+
+**Firm Overview colors (added 2026-10-22, at Deepak's request):** the Engagements card's bar and
+legend, the "N need attention" headline, the rows' time bars and pace pills move from their own
+`PACE_HEX` (old `RING` plus a hand-picked orange and slate) to the status palette, by the shared pace
+rule; pills are plain stage pills (`StagePill`), not dotted tags. The revenue pipeline and engagement
+types take the warm gray ramp (they're categories); a prospect's "Soon" is a Waiting pill.
 
 ## 7. Data change (for the byline)
 
