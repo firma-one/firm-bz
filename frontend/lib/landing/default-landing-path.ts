@@ -21,7 +21,8 @@ function resolveHomeLandingPath(firms: Awaited<ReturnType<typeof FirmService.get
     const landable = firms.filter((f) => f.slug && f.groupSlug)
     if (landable.length === 0) return null
 
-    return '/d/u/home'
+    // `?landed=returning` plays the arrival overlay's closing "Welcome back" on Home (LandingArrival).
+    return '/d/u/home?landed=returning'
 }
 
 /**

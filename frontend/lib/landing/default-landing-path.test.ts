@@ -24,10 +24,10 @@ beforeEach(() => vi.clearAllMocks())
 describe('resolveDefaultFirmLandingPath', () => {
     it('lands a returning user on the cross-firm Home, however many firms they have', async () => {
         getUserFirms.mockResolvedValue([firm('acme')])
-        expect(await resolveDefaultFirmLandingPath('u1')).toBe('/d/u/home')
+        expect(await resolveDefaultFirmLandingPath('u1')).toBe('/d/u/home?landed=returning')
 
         getUserFirms.mockResolvedValue([firm('acme'), firm('beta', 'other')])
-        expect(await resolveDefaultFirmLandingPath('u1')).toBe('/d/u/home')
+        expect(await resolveDefaultFirmLandingPath('u1')).toBe('/d/u/home?landed=returning')
     })
 
     it('still lands a brand-new user in the firm just provisioned for them', async () => {

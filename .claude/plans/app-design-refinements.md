@@ -183,6 +183,11 @@ dragging".
   white canvas, a small gray arc and one muted line, no card or shadow; the welcome step uses the
   status language's Done check, "Welcome back, {name}" and "Your workspace is ready." It stays
   fully opaque (the shell loads behind it) and fades rather than zooms.
+  Revised the same day: the spinner became a mark from the status language. While loading, the
+  Underway ring fills and empties like a stage icon moving along and turns slowly; on arrival it
+  becomes the Done check, which pops in and draws its tick. Still under reduced motion. The welcome
+  step had never shown for returning users: they land on Home (`/d/u/home`), which had no
+  `?landed=` handling, so Home now gets `?landed=returning` and the shared `LandingArrival`.
 
 ### Wave 2: the engagement core
 

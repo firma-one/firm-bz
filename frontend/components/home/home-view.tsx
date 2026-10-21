@@ -15,6 +15,7 @@ import { StatusIcon } from "@/components/ui/status-icon"
 import { Greeting, MyEngagementsList, RelativeTime } from "./home-client"
 import { AgendaWeek, type AgendaDueItem, type AgendaEvent } from "./agenda-week"
 import { HomeBookmarks } from "./home-bookmarks"
+import { LandingArrival } from "@/components/app/landing-arrival"
 import { FirmFilter, UnavailableFirmsNote } from "./firm-filter"
 
 /**
@@ -177,6 +178,8 @@ export function HomeView({
 
     return (
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 pb-10">
+            {/* Sign-in lands here with ?landed=returning: the loader's last beat, then "Welcome back". */}
+            <LandingArrival firstName={firstName} />
             <PageHeading
                 icon={<Home />}
                 title={<Greeting firstName={firstName} />}

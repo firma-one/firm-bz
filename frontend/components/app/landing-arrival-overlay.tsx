@@ -1,8 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { StatusIcon } from '@/components/ui/status-icon'
-import { WorkspaceLoaderMessage, WorkspaceLoaderScreen } from '@/components/app/workspace-loader'
+import { WorkspaceLoaderMark, WorkspaceLoaderMessage, WorkspaceLoaderScreen } from '@/components/app/workspace-loader'
 
 const LOADING_PHASE_MS = 900
 const WELCOME_PHASE_MS = 2000
@@ -55,8 +54,8 @@ export function LandingArrivalOverlay({
                     />
                 ) : (
                     <>
-                        {/* The status language's "Done", not a big brand-colored check. */}
-                        <StatusIcon stage="done" size={20} />
+                        {/* The loader's mark, arrived: the status language's Done, its tick drawn in. */}
+                        <WorkspaceLoaderMark state="done" />
                         <div className="space-y-0.5">
                             <p className="text-h3 text-fg">
                                 {variant === 'new'
