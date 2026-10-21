@@ -6,7 +6,7 @@ import dayGridPlugin from '@fullcalendar/daygrid'
 import timeGridPlugin from '@fullcalendar/timegrid'
 import listPlugin from '@fullcalendar/list'
 import type { EventContentArg, EventInput } from '@fullcalendar/core'
-import { Briefcase, Layers, FileText } from 'lucide-react'
+import { Briefcase, FileText, FolderPlus } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { StatusIcon } from '@/components/ui/status-icon'
@@ -20,7 +20,7 @@ import '@/components/calendar/calendar-view.css'
 const EVENT_TYPE_ICON: Record<DemoCalendarEventType, typeof Briefcase> = {
     kickoff: Briefcase,
     due: Briefcase,
-    deliverable: Layers,
+    deliverable: FolderPlus,
     document: FileText,
 }
 

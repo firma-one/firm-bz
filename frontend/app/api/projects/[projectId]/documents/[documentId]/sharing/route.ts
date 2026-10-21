@@ -283,7 +283,7 @@ export async function PUT(
         where: { id: documentIdParam, engagementId: projectId },
       })
       if (!doc) return NextResponse.json({ error: 'Document not found' }, { status: 404 })
-      if (!doc.isFolder) return NextResponse.json({ error: 'Cannot untag a file' }, { status: 400 })
+      if (!doc.isFolder) return NextResponse.json({ error: 'Only a folder can be demoted from a deliverable' }, { status: 400 })
 
       // Clear settings (removes share.createdAt, activity, etc.)
       await prisma.engagementDocument.update({

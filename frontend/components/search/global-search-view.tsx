@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { Search, Folder, Sparkles, X, Building2, Briefcase, Package, Hash, FileText, ArrowUpRight, ArrowRight, RefreshCw, History, BrushCleaning, CalendarClock, Info, ChevronRight } from 'lucide-react'
+import { Search, Folder, Sparkles, X, Building2, Briefcase, Hash, FileText, ArrowUpRight, ArrowRight, RefreshCw, History, BrushCleaning, CalendarClock, Info, ChevronRight, FolderPlus } from 'lucide-react'
 import { DocumentIcon } from '@/components/ui/document-icon'
 import { Button } from '@/components/ui/button'
 import {
@@ -141,7 +141,7 @@ const STAGE_LABEL: Record<FilterStage, string> = {
 const STAGE_ICON: Record<FilterStage, React.ComponentType<{ className?: string }>> = {
   client: Building2,
   engagement: Briefcase,
-  deliverable: Package,
+  deliverable: FolderPlus,
   dateRange: CalendarClock,
   type: FileText,
 }

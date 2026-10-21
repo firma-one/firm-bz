@@ -2,12 +2,22 @@
 
 import React from 'react'
 import {
-    Folder, Share2, Lock, FolderLock, FolderUp,
-    Link2, ScanEye, MoreVertical, CircleChevronLeft, Loader2, Bookmark,
-    PackagePlus, PackageCheck
+    Folder,
+    Share2,
+    Lock,
+    FolderLock,
+    FolderUp,
+    Link2,
+    ScanEye,
+    MoreVertical,
+    CircleChevronLeft,
+    Loader2,
+    Bookmark,
+    FolderPlus,
 } from 'lucide-react'
 import { DocumentIcon } from '@/components/ui/document-icon'
 import { SharedFolderIcon } from '@/components/ui/folder-shared-icon'
+import { DeliverableIcon } from '@/components/ui/deliverable-icon'
 import { DocumentActionMenu } from '@/components/ui/document-action-menu'
 import { ProfileBubbleWithPopup } from '@/components/ui/profile-bubble-popup'
 import { RelativeDateTime } from '@/components/ui/relative-date-time'
@@ -304,7 +314,9 @@ export function EngagementFileRow({
             {/* Name Column: icon and name (deeplink = skewed pastel marker on file name only) */}
             <div className={cn("flex items-center gap-3 min-w-0", FILE_TABLE_COL_LINE_CLASS)}>
                 <div className="flex-shrink-0 w-4 h-4 flex items-center justify-center">
-                    {isFolder && showBadge ? (
+                    {isFolder && file.isDeliverable ? (
+                        <DeliverableIcon hint />
+                    ) : isFolder && showBadge ? (
                         <SharedFolderIcon
                             fillLevel={isAncestorShared ? 0.5 : 1}
                             tooltip={isAncestorShared ? 'contains-shared' : 'shared'}
@@ -401,12 +413,8 @@ export function EngagementFileRow({
                                                 ? 'bg-primary/5 text-primary/50 border-primary/20'
                                                 : 'bg-primary/10 text-primary border-primary/30'
                                 }`}>
-                                    {isIntakeRow
-                                        ? <Share2 className="h-3 w-3" />
-                                        : (isFolderApproved || isInsideApprovedDeliverable)
-                                            ? <PackageCheck className="h-3.5 w-3.5" />
-                                            : <PackagePlus className="h-3.5 w-3.5" />
-                                    }
+                                    {/* Approved or not, a deliverable's mark is folder-plus; the badge's fill says approved */}
+                                    {isIntakeRow ? <Share2 className="h-3 w-3" /> : <FolderPlus className="h-3.5 w-3.5" />}
                                 </span>
                             </TooltipTrigger>
                             <TooltipContent side="top">
@@ -416,7 +424,7 @@ export function EngagementFileRow({
                                         ? 'Deliverable — Approved'
                                         : isAncestorShared
                                             ? 'Inside a Deliverable folder'
-                                            : 'Tagged as Deliverable'}
+                                            : 'Deliverable'}
                             </TooltipContent>
                         </Tooltip>
                     ) : null}

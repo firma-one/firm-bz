@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState, type ReactElement, type ReactNode } from "react"
 import Link from "next/link"
 import { addDays, format, isSameDay, startOfDay } from "date-fns"
-import { AlertCircle, ArrowRight, Bell, Briefcase, CalendarDays, FileText, Layers } from "lucide-react"
+import { type LucideProps, AlertCircle, ArrowRight, Bell, Briefcase, CalendarDays, FileText } from "lucide-react"
+import { DeliverableGlyph } from '@/components/ui/deliverable-icon'
 import type { CalendarEventType } from "@/lib/actions/calendar"
 import { getEngagementTagColor } from "@/lib/calendar/engagement-color"
 import { EmptyPanel } from "@/components/ui/empty-panel"
@@ -56,17 +57,17 @@ export type AgendaDueItem = {
     status?: string | null
 }
 
-const TYPE_ICON: Record<AgendaEventType, typeof Briefcase> = {
+const TYPE_ICON: Record<AgendaEventType, React.ComponentType<LucideProps>> = {
     kickoff: Briefcase,
     due: Briefcase,
     followUp: Briefcase,
-    deliverable: Layers,
+    deliverable: DeliverableGlyph,
     document: FileText,
     reminder: Bell,
 }
 
-const DUE_KIND_ICON: Record<AgendaDueItem["kind"], typeof Briefcase> = {
-    deliverable: Layers,
+const DUE_KIND_ICON: Record<AgendaDueItem["kind"], React.ComponentType<LucideProps>> = {
+    deliverable: DeliverableGlyph,
     engagement: Briefcase,
     reminder: Bell,
 }

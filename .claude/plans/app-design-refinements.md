@@ -381,6 +381,14 @@ From the canvas's section 7 (the full "views" redesign was judged too extreme; t
   leaves Approved). As on the Board, a deliverable isn't approved while a document inside it isn't. The
   listing now returns every document's own stage (`activityStatus`), so documents inside a deliverable
   show theirs. The tour's visitor gets the lead's moves.
+- **One deliverable icon, everywhere.** lucide's folder-plus (Deepak, 2026-10-22): in the primary color
+  where it stands alone (`DeliverableIcon`, `DeliverableGlyph`) — Files rows, the Board, the action menu's
+  header, the deliverable panel, the share dialog, the Inbox, Home, the calendar's event dialog — and in
+  the surrounding color inside calendar chips, filter pills (Files' Deliverables, Doc Search) and section
+  headers (the Overview's Deliverables and Status). No package icons remain. Folders inside or above a
+  deliverable keep their own marks.
+- **Promote and demote.** The menu says "Promote Folder to Deliverable" (folder-plus) and "Demote
+  Deliverable to Folder" (folder-minus, in red), and so do their dialogs and toasts.
 - **"Due", everywhere.** Field labels, column headers, tooltips and placeholders say "Due" (and "Start"),
   not "Due date". Sentences keep "due date".
 - **Document action menu.** Stays three levels for now, made compact: 288px wide, 13px text, 26px rows,

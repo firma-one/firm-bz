@@ -7,6 +7,7 @@ import { DocumentIcon } from "@/components/ui/document-icon"
 import { UserAvatarWithTooltip } from "@/components/ui/user-avatar-with-tooltip"
 import { cn, formatFileSize, formatSmartDateTime } from "@/lib/utils"
 import { DuePickerPanel } from "@/components/ui/due-picker"
+import { DeliverableIcon } from "@/components/ui/deliverable-icon"
 import { formatDue, isPastDue, readDue } from "@/lib/ui/due-date"
 import { DocumentEditPanelContent, DocumentPreviewPanelContent, getDocumentEditUrl } from "@/components/files/document-edit-sheet"
 import { DocumentPreviewPane } from "@/components/files/document-preview-pane"
@@ -47,9 +48,9 @@ import {
   XCircle,
   Building2,
   Loader2,
-  PackageMinus,
-  Package,
   Flag,
+  FolderPlus,
+  FolderMinus,
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -552,7 +553,7 @@ export function DocumentActionMenu({
           <div className="px-3 py-2 border-b border-line flex-none">
             <div className="flex items-start gap-2.5">
               <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-control bg-surface-muted">
-                <DocumentIcon mimeType={document.mimeType} className="h-4 w-4" />
+                {isDeliverable ? <DeliverableIcon /> : <DocumentIcon mimeType={document.mimeType} className="h-4 w-4" />}
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-start gap-1">
@@ -683,11 +684,11 @@ export function DocumentActionMenu({
                             onSelect={(e) => e.preventDefault()}
                             className="flex items-center gap-2 px-2 py-1 text-small opacity-50 cursor-not-allowed"
                           >
-                            <XCircle className="h-3.5 w-3.5" />
-                            <span>Untag as deliverable</span>
+                            <FolderMinus className="h-3.5 w-3.5" />
+                            <span>Demote Deliverable to Folder</span>
                           </DropdownMenuItem>
                         </TooltipTrigger>
-                        <TooltipContent side="right" className="text-xs max-w-48">Approved deliverables cannot be untagged</TooltipContent>
+                        <TooltipContent side="right" className="text-xs max-w-48">An approved deliverable can't be demoted</TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
                   ) : isDeliverable ? (
@@ -695,15 +696,15 @@ export function DocumentActionMenu({
                       // Closes the menu: it sits above dialogs, so left open it covers the confirmation.
                       onSelect={() => {
                         if (deliverableStatus && deliverableStatus !== 'to_do') {
-                          addToast({ type: 'error', title: 'Cannot untag', message: 'Only deliverables with a To Do status can be untagged.' })
+                          addToast({ type: 'error', title: 'Cannot demote', message: 'Only a deliverable still at To do can be demoted to a folder.' })
                           return
                         }
                         setShowUntagConfirm(true)
                       }}
                       className="flex items-center gap-2 px-2 py-1 cursor-pointer text-small text-danger focus:text-danger"
                     >
-                      <XCircle className="h-3.5 w-3.5" />
-                      <span>Untag as deliverable</span>
+                      <FolderMinus className="h-3.5 w-3.5" />
+                      <span>Demote Deliverable to Folder</span>
                     </DropdownMenuItem>
                   ) : isAncestorShared ? (
                     <TooltipProvider>
@@ -714,8 +715,8 @@ export function DocumentActionMenu({
                             onSelect={(e) => e.preventDefault()}
                             className="flex items-center gap-2 px-2 py-1 text-small opacity-50 cursor-not-allowed"
                           >
-                            <Package className="h-3.5 w-3.5 text-fg-subtle" />
-                            <span>Promote as deliverable</span>
+                            <FolderPlus className="h-3.5 w-3.5 text-fg-subtle" />
+                            <span>Promote Folder to Deliverable</span>
                           </DropdownMenuItem>
                         </TooltipTrigger>
                         <TooltipContent side="right" className="text-xs max-w-48">An ancestor folder is already a deliverable</TooltipContent>
@@ -728,10 +729,11 @@ export function DocumentActionMenu({
                           <DropdownMenuItem
                             // Closes the menu: it sits above dialogs, so left open it covers the dialog.
                             onSelect={() => { setTagDeliverableDueDate(""); setShowTagDeliverableModal(true) }}
-                            className="flex cursor-pointer items-center gap-2"
+                            // Green, as Demote is red: the deliverable color, the opposite move.
+                            className="flex cursor-pointer items-center gap-2 text-primary focus:text-primary"
                           >
-                            <Package className="h-3.5 w-3.5 text-fg-subtle" />
-                            <span>Promote as deliverable</span>
+                            <FolderPlus className="h-3.5 w-3.5 text-primary" />
+                            <span>Promote Folder to Deliverable</span>
                           </DropdownMenuItem>
                         </TooltipTrigger>
                         <TooltipContent side="right" className="text-xs max-w-48">Deliverables will be shared externally</TooltipContent>
@@ -1485,9 +1487,9 @@ export function DocumentActionMenu({
       <ConfirmDialog
         open={showTagDeliverableModal}
         onOpenChange={setShowTagDeliverableModal}
-        icon={<Package className="h-3.5 w-3.5" />}
+        icon={<FolderPlus className="h-3.5 w-3.5" />}
         iconVariant="primary"
-        title="Promote as deliverable"
+        title="Promote Folder to Deliverable"
         subtitle={document.name}
         description="This will share the folder externally and add it to the Board."
         extra={
@@ -1514,16 +1516,16 @@ export function DocumentActionMenu({
         }}
       />
 
-      {/* Untag as Deliverable confirmation */}
+      {/* Demote Deliverable to Folder confirmation */}
       <ConfirmDialog
         open={showUntagConfirm}
         onOpenChange={setShowUntagConfirm}
-        icon={<PackageMinus className="h-3.5 w-3.5" />}
+        icon={<FolderMinus className="h-3.5 w-3.5" />}
         iconVariant="red"
-        title="Untag as Deliverable"
+        title="Demote Deliverable to Folder"
         subtitle="This action will revoke all external access."
-        description={<>This will remove the deliverable tag from <span className="font-semibold text-fg">{document.name}</span> and revoke all sharing access for external collaborators and viewers.</>}
-        confirmLabel="Untag"
+        description={<>This will turn <span className="font-semibold text-fg">{document.name}</span> back into a plain folder, take it off the Board, and revoke all sharing access for external collaborators and viewers.</>}
+        confirmLabel="Demote"
         confirmVariant="red"
         onCancel={() => setShowUntagConfirm(false)}
         onConfirm={() => {

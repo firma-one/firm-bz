@@ -9,9 +9,9 @@ import {
     Gauge,
     Heart,
     MessagesSquare,
-    Package,
     ListChecks,
     Users,
+    FolderPlus,
 } from 'lucide-react'
 import { DATA, Donut, ScoreDeductions, tint } from './insight-rings'
 import { StatusPill } from '@/components/ui/status-pill'
@@ -150,7 +150,7 @@ export function DeliverablesTimeline({ deliverables, startDate, dueDate, nowMs }
 
     return (
         <ChartBlock
-            icon={Package}
+            icon={FolderPlus}
             title="Deliverables"
             info="Each bar runs from when the folder was marked a deliverable to its due date (or approval). The fill shows its stage: a quarter for To Do, half for In Progress, three quarters for In Review, full when approved. Red means overdue; a dashed bar has no due date. The dashed line is today; the solid line is the engagement's due date."
             aside={
@@ -412,7 +412,7 @@ function StatusBlock({ r }: { r: ReportInputs }) {
     return (
         <ChartBlock
             fill
-            icon={Package}
+            icon={FolderPlus}
             title="Status"
             info="Where the deliverables stand, in workflow order: To Do → In Progress → In Review → Approved."
             aside={total > 0 ? `${approved} of ${total} approved` : undefined}

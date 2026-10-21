@@ -18,11 +18,11 @@ import {
   type DraggableAttributes,
 } from '@dnd-kit/core'
 import type { SyntheticListenerMap } from '@dnd-kit/core/dist/hooks/utilities'
-import { Share2, User, Lock, GripVertical, FolderOpen, Clock, Copy, Check, Search, MessagesSquare, Link2, ScanEye, X, RefreshCw, ChevronDown, ChevronLeft, ChevronRight, Filter, CheckCircle2, Trash2, BookOpenText, PackagePlus, CalendarDays, AlertTriangle, CalendarClock } from 'lucide-react'
+import { Share2, User, Lock, GripVertical, FolderOpen, Clock, Copy, Check, Search, MessagesSquare, Link2, ScanEye, X, RefreshCw, ChevronDown, ChevronLeft, ChevronRight, Filter, CheckCircle2, Trash2, BookOpenText, CalendarDays, AlertTriangle, CalendarClock } from 'lucide-react'
 import { ProfileBubbleWithPopup } from '@/components/ui/profile-bubble-popup'
 import { DocumentBreadcrumb } from '@/components/ui/document-breadcrumb'
 import { DocumentIcon } from '@/components/ui/document-icon'
-import { SharedFolderIcon } from '@/components/ui/folder-shared-icon'
+import { DeliverableIcon } from '@/components/ui/deliverable-icon'
 import { DocumentActionMenu } from '@/components/ui/document-action-menu'
 import { Switch } from '@/components/ui/switch'
 import { Button } from '@/components/ui/button'
@@ -823,7 +823,7 @@ function SharesListView({
               <div className="flex items-center gap-2.5 min-w-0">
                 <div className="flex-shrink-0 w-4 h-4 flex items-center justify-center">
                   {isFolder ? (
-                    <SharedFolderIcon fillLevel={1} size={16} />
+                    <DeliverableIcon />
                   ) : (
                     <DocumentIcon mimeType={share.documentMimeType ?? undefined} className="h-4 w-4" />
                   )}
@@ -1231,7 +1231,7 @@ function ShareCard({
         ) : isFolder ? (
           <div className="w-full h-full bg-primary/10 flex items-center justify-center relative group-hover:bg-primary/20 transition-colors duration-500">
             <div className="transform group-hover:scale-110 transition-transform duration-700 ease-out">
-              <SharedFolderIcon fillLevel={1} tooltip="shared" size={96} className="opacity-40" />
+              <DeliverableIcon className="h-24 w-24 opacity-40" />
             </div>
             <div className="absolute inset-0 bg-gradient-to-tr from-primary/8 to-transparent" />
           </div>
@@ -1649,15 +1649,15 @@ export function EngagementSharesTab({
       )
       if (!res.ok) {
         logger.error('Untag as deliverable failed', new Error(`${res.status}`), 'ProjectShares', { documentId: doc.id })
-        addToast({ type: 'error', title: 'Untag failed', message: 'Could not remove the deliverable tag. Please try again.' })
+        addToast({ type: 'error', title: 'Demote failed', message: 'Could not demote the deliverable to a folder. Please try again.' })
         return
       }
       setShares((prev) => prev.filter((s) => s.documentId !== doc.id))
       if (openDeliverableId === doc.id) setOpenDeliverableId(null)
-      addToast({ type: 'success', title: 'Deliverable removed', message: 'The document has been untagged as a deliverable.' })
+      addToast({ type: 'success', title: 'Demoted to folder', message: 'It is a plain folder again and off the Board.' })
     } catch (e) {
       logger.error('Untag as deliverable error', e instanceof Error ? e : new Error(String(e)), 'ProjectShares', { documentId: doc.id })
-      addToast({ type: 'error', title: 'Untag failed', message: 'Could not remove the deliverable tag. Please try again.' })
+      addToast({ type: 'error', title: 'Demote failed', message: 'Could not demote the deliverable to a folder. Please try again.' })
     }
   }, [projectId, addToast, openDeliverableId])
 
@@ -1770,7 +1770,7 @@ export function EngagementSharesTab({
       window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#doc-file:${share.documentId}${hashSuffix}`)
       rightPane.setTitle(share.docId ?? share.documentName)
       rightPane.setHeaderSubtitle(displayFolderName(share.documentName))
-      rightPane.setHeaderIcon(<PackagePlus className="h-4 w-4" />)
+      rightPane.setHeaderIcon(<DeliverableIcon />)
       rightPane.setIconTooltip('Deliverable')
       rightPane.setPaneSize('medium')
       rightPane.setContent(

@@ -10,7 +10,7 @@ import { CalendarSidebar } from './calendar-sidebar'
 import { CalendarEventDetailModal } from './calendar-event-detail-modal'
 import { getFirmCalendarData, type CalendarData, type CalendarEvent, type CalendarEventType } from '@/lib/actions/calendar'
 import { getEngagementTagColor } from '@/lib/calendar/engagement-color'
-import { Briefcase, ChevronLeft, ChevronRight, FileText, Layers, RefreshCw } from 'lucide-react'
+import { Briefcase, ChevronLeft, ChevronRight, FileText, RefreshCw, FolderPlus } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Button } from '@/components/ui/button'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
@@ -23,7 +23,7 @@ const EVENT_TYPE_ICON: Record<CalendarEventType, typeof Briefcase> = {
   kickoff: Briefcase,
   due: Briefcase,
   followUp: Briefcase,
-  deliverable: Layers,
+  deliverable: FolderPlus,
   document: FileText,
 }
 

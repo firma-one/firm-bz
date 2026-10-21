@@ -11,7 +11,7 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { Mail, AlertCircle, ExternalLink } from 'lucide-react'
 import { useState } from 'react'
 import { DocumentIcon } from '@/components/ui/document-icon'
-import { SharedFolderIcon } from '@/components/ui/folder-shared-icon'
+import { DeliverableIcon } from '@/components/ui/deliverable-icon'
 import type { SecureOpenModalMode } from '@/lib/use-secure-open-document'
 
 interface SecureAccessModalProps {
@@ -127,7 +127,7 @@ export function SecureAccessModal({
                                     </div>
                                 ) : isFolder ? (
                                     <div className="flex h-8 w-8 shrink-0 items-center justify-center">
-                                        <SharedFolderIcon fillLevel={1} tooltip="shared" className="h-7 w-7" />
+                                        <DeliverableIcon hint className="h-7 w-7" />
                                     </div>
                                 ) : (
                                     <div className="flex h-8 w-8 shrink-0 items-center justify-center">

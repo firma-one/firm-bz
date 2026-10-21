@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { formatDistanceToNowStrict, format } from "date-fns"
-import { AlarmClock, ArrowLeft, Bell, Briefcase, Building2, CheckCheck, CheckCircle2, EyeOff, ExternalLink, FileText, HardDrive, Inbox as InboxIcon, Layers, Loader2, Mail, MessagesSquare, Users } from "lucide-react"
+import { AlarmClock, ArrowLeft, Bell, Briefcase, Building2, CheckCheck, CheckCircle2, EyeOff, ExternalLink, FileText, HardDrive, Inbox as InboxIcon, Loader2, Mail, MessagesSquare, Users } from "lucide-react"
+import { DeliverableGlyph } from '@/components/ui/deliverable-icon'
 import { getAllUserReminders, hideReminder, markReminderDone, type ReminderWithContext } from "@/lib/actions/user-reminders"
 import { Button } from "@/components/ui/button"
 import { EmptyPanel } from "@/components/ui/empty-panel"
@@ -28,7 +29,7 @@ function isTypingTarget(target: EventTarget | null): boolean {
 
 /**
  * What an item is about, in the icons the app already uses for it: Building2 a firm, Users a client
- * (and the Members tab), Briefcase an engagement, Layers a deliverable and FileText a document (as in
+ * (and the Members tab), Briefcase an engagement, folder-plus a deliverable and FileText a document (as in
  * the calendar), MessagesSquare a comment, Mail an invitation, HardDrive storage. Anything else is a
  * generic alarm clock for a reminder or a bell for a notification.
  */
@@ -36,7 +37,7 @@ const ENTITY_ICON: Record<InboxEntity, React.ElementType> = {
     firm: Building2,
     client: Users,
     engagement: Briefcase,
-    deliverable: Layers,
+    deliverable: DeliverableGlyph,
     document: FileText,
     comment: MessagesSquare,
     invitation: Mail,

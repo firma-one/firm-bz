@@ -27,9 +27,6 @@ import {
     MessagesSquare,
     MoreVertical,
     Move,
-    Package,
-    PackageCheck,
-    PackagePlus,
     RefreshCw,
     ScanEye,
     Search,
@@ -37,7 +34,8 @@ import {
     Type,
     User,
     UserRound,
-    XCircle,
+    FolderPlus,
+    FolderMinus,
 } from 'lucide-react'
 import { DocumentIcon } from '@/components/ui/document-icon'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -50,6 +48,7 @@ import { useToast } from '@/components/ui/toast'
 import { getAllowedTransitions } from '@/lib/deliverable-stage-roles'
 import { statusOf } from '@/lib/ui/status'
 import { DuePickerPanel } from '@/components/ui/due-picker'
+import { DeliverableIcon } from '@/components/ui/deliverable-icon'
 import { formatDue, isPastDue, readDue } from '@/lib/ui/due-date'
 import {
     DropdownMenu,
@@ -143,10 +142,10 @@ const TYPE_LABEL: Record<string, string> = {
 }
 
 /** A menu row that does nothing in the demo; the menu stays open so the whole menu can be read. */
-function DemoMenuItem({ icon, children, danger = false }: { icon: React.ReactNode; children: React.ReactNode; danger?: boolean }) {
+function DemoMenuItem({ icon, children, danger = false, accent = false }: { icon: React.ReactNode; children: React.ReactNode; danger?: boolean; accent?: boolean }) {
     return (
-        <DropdownMenuItem onSelect={(e) => e.preventDefault()} className={cn('flex cursor-pointer items-center gap-2', danger && 'text-danger focus:text-danger')}>
-            <span className={cn('flex shrink-0', danger ? 'text-danger' : 'text-fg-muted')}>{icon}</span>
+        <DropdownMenuItem onSelect={(e) => e.preventDefault()} className={cn('flex cursor-pointer items-center gap-2', danger && 'text-danger focus:text-danger', accent && 'text-primary focus:text-primary')}>
+            <span className={cn('flex shrink-0', danger ? 'text-danger' : accent ? 'text-primary' : 'text-fg-muted')}>{icon}</span>
             {children}
         </DropdownMenuItem>
     )
@@ -204,7 +203,7 @@ function RowActionMenu({ entry, name, docId, deliverableStatus, dueDate, onSetDu
                     <div className="flex items-start gap-2.5">
                         <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-control bg-surface-muted">
                             {isFolder
-                                ? <Folder className="h-4 w-4 fill-surface-muted text-fg-muted" />
+                                ? deliverableStatus ? <DeliverableIcon /> : <Folder className="h-4 w-4 fill-surface-muted text-fg-muted" />
                                 : <DocumentIcon mimeType={MIME_BY_TYPE[entry.file.type] ?? 'application/octet-stream'} className="h-4 w-4" />}
                         </div>
                         <div className="min-w-0 flex-1">
@@ -230,8 +229,8 @@ function RowActionMenu({ entry, name, docId, deliverableStatus, dueDate, onSetDu
                         <>
                             <DemoMenuItem icon={<Link2 />}>Copy link</DemoMenuItem>
                             {deliverableStatus
-                                ? <DemoMenuItem icon={<XCircle />}>Untag as deliverable</DemoMenuItem>
-                                : <DemoMenuItem icon={<Package />}>Promote as deliverable</DemoMenuItem>}
+                                ? <DemoMenuItem icon={<FolderMinus />} danger>Demote Deliverable to Folder</DemoMenuItem>
+                                : <DemoMenuItem icon={<FolderPlus />} accent>Promote Folder to Deliverable</DemoMenuItem>}
                             <DemoSubmenu icon={<FolderOpen />} label="Organize">
                                 <DemoMenuItem icon={<Edit3 />}>Rename</DemoMenuItem>
                                 <DemoMenuItem icon={<Move />}>Move</DemoMenuItem>
@@ -367,7 +366,7 @@ function EntryRow({
             <div className={`flex min-w-0 items-center gap-3 ${FILE_TABLE_COL_LINE_CLASS}`}>
                 <span className="flex h-4 w-4 flex-shrink-0 items-center justify-center">
                     {isFolder ? (
-                        <Folder className="h-4 w-4 fill-surface-muted text-fg-muted" />
+                        deliverableStatus ? <DeliverableIcon hint /> : <Folder className="h-4 w-4 fill-surface-muted text-fg-muted" />
                     ) : (
                         <DocumentIcon mimeType={MIME_BY_TYPE[entry.file.type] ?? 'application/octet-stream'} className="h-4 w-4" />
                     )}
@@ -377,7 +376,7 @@ function EntryRow({
                 {deliverableStatus && (
                     <Hint label={approved ? 'Deliverable — approved' : 'Deliverable'}>
                         <span className={cn('inline-flex shrink-0 items-center @[49rem]/file-table:hidden', approved ? 'text-action' : 'text-fg-subtle')}>
-                            {approved ? <PackageCheck className="h-3.5 w-3.5" /> : <PackagePlus className="h-3.5 w-3.5" />}
+                            <FolderPlus className="h-3.5 w-3.5" />
                         </span>
                     </Hint>
                 )}
@@ -584,7 +583,7 @@ export function DemoFileList({
                     <div className="flex min-h-8 items-center justify-between gap-3">
                         <div className="flex flex-wrap items-center gap-1.5">
                             <FilterPill
-                                icon={<PackageCheck />}
+                                icon={<FolderPlus />}
                                 label="Deliverables"
                                 pressed={deliverablesOnly}
                                 onClick={() => {

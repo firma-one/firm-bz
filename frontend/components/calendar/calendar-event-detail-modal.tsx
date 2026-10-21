@@ -4,8 +4,9 @@ import { useEffect, useState } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import {
-  Building2, Briefcase, Layers, FileText, ArrowUpRight, CalendarDays, User, AlarmClock,
+  Building2, Briefcase, FileText, ArrowUpRight, CalendarDays, User, AlarmClock,
 } from 'lucide-react'
+import { DeliverableIcon } from '@/components/ui/deliverable-icon'
 import { UserAvatarWithTooltip } from '@/components/ui/user-avatar-with-tooltip'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatFullDate, cn } from '@/lib/utils'
@@ -281,7 +282,7 @@ export function CalendarEventDetailModal({ event, onClose }: CalendarEventDetail
                   )}
                 >
                   <div className="flex items-center gap-2">
-                    <Layers className="h-4 w-4 text-fg-muted shrink-0" />
+                    <DeliverableIcon />
                     <span className="text-caption text-fg-subtle">Deliverable</span>
                   </div>
                   {isLoadingSiblings && !deliverableName ? (

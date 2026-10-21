@@ -33,7 +33,6 @@ import {
     Trash2,
     Heart,
     Timer,
-    Package,
     ClipboardCheck,
     Gauge,
     Target,
@@ -54,6 +53,7 @@ import {
     Copy,
     Inbox,
     LocateFixed,
+    FolderPlus,
 } from 'lucide-react'
 import { getFileTypeLabel, formatRelativeTime, formatDateTimeWithTZ, formatFileSize } from '@/lib/utils'
 import { engagementPath, firmSettingsPath } from '@/lib/navigation/firm-paths'
@@ -2192,7 +2192,7 @@ function EngagementHealthBody({ health, deliverables, planningHygiene, commentTh
                 {show('engagement.delivery_status') && (
                 <div id="ring-status" className="flex flex-col items-center gap-3 scroll-mt-24">
                     <p className="text-sm font-semibold text-fg-muted flex items-center gap-1.5">
-                        <Package className="h-4 w-4 text-fg-subtle" /> Delivery Status
+                        <FolderPlus className="h-4 w-4 text-fg-subtle" /> Delivery Status
                         <InfoTip ariaLabel="About Delivery Status" text="Distribution of deliverables across workflow stages (To Do → In Progress → In Review → Approved). Center shows % of deliverables that have reached Approved." />
                     </p>
                     <RingWithLegend

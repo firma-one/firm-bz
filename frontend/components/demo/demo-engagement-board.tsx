@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { CalendarDays, PackageCheck, PackagePlus } from 'lucide-react'
+import { CalendarDays } from 'lucide-react'
+import { DeliverableIcon } from '@/components/ui/deliverable-icon'
 import { cn } from '@/lib/utils'
 import { StatusIcon } from '@/components/ui/status-icon'
 import { StatusPill } from '@/components/ui/status-pill'
@@ -86,7 +87,7 @@ export function DemoEngagementBoard({ engagement }: { engagement: DemoEngagement
         openIdRef.current = card.folder.id
         rightPane.setTitle(card.folder.docId)
         rightPane.setHeaderSubtitle(prettyName(card.folder.name))
-        rightPane.setHeaderIcon(card.status === 'approved' ? <PackageCheck className="h-4 w-4" /> : <PackagePlus className="h-4 w-4" />)
+        rightPane.setHeaderIcon(<DeliverableIcon />)
         rightPane.setIconTooltip('Deliverable')
         rightPane.setHeaderActions(null)
         rightPane.setPaneSize('medium')

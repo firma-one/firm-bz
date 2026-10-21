@@ -1,7 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { CalendarClock, Info, MessagesSquare, PackageCheck, PackagePlus, Settings as SettingsIcon, XSquare } from 'lucide-react'
+import { CalendarClock, Info, MessagesSquare, Settings as SettingsIcon, XSquare } from 'lucide-react'
+import { DeliverableIcon } from '@/components/ui/deliverable-icon'
 import { DocumentIcon } from '@/components/ui/document-icon'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
@@ -64,9 +65,7 @@ export function DemoDeliverablePane({ deliverable, onClose, embedded = false }: 
             {!embedded && (<header className="flex items-center justify-between gap-2 px-4 h-[52px] border-b border-[#e5e7eb] bg-white shrink-0">
                 <div className="flex items-center gap-2.5 min-w-0 flex-1">
                     <div className="h-8 w-8 rounded-sm bg-primary/10 flex items-center justify-center text-primary shrink-0">
-                        {deliverable.status === 'approved'
-                            ? <PackageCheck className="h-4 w-4" />
-                            : <PackagePlus className="h-4 w-4" />}
+                        <DeliverableIcon />
                     </div>
                     <div className="min-w-0 flex-1">
                         <h2 className="font-headline text-sm font-bold text-[#1b1b1d] truncate">{deliverable.folder.docId}</h2>

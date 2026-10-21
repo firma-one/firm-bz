@@ -30,12 +30,12 @@ describe('DocumentActionMenu — items that open a dialog', () => {
     await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
   })
 
-  it('Promote as deliverable closes the menu and shows its dialog', async () => {
+  it('Promote Folder to Deliverable closes the menu and shows its dialog', async () => {
     render(<DocumentActionMenu document={{ ...FILE, mimeType: 'application/vnd.google-apps.folder' }} canManage showShareModal projectId="e1" onMarkAsDeliverable={vi.fn()} />)
     await openMenu()
-    fireEvent.click(screen.getByRole('menuitem', { name: /Promote as deliverable/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /Promote Folder to Deliverable/ }))
     await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
-    expect(screen.getByRole('dialog').textContent).toContain('Promote as deliverable')
+    expect(screen.getByRole('dialog').textContent).toContain('Promote Folder to Deliverable')
     // Closing the dialog leaves the page clickable: no layer is left blocking pointer events.
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())

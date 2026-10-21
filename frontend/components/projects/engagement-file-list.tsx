@@ -12,7 +12,7 @@ import { LoadingAnnouncement, ShimmerBar, ShimmerBlock } from "@/components/ui/s
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { FilterMenuLabel, FilterMenuRow, FilterPill, summarizePicks } from "@/components/ui/filter-pill"
 import { CoffeeIcon, type CoffeeIconHandle } from "@/components/ui/coffee-icon"
-import { SquarePlus, Upload, FolderUp, X, Folder, File as FileIcon, ArrowUp, ArrowDown, ChevronRight, Search, List as ListIcon, LayoutGrid, ChevronDown, User, FileText, FileSpreadsheet, Presentation, ListChecks, PenTool, Map as MapIcon, LayoutTemplate, FileCode, AlertCircle, ShieldCheck, Maximize2, Minimize2, CheckCircle2, XCircle, Trash2, Layout, Code, Laptop, RefreshCw, Info, Share2, Layers, Building2, Users, Briefcase, Lock, FolderLock, Inbox, Sparkles, Link2, ExternalLink, MessagesSquare, CircleChevronLeft, Download, MoreVertical, Clock, Copy, FolderInput, Loader2, Pencil, Hash, Type, UserRound, Clock3, Flag, HardDrive, Plus, PackageCheck, CircleDot } from 'lucide-react'
+import { SquarePlus, Upload, FolderUp, X, Folder, File as FileIcon, ArrowUp, ArrowDown, ChevronRight, Search, List as ListIcon, LayoutGrid, ChevronDown, User, FileText, FileSpreadsheet, Presentation, ListChecks, PenTool, Map as MapIcon, LayoutTemplate, FileCode, AlertCircle, ShieldCheck, Maximize2, Minimize2, CheckCircle2, XCircle, Trash2, Layout, Code, Laptop, RefreshCw, Info, Share2, Layers, Building2, Users, Briefcase, Lock, FolderLock, Inbox, Sparkles, Link2, ExternalLink, MessagesSquare, CircleChevronLeft, Download, MoreVertical, Clock, Copy, FolderInput, Loader2, Pencil, Hash, Type, UserRound, Clock3, Flag, HardDrive, Plus, CircleDot, FolderPlus } from 'lucide-react'
 import Fuse from 'fuse.js'
 import { config } from "@/lib/config"
 import { DocumentIcon } from '@/components/ui/document-icon'
@@ -1525,13 +1525,13 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
             })
             if (!res.ok) {
                 const err = await res.json().catch(() => ({}))
-                addToast({ type: 'error', title: 'Failed', message: err.error ?? 'Could not mark as Deliverable.' })
+                addToast({ type: 'error', title: 'Failed', message: err.error ?? 'Could not promote the folder to a deliverable.' })
                 return
             }
-            addToast({ type: 'success', title: 'Marked as Deliverable', message: `"${doc.name}" added to the Board.` })
+            addToast({ type: 'success', title: 'Promoted to deliverable', message: `"${doc.name}" added to the Board.` })
             await refreshShareStateAndFiles()
         } catch {
-            addToast({ type: 'error', title: 'Error', message: 'Could not mark as Deliverable.' })
+            addToast({ type: 'error', title: 'Error', message: 'Could not promote the folder to a deliverable.' })
         }
     }, [sessionRef, projectId, refreshShareStateAndFiles, addToast])
 
@@ -1547,13 +1547,13 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
             })
             if (!res.ok) {
                 const err = await res.json().catch(() => ({}))
-                addToast({ type: 'error', title: 'Failed', message: err.error ?? 'Could not untag Deliverable.' })
+                addToast({ type: 'error', title: 'Failed', message: err.error ?? 'Could not demote the deliverable to a folder.' })
                 return
             }
-            addToast({ type: 'success', title: 'Untagged', message: `"${doc.name}" removed from the Board.` })
+            addToast({ type: 'success', title: 'Demoted to folder', message: `"${doc.name}" removed from the Board.` })
             await refreshShareStateAndFiles()
         } catch {
-            addToast({ type: 'error', title: 'Error', message: 'Could not untag Deliverable.' })
+            addToast({ type: 'error', title: 'Error', message: 'Could not demote the deliverable to a folder.' })
         }
     }, [sessionRef, projectId, refreshShareStateAndFiles, addToast])
 
@@ -2554,7 +2554,7 @@ const handleRefresh = async () => {
                         {!restrictToSharedOnly && (
                             <FilterPill
                                 disabled={loading}
-                                icon={<PackageCheck />}
+                                icon={<FolderPlus />}
                                 label="Deliverables"
                                 pressed={deliverablesOnly}
                                 onClick={() => setDeliverablesOnly((v) => !v)}
