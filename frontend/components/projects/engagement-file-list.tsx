@@ -2200,11 +2200,11 @@ const handleRefresh = async () => {
             onDrop={handleDrop}
         >
             {/* Top Bar: Breadcrumbs & Actions — renders on background, outside the content card */}
-            {/* One row: where you are and how many on the left, filters and quiet icons on the right.
-                While files are selected, the selection bar takes the row. Wraps when the pane is narrow. */}
-            <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 pt-1 pb-2 z-20">
+            {/* Two rows: where you are and how many, then the filters with the quiet icons at the end.
+                While files are selected, the selection bar takes the second row. */}
+            <div className="flex shrink-0 flex-col gap-2 pt-1 pb-2 z-20">
                 {/* Breadcrumbs: root always visible (as dropdown when canManage); truncate middle */}
-                <div className={cn("flex min-w-0 flex-1 basis-60 items-center gap-2 text-xs font-medium text-fg-muted", selectedFileIds.size > 0 && "hidden")}>
+                <div className="flex min-w-0 items-center gap-2 text-xs font-medium text-fg-muted">
                     <div className="subtle-scrollbar flex min-w-0 items-center overflow-x-auto whitespace-nowrap">
                         {(() => {
                             const ROOT_INDEX = 0
@@ -2335,9 +2335,9 @@ const handleRefresh = async () => {
                     )}
                 </div>
 
-                {/* Selection bar: while files are selected, their bulk actions take this row */}
+                {/* Selection bar: while files are selected, their bulk actions take the filters' row */}
                 {selectedFileIds.size > 0 && (
-                    <div role="toolbar" aria-label={`${selectedFileIds.size} selected`} className="flex h-8 min-w-0 flex-1 items-center gap-0.5">
+                    <div role="toolbar" aria-label={`${selectedFileIds.size} selected`} className="flex h-8 min-w-0 items-center gap-0.5">
                         <span className="mr-1.5 whitespace-nowrap text-small font-medium tabular-nums text-fg">{selectedFileIds.size} selected</span>
                         <span aria-hidden className="mr-1 h-4 w-px bg-line-strong" />
                         {!restrictToSharedOnly && (
@@ -2541,8 +2541,8 @@ const handleRefresh = async () => {
                     navSlot
                 )}
 
-                {/* Toolbar: filters, then the quiet icons */}
-                <div className={cn("ml-auto flex shrink-0 items-center gap-3", selectedFileIds.size > 0 && "hidden")}>
+                {/* Toolbar: filters on the left, the quiet icons on the right */}
+                <div className={cn("flex min-h-8 items-center justify-between gap-3", selectedFileIds.size > 0 && "hidden")}>
                     {/* Left: Filters — Notion's filter-bar pills and menus, the same parts as Doc
                         Search (components/ui/filter-pill.tsx). Empty: a quiet outlined pill. Set:
                         filled in the accent and reading "Type: Folders, Documents", with an x.
@@ -2684,8 +2684,7 @@ const handleRefresh = async () => {
                     </div>
 
                     {/* Right: Search & Refresh as quiet 28px icons. Bulk download and trash live in the selection bar. */}
-                    <div className="flex items-center gap-0.5">
-                        <span aria-hidden className="mr-1.5 h-4 w-px bg-line-strong" />
+                    <div className="flex shrink-0 items-center gap-0.5">
                         <Hint label="Search engagement files" side="bottom">
                             <button type="button" onClick={openSearchPanel} aria-label="Search engagement files" className={TOOLBAR_ICON_CLASS}>
                                 <Search className="h-3.5 w-3.5" />

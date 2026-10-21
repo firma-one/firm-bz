@@ -361,10 +361,10 @@ its columns.
 
 From the canvas's section 7 (the full "views" redesign was judged too extreme; these parts were kept):
 
-- **One toolbar row.** Breadcrumb and item count on the left ("5", or "4 of 6" while filtered), filter pills
-  and two quiet 28px icons (Search, Refresh) on the right; it wraps on a narrow pane. The separate count row
-  is gone.
-- **Selection bar.** While files are selected, the same row reads "N selected · Download · Move to trash ·
+- **Two toolbar rows.** First the breadcrumb and item count ("5", or "4 of 6" while filtered); then the
+  filter pills on the left and two quiet 28px icons (Search, Refresh) on the right. (Built first as one row;
+  Deepak split it 2026-10-22 — the breadcrumb needs the room.) The separate count row is gone.
+- **Selection bar.** While files are selected, the second row reads "N selected · Download · Move to trash ·
   Clear (Esc)". Bulk Download and Trash no longer sit in the toolbar, disabled, the rest of the time.
 - **Row tools on hover.** Preview, Copy link and ⋯ show on hover or focus, while the row is selected or its
   menu is open, and always on touch screens.

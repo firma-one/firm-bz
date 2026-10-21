@@ -387,7 +387,7 @@ function EntryRow({
 }
 
 /**
- * Static counterpart to engagement-file-list.tsx + engagement-file-row.tsx: the same one-row toolbar
+ * Static counterpart to engagement-file-list.tsx + engagement-file-row.tsx: the same two-row toolbar
  * (breadcrumb and count, filter pills, quiet icons), selection bar and table (shared grid, collapsing
  * columns, Status and Due). Folder navigation, selection and the Deliverables toggle work; the other
  * filters and every action are inert. Top-level deliverable folders carry the Board's status and due date.
@@ -447,10 +447,44 @@ export function DemoFileList({
 
     return (
         <div className="flex min-h-0 flex-1 flex-col">
-            {/* One row: where you are and how many, then filters and quiet icons; the selection bar takes it while selecting */}
-            <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 pb-2">
+            {/* Two rows: where you are and how many, then the filters with the quiet icons at the end; the selection bar takes the second row while selecting */}
+            <div className="flex shrink-0 flex-col gap-2 pb-2">
+                <div className="flex min-w-0 items-center gap-2 text-xs font-medium text-fg-muted">
+                    <div className="flex min-w-0 items-center">
+                        <button
+                            type="button"
+                            onClick={() => openFolder([])}
+                            className={cn('flex items-center rounded-control px-1.5 py-1 transition-colors hover:bg-surface-hover', path.length === 0 ? 'text-fg' : 'text-fg-muted')}
+                            aria-label="Files root"
+                        >
+                            <Briefcase className="h-3.5 w-3.5 text-fg-subtle" />
+                        </button>
+                        {path.map((folder, i) => (
+                            <div key={folder.id} className="flex min-w-0 items-center">
+                                <ChevronRight className="mx-0.5 h-3.5 w-3.5 shrink-0 text-fg-subtle" />
+                                <button
+                                    type="button"
+                                    onClick={() => openFolder(path.slice(0, i + 1))}
+                                    className={cn(
+                                        'flex min-w-0 max-w-[200px] items-center gap-1.5 rounded-control px-1.5 py-1 transition-colors hover:bg-surface-hover',
+                                        i === path.length - 1 ? 'text-fg' : 'text-fg-muted',
+                                    )}
+                                >
+                                    <Folder className="h-3.5 w-3.5 shrink-0 text-fg-subtle" />
+                                    <span className="truncate">{folder.name.replace(/_+/g, ' ').trim()}</span>
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                    {totalCount > 0 && (
+                        <span className="shrink-0 text-caption font-normal tabular-nums text-fg-subtle" aria-label={`${itemCount} of ${totalCount} items`}>
+                            {itemCount === totalCount ? totalCount : `${itemCount} of ${totalCount}`}
+                        </span>
+                    )}
+                </div>
+
                 {selected.size > 0 ? (
-                    <div role="toolbar" aria-label={`${selected.size} selected`} className="flex h-8 min-w-0 flex-1 items-center gap-0.5">
+                    <div role="toolbar" aria-label={`${selected.size} selected`} className="flex h-8 min-w-0 items-center gap-0.5">
                         <span className="mr-1.5 whitespace-nowrap text-small font-medium tabular-nums text-fg">{selected.size} selected</span>
                         <span aria-hidden className="mr-1 h-4 w-px bg-line-strong" />
                         <Hint label={NOT_IN_DEMO}>
@@ -472,72 +506,35 @@ export function DemoFileList({
                         </button>
                     </div>
                 ) : (
-                    <>
-                        <div className="flex min-w-0 flex-1 basis-60 items-center gap-2 text-xs font-medium text-fg-muted">
-                            <div className="flex min-w-0 items-center">
-                                <button
-                                    type="button"
-                                    onClick={() => openFolder([])}
-                                    className={cn('flex items-center rounded-control px-1.5 py-1 transition-colors hover:bg-surface-hover', path.length === 0 ? 'text-fg' : 'text-fg-muted')}
-                                    aria-label="Files root"
-                                >
-                                    <Briefcase className="h-3.5 w-3.5 text-fg-subtle" />
-                                </button>
-                                {path.map((folder, i) => (
-                                    <div key={folder.id} className="flex min-w-0 items-center">
-                                        <ChevronRight className="mx-0.5 h-3.5 w-3.5 shrink-0 text-fg-subtle" />
-                                        <button
-                                            type="button"
-                                            onClick={() => openFolder(path.slice(0, i + 1))}
-                                            className={cn(
-                                                'flex min-w-0 max-w-[200px] items-center gap-1.5 rounded-control px-1.5 py-1 transition-colors hover:bg-surface-hover',
-                                                i === path.length - 1 ? 'text-fg' : 'text-fg-muted',
-                                            )}
-                                        >
-                                            <Folder className="h-3.5 w-3.5 shrink-0 text-fg-subtle" />
-                                            <span className="truncate">{folder.name.replace(/_+/g, ' ').trim()}</span>
-                                        </button>
-                                    </div>
-                                ))}
-                            </div>
-                            {totalCount > 0 && (
-                                <span className="shrink-0 text-caption font-normal tabular-nums text-fg-subtle" aria-label={`${itemCount} of ${totalCount} items`}>
-                                    {itemCount === totalCount ? totalCount : `${itemCount} of ${totalCount}`}
-                                </span>
-                            )}
+                    <div className="flex min-h-8 items-center justify-between gap-3">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                            <FilterPill
+                                icon={<PackageCheck />}
+                                label="Deliverables"
+                                pressed={deliverablesOnly}
+                                onClick={() => {
+                                    setSelected(new Set())
+                                    setDeliverablesOnly((v) => !v)
+                                }}
+                            />
+                            <Hint label="Filters aren't available in this demo" side="bottom">
+                                <div className="flex items-center gap-1.5">
+                                    <FilterPill icon={<FileText />} label="Type" />
+                                    <FilterPill icon={<User />} label="People" />
+                                    <FilterPill icon={<Clock3 />} label="Modified" />
+                                    <FilterPill icon={<ArrowDownUp />} label="Sort" />
+                                </div>
+                            </Hint>
                         </div>
-
-                        <div className="ml-auto flex shrink-0 items-center gap-3">
-                            <div className="flex items-center gap-1.5">
-                                <FilterPill
-                                    icon={<PackageCheck />}
-                                    label="Deliverables"
-                                    pressed={deliverablesOnly}
-                                    onClick={() => {
-                                        setSelected(new Set())
-                                        setDeliverablesOnly((v) => !v)
-                                    }}
-                                />
-                                <Hint label="Filters aren't available in this demo" side="bottom">
-                                    <div className="flex items-center gap-1.5">
-                                        <FilterPill icon={<FileText />} label="Type" />
-                                        <FilterPill icon={<User />} label="People" />
-                                        <FilterPill icon={<Clock3 />} label="Modified" />
-                                        <FilterPill icon={<ArrowDownUp />} label="Sort" />
-                                    </div>
-                                </Hint>
-                            </div>
-                            <div className="flex items-center gap-0.5">
-                                <span aria-hidden className="mr-1.5 h-4 w-px bg-line-strong" />
-                                <Hint label={NOT_IN_DEMO} side="bottom">
-                                    <button type="button" aria-label="Search engagement files" className={TOOLBAR_ICON_CLASS}><Search /></button>
-                                </Hint>
-                                <Hint label={NOT_IN_DEMO} side="bottom">
-                                    <button type="button" aria-label="Refresh list" className={TOOLBAR_ICON_CLASS}><RefreshCw /></button>
-                                </Hint>
-                            </div>
+                        <div className="flex shrink-0 items-center gap-0.5">
+                            <Hint label={NOT_IN_DEMO} side="bottom">
+                                <button type="button" aria-label="Search engagement files" className={TOOLBAR_ICON_CLASS}><Search /></button>
+                            </Hint>
+                            <Hint label={NOT_IN_DEMO} side="bottom">
+                                <button type="button" aria-label="Refresh list" className={TOOLBAR_ICON_CLASS}><RefreshCw /></button>
+                            </Hint>
                         </div>
-                    </>
+                    </div>
                 )}
             </div>
 
