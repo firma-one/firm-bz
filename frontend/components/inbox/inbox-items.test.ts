@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { ReminderWithContext } from '@/lib/actions/user-reminders'
-import { groupReminders, sortNotifications, type ApiNotification } from './inbox-items'
+import { groupReminders, notificationToItem, reminderEntity, sortNotifications, type ApiNotification } from './inbox-items'
 
 function reminder(over: Partial<ReminderWithContext>): ReminderWithContext {
     return {
@@ -44,5 +44,27 @@ describe('sortNotifications', () => {
         expect(notes.map((n) => n.sourceId)).toEqual(['new', 'old'])
         expect(notes[0]).toMatchObject({ unread: true, label: 'External client comment', key: 'n:new' })
         expect(notes[1].unread).toBe(false)
+    })
+})
+
+describe('what an item is about', () => {
+    it('reads a reminder\'s subject from its entity key', () => {
+        expect(reminderEntity('platform.engagements.dueDate', 'Engagement due')).toBe('engagement')
+        expect(reminderEntity('platform.clients.followUpDate', 'Follow-up')).toBe('client')
+        expect(reminderEntity('platform.engagements.shares', 'Deliverable due')).toBe('deliverable')
+        expect(reminderEntity('platform.engagements.shares', 'Review comment')).toBe('comment')
+        expect(reminderEntity('platform.documents.id', 'Review document')).toBe('document')
+        expect(reminderEntity('platform.doc_comments', 'Review comment')).toBe('comment')
+        expect(reminderEntity('platform.firm_invitations.expireAt', 'Invitation expiring')).toBe('invitation')
+        expect(reminderEntity('platform.connectors.tokenExpiresAt', 'Reconnect')).toBe('storage')
+        expect(reminderEntity('platform.something_new.id', 'Follow-up')).toBeNull()
+    })
+
+    it('reads a notification\'s subject from its type, and has none for the rest', () => {
+        const n = (type: string): ApiNotification => ({ id: type, createdAt: '2026-10-21T00:00:00Z', scope: 'user', type, priority: 'normal', title: 't', body: null, ctaUrl: null, readAt: null })
+        expect(notificationToItem(n('EXTERNAL_CLIENT_COMMENT')).entity).toBe('comment')
+        expect(notificationToItem(n('ENGAGEMENT_INVITE_ACCEPTED')).entity).toBe('member')
+        expect(notificationToItem(n('DELIVERABLE_OVERDUE')).entity).toBe('deliverable')
+        expect(notificationToItem(n('BROADCAST')).entity).toBeNull()
     })
 })

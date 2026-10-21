@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { formatDistanceToNowStrict, format } from "date-fns"
-import { AlarmClock, ArrowLeft, Bell, CheckCheck, CheckCircle2, EyeOff, ExternalLink, Inbox as InboxIcon, Loader2 } from "lucide-react"
+import { AlarmClock, ArrowLeft, Bell, Briefcase, Building2, CheckCheck, CheckCircle2, EyeOff, ExternalLink, FileText, HardDrive, Inbox as InboxIcon, Layers, Loader2, Mail, MessagesSquare, Users } from "lucide-react"
 import { getAllUserReminders, hideReminder, markReminderDone, type ReminderWithContext } from "@/lib/actions/user-reminders"
 import { Button } from "@/components/ui/button"
 import { EmptyPanel } from "@/components/ui/empty-panel"
@@ -15,7 +15,7 @@ import { StatusIcon } from "@/components/ui/status-icon"
 import { cn } from "@/lib/utils"
 import { FirmFilter, UnavailableFirmsNote } from "@/components/home/firm-filter"
 import type { UnavailableFirm } from "@/lib/home/home-firms"
-import { groupReminders, sortNotifications, INBOX_CHANGED_EVENT, type ApiNotification, type InboxItem } from "./inbox-items"
+import { groupReminders, sortNotifications, INBOX_CHANGED_EVENT, type ApiNotification, type InboxEntity, type InboxItem } from "./inbox-items"
 
 function notifyChanged() {
     window.dispatchEvent(new Event(INBOX_CHANGED_EVENT))
@@ -24,6 +24,29 @@ function notifyChanged() {
 function isTypingTarget(target: EventTarget | null): boolean {
     const el = target as HTMLElement | null
     return !!el && (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName))
+}
+
+/**
+ * What an item is about, in the icons the app already uses for it: Building2 a firm, Users a client
+ * (and the Members tab), Briefcase an engagement, Layers a deliverable and FileText a document (as in
+ * the calendar), MessagesSquare a comment, Mail an invitation, HardDrive storage. Anything else is a
+ * generic alarm clock for a reminder or a bell for a notification.
+ */
+const ENTITY_ICON: Record<InboxEntity, React.ElementType> = {
+    firm: Building2,
+    client: Users,
+    engagement: Briefcase,
+    deliverable: Layers,
+    document: FileText,
+    comment: MessagesSquare,
+    invitation: Mail,
+    member: Users,
+    storage: HardDrive,
+}
+
+function ItemIcon({ item, className }: { item: InboxItem; className?: string }) {
+    const Icon = item.entity ? ENTITY_ICON[item.entity] : item.source === "reminder" ? AlarmClock : Bell
+    return <Icon className={className} aria-hidden />
 }
 
 function ItemTime({ item }: { item: InboxItem }) {
@@ -309,6 +332,7 @@ export function InboxView({
             <span className="mt-1.5 flex h-2 w-2 shrink-0 items-center justify-center">
                 {item.unread && <span className={cn("h-2 w-2 rounded-full", item.overdue ? "bg-danger" : "bg-action")} aria-label="Needs attention" />}
             </span>
+            <ItemIcon item={item} className="mt-0.5 h-4 w-4 shrink-0 text-fg-muted" />
             <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                 <span className="flex min-w-0 items-baseline justify-between gap-2">
                     <span className={cn("truncate text-ui text-fg", item.unread && "font-semibold")}>{item.title}</span>
@@ -415,7 +439,7 @@ export function InboxView({
                                 </button>
                                 <div className="flex flex-col gap-2">
                                     <span className="flex flex-wrap items-center gap-2 text-small text-fg-muted">
-                                        {selected.source === "reminder" ? <AlarmClock className="h-4 w-4" /> : <Bell className="h-4 w-4" />}
+                                        <ItemIcon item={selected} className="h-4 w-4" />
                                         {labelOf(selected)}
                                         <span aria-hidden>·</span>
                                         <ItemTime item={selected} />
