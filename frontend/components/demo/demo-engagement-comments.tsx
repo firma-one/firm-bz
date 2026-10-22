@@ -1,17 +1,25 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { ArrowRight, AtSign, MessagesSquare, Search } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { AtSign, MessagesSquare, Search } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
-import { RelativeDateTime } from '@/components/ui/relative-date-time'
-import { DemoEngagement } from '@/lib/demo/static-demo-data'
+import { DemoEngagement, DemoFolder } from '@/lib/demo/static-demo-data'
+import { DELIVERABLE_ACTORS, getDemoDeliverables } from '@/lib/demo/demo-deliverables'
+import { MIME_BY_TYPE } from '@/components/demo/demo-file-list'
+import { PEEK, ThreadRow, type DocRow, type TextKit, type ThreadMessage } from '@/components/projects/engagement-comments-tab'
 
-const COMMENT_PREVIEWS = [
-    "This looks great overall. Can we tighten the summary — the main recommendation should come first.",
-    "A few numbers here look outdated. Should these reflect the latest figures?",
-    "Client requested a slimmed-down version for the board deck. Can we prepare that?",
+/** A sample conversation; a thread of n comments is its first n, so each row ends somewhere else. */
+const CONVERSATION: { author: string; text: (other: string) => string }[] = [
+    { author: 'Sam Rivera', text: () => 'First pass is in. The structure follows the brief; the numbers still need a check.' },
+    { author: 'Alex Jordan', text: () => '@Sam Rivera can we lead with the recommendation? The board will only read the first page.' },
+    { author: 'Jordan Lee', text: () => 'Moved the summary up and trimmed the appendix.' },
+    { author: 'Taylor Kim', text: () => 'A few figures look outdated. Should these reflect the latest quarter?' },
+    { author: 'Sam Rivera', text: (other) => `Updated them from #${other}, which has the Q3 actuals.` },
+    { author: 'Alex Jordan', text: () => '@Taylor Kim can you confirm the figures before this goes to review?' },
+    { author: 'Taylor Kim', text: (other) => `Confirmed, they match #${other}. Ready for review from our side.` },
 ]
+const THREAD_LENGTHS = [7, 3, 2, 1]
 
 const toggleClass = (active: boolean) =>
     cn(
@@ -20,27 +28,77 @@ const toggleClass = (active: boolean) =>
     )
 
 /**
- * Static counterpart to engagement-comments-tab.tsx: the same All / Mentions toggles and hairline
- * thread rows, one thread per real file in the engagement, no fetching. Mentions shows its real
- * empty state.
+ * Static counterpart to engagement-comments-tab.tsx: the same All / Mentions toggles and thread rows
+ * (the app's own ThreadRow), on two of the engagement's deliverables and a document in each, over
+ * sample comments with a mention and a document tag. "Show N earlier" opens a row in place, as in the app; no fetching.
+ * Mentions shows its real empty state.
  */
 export function DemoEngagementComments({ engagement }: { engagement: DemoEngagement }) {
     const [activeTab, setActiveTab] = useState<'all' | 'mentions'>('all')
     const [query, setQuery] = useState('')
+    const [expanded, setExpanded] = useState<Set<string>>(new Set())
     // Relative to now, so set after mount to keep server and client markup equal.
     const [now, setNow] = useState<number | null>(null)
     useEffect(() => setNow(Date.now()), [])
 
-    const threadFiles = engagement.folders.flatMap((f) => f.files).slice(0, 4)
-    const rows = threadFiles.map((file, i) => ({
-        file,
-        count: threadFiles.length - i,
-        preview: COMMENT_PREVIEWS[i % COMMENT_PREVIEWS.length],
-        ts: now === null ? null : new Date(now - (i + 1) * 3 * 86400000).toISOString(),
-    }))
+    const files = useMemo(() => engagement.folders.flatMap((f) => f.files), [engagement])
+    /** What the threads are on: two deliverables and a document in each, as on a real engagement. */
+    const subjects = useMemo(() => {
+        const [a, b] = getDemoDeliverables(engagement).map((d) => d.folder)
+        const tagIn = (f: DemoFolder) => (f.files[1] ?? f.files[0])?.docId ?? f.docId
+        const deliverable = (f: DemoFolder) => ({ id: f.id, docId: f.docId, name: f.name, kind: 'deliverable' as const, mimeType: null, tag: tagIn(f) })
+        const document = (f: DemoFolder) => {
+            const file = f.files[0]
+            return file ? { id: file.id, docId: file.docId, name: file.name, kind: 'file' as const, mimeType: MIME_BY_TYPE[file.type] ?? 'application/octet-stream', tag: tagIn(f) } : null
+        }
+        return [a && deliverable(a), b && deliverable(b), a && document(a), b && document(b)].filter((x): x is NonNullable<typeof x> => !!x)
+    }, [engagement])
+
+    const threads = useMemo(() => {
+        if (now === null) return []
+        return subjects.slice(0, THREAD_LENGTHS.length).map((subject, i) => {
+            const n = THREAD_LENGTHS[i]
+            const messages: ThreadMessage[] = CONVERSATION.slice(0, n).map((c, k) => ({
+                id: `${subject.id}-${k}`,
+                createdAt: new Date(now - ((i * 30) + 2 + (n - 1 - k) * 7) * 3_600_000).toISOString(),
+                authorUserId: null,
+                authorEmail: null,
+                authorName: c.author,
+                content: c.text(subject.tag),
+            }))
+            const last = messages[messages.length - 1]
+            const row: DocRow = {
+                projectDocumentId: subject.id,
+                documentName: subject.name,
+                docId: subject.docId,
+                kind: subject.kind,
+                mimeType: subject.mimeType,
+                count: messages.length,
+                latest: { createdAt: last.createdAt, preview: last.content, authorUserId: null, authorName: last.authorName ?? null, authorEmail: null },
+            }
+            return { row, messages: messages.slice(-PEEK) }
+        })
+    }, [subjects, now])
+
+    const text = useMemo<TextKit>(() => {
+        const docs = new Map(files.map((f) => [f.docId, { docId: f.docId, fileName: f.name, mimeType: MIME_BY_TYPE[f.type] ?? 'application/octet-stream' }]))
+        return {
+            names: DELIVERABLE_ACTORS,
+            personFor: (name) => (DELIVERABLE_ACTORS.includes(name) ? { name } : undefined),
+            docFor: (docId) => docs.get(docId),
+        }
+    }, [files])
 
     const q = query.trim().toLowerCase()
-    const filteredRows = q ? rows.filter((r) => r.file.name.toLowerCase().includes(q)) : rows
+    const filtered = q ? threads.filter((t) => t.row.documentName.toLowerCase().includes(q)) : threads
+
+    const toggle = (id: string) =>
+        setExpanded((prev) => {
+            const next = new Set(prev)
+            if (next.has(id)) next.delete(id)
+            else next.add(id)
+            return next
+        })
 
     return (
         <div className="flex flex-col gap-3">
@@ -48,7 +106,7 @@ export function DemoEngagementComments({ engagement }: { engagement: DemoEngagem
                 <button type="button" onClick={() => setActiveTab('all')} className={toggleClass(activeTab === 'all')}>
                     <MessagesSquare className="h-3.5 w-3.5" />
                     All
-                    {rows.length > 0 && <span className="tabular-nums text-fg-subtle">{rows.length}</span>}
+                    {threads.length > 0 && <span className="tabular-nums text-fg-subtle">{threads.length}</span>}
                 </button>
                 <button type="button" onClick={() => setActiveTab('mentions')} className={toggleClass(activeTab === 'mentions')}>
                     <AtSign className="h-3.5 w-3.5" />
@@ -66,41 +124,26 @@ export function DemoEngagementComments({ engagement }: { engagement: DemoEngagem
                     </div>
 
                     <div className="overflow-hidden border-t border-line">
-                        {filteredRows.length === 0 ? (
+                        {now !== null && filtered.length === 0 ? (
                             <div className="py-12 text-center">
                                 <MessagesSquare className="mx-auto mb-2.5 h-7 w-7 text-line" />
                                 <div className="text-sm font-medium text-fg">No comments found</div>
                             </div>
                         ) : (
                             <div className="divide-y divide-line">
-                                {filteredRows.map((r) => (
-                                    <div key={r.file.id} className="group flex items-start gap-3 px-4 py-3 transition-colors hover:bg-surface-hover">
-                                        <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary/10">
-                                            <MessagesSquare className="h-3.5 w-3.5 text-primary" />
-                                        </div>
-                                        <div className="min-w-0 flex-1">
-                                            <div className="flex items-center gap-2">
-                                                <span className="shrink-0 font-mono text-[11px] font-bold tracking-wide text-primary">{r.file.docId}</span>
-                                                <span className="truncate text-sm font-semibold text-fg">{r.file.name}</span>
-                                                <span className="inline-flex shrink-0 items-center rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold leading-none tabular-nums text-primary">
-                                                    {r.count}
-                                                </span>
-                                            </div>
-                                            <div className="mt-0.5 line-clamp-1 text-xs text-fg-muted">
-                                                <span className="mr-1.5 text-[9px] font-bold uppercase tracking-wide text-fg-subtle">Latest</span>
-                                                {r.preview}
-                                            </div>
-                                            {r.ts && (
-                                                <div className="mt-1 flex items-center gap-1 text-[10px] text-fg-subtle">
-                                                    <span>Last comment</span>
-                                                    <RelativeDateTime date={r.ts} />
-                                                </div>
-                                            )}
-                                        </div>
-                                        <div className="shrink-0 text-fg-subtle transition-all group-hover:translate-x-0.5 group-hover:text-primary">
-                                            <ArrowRight className="h-3.5 w-3.5" />
-                                        </div>
-                                    </div>
+                                {filtered.map(({ row, messages }) => (
+                                    <ThreadRow
+                                        key={row.projectDocumentId}
+                                        row={row}
+                                        author={{ name: row.latest!.authorName! }}
+                                        open={expanded.has(row.projectDocumentId)}
+                                        thread={{ status: 'ready', messages }}
+                                        text={text}
+                                        authorOf={(_id, name) => (name ? { name } : null)}
+                                        onToggle={() => toggle(row.projectDocumentId)}
+                                        onRetry={() => {}}
+                                        onOpenThread={() => {}}
+                                    />
                                 ))}
                             </div>
                         )}

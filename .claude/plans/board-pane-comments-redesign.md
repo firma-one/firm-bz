@@ -68,3 +68,26 @@ Deepak: "use # and tag 1 or more documents in this deliverable", alongside @-men
 - **The tour:** the Board pane's Comments tab now works on screen (`demo-deliverable-comments.tsx`),
   with sample comments that mention a teammate and tag the deliverable's documents, and the same
   composer with @ and #. Posting changes only what's on screen.
+
+## The engagement Comments page: peek at a thread (2026-10-22)
+
+Deepak: keep one row per document with its latest comment, but be able to see the thread's latest
+five on the page.
+
+- **The row** shows what the thread is on (folder-plus for a deliverable, the file-type icon for a
+  document) before its ID, the latest comment with @ and # chips, and who wrote it and when.
+- **"Show N earlier"** (N up to 4) opens the row in place to the thread's last five comments, oldest
+  first, the newest marked Latest, each with avatar, name, time and up to three lines. A longer thread
+  says "N older comments · Open thread". Several rows can be open; Hide closes one. Reading an open
+  row doesn't navigate; the row itself and its arrow open the whole thread in the deliverable, where
+  replying stays.
+- **Loaded when first opened** from the thread endpoint with `?limit=5`, not in the list response.
+- **Access:** the list endpoint now follows the thread endpoint's rule: engagement members only, and
+  external personas see only threads on documents shared with them (`visibleDocumentIdsFor`). Both
+  return `taggedDocuments` (the tagged documents the viewer may open) so tags draw as chips.
+- **One renderer** for comment text everywhere: `components/comments/comment-text.tsx` (the
+  deliverable pane, this page and their tour copies).
+- **The tour** draws the app's own `ThreadRow` over sample threads on two deliverables and a
+  document in each.
+- Open: searching by comment text can't match (content is encrypted at rest, and the search filters
+  in the database); the Comments tab count still counts threads on documents an external can't see.

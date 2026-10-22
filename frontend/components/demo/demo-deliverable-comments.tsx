@@ -3,9 +3,10 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { formatDistanceToNowStrict } from 'date-fns'
 import { AtSign, Hash, Send } from 'lucide-react'
-import { DocumentIcon } from '@/components/ui/document-icon'
 import { PersonAvatar } from '@/components/ui/property-cells'
-import { Hint, Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { DocumentIcon } from '@/components/ui/document-icon'
+import { Hint } from '@/components/ui/tooltip'
+import { CommentText } from '@/components/comments/comment-text'
 import { cn } from '@/lib/utils'
 import { caretOffset } from '@/lib/ui/caret-offset'
 import {
@@ -147,31 +148,18 @@ export function DemoDeliverableComments({ documents }: { documents: DemoTaggable
         requestAnimationFrame(() => endRef.current?.scrollIntoView({ block: 'nearest' }))
     }
 
-    const docChip = (docId: string, key: string) => {
-        const doc = docByDocId.get(docId)
-        if (!doc) return <span key={key} className="rounded-[4px] bg-surface-muted px-1 py-px text-fg-muted">#{docId}</span>
-        return (
-            <Tooltip key={key}>
-                <TooltipTrigger asChild>
-                    <span className="inline-flex items-center gap-1 rounded-[4px] bg-surface-muted px-1 py-px align-bottom font-medium tabular-nums text-fg">
-                        <DocumentIcon mimeType={doc.mimeType} className="h-3.5 w-3.5 shrink-0" />
-                        {doc.docId}
-                    </span>
-                </TooltipTrigger>
-                <TooltipContent side="top" className="text-xs">{doc.name}</TooltipContent>
-            </Tooltip>
-        )
-    }
-
     /** A comment's text: mentions as pills, document tags as chips with the document's ID (its name on hover). */
-    const render = (content: string) =>
-        splitMentions(content, NAMES).map((t, i) =>
-            t.type === 'mention' ? (
-                <span key={i} className="rounded-[4px] bg-action/10 px-1 py-px font-medium text-action">{t.value}</span>
-            ) : (
-                <span key={i}>{splitDocTags(t.value).map((d, j) => (d.type === 'doc' ? docChip(d.docId, `${i}-${j}`) : <span key={j}>{d.value}</span>))}</span>
-            )
-        )
+    const render = (content: string) => (
+        <CommentText
+            content={content}
+            names={NAMES}
+            personFor={(name) => (NAMES.includes(name) ? { name } : undefined)}
+            docFor={(docId) => {
+                const d = docByDocId.get(docId)
+                return d && { docId: d.docId, fileName: d.name, mimeType: d.mimeType }
+            }}
+        />
+    )
 
     // Chips behind the text: mentions picked from the menu, and tags of this deliverable's documents.
     const currentMentions = picked.filter((n) => mentionedNames(text, [n]).length > 0)

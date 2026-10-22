@@ -24,7 +24,8 @@ import { DateTimePicker } from '@/components/ui/date-time-picker'
 import { SetupReminderModal } from '@/components/ui/setup-reminder-modal'
 import { FilterMenuLabel, FilterMenuRow, FilterPill, summarizePicks } from '@/components/ui/filter-pill'
 import { PersonAvatar } from '@/components/ui/property-cells'
-import { ENGAGEMENT_ROLE_LABEL, findMentionQuery, findTagQuery, insertMention, insertTag, mentionedNames, splitDocTags, splitMentions } from '@/lib/comments/mentions'
+import { ENGAGEMENT_ROLE_LABEL, findMentionQuery, findTagQuery, formatDisplayName, insertMention, insertTag, mentionedNames, splitDocTags, splitMentions } from '@/lib/comments/mentions'
+import { CommentText } from '@/components/comments/comment-text'
 import { DocumentIcon } from '@/components/ui/document-icon'
 import { caretOffset } from '@/lib/ui/caret-offset'
 
@@ -96,18 +97,6 @@ const DATE_PRESETS: { value: DatePreset; label: string; days: number | null }[] 
   { value: '7d', label: 'Last 7 days', days: 7 },
   { value: '30d', label: 'Last 30 days', days: 30 },
 ]
-
-/** Format a raw auth name (may be username-style like "deepaksshettigar") into a readable display name. */
-function formatDisplayName(name: string, email: string): string {
-  if (!name || name === email.split('@')[0]) {
-    const local = email.split('@')[0]
-    return local.replace(/[._\-+]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()).trim()
-  }
-  if (name.includes(' ') || name.includes('.') || name.includes('_')) {
-    return name.split(/[\s._-]+/).map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ').trim()
-  }
-  return name
-}
 
 /** 9:00 AM local, `days` from today — the reminder presets. */
 function nineAm(days: number): string {
@@ -606,63 +595,20 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
     else bottomSentinelRef.current?.scrollIntoView({ behavior: 'auto', block: 'end' })
   }, [loading, sortOrder, visibleMessages.length])
 
-  /**
-   * A document tag in the thread: a chip with the document's ID and icon (its name and where it lives on
-   * hover) that opens it; a tag of a document this viewer can't see, or that is gone, stays plain text.
-   */
-  const renderDocTag = (docId: string, key: string) => {
-    const doc = docByDocId.get(docId)
-    if (!doc) return <span key={key} className="rounded-[4px] bg-surface-muted px-1 py-px text-fg-muted">#{docId}</span>
-    const chip = (
-      <span className="inline-flex items-center gap-1 rounded-[4px] bg-surface-muted px-1 py-px align-bottom font-medium tabular-nums text-fg">
-        <DocumentIcon mimeType={doc.mimeType ?? undefined} className="h-3.5 w-3.5 shrink-0" />
-        {doc.docId}
-      </span>
-    )
-    return (
-      <Tooltip key={key}>
-        <TooltipTrigger asChild>
-          {onOpenDocument ? (
-            <button type="button" onClick={() => onOpenDocument(doc)} className="rounded-[4px] align-bottom hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action/30">{chip}</button>
-          ) : chip}
-        </TooltipTrigger>
-        <TooltipContent side="top" className="z-[9999] max-w-xs border border-line bg-surface p-2 text-xs text-fg shadow-popover">
-          <div className="font-medium">{doc.fileName}</div>
-          {(doc.breadcrumb ?? []).length > 0 && <div className="text-caption text-fg-subtle">{(doc.breadcrumb ?? []).slice(-2).join(' › ')}</div>}
-        </TooltipContent>
-      </Tooltip>
-    )
+  /** A comment's text with its mentions drawn as pills (name and email on hover) and its document tags as ID chips (name on hover) that open the document. */
+  const personForName = (name: string) => {
+    const member = firmMembers.find((m) => displayNameOf(m) === name || m.name === name)
+    return member ? { name: displayNameOf(member), email: member.email, avatarUrl: member.avatarUrl } : undefined
   }
-
-  /** A comment's text with its mentions drawn as pills (name and email on hover) and its document tags as ID chips (name on hover). */
-  const renderContentWithMentions = (content: string) =>
-    splitMentions(content, knownNames).map((t, i) => {
-      if (t.type !== 'mention') {
-        return (
-          <span key={i}>
-            {splitDocTags(t.value).map((d, j) => (d.type === 'doc' ? renderDocTag(d.docId, `${i}-${j}`) : <span key={j}>{d.value}</span>))}
-          </span>
-        )
-      }
-      const name = t.value.replace(/^@/, '')
-      const member = firmMembers.find((m) => displayNameOf(m) === name || m.name === name)
-      const pill = <span className="rounded-[4px] bg-action/10 px-1 py-px font-medium text-action">{t.value}</span>
-      if (!member) return <span key={i}>{pill}</span>
-      return (
-        <Tooltip key={i}>
-          <TooltipTrigger asChild>{pill}</TooltipTrigger>
-          <TooltipContent side="top" className="z-[9999] border border-line bg-surface p-2 text-xs text-fg shadow-popover">
-            <div className="flex items-center gap-2">
-              <PersonAvatar person={{ name: displayNameOf(member), avatarUrl: member.avatarUrl }} size={28} />
-              <div>
-                <div className="font-semibold">{displayNameOf(member)}</div>
-                <div className="text-caption text-fg-subtle">{member.email}</div>
-              </div>
-            </div>
-          </TooltipContent>
-        </Tooltip>
-      )
-    })
+  const renderContentWithMentions = (content: string) => (
+    <CommentText
+      content={content}
+      names={knownNames}
+      personFor={personForName}
+      docFor={(docId) => docByDocId.get(docId)}
+      onOpenDocument={onOpenDocument}
+    />
+  )
 
   // Setting or changing a posted comment's reminder date (from its bell, or "Remind" on hover).
   const [reminderEditPicker, setReminderEditPicker] = useState<{

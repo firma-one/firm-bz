@@ -1,35 +1,45 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useId, useMemo, useState } from 'react'
 import { AtSign, Search, ArrowRight, ArrowUp, MessagesSquare } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { RelativeDateTime } from '@/components/ui/relative-date-time'
+import { PersonAvatar } from '@/components/ui/property-cells'
+import { DeliverableIcon } from '@/components/ui/deliverable-icon'
+import { DocumentIcon } from '@/components/ui/document-icon'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { CommentText, type CommentPerson } from '@/components/comments/comment-text'
+import { formatDisplayName } from '@/lib/comments/mentions'
+import type { TaggedDocument } from '@/lib/comments/tagged-documents'
 
-function renderMentions(content: string) {
-  const tokens: { type: 'mention' | 'text'; value: string }[] = []
-  let remaining = content
-  while (remaining.startsWith('@')) {
-    const match = remaining.match(/^(@[A-Za-z][^\s]*(?:\s+[A-Z][^\s]*)?)(\s+|$)/)
-    if (!match) break
-    tokens.push({ type: 'mention', value: match[1] })
-    remaining = remaining.slice(match[0].length)
-  }
-  if (remaining) tokens.push({ type: 'text', value: remaining })
-  return tokens.map((t, i) =>
-    t.type === 'mention'
-      ? <span key={i} className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold bg-primary/10 text-primary leading-none mr-1 cursor-pointer">{t.value}</span>
-      : <span key={i}>{t.value}</span>
-  )
-}
+/*
+ * The engagement's Comments page: one row per document with comments, showing its latest comment
+ * and who wrote it. "Show N earlier" opens the row in place to the thread's last five comments,
+ * oldest first, loaded when first opened; the whole thread, and replying, stay in the deliverable.
+ */
 
-type DocRow = {
+const FOLDER_MIME = 'application/vnd.google-apps.folder'
+
+/** How many of a thread's latest comments an opened row shows. */
+export const PEEK = 5
+
+export type DocRow = {
   projectDocumentId: string
   documentName: string
   docId: string | null
+  /** What the thread is on: a deliverable shows its folder-plus mark, a file its type icon. */
+  kind?: 'deliverable' | 'folder' | 'file'
+  mimeType?: string | null
   count: number
-  latest: { createdAt: string; preview: string; authorIsExternal?: boolean } | null
+  latest: {
+    createdAt: string
+    preview: string
+    authorUserId: string | null
+    authorName: string | null
+    authorEmail: string | null
+    authorIsExternal?: boolean
+  } | null
 }
 
 type MentionRow = {
@@ -38,6 +48,17 @@ type MentionRow = {
   preview: string
   projectDocumentId: string
   documentName: string
+}
+
+export type ThreadMessage = { id: string; createdAt: string; authorUserId: string | null; authorEmail: string | null; authorName?: string | null; content: string }
+export type Thread = { status: 'loading' | 'error' | 'ready'; messages: ThreadMessage[] }
+type Member = { userId: string; email: string; name: string; avatarUrl: string | null }
+
+/** How a comment's text is drawn: mentions as pills, document tags as chips. */
+export type TextKit = {
+  names: string[]
+  personFor: (name: string) => CommentPerson | undefined
+  docFor: (docId: string) => TaggedDocument | undefined
 }
 
 export function EngagementCommentsTab({
@@ -59,6 +80,15 @@ export function EngagementCommentsTab({
   const [mentionRows, setMentionRows] = useState<MentionRow[]>([])
   const [mentionsError, setMentionsError] = useState<string | null>(null)
 
+  // Opened rows, and the threads loaded for them (kept while the list reloads)
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [threads, setThreads] = useState<Record<string, Thread>>({})
+  /** Documents tagged in what's on screen, by doc ID, for drawing tags as chips. */
+  const [taggedDocs, setTaggedDocs] = useState<Record<string, TaggedDocument>>({})
+  const addTagged = useCallback((docs: Record<string, TaggedDocument> | undefined) => {
+    if (docs && Object.keys(docs).length > 0) setTaggedDocs((prev) => ({ ...prev, ...docs }))
+  }, [])
+
   useEffect(() => {
     let cancelled = false
     const load = async () => {
@@ -72,7 +102,10 @@ export function EngagementCommentsTab({
           throw new Error(data.error ?? 'Failed to load comments')
         }
         const data = await res.json()
-        if (!cancelled) setRows(data.documents ?? [])
+        if (!cancelled) {
+          setRows(data.documents ?? [])
+          addTagged(data.taggedDocuments)
+        }
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load comments')
       } finally {
@@ -81,7 +114,7 @@ export function EngagementCommentsTab({
     }
     load()
     return () => { cancelled = true }
-  }, [projectId, query])
+  }, [projectId, query, addTagged])
 
   useEffect(() => {
     let cancelled = false
@@ -95,7 +128,10 @@ export function EngagementCommentsTab({
           throw new Error(data.error ?? 'Failed to load mentions')
         }
         const data = await res.json()
-        if (!cancelled) setMentionRows(data.mentions ?? [])
+        if (!cancelled) {
+          setMentionRows(data.mentions ?? [])
+          addTagged(data.taggedDocuments)
+        }
       } catch (e) {
         if (!cancelled) setMentionsError(e instanceof Error ? e.message : 'Failed to load mentions')
       } finally {
@@ -104,7 +140,65 @@ export function EngagementCommentsTab({
     }
     load()
     return () => { cancelled = true }
+  }, [projectId, addTagged])
+
+  // Engagement members: the names mentions are written with, and the names and faces of authors.
+  const [members, setMembers] = useState<Member[]>([])
+  useEffect(() => {
+    fetch(`/api/projects/${projectId}/members`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        setMembers((data?.members ?? [])
+          .filter((m: any) => m.userId && m.email)
+          .map((m: any) => ({ userId: m.userId, email: m.email, name: m.name ?? m.email.split('@')[0], avatarUrl: m.avatarUrl ?? null })))
+      })
+      .catch(() => {})
   }, [projectId])
+
+  const memberById = useMemo(() => new Map(members.map((m) => [m.userId, m])), [members])
+  const text = useMemo<TextKit>(() => {
+    const known = members.map((m) => ({ ...m, display: formatDisplayName(m.name, m.email) }))
+    return {
+      names: known.flatMap((m) => [m.display, m.name]).filter(Boolean),
+      personFor: (name) => {
+        const m = known.find((k) => k.display === name || k.name === name)
+        return m ? { name: m.display, email: m.email, avatarUrl: m.avatarUrl } : undefined
+      },
+      docFor: (docId) => taggedDocs[docId],
+    }
+  }, [members, taggedDocs])
+
+  /** Who wrote a comment: their member name and face, else the name or email the server knew them by. */
+  const authorOf = useCallback((userId: string | null, name: string | null, email: string | null): CommentPerson | null => {
+    const m = userId ? memberById.get(userId) : undefined
+    if (m) return { name: formatDisplayName(m.name, m.email), email: m.email, avatarUrl: m.avatarUrl }
+    if (email) return { name: formatDisplayName(name ?? '', email), email, avatarUrl: null }
+    return name ? { name, avatarUrl: null } : null
+  }, [memberById])
+
+  const loadThread = async (projectDocumentId: string) => {
+    setThreads((prev) => ({ ...prev, [projectDocumentId]: { status: 'loading', messages: prev[projectDocumentId]?.messages ?? [] } }))
+    try {
+      const res = await fetch(`/api/projects/${projectId}/documents/${projectDocumentId}/doc-comments?limit=${PEEK}`)
+      if (!res.ok) throw new Error()
+      const data = await res.json()
+      addTagged(data.taggedDocuments)
+      setThreads((prev) => ({ ...prev, [projectDocumentId]: { status: 'ready', messages: data.messages ?? [] } }))
+    } catch {
+      setThreads((prev) => ({ ...prev, [projectDocumentId]: { status: 'error', messages: [] } }))
+    }
+  }
+
+  const toggle = (projectDocumentId: string) => {
+    const opening = !expanded.has(projectDocumentId)
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      if (opening) next.add(projectDocumentId)
+      else next.delete(projectDocumentId)
+      return next
+    })
+    if (opening && threads[projectDocumentId]?.status !== 'ready') loadThread(projectDocumentId)
+  }
 
   const empty = !loading && !error && rows.length === 0
   const mentionsEmpty = !mentionsLoading && !mentionsError && mentionRows.length === 0
@@ -186,53 +280,18 @@ export function EngagementCommentsTab({
             ) : (
               <div className="divide-y divide-line">
                 {rows.map((r) => (
-                  <Tooltip key={r.projectDocumentId}>
-                  <TooltipTrigger asChild>
-                  <div
-                    className="flex items-start gap-3 px-4 py-3 hover:bg-surface-hover transition-colors cursor-pointer group"
-                    onClick={() => goToDeliverable(r.projectDocumentId)}
-                  >
-                    <div className="mt-0.5 shrink-0 flex h-7 w-7 items-center justify-center rounded-md bg-primary/10">
-                      <MessagesSquare className="h-3.5 w-3.5 text-primary" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        {r.docId && (
-                          <span className="shrink-0 text-[11px] font-bold font-mono text-primary tracking-wide">{r.docId}</span>
-                        )}
-                        <span className="text-sm font-semibold text-fg truncate">{r.documentName}</span>
-                        <span className="shrink-0 inline-flex items-center rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary tabular-nums leading-none">
-                          {r.count}
-                        </span>
-                        {r.latest?.authorIsExternal && (
-                            <span
-                                className="shrink-0 inline-flex items-center gap-0.5 rounded-full bg-amber-50 border border-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-600 leading-none"
-                                title="Last message is from an external contributor — awaiting your reply."
-                            >
-                                <ArrowUp className="h-2.5 w-2.5" />
-                                Awaiting reply
-                            </span>
-                        )}
-                      </div>
-                      {r.latest ? (
-                        <div className="mt-0.5 text-xs text-fg-muted line-clamp-1">
-                          <span className="text-[9px] font-bold uppercase tracking-wide text-fg-subtle mr-1.5">Latest</span>{renderMentions(r.latest.preview)}
-                        </div>
-                      ) : null}
-                      {r.latest ? (
-                        <div className="mt-1 text-[10px] text-fg-subtle flex items-center gap-1">
-                          <span>Last comment</span>
-                          <RelativeDateTime date={r.latest.createdAt} />
-                        </div>
-                      ) : null}
-                    </div>
-                    <div className="shrink-0 text-fg-subtle group-hover:text-primary group-hover:translate-x-0.5 transition-all">
-                      <ArrowRight className="h-3.5 w-3.5" />
-                    </div>
-                  </div>
-                  </TooltipTrigger>
-                  <TooltipContent side="top" className="text-xs">Go to Deliverable</TooltipContent>
-                  </Tooltip>
+                  <ThreadRow
+                    key={r.projectDocumentId}
+                    row={r}
+                    author={r.latest ? authorOf(r.latest.authorUserId, r.latest.authorName, r.latest.authorEmail) : null}
+                    open={expanded.has(r.projectDocumentId)}
+                    thread={threads[r.projectDocumentId]}
+                    text={text}
+                    authorOf={authorOf}
+                    onToggle={() => toggle(r.projectDocumentId)}
+                    onRetry={() => loadThread(r.projectDocumentId)}
+                    onOpenThread={() => goToDeliverable(r.projectDocumentId)}
+                  />
                 ))}
               </div>
             )}
@@ -261,7 +320,7 @@ export function EngagementCommentsTab({
                       <AtSign className="h-3 w-3 shrink-0" />
                       {r.documentName}
                     </div>
-                    <div className="mt-0.5 text-xs text-fg-muted line-clamp-2">{renderMentions(r.preview)}</div>
+                    <div className="mt-0.5 text-xs text-fg-muted line-clamp-2"><CommentText content={r.preview} {...text} /></div>
                     <div className="mt-1 text-[10px] text-fg-subtle">
                       <RelativeDateTime date={r.createdAt} />
                     </div>
@@ -286,6 +345,174 @@ export function EngagementCommentsTab({
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+/**
+ * A document's thread: its latest comment and who wrote it, opening in place to the last few
+ * comments. Clicking the row, or its arrow, opens the whole thread in the deliverable. The tour's
+ * Comments page draws the same rows over sample threads.
+ */
+export function ThreadRow({
+  row: r,
+  author,
+  open,
+  thread,
+  text,
+  authorOf,
+  onToggle,
+  onRetry,
+  onOpenThread,
+}: {
+  row: DocRow
+  author: CommentPerson | null
+  open: boolean
+  thread: Thread | undefined
+  text: TextKit
+  authorOf: (userId: string | null, name: string | null, email: string | null) => CommentPerson | null
+  onToggle: () => void
+  onRetry: () => void
+  onOpenThread: () => void
+}) {
+  const listId = useId()
+  const earlier = Math.min(r.count, PEEK) - 1
+  const shown = thread?.status === 'ready' ? thread.messages : []
+  const older = r.count - shown.length
+  const stop = (fn: () => void) => (e: React.MouseEvent) => {
+    e.stopPropagation()
+    fn()
+  }
+
+  return (
+    <div
+      className="flex items-start gap-3 px-4 py-3 hover:bg-surface-hover transition-colors cursor-pointer group"
+      onClick={onOpenThread}
+    >
+      <div className="mt-0.5 shrink-0 flex h-7 w-7 items-center justify-center rounded-md bg-primary/10">
+        <MessagesSquare className="h-3.5 w-3.5 text-primary" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="inline-flex shrink-0 items-center gap-1">
+            {r.kind === 'deliverable' ? (
+              <DeliverableIcon className="h-3.5 w-3.5" />
+            ) : r.kind ? (
+              <DocumentIcon mimeType={r.kind === 'folder' ? FOLDER_MIME : r.mimeType ?? undefined} className="h-3.5 w-3.5 shrink-0" />
+            ) : null}
+            {r.docId && (
+              <span className="text-[11px] font-bold font-mono text-primary tracking-wide">{r.docId}</span>
+            )}
+          </span>
+          <span className="text-sm font-semibold text-fg truncate">{r.documentName}</span>
+          <span className="shrink-0 inline-flex items-center rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary tabular-nums leading-none">
+            {r.count}
+          </span>
+          {r.latest?.authorIsExternal && (
+              <span
+                  className="shrink-0 inline-flex items-center gap-0.5 rounded-full bg-amber-50 border border-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-600 leading-none"
+                  title="Last message is from an external contributor — awaiting your reply."
+              >
+                  <ArrowUp className="h-2.5 w-2.5" />
+                  Awaiting reply
+              </span>
+          )}
+        </div>
+
+        {!open && r.latest ? (
+          <>
+            <div className="mt-0.5 text-xs text-fg-muted line-clamp-1">
+              <span className="text-[9px] font-bold uppercase tracking-wide text-fg-subtle mr-1.5">Latest</span>
+              <CommentText content={r.latest.preview} {...text} />
+            </div>
+            <div className="mt-1 flex items-center gap-1.5 text-[10px] text-fg-subtle">
+              {author && <span className="font-medium text-fg-muted">{author.name}</span>}
+              {author && <span aria-hidden>·</span>}
+              <RelativeDateTime date={r.latest.createdAt} iconClassName="hidden" />
+              {earlier > 0 && (
+                <>
+                  <span aria-hidden>·</span>
+                  <button
+                    type="button"
+                    aria-expanded={false}
+                    aria-controls={listId}
+                    onClick={stop(onToggle)}
+                    className="rounded-control font-medium text-fg-muted hover:text-fg hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action/30"
+                  >
+                    Show {earlier} earlier
+                  </button>
+                </>
+              )}
+            </div>
+          </>
+        ) : null}
+
+        {open && (
+          // Reading here doesn't open the deliverable: the text can be selected, and chips hovered.
+          <div id={listId} className="mt-2 cursor-default" onClick={(e) => e.stopPropagation()}>
+            {thread?.status === 'error' ? (
+              <div className="text-xs text-fg-muted">
+                Couldn’t load these comments.{' '}
+                <button type="button" onClick={onRetry} className="font-medium text-fg hover:underline">Try again</button>
+              </div>
+            ) : thread?.status !== 'ready' ? (
+              <div className="text-xs text-fg-subtle">Loading comments…</div>
+            ) : (
+              <>
+                {older > 0 && (
+                  <button type="button" onClick={onOpenThread} className="mb-2 text-[10px] text-fg-subtle hover:text-fg hover:underline">
+                    {older} older {older === 1 ? 'comment' : 'comments'} · Open thread
+                  </button>
+                )}
+                <ol className="flex flex-col gap-3">
+                  {shown.map((m, i) => {
+                    const who = authorOf(m.authorUserId, m.authorName ?? null, m.authorEmail)
+                    return (
+                      <li key={m.id} className="grid grid-cols-[20px_minmax(0,1fr)] gap-x-2">
+                        <PersonAvatar person={{ name: who?.name ?? '?', avatarUrl: who?.avatarUrl ?? null }} size={20} />
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 text-xs">
+                            <span className="font-medium text-fg">{who?.name ?? 'Unknown'}</span>
+                            <RelativeDateTime date={m.createdAt} iconClassName="hidden" className="text-[10px] text-fg-subtle" />
+                            {i === shown.length - 1 && (
+                              <span className="text-[9px] font-bold uppercase tracking-wide text-fg-subtle">Latest</span>
+                            )}
+                          </div>
+                          <p className="mt-0.5 line-clamp-3 whitespace-pre-wrap break-words text-xs leading-relaxed text-fg">
+                            <CommentText content={m.content} {...text} />
+                          </p>
+                        </div>
+                      </li>
+                    )
+                  })}
+                </ol>
+              </>
+            )}
+            <button
+              type="button"
+              aria-expanded
+              aria-controls={listId}
+              onClick={onToggle}
+              className="mt-2 rounded-control text-[10px] font-medium text-fg-muted hover:text-fg hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action/30"
+            >
+              Hide
+            </button>
+          </div>
+        )}
+      </div>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            aria-label="Open thread"
+            onClick={stop(onOpenThread)}
+            className="shrink-0 rounded-control text-fg-subtle group-hover:text-primary group-hover:translate-x-0.5 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action/30"
+          >
+            <ArrowRight className="h-3.5 w-3.5" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="text-xs">Go to Deliverable</TooltipContent>
+      </Tooltip>
     </div>
   )
 }

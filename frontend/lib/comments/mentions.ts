@@ -154,3 +154,15 @@ export function splitDocTags(text: string): DocTagToken[] {
 export function taggedDocIds(text: string): string[] {
     return Array.from(new Set(splitDocTags(text).flatMap((t) => (t.type === 'doc' ? [t.docId] : []))))
 }
+
+/** A raw auth name (may be username-style like "deepaksshettigar") as a readable display name. */
+export function formatDisplayName(name: string, email: string): string {
+    if (!name || name === email.split('@')[0]) {
+        const local = email.split('@')[0]
+        return local.replace(/[._\-+]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()).trim()
+    }
+    if (name.includes(' ') || name.includes('.') || name.includes('_')) {
+        return name.split(/[\s._-]+/).map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ').trim()
+    }
+    return name
+}

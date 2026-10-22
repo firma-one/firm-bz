@@ -53,12 +53,24 @@ export async function externalMemberCanAccessDocument(
   persona: EngagementRole,
   documentExternalId: string
 ): Promise<boolean> {
-  if (!isExternalEngagementRole(persona)) return true
+  const visible = await visibleDocumentIdsFor(projectId, persona)
+  return !visible || visible.has(documentExternalId)
+}
+
+/**
+ * The documents a persona may access, by external ID: the shared subtree for external personas;
+ * null for internal roles, who may access them all. For checking many documents at once.
+ */
+export async function visibleDocumentIdsFor(
+  projectId: string,
+  persona: EngagementRole
+): Promise<Set<string> | null> {
+  if (!isExternalEngagementRole(persona)) return null
   const slug = persona === 'eng_viewer' ? ('eng_viewer' as const) : ('eng_ext_collaborator' as const)
   const { sharedIds, descendantIds } = await getSharedAndAncestorIdsForPersona(projectId, slug, {
     skipDescendants: false,
   })
-  return sharedIds.includes(documentExternalId) || descendantIds.includes(documentExternalId)
+  return new Set([...sharedIds, ...descendantIds])
 }
 
 /** Blocks file mutations when user is not an engagement member or is read-only after closure. */
