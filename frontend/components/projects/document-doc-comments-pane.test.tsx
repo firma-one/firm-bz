@@ -191,3 +191,45 @@ describe('DocumentDocCommentsPane — reminders', () => {
         expect(screen.queryByRole('button', { name: 'Remove reminder' })).toBeNull()
     })
 })
+
+describe('DocumentDocCommentsPane — document tags', () => {
+    const DOCS = [
+        { documentId: 'doc-a', docId: 'QSR-12', fileName: 'Market sizing.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', breadcrumb: ['01 Market'] },
+        { documentId: 'doc-b', docId: 'QSR-13', fileName: 'Competitor teardown.pdf', mimeType: 'application/pdf' },
+        { documentId: 'doc-c', docId: null, fileName: 'No ID yet.docx' },
+    ]
+    const renderTagging = (onOpenDocument = vi.fn()) =>
+        render(<DocumentDocCommentsPane engagementId="e1" documentId="d1" documentName="Deliverable" taggableDocuments={DOCS} onOpenDocument={onOpenDocument} />)
+
+    it('opens the deliverable’s documents at "#", matching by ID or name, and inserts the ID', async () => {
+        renderTagging()
+        const box = await screen.findByLabelText('Comment') as HTMLTextAreaElement
+        await settle()
+        type(box, 'See #comp')
+        const menu = await screen.findByRole('listbox', { name: 'Tag a document' })
+        expect(menu.textContent).toContain('Competitor teardown.pdf')
+        expect(menu.textContent).not.toContain('Market sizing')
+        fireEvent.keyDown(box, { key: 'Enter' })
+        expect(box.value).toBe('See #QSR-13 ')
+        type(box, 'See #QSR-13 and #qsr-1')
+        expect((await screen.findByRole('listbox', { name: 'Tag a document' })).textContent).toContain('Market sizing.xlsx')
+    })
+
+    it('shows a tag in the thread as a chip with the document ID, which opens the document', async () => {
+        existing = [{ id: 'm1', createdAt: new Date().toISOString(), authorUserId: 'u1', authorEmail: 'ana@firm.com', content: 'Numbers are in #QSR-12, and #QSR-99 is gone' }]
+        const open = vi.fn()
+        renderTagging(open)
+        fireEvent.click(await screen.findByRole('button', { name: /QSR-12/ }))
+        expect(open).toHaveBeenCalledWith(expect.objectContaining({ documentId: 'doc-a', docId: 'QSR-12' }))
+        expect(screen.getByText('#QSR-99')).toBeTruthy()
+    })
+
+    it('offers no # where no documents are given', async () => {
+        renderPane()
+        const box = await screen.findByLabelText('Comment') as HTMLTextAreaElement
+        await settle()
+        type(box, 'issue #4')
+        expect(screen.queryByRole('listbox', { name: 'Tag a document' })).toBeNull()
+        expect(screen.queryByRole('button', { name: 'Tag a document' })).toBeNull()
+    })
+})

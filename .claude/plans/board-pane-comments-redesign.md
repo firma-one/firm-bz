@@ -46,3 +46,25 @@ comments pane and the document menu, so every place gets the changes.
 - New rows: Lead (the deliverable's owner — its `assigneeUserId`, set through the existing
   assignee route; the subtasks API returns it) and Progress ("0 of 4 documents approved").
 - The Comments tab shows its count.
+
+## Document tags with # (2026-10-22)
+
+Deepak: "use # and tag 1 or more documents in this deliverable", alongside @-mentions.
+
+- **Typing `#`** in a deliverable's comment composer (or the new # button beside @) opens a menu
+  of the deliverable's documents. It matches by document ID or name, and picking inserts `#QSR-12 `.
+  The ID, not the name: short, unique in the engagement, and it survives a rename.
+- **Which documents:** the ones the Board's deliverable panel already loads for the viewer
+  (`subtasks?persona=…`), passed in as `taggableDocuments`. An external collaborator is offered only
+  what's shared with them. A document without an ID yet can't be tagged.
+- **In the composer** a tag of a known document is marked like a mention chip, in gray. **In the
+  thread** it's a chip with the document's icon and ID (Deepak: the ID, since hovering shows the
+  details); hovering shows its name and folder, and clicking opens its preview. A tag of a document
+  the viewer can't see, or that's gone, is a muted ID chip with no icon, link or details.
+- Stored as plain text in the comment (like mentions), so no schema change; tags notify no one.
+  Helpers: `findTagQuery`, `insertTag`, `splitDocTags`, `taggedDocIds` in `lib/comments/mentions.ts`.
+- Where: the Board's deliverable panel. Other comment panes (a single document's, in Files) show a
+  tag as its ID and don't offer `#` until they're given the deliverable's documents.
+- **The tour:** the Board pane's Comments tab now works on screen (`demo-deliverable-comments.tsx`),
+  with sample comments that mention a teammate and tag the deliverable's documents, and the same
+  composer with @ and #. Posting changes only what's on screen.
