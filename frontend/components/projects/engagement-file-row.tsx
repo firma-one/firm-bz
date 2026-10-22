@@ -225,9 +225,11 @@ export function EngagementFileRow({
     const canEditDueDate = canManage && (!isFolder || !!file.isDeliverable) && !isFolderApproved && !locked && !isIntakeRow
     // The Status column shows a deliverable's stage; the row's deliverable badge steps aside while it's visible.
     const hasStatus = !!file.isDeliverable && !!file.deliverableStatus
-    // A deliverable and everything inside one is tracked, so an empty Status or Due reads "Not set"; other rows show a dash.
-    const isTracked = !!file.isDeliverable || isInsideApprovedDeliverable
+    // Tracked work: a deliverable, and the documents inside one. An empty Status or Due reads "Not set" there.
+    // The folders inside a deliverable only organize it, so they have no Status or Due: a dash, as other rows.
+    const isInsideDeliverable = isInsideApprovedDeliverable
         || (isGuest ? descendantIdsForGuest : isEC ? descendantIdsForEC : descendantIds).has(file.id)
+    const isTracked = !!file.isDeliverable || (!isFolder && isInsideDeliverable)
     const emptyTrackedValue = isTracked ? 'Not set' : '—'
     // A row's own stage: the deliverable's, or a document's inside one.
     const statusValue = file.activityStatus ?? (file.isDeliverable ? file.deliverableStatus : null) ?? null
@@ -315,13 +317,15 @@ export function EngagementFileRow({
                 and tools. It spans the Name, badge and tool tracks, so the name runs on into whatever space they leave. */}
             <div className={cn("col-span-3 flex items-center gap-3 min-w-0", FILE_TABLE_COL_LINE_CLASS)}>
                 <div className="flex-shrink-0 w-4 h-4 flex items-center justify-center">
+                    {/* A deliverable folder and the folders inside one wear folder-plus (inside ones a shade lighter);
+                        documents keep their file-type icons; a folder that only contains a deliverable keeps the
+                        shared-folder mark */}
                     {isFolder && file.isDeliverable ? (
                         <DeliverableIcon hint />
+                    ) : isFolder && (isAncestorShared || isInsideApprovedDeliverable) ? (
+                        <DeliverableIcon hint inside />
                     ) : isFolder && showBadge ? (
-                        <SharedFolderIcon
-                            fillLevel={isAncestorShared ? 0.5 : 1}
-                            tooltip={isAncestorShared ? 'contains-shared' : 'shared'}
-                        />
+                        <SharedFolderIcon fillLevel={1} tooltip="Contains a deliverable" />
                     ) : isFolder ? (
                         <Folder className="h-4 w-4 fill-surface-muted text-fg-muted flex-shrink-0" />
                     ) : (
@@ -401,7 +405,9 @@ export function EngagementFileRow({
                                 <TooltipContent side="top" className="text-xs">Bookmarked — click to remove</TooltipContent>
                             </Tooltip>
                         )}
-                        {(showBadge || isIntakeRow) ? (
+                        {/* Only a deliverable itself (until the Status column says it) and a pending upload carry this
+                            badge; rows inside a deliverable already show it in their icon and the breadcrumb */}
+                        {(isIntakeRow || directShared) ? (
                             <Tooltip>
                                 <TooltipTrigger asChild>
                                     <span className={`${hasStatus && !isIntakeRow ? '@[49rem]/file-table:hidden ' : ''}inline-flex items-center shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium border ${
@@ -605,7 +611,7 @@ export function EngagementFileRow({
                     documentId={file.projectDocumentId ?? file.id}
                     fileName={file.name}
                     isFolder={isFolder}
-                    status={statusValue}
+                    status={isFolder && !file.isDeliverable ? null : statusValue}
                     roleSlug={canEditStatus ? roleSlug : null}
                     emptyLabel={emptyTrackedValue}
                     emptyClassName={isTracked ? 'text-fg-subtle' : 'text-[#45474c]/40'}
@@ -632,7 +638,8 @@ export function EngagementFileRow({
                     />
                 ) : (
                     <>
-                    {file.dueDate ? (() => {
+                    {/* Folders other than deliverables have no Due, whatever an older value says */}
+                    {file.dueDate && (!isFolder || file.isDeliverable) ? (() => {
                         const due = new Date(file.dueDate)
                         const now = Date.now()
                         const diffMs = due.getTime() - now

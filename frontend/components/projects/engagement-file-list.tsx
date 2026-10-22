@@ -17,6 +17,7 @@ import Fuse from 'fuse.js'
 import { config } from "@/lib/config"
 import { DocumentIcon } from '@/components/ui/document-icon'
 import { SharedFolderIcon } from '@/components/ui/folder-shared-icon'
+import { DeliverableIcon } from '@/components/ui/deliverable-icon'
 import { DocumentActionMenu } from '@/components/ui/document-action-menu'
 import { DocumentPreviewPanelContent } from '@/components/files/document-edit-sheet'
 import { DocumentPreviewPane } from '@/components/files/document-preview-pane'
@@ -2210,6 +2211,13 @@ const handleRefresh = async () => {
                     <div className="subtle-scrollbar flex min-w-0 items-center overflow-x-auto whitespace-nowrap">
                         {(() => {
                             const ROOT_INDEX = 0
+                            // A crumb that is a deliverable, or inside one, wears folder-plus, as its row does
+                            const crumbFolderIcon = (id: string) =>
+                                sharedExternalIds.has(id) || sharedExternalIdsForEC.has(id) || sharedExternalIdsForGuest.has(id)
+                                    ? <DeliverableIcon className="mr-1.5 h-3.5 w-3.5" />
+                                    : descendantIds.has(id) || descendantIdsForEC.has(id) || descendantIdsForGuest.has(id)
+                                        ? <DeliverableIcon inside className="mr-1.5 h-3.5 w-3.5" />
+                                        : <Folder className="h-3.5 w-3.5 mr-1.5 text-fg-subtle flex-shrink-0" />
                             const showAll = breadcrumbs.length <= 4
                             const displayItems: { item: BreadcrumbItem; index: number; isEllipsis: boolean; isRoot: boolean }[] = showAll
                                 ? breadcrumbs.map((item, index) => ({ item, index, isEllipsis: false, isRoot: index === ROOT_INDEX }))
@@ -2294,7 +2302,7 @@ const handleRefresh = async () => {
                                                     {index === 0 && <Building2 className="h-3.5 w-3.5 mr-1.5 text-fg-subtle flex-shrink-0" />}
                                                     {index === 1 && <Users className="h-3.5 w-3.5 mr-1.5 text-fg-subtle flex-shrink-0" />}
                                                     {index === 2 && <Briefcase className="h-3.5 w-3.5 mr-1.5 text-fg-subtle flex-shrink-0" />}
-                                                    {index > 2 && <Folder className="h-3.5 w-3.5 mr-1.5 text-fg-subtle flex-shrink-0" />}
+                                                    {index > 2 && crumbFolderIcon(item.id)}
                                                     <span className="truncate max-w-[140px]" title={item.name}>{item.name}</span>
                                                 </div>
                                             ) : item.isEngagementRoot ? (
@@ -2319,7 +2327,7 @@ const handleRefresh = async () => {
                                                     )}
                                                     title={item.name}
                                                 >
-                                                    <Folder className="h-3.5 w-3.5 mr-1.5 text-fg-subtle flex-shrink-0" />
+                                                    {crumbFolderIcon(item.id)}
                                                     <span className="truncate min-w-0">{item.name}</span>
                                                 </button>
                                             )}

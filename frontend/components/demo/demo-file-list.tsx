@@ -309,6 +309,7 @@ function EntryRow({
     deliverableStatus,
     dueDate,
     tracked,
+    inside = false,
     pinTools = false,
     selected,
     onToggleSelect,
@@ -321,8 +322,10 @@ function EntryRow({
     onOpenFolder?: () => void
     deliverableStatus?: DeliverableStatus
     dueDate?: string | null
-    /** A deliverable or something inside one: an empty Status or Due reads "Not set", not a dash. */
+    /** A deliverable, or a document inside one: an empty Status or Due reads "Not set", not a dash. */
     tracked: boolean
+    /** Inside a deliverable: a folder here wears the lighter folder-plus, though it has no Status or Due. */
+    inside?: boolean
     /** The first row keeps its tools showing: the guided tour points at its ⋯, which would otherwise wait for a hover. */
     pinTools?: boolean
     selected: boolean
@@ -366,8 +369,9 @@ function EntryRow({
             {/* Name spans the badge and tool tracks, as in the app: the name runs on into the space the tools leave */}
             <div className={`col-span-3 flex min-w-0 items-center gap-3 ${FILE_TABLE_COL_LINE_CLASS}`}>
                 <span className="flex h-4 w-4 flex-shrink-0 items-center justify-center">
+                    {/* As in the app: deliverable folders and the folders inside one wear folder-plus; documents keep their type icons */}
                     {isFolder ? (
-                        deliverableStatus ? <DeliverableIcon hint /> : <Folder className="h-4 w-4 fill-surface-muted text-fg-muted" />
+                        deliverableStatus ? <DeliverableIcon hint /> : inside ? <DeliverableIcon hint inside /> : <Folder className="h-4 w-4 fill-surface-muted text-fg-muted" />
                     ) : (
                         <DocumentIcon mimeType={MIME_BY_TYPE[entry.file.type] ?? 'application/octet-stream'} className="h-4 w-4" />
                     )}
@@ -545,7 +549,10 @@ export function DemoFileList({
                                         i === path.length - 1 ? 'text-fg' : 'text-fg-muted',
                                     )}
                                 >
-                                    <Folder className="h-3.5 w-3.5 shrink-0 text-fg-subtle" />
+                                    {/* As in the app: a deliverable crumb, or one inside a deliverable, wears folder-plus */}
+                                    {insideDeliverable
+                                        ? <DeliverableIcon inside={i > 0} className="h-3.5 w-3.5" />
+                                        : <Folder className="h-3.5 w-3.5 shrink-0 text-fg-subtle" />}
                                     <span className="truncate">{folder.name.replace(/_+/g, ' ').trim()}</span>
                                 </button>
                             </div>
@@ -642,11 +649,13 @@ export function DemoFileList({
                                 onOpenFolder={entry.kind === 'folder' ? () => openFolder([...path, entry.folder]) : undefined}
                                 deliverableStatus={entry.kind === 'folder' ? (statusOverrides[id] ?? deliverableStatusByFolderId?.[id]) : undefined}
                                 status={statusFor(entry)}
-                                statusEditable={(insideDeliverable && !deliverableApproved) || (entry.kind === 'folder' && !!deliverableStatusByFolderId?.[id] && statusFor(entry) !== 'approved')}
+                                // As in the app: the deliverable and its documents have a Status; the folders inside it only organize it
+                                statusEditable={(entry.kind === 'file' && insideDeliverable && !deliverableApproved) || (entry.kind === 'folder' && !!deliverableStatusByFolderId?.[id] && statusFor(entry) !== 'approved')}
                                 onSetStatus={(next) => setStatus(entry, next)}
                                 dueDate={id in dueOverrides ? dueOverrides[id] : entry.kind === 'folder' ? deliverableDueByFolderId?.[id] : null}
                                 onSetDue={(next) => setDueOverrides((prev) => ({ ...prev, [id]: next }))}
-                                tracked={insideDeliverable || (entry.kind === 'folder' && !!deliverableStatusByFolderId?.[id])}
+                                tracked={(entry.kind === 'file' && insideDeliverable) || (entry.kind === 'folder' && !!deliverableStatusByFolderId?.[id])}
+                                inside={insideDeliverable}
                                 pinTools={index === 0}
                                 selected={selected.has(id)}
                                 onToggleSelect={() => toggle(id)}

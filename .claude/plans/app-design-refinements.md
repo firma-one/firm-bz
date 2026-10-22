@@ -372,8 +372,9 @@ From the canvas's section 7 (the full "views" redesign was judged too extreme; t
 - **Deliverables toggle.** A toggle pill shows only deliverables, what's inside them, and the folders above
   them.
 - **Status and Due columns.** Status is the deliverable's stage (the Board's pill); Due is editable in place
-  for files and deliverable folders. For a deliverable or anything inside one, an empty value reads
-  "Not set"; other rows show a dash. Columns hide from the right as the pane narrows: Size, Modified,
+  for files and deliverable folders. For a deliverable or a document inside one, an empty value reads
+  "Not set"; folders inside a deliverable only organize it, so they have neither (a dash, not editable), as
+  other rows. Columns hide from the right as the pane narrows: Size, Modified,
   Owner, Due, then Status.
 - **Status changes in place.** On a deliverable or a document inside one, the Status cell is a picker
   offering only the stages the viewer's role may move it to, from `getAllowedTransitions` — the rules the
@@ -386,8 +387,10 @@ From the canvas's section 7 (the full "views" redesign was judged too extreme; t
   where it stands alone (`DeliverableIcon`, `DeliverableGlyph`) — Files rows, the Board, the action menu's
   header, the deliverable panel, the share dialog, the Inbox, Home, the calendar's event dialog — and in
   the surrounding color inside calendar chips, filter pills (Files' Deliverables, Doc Search) and section
-  headers (the Overview's Deliverables and Status). No package icons remain. Folders inside or above a
-  deliverable keep their own marks.
+  headers (the Overview's Deliverables and Status). No package icons remain. A folder inside a deliverable,
+  and a breadcrumb crumb that is or sits inside one, wear it a shade lighter; documents keep their file-type
+  icons; rows inside a deliverable carry no trailing badge. A folder that only contains a deliverable keeps
+  the shared-folder mark.
 - **Promote and demote.** The menu says "Promote Folder to Deliverable" (folder-plus) and "Demote
   Deliverable to Folder" (folder-minus, in red), and so do their dialogs and toasts.
 - **"Due", everywhere.** Field labels, column headers, tooltips and placeholders say "Due" (and "Start"),
