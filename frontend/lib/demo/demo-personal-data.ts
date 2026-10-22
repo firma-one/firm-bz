@@ -303,6 +303,31 @@ export function demoWork(now: Date): MyWork {
             actionLabel: 'Approve upload',
             at: new Date(now.getTime() - 2 * HOUR).toISOString(),
         }] : []),
+        // As in the app: a client comment no one has answered yet, and a deliverable sent back for changes.
+        ...nextDeliverables().slice(0, 1).map(({ client, engagement, deliverable }) => ({
+            id: `ny-comment-${deliverable.folder.id}`,
+            kind: 'client_comment' as const,
+            firmId: DEMO_HOME_FIRM.id,
+            title: deliverableName(deliverable.folder.name),
+            context: `${client.name} · ${engagement.name}`,
+            href: `${engagementHref(client, engagement)}?tab=files`,
+            actionLabel: 'Reply',
+            at: new Date(now.getTime() - 3 * HOUR).toISOString(),
+        })),
+        ...pairs
+            .flatMap(({ client, engagement }) =>
+                getDemoDeliverables(engagement).filter((d) => d.status === 'in_progress').map((deliverable) => ({ client, engagement, deliverable })))
+            .slice(0, 1)
+            .map(({ client, engagement, deliverable }) => ({
+                id: `ny-changes-${deliverable.folder.id}`,
+                kind: 'changes_requested' as const,
+                firmId: DEMO_HOME_FIRM.id,
+                title: deliverableName(deliverable.folder.name),
+                context: `${client.name} · ${engagement.name}`,
+                href: `${engagementHref(client, engagement)}?tab=board`,
+                actionLabel: 'See changes',
+                at: new Date(now.getTime() - 26 * HOUR).toISOString(),
+            })),
     ]
 
     // A due deliverable carries its stage, so Home's chip leads with the status icon as in the app.

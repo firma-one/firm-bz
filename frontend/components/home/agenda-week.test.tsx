@@ -88,7 +88,7 @@ describe('AgendaWeek', () => {
 
     it('says so when nothing is overdue and the week is empty', () => {
         render(<AgendaWeek events={[]} dueItems={[]} calendarHref="/cal" />)
-        expect(screen.getByText('Nothing overdue or on the calendar this week')).toBeTruthy()
+        expect(screen.getByText('Nothing overdue or on the calendar this week.')).toBeTruthy()
         expect(screen.getByRole('link', { name: /Open calendar/ }).getAttribute('href')).toBe('/cal')
     })
 })

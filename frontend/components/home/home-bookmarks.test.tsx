@@ -16,7 +16,7 @@ describe('HomeBookmarks', () => {
     it('stays visible when empty and says how to add one', () => {
         render(<HomeBookmarks bookmarks={[]} />)
         expect(screen.getByText('Bookmarks')).toBeTruthy()
-        expect(screen.getByText('No bookmarks yet')).toBeTruthy()
+        expect(screen.getByText(/No bookmarks yet/)).toBeTruthy()
     })
 
     it('links each bookmark with where it lives', () => {
@@ -48,7 +48,7 @@ describe('HomeBookmarks', () => {
         expect(fetchMock).toHaveBeenCalledWith('/api/bookmarks', expect.objectContaining({ method: 'DELETE', body: JSON.stringify({ id: '1' }) }))
         expect(updated).toHaveBeenCalled()
         expect(screen.getByText('Bookmark 2')).toBeTruthy()
-        expect(screen.queryByText('No bookmarks yet')).toBeNull()
+        expect(screen.queryByText(/No bookmarks yet/)).toBeNull()
         window.removeEventListener('pockett-bookmarks-updated', updated)
     })
 })

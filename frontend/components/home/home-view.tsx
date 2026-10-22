@@ -1,6 +1,6 @@
 import Link from "next/link"
 import { format } from "date-fns"
-import { ArrowRight, AtSign, CheckCircle2, Clock, Home, Inbox, Briefcase, Users } from "lucide-react"
+import { ArrowRight, AtSign, Bell, Clock, History, Home, Inbox, Briefcase, MessageSquare, Users } from "lucide-react"
 import type { RecentVisit } from "@/lib/recents"
 import type { MyWork, NeedsYouItem } from "@/lib/home/my-work"
 import type { HomeFirm, UnavailableFirm } from "@/lib/home/home-firms"
@@ -8,7 +8,7 @@ import type { HomeBookmark } from "@/lib/home/bookmarks"
 import type { CalendarEvent } from "@/lib/calendar/calendar-data"
 import { firmTabPath } from "@/lib/navigation/firm-paths"
 import { PageHeading } from "@/components/ui/page-heading"
-import { ListGroup, ListRow } from "@/components/ui/list-row"
+import { ListRow } from "@/components/ui/list-row"
 import { EmptyPanel } from "@/components/ui/empty-panel"
 import { interactiveCardClass } from "@/components/ui/interactive-card"
 import { StatusIcon } from "@/components/ui/status-icon"
@@ -17,22 +17,32 @@ import { AgendaWeek, type AgendaDueItem, type AgendaEvent } from "./agenda-week"
 import { HomeBookmarks } from "./home-bookmarks"
 import { LandingArrival } from "@/components/app/landing-arrival"
 import { FirmFilter, UnavailableFirmsNote } from "./firm-filter"
+import { HomeEmptyLine, HomeSection } from "./home-section"
 
 /**
- * The cross-firm Home at `/d/u/home` (.claude/plans/cross-firm-home-inbox.md): Continue, Agenda,
- * Needs you, My engagements and Bookmarks across every firm the viewer may open, or one firm when
+ * The cross-firm Home at `/d/u/home` (.claude/plans/cross-firm-home-inbox.md): Needs you, Continue,
+ * Agenda, My engagements and Bookmarks across every firm the viewer may open, or one firm when
  * filtered. With more than one firm on screen, every row names its firm. Pure rendering: the page
  * loads the data, already limited to what the viewer may see.
+ *
+ * Every section has the same heading (HomeSection) and sits 40px from the next; an empty one is a
+ * single quiet line. Needs you always comes first, so the page keeps its order whatever the day
+ * holds (.claude/plans/app-design-refinements.md, section 13).
  */
 
 /**
  * A deliverable to review and an upload to approve are both waiting on you, so they lead with the
- * status language's "Waiting" icon, named for screen readers; a mention keeps its @.
+ * status language's "Waiting" icon, named for screen readers; changes requested are its "Problem";
+ * a client comment is a speech bubble, a mention keeps its @, any other reminder its bell.
  */
-const NEEDS_ICON: Record<NeedsYouItem["kind"], React.ReactNode> = {
-    deliverable_review: <StatusIcon stage="waiting" label="In review" />,
-    intake: <StatusIcon stage="waiting" label="Upload to review" />,
-    reminder: <AtSign />,
+function needsIcon(item: NeedsYouItem): React.ReactNode {
+    switch (item.kind) {
+        case "deliverable_review": return <StatusIcon stage="waiting" label="In review" />
+        case "intake": return <StatusIcon stage="waiting" label="Upload to review" />
+        case "changes_requested": return <StatusIcon stage="problem" label="Changes requested" />
+        case "client_comment": return <MessageSquare aria-label="Client comment" />
+        case "reminder": return /comment/i.test(item.context) ? <AtSign /> : <Bell />
+    }
 }
 
 /** How many recents to show: only full rows, so the cards line up — 1–3 in one row, else 6 in two. */
@@ -54,8 +64,7 @@ function ContinueSection({ recents, label }: { recents: RecentVisit[]; label: La
     const shown = recents.slice(0, continueCount(recents.length))
     if (shown.length === 0) return null
     return (
-        <section className="flex flex-col gap-2">
-            <h2 className="text-h3 text-fg">Continue where you left off</h2>
+        <HomeSection icon={<History />} title="Continue where you left off">
             <div className={`grid auto-rows-fr gap-3 ${CONTINUE_COLS[shown.length] ?? CONTINUE_COLS[6]}`}>
                 {shown.map((r, i) => (
                     <Link
@@ -86,21 +95,22 @@ function ContinueSection({ recents, label }: { recents: RecentVisit[]; label: La
                     </Link>
                 ))}
             </div>
-        </section>
+        </HomeSection>
     )
 }
 
 function NeedsYouSection({ items, label }: { items: NeedsYouItem[]; label: Label }) {
     return (
-        <ListGroup title="Needs you" count={items.length} icon={<Inbox className="h-3.5 w-3.5 text-fg-muted" />}>
+        <HomeSection icon={<Inbox />} title="Needs you" count={items.length}>
             {items.length === 0 ? (
-                <EmptyPanel compact icon={<CheckCircle2 />} title="You're all caught up" description="Approvals, uploads to review and mentions show up here." />
+                <HomeEmptyLine>All caught up. Approvals, client comments, changes requested and mentions show up here.</HomeEmptyLine>
             ) : (
-                items.map((item) => (
+                <div className="flex flex-col">
+                {items.map((item) => (
                     <ListRow
                         key={item.id}
                         href={item.href}
-                        leading={NEEDS_ICON[item.kind]}
+                        leading={needsIcon(item)}
                         title={item.title}
                         meta={label(item.firmId, item.context)}
                         trailing={
@@ -112,9 +122,10 @@ function NeedsYouSection({ items, label }: { items: NeedsYouItem[]; label: Label
                             </>
                         }
                     />
-                ))
+                ))}
+                </div>
             )}
-        </ListGroup>
+        </HomeSection>
     )
 }
 
@@ -177,7 +188,7 @@ export function HomeView({
         calendarHrefOverride ?? (shownFirms.length === 1 ? firmTabPath(shownFirms[0].groupSlug, shownFirms[0].slug, "calendar") : undefined)
 
     return (
-        <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 pb-10">
+        <div className="mx-auto flex w-full max-w-5xl flex-col gap-10 pb-10">
             {/* Sign-in lands here with ?landed=returning: the loader's last beat, then "Welcome back". */}
             <LandingArrival firstName={firstName} />
             <PageHeading
@@ -198,11 +209,12 @@ export function HomeView({
                 />
             ) : (
                 <>
+                    {/* First, always: what is waiting on you. The order never changes with the day's state. */}
+                    <NeedsYouSection items={work.needsYou} label={label} />
+
                     <ContinueSection recents={recents} label={label} />
 
                     <AgendaWeek events={agendaEvents} dueItems={dueItems} calendarHref={calendarHref} />
-
-                    <NeedsYouSection items={work.needsYou} label={label} />
 
                     <MyEngagementsList
                         engagements={work.engagements}

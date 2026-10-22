@@ -7,7 +7,7 @@ import { ListGroup, ListRow } from "@/components/ui/list-row"
 import { StatusPill } from "@/components/ui/status-pill"
 import { StatusIcon } from "@/components/ui/status-icon"
 import { statusOf } from "@/lib/ui/status"
-import { EmptyPanel } from "@/components/ui/empty-panel"
+import { HomeEmptyLine, HomeSection } from "./home-section"
 import { cn } from "@/lib/utils"
 import { Hint } from "@/components/ui/tooltip"
 import type { HomeEngagement } from "@/lib/home/my-work"
@@ -106,13 +106,12 @@ export function MyEngagementsList({
         )
 
     return (
-        <section className="flex flex-col gap-2">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-                <h2 className="flex items-center gap-2 text-h3 text-fg">
-                    <Briefcase className="h-5 w-5 text-fg-muted" aria-hidden />
-                    My engagements
-                </h2>
-                <div className="flex items-center gap-3">
+        <HomeSection
+            icon={<Briefcase />}
+            title="My engagements"
+            count={visible.length}
+            actions={
+                <>
                     <div className="flex items-center gap-0.5" role="group" aria-label="Show">
                         <button type="button" className={toggle(!showAll)} onClick={() => setShowAll(false)}>Open</button>
                         <button type="button" className={toggle(showAll)} onClick={() => setShowAll(true)}>All</button>
@@ -124,16 +123,13 @@ export function MyEngagementsList({
                         <button type="button" className={toggle(grouping === "client")} onClick={() => setGrouping("client")}>By client</button>
                         <button type="button" className={toggle(grouping === "status")} onClick={() => setGrouping("status")}>By status</button>
                     </div>
-                </div>
-            </div>
-
+                </>
+            }
+        >
             {visible.length === 0 ? (
-                <EmptyPanel
-                    compact
-                    icon={<Briefcase />}
-                    title={showAll ? "No engagements yet" : "No open engagements"}
-                    description="Engagements you're a member of show up here."
-                />
+                <HomeEmptyLine>
+                    {showAll ? "No engagements yet." : "No open engagements."} Engagements you're a member of show up here.
+                </HomeEmptyLine>
             ) : (
                 <div className="flex flex-col gap-3">
                     {groups.map(([key, items]) => (
@@ -178,6 +174,6 @@ export function MyEngagementsList({
                     ))}
                 </div>
             )}
-        </section>
+        </HomeSection>
     )
 }

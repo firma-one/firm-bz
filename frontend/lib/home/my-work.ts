@@ -2,7 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { logger } from '@/lib/logger'
-import { engagementPath } from '@/lib/navigation/firm-paths'
+import { engagementDocCommentPath, engagementPath } from '@/lib/navigation/firm-paths'
 import { canViewDeliverable, type EngagementRoleSlug } from '@/lib/deliverable-stage-roles'
 import type { ActivityStatus } from '@/lib/sharing-settings'
 import type { ReminderWithContext } from '@/lib/actions/user-reminders'
@@ -19,10 +19,17 @@ import type { HomeFirm } from '@/lib/home/home-firms'
  *  - approvals (deliverables in review, intake) only on engagements the caller leads (eng_admin) —
  *    the only role that can act on them. AI summary drafts are not listed: a draft is written,
  *    reviewed and published or discarded in one sitting, never left waiting;
+ *  - client comments still waiting for a reply, also only for the lead;
+ *  - changes requested on what the caller owns (its assignee, else whoever added it);
  *  - due deliverables assigned to an external (EC/EV) member are shown only at stages their role
  *    may see (deliverable-stage-roles), so a hidden to-do never leaks its name;
  *  - reminders are the caller's own, filtered to those firms.
  * Nothing here is cached across users.
+ *
+ * "Needs you" is what is waiting on the caller, read from the current state rather than from
+ * notifications, so an item leaves once it's dealt with — approved, replied to, moved on — and never
+ * because a notification was read (.claude/plans/app-design-refinements.md, section 13). Deadlines are
+ * the Agenda's, so due work isn't listed here twice.
  */
 
 export const DUE_SOON_DAYS = 14
@@ -42,7 +49,7 @@ export type HomeEngagement = {
 
 export type NeedsYouItem = {
     id: string
-    kind: 'deliverable_review' | 'intake' | 'reminder'
+    kind: 'deliverable_review' | 'intake' | 'changes_requested' | 'client_comment' | 'reminder'
     /** The firm it belongs to, for the firm label and filter; null for a reminder without one. */
     firmId: string | null
     title: string
@@ -143,7 +150,7 @@ export async function getMyWork(params: {
         const dueCutoff = new Date(Date.now() + DUE_SOON_DAYS * 86_400_000)
         const today = startOfToday()
 
-        const [inReview, intake, assigned] = await Promise.all([
+        const [inReview, intake, assigned, changesRequested, clientComments] = await Promise.all([
             // Deliverables (explicitly shared folders — the shares API's definition) awaiting the lead's approval.
             leadIds.length
                 ? prisma.$queryRaw<{ id: string; engagementId: string; fileName: string; updatedAt: Date }[]>`
@@ -185,6 +192,45 @@ export async function getMyWork(params: {
                   AND COALESCE(ed.settings->'activity'->>'status', 'to_do') NOT IN ('approved', 'done')
                 ORDER BY ed."dueDate" ASC
                 LIMIT ${LIST_LIMIT}`,
+            // Sent back for changes, and still in progress: what the caller owns (its assignee, else
+            // whoever added it) whose latest stage change was In review → In progress by someone else.
+            prisma.$queryRaw<{ id: string; engagementId: string; fileName: string; eventAt: Date }[]>`
+                SELECT ed.id, ed."engagementId", ed."fileName", last."eventAt"
+                FROM platform.engagement_documents ed
+                JOIN LATERAL (
+                    SELECT e."eventAt", e."actorUserId", e.metadata
+                    FROM platform.platform_audit_events e
+                    WHERE e."projectDocumentId" = ed.id AND e."eventType" = 'DOCUMENT_STATUS_CHANGED'
+                    ORDER BY e."eventAt" DESC
+                    LIMIT 1
+                ) last ON true
+                WHERE ed."engagementId" = ANY(${allIds}::uuid[])
+                  AND COALESCE(ed.settings->>'assigneeUserId', ed."createdBy"::text) = ${userId}
+                  AND ed.settings->'activity'->>'status' = 'in_progress'
+                  AND last.metadata->>'oldStatus' = 'in_review'
+                  AND last.metadata->>'newStatus' = 'in_progress'
+                  AND last."actorUserId" IS DISTINCT FROM ${userId}::uuid
+                ORDER BY last."eventAt" DESC
+                LIMIT ${LIST_LIMIT}`,
+            // Client comments no one on the team has answered: documents whose latest comment is an
+            // external member's (EC/EV), on engagements the caller leads. A team reply clears it.
+            leadIds.length
+                ? prisma.$queryRaw<{ id: string; engagementId: string; projectDocumentId: string; fileName: string; createdAt: Date }[]>`
+                      SELECT latest.id, latest."engagementId", latest."projectDocumentId", latest."fileName", latest."createdAt"
+                      FROM (
+                          SELECT DISTINCT ON (m."projectDocumentId")
+                              m.id, m."engagementId", m."projectDocumentId", ed."fileName", m."createdAt", em.role
+                          FROM platform.doc_comment_messages m
+                          JOIN platform.engagement_documents ed ON ed.id = m."projectDocumentId"
+                          LEFT JOIN platform.engagement_members em
+                            ON em."engagementId" = m."engagementId" AND em."userId" = m."authorUserId"
+                          WHERE m."engagementId" = ANY(${leadIds}::uuid[])
+                          ORDER BY m."projectDocumentId", m."createdAt" DESC
+                      ) latest
+                      WHERE latest.role IN ('eng_ext_collaborator', 'eng_viewer')
+                      ORDER BY latest."createdAt" DESC
+                      LIMIT ${LIST_LIMIT}`
+                : [],
         ])
 
         const needsYou: NeedsYouItem[] = [
@@ -208,6 +254,36 @@ export async function getMyWork(params: {
                 actionLabel: 'Approve upload',
                 at: d.createdAt.toISOString(),
             })),
+            ...clientComments.map((c) => {
+                const e = rows.find((r) => r.id === c.engagementId)!
+                const firm = firmById.get(e.client.firmId)!
+                return {
+                    id: `comment:${c.projectDocumentId}`,
+                    kind: 'client_comment' as const,
+                    firmId: firmOf(c.engagementId),
+                    title: c.fileName,
+                    context: contextOf(c.engagementId),
+                    href: engagementDocCommentPath(firm.groupSlug, firm.slug, e.client.slug, e.slug, c.projectDocumentId, c.id),
+                    actionLabel: 'Reply',
+                    at: c.createdAt.toISOString(),
+                }
+            }),
+            ...changesRequested
+                // As with due work: an external member sees only the stages their role may see.
+                .filter((d) => {
+                    const role = byId.get(d.engagementId)?.role ?? null
+                    return !!role && (INTERNAL_ROLES.has(role) || canViewDeliverable(role, 'in_progress'))
+                })
+                .map((d) => ({
+                    id: `changes:${d.id}`,
+                    kind: 'changes_requested' as const,
+                    firmId: firmOf(d.engagementId),
+                    title: d.fileName,
+                    context: contextOf(d.engagementId),
+                    href: sharesBoard(d.engagementId),
+                    actionLabel: 'See changes',
+                    at: d.eventAt.toISOString(),
+                })),
         ]
 
         const dueSoon: DueItem[] = []
@@ -255,13 +331,16 @@ export async function getMyWork(params: {
     }
 }
 
-/** The caller's own reminders in these firms: review requests → Needs you; dated ones → Due soon. */
+/**
+ * The caller's own reminders in these firms: review requests and undated ones (Reconnect Drive, say —
+ * waiting on them now) → Needs you; dated ones → Due soon, which the Agenda shows.
+ */
 function remindersOnly(reminders: ReminderWithContext[], firmIds: Set<string>): Pick<MyWork, 'needsYou' | 'dueSoon'> {
     const needsYou: NeedsYouItem[] = []
     const dueSoon: DueItem[] = []
     for (const r of reminders) {
         if (r.hiddenAt || !r.firmId || !firmIds.has(r.firmId)) continue
-        if (isReviewReminder(r)) {
+        if (isReviewReminder(r) || !r.dateValue) {
             needsYou.push({
                 id: `reminder:${r.id}`,
                 kind: 'reminder',

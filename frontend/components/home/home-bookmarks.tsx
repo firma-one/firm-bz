@@ -2,8 +2,8 @@
 
 import { useState } from "react"
 import { Bookmark, Briefcase, FileText, X } from "lucide-react"
-import { ListGroup, ListRow } from "@/components/ui/list-row"
-import { EmptyPanel } from "@/components/ui/empty-panel"
+import { ListRow } from "@/components/ui/list-row"
+import { HomeEmptyLine, HomeSection } from "./home-section"
 import { Hint } from "@/components/ui/tooltip"
 import type { ShellFavorite } from "@/lib/actions/shell"
 
@@ -42,15 +42,11 @@ export function HomeBookmarks({ bookmarks, readOnly = false }: { bookmarks: Shel
     const hidden = items.length - shown.length
 
     return (
-        <ListGroup title="Bookmarks" count={items.length} icon={<Bookmark className="h-3.5 w-3.5 text-fg-muted" />}>
+        <HomeSection icon={<Bookmark />} title="Bookmarks" count={items.length}>
             {items.length === 0 && (
-                <EmptyPanel
-                    compact
-                    icon={<Bookmark />}
-                    title="No bookmarks yet"
-                    description="Bookmark a document from its ⋯ menu to keep it one click away here."
-                />
+                <HomeEmptyLine>No bookmarks yet. Bookmark a document from its ⋯ menu to keep it one click away here.</HomeEmptyLine>
             )}
+            <div className="flex flex-col">
             {shown.map((b) => (
                 // The remove button sits beside the link, not inside it, so it never navigates.
                 <div key={b.id} className="group/bookmark relative">
@@ -85,6 +81,7 @@ export function HomeBookmarks({ bookmarks, readOnly = false }: { bookmarks: Shel
                     Show {hidden} more
                 </button>
             )}
-        </ListGroup>
+            </div>
+        </HomeSection>
     )
 }

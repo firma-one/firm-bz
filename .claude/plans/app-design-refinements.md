@@ -425,3 +425,33 @@ date, in place:
   read back as that day); a day with a time as an ISO instant. Table cells show the compact form
   ("Oct 30 · 3:30 PM"), so Files' Due column is 128px.
 - The tour's menu and Due cells use the same panel; Due is the one action that works there.
+
+## 13. Home: one heading style, and what "needs you" means (decided 2026-10-22)
+
+Home was hard to read because its sections had three heading styles (plain h3, gray collapsible bars,
+an icon heading with tabs), empty states that took 40% of the screen to say "nothing here", and
+uneven gaps. Rules between sections would have made it look like a form. Instead:
+
+- **One heading for every section** (`components/home/home-section.tsx`): a 16px muted icon, a 14px
+  semibold title, a muted count, any action at the right, over a hairline. Content starts 12px below,
+  and sections sit 40px apart.
+- **One-line empty states:** muted text under the heading, with no icon or box ("All caught up…",
+  "Nothing overdue or on the calendar this week.").
+- **A fixed order:** Needs you, Continue where you left off, Agenda, My engagements, Bookmarks. Needs
+  you is always first, so nothing moves with the day's state. When empty it's one line.
+- **Needs you is what is waiting on you, read from current state** (`lib/home/my-work.ts`), so an item
+  leaves once it is dealt with, never because a notification was read:
+  - deliverables in review, and client uploads to approve, for the lead (as before);
+  - **client comments no one has answered** (the document's latest comment is an external member's),
+    for the lead. A team reply clears it;
+  - **changes requested** on what you own (assignee, else whoever added it): the latest stage change
+    was In review → In progress, made by someone else, and it is still In progress;
+  - your reminders that are review requests or have no date (Reconnect Drive, say).
+  Deadlines stay in the Agenda (its Overdue row and week), so due work isn't listed twice.
+- The tour's Home is the same view over demo data, which now includes a client comment and changes
+  requested.
+
+**Next (not built):** the Inbox badge still counts every unread notification, so it can disagree with
+Needs you (it showed 2 when Needs you said 0: both were "Document due date updated", sent to every member
+including the one who set the date). Planned: the badge counts only what needs you, from the same rules;
+the Inbox gets "Needs you" and "Updates" views; and no one is notified of their own change.
