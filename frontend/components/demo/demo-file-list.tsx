@@ -49,6 +49,7 @@ import { getAllowedTransitions } from '@/lib/deliverable-stage-roles'
 import { statusOf } from '@/lib/ui/status'
 import { DuePickerPanel } from '@/components/ui/due-picker'
 import { DeliverableIcon } from '@/components/ui/deliverable-icon'
+import { ModifiedStamp } from '@/components/ui/modified-stamp'
 import { formatDue, isPastDue, readDue } from '@/lib/ui/due-date'
 import {
     DropdownMenu,
@@ -70,7 +71,7 @@ import {
     OWNER_COL_CLASS,
     STATUS_COL_CLASS,
 } from '@/components/projects/engagement-file-table-grid'
-import { cn, formatFileSize, formatSmartDateTime } from '@/lib/utils'
+import { cn, formatFileSize } from '@/lib/utils'
 import { initialsOf } from '@/lib/initials'
 import type { DemoFolder, DemoFile } from '@/lib/demo/static-demo-data'
 import type { DeliverableStatus } from '@/lib/demo/demo-deliverables'
@@ -200,27 +201,30 @@ function RowActionMenu({ entry, name, docId, deliverableStatus, dueDate, onSetDu
             </Hint>
             <DropdownMenuContent align="end" sideOffset={0} className={cn('flex w-72 flex-col overflow-hidden p-0', COMPACT_MENU_CLASS)} onClick={(e) => e.stopPropagation()}>
                 <div className="flex-none border-b border-line px-3 py-2">
-                    <div className="flex items-start gap-2.5">
+                    {/* As in the app: two lines — the name on one, then code, stage, type, size and who/when */}
+                    <div className="flex items-center gap-2.5">
                         <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-control bg-surface-muted">
                             {isFolder
                                 ? deliverableStatus ? <DeliverableIcon /> : <Folder className="h-4 w-4 fill-surface-muted text-fg-muted" />
                                 : <DocumentIcon mimeType={MIME_BY_TYPE[entry.file.type] ?? 'application/octet-stream'} className="h-4 w-4" />}
                         </div>
                         <div className="min-w-0 flex-1">
-                            <div className="flex items-start gap-1">
-                                <h3 className="min-w-0 cursor-default break-words text-small font-medium leading-snug text-fg line-clamp-2">{name}</h3>
+                            <div className="flex items-center gap-1">
+                                <Hint label={name} side="bottom">
+                                    <h3 className="min-w-0 cursor-default truncate text-small font-medium leading-snug text-fg">{name}</h3>
+                                </Hint>
                                 <Hint label={NOT_IN_DEMO}>
-                                    <button type="button" aria-label="Copy name" className="mt-0.5 shrink-0 rounded-control p-0.5 text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg">
+                                    <button type="button" aria-label="Copy name" className="shrink-0 rounded-control p-0.5 text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg">
                                         <Copy className="h-3 w-3" />
                                     </button>
                                 </Hint>
                             </div>
-                            <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-caption text-fg-muted">
-                                {docId && <span className="font-mono text-caption text-fg-subtle">{docId}</span>}
+                            <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-caption text-fg-muted">
+                                {docId && <span className="shrink-0 font-mono text-caption text-fg-subtle">{docId}</span>}
                                 {deliverableStatus && <StatusPill kind="deliverable" status={deliverableStatus} />}
-                                <span>{type}{size ? <> · {formatFileSize(size)}</> : null}</span>
+                                <span className="min-w-0 truncate">{type}{size ? <> · {formatFileSize(size)}</> : null}</span>
+                                {modified && <ModifiedStamp at={modified} by={OWNER} className="ml-auto pl-1" />}
                             </div>
-                            {modified && <p className="mt-0.5 text-caption text-fg-subtle">Modified {formatSmartDateTime(modified)} by {OWNER}</p>}
                         </div>
                     </div>
                 </div>

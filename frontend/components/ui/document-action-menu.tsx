@@ -8,6 +8,7 @@ import { UserAvatarWithTooltip } from "@/components/ui/user-avatar-with-tooltip"
 import { cn, formatFileSize, formatSmartDateTime } from "@/lib/utils"
 import { DuePickerPanel } from "@/components/ui/due-picker"
 import { DeliverableIcon } from "@/components/ui/deliverable-icon"
+import { ModifiedStamp } from "@/components/ui/modified-stamp"
 import { formatDue, isPastDue, readDue } from "@/lib/ui/due-date"
 import { DocumentEditPanelContent, DocumentPreviewPanelContent, getDocumentEditUrl } from "@/components/files/document-edit-sheet"
 import { DocumentPreviewPane } from "@/components/files/document-preview-pane"
@@ -548,17 +549,18 @@ export function DocumentActionMenu({
           {sandboxPreview && (
             <div className="absolute inset-0 z-10 rounded-[inherit] pointer-events-auto cursor-not-allowed bg-transparent" />
           )}
-          {/* What this is, before what you can do with it: the name in full (two lines), its code and
-              stage in the status language where known, its type and size, and who changed it last. */}
+          {/* What this is, before what you can do with it, in two lines: the name (one line — the hint
+              and Copy name have it in full), then its code, stage, type and size, with who changed it
+              last and when at the end (in full on hover). */}
           <div className="px-3 py-2 border-b border-line flex-none">
-            <div className="flex items-start gap-2.5">
+            <div className="flex items-center gap-2.5">
               <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-control bg-surface-muted">
                 {isDeliverable ? <DeliverableIcon /> : <DocumentIcon mimeType={document.mimeType} className="h-4 w-4" />}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="flex items-start gap-1">
+                <div className="flex items-center gap-1">
                   <Hint label={document.name} side="bottom">
-                    <h3 className="min-w-0 cursor-default select-text break-words text-small font-medium leading-snug text-fg line-clamp-2">
+                    <h3 className="min-w-0 cursor-default select-text truncate text-small font-medium leading-snug text-fg">
                       {document.name}
                     </h3>
                   </Hint>
@@ -567,28 +569,30 @@ export function DocumentActionMenu({
                       type="button"
                       onClick={(e) => handleCopyName(e, document.name)}
                       aria-label="Copy name"
-                      className="mt-0.5 shrink-0 rounded-control p-0.5 text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg"
+                      className="shrink-0 rounded-control p-0.5 text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg"
                     >
                       {hasCopiedName ? <Check className="h-3 w-3 text-status-done-icon" /> : <Copy className="h-3 w-3" />}
                     </button>
                   </Hint>
                 </div>
-                <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-caption text-fg-muted">
-                  {document.docId && <span className="font-mono text-caption text-fg-subtle">{document.docId}</span>}
+                <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-caption text-fg-muted">
+                  {document.docId && <span className="shrink-0 font-mono text-caption text-fg-subtle">{document.docId}</span>}
                   {stageKnown && <StatusPill kind="deliverable" status={deliverableStatus!} />}
-                  <span>
+                  <span className="min-w-0 truncate">
                     {getDisplayType(document)}
                     {!document.mimeType?.includes('folder') && document.size != null && typeof document.size === 'number' && (
                       <> · {formatFileSize(document.size)}</>
                     )}
                   </span>
+                  {modifiedAt && (
+                    <ModifiedStamp
+                      at={modifiedAt}
+                      by={document.lastModifyingUser?.displayName}
+                      photoLink={document.lastModifyingUser?.photoLink}
+                      className="ml-auto pl-1"
+                    />
+                  )}
                 </div>
-                {modifiedAt && (
-                  <p className="mt-0.5 text-caption text-fg-subtle">
-                    Modified {formatSmartDateTime(modifiedAt)}
-                    {document.lastModifyingUser?.displayName && <> by {document.lastModifyingUser.displayName}</>}
-                  </p>
-                )}
               </div>
             </div>
           </div>
