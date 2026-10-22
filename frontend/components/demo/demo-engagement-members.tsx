@@ -1,11 +1,12 @@
 'use client'
 
 import { useEffect, useState, type ReactNode } from 'react'
-import { AtSign, Clock3, Shield, Type, UserPlus } from 'lucide-react'
+import { AtSign, Clock3, Mail, Shield, Type, UserPlus } from 'lucide-react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { RelativeDateTime } from '@/components/ui/relative-date-time'
 import { Tag } from '@/components/ui/tag'
+import { StatusPill } from '@/components/ui/status-pill'
 import { Hint } from '@/components/ui/tooltip'
 import {
     NotionTable,
@@ -31,6 +32,10 @@ const DEMO_ENGAGEMENT_MEMBERS: DemoEngagementMember[] = [
     { name: 'Jordan Lee', email: 'jordan@beacongrowth.com', role: <Tag color="gray">Contributor · Full Access</Tag>, addedDaysAgo: 60 },
     { name: 'Morgan Ellis', email: 'morgan@client-example.com', role: <Tag color="blue">Reviewer</Tag>, addedDaysAgo: 41 },
 ]
+
+/** The invitation the engagement's Overview counts as pending. */
+const INVITEE = 'riley@client-example.com'
+const INVITEE_ROLE = <Tag color="blue">Reviewer</Tag>
 
 /** Static counterpart to engagement-members-tab.tsx: the same count line and members table. No write actions. */
 export function DemoEngagementMembers() {
@@ -83,6 +88,22 @@ export function DemoEngagementMembers() {
                             </NotionTableCell>
                         </NotionTableRow>
                     ))}
+                    {/* A pending invitation, as member-list.tsx draws one: the email, a dashed avatar and the "Invited" pill */}
+                    <NotionTableRow>
+                        <NotionTableCell>
+                            <div className="flex min-w-0 items-center gap-2">
+                                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-dashed border-line-strong text-fg-subtle">
+                                    <Mail className="h-3 w-3" />
+                                </span>
+                                <span className="truncate text-fg-muted">{INVITEE}</span>
+                            </div>
+                        </NotionTableCell>
+                        <NotionTableCell className="hidden text-fg-subtle md:table-cell">—</NotionTableCell>
+                        <NotionTableCell>{INVITEE_ROLE}</NotionTableCell>
+                        <NotionTableCell className="hidden sm:table-cell">
+                            <StatusPill kind="invitation" status="PENDING" />
+                        </NotionTableCell>
+                    </NotionTableRow>
                 </NotionTableBody>
             </NotionTable>
         </div>

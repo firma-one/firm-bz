@@ -1,5 +1,6 @@
 'use client'
 
+import { interactiveCardClass } from '@/components/ui/interactive-card'
 import React, { useState } from 'react'
 import { Building2, Clock } from 'lucide-react'
 import { FirmOption, switchFirm } from '@/lib/actions/firms'
@@ -160,7 +161,7 @@ export function FirmList({ firms, viewMode = 'grid', activeOrgIdFromJWT }: FirmL
                         href={firmHref(org)}
                         prefetch={false}
                         onClick={(e) => handleOrgClick(e, org)}
-                        className="group relative bg-surface border border-line rounded-card p-5 hover:border-line-strong transition-colors hover:bg-surface-hover flex flex-col h-48"
+                        className={`group relative flex h-48 flex-col p-5 ${interactiveCardClass()}`}
                     >
                         <div className="flex items-start justify-between mb-3">
                             <div className="h-10 w-10 bg-surface-muted text-fg-muted rounded-control flex items-center justify-center shrink-0">

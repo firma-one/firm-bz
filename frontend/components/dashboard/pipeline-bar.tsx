@@ -5,6 +5,7 @@ import { ArrowLeft } from 'lucide-react'
 import type { ClientPipelineItem, EngagementPipelineItem } from '@/app/api/firms/[firmId]/insights/route'
 import { Button } from '@/components/ui/button'
 import { Tag } from '@/components/ui/tag'
+import { StagePill } from '@/components/projects/engagement-overview-sections'
 
 /*
  * The client pipeline bar on the Firm Overview, with its drill-down into a client's engagements.
@@ -18,10 +19,14 @@ export function formatValue(val: number, symbol = ''): string {
     return `${symbol}${val.toFixed(0)}`
 }
 
-/** Pipeline segments and legend dots use the chart palette in ui-tokens.css. */
-const PIPELINE_COLORS = ['blue', 'purple', 'pink', 'green', 'orange', 'yellow', 'teal'] as const
+/**
+ * Pipeline segments and legend dots: clients and engagements are categories, not statuses, so they
+ * take the warm gray ramp (--ui-data-category-1…4), darkest first (app-design-refinements.md,
+ * "Data colors"). The amounts carry the meaning.
+ */
+const PIPELINE_COLORS = [1, 2, 3, 4] as const
 type PipelineColor = (typeof PIPELINE_COLORS)[number]
-const chartColor = (c: PipelineColor) => `var(--ui-chart-${c})`
+const chartColor = (c: PipelineColor) => `var(--ui-data-category-${c})`
 
 /** Dark hover label over a bar segment. */
 function SegmentTip({ children }: { children: React.ReactNode }) {
@@ -99,7 +104,7 @@ function EngagementDrillBar({ engagements, clientTotal, symbol, onBack, clientNa
                                             {pct && <span className="text-small tabular-nums text-fg-subtle">{pct}%</span>}
                                         </>
                                     )}
-                                    {eng.closingSoon && <Tag color="orange">Soon</Tag>}
+                                    {eng.closingSoon && <StagePill stage="waiting">Soon</StagePill>}
                                 </div>
                             </div>
                         </div>

@@ -18,12 +18,11 @@ describe('FirmActions', () => {
         expect(screen.getByText('All clear')).toBeTruthy()
         expect(screen.queryByText('Engagements')).toBeNull()
         fireEvent.click(screen.getByRole('button', { name: /6 checks passed/ }))
-        // Opened from the one line, the checks are listed at once.
         expect(screen.getByText('Extend or close overdue engagements')).toBeTruthy()
         expect(screen.getByText('Resend invitations')).toBeTruthy()
     })
 
-    it('shows Engagements and Clients side by side, and opens an item\'s work', () => {
+    it('lists the work in one list, groups only the passed checks, and opens an item\'s work', () => {
         render(<FirmActions
             links={LINKS}
             data={{
@@ -32,8 +31,9 @@ describe('FirmActions', () => {
                 invitations: [{ invitationId: 'i1', email: 'jo@client.com', engagementId: 'e1', engagementName: 'GTM', engagementSlug: 'gtm', clientSlug: 'acme', expireAt: '', daysUntilExpiry: -2 }],
             }}
         />)
-        expect(screen.getByText('Engagements')).toBeTruthy()
-        expect(screen.getByText('Clients')).toBeTruthy()
+        // The two rows with work, ungrouped; the four clear checks fold into one line.
+        expect(screen.queryByText('Engagements')).toBeNull()
+        expect(screen.getByRole('button', { name: /4 checks passed/ })).toBeTruthy()
 
         fireEvent.click(screen.getByText('Finish engagement setup'))
         const link = screen.getByRole('link', { name: /GTM/ })
@@ -56,9 +56,10 @@ describe('FirmActions', () => {
     })
 
     it('puts invitations under Engagements, and prospects to decide on under Clients', () => {
-        const { container } = render(<FirmActions data={EMPTY} links={LINKS} />)
+        render(<FirmActions data={EMPTY} links={LINKS} />)
         fireEvent.click(screen.getByRole('button', { name: /checks passed/ }))
-        const [engagements, clients] = Array.from(container.querySelectorAll('.grid > *'))
+        const engagements = screen.getByText('Engagements').parentElement!
+        const clients = screen.getByText('Clients').parentElement!
         expect(engagements.textContent).toContain('Resend invitations')
         expect(clients.textContent).toContain('Decide on prospects')
         expect(clients.textContent).toContain('Start work with idle clients')

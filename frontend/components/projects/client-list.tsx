@@ -15,7 +15,8 @@ import {
     NotionTableHeader,
     NotionTableRow,
 } from '@/components/ui/notion-table'
-import { StatusPill } from '@/components/ui/tag'
+import { StatusPill } from '@/components/ui/status-pill'
+import { interactiveCardClass } from '@/components/ui/interactive-card'
 import { EmptyPanel } from '@/components/ui/empty-panel'
 import { ShimmerBar, ShimmerBlock } from '@/components/ui/shimmer'
 
@@ -84,11 +85,11 @@ export function ClientList({ clients, groupSlug, orgSlug, viewMode = 'list', isR
                 </NotionTableHeader>
                 <NotionTableBody>
                     {isRefreshing && (
-                        <tr className="h-9 border-b border-line" aria-hidden>
-                            <td colSpan={5} className="px-2 first:pl-1">
+                        <NotionTableRow aria-hidden>
+                            <NotionTableCell colSpan={5}>
                                 <span className="flex items-center gap-2"><ShimmerBlock className="h-5 w-5" /><ShimmerBar className="w-40" /></span>
-                            </td>
-                        </tr>
+                            </NotionTableCell>
+                        </NotionTableRow>
                     )}
                     {clients.map((client) => {
                         const href = linkFor(client)
@@ -131,8 +132,10 @@ export function ClientList({ clients, groupSlug, orgSlug, viewMode = 'list', isR
                     <Link
                         key={client.id}
                         href={linkFor(client)}
-                        className={`group flex h-36 flex-col rounded-card border bg-surface p-3.5 transition-colors hover:border-line-strong hover:bg-surface-hover ${
-                            client.status === 'PROSPECT' ? 'border-dashed border-line-strong' : 'border-line'
+                        // The shared card shell; a prospect, not yet a client, keeps its dashed edge instead
+                        // of the shadow.
+                        className={`group flex h-36 flex-col p-3.5 ${interactiveCardClass()} ${
+                            client.status === 'PROSPECT' ? 'border border-dashed border-line-strong !shadow-none' : ''
                         }`}
                     >
                         <div className="flex items-start justify-between gap-2">

@@ -48,3 +48,10 @@ export function getDeliverableStatusMap(engagement: DemoEngagement): Record<stri
     for (const d of getDemoDeliverables(engagement)) map[d.folder.id] = d.status
     return map
 }
+
+/** Each deliverable folder's due date (ISO yyyy-MM-dd), for the Files table's Due column. */
+export function getDeliverableDueMap(engagement: DemoEngagement): Record<string, string | null> {
+    const map: Record<string, string | null> = {}
+    for (const d of getDemoDeliverables(engagement)) map[d.folder.id] = d.dueDate
+    return map
+}

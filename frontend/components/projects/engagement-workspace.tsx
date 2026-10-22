@@ -4,6 +4,7 @@ import { useEffect, useCallback, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { Tabs } from "@/components/ui/tabs"
 import { EngagementInsightsDashboard } from './engagement-insights-dashboard'
+import type { EngagementRoleSlug } from '@/lib/deliverable-stage-roles'
 import { EngagementFileList } from './engagement-file-list'
 import { type BreadcrumbItem } from '@/lib/files-folder-session'
 import { EngagementSettingsForm } from './engagement-settings-form'
@@ -299,6 +300,7 @@ export function EngagementWorkspace({
                                         canManage={canManage}
                                         isFirmAdmin={isFirmAdmin}
                                         restrictToSharedOnly={restrictToSharedOnly}
+                                        roleSlug={roleSlug as EngagementRoleSlug | undefined}
                                         firmId={firmId}
                                         groupSlug={groupSlug}
                                         orgSlug={orgSlug}

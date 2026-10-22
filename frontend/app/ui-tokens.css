@@ -83,6 +83,79 @@
   --ui-tag-red-bg: #ffe2dd;
   --ui-tag-red-fg: #b1403b;
 
+  /* Status language (.claude/plans/app-design-refinements.md, section 2): every lifecycle in the app
+     maps onto these seven stages through lib/ui/status.ts. Pastel versions of Notion's hues.
+     -bg/-fg: the StatusPill (text clears 4.5:1 on its bg). -icon: the StatusIcon, which stays below
+     3:1, so it is never the only cue. -bar: progress bars. -lane / -lane-line: a Board lane at rest;
+     -lane-target / -lane-target-line: the lane under a dragged card. */
+  --ui-status-not-started-bg: #ebeae7;
+  --ui-status-not-started-fg: #5f5e5b;
+  --ui-status-not-started-icon: #9b9a97;
+  --ui-status-not-started-bar: #c7c6c3;
+  --ui-status-not-started-lane: #f9f9f8;
+  --ui-status-not-started-lane-line: rgba(55, 53, 47, 0.07);
+  --ui-status-not-started-lane-target: #f7f7f5;
+  --ui-status-not-started-lane-target-line: rgba(55, 53, 47, 0.35);
+
+  --ui-status-underway-bg: #e1eef7;
+  --ui-status-underway-fg: #2b6491;
+  --ui-status-underway-icon: #5a9bd4;
+  --ui-status-underway-bar: #8fbde5;
+  --ui-status-underway-lane: #f7fafd;
+  --ui-status-underway-lane-line: rgba(90, 155, 212, 0.18);
+  --ui-status-underway-lane-target: #f5f9fc;
+  --ui-status-underway-lane-target-line: rgba(90, 155, 212, 0.7);
+
+  --ui-status-waiting-bg: #f9eecf;
+  --ui-status-waiting-fg: #8a6418;
+  --ui-status-waiting-icon: #dba940;
+  --ui-status-waiting-bar: #e9c86f;
+  --ui-status-waiting-lane: #fefbf4;
+  --ui-status-waiting-lane-line: rgba(219, 169, 64, 0.2);
+  --ui-status-waiting-lane-target: #fdf8ec;
+  --ui-status-waiting-lane-target-line: rgba(219, 169, 64, 0.75);
+
+  --ui-status-done-bg: #dfeedd;
+  --ui-status-done-fg: #2f6b4b;
+  --ui-status-done-icon: #5aa77a;
+  --ui-status-done-bar: #7fbf98;
+  --ui-status-done-lane: #f6faf5;
+  --ui-status-done-lane-line: rgba(90, 167, 122, 0.18);
+  --ui-status-done-lane-target: #f4f8f3;
+  --ui-status-done-lane-target-line: rgba(90, 167, 122, 0.7);
+
+  --ui-status-paused-bg: #f1e8e4;
+  --ui-status-paused-fg: #7a5443;
+  --ui-status-paused-icon: #b28a77;
+
+  --ui-status-closed-bg: #ebeae7;
+  --ui-status-closed-fg: #5f5e5b;
+  --ui-status-closed-icon: #b9b8b5;
+
+  --ui-status-problem-bg: #fbe4e4;
+  --ui-status-problem-fg: #a8352f;
+  --ui-status-problem-icon: #d9625a;
+  --ui-status-problem-bar: #e8908a;
+
+  /* Data that isn't a status (roles, internal vs external): a warm gray ramp, darkest first, so a
+     chart never borrows a status color it doesn't mean. Charts otherwise use the -bar tokens above. */
+  --ui-data-category-1: #8a8985;
+  --ui-data-category-2: #aeada9;
+  --ui-data-category-3: #cac9c5;
+  --ui-data-category-4: #e3e2df;
+
+  /* Cards you open or drag: Notion's card shadow (the 1px ring stands in for a border). Page sections
+     stay flat. -drag is the card lifted under the pointer. */
+  --ui-shadow-card: 0 0 0 1px rgba(15, 15, 15, 0.1), 0 2px 4px rgba(15, 15, 15, 0.1);
+  --ui-shadow-card-drag: 0 0 0 1px rgba(15, 15, 15, 0.1), 0 14px 32px -8px rgba(15, 15, 15, 0.35);
+
+  /* Motion: hover, enter, expand. Reduced motion is handled once, in globals (MotionConfig and the
+     motion-reduce rule), not per component. */
+  --ui-ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ui-dur-fast: 120ms;
+  --ui-dur-base: 200ms;
+  --ui-dur-slow: 320ms;
+
   /* Chart series — filled bars, segments and legend swatches. The tag colors above are text
      tones (too dark and muddy as fills); these are their vivid counterparts, picked to stay apart
      from each other at small sizes. Use as var(--ui-chart-blue) etc. */

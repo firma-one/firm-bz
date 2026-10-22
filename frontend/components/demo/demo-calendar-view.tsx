@@ -6,9 +6,11 @@ import dayGridPlugin from '@fullcalendar/daygrid'
 import timeGridPlugin from '@fullcalendar/timegrid'
 import listPlugin from '@fullcalendar/list'
 import type { EventContentArg, EventInput } from '@fullcalendar/core'
-import { Briefcase, Layers, FileText } from 'lucide-react'
+import { Briefcase, FileText, FolderPlus } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
+import { StatusIcon } from '@/components/ui/status-icon'
+import { statusOf } from '@/lib/ui/status'
 import { getEngagementColorHex } from '@/lib/calendar/engagement-color'
 import { DemoFirm } from '@/lib/demo/static-demo-data'
 import { buildDemoCalendarData, DemoCalendarEvent, DemoCalendarEventType } from '@/lib/demo/demo-calendar-data'
@@ -18,7 +20,7 @@ import '@/components/calendar/calendar-view.css'
 const EVENT_TYPE_ICON: Record<DemoCalendarEventType, typeof Briefcase> = {
     kickoff: Briefcase,
     due: Briefcase,
-    deliverable: Layers,
+    deliverable: FolderPlus,
     document: FileText,
 }
 
@@ -41,21 +43,25 @@ function renderEventContent(arg: EventContentArg, eventsById: Map<string, DemoCa
     const Icon = EVENT_TYPE_ICON[type] ?? Briefcase
     const fullEvent = eventsById.get(arg.event.id)
     const label = EVENT_TYPE_LABEL[type] ?? 'Engagement'
+    // As in calendar-view.tsx: deliverables and documents lead with their stage's icon.
+    const status = (type === 'deliverable' || type === 'document') && fullEvent?.status ? statusOf('deliverable', fullEvent.status) : null
 
     return (
         <Tooltip>
             <TooltipTrigger asChild>
                 <div className="flex items-center gap-1 min-w-0 px-0.5">
-                    <Icon className="h-3 w-3 shrink-0 opacity-70" />
+                    {status
+                        ? <StatusIcon stage={status.stage} size={12} label={status.label} />
+                        : <Icon className="h-3 w-3 shrink-0 opacity-70" />}
                     <span className="truncate">{arg.event.title}</span>
                 </div>
             </TooltipTrigger>
             <TooltipContent variant="light" side="top" className="max-w-[240px]">
-                <div className="flex items-center gap-1.5 text-[#8a8d94]">
+                <div className="flex items-center gap-1.5 text-fg-subtle">
                     <Icon className="h-3.5 w-3.5 shrink-0" />
-                    <span className="text-xs font-medium uppercase tracking-wide">{label}</span>
+                    <span className="text-caption">{label}{status && ` · ${status.label}`}</span>
                 </div>
-                <div className="mt-1 font-medium text-[#1b1b1d]">{fullEvent?.engagementName}</div>
+                <div className="mt-1 font-medium text-fg">{fullEvent?.engagementName}</div>
             </TooltipContent>
         </Tooltip>
     )

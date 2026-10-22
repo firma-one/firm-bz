@@ -7,6 +7,7 @@ import { Briefcase, CalendarDays, Flag, FolderOpen, Users } from "lucide-react"
 import { updateProject, type LwCrmEngagementStatus } from "@/lib/actions/project"
 import { DateProperty, PersonAvatar, StatusProperty, type PersonOption } from "@/components/ui/property-cells"
 import { Tag } from "@/components/ui/tag"
+import { Hint } from "@/components/ui/tooltip"
 import { HeaderProp as Prop } from "@/components/ui/header-prop"
 import { useToast } from "@/components/ui/toast"
 import { clientPath } from "@/lib/navigation/firm-paths"
@@ -108,9 +109,11 @@ export function EngagementHeader({
                     <h1 className="min-w-0 text-h1 text-fg">{name || "Engagement"}</h1>
                 </div>
                 {personaDisplayName && (
-                    <Tag color="gray" title="Your role on this engagement" className="mt-2">
-                        You · {personaDisplayName}
-                    </Tag>
+                    <Hint label="Your role on this engagement">
+                        <span className="mt-2 inline-flex">
+                            <Tag color="gray">You · {personaDisplayName}</Tag>
+                        </span>
+                    </Hint>
                 )}
             </div>
             {description && <p className="max-w-3xl text-ui text-fg-muted line-clamp-2">{description}</p>}
@@ -157,19 +160,19 @@ export function EngagementHeader({
                     </Prop>
                 )}
 
-                <Prop label="Start date" icon={<CalendarDays className="h-3.5 w-3.5" />}>
+                <Prop label="Start" icon={<CalendarDays className="h-3.5 w-3.5" />}>
                     <DateProperty
                         value={kickoffDate}
-                        placeholder="Start date"
+                        placeholder="Start"
                         disabled={!canManage || isCompleted}
                         onChange={(next) => save({ kickoffDate: next }, "start date")}
                     />
                 </Prop>
 
-                <Prop label="Due date" icon={<Flag className="h-3.5 w-3.5" />}>
+                <Prop label="Due" icon={<Flag className="h-3.5 w-3.5" />}>
                     <DateProperty
                         value={dueDate}
-                        placeholder="Due date"
+                        placeholder="Due"
                         highlightOverdue={!isCompleted}
                         disabled={!canManage || isCompleted}
                         onChange={(next) => save({ dueDate: next }, "due date")}

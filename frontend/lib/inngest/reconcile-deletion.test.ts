@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 /**
- * The cleanup after "Move to Bin" deletes the app's records for good, so when the trash came from
+ * The cleanup after "Move to trash" deletes the app's records for good, so when the trash came from
  * the Files list it first waits out the Undo window (.claude/plans/undo-move-to-bin.md).
  */
 
@@ -50,7 +50,7 @@ describe.each([
         expect(SearchService.removeFile).not.toHaveBeenCalled()
     })
 
-    it('cleans up after the window when the item is still in the Bin', async () => {
+    it('cleans up after the window when the item is still in the trash', async () => {
         const s = step()
         const result = await handlerOf(fn)({ event: { data: { organizationId: 'f1', externalId: 'x', connectorId: 'conn', undoable: true } }, step: s })
         expect(s.sleep).toHaveBeenCalled()

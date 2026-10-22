@@ -4,11 +4,11 @@ import React from 'react'
 import Link from 'next/link'
 import { Briefcase, CalendarClock, CalendarDays, Coins, Layers, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { Tag } from '@/components/ui/tag'
 import { PersonAvatar } from '@/components/ui/property-cells'
 import { ChartBlock, Legend, SegmentedBar, Stat, type ChartSegment } from '@/components/projects/overview-charts'
-import { Card, CARDS_ROW, Empty, ONE_COLUMN_CAP, STAGE_META, STAGE_ORDER, THIRDS } from '@/components/projects/engagement-overview-sections'
-import { RING } from '@/components/projects/insight-rings'
+import { Card, CARDS_ROW, Empty, ONE_COLUMN_CAP, STAGE_META, STAGE_ORDER, StagePill, THIRDS } from '@/components/projects/engagement-overview-sections'
+import { DATA, tint } from '@/components/projects/insight-rings'
+import { Hint } from '@/components/ui/tooltip'
 import { PipelineBar, formatValue } from '@/components/dashboard/pipeline-bar'
 import { countByPace, PACE_META, PACE_ORDER, sortByPace, type FirmEngagementRow, type PaceKey } from '@/lib/insights/firm-engagement-pace'
 import type { ClientPipelineItem, ContractTypeCount } from '@/app/api/firms/[firmId]/insights/route'
@@ -38,16 +38,21 @@ export interface FirmOverviewData {
     contractTypes: ContractTypeCount[]
 }
 
+/**
+ * The Engagements card's bar, in the status palette (the engagement Overview's pace rule): Overdue red,
+ * behind amber (slightly behind a lighter amber), on pace green, can't-judge-yet gray.
+ */
 const PACE_HEX: Record<PaceKey, string> = {
-    overdue: RING.red,
-    behind: '#fb923c',
-    slightly_behind: RING.amber,
-    on_pace: RING.green,
-    no_deliverables: RING.gray,
-    no_due_date: '#e2e8f0',
+    overdue: DATA.problem,
+    behind: DATA.waiting,
+    slightly_behind: tint(DATA.waiting, 55),
+    on_pace: DATA.done,
+    no_deliverables: DATA.notStarted,
+    no_due_date: tint(DATA.notStarted, 55),
 }
 
-const TYPE_COLORS = ['blue', 'purple', 'pink', 'green', 'orange', 'yellow', 'teal'].map((c) => `var(--ui-chart-${c})`)
+/** Contract types are categories, not statuses: the warm gray ramp (Wave 3, "Data colors"). */
+const TYPE_COLORS = [DATA.category1, DATA.category2, DATA.category3, DATA.category4]
 
 const shortDate = (ms: number) => new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
@@ -79,7 +84,7 @@ function EngagementsCard({ data }: { data: FirmOverviewData }) {
                 ) : (
                     <>
                         <div className="flex items-baseline gap-2">
-                            <span className={cn('text-h3 tabular-nums', counts.overdue > 0 ? 'text-danger' : attention > 0 ? 'text-tag-orange-fg' : 'text-fg')}>
+                            <span className={cn('text-h3 tabular-nums', counts.overdue > 0 ? 'text-danger' : attention > 0 ? 'text-status-waiting-fg' : 'text-fg')}>
                                 {attention > 0 ? plural(attention, 'needs attention', 'need attention') : 'None behind'}
                             </span>
                         </div>
@@ -189,7 +194,8 @@ export function FirmEngagementsList({ rows, nowMs, hrefFor }: {
                             value: s === 'to_do' ? d.toDo : s === 'in_progress' ? d.inProgress : s === 'in_review' ? d.inReview : d.approved,
                         }))
                         const late = pace.daysLeft != null && pace.daysLeft < 0
-                        const timeHex = late ? RING.red : (pace.timePct ?? 0) >= 85 ? RING.amber : RING.blue
+                        // As on the engagement's Timeline: Underway, Waiting from 85% used, red once past due.
+                        const timeHex = late ? DATA.problem : (pace.timePct ?? 0) >= 85 ? DATA.waiting : DATA.underway
                         const timeText = pace.daysLeft == null
                             ? 'No due date'
                             : late ? `${plural(-pace.daysLeft, 'day')} overdue`
@@ -199,9 +205,9 @@ export function FirmEngagementsList({ rows, nowMs, hrefFor }: {
                                 <div className="flex min-w-0 items-center gap-2.5">
                                     {r.lead
                                         ? <PersonAvatar person={r.lead} size={22} />
-                                        : <span className="h-[22px] w-[22px] shrink-0 rounded-full border border-dashed border-line-strong" title="No lead" />}
+                                        : <Hint label="No lead"><span className="h-[22px] w-[22px] shrink-0 rounded-full border border-dashed border-line-strong" /></Hint>}
                                     <div className="min-w-0">
-                                        <p className="truncate text-small font-medium text-fg" title={r.name}>{r.name}</p>
+                                        <Hint label={r.name}><p className="truncate text-small font-medium text-fg">{r.name}</p></Hint>
                                         <p className="truncate text-caption text-fg-subtle">
                                             {r.clientName} · {r.lead ? r.lead.name : 'No lead'}
                                         </p>
@@ -222,7 +228,7 @@ export function FirmEngagementsList({ rows, nowMs, hrefFor }: {
                                     </span>
                                 </div>
                                 <div className="flex min-w-0 flex-col items-end">
-                                    <Tag color={PACE_META[pace.key].tag} dot>{PACE_META[pace.key].label}</Tag>
+                                    <StagePill stage={PACE_META[pace.key].stage}>{PACE_META[pace.key].label}</StagePill>
                                     <span className={cn('text-caption', late ? 'text-danger' : 'text-fg-subtle')}>
                                         {r.dueDate ? `Due ${shortDate(new Date(r.dueDate).getTime())}` : '—'}
                                     </span>

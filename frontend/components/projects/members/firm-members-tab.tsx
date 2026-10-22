@@ -10,6 +10,7 @@ import { AtSign, Clock3, Mail, Plus, RefreshCw, Shield, Trash2, Type, UserMinus,
 import {
     NotionTable,
     NotionTableActions,
+    NotionTableActionsHead,
     NotionTableBody,
     NotionTableCell,
     NotionTableHead,
@@ -20,9 +21,12 @@ import { PageHeading } from '@/components/ui/page-heading'
 import { AccessLock } from '@/components/ui/access-lock'
 import { EmptyPanel } from '@/components/ui/empty-panel'
 import { Tag } from '@/components/ui/tag'
+import { StatusPill } from '@/components/ui/status-pill'
+import { FRESH_CHIP_CLASS, useApprovalFeedback } from '@/lib/ui/use-approval-feedback'
 import { LoadingAnnouncement, ShimmerBar, ShimmerBlock } from '@/components/ui/shimmer'
 import { RelativeDateTime } from '@/components/ui/relative-date-time'
 import { useToast } from '@/components/ui/toast'
+import { Hint } from '@/components/ui/tooltip'
 import {
     Dialog,
     DialogContent,
@@ -56,6 +60,7 @@ export function FirmMembersTab({ firmId, groupSlug, orgSlug, canManage = false }
     const [inviteToRevokeId, setInviteToRevokeId] = useState<string | null>(null)
     const [memberToRemove, setMemberToRemove] = useState<{ id: string; name: string; email: string; ownsConnector: boolean } | null>(null)
     const { addToast } = useToast()
+    const resendFeedback = useApprovalFeedback()
 
     const refreshData = async () => {
         setIsLoading(true)
@@ -77,11 +82,11 @@ export function FirmMembersTab({ firmId, groupSlug, orgSlug, canManage = false }
         refreshData()
     }, [firmId, orgSlug])
 
-    const handleResendInvite = async (id: string) => {
+    const handleResendInvite = async (id: string, email: string) => {
         setActionLoading(id)
         try {
             await resendFirmInvitation(id)
-            addToast({ type: 'success', title: 'Invitation Sent', message: 'The invitation has been resent.' })
+            resendFeedback.confirm({ id, name: email, title: 'Invitation resent' })
             refreshData()
         } catch (e) {
             addToast({ type: 'error', title: 'Failed to Send', message: 'Could not resend the invitation.' })
@@ -140,9 +145,11 @@ export function FirmMembersTab({ firmId, groupSlug, orgSlug, canManage = false }
                 description="Firm administrators manage the firm's settings, members and every client."
                 actions={
                     <>
-                        <Button variant="ghost" size="icon" onClick={refreshData} disabled={isLoading} title="Refresh" aria-label="Refresh members">
+                        <Hint label="Refresh">
+                        <Button variant="ghost" size="icon" onClick={refreshData} disabled={isLoading} aria-label="Refresh members">
                             <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
                         </Button>
+                        </Hint>
                         {canManage && (
                             <Button size="sm" onClick={() => setIsInviteModalOpen(true)}>
                                 <Plus className="h-3.5 w-3.5" />
@@ -176,7 +183,7 @@ export function FirmMembersTab({ firmId, groupSlug, orgSlug, canManage = false }
                         <NotionTableHead icon={<AtSign />} className="hidden md:table-cell">Email</NotionTableHead>
                         <NotionTableHead icon={<Shield />}>Role</NotionTableHead>
                         <NotionTableHead icon={<Clock3 />} className="hidden sm:table-cell">Added</NotionTableHead>
-                        <th className="w-px" aria-label="Actions" />
+                        <NotionTableActionsHead />
                     </NotionTableHeader>
                     <NotionTableBody>
                         {members.map((member) => {
@@ -237,17 +244,21 @@ export function FirmMembersTab({ firmId, groupSlug, orgSlug, canManage = false }
                                 <NotionTableCell className="hidden text-fg-subtle md:table-cell">—</NotionTableCell>
                                 <NotionTableCell><Tag color="purple">Firm admin</Tag></NotionTableCell>
                                 <NotionTableCell className="hidden sm:table-cell">
-                                    <Tag color="yellow" dot>Invited</Tag>
+                                    <StatusPill kind="invitation" status="PENDING" className={resendFeedback.isFresh(inv.id) ? FRESH_CHIP_CLASS : undefined} />
                                 </NotionTableCell>
                                 <NotionTableActions>
                                     {canManage && (
                                         <span className="inline-flex items-center gap-0.5">
-                                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleResendInvite(inv.id)} disabled={actionLoading === inv.id} title="Resend invitation" aria-label={`Resend invitation to ${inv.email}`}>
-                                                <RefreshCw className="h-3.5 w-3.5" />
-                                            </Button>
-                                            <Button variant="ghost" size="icon" className="h-7 w-7 hover:text-danger" onClick={() => setInviteToRevokeId(inv.id)} disabled={actionLoading === inv.id} title="Cancel invitation" aria-label={`Cancel invitation to ${inv.email}`}>
-                                                <Trash2 className="h-3.5 w-3.5" />
-                                            </Button>
+                                            <Hint label="Resend invitation">
+                                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleResendInvite(inv.id, inv.email)} disabled={actionLoading === inv.id} aria-label={`Resend invitation to ${inv.email}`}>
+                                                    <RefreshCw className="h-3.5 w-3.5" />
+                                                </Button>
+                                            </Hint>
+                                            <Hint label="Cancel invitation">
+                                                <Button variant="ghost" size="icon" className="h-7 w-7 hover:text-danger" onClick={() => setInviteToRevokeId(inv.id)} disabled={actionLoading === inv.id} aria-label={`Cancel invitation to ${inv.email}`}>
+                                                    <Trash2 className="h-3.5 w-3.5" />
+                                                </Button>
+                                            </Hint>
                                         </span>
                                     )}
                                 </NotionTableActions>

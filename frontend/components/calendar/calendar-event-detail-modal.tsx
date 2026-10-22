@@ -4,71 +4,36 @@ import { useEffect, useState } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import {
-  Building2, Briefcase, Layers, FileText, ArrowUpRight, ListTodo, PenLine, Eye, CheckCircle, CalendarDays, User, AlarmClock,
+  Building2, Briefcase, FileText, ArrowUpRight, CalendarDays, User, AlarmClock,
 } from 'lucide-react'
+import { DeliverableIcon } from '@/components/ui/deliverable-icon'
 import { UserAvatarWithTooltip } from '@/components/ui/user-avatar-with-tooltip'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatFullDate, cn } from '@/lib/utils'
 import { getEngagementTagColor } from '@/lib/calendar/engagement-color'
 import { TAG_DOT_CLASSES } from '@/lib/ui/status-colors'
+import { StatusPill } from '@/components/ui/status-pill'
 import { useAuth } from '@/lib/auth-context'
 import type { CalendarEvent } from '@/lib/actions/calendar'
 import type { ActivityStatus } from '@/lib/sharing-settings'
 
-const STAGE_LABELS: Record<ActivityStatus, string> = {
-  to_do: 'To Do',
-  in_progress: 'In Progress',
-  in_review: 'In Review',
-  approved: 'Approved',
-}
+/** Fixed width, so the rows' statuses line up in a column. */
+const STATUS_BADGE_WIDTH = 'w-[104px]'
 
-const STAGE_ICON: Record<ActivityStatus, React.ReactNode> = {
-  to_do: <ListTodo className="h-3 w-3" />,
-  in_progress: <PenLine className="h-3 w-3" />,
-  in_review: <Eye className="h-3 w-3" />,
-  approved: <CheckCircle className="h-3 w-3" />,
-}
-
-const STAGE_COLOR: Record<ActivityStatus, string> = {
-  to_do: 'bg-[#f3b52f] text-white',
-  in_progress: 'bg-[#3b5bfd] text-white',
-  in_review: 'bg-[#7c3aed] text-white',
-  // Fixed Firma green — not bg-primary, which is theme-able per firm brand color.
-  approved: 'bg-[#069668] text-white',
-}
-
-const STATUS_BADGE_WIDTH = 'w-[92px]'
-
+/** A deliverable's or document's stage, as on the Board (the status language). */
 function StatusBadge({ status }: { status: ActivityStatus | null }) {
   if (!status) return <span className={cn('inline-block shrink-0', STATUS_BADGE_WIDTH)} />
   return (
-    <span className={cn('inline-flex items-center justify-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold shrink-0', STATUS_BADGE_WIDTH, STAGE_COLOR[status])}>
-      {STAGE_ICON[status]}
-      {STAGE_LABELS[status]}
+    <span className={cn('inline-flex shrink-0', STATUS_BADGE_WIDTH)}>
+      <StatusPill kind="deliverable" status={status} />
     </span>
   )
 }
 
-const ENGAGEMENT_STATUS_LABEL: Record<string, string> = {
-  PLANNED: 'Planned',
-  ACTIVE: 'Active',
-  COMPLETED: 'Completed',
-  PAUSED: 'Paused',
-}
-
-const ENGAGEMENT_STATUS_COLOR: Record<string, string> = {
-  PLANNED: 'bg-blue-500 text-white',
-  ACTIVE: 'bg-primary text-white',
-  COMPLETED: 'bg-[#8a8d94] text-white',
-  PAUSED: 'bg-fuchsia-500 text-white',
-}
-
 function EngagementStatusBadge({ status }: { status: string }) {
-  const color = ENGAGEMENT_STATUS_COLOR[status] ?? ENGAGEMENT_STATUS_COLOR.ACTIVE
-  const label = ENGAGEMENT_STATUS_LABEL[status] ?? 'Active'
   return (
-    <span className={cn('inline-flex items-center justify-center px-1.5 py-0.5 rounded text-[10px] font-semibold shrink-0', STATUS_BADGE_WIDTH, color)}>
-      {label}
+    <span className={cn('inline-flex shrink-0', STATUS_BADGE_WIDTH)}>
+      <StatusPill kind="engagement" status={status} />
     </span>
   )
 }
@@ -95,7 +60,7 @@ function DueDate({ date }: { date: string | null }) {
           {date ? formatFullDate(date) : 'Not Set'}
         </span>
       </TooltipTrigger>
-      <TooltipContent variant="light" side="top">Due Date</TooltipContent>
+      <TooltipContent variant="light" side="top">Due</TooltipContent>
     </Tooltip>
   )
 }
@@ -317,7 +282,7 @@ export function CalendarEventDetailModal({ event, onClose }: CalendarEventDetail
                   )}
                 >
                   <div className="flex items-center gap-2">
-                    <Layers className="h-4 w-4 text-fg-muted shrink-0" />
+                    <DeliverableIcon />
                     <span className="text-caption text-fg-subtle">Deliverable</span>
                   </div>
                   {isLoadingSiblings && !deliverableName ? (

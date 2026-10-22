@@ -1,8 +1,13 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { CalendarDays, CheckCircle, Eye, ListTodo, PackageCheck, PackagePlus, PenLine } from 'lucide-react'
+import { CalendarDays } from 'lucide-react'
+import { DeliverableIcon } from '@/components/ui/deliverable-icon'
 import { cn } from '@/lib/utils'
+import { StatusIcon } from '@/components/ui/status-icon'
+import { StatusPill } from '@/components/ui/status-pill'
+import { interactiveCardClass } from '@/components/ui/interactive-card'
+import { STAGE_BAR_CLASSES, STAGE_LANE_CLASSES, STATUS, type LaneStage } from '@/lib/ui/status'
 import { DemoEngagement } from '@/lib/demo/static-demo-data'
 import { DemoDeliverable, DeliverableStatus, getDemoDeliverables } from '@/lib/demo/demo-deliverables'
 import { DemoDeliverablePane } from '@/components/demo/demo-deliverable-pane'
@@ -11,54 +16,38 @@ import { useRightPane } from '@/lib/right-pane-context'
 
 type BoardStatus = DeliverableStatus
 
-/** The real board's lane palette (engagement-shares-tab.tsx): a tag-colored chip on a plain header. */
-const LANE_THEME: Record<BoardStatus, { chipBg: string; chipFg: string; progress: string }> = {
-    to_do: { chipBg: 'bg-tag-gray-bg', chipFg: 'text-tag-gray-fg', progress: 'var(--ui-tag-gray-fg)' },
-    in_progress: { chipBg: 'bg-tag-blue-bg', chipFg: 'text-tag-blue-fg', progress: 'var(--ui-tag-blue-fg)' },
-    in_review: { chipBg: 'bg-tag-yellow-bg', chipFg: 'text-tag-yellow-fg', progress: 'var(--ui-tag-yellow-fg)' },
-    approved: { chipBg: 'bg-tag-green-bg', chipFg: 'text-tag-green-fg', progress: 'var(--ui-tag-green-fg)' },
-}
-
-const LANES: { status: BoardStatus; label: string; icon: typeof ListTodo }[] = [
-    { status: 'to_do', label: 'To Do', icon: ListTodo },
-    { status: 'in_progress', label: 'In Progress', icon: PenLine },
-    { status: 'in_review', label: 'In Review', icon: Eye },
-    { status: 'approved', label: 'Approved', icon: CheckCircle },
-]
+/** The real Board's lanes (engagement-shares-tab.tsx): stage-tinted, with a StatusPill header. */
+const LANES: { status: BoardStatus; stage: LaneStage }[] = (['to_do', 'in_progress', 'in_review', 'approved'] as const)
+    .map((status) => ({ status, stage: STATUS.deliverable[status].stage as LaneStage }))
 
 const formatDue = (iso: string) =>
     new Date(`${iso}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 
-function BoardCard({ card, open, onToggle }: { card: DemoDeliverable; open: boolean; onToggle: () => void }) {
-    const theme = LANE_THEME[card.status]
-    const approved = card.status === 'approved'
+function BoardCard({ card, stage, open, onToggle }: { card: DemoDeliverable; stage: LaneStage; open: boolean; onToggle: () => void }) {
     const initials = card.actor.split(' ').map((p) => p[0]).join('')
+    const approved = card.status === 'approved'
     const done = approved ? card.fileCount : Math.max(1, Math.floor(card.fileCount * 0.5))
-    const Icon = approved ? PackageCheck : PackagePlus
+    // As on the app's card: overdue is a red date, not a status.
+    const overdue = !!card.dueDate && !approved && new Date(`${card.dueDate}T23:59:59`).getTime() < Date.now()
 
     return (
         <button
             type="button"
             onClick={onToggle}
-            className={cn(
-                'relative w-full overflow-hidden rounded-card border bg-surface text-left transition-colors hover:border-line-strong',
-                open ? 'border-fg-subtle' : 'border-line',
-            )}
+            className={cn(interactiveCardClass(), 'relative w-full overflow-hidden', open && 'ring-1 ring-fg-subtle')}
         >
-            <div className={cn('flex items-center gap-2.5 border-b px-3 pb-2 pt-2.5', approved ? 'border-action/10 bg-action/5' : 'border-line bg-surface-subtle')}>
-                <div className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded', theme.chipBg)}>
-                    <Icon className={cn('h-4 w-4', theme.chipFg)} />
+            <div className="border-b border-line px-3 pb-2 pt-2.5">
+                <div className="mb-0.5 flex items-center gap-1.5">
+                    <StatusIcon stage={stage} size={13} label={STATUS.deliverable[card.status].label} />
+                    <span className="font-mono text-[11px] text-fg-subtle">{card.folder.docId}</span>
                 </div>
-                <div className="min-w-0 flex-1">
-                    <div className="mb-0.5 font-mono text-[11px] font-bold tracking-wide text-fg-subtle">{card.folder.docId}</div>
-                    <div className="truncate text-small font-medium text-fg-muted">{card.folder.name.replace(/_+/g, ' ').trim()}</div>
-                </div>
+                <div className="truncate text-ui font-medium text-fg">{card.folder.name.replace(/_+/g, ' ').trim()}</div>
             </div>
             <div className="space-y-1.5 px-3 pb-3 pt-2">
                 <div className="flex items-center justify-between gap-2">
-                    <span className={cn('inline-flex items-center gap-1 text-caption', card.dueDate ? 'text-fg-muted' : 'italic text-fg-subtle')}>
-                        <CalendarDays className="h-3.5 w-3.5 text-fg-subtle" />
-                        {card.dueDate ? formatDue(card.dueDate) : 'Not set'}
+                    <span className={cn('inline-flex items-center gap-1 text-small', overdue ? 'text-danger' : card.dueDate ? 'text-fg-muted' : 'text-fg-subtle')}>
+                        <CalendarDays className={cn('h-3.5 w-3.5', overdue ? 'text-danger' : 'text-fg-subtle')} />
+                        {card.dueDate ? formatDue(card.dueDate) : 'No due date'}
                     </span>
                     <span className="flex min-w-0 items-center gap-1">
                         <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-surface-muted text-[8px] font-semibold text-fg-muted">{initials}</span>
@@ -68,7 +57,7 @@ function BoardCard({ card, open, onToggle }: { card: DemoDeliverable; open: bool
                 {card.fileCount > 0 && (
                     <div className="flex items-center gap-2">
                         <div className="h-1 flex-1 overflow-hidden rounded-full bg-surface-muted">
-                            <div className="h-full rounded-full" style={{ width: `${Math.round((done / card.fileCount) * 100)}%`, backgroundColor: theme.progress }} />
+                            <div className={cn('h-full rounded-full', STAGE_BAR_CLASSES[stage])} style={{ width: `${Math.round((done / card.fileCount) * 100)}%` }} />
                         </div>
                         <span className="shrink-0 text-caption tabular-nums text-fg-subtle">{done}/{card.fileCount}</span>
                     </div>
@@ -79,8 +68,8 @@ function BoardCard({ card, open, onToggle }: { card: DemoDeliverable; open: bool
 }
 
 /**
- * Static counterpart to the real Board tab (EngagementSharesTab in board view): the same plain lane
- * headers, gray lane bodies and hairline cards. Deliverables are the engagement's actual folders,
+ * Static counterpart to the real Board tab (EngagementSharesTab in board view): the same
+ * stage-tinted lanes sized to their cards, StatusPill headers and shadowed cards. Deliverables are the engagement's actual folders,
  * status cycled deterministically, file counts are real. Clicking a card opens the deliverable
  * detail pane, matching the real right-pane pattern.
  */
@@ -98,7 +87,7 @@ export function DemoEngagementBoard({ engagement }: { engagement: DemoEngagement
         openIdRef.current = card.folder.id
         rightPane.setTitle(card.folder.docId)
         rightPane.setHeaderSubtitle(prettyName(card.folder.name))
-        rightPane.setHeaderIcon(card.status === 'approved' ? <PackageCheck className="h-4 w-4" /> : <PackagePlus className="h-4 w-4" />)
+        rightPane.setHeaderIcon(<DeliverableIcon />)
         rightPane.setIconTooltip('Deliverable')
         rightPane.setHeaderActions(null)
         rightPane.setPaneSize('medium')
@@ -128,48 +117,29 @@ export function DemoEngagementBoard({ engagement }: { engagement: DemoEngagement
 
     return (
         <div className="subtle-scrollbar overflow-x-auto pb-1">
-            <div className="grid min-h-[360px] items-start gap-4" style={{ gridTemplateColumns: 'repeat(4, minmax(240px, 1fr))' }}>
+            <div className="grid min-h-[360px] items-start gap-3" style={{ gridTemplateColumns: 'repeat(4, minmax(240px, 1fr))' }}>
                 {LANES.map((lane) => {
-                    const theme = LANE_THEME[lane.status]
                     const laneCards = byLane[lane.status]
-                    const lanePct = total > 0 ? (laneCards.length / total) * 100 : 0
-                    const LaneIcon = lane.icon
                     return (
-                        <div key={lane.status} className="flex flex-col">
-                            <div className="flex shrink-0 flex-col overflow-hidden">
-                                <div className="flex items-center gap-2 px-1 py-2">
-                                    <div className={cn('rounded p-1', theme.chipBg)}>
-                                        <LaneIcon className={cn('h-3.5 w-3.5', theme.chipFg)} />
-                                    </div>
-                                    <span className="text-ui font-medium text-fg">{lane.label}</span>
-                                    <span className="ml-0.5 text-small tabular-nums text-fg-subtle">
-                                        {total > 0 ? `${laneCards.length}/${total}` : laneCards.length}
-                                    </span>
-                                </div>
-                                <div className="h-0.5 shrink-0 rounded-full bg-surface-muted">
-                                    <div className="h-full transition-all duration-300" style={{ width: `${lanePct}%`, backgroundColor: theme.progress }} />
-                                </div>
+                        <div key={lane.status} className={cn('flex flex-col gap-2 rounded-lg p-2', STAGE_LANE_CLASSES[lane.stage].rest)}>
+                            <div className="flex h-7 items-center gap-2 px-1">
+                                <StatusPill kind="deliverable" status={lane.status} />
+                                <span className="text-small tabular-nums text-fg-subtle">{laneCards.length}</span>
                             </div>
-                            <div className="mt-1 flex flex-col gap-1.5 rounded-card bg-surface-subtle p-1.5">
-                                {laneCards.map((c) => (
-                                    <BoardCard
-                                        key={c.folder.id}
-                                        card={c}
-                                        open={selected === c.folder.id}
-                                        onToggle={() => (selected === c.folder.id ? closeCard() : openCard(c))}
-                                    />
-                                ))}
-                                {laneCards.length === 0 && (
-                                    <div className="flex h-[120px] items-center justify-center rounded-card border border-dashed border-line text-caption text-fg-subtle">
-                                        Nothing here yet
-                                    </div>
-                                )}
-                            </div>
+                            {laneCards.map((c) => (
+                                <BoardCard
+                                    key={c.folder.id}
+                                    card={c}
+                                    stage={lane.stage}
+                                    open={selected === c.folder.id}
+                                    onToggle={() => (selected === c.folder.id ? closeCard() : openCard(c))}
+                                />
+                            ))}
+                            {laneCards.length === 0 && <p className="px-1 pb-1 text-small text-fg-subtle">No deliverables</p>}
                         </div>
                     )
                 })}
             </div>
-
         </div>
     )
 }

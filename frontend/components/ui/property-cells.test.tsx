@@ -21,12 +21,39 @@ describe('StatusProperty', () => {
 })
 
 describe('DateProperty', () => {
-    it('saves a picked date and can clear it', async () => {
+    it('can clear a date', async () => {
         const onChange = vi.fn()
         render(<DateProperty value="2026-10-18T00:00:00.000Z" onChange={onChange} />)
         fireEvent.click(screen.getByRole('button'))
-        fireEvent.click(await screen.findByText('Clear date'))
+        fireEvent.click(await screen.findByRole('button', { name: 'Clear' }))
         await waitFor(() => expect(onChange).toHaveBeenCalledWith(null))
+    })
+
+    it('saves a picked day as yyyy-MM-dd', async () => {
+        const onChange = vi.fn()
+        render(<DateProperty value="2026-10-18" onChange={onChange} />)
+        fireEvent.click(screen.getByRole('button'))
+        fireEvent.click(await screen.findByRole('button', { name: 'Friday, October 30, 2026' }))
+        await waitFor(() => expect(onChange).toHaveBeenCalledWith('2026-10-30'))
+    })
+
+    it('saves a typed date on Enter', async () => {
+        const onChange = vi.fn()
+        render(<DateProperty value="2026-10-18" placeholder="Due" onChange={onChange} />)
+        fireEvent.click(screen.getByRole('button'))
+        const field = await screen.findByRole('textbox', { name: 'Due' })
+        fireEvent.change(field, { target: { value: '2026-11-03' } })
+        fireEvent.keyDown(field, { key: 'Enter' })
+        await waitFor(() => expect(onChange).toHaveBeenCalledWith('2026-11-03'))
+    })
+
+    it('shows a time only when times are allowed', () => {
+        const at = new Date(2026, 9, 30, 17, 0).toISOString()
+        const { unmount } = render(<DateProperty value={at} onChange={() => {}} disabled allowTime />)
+        expect(screen.getByText('Oct 30, 2026 · 5:00 PM')).toBeTruthy()
+        unmount()
+        render(<DateProperty value={at} onChange={() => {}} disabled />)
+        expect(screen.getByText('Oct 30, 2026')).toBeTruthy()
     })
 
     it('shows the placeholder when empty and nothing to click when disabled', () => {

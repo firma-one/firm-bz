@@ -16,6 +16,7 @@ import { AtSign, Briefcase, Contact, CornerDownLeft, Pencil, Phone, Plus, Refres
 import {
   NotionTable,
   NotionTableActions,
+  NotionTableActionsHead,
   NotionTableBody,
   NotionTableCell,
   NotionTableHead,
@@ -217,7 +218,7 @@ export function ClientContactsTab({
             <NotionTableHead icon={<AtSign />}>Email</NotionTableHead>
             <NotionTableHead icon={<Phone />} className="hidden lg:table-cell">Phone</NotionTableHead>
             <NotionTableHead icon={<Tags />} className="hidden sm:table-cell">Tags</NotionTableHead>
-            {canManage && <th className="w-px" aria-label="Actions" />}
+            {canManage && <NotionTableActionsHead />}
           </NotionTableHeader>
           <NotionTableBody>
             {filtered.map((c) => (

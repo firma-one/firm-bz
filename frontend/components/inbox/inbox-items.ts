@@ -1,4 +1,5 @@
 import type { ReminderWithContext } from "@/lib/actions/user-reminders"
+import type { StatusStage } from "@/lib/ui/status"
 
 /** Dispatched on window after any Inbox change, so the shell refreshes its badges. */
 export const INBOX_CHANGED_EVENT = "firma:inbox-changed"
@@ -41,6 +42,58 @@ export type InboxItem = {
     overdue: boolean
     /** Reminder due-date label from the reminder engine ("Due today", "3 days overdue"). */
     dueLabel: string | null
+    /** The stage a notification reports, drawn as its StatusIcon beside the label (null for the rest). */
+    stage?: StatusStage | null
+    /** What it's about, for its leading icon; null falls back to a generic reminder or notification icon. */
+    entity: InboxEntity | null
+}
+
+export type InboxEntity = "firm" | "client" | "engagement" | "deliverable" | "document" | "comment" | "invitation" | "member" | "storage"
+
+/**
+ * A reminder's subject from its entity key, "platform.<table>[.<column>]" (the keys
+ * lib/reminders/entity-registry.ts resolves). An engagement's shares are its deliverables.
+ */
+export function reminderEntity(entityKey: string, action: string): InboxEntity | null {
+    const [, table, column] = entityKey.split(".")
+    switch (table) {
+        case "firms": return "firm"
+        case "clients": return "client"
+        case "engagements": return column === "shares" ? (/comment/i.test(action) ? "comment" : "deliverable") : "engagement"
+        case "documents": return "document"
+        case "doc_comments": return "comment"
+        case "engagement_invitations":
+        case "client_invitations":
+        case "firm_invitations": return "invitation"
+        case "connectors": return "storage"
+        default: return null
+    }
+}
+
+/** A notification's subject from its type (lib/notify-event.ts and the Inngest reminders). */
+const NOTIFICATION_ENTITY: Record<string, InboxEntity> = {
+    DOCUMENT_STAGING_INTAKE: "document",
+    DOCUMENT_ACCEPTED_BY_CLIENT: "document",
+    DOCUMENT_REJECTED: "document",
+    DOCUMENT_STATUS_CHANGED: "document",
+    DOCUMENT_DUE_DATE_SET: "document",
+    DELIVERABLE_DUE_REMINDER: "deliverable",
+    DELIVERABLE_OVERDUE: "deliverable",
+    EXTERNAL_CLIENT_COMMENT: "comment",
+    ENGAGEMENT_INVITE_ACCEPTED: "member",
+    PROJECT_DUE_DATE_SET: "engagement",
+    CLIENT_FOLLOWUP_DUE: "client",
+}
+
+/**
+ * Notifications that report a state change, in the status language: an upload waiting for review,
+ * a document the client accepted, an invitation accepted, a document sent back.
+ */
+const NOTIFICATION_STAGE: Record<string, StatusStage> = {
+    DOCUMENT_STAGING_INTAKE: "waiting",
+    DOCUMENT_ACCEPTED_BY_CLIENT: "done",
+    ENGAGEMENT_INVITE_ACCEPTED: "done",
+    DOCUMENT_REJECTED: "problem",
 }
 
 function humanizeType(type: string): string {
@@ -66,6 +119,7 @@ export function reminderToItem(r: ReminderWithContext): InboxItem {
         unread: r.delta === null || r.delta <= 0,
         overdue: r.delta !== null && r.delta < 0,
         dueLabel: r.dateValue ? r.label : null,
+        entity: reminderEntity(r.entityKey, r.action),
     }
 }
 
@@ -83,6 +137,8 @@ export function notificationToItem(n: ApiNotification): InboxItem {
         unread: n.readAt === null,
         overdue: false,
         dueLabel: null,
+        stage: NOTIFICATION_STAGE[n.type] ?? null,
+        entity: NOTIFICATION_ENTITY[n.type] ?? null,
     }
 }
 

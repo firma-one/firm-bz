@@ -142,10 +142,10 @@ export function AgentPromptCard({
            replays — the next question slides in from the right as the last one leaves. Only the
            CURRENT question is ever rendered: answered ones are not kept on screen, which is what
            the card is replacing, not accumulating. */
-        <div className="animate-in fade-in slide-in-from-right-4 overflow-hidden rounded-xl border border-gray-200 bg-white duration-200">
+        <div className="animate-in fade-in slide-in-from-right-4 overflow-hidden rounded-card border border-line bg-surface duration-200">
             {/* The question, weightier than anything under it: everything below is an answer to it. */}
             <div className="flex items-start gap-2 px-3.5 pb-2.5 pt-3">
-                <p className="min-w-0 flex-1 font-headline text-[13px] leading-snug text-gray-900">
+                <p className="min-w-0 flex-1 font-headline text-[13px] leading-snug text-fg">
                     {question}
                 </p>
                 {/* Shown whenever a position is given, including "1 of 1".
@@ -153,7 +153,7 @@ export function AgentPromptCard({
                     queue from a longer one whose length was simply not displayed — and "how many
                     more of these are there" is the first thing anyone asks of a sequence. */}
                 {step != null && stepCount != null && (
-                    <span className="shrink-0 pt-0.5 text-[10px] tabular-nums text-gray-400">
+                    <span className="shrink-0 pt-0.5 text-[10px] tabular-nums text-fg-subtle">
                         {step} of {stepCount}
                     </span>
                 )}
@@ -161,7 +161,7 @@ export function AgentPromptCard({
                     <button
                         type="button"
                         onClick={onDismiss}
-                        className="-mr-1 flex h-5 w-5 shrink-0 items-center justify-center rounded text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700"
+                        className="-mr-1 flex h-5 w-5 shrink-0 items-center justify-center rounded text-fg-subtle transition-colors hover:bg-surface-muted hover:text-fg-muted"
                         aria-label="Dismiss this question"
                     >
                         <X className="h-3.5 w-3.5" />
@@ -172,19 +172,19 @@ export function AgentPromptCard({
             {answered ? (
                 /* Answered: the card keeps the decision in place rather than vanishing, so the
                    thread reads back as what was asked and what was agreed. */
-                <div className="flex items-center gap-2.5 border-t border-gray-100 bg-primary/[0.04] px-3.5 py-2.5">
+                <div className="flex items-center gap-2.5 border-t border-line bg-action/[0.04] px-3.5 py-2.5">
                     <span
                         aria-hidden
-                        className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-md bg-primary/15 text-[10px] font-medium text-primary"
+                        className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-md bg-action/15 text-[10px] font-medium text-action"
                     >
                         {chosen ? options.indexOf(chosen) + 1 : <Pencil className="h-2.5 w-2.5" />}
                     </span>
                     <span className="min-w-0 flex-1">
-                        <span className="block truncate text-xs text-gray-700">
+                        <span className="block truncate text-xs text-fg-muted">
                             {chosen?.label ?? answer}
                         </span>
                         {answerNote && (
-                            <span className="mt-0.5 block text-[10px] leading-snug text-gray-500">
+                            <span className="mt-0.5 block text-[10px] leading-snug text-fg-muted">
                                 You asked: &ldquo;{answerNote}&rdquo;
                             </span>
                         )}
@@ -196,7 +196,7 @@ export function AgentPromptCard({
                         {options.map((option, i) => {
                         const isRecommended = i === recommended
                         return (
-                            <li key={option.value} className="border-t border-gray-100">
+                            <li key={option.value} className="border-t border-line">
                                 <button
                                     type="button"
                                     disabled={disabled}
@@ -205,21 +205,21 @@ export function AgentPromptCard({
                                        assistant chose it; the highlight says so without
                                        preselecting anything or taking the decision away. */
                                     className={`group flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left transition-colors disabled:opacity-50 ${
-                                        isRecommended ? 'bg-gray-50 hover:bg-primary/[0.06]' : 'hover:bg-gray-50'
+                                        isRecommended ? 'bg-surface-subtle hover:bg-action/[0.06]' : 'hover:bg-surface-subtle'
                                     }`}
                                 >
                                     <span
                                         aria-hidden
                                         className={`flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-md text-[10px] font-medium transition-colors ${
                                             isRecommended
-                                                ? 'bg-white text-gray-600 group-hover:bg-primary/15 group-hover:text-primary'
-                                                : 'bg-gray-100 text-gray-500 group-hover:bg-primary/15 group-hover:text-primary'
+                                                ? 'bg-surface text-fg-muted group-hover:bg-action/15 group-hover:text-action'
+                                                : 'bg-surface-muted text-fg-muted group-hover:bg-action/15 group-hover:text-action'
                                         }`}
                                     >
                                         {i + 1}
                                     </span>
                                     <span className="min-w-0 flex-1">
-                                        <span className="block text-xs font-medium leading-snug text-gray-900">
+                                        <span className="block text-xs font-medium leading-snug text-fg">
                                             {option.label}
                                             {/* Inline with the label, not in its own column.
                                                 As a sibling of the text block it took a fixed
@@ -232,7 +232,7 @@ export function AgentPromptCard({
                                                 tells a screen reader nothing, and a user who cannot
                                                 see the tint cannot tell which answer is advised. */}
                                             {isRecommended && (
-                                                <span className="ml-1.5 whitespace-nowrap rounded-full bg-primary/10 px-1.5 py-0.5 align-middle text-[9px] font-medium uppercase tracking-wide text-primary">
+                                                <span className="ml-1.5 whitespace-nowrap rounded-full bg-action/10 px-1.5 py-0.5 align-middle text-[9px] font-medium uppercase tracking-wide text-action">
                                                     Recommended
                                                 </span>
                                             )}
@@ -245,7 +245,7 @@ export function AgentPromptCard({
                                             the thought. Hierarchy here comes from weight and
                                             colour, not from shrinking the text. */}
                                         {option.description && (
-                                            <span className="mt-0.5 block text-xs leading-snug text-gray-500">
+                                            <span className="mt-0.5 block text-xs leading-snug text-fg-muted">
                                                 {option.description}
                                             </span>
                                         )}
@@ -253,7 +253,7 @@ export function AgentPromptCard({
                                     {/* On hover only: a permanent arrow on every row reads as
                                         several competing calls to action. */}
                                     <ArrowRight
-                                        className="h-3.5 w-3.5 shrink-0 text-gray-400 opacity-0 transition-opacity group-hover:opacity-100"
+                                        className="h-3.5 w-3.5 shrink-0 text-fg-subtle opacity-0 transition-opacity group-hover:opacity-100"
                                         aria-hidden
                                     />
                                 </button>
@@ -263,20 +263,20 @@ export function AgentPromptCard({
                         {/* Last and quieter: the fallback, not a peer of the options. Leading with
                             it would invite typing where a click would do. */}
                         {!writing && (
-                            <li className="border-t border-gray-100">
+                            <li className="border-t border-line">
                                 <button
                                     type="button"
                                     disabled={disabled}
                                     onClick={() => setWriting(true)}
-                                    className="group flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left transition-colors hover:bg-gray-50 disabled:opacity-50"
+                                    className="group flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left transition-colors hover:bg-surface-subtle disabled:opacity-50"
                                 >
                                     <span
                                         aria-hidden
-                                        className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-md bg-gray-100 text-gray-400 transition-colors group-hover:text-primary"
+                                        className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-md bg-surface-muted text-fg-subtle transition-colors group-hover:text-action"
                                     >
                                         <Pencil className="h-2.5 w-2.5" />
                                     </span>
-                                    <span className="text-xs text-gray-400 transition-colors group-hover:text-gray-600">
+                                    <span className="text-xs text-fg-subtle transition-colors group-hover:text-fg-muted">
                                         {freeTextLabel}
                                     </span>
                                 </button>
@@ -284,11 +284,11 @@ export function AgentPromptCard({
                         )}
 
                         {writing && (
-                            <li className="border-t border-gray-100">
+                            <li className="border-t border-line">
                                 <div className="flex items-center gap-2.5 px-3.5 py-2.5">
                                     <span
                                         aria-hidden
-                                        className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-md bg-primary/15 text-primary"
+                                        className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-md bg-action/15 text-action"
                                     >
                                         <Pencil className="h-2.5 w-2.5" />
                                     </span>
@@ -303,13 +303,13 @@ export function AgentPromptCard({
                                             if (e.key === 'Escape') { setWriting(false); setDraft('') }
                                         }}
                                         placeholder={freeTextPlaceholder}
-                                        className="min-w-0 flex-1 bg-transparent text-xs text-gray-800 outline-none placeholder:text-gray-400"
+                                        className="min-w-0 flex-1 bg-transparent text-xs text-fg outline-none placeholder:text-fg-subtle"
                                     />
                                     <button
                                         type="button"
                                         onClick={submitFreeText}
                                         disabled={!draft.trim()}
-                                        className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-primary transition-colors hover:bg-primary/10 disabled:opacity-30"
+                                        className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-action transition-colors hover:bg-action/10 disabled:opacity-30"
                                         aria-label="Submit answer"
                                     >
                                         <ArrowRight className="h-3.5 w-3.5" />
@@ -321,7 +321,7 @@ export function AgentPromptCard({
 
                     {/* Declining is a different act from answering, so it sits apart. */}
                     {(onSkip || dismissLabel) && (
-                        <div className="flex items-center justify-between gap-2 border-t border-gray-100 px-3.5 py-2.5">
+                        <div className="flex items-center justify-between gap-2 border-t border-line px-3.5 py-2.5">
                             {/* Leaving the flow sits HERE, beside Skip, not only as the × in the
                                 header. Once the reader is working down a list of options the
                                 header is out of their reading path entirely — the × is findable
@@ -334,7 +334,7 @@ export function AgentPromptCard({
                                     type="button"
                                     onClick={onDismiss}
                                     disabled={disabled}
-                                    className="rounded-lg px-2 py-1.5 text-[11px] text-gray-500 transition-colors hover:text-gray-900 disabled:opacity-50"
+                                    className="rounded-lg px-2 py-1.5 text-[11px] text-fg-muted transition-colors hover:text-fg disabled:opacity-50"
                                 >
                                     {dismissLabel}
                                 </button>
@@ -349,7 +349,7 @@ export function AgentPromptCard({
                                     // final — and "Skip" reads as deferrable, which is the gap
                                     // this closes.
                                     title={skipHint}
-                                    className="rounded-lg border border-gray-200 px-3.5 py-1.5 text-[11px] text-gray-600 transition-colors hover:border-gray-300 hover:bg-gray-50 hover:text-gray-900 disabled:opacity-50"
+                                    className="rounded-lg border border-line px-3.5 py-1.5 text-[11px] text-fg-muted transition-colors hover:border-line-strong hover:bg-surface-subtle hover:text-fg disabled:opacity-50"
                                 >
                                     Skip
                                 </button>

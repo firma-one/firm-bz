@@ -317,6 +317,14 @@ export interface EngagementInsightsResponse {
   /** The pending draft describes older data than now (internal only), so the review can say so. */
   insightsSummaryDraftStale: boolean
   insightsSummaryPublishedAt: string | null
+  /**
+   * Who wrote the published summary, for its byline (app-design-refinements.md, section 7):
+   * 'ai' when a lead published Brio's draft, 'manual' when one was typed. Null for older records.
+   * Shown to everyone who sees the summary, clients included.
+   */
+  insightsSummarySource?: 'ai' | 'manual' | null
+  /** Display name of the lead who published it; null for older records or a deleted account. */
+  insightsSummaryPublishedBy?: string | null
   folderHealth: FolderHealthReport
   storageHealth: StorageHealthReport
   pendingInvitations: { email: string; expireAt: string; daysUntilExpiry: number }[]
@@ -1203,6 +1211,9 @@ export async function computeEngagementInsights(
 
     const { readInsightsSummary } = await import('@/lib/ai/engagement-summary')
     const summaryRecord = readInsightsSummary(engagement?.settings as Record<string, unknown> | null)
+    const summaryPublishedBy = summaryRecord.text && summaryRecord.publishedByUserId
+      ? await publisherDisplayName(summaryRecord.publishedByUserId)
+      : null
 
     const response: EngagementInsightsResponse = {
       insightsConfig,
@@ -1225,6 +1236,9 @@ export async function computeEngagementInsights(
       insightsSummaryDraftStale: false,
       // Dates the published summary; safe for externals since it accompanies text they already see.
       insightsSummaryPublishedAt: summaryRecord.publishedAt,
+      // The byline: everyone who sees the summary sees who published it (decision D).
+      insightsSummarySource: summaryRecord.text ? summaryRecord.source : null,
+      insightsSummaryPublishedBy: summaryPublishedBy,
       folderHealth: folderHealthWithAllSignals,
       storageHealth,
       pendingInvitations,
@@ -1283,5 +1297,24 @@ export async function computeEngagementInsights(
     }
 
     return response
+  }
+}
+
+/**
+ * The name a summary's byline shows for its publisher: the account's full name, else the part of
+ * the email before the @ (as the Members list does). Null when the account is gone or the lookup
+ * fails, and the byline then falls back to "Written by Brio · {date}".
+ */
+async function publisherDisplayName(userId: string): Promise<string | null> {
+  try {
+    const { createClient: createAdminClient } = await import('@supabase/supabase-js')
+    const adminClient = createAdminClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+    const { data } = await adminClient.auth.admin.getUserById(userId)
+    const user = data?.user
+    if (!user) return null
+    const meta = user.user_metadata ?? {}
+    return ((meta.full_name ?? meta.name ?? user.email?.split('@')[0]) as string | undefined) ?? null
+  } catch {
+    return null
   }
 }

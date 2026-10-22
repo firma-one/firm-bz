@@ -173,7 +173,7 @@ const STEPS: TourStep[] = [
         {
             target: '[data-demo-tour="document-action-trigger"]',
             title: 'Document actions',
-            content: <p>Click the ⋯ menu on any file to download, share, rename, set a due date, add a reminder, bookmark it, and more.</p>,
+            content: <p>Hover a row for its quick actions, or click ⋯ on any file to open, download, comment on, bookmark, set a due date, rename or move it, and more.</p>,
             route: `${eng}?tab=files`,
             placement: 'left' as const,
         },

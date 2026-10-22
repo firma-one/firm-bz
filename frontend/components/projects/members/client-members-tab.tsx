@@ -15,6 +15,8 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { formatFullDate } from '@/lib/utils'
 import { useToast } from '@/components/ui/toast'
+import { StatusPill } from '@/components/ui/status-pill'
+import { FRESH_CHIP_CLASS, useApprovalFeedback } from '@/lib/ui/use-approval-feedback'
 import { logger } from '@/lib/logger'
 import { initialsOf } from '@/lib/initials'
 
@@ -47,6 +49,7 @@ export function ClientMembersTab({ firmId, clientId, orgSlug, clientSlug, canMan
     const [actionLoading, setActionLoading] = useState<string | null>(null)
     const [inviteToRevokeId, setInviteToRevokeId] = useState<string | null>(null)
     const { addToast } = useToast()
+    const resendFeedback = useApprovalFeedback()
 
     const refreshData = async () => {
         setIsLoading(true)
@@ -65,11 +68,11 @@ export function ClientMembersTab({ firmId, clientId, orgSlug, clientSlug, canMan
         refreshData()
     }, [clientId, orgSlug, clientSlug])
 
-    const handleResendInvite = async (id: string) => {
+    const handleResendInvite = async (id: string, email: string) => {
         setActionLoading(id)
         try {
             await resendClientInvitation(id)
-            addToast({ type: 'success', title: 'Invitation Sent', message: 'The invitation has been resent.' })
+            resendFeedback.confirm({ id, name: email, title: 'Invitation resent' })
             refreshData()
         } catch (e) {
             addToast({ type: 'error', title: 'Failed to Send', message: 'Could not resend the invitation.' })
@@ -176,10 +179,7 @@ export function ClientMembersTab({ firmId, clientId, orgSlug, clientSlug, canMan
                                     </div>
                                     <div className="flex-1 min-w-0">
                                         <p className="text-[13px] font-medium text-fg truncate">{inv.email}</p>
-                                        <p className="text-[11px] text-fg-muted flex items-center gap-1">
-                                            <Clock className="h-3 w-3" />
-                                            Pending
-                                        </p>
+                                        <StatusPill kind="invitation" status="PENDING" className={resendFeedback.isFresh(inv.id) ? FRESH_CHIP_CLASS : undefined} />
                                     </div>
                                     {canManage && (
                                         <DropdownMenu>
@@ -190,7 +190,7 @@ export function ClientMembersTab({ firmId, clientId, orgSlug, clientSlug, canMan
                                             </DropdownMenuTrigger>
                                             <DropdownMenuContent align="end" className="min-w-[140px]">
                                                 <DropdownMenuItem
-                                                    onClick={() => handleResendInvite(inv.id)}
+                                                    onClick={() => handleResendInvite(inv.id, inv.email)}
                                                     disabled={actionLoading === inv.id}
                                                 >
                                                     <RefreshCw className="h-4 w-4 mr-2" />

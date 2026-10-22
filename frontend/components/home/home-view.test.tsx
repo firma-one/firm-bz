@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 
 vi.mock('next/link', () => ({ default: ({ href, children, ...rest }: any) => <a href={href} {...rest}>{children}</a> }))
-vi.mock('next/navigation', () => ({ usePathname: () => '/d/u/home', useSearchParams: () => new URLSearchParams() }))
+vi.mock('next/navigation', () => ({ usePathname: () => '/d/u/home', useSearchParams: () => new URLSearchParams(), useRouter: () => ({ replace: vi.fn(), push: vi.fn() }) }))
 
 import { HomeView } from './home-view'
 import type { MyWork } from '@/lib/home/my-work'

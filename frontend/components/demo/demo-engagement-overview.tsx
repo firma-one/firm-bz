@@ -16,13 +16,12 @@ import {
     Heart,
     Inbox,
     MessagesSquare,
-    Package,
     RefreshCw,
     Users,
 } from 'lucide-react'
 import { InsightCard } from '@/components/dashboard/insight-card'
-import { ActionSection, attentionCount, type ActionItem } from '@/components/dashboard/action-list'
-import { RING } from '@/components/projects/insight-rings'
+import { ActionList, attentionCount, type ActionItem } from '@/components/dashboard/action-list'
+import { DATA } from '@/components/projects/insight-rings'
 import {
     DeliverablesTimeline,
     FileOrganizationSection,
@@ -168,10 +167,12 @@ export function DemoEngagementOverview({ engagement }: { engagement: DemoEngagem
                         <span className="text-small tabular-nums text-fg-subtle">{attentionCount(delivery, housekeeping)}</span>
                     )}
                 </div>
-                <div className="grid grid-cols-1 gap-x-10 gap-y-4 md:grid-cols-2">
-                    <ActionSection title="Delivery" icon={Package} items={delivery} />
-                    <ActionSection title="Housekeeping" icon={Archive} items={housekeeping} />
-                </div>
+                <ActionList
+                    groups={[
+                        { title: 'Delivery', items: delivery },
+                        { title: 'Housekeeping', items: housekeeping },
+                    ]}
+                />
             </div>
 
             <InsightCard
@@ -222,9 +223,9 @@ export function DemoEngagementOverview({ engagement }: { engagement: DemoEngagem
                         joined={3}
                         invited={1}
                         roles={[
-                            { label: 'Admin', hex: RING.green, value: 1 },
-                            { label: 'Member', hex: RING.blue, value: 1 },
-                            { label: 'Collaborator', hex: RING.indigo, value: 1 },
+                            { label: 'Admin', hex: DATA.category1, value: 1 },
+                            { label: 'Member', hex: DATA.category2, value: 1 },
+                            { label: 'Collaborator', hex: DATA.category3, value: 1 },
                         ]}
                         internal={2}
                         external={1}

@@ -1,8 +1,12 @@
 'use client'
 
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { Check, Clock, Copy, FileText, Square, Trash2 } from 'lucide-react'
+import { Check, Copy, FileText, Sparkles, Square, Trash2 } from 'lucide-react'
 import { Brio } from '@/components/ui/brio'
+import { BrioByline } from '@/components/ui/brio-byline'
+import { Hint } from '@/components/ui/tooltip'
+import { useToast } from '@/components/ui/toast'
+import { ASSISTANT, BRIO_GREEN } from '@/lib/ai/assistant'
 import { BrioSections } from '@/components/ui/brio-sections'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import {
@@ -14,9 +18,12 @@ import {
 import { useRightPane } from '@/lib/right-pane-context'
 import { findUnfilledSections } from '@/lib/ai/summary-sections'
 import { buildDemoSummary, type DemoSummaryInput } from '@/lib/demo/demo-summary'
-import { formatRelativeTime } from '@/lib/utils'
 
 const CONTROL = 'inline-flex h-7 items-center gap-1.5 rounded-control border border-line bg-surface px-2 text-small transition-colors hover:border-line-strong hover:bg-surface-hover'
+/** The header's actions, as in the app: 28px icon buttons named by a Hint and an aria-label. */
+const ICON_BUTTON = 'inline-flex h-7 w-7 items-center justify-center rounded-control text-fg-muted transition-colors duration-ui-fast hover:bg-surface-hover hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action/30'
+/** The tour's signed-in person, who published the sample and publishes any rewrite. */
+const TOUR_PUBLISHER = 'Demo User'
 
 /**
  * The tour's Engagement Summary: a sample already "published" two days ago, and a Rewrite with
@@ -38,6 +45,7 @@ export function DemoSummaryCard({ input, today }: { input: DemoSummaryInput; tod
     const [confirmOpen, setConfirmOpen] = useState(false)
     const [copied, setCopied] = useState<'published' | 'draft' | null>(null)
     const timer = useRef<number | null>(null)
+    const { addToast } = useToast()
 
     // The pane, exactly as the app's Overview drives it (engagement-insights-dashboard.tsx).
     const rightPane = useRightPane()
@@ -113,6 +121,7 @@ export function DemoSummaryCard({ input, today }: { input: DemoSummaryInput; tod
         setDraft(null)
         setDraftEdit('')
         clearPaneRef.current()
+        addToast({ type: 'success', title: 'Summary published', message: 'Visible to the client and in exports.' })
     }
 
     const copy = async (text: string, which: 'published' | 'draft') => {
@@ -162,10 +171,6 @@ export function DemoSummaryCard({ input, today }: { input: DemoSummaryInput; tod
                 <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-line px-4 pb-2 pt-3">
                     <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
                         <span className="text-small font-medium text-fg-muted">Engagement Summary</span>
-                        <span className="inline-flex shrink-0 items-center gap-1 text-caption text-fg-subtle">
-                            <Clock className="h-3 w-3" />
-                            {formatRelativeTime(published.publishedAt)}
-                        </span>
                     </div>
                     {reviewing ? (
                         <div className="flex shrink-0 items-center gap-2">
@@ -182,18 +187,22 @@ export function DemoSummaryCard({ input, today }: { input: DemoSummaryInput; tod
                             )}
                         </div>
                     ) : (
-                        <div className="flex shrink-0 items-center gap-2">
-                            <button type="button" onClick={() => copy(published.content, 'published')} aria-label="Copy summary to clipboard" className={`${CONTROL} text-fg-muted hover:text-fg`}>
-                                {copied === 'published' ? <Check className="h-3 w-3 text-action" /> : <Copy className="h-3 w-3" />}
-                                {copied === 'published' ? 'Copied' : 'Copy'}
-                            </button>
-                            <button type="button" onClick={rewrite} className={`${CONTROL} font-medium text-action`}>
-                                Rewrite with <Brio />
-                            </button>
+                        <div className="flex shrink-0 items-center gap-0.5">
+                            <Hint label={copied === 'published' ? 'Copied' : 'Copy as Markdown'}>
+                                <button type="button" onClick={() => copy(published.content, 'published')} aria-label="Copy the summary as Markdown" className={ICON_BUTTON}>
+                                    {copied === 'published' ? <Check className="h-4 w-4 text-status-done-icon" /> : <Copy className="h-4 w-4" />}
+                                </button>
+                            </Hint>
+                            <Hint label={<>Rewrite with <Brio /></>}>
+                                <button type="button" onClick={rewrite} aria-label={`Rewrite with ${ASSISTANT.name}`} className={ICON_BUTTON}>
+                                    <Sparkles className="h-4 w-4" style={{ color: BRIO_GREEN }} />
+                                </button>
+                            </Hint>
                         </div>
                     )}
                 </div>
                 <BrioSections content={published.content} className="px-4 py-3 text-fg-muted" />
+                <BrioByline source="ai" publisherName={TOUR_PUBLISHER} date={published.publishedAt} className="border-t border-line px-4 py-2.5" />
             </div>
 
             <ConfirmDialog

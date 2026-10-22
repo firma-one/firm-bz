@@ -5,10 +5,12 @@ import { Button } from "@/components/ui/button"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { AtSign, Clock3, Info, Mail, MoreHorizontal, Plus, Send, Shield, Trash2, Type, User, UserCircle, UserCog, UserMinus, X } from 'lucide-react'
-import { NotionTable, NotionTableActions, NotionTableBody, NotionTableCell, NotionTableHead, NotionTableHeader, NotionTableRow } from '@/components/ui/notion-table'
+import { NotionTable, NotionTableActions, NotionTableActionsHead, NotionTableBody, NotionTableCell, NotionTableHead, NotionTableHeader, NotionTableRow } from '@/components/ui/notion-table'
 import { Tag } from '@/components/ui/tag'
+import { StatusPill } from '@/components/ui/status-pill'
+import { FRESH_CHIP_CLASS, useApprovalFeedback } from '@/lib/ui/use-approval-feedback'
 import { EmptyPanel } from '@/components/ui/empty-panel'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { Hint, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -23,7 +25,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
-import { formatFullDate } from '@/lib/utils'
+import { cn, formatFullDate } from '@/lib/utils'
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Label } from "@/components/ui/label"
 import { removeMember, revokeInvitation, updateMemberPersona } from '@/lib/actions/members'
@@ -53,6 +55,7 @@ export function MemberList({ members, invitations, personas, onRefresh, canManag
     const [memberIdToRemove, setMemberIdToRemove] = useState<string | null>(null)
     const [inviteIdToRevoke, setInviteIdToRevoke] = useState<string | null>(null)
     const { addToast } = useToast()
+    const resendFeedback = useApprovalFeedback()
 
     const findPersonaId = (uiRoleValue: PersonaUiRole, subRoleValue?: PersonaUiSubRole) => {
         const slug = resolvePersonaSlug(uiRoleValue, subRoleValue)
@@ -132,11 +135,12 @@ export function MemberList({ members, invitations, personas, onRefresh, canManag
         }
     }
 
-    const handleResendInvite = async (id: string) => {
+    const handleResendInvite = async (id: string, email: string) => {
         setActionLoading(id)
         try {
             await resendInvitation(id)
-            addToast({ type: 'success', title: 'Invitation Sent', message: 'The invitation has been resent.' })
+            // The toast, and the row's status pill fading in (the shared state-change feedback).
+            resendFeedback.confirm({ id, name: email, title: 'Invitation resent' })
             onRefresh()
         } catch (e) {
             console.error(e)
@@ -273,19 +277,21 @@ export function MemberList({ members, invitations, personas, onRefresh, canManag
                 <NotionTableCell className="hidden text-fg-subtle md:table-cell">—</NotionTableCell>
                 <NotionTableCell>{roleTag(persona?.slug, persona?.description)}</NotionTableCell>
                 <NotionTableCell className="hidden sm:table-cell">
-                    <Tag color={invite.status === 'PENDING' ? 'yellow' : 'gray'} dot>
-                        {invite.status === 'PENDING' ? 'Invited' : invite.status === 'ACCEPTED' ? 'Accepted' : invite.status.toLowerCase()}
-                    </Tag>
+                    <StatusPill kind="invitation" status={invite.status} className={cn(resendFeedback.isFresh(invite.id) && FRESH_CHIP_CLASS)} />
                 </NotionTableCell>
                 <NotionTableActions>
                     {canManage && (
                         <div className="flex items-center justify-end gap-0.5">
-                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleResendInvite(invite.id)} disabled={actionLoading === invite.id} title="Resend invitation" aria-label={`Resend invitation to ${invite.email}`}>
-                                <Send className="h-3.5 w-3.5" />
-                            </Button>
-                            <Button variant="ghost" size="icon" className="h-7 w-7 hover:text-danger" onClick={() => setInviteIdToRevoke(invite.id)} disabled={actionLoading === invite.id} title="Cancel invitation" aria-label={`Cancel invitation to ${invite.email}`}>
-                                <X className="h-3.5 w-3.5" />
-                            </Button>
+                            <Hint label="Resend invitation">
+                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleResendInvite(invite.id, invite.email)} disabled={actionLoading === invite.id} aria-label={`Resend invitation to ${invite.email}`}>
+                                    <Send className="h-3.5 w-3.5" />
+                                </Button>
+                            </Hint>
+                            <Hint label="Cancel invitation">
+                                <Button variant="ghost" size="icon" className="h-7 w-7 hover:text-danger" onClick={() => setInviteIdToRevoke(invite.id)} disabled={actionLoading === invite.id} aria-label={`Cancel invitation to ${invite.email}`}>
+                                    <X className="h-3.5 w-3.5" />
+                                </Button>
+                            </Hint>
                         </div>
                     )}
                 </NotionTableActions>
@@ -295,8 +301,8 @@ export function MemberList({ members, invitations, personas, onRefresh, canManag
 
     /* Linear-style group header: role, count and description, with a quiet invite button at the end. */
     const groupHeader = (key: string, label: string, count: number, description?: string, icon?: React.ReactNode, onInvite?: () => void) => (
-        <tr key={`${key}-header`} className="h-9 border-b border-line bg-surface-subtle">
-            <td colSpan={5} className="px-1">
+        <tr key={`${key}-header`} className="h-9 bg-surface-subtle">
+            <td colSpan={5} className="border-b border-line px-2.5">
                 <div className="flex items-center gap-2">
                     {icon && <span className="text-fg-subtle [&_svg]:h-4 [&_svg]:w-4">{icon}</span>}
                     <span className="text-small font-medium text-fg">{label}</span>
@@ -326,7 +332,7 @@ export function MemberList({ members, invitations, personas, onRefresh, canManag
             <NotionTableHead icon={<AtSign />} className="hidden md:table-cell">Email</NotionTableHead>
             <NotionTableHead icon={<Shield />}>Role</NotionTableHead>
             <NotionTableHead icon={<Clock3 />} className="hidden sm:table-cell">Added</NotionTableHead>
-            <th className="w-px" aria-label="Actions" />
+            <NotionTableActionsHead />
         </NotionTableHeader>
     )
 
@@ -354,8 +360,8 @@ export function MemberList({ members, invitations, personas, onRefresh, canManag
                                     {roleMembers.map(memberRow)}
                                     {roleInvitations.map(invitationRow)}
                                     {totalCount === 0 && (
-                                        <tr className="h-9 border-b border-line">
-                                            <td colSpan={5} className="px-1 text-small text-fg-subtle">No one in this role yet.</td>
+                                        <tr className="h-[34px]">
+                                            <td colSpan={5} className="border-b border-line px-2.5 text-small text-fg-subtle">No one in this role yet.</td>
                                         </tr>
                                     )}
                                 </NotionTableBody>

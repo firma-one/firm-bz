@@ -1,9 +1,10 @@
 'use client'
 
-import { AtSign, Clock3, Shield, Type } from 'lucide-react'
+import { AtSign, Clock3, Mail, Shield, Type } from 'lucide-react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { RelativeDateTime } from '@/components/ui/relative-date-time'
 import { Tag } from '@/components/ui/tag'
+import { StatusPill } from '@/components/ui/status-pill'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import {
     NotionTable,
@@ -28,6 +29,8 @@ export const DEMO_MEMBERS: DemoMember[] = [
     { name: 'Jordan Lee', email: 'jordan@beacongrowth.com', role: 'firm_member', joinedDaysAgo: 180 },
     { name: 'Taylor Kim', email: 'taylor@beacongrowth.com', role: 'firm_member', joinedDaysAgo: 95 },
 ]
+
+const INVITEE = 'casey@beacongrowth.com'
 
 /** Static counterpart to firm-members-tab.tsx: the same table, over a plausible team. No write actions. */
 export function DemoFirmMembers() {
@@ -66,6 +69,22 @@ export function DemoFirmMembers() {
                             </NotionTableCell>
                         </NotionTableRow>
                     ))}
+                    {/* A pending invitation, as firm-members-tab.tsx draws one: the email, a dashed avatar and the "Invited" pill */}
+                    <NotionTableRow>
+                        <NotionTableCell>
+                            <div className="flex min-w-0 items-center gap-2">
+                                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-dashed border-line-strong text-fg-subtle">
+                                    <Mail className="h-3 w-3" />
+                                </span>
+                                <span className="truncate text-fg-muted">{INVITEE}</span>
+                            </div>
+                        </NotionTableCell>
+                        <NotionTableCell className="hidden text-fg-subtle md:table-cell">—</NotionTableCell>
+                        <NotionTableCell><Tag color="gray">Member</Tag></NotionTableCell>
+                        <NotionTableCell className="hidden sm:table-cell">
+                            <StatusPill kind="invitation" status="PENDING" />
+                        </NotionTableCell>
+                    </NotionTableRow>
                 </NotionTableBody>
             </NotionTable>
         </TooltipProvider>

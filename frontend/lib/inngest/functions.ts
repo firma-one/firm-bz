@@ -466,8 +466,8 @@ export const reconcileFileDeletion = inngest.createFunction(
     async ({ event, step }) => {
         const { organizationId, externalId, connectorPermissionId, connectorId: trashedVia, undoable } = event.data
 
-        // Moved to the Bin from the Files list: wait out the Undo window, and keep everything if
-        // the file came back out of the Bin meanwhile.
+        // Moved to the trash from the Files list: wait out the Undo window, and keep everything if
+        // the file came back out of the trash meanwhile.
         if (undoable && trashedVia) {
             await step.sleep("undo-window", `${TRASH_UNDO_WINDOW_SECONDS}s`)
             const restored = await step.run("check-still-in-bin", () => wasRestoredFromBin(trashedVia, externalId))

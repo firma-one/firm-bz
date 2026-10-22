@@ -108,7 +108,7 @@ describe('actions without an engagement', () => {
     })
 })
 
-describe('restore (Undo on "Moved to Bin")', () => {
+describe('restore (Undo on "Moved to trash")', () => {
     const inBin = (meta: Record<string, unknown> = {}) => ({ id: 'file', name: 'Report.pdf', mimeType: 'application/pdf', trashed: true, parents: ['folder'], ...meta })
 
     it('tells the cleanup after a trash that it can be undone, and through which connector', async () => {
@@ -132,7 +132,7 @@ describe('restore (Undo on "Moved to Bin")', () => {
         expect(adapter.restoreFile).not.toHaveBeenCalled()
     })
 
-    it('takes the file out of the Bin through the engagement\'s connector', async () => {
+    it('takes the file out of the trash through the engagement\'s connector', async () => {
         state.canEdit = true
         adapter.getFileMetadata.mockImplementation(async (_c: unknown, id: unknown) => (id === 'file' ? inBin() : { id: 'folder', trashed: false }))
         const res = await call({ action: 'restore', fileId: 'file', projectId: 'e1' })
@@ -149,7 +149,7 @@ describe('restore (Undo on "Moved to Bin")', () => {
         expect(adapter.restoreFile).not.toHaveBeenCalled()
     })
 
-    it('refuses when the file\'s folder is in the Bin too', async () => {
+    it('refuses when the file\'s folder is in the trash too', async () => {
         state.canEdit = true
         adapter.getFileMetadata.mockImplementation(async (_c: unknown, id: unknown) => (id === 'file' ? inBin() : { id: 'folder', trashed: true }))
         const res = await call({ action: 'restore', fileId: 'file', projectId: 'e1' })
@@ -157,7 +157,7 @@ describe('restore (Undo on "Moved to Bin")', () => {
         expect(adapter.restoreFile).not.toHaveBeenCalled()
     })
 
-    it('answers success for a file already out of the Bin, without restoring it again', async () => {
+    it('answers success for a file already out of the trash, without restoring it again', async () => {
         state.canEdit = true
         adapter.getFileMetadata.mockImplementation(async () => inBin({ trashed: false }))
         expect((await call({ action: 'restore', fileId: 'file', projectId: 'e1' })).status).toBe(200)

@@ -145,6 +145,7 @@ export function FileReviewModal({
         secureModalMode,
         secureModalData,
         setSecureModalOpen,
+        regrantError,
     } = useSecureOpenDocument({ logContext: 'FileReviewModal' })
 
     // Filters
@@ -711,6 +712,7 @@ export function FileReviewModal({
                     firmId={secureModalData.firmId}
                     documentUrl={secureModalData.documentUrl}
                     mode={secureModalMode}
+                    error={regrantError}
                 />
             </SheetContent>
         </Sheet >

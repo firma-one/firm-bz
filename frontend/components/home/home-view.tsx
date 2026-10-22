@@ -1,6 +1,6 @@
 import Link from "next/link"
 import { format } from "date-fns"
-import { ArrowRight, AtSign, CheckCircle2, Clock, FileCheck2, Home, Inbox, Upload, Briefcase, Users } from "lucide-react"
+import { ArrowRight, AtSign, CheckCircle2, Clock, Home, Inbox, Briefcase, Users } from "lucide-react"
 import type { RecentVisit } from "@/lib/recents"
 import type { MyWork, NeedsYouItem } from "@/lib/home/my-work"
 import type { HomeFirm, UnavailableFirm } from "@/lib/home/home-firms"
@@ -10,9 +10,12 @@ import { firmTabPath } from "@/lib/navigation/firm-paths"
 import { PageHeading } from "@/components/ui/page-heading"
 import { ListGroup, ListRow } from "@/components/ui/list-row"
 import { EmptyPanel } from "@/components/ui/empty-panel"
+import { interactiveCardClass } from "@/components/ui/interactive-card"
+import { StatusIcon } from "@/components/ui/status-icon"
 import { Greeting, MyEngagementsList, RelativeTime } from "./home-client"
 import { AgendaWeek, type AgendaDueItem, type AgendaEvent } from "./agenda-week"
 import { HomeBookmarks } from "./home-bookmarks"
+import { LandingArrival } from "@/components/app/landing-arrival"
 import { FirmFilter, UnavailableFirmsNote } from "./firm-filter"
 
 /**
@@ -22,9 +25,13 @@ import { FirmFilter, UnavailableFirmsNote } from "./firm-filter"
  * loads the data, already limited to what the viewer may see.
  */
 
+/**
+ * A deliverable to review and an upload to approve are both waiting on you, so they lead with the
+ * status language's "Waiting" icon, named for screen readers; a mention keeps its @.
+ */
 const NEEDS_ICON: Record<NeedsYouItem["kind"], React.ReactNode> = {
-    deliverable_review: <FileCheck2 />,
-    intake: <Upload />,
+    deliverable_review: <StatusIcon stage="waiting" label="In review" />,
+    intake: <StatusIcon stage="waiting" label="Upload to review" />,
     reminder: <AtSign />,
 }
 
@@ -54,7 +61,7 @@ function ContinueSection({ recents, label }: { recents: RecentVisit[]; label: La
                     <Link
                         key={r.id}
                         href={r.path}
-                        className="group flex h-full min-w-0 flex-col justify-between gap-4 rounded-card border border-line bg-surface p-3.5 transition-colors hover:border-line-strong hover:bg-surface-hover"
+                        className={`group flex h-full min-w-0 flex-col justify-between gap-4 p-3.5 ${interactiveCardClass()}`}
                     >
                         <div className="flex min-w-0 flex-col gap-1">
                             <span className="flex min-w-0 items-center gap-1.5 text-caption text-fg-muted">
@@ -163,6 +170,7 @@ export function HomeView({
         context: label(d.firmId, d.context),
         href: d.href,
         date: d.dueDate,
+        status: d.status,
     }))
     // One firm on screen has one calendar to open; a cross-firm week has none.
     const calendarHref =
@@ -170,6 +178,8 @@ export function HomeView({
 
     return (
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 pb-10">
+            {/* Sign-in lands here with ?landed=returning: the loader's last beat, then "Welcome back". */}
+            <LandingArrival firstName={firstName} />
             <PageHeading
                 icon={<Home />}
                 title={<Greeting firstName={firstName} />}

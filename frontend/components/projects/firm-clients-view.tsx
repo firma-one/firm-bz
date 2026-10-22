@@ -21,7 +21,7 @@ import { FirmBusinessInsights } from '@/components/dashboard/firm-business-insig
 import { CalendarView } from '@/components/calendar/calendar-view'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { useAuth } from '@/lib/auth-context'
-import { LandingArrivalOverlay } from '@/components/app/landing-arrival-overlay'
+import { LandingArrival } from '@/components/app/landing-arrival'
 
 interface FirmClientsViewProps {
     clients: ClientSummary[]
@@ -58,11 +58,6 @@ export function FirmClientsView({ clients, groupSlug, orgSlug, orgId, firmSandbo
     const pathname = usePathname()
     const searchParams = useSearchParams()
     const { user } = useAuth()
-    const [arrivalVariant] = useState<'new' | 'returning' | null>(() => {
-        const landed = searchParams.get('landed')
-        return landed === 'new' || landed === 'returning' ? landed : null
-    })
-    const [showArrivalOverlay, setShowArrivalOverlay] = useState(arrivalVariant !== null)
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('list')
     const [orgName, setOrgName] = useState<string | null>(null)
     const [isPendingRefresh, startRefresh] = useTransition()
@@ -227,23 +222,10 @@ export function FirmClientsView({ clients, groupSlug, orgSlug, orgId, firmSandbo
         />
     )
 
-    const closeArrivalOverlay = () => {
-        setShowArrivalOverlay(false)
-        const params = new URLSearchParams(searchParams.toString())
-        params.delete('landed')
-        const query = params.toString()
-        router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false })
-    }
-
     return (
         <div className="flex flex-col h-full">
-            {showArrivalOverlay && arrivalVariant && (
-                <LandingArrivalOverlay
-                    variant={arrivalVariant}
-                    firstName={user?.user_metadata?.first_name as string | undefined}
-                    onClose={closeArrivalOverlay}
-                />
-            )}
+            {/* A new user's sign-in lands here with ?landed=new (Home takes returning users). */}
+            <LandingArrival firstName={user?.user_metadata?.first_name as string | undefined} />
 
             {permissionsLoading ? (
                 <div className="flex flex-col gap-4 pb-4" aria-hidden>

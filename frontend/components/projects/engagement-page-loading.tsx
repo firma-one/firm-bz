@@ -3,7 +3,7 @@
 import { usePathname } from 'next/navigation'
 import { Briefcase } from 'lucide-react'
 import { Tabs } from '@/components/ui/tabs'
-import { StatusPill } from '@/components/ui/tag'
+import { StatusPill } from '@/components/ui/status-pill'
 import { LoadingAnnouncement, ShimmerBar, ShimmerBlock } from '@/components/ui/shimmer'
 import { useShellData } from '@/components/shell/shell-data-context'
 import { EngagementHeader } from './engagement-header'

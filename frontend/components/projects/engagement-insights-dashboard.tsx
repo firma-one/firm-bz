@@ -33,7 +33,6 @@ import {
     Trash2,
     Heart,
     Timer,
-    Package,
     ClipboardCheck,
     Gauge,
     Target,
@@ -49,10 +48,12 @@ import {
     FolderTree,
     Settings,
     Pencil,
+    Plus,
     Sparkles,
     Copy,
     Inbox,
     LocateFixed,
+    FolderPlus,
 } from 'lucide-react'
 import { getFileTypeLabel, formatRelativeTime, formatDateTimeWithTZ, formatFileSize } from '@/lib/utils'
 import { engagementPath, firmSettingsPath } from '@/lib/navigation/firm-paths'
@@ -61,16 +62,18 @@ import { StatTile } from '@/components/ui/stat-tile'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Hint, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { ActionSection, type ActionItem } from '@/components/dashboard/action-list'
-import { ConcentricRings, Donut, PlanningGapRow, RING, RingWithLegend, ScoreDeductions } from './insight-rings'
+import { ActionList, type ActionItem } from '@/components/dashboard/action-list'
+import { ConcentricRings, DATA, Donut, PlanningGapRow, RING, RingWithLegend, ScoreDeductions } from './insight-rings'
 import { DocumentIcon } from '@/components/ui/document-icon'
 import type { EngagementInsightsResponse, UnansweredThreadItem, DocumentDueDateItem, RecentDocumentItem, SensitiveFileItem, DeliverableProgress, DeliverableStage, EngagementHealthScore, PlanningHygiene, CommentThreads, EngagementPace, FirstTimeRight } from '@/app/api/projects/[projectId]/insights/route'
 import { updateEngagementInsightsSummary, approveEngagementAiSummary, dismissEngagementAiSummary } from '@/lib/actions/project'
 import { RelativeDateTime } from '@/components/ui/relative-date-time'
 import { FloatingAiChat } from '@/components/projects/floating-ai-chat'
-import { ASSISTANT } from '@/lib/ai/assistant'
+import { ASSISTANT, BRIO_GREEN } from '@/lib/ai/assistant'
 import { fetchWithTimeout, AI_TIMEOUT_MS } from '@/lib/ai/fetch-timeout'
 import { Brio } from '@/components/ui/brio'
+import { BrioByline } from '@/components/ui/brio-byline'
+import { useToast } from '@/components/ui/toast'
 import { StreamingText } from '@/components/ui/streaming-text'
 import { BrioSections } from '@/components/ui/brio-sections'
 import { findUnfilledSections } from '@/lib/ai/summary-sections'
@@ -330,12 +333,13 @@ function TeamStatusBody({ data }: { data: EngagementInsightsResponse }) {
 // ─── Shares Progress Card ────────────────────────────────────────────────────
 
 
-// Palette for role rings — leans on the shared RING palette so team rings match the health rings.
+// Roles aren't statuses, so the team bars use the categorical gray ramp (DATA), darkest for the
+// firm side's lead, lightest for the client side's reviewer.
 const ROLE_META: Record<string, { label: string; hex: string }> = {
-    eng_admin:            { label: 'Admin',        hex: RING.green },   // Engagement Lead — firm side, top authority
-    eng_member:           { label: 'Member',       hex: RING.blue },    // Team Member — firm side
-    eng_ext_collaborator: { label: 'Collaborator', hex: RING.indigo },  // External Collaborator — client side
-    eng_viewer:           { label: 'Reviewer',     hex: RING.amber },   // External Reviewer — client side
+    eng_admin:            { label: 'Admin',        hex: DATA.category1 },  // Engagement Lead — firm side, top authority
+    eng_member:           { label: 'Member',       hex: DATA.category2 },  // Team Member — firm side
+    eng_ext_collaborator: { label: 'Collaborator', hex: DATA.category3 },  // External Collaborator — client side
+    eng_viewer:           { label: 'Reviewer',     hex: DATA.category4 },  // External Reviewer — client side
 }
 const INTERNAL_ROLES = new Set(['eng_admin', 'eng_member'])
 
@@ -344,7 +348,7 @@ function teamSectionProps(data: EngagementInsightsResponse) {
     const roleEntries = Object.entries(data.membersByRole).filter(([, c]) => c > 0)
     const roles: ChartSegment[] = roleEntries.map(([role, count]) => ({
         label: ROLE_META[role]?.label ?? role,
-        hex: ROLE_META[role]?.hex ?? RING.gray,
+        hex: ROLE_META[role]?.hex ?? DATA.category4,
         value: count,
     }))
     const internal = roleEntries.filter(([role]) => INTERNAL_ROLES.has(role)).reduce((s, [, c]) => s + c, 0)
@@ -780,7 +784,7 @@ function EngagementActionCenter({ data, loading, engagementBase, projectId, setR
                             </SectionBlock>
                         )}
                         {upcomingDocs.length > 0 && (
-                            <SectionBlock title="Document Due Dates" icon={CalendarClock}>
+                            <SectionBlock title="Documents due" icon={CalendarClock}>
                                 <div className="space-y-2">
                                     {upcomingDocs.slice(0, 6).map(d => <ACDocDueRow key={d.documentId} item={d} engagementBase={engagementBase} />)}
                                 </div>
@@ -1159,6 +1163,9 @@ function DocActivitySection({ data, engagementBase }: { data: EngagementInsights
     )
 }
 
+/** The Summary card's header actions: 28px icon buttons (app-design-refinements.md, section 6). */
+const SUMMARY_ICON_BUTTON = 'inline-flex h-7 w-7 items-center justify-center rounded-control text-fg-muted transition-colors duration-ui-fast hover:bg-surface-hover hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action/30'
+
 // ─── Action Center V2 — Delivery Actions + Housekeeping ─────────────────────
 
 // Scroll to a ring on click, then pulse it briefly so the user can locate what's referenced.
@@ -1239,25 +1246,22 @@ function DuplicatesDrilldown({ groups, engagementBase, onBack }: {
 }
 
 /**
- * The engagement's Action Center group (the shared ActionSection, also on the firm Overview).
- * Links resolve against the engagement, and a row tied to a ring on the left gets a hover-only
- * "show in …" button in a fixed slot, so the counts stay aligned down the column.
+ * The engagement's Action Center (the shared ActionList, also on the firm Overview): Delivery and
+ * Housekeeping in one list, grouped only among the passed checks. Links resolve against the
+ * engagement, and a row tied to a ring on the left gets a hover-only "show in …" button in a fixed
+ * slot, so the counts stay aligned down the column.
  */
-function ACSectionV2({ title, icon, items, engagementBase }: {
-    title: string
-    icon: React.ElementType
-    items: ActionRowItem[]
+function EngagementActionList({ groups, engagementBase }: {
+    groups: { title: string; items: ActionRowItem[] }[]
     engagementBase: string
 }) {
-    const resolved = items.map((it) => ({
+    const resolve = (it: ActionRowItem): ActionRowItem => ({
         ...it,
         href: it.href && !it.href.startsWith('http') && engagementBase ? `${engagementBase}${it.href}` : it.href,
-    }))
+    })
     return (
-        <ActionSection
-            title={title}
-            icon={icon}
-            items={resolved}
+        <ActionList
+            groups={groups.map((g) => ({ title: g.title, items: g.items.map(resolve) }))}
             aside={(it) => it.ringId && it.count > 0 ? (
                 <Hint label={`Show in ${it.ringLabel ?? 'the overview'}`}>
                     <button
@@ -1418,9 +1422,10 @@ function EngagementActionCenterV2({ data, loading, engagementBase, setRefreshTic
                 </div>
 
                 {(loading || !data) ? (
-                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                        <div className="h-32 rounded-card bg-surface-muted animate-pulse" />
-                        <div className="h-32 rounded-card bg-surface-muted animate-pulse" />
+                    <div className="flex flex-col gap-2">
+                        <div className="h-9 rounded-control bg-surface-muted animate-pulse" />
+                        <div className="h-9 rounded-control bg-surface-muted animate-pulse" />
+                        <div className="h-8 w-48 rounded-control bg-surface-muted animate-pulse" />
                     </div>
                 ) : drilldown === 'duplicates' ? (
                     <DuplicatesDrilldown
@@ -1429,16 +1434,14 @@ function EngagementActionCenterV2({ data, loading, engagementBase, setRefreshTic
                         onBack={() => setDrilldown(null)}
                     />
                 ) : (
-                    // Delivery and Housekeeping side by side: at the top of the page they are read first,
-                    // and two short columns keep the report from starting a screen further down.
-                    <div className="grid grid-cols-1 gap-x-10 gap-y-4 md:grid-cols-2">
-                        {delivery.length > 0 && (
-                            <ACSectionV2 title="Delivery" icon={Package} items={delivery} engagementBase={engagementBase} />
-                        )}
-                        {housekeeping.length > 0 && (
-                            <ACSectionV2 title="Housekeeping" icon={Archive} items={housekeeping} engagementBase={engagementBase} />
-                        )}
-                    </div>
+                    // One list, Linear-style: what needs doing first, everything clear behind "N checks passed".
+                    <EngagementActionList
+                        groups={[
+                            { title: 'Delivery', items: delivery },
+                            { title: 'Housekeeping', items: housekeeping },
+                        ]}
+                        engagementBase={engagementBase}
+                    />
                 )}
             </div>
 
@@ -1690,7 +1693,7 @@ function DeliveryTimeline({ deliverables, engagementCreatedAt, kickoffDate, enga
                             criticalTicks.push({ ms: engStartMs, pctVal: engStartPct, label: engStartLabel, color: '#6ee7b7' })
                         criticalTicks.push({ ms: nowMs, pctVal: todayPct, label: 'today', color: 'var(--color-primary, #6366f1)' })
                         if (engDueInWindow && engDueMs !== null && engDuePct !== null)
-                            criticalTicks.push({ ms: engDueMs, pctVal: engDuePct, label: 'Engagement\nDue Date', color: engDueColor })
+                            criticalTicks.push({ ms: engDueMs, pctVal: engDuePct, label: 'Engagement\ndue', color: engDueColor })
 
                         // Filter the 5 interval ticks — suppress any that land within 6% of a critical tick
                         const filteredTickMs = tickMs.filter(ms => {
@@ -1776,7 +1779,7 @@ function DeliveryTimeline({ deliverables, engagementCreatedAt, kickoffDate, enga
                                                 color: engDueColor,
                                             }}
                                         >
-                                            Engagement<br />Due Date
+                                            Engagement<br />due
                                         </span>
                                     )}
                                 </div>
@@ -2109,7 +2112,7 @@ function EngagementHealthBody({ health, deliverables, planningHygiene, commentTh
         { label: 'Completed', hex: RING.green, value: approved },
         { label: 'On Track', hex: RING.blue, value: onTrack },
         { label: 'Overdue', hex: RING.red, value: overdue },
-        { label: 'No Due Date', hex: RING.gray, value: noDue },
+        { label: 'No due date', hex: RING.gray, value: noDue },
     ]
     const onSchedulePct = total > 0 ? Math.round(((total - overdue) / total) * 100) : 0
 
@@ -2189,7 +2192,7 @@ function EngagementHealthBody({ health, deliverables, planningHygiene, commentTh
                 {show('engagement.delivery_status') && (
                 <div id="ring-status" className="flex flex-col items-center gap-3 scroll-mt-24">
                     <p className="text-sm font-semibold text-fg-muted flex items-center gap-1.5">
-                        <Package className="h-4 w-4 text-fg-subtle" /> Delivery Status
+                        <FolderPlus className="h-4 w-4 text-fg-subtle" /> Delivery Status
                         <InfoTip ariaLabel="About Delivery Status" text="Distribution of deliverables across workflow stages (To Do → In Progress → In Review → Approved). Center shows % of deliverables that have reached Approved." />
                     </p>
                     <RingWithLegend
@@ -2204,7 +2207,7 @@ function EngagementHealthBody({ health, deliverables, planningHygiene, commentTh
                 <div id="ring-schedule" className="flex flex-col items-center gap-3 scroll-mt-24">
                     <p className="text-sm font-semibold text-fg-muted flex items-center gap-1.5">
                         <CalendarClock className="h-4 w-4 text-fg-subtle" /> Delivery Schedule
-                        <InfoTip ariaLabel="About Delivery Schedule" text="Due-date adherence across deliverables. Completed = approved. On Track = has a due date and not late. Overdue = due date has passed and not yet approved. No Due Date = no target set. Center shows % on schedule." />
+                        <InfoTip ariaLabel="About Delivery Schedule" text="Due-date adherence across deliverables. Completed = approved. On Track = has a due date and not late. Overdue = due date has passed and not yet approved. No due date = no target set. Center shows % on schedule." />
                     </p>
                     <RingWithLegend
                         items={scheduleItems}
@@ -2373,6 +2376,10 @@ export function EngagementInsightsDashboard({
     const [summaryEditing, setSummaryEditing] = useState(false)
     /** Which summary was last copied ('draft' | 'published'), so only that button confirms. */
     const [summaryCopied, setSummaryCopied] = useState<string | null>(null)
+    const { addToast } = useToast()
+    // The publisher shown in the byline until the refetch after publishing brings the stored one.
+    const myDisplayName = (session?.user?.user_metadata?.full_name as string | undefined)
+        ?? session?.user?.email?.split('@')[0] ?? null
 
     /**
      * Copies the raw markdown, not the rendered text: the headings are what make the summary
@@ -2584,14 +2591,21 @@ export function EngagementInsightsDashboard({
     const handleSummarySave = async () => {
         setSummarySaving(true)
         try {
-            await updateEngagementInsightsSummary(projectId, summaryDraft.trim() || null)
+            const text = summaryDraft.trim() || null
+            await updateEngagementInsightsSummary(projectId, text)
             // A hand-written summary clears the fingerprint server-side, so it can never be stale.
             setData((prev) => prev ? {
                 ...prev,
-                insightsSummary: summaryDraft.trim() || null,
+                insightsSummary: text,
                 insightsSummaryStale: false,
-                insightsSummaryPublishedAt: summaryDraft.trim() ? new Date().toISOString() : null,
+                insightsSummaryPublishedAt: text ? new Date().toISOString() : null,
+                insightsSummarySource: text ? 'manual' : null,
+                insightsSummaryPublishedBy: text ? myDisplayName : null,
             } : prev)
+            // Publishing was silent before; it reaches the client, so say so.
+            addToast(text
+                ? { type: 'success', title: 'Summary published', message: 'Visible to the client and in exports.' }
+                : { type: 'success', title: 'Summary removed' })
             setSummaryEditing(false)
             setRefreshTick((t) => t + 1)
         } finally {
@@ -2835,7 +2849,10 @@ export function EngagementInsightsDashboard({
                 // real values. Leaving them would keep showing a pre-publish "stale" warning.
                 insightsSummaryStale: false,
                 insightsSummaryPublishedAt: new Date().toISOString(),
+                insightsSummarySource: 'ai',
+                insightsSummaryPublishedBy: myDisplayName,
             } : prev)
+            addToast({ type: 'success', title: 'Summary published', message: 'Visible to the client and in exports.' })
             setAiGenerateNote(null)
             setRefreshTick((t) => t + 1)
         } finally {
@@ -3107,19 +3124,6 @@ export function EngagementInsightsDashboard({
                                                         <span className="text-small font-medium text-fg-muted">
                                                             Engagement Summary
                                                         </span>
-                                                        {data.insightsSummaryPublishedAt && (
-                                                            <Tooltip>
-                                                                <TooltipTrigger asChild>
-                                                                    <span className="inline-flex shrink-0 cursor-default items-center gap-1 text-caption text-fg-subtle">
-                                                                        <Clock className="h-3 w-3" />
-                                                                        {formatRelativeTime(data.insightsSummaryPublishedAt)}
-                                                                    </span>
-                                                                </TooltipTrigger>
-                                                                <TooltipContent side="bottom" className="text-xs">
-                                                                    Published {formatDateTimeWithTZ(data.insightsSummaryPublishedAt)}
-                                                                </TooltipContent>
-                                                            </Tooltip>
-                                                        )}
                                                         {/* Deliberately narrow: the fingerprint watches deliverable stages,
                                                             due dates, comment counts, planning coverage and team size — not
                                                             everything the summary can describe (pace, health score, approval
@@ -3190,40 +3194,44 @@ export function EngagementInsightsDashboard({
                                                         </div>
                                                     )}
                                                     {isFirmAdmin && !aiStreaming && !data.insightsSummaryDraft && (
-                                                        <div data-no-export="" className="flex items-center gap-2 shrink-0">
+                                                        // 28px icon buttons, each named by a Hint and an aria-label (the tooltip
+                                                        // isn't announced as the button's name).
+                                                        <div data-no-export="" className="flex shrink-0 items-center gap-0.5">
                                                             {data.insightsSummary && (
-                                                                <Tooltip>
-                                                                    <TooltipTrigger asChild>
-                                                                        <button
-                                                                            onClick={() => copySummary(data.insightsSummary!, 'published')}
-                                                                            aria-label="Copy summary to clipboard"
-                                                                            className="inline-flex h-7 items-center gap-1.5 rounded-control border border-line bg-surface px-2 text-small text-fg-muted transition-colors hover:border-line-strong hover:bg-surface-hover hover:text-fg"
-                                                                        >
-                                                                            {summaryCopied === 'published'
-                                                                                ? <Check className="h-3 w-3 text-action" />
-                                                                                : <Copy className="h-3 w-3" />}
-                                                                            {summaryCopied === 'published' ? 'Copied' : 'Copy'}
-                                                                        </button>
-                                                                    </TooltipTrigger>
-                                                                    <TooltipContent side="bottom" className="text-xs">
-                                                                        Copy the summary as markdown
-                                                                    </TooltipContent>
-                                                                </Tooltip>
+                                                                <Hint label={summaryCopied === 'published' ? 'Copied' : 'Copy as Markdown'}>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => copySummary(data.insightsSummary!, 'published')}
+                                                                        aria-label="Copy the summary as Markdown"
+                                                                        className={SUMMARY_ICON_BUTTON}
+                                                                    >
+                                                                        {summaryCopied === 'published'
+                                                                            ? <Check className="h-4 w-4 text-status-done-icon" />
+                                                                            : <Copy className="h-4 w-4" />}
+                                                                    </button>
+                                                                </Hint>
                                                             )}
-                                                            <button
-                                                                onClick={() => { setSummaryDraft(data.insightsSummary ?? ''); setSummaryEditing(true) }}
-                                                                className="inline-flex h-7 items-center gap-1.5 rounded-control border border-line bg-surface px-2 text-small text-fg-muted transition-colors hover:border-line-strong hover:bg-surface-hover hover:text-fg"
-                                                            >
-                                                                <Pencil className="h-3 w-3" />
-                                                                {data.insightsSummary ? 'Edit' : 'Add'}
-                                                            </button>
-                                                            <button
-                                                                onClick={handleGenerateSummary}
-                                                                className="inline-flex h-7 items-center gap-1.5 rounded-control border border-line bg-surface px-2 text-small font-medium text-action transition-colors hover:border-line-strong hover:bg-surface-hover"
-                                                            >
-                                                                {data.insightsSummary ? <>Rewrite with</> : <>Write with</>}
-                                                                <Brio />
-                                                            </button>
+                                                            <Hint label={data.insightsSummary ? 'Edit' : 'Add a summary'}>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => { setSummaryDraft(data.insightsSummary ?? ''); setSummaryEditing(true) }}
+                                                                    aria-label={data.insightsSummary ? 'Edit the summary' : 'Add a summary'}
+                                                                    className={SUMMARY_ICON_BUTTON}
+                                                                >
+                                                                    {data.insightsSummary ? <Pencil className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                                                                </button>
+                                                            </Hint>
+                                                            <Hint label={<>{data.insightsSummary ? 'Rewrite with' : 'Write with'} <Brio /></>}>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={handleGenerateSummary}
+                                                                    aria-label={`${data.insightsSummary ? 'Rewrite' : 'Write'} with ${ASSISTANT.name}`}
+                                                                    className={SUMMARY_ICON_BUTTON}
+                                                                >
+                                                                    {/* Brio's sparkle, in Brio's green: the one place its color is used. */}
+                                                                    <Sparkles className="h-4 w-4" style={{ color: BRIO_GREEN }} />
+                                                                </button>
+                                                            </Hint>
                                                         </div>
                                                     )}
                                                 </div>
@@ -3232,10 +3240,19 @@ export function EngagementInsightsDashboard({
                                                     <p data-no-export="" className="px-4 pt-3 text-caption text-fg-muted">{aiGenerateNote}</p>
                                                 )}
                                                 {data.insightsSummary ? (
-                                                    <BrioSections
-                                                        content={data.insightsSummary}
-                                                        className="px-4 py-3 text-fg-muted"
-                                                    />
+                                                    <>
+                                                        <BrioSections
+                                                            content={data.insightsSummary}
+                                                            className="px-4 py-3 text-fg-muted"
+                                                        />
+                                                        {/* Who wrote it, in plain text. Part of the export: the client sees it too. */}
+                                                        <BrioByline
+                                                            source={data.insightsSummarySource === 'manual' ? 'manual' : 'ai'}
+                                                            publisherName={data.insightsSummaryPublishedBy}
+                                                            date={data.insightsSummaryPublishedAt}
+                                                            className="border-t border-line px-4 py-2.5"
+                                                        />
+                                                    </>
                                                 ) : (
                                                     <p data-no-export="" className="text-sm text-fg-subtle px-4 py-3">
                                                         {hasDraftOrStream

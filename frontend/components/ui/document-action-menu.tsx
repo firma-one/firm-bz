@@ -1,12 +1,14 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
-import { createPortal } from "react-dom"
+import { useState, useCallback, useRef } from "react"
 import { Button } from "@/components/ui/button"
-import { DateTimePicker } from "@/components/ui/date-time-picker"
+import { DateProperty } from "@/components/ui/property-cells"
 import { DocumentIcon } from "@/components/ui/document-icon"
 import { UserAvatarWithTooltip } from "@/components/ui/user-avatar-with-tooltip"
-import { formatFileSize, formatSmartDateTime } from "@/lib/utils"
+import { cn, formatFileSize, formatSmartDateTime } from "@/lib/utils"
+import { DuePickerPanel } from "@/components/ui/due-picker"
+import { DeliverableIcon } from "@/components/ui/deliverable-icon"
+import { formatDue, isPastDue, readDue } from "@/lib/ui/due-date"
 import { DocumentEditPanelContent, DocumentPreviewPanelContent, getDocumentEditUrl } from "@/components/files/document-edit-sheet"
 import { DocumentPreviewPane } from "@/components/files/document-preview-pane"
 import { useRightPane } from "@/lib/right-pane-context"
@@ -34,7 +36,6 @@ import {
   Info,
   Eye,
   X,
-  XSquare,
   FolderLock,
   FolderUp,
   MessagesSquare,
@@ -47,8 +48,9 @@ import {
   XCircle,
   Building2,
   Loader2,
-  PackageMinus,
-  Package,
+  Flag,
+  FolderPlus,
+  FolderMinus,
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -60,13 +62,22 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { Hint, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { StatusPill } from "@/components/ui/status-pill"
+import { STATUS } from "@/lib/ui/status"
 import { useToast } from "@/components/ui/toast"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { useDownloadProgress } from "@/lib/download-progress-context"
 import { SetupReminderModal } from "@/components/ui/setup-reminder-modal"
 import { useAuth } from "@/lib/auth-context"
+
+/**
+ * Compact rows for this menu and its submenus (which render inside it): 13px text, 26px rows, 14px
+ * icons. The base DropdownMenuItem is sized for roomier menus; this one is long, so it runs tighter.
+ */
+const COMPACT_MENU_CLASS =
+  '[&_[role=menuitem]]:py-1 [&_[role=menuitem]]:text-small [&_[role=menuitem]_svg]:h-3.5 [&_[role=menuitem]_svg]:w-3.5'
 
 const VERSION_LOCK_TOOLTIP =
   'Finalize locks the document — all collaborators become view-only. Return to Draft restores each collaborator\'s prior access level based on their role and sharing settings.'
@@ -203,16 +214,17 @@ export function DocumentActionMenu({
   connectorAccountEmail,
   isOneDriveClient = false,
 }: DocumentActionMenuProps) {
-  const [showDueDatePicker, setShowDueDatePicker] = useState(false)
+  // Controlled, so picking a due date in the Due submenu can close the whole menu.
+  const [menuOpen, setMenuOpen] = useState(false)
   const [showUntagConfirm, setShowUntagConfirm] = useState(false)
   const [showTagDeliverableModal, setShowTagDeliverableModal] = useState(false)
   const [tagDeliverableDueDate, setTagDeliverableDueDate] = useState<string>("")
   const [existingBookmarkId, setExistingBookmarkId] = useState<string | null>(null)
   /** Drive id or project document UUID — disables Finalize row while request in flight */
   const [finalizeLockActiveId, setFinalizeLockActiveId] = useState<string | null>(null)
-  const [selectedDueDate, setSelectedDueDate] = useState<string>("")
+  // Bumped after a due date saves: the value lives on `document`, so this redraws the Due row.
+  const [, setDueVersion] = useState(0)
   const [hasCopiedName, setHasCopiedName] = useState(false)
-  const [mounted, setMounted] = useState(false)
   const [privateInfoOpen, setPrivateInfoOpen] = useState(false)
   const [showReminderModal, setShowReminderModal] = useState(false)
   const [reminderMembers, setReminderMembers] = useState<{ userId: string; email: string; name: string; role: string; avatarUrl?: string | null }[]>([])
@@ -227,11 +239,6 @@ export function DocumentActionMenu({
   const canOpenWithGoogleDoc = mime.includes('document') || mime.includes('vnd.google-apps.document')
   const canOpenWithGoogleSheet = mime.includes('spreadsheet') || mime.includes('vnd.google-apps.spreadsheet')
   const canOpenWithGoogleSlide = mime.includes('presentation') || mime.includes('vnd.google-apps.presentation')
-
-  // Ensure we're on the client side
-  useEffect(() => {
-    setMounted(true)
-  }, [])
 
   // Handle copy name
   const handleCopyName = (e: React.MouseEvent, text: string) => {
@@ -268,8 +275,7 @@ export function DocumentActionMenu({
       }
 
       document.dueDate = dateTime || null
-      setSelectedDueDate(dateTime)
-      setShowDueDatePicker(false)
+      setDueVersion((v) => v + 1)
 
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('pockett-notifications-updated'))
@@ -411,12 +417,17 @@ export function DocumentActionMenu({
   }, [projectId, isExternalViewer, documentIdForProjectApis, addToast, onShareSaved])
 
   const getDisplayType = (doc: any) => {
-    if (doc.documentType === 'LINK') return "External URL"
-    if (doc.mimeType?.includes('folder')) return "Folder"
-    if (doc.mimeType?.includes('document')) return "Document"
-    if (doc.mimeType?.includes('spreadsheet')) return "Spreadsheet"
-    if (doc.mimeType?.includes('presentation')) return "Presentation"
-    if (doc.type?.includes('pdf')) return "PDF"
+    if (doc.documentType === 'LINK') return "External link"
+    const m: string = (doc.mimeType ?? '').toLowerCase()
+    if (m.includes('folder')) return "Folder"
+    if (m.includes('pdf') || doc.type?.includes('pdf')) return "PDF"
+    if (m.includes('presentation') || m.includes('powerpoint')) return "Presentation"
+    // Before "document": every OOXML mime type contains it ("officedocument"), so an .xlsx read as a
+    // Document. Same order as getFileTypeLabel in lib/utils.
+    if (m.includes('spreadsheet') || m.includes('sheet') || m.includes('excel') || m.includes('csv')) return "Spreadsheet"
+    if (m.includes('document') || m.includes('word')) return "Document"
+    if (m.includes('image')) return "Image"
+    if (m.includes('video')) return "Video"
     return "File"
   }
 
@@ -476,9 +487,21 @@ export function DocumentActionMenu({
     }
   }
 
+  const stageKnown = !!deliverableStatus && deliverableStatus in STATUS.deliverable
+  // What happens after "Move to trash", in the provider's own terms: Google empties its trash after
+  // 30 days; Microsoft's recycle bin keeps items 30 days on personal OneDrive, up to 93 on work accounts.
+  const trashRetentionNote = isOneDriveClient
+    ? 'Items go to the OneDrive recycle bin, which keeps them for 30 days (up to 93 on work accounts).'
+    : 'Items in the Google Drive trash are permanently deleted after 30 days.'
+  const modifiedAt = [document.modifiedTime, document.createdTime].find((t) => t && !Number.isNaN(new Date(t).getTime())) as string | undefined
+  // The due date shown on its menu item; red when overdue (past due and not yet approved).
+  const due = readDue(document.dueDate)
+  const dueOverdue = !!due && isPastDue(due) && deliverableStatus !== 'approved' && !isApprovedDeliverable
+
   return (
     <>
-      <DropdownMenu onOpenChange={async (open) => {
+      <DropdownMenu open={menuOpen} onOpenChange={async (open) => {
+        setMenuOpen(open)
         onOpenChange?.(open)
         if (open) {
           const projectDocumentId = (document as any)?.projectDocumentId as string | undefined
@@ -498,24 +521,26 @@ export function DocumentActionMenu({
           }
         }
       }}>
-        <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()} disabled={disabled}>
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={disabled}
-            className="text-fg-muted hover:text-fg hover:bg-surface-hover h-8 w-8 p-0 disabled:opacity-30 disabled:cursor-not-allowed"
-            title="More actions"
-          >
-            {triggerIcon ?? <MoreHorizontal className="h-4 w-4" />}
-          </Button>
-        </DropdownMenuTrigger>
+        <Hint label="More actions">
+          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()} disabled={disabled}>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={disabled}
+              aria-label="More actions"
+              className="text-fg-muted hover:text-fg hover:bg-surface-hover h-7 w-7 p-0 disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              {triggerIcon ?? <MoreHorizontal className="h-4 w-4" />}
+            </Button>
+          </DropdownMenuTrigger>
+        </Hint>
         <DropdownMenuContent
           side="bottom"
           align="end"
           avoidCollisions
           collisionPadding={8}
           sideOffset={0}
-          className="w-80 p-0 flex flex-col overflow-hidden"
+          className={cn("w-72 p-0 flex flex-col overflow-hidden", COMPACT_MENU_CLASS)}
           style={{ maxHeight: 'var(--radix-dropdown-menu-content-available-height)' }}
           onClick={(e) => e.stopPropagation()}
           onCloseAutoFocus={(e) => e.preventDefault()} // Prevent focus jump causing scroll
@@ -523,49 +548,52 @@ export function DocumentActionMenu({
           {sandboxPreview && (
             <div className="absolute inset-0 z-10 rounded-[inherit] pointer-events-auto cursor-not-allowed bg-transparent" />
           )}
-          <div className="px-3 py-2.5 border-b border-line flex-none">
-            <div className="flex items-center space-x-2.5">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-control bg-surface-muted">
-                <DocumentIcon mimeType={document.mimeType} className="h-5 w-5" />
+          {/* What this is, before what you can do with it: the name in full (two lines), its code and
+              stage in the status language where known, its type and size, and who changed it last. */}
+          <div className="px-3 py-2 border-b border-line flex-none">
+            <div className="flex items-start gap-2.5">
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-control bg-surface-muted">
+                {isDeliverable ? <DeliverableIcon /> : <DocumentIcon mimeType={document.mimeType} className="h-4 w-4" />}
               </div>
-              <div className="flex-1 min-w-0 pr-2">
-                <div className="flex items-center gap-1.5 min-w-0">
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <h3 className="max-w-[180px] cursor-default select-text truncate text-ui font-medium text-fg">
-                          {document.name}
-                        </h3>
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom" align="start" className="max-w-[300px] break-words">
-                        <p>{document.name}</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                  <button
-                    onClick={(e) => handleCopyName(e, document.name)}
-                    className="shrink-0 rounded-control p-0.5 text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg"
-                    title="Copy name"
-                  >
-                    {hasCopiedName ? <Check className="h-3 w-3 text-action" /> : <Copy className="h-3 w-3" />}
-                  </button>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-start gap-1">
+                  <Hint label={document.name} side="bottom">
+                    <h3 className="min-w-0 cursor-default select-text break-words text-small font-medium leading-snug text-fg line-clamp-2">
+                      {document.name}
+                    </h3>
+                  </Hint>
+                  <Hint label={hasCopiedName ? 'Copied' : 'Copy name'}>
+                    <button
+                      type="button"
+                      onClick={(e) => handleCopyName(e, document.name)}
+                      aria-label="Copy name"
+                      className="mt-0.5 shrink-0 rounded-control p-0.5 text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg"
+                    >
+                      {hasCopiedName ? <Check className="h-3 w-3 text-status-done-icon" /> : <Copy className="h-3 w-3" />}
+                    </button>
+                  </Hint>
                 </div>
-                <p className="text-small text-fg-muted">
-                  {getDisplayType(document)}
-                  {!document.mimeType?.includes('folder') && document.size != null && typeof document.size === 'number' && (
-                    <> • {formatFileSize(document.size)}</>
-                  )}
-                </p>
-                {(document.modifiedTime || document.createdTime) && (
-                  <p className="text-caption text-fg-subtle mt-0.5">
-                    {document.lastModifyingUser?.displayName || 'Unknown'} · {document.modifiedTime && !Number.isNaN(new Date(document.modifiedTime).getTime()) ? formatSmartDateTime(document.modifiedTime) : document.createdTime && !Number.isNaN(new Date(document.createdTime).getTime()) ? formatSmartDateTime(document.createdTime) : '—'}
+                <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-caption text-fg-muted">
+                  {document.docId && <span className="font-mono text-caption text-fg-subtle">{document.docId}</span>}
+                  {stageKnown && <StatusPill kind="deliverable" status={deliverableStatus!} />}
+                  <span>
+                    {getDisplayType(document)}
+                    {!document.mimeType?.includes('folder') && document.size != null && typeof document.size === 'number' && (
+                      <> · {formatFileSize(document.size)}</>
+                    )}
+                  </span>
+                </div>
+                {modifiedAt && (
+                  <p className="mt-0.5 text-caption text-fg-subtle">
+                    Modified {formatSmartDateTime(modifiedAt)}
+                    {document.lastModifyingUser?.displayName && <> by {document.lastModifyingUser.displayName}</>}
                   </p>
                 )}
               </div>
             </div>
           </div>
 
-          <div className="p-2 overflow-y-auto min-h-0">
+          <div className="p-1 overflow-y-auto min-h-0">
             {/* Intake pending actions — shown at the top when applicable */}
             {(onApproveIntake || onRejectIntake || onWithdrawIntake) && (
               <>
@@ -574,7 +602,7 @@ export function DocumentActionMenu({
                     onSelect={() => onApproveIntake(document)}
                     className="flex cursor-pointer items-center gap-2"
                   >
-                    <CheckCircle2 className="h-4 w-4 text-action" />
+                    <CheckCircle2 className="h-3.5 w-3.5 text-action" />
                     <span>Approve</span>
                   </DropdownMenuItem>
                 )}
@@ -583,7 +611,7 @@ export function DocumentActionMenu({
                     onSelect={() => onRejectIntake(document)}
                     className="flex cursor-pointer items-center gap-2 text-danger focus:text-danger"
                   >
-                    <XCircle className="h-4 w-4 text-danger" />
+                    <XCircle className="h-3.5 w-3.5 text-danger" />
                     <span>Reject</span>
                   </DropdownMenuItem>
                 )}
@@ -592,7 +620,7 @@ export function DocumentActionMenu({
                     onSelect={() => onWithdrawIntake(document)}
                     className="flex cursor-pointer items-center gap-2"
                   >
-                    <X className="h-4 w-4 text-fg-muted" />
+                    <X className="h-3.5 w-3.5 text-fg-muted" />
                     <span>Withdraw upload</span>
                   </DropdownMenuItem>
                 )}
@@ -606,7 +634,7 @@ export function DocumentActionMenu({
                     onSelect={() => onApproveFolder(document)}
                     className="flex cursor-pointer items-center gap-2"
                   >
-                    <CheckCircle2 className="h-4 w-4 text-action" />
+                    <CheckCircle2 className="h-3.5 w-3.5 text-action" />
                     <span>Approve folder upload</span>
                   </DropdownMenuItem>
                 )}
@@ -615,16 +643,16 @@ export function DocumentActionMenu({
                     onSelect={() => onRejectFolder(document)}
                     className="flex cursor-pointer items-center gap-2 text-danger focus:text-danger"
                   >
-                    <XCircle className="h-4 w-4 text-danger" />
+                    <XCircle className="h-3.5 w-3.5 text-danger" />
                     <span>Reject folder</span>
                   </DropdownMenuItem>
                 )}
                 {onWithdrawFolder && (
                   <DropdownMenuItem
                     onSelect={() => onWithdrawFolder(document)}
-                    className="flex items-center gap-2 px-2 py-1.5 cursor-pointer text-ui text-tag-orange-fg focus:text-tag-orange-fg"
+                    className="flex items-center gap-2 px-2 py-1 cursor-pointer text-small text-tag-orange-fg focus:text-tag-orange-fg"
                   >
-                    <FolderUp className="h-4 w-4 text-tag-orange-fg" />
+                    <FolderUp className="h-3.5 w-3.5 text-tag-orange-fg" />
                     <span>Withdraw folder</span>
                   </DropdownMenuItem>
                 )}
@@ -643,7 +671,7 @@ export function DocumentActionMenu({
                   }}
                   className="flex cursor-pointer items-center gap-2"
                 >
-                  <Link2 className="h-4 w-4 text-fg-muted" />
+                  <Link2 className="h-3.5 w-3.5 text-fg-muted" />
                   <span>Copy link</span>
                 </DropdownMenuItem>
                 {showShareModal && projectId && (
@@ -654,13 +682,13 @@ export function DocumentActionMenu({
                           <DropdownMenuItem
                             aria-disabled="true"
                             onSelect={(e) => e.preventDefault()}
-                            className="flex items-center gap-2 px-2 py-1.5 text-ui opacity-50 cursor-not-allowed"
+                            className="flex items-center gap-2 px-2 py-1 text-small opacity-50 cursor-not-allowed"
                           >
-                            <XCircle className="h-4 w-4" />
-                            <span>Untag as Deliverable</span>
+                            <FolderMinus className="h-3.5 w-3.5" />
+                            <span>Demote Deliverable to Folder</span>
                           </DropdownMenuItem>
                         </TooltipTrigger>
-                        <TooltipContent side="right" className="text-xs max-w-48">Approved deliverables cannot be untagged</TooltipContent>
+                        <TooltipContent side="right" className="text-xs max-w-48">An approved deliverable can't be demoted</TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
                   ) : isDeliverable ? (
@@ -668,15 +696,15 @@ export function DocumentActionMenu({
                       // Closes the menu: it sits above dialogs, so left open it covers the confirmation.
                       onSelect={() => {
                         if (deliverableStatus && deliverableStatus !== 'to_do') {
-                          addToast({ type: 'error', title: 'Cannot untag', message: 'Only deliverables with a To Do status can be untagged.' })
+                          addToast({ type: 'error', title: 'Cannot demote', message: 'Only a deliverable still at To do can be demoted to a folder.' })
                           return
                         }
                         setShowUntagConfirm(true)
                       }}
-                      className="flex items-center gap-2 px-2 py-1.5 cursor-pointer text-ui text-danger focus:text-danger"
+                      className="flex items-center gap-2 px-2 py-1 cursor-pointer text-small text-danger focus:text-danger"
                     >
-                      <XCircle className="h-4 w-4" />
-                      <span>Untag as Deliverable</span>
+                      <FolderMinus className="h-3.5 w-3.5" />
+                      <span>Demote Deliverable to Folder</span>
                     </DropdownMenuItem>
                   ) : isAncestorShared ? (
                     <TooltipProvider>
@@ -685,13 +713,13 @@ export function DocumentActionMenu({
                           <DropdownMenuItem
                             aria-disabled="true"
                             onSelect={(e) => e.preventDefault()}
-                            className="flex items-center gap-2 px-2 py-1.5 text-ui opacity-50 cursor-not-allowed"
+                            className="flex items-center gap-2 px-2 py-1 text-small opacity-50 cursor-not-allowed"
                           >
-                            <Package className="h-4 w-4 text-fg-subtle" />
-                            <span>Promote as Deliverable</span>
+                            <FolderPlus className="h-3.5 w-3.5 text-fg-subtle" />
+                            <span>Promote Folder to Deliverable</span>
                           </DropdownMenuItem>
                         </TooltipTrigger>
-                        <TooltipContent side="right" className="text-xs max-w-48">An ancestor folder is already a Deliverable</TooltipContent>
+                        <TooltipContent side="right" className="text-xs max-w-48">An ancestor folder is already a deliverable</TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
                   ) : (
@@ -701,10 +729,11 @@ export function DocumentActionMenu({
                           <DropdownMenuItem
                             // Closes the menu: it sits above dialogs, so left open it covers the dialog.
                             onSelect={() => { setTagDeliverableDueDate(""); setShowTagDeliverableModal(true) }}
-                            className="flex cursor-pointer items-center gap-2"
+                            // Green, as Demote is red: the deliverable color, the opposite move.
+                            className="flex cursor-pointer items-center gap-2 text-primary focus:text-primary"
                           >
-                            <Package className="h-4 w-4 text-fg-subtle" />
-                            <span>Promote as Deliverable</span>
+                            <FolderPlus className="h-3.5 w-3.5 text-primary" />
+                            <span>Promote Folder to Deliverable</span>
                           </DropdownMenuItem>
                         </TooltipTrigger>
                         <TooltipContent side="right" className="text-xs max-w-48">Deliverables will be shared externally</TooltipContent>
@@ -716,8 +745,8 @@ export function DocumentActionMenu({
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <div className="flex items-center gap-2 px-2 py-1.5 text-ui text-fg-subtle opacity-50 cursor-not-allowed select-none">
-                          <FolderOpen className="h-4 w-4" />
+                        <div className="flex items-center gap-2 px-2 py-1 text-small text-fg-subtle opacity-50 cursor-not-allowed select-none">
+                          <FolderOpen className="h-3.5 w-3.5" />
                           <span>Organize</span>
                         </div>
                       </TooltipTrigger>
@@ -729,48 +758,48 @@ export function DocumentActionMenu({
                 ) : (onCopyDocument || onMoveDocument || onRenameDocument || onDuplicateDocument || canManage) && (
                   <DropdownMenuSub>
                     <DropdownMenuSubTrigger className="flex cursor-pointer items-center gap-2">
-                      <FolderOpen className="h-4 w-4 text-fg-muted" />
+                      <FolderOpen className="h-3.5 w-3.5 text-fg-muted" />
                       <span>Organize</span>
                     </DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent className="w-56">
+                    <DropdownMenuSubContent className="w-max min-w-48 max-w-72">
                       {onRenameDocument && (
                         isApprovedDeliverable ? (
-                          <div className="flex items-center gap-2 px-2 py-1.5 text-ui text-fg-subtle opacity-40 cursor-not-allowed select-none">
-                            <Edit3 className="h-4 w-4" /><span>Rename</span>
+                          <div className="flex items-center gap-2 px-2 py-1 text-small text-fg-subtle opacity-40 cursor-not-allowed select-none">
+                            <Edit3 className="h-3.5 w-3.5" /><span>Rename</span>
                           </div>
                         ) : (
                           <DropdownMenuItem onSelect={() => onRenameDocument(document)} className="flex cursor-pointer items-center gap-2">
-                            <Edit3 className="h-4 w-4 text-fg-muted" />
+                            <Edit3 className="h-3.5 w-3.5 text-fg-muted" />
                             <span>Rename</span>
                           </DropdownMenuItem>
                         )
                       )}
                       {onDuplicateDocument && (
                         isApprovedDeliverable ? (
-                          <div className="flex items-center gap-2 px-2 py-1.5 text-ui text-fg-subtle opacity-40 cursor-not-allowed select-none">
-                            <Copy className="h-4 w-4" /><span>Duplicate</span>
+                          <div className="flex items-center gap-2 px-2 py-1 text-small text-fg-subtle opacity-40 cursor-not-allowed select-none">
+                            <Copy className="h-3.5 w-3.5" /><span>Duplicate</span>
                           </div>
                         ) : (
                           <DropdownMenuItem onSelect={() => onDuplicateDocument(document)} className="flex cursor-pointer items-center gap-2">
-                            <Copy className="h-4 w-4 text-fg-muted" />
+                            <Copy className="h-3.5 w-3.5 text-fg-muted" />
                             <span>Duplicate</span>
                           </DropdownMenuItem>
                         )
                       )}
                       {onCopyDocument && (
                         <DropdownMenuItem onSelect={() => onCopyDocument(document)} className="flex cursor-pointer items-center gap-2">
-                          <Copy className="h-4 w-4 text-fg-muted" />
+                          <Copy className="h-3.5 w-3.5 text-fg-muted" />
                           <span>Copy</span>
                         </DropdownMenuItem>
                       )}
                       {onMoveDocument && (
                         isApprovedDeliverable ? (
-                          <div className="flex items-center gap-2 px-2 py-1.5 text-ui text-fg-subtle opacity-40 cursor-not-allowed select-none">
-                            <Move className="h-4 w-4" /><span>Move</span>
+                          <div className="flex items-center gap-2 px-2 py-1 text-small text-fg-subtle opacity-40 cursor-not-allowed select-none">
+                            <Move className="h-3.5 w-3.5" /><span>Move</span>
                           </div>
                         ) : (
                           <DropdownMenuItem onSelect={() => onMoveDocument(document)} className="flex cursor-pointer items-center gap-2">
-                            <Move className="h-4 w-4 text-fg-muted" />
+                            <Move className="h-3.5 w-3.5 text-fg-muted" />
                             <span>Move</span>
                           </DropdownMenuItem>
                         )
@@ -778,8 +807,8 @@ export function DocumentActionMenu({
                       {(canManage && (onMakePrivate || onMakePublic)) && <DropdownMenuSeparator />}
                       {canManage && !document.isPrivate && onMakePrivate && (
                         isApprovedDeliverable ? (
-                          <div className="flex items-center gap-2 px-2 py-1.5 text-ui text-fg-subtle opacity-40 cursor-not-allowed select-none">
-                            <FolderLock className="h-4 w-4" /><span>Make Private</span>
+                          <div className="flex items-center gap-2 px-2 py-1 text-small text-fg-subtle opacity-40 cursor-not-allowed select-none">
+                            <FolderLock className="h-3.5 w-3.5" /><span>Make private</span>
                           </div>
                         ) : document.isSharedWithExternal ? (
                           <TooltipProvider>
@@ -787,83 +816,49 @@ export function DocumentActionMenu({
                               <TooltipTrigger asChild>
                                 <div
                                   onClick={(e) => { e.stopPropagation(); setPrivateInfoOpen((v) => !v) }}
-                                  className="flex items-center gap-2 px-2 py-1.5 text-ui text-fg-subtle cursor-pointer opacity-50 rounded-control hover:bg-surface-hover"
+                                  className="flex items-center gap-2 px-2 py-1 text-small text-fg-subtle cursor-pointer opacity-50 rounded-control hover:bg-surface-hover"
                                 >
-                                  <FolderLock className="h-4 w-4 text-fg-subtle" />
-                                  <span>Make Private</span>
+                                  <FolderLock className="h-3.5 w-3.5 text-fg-subtle" />
+                                  <span>Make private</span>
                                   <Info className="h-3.5 w-3.5 ml-auto text-fg-subtle" />
                                 </div>
                               </TooltipTrigger>
                               <TooltipContent side="left" className="text-xs max-w-[220px]">
-                                A shared document cannot be made Private. Turn off sharing first.
+                                A shared document can't be made private. Turn off sharing first.
                               </TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
                         ) : (
                           <DropdownMenuItem onClick={() => onMakePrivate(document)} className="flex cursor-pointer items-center gap-2">
-                            <FolderLock className="h-4 w-4 text-fg-subtle" />
-                            <span>Make Private</span>
+                            <FolderLock className="h-3.5 w-3.5 text-fg-subtle" />
+                            <span>Make private</span>
                           </DropdownMenuItem>
                         )
                       )}
                       {canManage && document.isPrivate && onMakePublic && (
                         isApprovedDeliverable ? (
-                          <div className="flex items-center gap-2 px-2 py-1.5 text-ui text-fg-subtle opacity-40 cursor-not-allowed select-none">
-                            <FolderUp className="h-4 w-4" /><span>Make Public</span>
+                          <div className="flex items-center gap-2 px-2 py-1 text-small text-fg-subtle opacity-40 cursor-not-allowed select-none">
+                            <FolderUp className="h-3.5 w-3.5" /><span>Make public</span>
                           </div>
                         ) : (
                           <DropdownMenuItem onClick={() => onMakePublic(document)} className="flex cursor-pointer items-center gap-2">
-                            <FolderUp className="h-4 w-4 text-fg-muted" />
-                            <span>Make Public</span>
+                            <FolderUp className="h-3.5 w-3.5 text-fg-muted" />
+                            <span>Make public</span>
                           </DropdownMenuItem>
                         )
                       )}
                     </DropdownMenuSubContent>
                   </DropdownMenuSub>
                 )}
-                {(onDeleteDocument || isApprovedDeliverable) && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          {isApprovedDeliverable ? (
-                            <div className="flex items-center gap-2 px-2 py-1.5 text-ui text-fg-subtle opacity-50 cursor-not-allowed select-none">
-                              <Trash2 className="h-4 w-4" />
-                              <span>{document.documentType === 'LINK' ? 'Delete' : 'Move to Bin'}</span>
-                            </div>
-                          ) : (
-                            <DropdownMenuItem
-                              // Closes the menu: it sits above dialogs, so left open it covers the confirmation.
-                              onSelect={() => onDeleteDocument!(document)}
-                              className="flex cursor-pointer items-center gap-2 text-danger focus:text-danger"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                              <span>{document.documentType === 'LINK' ? 'Delete' : 'Move to Bin'}</span>
-                            </DropdownMenuItem>
-                          )}
-                        </TooltipTrigger>
-                        <TooltipContent side="left" className="max-w-[200px]">
-                          {isApprovedDeliverable
-                            ? <p>Approved deliverables cannot be deleted</p>
-                            : document.documentType === 'LINK'
-                              ? <p>This link will be permanently deleted.</p>
-                              : <p>Items in Bin are permanently deleted after 30 days (Google Drive).</p>
-                          }
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  </>
-                )}
                 {!isExternalUser && (
                 <>
                   <DropdownMenuSeparator />
                   <DropdownMenuSub>
                     <DropdownMenuSubTrigger className="flex cursor-pointer items-center gap-2">
-                      <ExternalLink className="h-4 w-4 text-fg-muted" />
-                      <span>Drive Actions</span>
+                      <ExternalLink className="h-3.5 w-3.5 text-fg-muted" />
+                      <span>Drive actions</span>
                     </DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent className="w-56">
+                    <DropdownMenuSubContent className="w-max min-w-48 max-w-72">
                       <DropdownMenuItem
                         onClick={() => {
                           // webViewLink is the provider-correct URL (Google's Drive UI link or
@@ -884,23 +879,429 @@ export function DocumentActionMenu({
                       </DropdownMenuItem>
                     </DropdownMenuSubContent>
                   </DropdownMenuSub>
-                </>
+                  {(onDeleteDocument || isApprovedDeliverable) && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          {isApprovedDeliverable ? (
+                            <div className="flex items-center gap-2 px-2 py-1 text-small text-fg-subtle opacity-50 cursor-not-allowed select-none">
+                              <Trash2 className="h-3.5 w-3.5" />
+                              <span>{document.documentType === 'LINK' ? 'Delete' : 'Move to trash'}</span>
+                            </div>
+                          ) : (
+                            <DropdownMenuItem
+                              // Closes the menu: it sits above dialogs, so left open it covers the confirmation.
+                              onSelect={() => onDeleteDocument!(document)}
+                              className="flex cursor-pointer items-center gap-2 text-danger focus:text-danger"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                              <span>{document.documentType === 'LINK' ? 'Delete' : 'Move to trash'}</span>
+                            </DropdownMenuItem>
+                          )}
+                        </TooltipTrigger>
+                        <TooltipContent side="left" className="max-w-[200px]">
+                          {isApprovedDeliverable
+                            ? <p>Approved deliverables cannot be deleted</p>
+                            : document.documentType === 'LINK'
+                              ? <p>This link will be permanently deleted.</p>
+                              : <p>{trashRetentionNote}</p>
+                          }
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </>
+                )}
+              </>
                 )}
               </>
             ) : (
               <>
+                {/* Grouped by intent (.claude/plans/app-design-refinements.md): use the file, plan it,
+                    the submenus, and the destructive action last. */}
+                {isApprovedDeliverable ? (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="flex items-center gap-2 px-2 py-1 text-small text-fg-subtle opacity-50 cursor-not-allowed select-none">
+                          <Eye className="h-3.5 w-3.5" />
+                          <span>Open</span>
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent side="right" className="text-xs max-w-48">
+                        Use the preview panel to view this document
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                ) : (
+                  <DropdownMenuItem
+                    onClick={() => {
+                      if (document.documentType === 'LINK' && document.externalUrl) {
+                        window.open(document.externalUrl, '_blank', 'noopener,noreferrer')
+                        return
+                      }
+                      if (onOpenDocument) {
+                        onOpenDocument(document)
+                      } else if (rightPane.hasRightPane) {
+                        rightPane.setTitle(document.name || 'Preview')
+                        rightPane.setContent(<DocumentPreviewPanelContent document={document} />)
+                      }
+                    }}
+                    className="flex cursor-pointer items-center gap-2"
+                  >
+                    <Eye className="h-3.5 w-3.5 text-fg-muted" />
+                    <span>Open</span>
+                  </DropdownMenuItem>
+                )}
+
+                <DropdownMenuItem
+                  onClick={() => {
+                    const docId = (document as any).projectDocumentId || document.id
+                    if (!deeplinkBase) return
+                    navigator.clipboard.writeText(`${deeplinkBase}#doc-file:${docId}`)
+                      .then(() => addToast({ type: 'success', title: 'Link copied', message: 'Link copied to clipboard' }))
+                      .catch(() => addToast({ type: 'error', title: 'Copy failed', message: 'Could not copy link.' }))
+                  }}
+                  className="flex cursor-pointer items-center gap-2"
+                >
+                  <Link2 className="h-3.5 w-3.5 text-fg-muted" />
+                  <span>Copy link</span>
+                </DropdownMenuItem>
+
+                {document.documentType !== 'LINK' &&
+                 !(document.isGuest && !document.allowDownload) &&
+                 !(document.isExternalCollaborator && !document.ecAllowDownload) && (
+                  <DropdownMenuItem
+                    onClick={() => { handleDownload(document); onDownloadDocument?.(document) }}
+                    className="flex cursor-pointer items-center gap-2"
+                  >
+                    <Download className="h-3.5 w-3.5 text-fg-subtle" />
+                    <span>Download</span>
+                  </DropdownMenuItem>
+                )}
+
+                {/* Comments (folders only — files have Comments inside the deliverable detail pane) */}
+                {projectId && document.mimeType?.includes('folder') && (
+                  <DropdownMenuItem
+                    onClick={() => {
+                      if (rightPane.hasRightPane) {
+                        onOpenCommentPane?.(document.id)
+                        const docIdForComments = (document as any)?.projectDocumentId || document.id
+                        rightPane.setTitle('Comments')
+                        rightPane.setHeaderActions(null)
+                        rightPane.setHeaderIcon(<DocumentIcon mimeType={document.mimeType} className="h-3.5 w-3.5" />)
+                        rightPane.setHeaderSubtitle('Append-only. Visible to all project members.')
+                        rightPane.setContent(
+                          <DocumentDocCommentsPane
+                            engagementId={projectId}
+                            documentId={docIdForComments}
+                            documentName={document.name}
+                            documentMimeType={document.mimeType}
+                            orgSlug={orgSlug}
+                          />
+                        )
+                        rightPane.setExpanded?.(false)
+                      }
+                    }}
+                    className="flex cursor-pointer items-center gap-2"
+                  >
+                    <MessagesSquare className="h-3.5 w-3.5 text-fg-muted" />
+                    <span>Comment</span>
+                  </DropdownMenuItem>
+                )}
+
+                <DropdownMenuSeparator />
+
+                <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span>
+                <DropdownMenuItem
+                  onClick={async () => {
+                    if (onBookmarkDocument) {
+                      onBookmarkDocument(document)
+                      return
+                    }
+                    try {
+                      const projectDocumentId = (document as any)?.projectDocumentId || document.id
+                      const { getSession } = await import('@/lib/supabase')
+                      const session = await getSession()
+                      if (!session?.access_token) {
+                        addToast({ type: 'error', title: 'Unauthorized', message: 'Please sign in again.' })
+                        return
+                      }
+                      if (!projectId) {
+                        addToast({ type: 'error', title: 'Unavailable', message: 'No project context for this bookmark.' })
+                        return
+                      }
+                      if (existingBookmarkId) {
+                        // Remove
+                        const res = await fetch('/api/bookmarks', {
+                          method: 'DELETE',
+                          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+                          body: JSON.stringify({ id: existingBookmarkId }),
+                        })
+                        if (!res.ok) throw new Error('Failed to remove bookmark')
+                        setExistingBookmarkId(null)
+                        if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('pockett-bookmarks-updated'))
+                        addToast({ type: 'success', title: 'Removed', message: 'Bookmark removed.' })
+                      } else {
+                        // Add
+                        const res = await fetch('/api/bookmarks', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+                          body: JSON.stringify({
+                            bookmark: {
+                              kind: 'document',
+                              label: document.name ?? 'Document',
+                              url: undefined,
+                              projectId: projectId,
+                              documentId: projectDocumentId,
+                            },
+                          }),
+                        })
+                        if (!res.ok) {
+                          const err = await res.json().catch(() => ({}))
+                          throw new Error(err.error ?? 'Failed to bookmark')
+                        }
+                        const data = await res.json()
+                        setExistingBookmarkId(data.bookmark?.id ?? null)
+                        if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('pockett-bookmarks-updated'))
+                        addToast({ type: 'success', title: 'Bookmarked', message: 'Saved to your bookmarks.' })
+                      }
+                    } catch (e) {
+                      addToast({ type: 'error', title: 'Failed', message: e instanceof Error ? e.message : 'Failed to update bookmark.' })
+                    }
+                  }}
+                  className="flex items-center gap-2 px-2 py-1 text-small data-[disabled]:opacity-50 data-[disabled]:pointer-events-none"
+                >
+                  <Bookmark className={`h-3.5 w-3.5 ${existingBookmarkId ? 'fill-current text-fg' : 'text-fg-muted'}`} />
+                  <span>{existingBookmarkId ? 'Remove bookmark' : 'Bookmark'}</span>
+                </DropdownMenuItem>
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="left" className="text-xs">
+                    {existingBookmarkId ? 'Remove bookmark' : 'Bookmark'}
+                  </TooltipContent>
+                </Tooltip>
+                </TooltipProvider>
+                {isApprovedDeliverable ? (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="flex items-center gap-2 px-2 py-1 text-small text-fg-subtle opacity-50 cursor-not-allowed select-none">
+                          <Calendar className="h-3.5 w-3.5 text-fg-subtle" />
+                          <span>Due</span>
+                          <span className={`ml-auto pl-3 text-small tabular-nums ${dueOverdue ? 'text-danger' : 'text-fg-subtle'}`}>{due ? formatDue(due) : 'Not set'}</span>
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent side="right" className="text-xs max-w-48">
+                        Cannot set due date on an approved deliverable
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                ) : (
+                  <DropdownMenuSub>
+                    <DropdownMenuSubTrigger className="flex cursor-pointer items-center gap-2">
+                      <Calendar className="h-3.5 w-3.5 text-fg-muted" />
+                      <span className="flex flex-1 items-center">
+                        Due
+                        <span className={`ml-auto pl-3 text-small tabular-nums ${dueOverdue ? 'text-danger' : 'text-fg-subtle'}`}>{due ? formatDue(due) : 'Not set'}</span>
+                      </span>
+                    </DropdownMenuSubTrigger>
+                    {/* The shared date picker (due-picker.tsx) opens beside the row — no modal. A day saves
+                        and closes the menu; adding a time keeps it open until you're done. */}
+                    <DropdownMenuSubContent className="w-auto p-0" sideOffset={6}>
+                      <DuePickerPanel
+                        value={document.dueDate ?? null}
+                        allowTime
+                        label="Due"
+                        onCommit={(next, close) => {
+                          void handleDueDateChange(next ?? '')
+                          if (close) {
+                            setMenuOpen(false)
+                            onOpenChange?.(false)
+                          }
+                        }}
+                      />
+                    </DropdownMenuSubContent>
+                  </DropdownMenuSub>
+                )}
+                {!mime.includes('folder') && document.documentType !== 'LINK' && isExternalViewer && projectId && (() => {
+                  const doc = document as { lock?: { type?: string } | null }
+                  const isAlreadyLocked = doc.lock?.type === 'finalize'
+                  if (isAlreadyLocked) return (
+                    <DropdownMenuItem disabled className="flex items-center gap-2 px-2 py-1 text-small text-fg-subtle opacity-50 cursor-not-allowed data-[disabled]:pointer-events-none">
+                      <BadgeCheck className="h-3.5 w-3.5 shrink-0" />
+                      <span className="whitespace-nowrap">Accepted</span>
+                    </DropdownMenuItem>
+                  )
+                  return (
+                    <DropdownMenuItem
+                      disabled={finalizeLockDisabled}
+                      onClick={() => void handleAcceptDocument()}
+                      className="flex cursor-pointer items-center gap-2 data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+                    >
+                      <BadgeCheck className="h-3.5 w-3.5 shrink-0 text-action" />
+                      <span className="whitespace-nowrap">Accept</span>
+                    </DropdownMenuItem>
+                  )
+                })()}
+
+                <DropdownMenuSeparator />
+
+                {/* Organize (Copy + Move + persona options) */}
+                {isApprovedDeliverable && !onCopyDocument ? (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="flex items-center gap-2 px-2 py-1 text-small text-fg-subtle opacity-50 cursor-not-allowed select-none">
+                          <FolderOpen className="h-3.5 w-3.5" />
+                          <span>Organize</span>
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent side="right" className="text-xs max-w-48">
+                        Approved deliverables cannot be reorganized
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                ) : (onCopyDocument || onMoveDocument || onRenameDocument || onDuplicateDocument || canManage) && (
+                  <DropdownMenuSub>
+                    <DropdownMenuSubTrigger className="flex cursor-pointer items-center gap-2">
+                      <FolderOpen className="h-3.5 w-3.5 text-fg-muted" />
+                      <span>Organize</span>
+                    </DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent className="w-max min-w-48 max-w-72">
+                      {onRenameDocument && (
+                        isApprovedDeliverable ? (
+                          <div className="flex items-center gap-2 px-2 py-1 text-small text-fg-subtle opacity-40 cursor-not-allowed select-none">
+                            <Edit3 className="h-3.5 w-3.5" /><span>Rename</span>
+                          </div>
+                        ) : (
+                          <DropdownMenuItem
+                            onSelect={() => onRenameDocument(document)}
+                            className="flex cursor-pointer items-center gap-2"
+                          >
+                            <Edit3 className="h-3.5 w-3.5 text-fg-muted" />
+                            <span>Rename</span>
+                          </DropdownMenuItem>
+                        )
+                      )}
+                      {onDuplicateDocument && document.documentType !== 'LINK' && (
+                        isApprovedDeliverable ? (
+                          <div className="flex items-center gap-2 px-2 py-1 text-small text-fg-subtle opacity-40 cursor-not-allowed select-none">
+                            <Copy className="h-3.5 w-3.5" /><span>Duplicate</span>
+                          </div>
+                        ) : (
+                          <DropdownMenuItem
+                            onSelect={() => onDuplicateDocument(document)}
+                            className="flex cursor-pointer items-center gap-2"
+                          >
+                            <Copy className="h-3.5 w-3.5 text-fg-muted" />
+                            <span>Duplicate</span>
+                          </DropdownMenuItem>
+                        )
+                      )}
+                      {onCopyDocument && document.documentType !== 'LINK' && (
+                        <DropdownMenuItem
+                          onSelect={() => onCopyDocument(document)}
+                          className="flex cursor-pointer items-center gap-2"
+                        >
+                          <Copy className="h-3.5 w-3.5 text-fg-muted" />
+                          <span>Copy</span>
+                        </DropdownMenuItem>
+                      )}
+                      {onMoveDocument && document.documentType !== 'LINK' && (
+                        isApprovedDeliverable ? (
+                          <div className="flex items-center gap-2 px-2 py-1 text-small text-fg-subtle opacity-40 cursor-not-allowed select-none">
+                            <Move className="h-3.5 w-3.5" /><span>Move</span>
+                          </div>
+                        ) : (
+                          <DropdownMenuItem
+                            onSelect={() => onMoveDocument(document)}
+                            className="flex cursor-pointer items-center gap-2"
+                          >
+                            <Move className="h-3.5 w-3.5 text-fg-muted" />
+                            <span>Move</span>
+                          </DropdownMenuItem>
+                        )
+                      )}
+                      {onCrossEngagementCopy && document.documentType !== 'LINK' && <DropdownMenuSeparator />}
+                      {onCrossEngagementCopy && document.documentType !== 'LINK' && (
+                        <DropdownMenuItem
+                          onSelect={() => onCrossEngagementCopy(document)}
+                          className="flex cursor-pointer items-center gap-2"
+                        >
+                          <Building2 className="h-3.5 w-3.5 flex-shrink-0 text-fg-subtle" />
+                          <span className="whitespace-nowrap">Copy to another engagement…</span>
+                        </DropdownMenuItem>
+                      )}
+                      {(canManage && (onMakePrivate || onMakePublic)) && <DropdownMenuSeparator />}
+                      {canManage && !document.isPrivate && onMakePrivate && (
+                        isApprovedDeliverable ? (
+                          <div className="flex items-center gap-2 px-2 py-1 text-small text-fg-subtle opacity-40 cursor-not-allowed select-none">
+                            <FolderLock className="h-3.5 w-3.5" /><span>Make private</span>
+                          </div>
+                        ) : document.isSharedWithExternal ? (
+                          <TooltipProvider>
+                            <Tooltip open={privateInfoOpen} onOpenChange={setPrivateInfoOpen}>
+                              <TooltipTrigger asChild>
+                                <div
+                                  onClick={(e) => { e.stopPropagation(); setPrivateInfoOpen((v) => !v) }}
+                                  className="flex items-center gap-2 px-2 py-1 text-small text-fg-subtle cursor-pointer opacity-50 rounded-control hover:bg-surface-hover"
+                                >
+                                  <FolderLock className="h-3.5 w-3.5 text-fg-subtle" />
+                                  <span>Make private</span>
+                                  <Info className="h-3.5 w-3.5 ml-auto text-fg-subtle" />
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent side="left" className="text-xs max-w-[220px]">
+                                A shared document can't be made private. Turn off sharing first.
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        ) : (
+                          <DropdownMenuItem
+                            onClick={() => onMakePrivate(document)}
+                            className="flex cursor-pointer items-center gap-2"
+                          >
+                            <FolderLock className="h-3.5 w-3.5 text-fg-subtle" />
+                            <span>Make private</span>
+                          </DropdownMenuItem>
+                        )
+                      )}
+                      {canManage && document.isPrivate && onMakePublic && (
+                        isApprovedDeliverable ? (
+                          <div className="flex items-center gap-2 px-2 py-1 text-small text-fg-subtle opacity-40 cursor-not-allowed select-none">
+                            <FolderUp className="h-3.5 w-3.5" /><span>Make public</span>
+                          </div>
+                        ) : (
+                          <DropdownMenuItem
+                            onClick={() => onMakePublic(document)}
+                            className="flex cursor-pointer items-center gap-2"
+                          >
+                            <FolderUp className="h-3.5 w-3.5 text-fg-muted" />
+                            <span>Make public</span>
+                          </DropdownMenuItem>
+                        )
+                      )}
+                    </DropdownMenuSubContent>
+                  </DropdownMenuSub>
+                )}
+
                 {document.documentType !== 'LINK' && (
                 <DropdownMenuSub>
                   <DropdownMenuSubTrigger className="flex cursor-pointer items-center gap-2">
-                    <Info className="h-4 w-4 text-fg-muted" />
-                    <span>Info</span>
+                    <Info className="h-3.5 w-3.5 text-fg-muted" />
+                    <span>Details</span>
                   </DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent className="w-56">
+                  <DropdownMenuSubContent className="w-max min-w-48 max-w-72">
                     <DropdownMenuItem
                       onClick={() => {
                         onOpenInfoPane?.(document.id)
                         rightPane.setTitle('File information')
-                        rightPane.setHeaderIcon(<DocumentIcon mimeType={document.mimeType} className="h-4 w-4" />)
+                        rightPane.setHeaderIcon(<DocumentIcon mimeType={document.mimeType} className="h-3.5 w-3.5" />)
                         rightPane.setHeaderSubtitle('')
                         rightPane.setHeaderActions(null)
                         rightPane.setContent(
@@ -969,14 +1370,14 @@ export function DocumentActionMenu({
                       }}
                       className="flex cursor-pointer items-center gap-2"
                     >
-                      <Info className="h-4 w-4 text-fg-muted" />
+                      <Info className="h-3.5 w-3.5 text-fg-muted" />
                       <span>File information</span>
                     </DropdownMenuItem>
                     <DropdownMenuItem
                       onClick={() => {
                         onOpenActivityPane?.(document.id)
-                        rightPane.setTitle('Activity Stream')
-                        rightPane.setHeaderIcon(<DocumentIcon mimeType={document.mimeType} className="h-4 w-4" />)
+                        rightPane.setTitle('Activity stream')
+                        rightPane.setHeaderIcon(<DocumentIcon mimeType={document.mimeType} className="h-3.5 w-3.5" />)
                         rightPane.setHeaderSubtitle('Last 30 days')
                         rightPane.setHeaderActions(null)
                         rightPane.setContent(<DocumentActivityPane document={document} />)
@@ -984,15 +1385,15 @@ export function DocumentActionMenu({
                       }}
                       className="flex cursor-pointer items-center gap-2"
                     >
-                      <Clock className="h-4 w-4 text-fg-muted" />
-                      <span>Activity Stream</span>
+                      <Clock className="h-3.5 w-3.5 text-fg-muted" />
+                      <span>Activity stream</span>
                     </DropdownMenuItem>
                     {document.documentType !== 'LINK' && (
                     <DropdownMenuItem
                       onClick={() => {
                         onOpenVersionPane?.(document.id)
-                        rightPane.setTitle('Version History')
-                        rightPane.setHeaderIcon(<DocumentIcon mimeType={document.mimeType} className="h-4 w-4" />)
+                        rightPane.setTitle('Version history')
+                        rightPane.setHeaderIcon(<DocumentIcon mimeType={document.mimeType} className="h-3.5 w-3.5" />)
                         rightPane.setHeaderSubtitle('Full history')
                         rightPane.setHeaderActions(null)
                         rightPane.setContent(<DocumentHistoryPane document={document} />)
@@ -1001,408 +1402,21 @@ export function DocumentActionMenu({
                       }}
                       className="flex cursor-pointer items-center gap-2"
                     >
-                      <Clock className="h-4 w-4 text-fg-muted" />
-                      <span>Version History</span>
+                      <Clock className="h-3.5 w-3.5 text-fg-muted" />
+                      <span>Version history</span>
                     </DropdownMenuItem>
                     )}
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>
                 )}
-
-                <DropdownMenuSeparator />
-
-                {isApprovedDeliverable ? (
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <div className="flex items-center gap-2 px-2 py-1.5 text-ui text-fg-subtle opacity-50 cursor-not-allowed select-none">
-                          <Eye className="h-4 w-4" />
-                          <span>Open</span>
-                        </div>
-                      </TooltipTrigger>
-                      <TooltipContent side="right" className="text-xs max-w-48">
-                        Use the preview panel to view this document
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                ) : (
-                  <DropdownMenuItem
-                    onClick={() => {
-                      if (document.documentType === 'LINK' && document.externalUrl) {
-                        window.open(document.externalUrl, '_blank', 'noopener,noreferrer')
-                        return
-                      }
-                      if (onOpenDocument) {
-                        onOpenDocument(document)
-                      } else if (rightPane.hasRightPane) {
-                        rightPane.setTitle(document.name || 'Preview')
-                        rightPane.setContent(<DocumentPreviewPanelContent document={document} />)
-                      }
-                    }}
-                    className="flex cursor-pointer items-center gap-2"
-                  >
-                    <Eye className="h-4 w-4 text-fg-muted" />
-                    <span>Open</span>
-                  </DropdownMenuItem>
-                )}
-
-                <DropdownMenuItem
-                  onClick={() => {
-                    const docId = (document as any).projectDocumentId || document.id
-                    if (!deeplinkBase) return
-                    navigator.clipboard.writeText(`${deeplinkBase}#doc-file:${docId}`)
-                      .then(() => addToast({ type: 'success', title: 'Link copied', message: 'Link copied to clipboard' }))
-                      .catch(() => addToast({ type: 'error', title: 'Copy failed', message: 'Could not copy link.' }))
-                  }}
-                  className="flex cursor-pointer items-center gap-2"
-                >
-                  <Link2 className="h-4 w-4 text-fg-muted" />
-                  <span>Copy link</span>
-                </DropdownMenuItem>
-
-                {document.documentType !== 'LINK' &&
-                 !(document.isGuest && !document.allowDownload) &&
-                 !(document.isExternalCollaborator && !document.ecAllowDownload) && (
-                  <DropdownMenuItem
-                    onClick={() => { handleDownload(document); onDownloadDocument?.(document) }}
-                    className="flex cursor-pointer items-center gap-2"
-                  >
-                    <Download className="h-4 w-4 text-fg-subtle" />
-                    <span>Download</span>
-                  </DropdownMenuItem>
-                )}
-
-                {/* Comments (folders only — files have Comments inside the deliverable detail pane) */}
-                {projectId && document.mimeType?.includes('folder') && (
-                  <DropdownMenuItem
-                    onClick={() => {
-                      if (rightPane.hasRightPane) {
-                        onOpenCommentPane?.(document.id)
-                        const docIdForComments = (document as any)?.projectDocumentId || document.id
-                        rightPane.setTitle('Comments')
-                        rightPane.setHeaderActions(null)
-                        rightPane.setHeaderIcon(<DocumentIcon mimeType={document.mimeType} className="h-4 w-4" />)
-                        rightPane.setHeaderSubtitle('Append-only. Visible to all project members.')
-                        rightPane.setContent(
-                          <DocumentDocCommentsPane
-                            engagementId={projectId}
-                            documentId={docIdForComments}
-                            documentName={document.name}
-                            documentMimeType={document.mimeType}
-                            orgSlug={orgSlug}
-                          />
-                        )
-                        rightPane.setExpanded?.(false)
-                      }
-                    }}
-                    className="flex cursor-pointer items-center gap-2"
-                  >
-                    <MessagesSquare className="h-4 w-4 text-fg-muted" />
-                    <span>Comment</span>
-                  </DropdownMenuItem>
-                )}
-
-                {/* Organize (Copy + Move + persona options) */}
-                {isApprovedDeliverable && !onCopyDocument ? (
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <div className="flex items-center gap-2 px-2 py-1.5 text-ui text-fg-subtle opacity-50 cursor-not-allowed select-none">
-                          <FolderOpen className="h-4 w-4" />
-                          <span>Organize</span>
-                        </div>
-                      </TooltipTrigger>
-                      <TooltipContent side="right" className="text-xs max-w-48">
-                        Approved deliverables cannot be reorganized
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                ) : (onCopyDocument || onMoveDocument || onRenameDocument || onDuplicateDocument || canManage) && (
-                  <DropdownMenuSub>
-                    <DropdownMenuSubTrigger className="flex cursor-pointer items-center gap-2">
-                      <FolderOpen className="h-4 w-4 text-fg-muted" />
-                      <span>Organize</span>
-                    </DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent className="w-56">
-                      {onRenameDocument && (
-                        isApprovedDeliverable ? (
-                          <div className="flex items-center gap-2 px-2 py-1.5 text-ui text-fg-subtle opacity-40 cursor-not-allowed select-none">
-                            <Edit3 className="h-4 w-4" /><span>Rename</span>
-                          </div>
-                        ) : (
-                          <DropdownMenuItem
-                            onSelect={() => onRenameDocument(document)}
-                            className="flex cursor-pointer items-center gap-2"
-                          >
-                            <Edit3 className="h-4 w-4 text-fg-muted" />
-                            <span>Rename</span>
-                          </DropdownMenuItem>
-                        )
-                      )}
-                      {onDuplicateDocument && document.documentType !== 'LINK' && (
-                        isApprovedDeliverable ? (
-                          <div className="flex items-center gap-2 px-2 py-1.5 text-ui text-fg-subtle opacity-40 cursor-not-allowed select-none">
-                            <Copy className="h-4 w-4" /><span>Duplicate</span>
-                          </div>
-                        ) : (
-                          <DropdownMenuItem
-                            onSelect={() => onDuplicateDocument(document)}
-                            className="flex cursor-pointer items-center gap-2"
-                          >
-                            <Copy className="h-4 w-4 text-fg-muted" />
-                            <span>Duplicate</span>
-                          </DropdownMenuItem>
-                        )
-                      )}
-                      {onCopyDocument && document.documentType !== 'LINK' && (
-                        <DropdownMenuItem
-                          onSelect={() => onCopyDocument(document)}
-                          className="flex cursor-pointer items-center gap-2"
-                        >
-                          <Copy className="h-4 w-4 text-fg-muted" />
-                          <span>Copy</span>
-                        </DropdownMenuItem>
-                      )}
-                      {onMoveDocument && document.documentType !== 'LINK' && (
-                        isApprovedDeliverable ? (
-                          <div className="flex items-center gap-2 px-2 py-1.5 text-ui text-fg-subtle opacity-40 cursor-not-allowed select-none">
-                            <Move className="h-4 w-4" /><span>Move</span>
-                          </div>
-                        ) : (
-                          <DropdownMenuItem
-                            onSelect={() => onMoveDocument(document)}
-                            className="flex cursor-pointer items-center gap-2"
-                          >
-                            <Move className="h-4 w-4 text-fg-muted" />
-                            <span>Move</span>
-                          </DropdownMenuItem>
-                        )
-                      )}
-                      {onCrossEngagementCopy && document.documentType !== 'LINK' && <DropdownMenuSeparator />}
-                      {onCrossEngagementCopy && document.documentType !== 'LINK' && (
-                        <DropdownMenuItem
-                          onSelect={() => onCrossEngagementCopy(document)}
-                          className="flex cursor-pointer items-center gap-2"
-                        >
-                          <Building2 className="h-4 w-4 flex-shrink-0 text-fg-subtle" />
-                          <span className="whitespace-nowrap">Copy to another engagement…</span>
-                        </DropdownMenuItem>
-                      )}
-                      {(canManage && (onMakePrivate || onMakePublic)) && <DropdownMenuSeparator />}
-                      {canManage && !document.isPrivate && onMakePrivate && (
-                        isApprovedDeliverable ? (
-                          <div className="flex items-center gap-2 px-2 py-1.5 text-ui text-fg-subtle opacity-40 cursor-not-allowed select-none">
-                            <FolderLock className="h-4 w-4" /><span>Make Private</span>
-                          </div>
-                        ) : document.isSharedWithExternal ? (
-                          <TooltipProvider>
-                            <Tooltip open={privateInfoOpen} onOpenChange={setPrivateInfoOpen}>
-                              <TooltipTrigger asChild>
-                                <div
-                                  onClick={(e) => { e.stopPropagation(); setPrivateInfoOpen((v) => !v) }}
-                                  className="flex items-center gap-2 px-2 py-1.5 text-ui text-fg-subtle cursor-pointer opacity-50 rounded-control hover:bg-surface-hover"
-                                >
-                                  <FolderLock className="h-4 w-4 text-fg-subtle" />
-                                  <span>Make Private</span>
-                                  <Info className="h-3.5 w-3.5 ml-auto text-fg-subtle" />
-                                </div>
-                              </TooltipTrigger>
-                              <TooltipContent side="left" className="text-xs max-w-[220px]">
-                                A shared document cannot be made Private. Turn off sharing first.
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        ) : (
-                          <DropdownMenuItem
-                            onClick={() => onMakePrivate(document)}
-                            className="flex cursor-pointer items-center gap-2"
-                          >
-                            <FolderLock className="h-4 w-4 text-fg-subtle" />
-                            <span>Make Private</span>
-                          </DropdownMenuItem>
-                        )
-                      )}
-                      {canManage && document.isPrivate && onMakePublic && (
-                        isApprovedDeliverable ? (
-                          <div className="flex items-center gap-2 px-2 py-1.5 text-ui text-fg-subtle opacity-40 cursor-not-allowed select-none">
-                            <FolderUp className="h-4 w-4" /><span>Make Public</span>
-                          </div>
-                        ) : (
-                          <DropdownMenuItem
-                            onClick={() => onMakePublic(document)}
-                            className="flex cursor-pointer items-center gap-2"
-                          >
-                            <FolderUp className="h-4 w-4 text-fg-muted" />
-                            <span>Make Public</span>
-                          </DropdownMenuItem>
-                        )
-                      )}
-                    </DropdownMenuSubContent>
-                  </DropdownMenuSub>
-                )}
-
-                <DropdownMenuSeparator />
-
-                <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span>
-                <DropdownMenuItem
-                  onClick={async () => {
-                    if (onBookmarkDocument) {
-                      onBookmarkDocument(document)
-                      return
-                    }
-                    try {
-                      const projectDocumentId = (document as any)?.projectDocumentId || document.id
-                      const { getSession } = await import('@/lib/supabase')
-                      const session = await getSession()
-                      if (!session?.access_token) {
-                        addToast({ type: 'error', title: 'Unauthorized', message: 'Please sign in again.' })
-                        return
-                      }
-                      if (!projectId) {
-                        addToast({ type: 'error', title: 'Unavailable', message: 'No project context for this bookmark.' })
-                        return
-                      }
-                      if (existingBookmarkId) {
-                        // Remove
-                        const res = await fetch('/api/bookmarks', {
-                          method: 'DELETE',
-                          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-                          body: JSON.stringify({ id: existingBookmarkId }),
-                        })
-                        if (!res.ok) throw new Error('Failed to remove bookmark')
-                        setExistingBookmarkId(null)
-                        if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('pockett-bookmarks-updated'))
-                        addToast({ type: 'success', title: 'Removed', message: 'Bookmark removed.' })
-                      } else {
-                        // Add
-                        const res = await fetch('/api/bookmarks', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-                          body: JSON.stringify({
-                            bookmark: {
-                              kind: 'document',
-                              label: document.name ?? 'Document',
-                              url: undefined,
-                              projectId: projectId,
-                              documentId: projectDocumentId,
-                            },
-                          }),
-                        })
-                        if (!res.ok) {
-                          const err = await res.json().catch(() => ({}))
-                          throw new Error(err.error ?? 'Failed to bookmark')
-                        }
-                        const data = await res.json()
-                        setExistingBookmarkId(data.bookmark?.id ?? null)
-                        if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('pockett-bookmarks-updated'))
-                        addToast({ type: 'success', title: 'Bookmarked', message: 'Saved to your bookmarks.' })
-                      }
-                    } catch (e) {
-                      addToast({ type: 'error', title: 'Failed', message: e instanceof Error ? e.message : 'Failed to update bookmark.' })
-                    }
-                  }}
-                  className="flex items-center gap-2 px-2 py-1.5 text-ui data-[disabled]:opacity-50 data-[disabled]:pointer-events-none"
-                >
-                  <Bookmark className={`h-4 w-4 ${existingBookmarkId ? 'fill-current text-action' : 'text-fg-muted'}`} />
-                  <span>{existingBookmarkId ? 'Remove bookmark' : 'Bookmark'}</span>
-                </DropdownMenuItem>
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent side="left" className="text-xs">
-                    {existingBookmarkId ? 'Remove bookmark' : 'Bookmark'}
-                  </TooltipContent>
-                </Tooltip>
-                </TooltipProvider>
-                {isApprovedDeliverable ? (
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <div className="flex items-center gap-2 px-2 py-1.5 text-ui text-fg-subtle opacity-50 cursor-not-allowed select-none">
-                          <Calendar className="h-4 w-4 text-fg-subtle" />
-                          <span>Set Due Date</span>
-                        </div>
-                      </TooltipTrigger>
-                      <TooltipContent side="right" className="text-xs max-w-48">
-                        Cannot set due date on an approved deliverable
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                ) : (
-                  <DropdownMenuItem
-                    onClick={() => setShowDueDatePicker(true)}
-                    className="flex cursor-pointer items-center gap-2"
-                  >
-                    <Calendar className="h-4 w-4 text-fg-subtle" />
-                    <span>Set Due Date</span>
-                  </DropdownMenuItem>
-                )}
-                {!mime.includes('folder') && document.documentType !== 'LINK' && isExternalViewer && projectId && (() => {
-                  const doc = document as { lock?: { type?: string } | null }
-                  const isAlreadyLocked = doc.lock?.type === 'finalize'
-                  if (isAlreadyLocked) return (
-                    <DropdownMenuItem disabled className="flex items-center gap-2 px-2 py-1.5 text-ui text-fg-subtle opacity-50 cursor-not-allowed data-[disabled]:pointer-events-none">
-                      <BadgeCheck className="h-4 w-4 shrink-0" />
-                      <span className="whitespace-nowrap">Accepted</span>
-                    </DropdownMenuItem>
-                  )
-                  return (
-                    <DropdownMenuItem
-                      disabled={finalizeLockDisabled}
-                      onClick={() => void handleAcceptDocument()}
-                      className="flex cursor-pointer items-center gap-2 data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
-                    >
-                      <BadgeCheck className="h-4 w-4 shrink-0 text-action" />
-                      <span className="whitespace-nowrap">Accept</span>
-                    </DropdownMenuItem>
-                  )
-                })()}
-
-                {(onDeleteDocument || isApprovedDeliverable) && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          {isApprovedDeliverable ? (
-                            <div className="flex items-center gap-2 px-2 py-1.5 text-ui text-fg-subtle opacity-50 cursor-not-allowed select-none">
-                              <Trash2 className="h-4 w-4" />
-                              <span>{document.documentType === 'LINK' ? 'Delete' : 'Move to Bin'}</span>
-                            </div>
-                          ) : (
-                            <DropdownMenuItem
-                              // Closes the menu: it sits above dialogs, so left open it covers the confirmation.
-                              onSelect={() => onDeleteDocument!(document)}
-                              className="flex cursor-pointer items-center gap-2 text-danger focus:text-danger"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                              <span>{document.documentType === 'LINK' ? 'Delete' : 'Move to Bin'}</span>
-                            </DropdownMenuItem>
-                          )}
-                        </TooltipTrigger>
-                        <TooltipContent side="left" className="max-w-[200px]">
-                          {isApprovedDeliverable
-                            ? <p>Approved deliverables cannot be deleted</p>
-                            : document.documentType === 'LINK'
-                              ? <p>This link will be permanently deleted.</p>
-                              : <p>Items in Bin are permanently deleted after 30 days (Google Drive).</p>
-                          }
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  </>
-                )}
                 {!isExternalUser && document.documentType !== 'LINK' && (
                 <>
-                  <DropdownMenuSeparator />
                   <DropdownMenuSub>
                     <DropdownMenuSubTrigger className="flex cursor-pointer items-center gap-2">
-                      <ExternalLink className="h-4 w-4 text-fg-muted" />
-                      <span>Drive Actions</span>
+                      <ExternalLink className="h-3.5 w-3.5 text-fg-muted" />
+                      <span>Drive actions</span>
                     </DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent className="w-56">
+                    <DropdownMenuSubContent className="w-max min-w-48 max-w-72">
                       <DropdownMenuItem
                         onClick={() => {
                           const parentId = document.parents?.[0]
@@ -1414,12 +1428,47 @@ export function DocumentActionMenu({
                         }}
                         className="flex cursor-pointer items-center gap-2"
                       >
-                        <ExternalLink className="h-4 w-4 text-fg-subtle" />
-                        <span>Open containing Folder in Google Drive</span>
+                        <ExternalLink className="h-3.5 w-3.5 text-fg-subtle" />
+                        <span>Open containing folder in Google Drive</span>
                       </DropdownMenuItem>
                     </DropdownMenuSubContent>
                   </DropdownMenuSub>
                 </>
+                )}
+
+                {(onDeleteDocument || isApprovedDeliverable) && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          {isApprovedDeliverable ? (
+                            <div className="flex items-center gap-2 px-2 py-1 text-small text-fg-subtle opacity-50 cursor-not-allowed select-none">
+                              <Trash2 className="h-3.5 w-3.5" />
+                              <span>{document.documentType === 'LINK' ? 'Delete' : 'Move to trash'}</span>
+                            </div>
+                          ) : (
+                            <DropdownMenuItem
+                              // Closes the menu: it sits above dialogs, so left open it covers the confirmation.
+                              onSelect={() => onDeleteDocument!(document)}
+                              className="flex cursor-pointer items-center gap-2 text-danger focus:text-danger"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                              <span>{document.documentType === 'LINK' ? 'Delete' : 'Move to trash'}</span>
+                            </DropdownMenuItem>
+                          )}
+                        </TooltipTrigger>
+                        <TooltipContent side="left" className="max-w-[200px]">
+                          {isApprovedDeliverable
+                            ? <p>Approved deliverables cannot be deleted</p>
+                            : document.documentType === 'LINK'
+                              ? <p>This link will be permanently deleted.</p>
+                              : <p>{trashRetentionNote}</p>
+                          }
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </>
                 )}
               </>
             )}
@@ -1438,21 +1487,23 @@ export function DocumentActionMenu({
       <ConfirmDialog
         open={showTagDeliverableModal}
         onOpenChange={setShowTagDeliverableModal}
-        icon={<Package className="h-3.5 w-3.5" />}
+        icon={<FolderPlus className="h-3.5 w-3.5" />}
         iconVariant="primary"
-        title="Promote as Deliverable"
+        title="Promote Folder to Deliverable"
         subtitle={document.name}
         description="This will share the folder externally and add it to the Board."
         extra={
-          <div>
-            <label className="mb-2 block text-small font-medium text-fg-muted">
-              Due date (optional)
-            </label>
-            <DateTimePicker
-              value={tagDeliverableDueDate}
-              onChange={setTagDeliverableDueDate}
-              placeholder="Choose date and time"
-              className="w-full"
+          // A Due property row, as on the engagement header: optional, and the same picker as everywhere.
+          <div className="flex items-center gap-2">
+            <span className="flex w-24 shrink-0 items-center gap-1.5 text-small text-fg-muted">
+              <Flag className="h-3.5 w-3.5 text-fg-subtle" />
+              Due
+            </span>
+            <DateProperty
+              value={tagDeliverableDueDate || null}
+              onChange={(next) => setTagDeliverableDueDate(next ?? '')}
+              placeholder="Not set"
+              allowTime
             />
           </div>
         }
@@ -1465,16 +1516,16 @@ export function DocumentActionMenu({
         }}
       />
 
-      {/* Untag as Deliverable confirmation */}
+      {/* Demote Deliverable to Folder confirmation */}
       <ConfirmDialog
         open={showUntagConfirm}
         onOpenChange={setShowUntagConfirm}
-        icon={<PackageMinus className="h-3.5 w-3.5" />}
+        icon={<FolderMinus className="h-3.5 w-3.5" />}
         iconVariant="red"
-        title="Untag as Deliverable"
+        title="Demote Deliverable to Folder"
         subtitle="This action will revoke all external access."
-        description={<>This will remove the deliverable tag from <span className="font-semibold text-fg">{document.name}</span> and revoke all sharing access for external collaborators and viewers.</>}
-        confirmLabel="Untag"
+        description={<>This will turn <span className="font-semibold text-fg">{document.name}</span> back into a plain folder, take it off the Board, and revoke all sharing access for external collaborators and viewers.</>}
+        confirmLabel="Demote"
         confirmVariant="red"
         onCancel={() => setShowUntagConfirm(false)}
         onConfirm={() => {
@@ -1531,57 +1582,6 @@ export function DocumentActionMenu({
         }}
       />
 
-      {/* Still using Portal for Date Picker as it is a complex modal. Could use Dialog too but sticking to scope. */}
-      {showDueDatePicker && mounted && typeof window !== 'undefined' && window.document?.body && createPortal(
-        <div
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[999999]"
-          onClick={() => setShowDueDatePicker(false)}
-        >
-          <div
-            className="modal-content z-[1000000] mx-4 w-full max-w-md rounded-dialog bg-surface shadow-dialog"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="p-4 border-b border-line">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-control bg-tag-orange-bg text-tag-orange-fg">
-                    <Calendar className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-medium text-fg">
-                      Set Due Date
-                    </h3>
-                    <p className="text-xs text-fg-muted">
-                      {document.name}
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setShowDueDatePicker(false)}
-                  className="text-fg-subtle hover:text-fg-muted p-1 rounded hover:bg-surface-hover transition-colors"
-                >
-                  <XSquare className="h-5 w-5" />
-                </button>
-              </div>
-            </div>
-
-            <div className="p-4">
-              <div className="mb-2">
-                <label className="block text-sm font-medium text-fg-muted mb-2">
-                  Select due date and time
-                </label>
-                <DateTimePicker
-                  value={selectedDueDate}
-                  onChange={handleDueDateChange}
-                  placeholder="Choose date and time"
-                  className="w-full"
-                />
-              </div>
-            </div>
-          </div>
-        </div>,
-        window.document.body
-      )}
     </>
   )
 }

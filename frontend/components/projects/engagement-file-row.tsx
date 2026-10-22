@@ -2,17 +2,31 @@
 
 import React from 'react'
 import {
-    Folder, Share2, Lock, FolderLock, FolderUp,
-    Link2, ScanEye, MoreVertical, CircleChevronLeft, Loader2, Bookmark,
-    PackagePlus, PackageCheck
+    Folder,
+    Share2,
+    Lock,
+    FolderLock,
+    FolderUp,
+    Link2,
+    ScanEye,
+    MoreVertical,
+    CircleChevronLeft,
+    Loader2,
+    Bookmark,
+    FolderPlus,
 } from 'lucide-react'
 import { DocumentIcon } from '@/components/ui/document-icon'
 import { SharedFolderIcon } from '@/components/ui/folder-shared-icon'
+import { DeliverableIcon } from '@/components/ui/deliverable-icon'
 import { DocumentActionMenu } from '@/components/ui/document-action-menu'
 import { ProfileBubbleWithPopup } from '@/components/ui/profile-bubble-popup'
 import { RelativeDateTime } from '@/components/ui/relative-date-time'
-import { DateProperty } from '@/components/ui/property-cells'
+import { DateProperty, StatusProperty } from '@/components/ui/property-cells'
+import { getAllowedTransitions, type EngagementRoleSlug } from '@/lib/deliverable-stage-roles'
+import { statusOf } from '@/lib/ui/status'
+import type { ActivityStatus } from '@/lib/sharing-settings'
 import { Checkbox } from '@/components/ui/checkbox'
+import { StatusPill } from '@/components/ui/status-pill'
 import {
     Tooltip,
     TooltipContent,
@@ -23,10 +37,12 @@ import { formatFileSize } from '@/lib/utils'
 import { DriveFile } from '@/lib/types'
 import {
     FILE_TABLE_GRID_COLS_CLASS,
+    STATUS_COL_CLASS,
     OWNER_COL_CLASS,
     DATE_MODIFIED_COL_CLASS,
     DUE_DATE_COL_CLASS,
     FILE_SIZE_COL_CLASS,
+    FILE_TABLE_COL_LINE_CLASS,
 } from '@/components/projects/engagement-file-table-grid'
 
 export interface EngagementFileRowProps {
@@ -113,6 +129,8 @@ export interface EngagementFileRowProps {
     hideBadges?: boolean
     /** When true, the current folder is an approved deliverable — disable all write operations. */
     isInsideApprovedDeliverable?: boolean
+    /** The viewer's engagement role: decides which stages they may move a row to (as on the Board). */
+    roleSlug?: EngagementRoleSlug | null
 }
 
 export function EngagementFileRow({
@@ -182,6 +200,7 @@ export function EngagementFileRow({
     bookmarkId,
     hideBadges = false,
     isInsideApprovedDeliverable = false,
+    roleSlug = null,
 }: EngagementFileRowProps) {
     const isDeeplinkHighlight = file.id === highlightedFileId
     const isFolder = (file.mimeType ?? (file as { type?: string }).type) === 'application/vnd.google-apps.folder'
@@ -202,8 +221,21 @@ export function EngagementFileRow({
     const isFolderApproved = isFolder && file.isDeliverable && (file as any).deliverableStatus === 'approved'
     const canMutateFile = canEdit && !locked && !isIntakeRow && !isInsideApprovedDeliverable && !isFolderApproved
     const canOrganizeTree = canManage && !locked && !isIntakeRow && !isFolderApproved && !isInsideApprovedDeliverable
-    const canEditDueDate = canManage && !isFolder && !locked && !isIntakeRow
+    // A deliverable folder's due date is the deliverable's (the Board's); other folders have none.
+    const canEditDueDate = canManage && (!isFolder || !!file.isDeliverable) && !isFolderApproved && !locked && !isIntakeRow
+    // The Status column shows a deliverable's stage; the row's deliverable badge steps aside while it's visible.
+    const hasStatus = !!file.isDeliverable && !!file.deliverableStatus
+    // A deliverable and everything inside one is tracked, so an empty Status or Due reads "Not set"; other rows show a dash.
+    const isTracked = !!file.isDeliverable || isInsideApprovedDeliverable
+        || (isGuest ? descendantIdsForGuest : isEC ? descendantIdsForEC : descendantIds).has(file.id)
+    const emptyTrackedValue = isTracked ? 'Not set' : '—'
+    // A row's own stage: the deliverable's, or a document's inside one.
+    const statusValue = file.activityStatus ?? (file.isDeliverable ? file.deliverableStatus : null) ?? null
+    // Changeable in place on tracked rows, until the deliverable is approved; the role decides which moves.
+    const canEditStatus = isTracked && !!roleSlug && !!file.projectDocumentId && !isIntakeRow && !isFolderApproved && !isInsideApprovedDeliverable
     const isIndexing = !isFolder && !!file.projectDocumentId && file.indexingStatus === 'PROCESSING'
+    // Row tools appear on hover or keyboard focus, and stay while the row is in use.
+    const toolsPinned = isActionMenuOpen || isSelected || isIndexing || file.id === activePreviewDocId || file.id === highlightedFileId
 
     async function handleRemoveBookmark(e: React.MouseEvent) {
         e.stopPropagation()
@@ -231,7 +263,7 @@ export function EngagementFileRow({
             onDragLeave={onDragLeave}
             onDrop={(e) => onDrop(e, file)}
             className={`${FILE_TABLE_GRID_COLS_CLASS} ${cn(
-                "group grid gap-4 h-9 pl-1 pr-2 transition-colors items-center cursor-default relative text-ui",
+                "group grid gap-4 h-[34px] overflow-hidden pl-1 pr-2 transition-colors items-center cursor-default relative text-ui",
                 isFolder && selectedFileIdsSize === 0 && "cursor-pointer",
                 (isFolderApproved || isInsideApprovedDeliverable) && "bg-primary/5 hover:bg-primary/10",
                 (isIntakeRow || file.lock?.type === 'finalize' || (file.isPrivate && !isFolder)) ? "hover:bg-surface-hover opacity-60" : !(isFolderApproved || isInsideApprovedDeliverable) && "hover:bg-surface-hover",
@@ -279,10 +311,13 @@ export function EngagementFileRow({
                 )}
             </div>
 
-            {/* Name Column: icon and name (deeplink = skewed pastel marker on file name only) */}
-            <div className="flex items-center gap-3 min-w-0">
+            {/* Name Column: icon and name (deeplink = skewed pastel marker on file name only), then the row's badges
+                and tools. It spans the Name, badge and tool tracks, so the name runs on into whatever space they leave. */}
+            <div className={cn("col-span-3 flex items-center gap-3 min-w-0", FILE_TABLE_COL_LINE_CLASS)}>
                 <div className="flex-shrink-0 w-4 h-4 flex items-center justify-center">
-                    {isFolder && showBadge ? (
+                    {isFolder && file.isDeliverable ? (
+                        <DeliverableIcon hint />
+                    ) : isFolder && showBadge ? (
                         <SharedFolderIcon
                             fillLevel={isAncestorShared ? 0.5 : 1}
                             tooltip={isAncestorShared ? 'contains-shared' : 'shared'}
@@ -348,222 +383,295 @@ export function EngagementFileRow({
                         </TooltipContent>
                     </Tooltip>
                 </div>
-            </div>
 
-            {/* Badges — hidden when hideBadges=true (e.g. medium pane) to prevent icon overflow */}
-            <div className={cn("flex items-center justify-end gap-1 pr-2", hideBadges && "invisible")} onClick={(e) => e.stopPropagation()}>
-                    {bookmarkId && (
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <button
-                                    type="button"
-                                    className="h-7 w-7 inline-flex items-center justify-center rounded-md text-primary hover:bg-red-50 hover:text-red-500 transition-colors"
-                                    aria-label="Remove bookmark"
-                                    onClick={handleRemoveBookmark}
-                                >
-                                    <Bookmark className="h-4 w-4 fill-current" />
-                                </button>
-                            </TooltipTrigger>
-                            <TooltipContent side="top" className="text-xs">Bookmarked — click to remove</TooltipContent>
-                        </Tooltip>
-                    )}
-                    {(showBadge || isIntakeRow) ? (
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <span className={`inline-flex items-center shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium border ${
-                                    isIntakeRow
-                                        ? 'bg-primary/10 text-primary border-primary/30'
-                                        : (isFolderApproved || isInsideApprovedDeliverable)
-                                            ? 'bg-primary text-white/70 border-primary'
-                                            : isAncestorShared
-                                                ? 'bg-primary/5 text-primary/50 border-primary/20'
-                                                : 'bg-primary/10 text-primary border-primary/30'
-                                }`}>
-                                    {isIntakeRow
-                                        ? <Share2 className="h-3 w-3" />
-                                        : (isFolderApproved || isInsideApprovedDeliverable)
-                                            ? <PackageCheck className="h-3.5 w-3.5" />
-                                            : <PackagePlus className="h-3.5 w-3.5" />
-                                    }
-                                </span>
-                            </TooltipTrigger>
-                            <TooltipContent side="top">
-                                {isIntakeRow
-                                    ? 'Pending Review'
-                                    : (isFolderApproved || isInsideApprovedDeliverable)
-                                        ? 'Deliverable — Approved'
-                                        : isAncestorShared
-                                            ? 'Inside a Deliverable folder'
-                                            : 'Tagged as Deliverable'}
-                            </TooltipContent>
-                        </Tooltip>
-                    ) : null}
-                    {file.lock?.type === 'finalize' && !isFolder ? (
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                {isProjectLead ? (
+                {/* Badges — hidden when hideBadges=true (e.g. medium pane) to prevent icon overflow */}
+                <div className={cn("flex shrink-0 items-center justify-end gap-1", hideBadges && "hidden")} onClick={(e) => e.stopPropagation()}>
+                        {bookmarkId && (
+                            <Tooltip>
+                                <TooltipTrigger asChild>
                                     <button
                                         type="button"
-                                        onClick={(e) => { e.stopPropagation(); onUnlockConfirm(file) }}
-                                        className="inline-flex items-center shrink-0 px-1.5 py-0.5 rounded text-[10px] font-normal bg-surface-subtle text-fg-subtle border border-line hover:bg-amber-50 hover:text-amber-600 hover:border-amber-200 transition-colors"
+                                        className="h-7 w-7 inline-flex items-center justify-center rounded-md text-primary hover:bg-red-50 hover:text-red-500 transition-colors"
+                                        aria-label="Remove bookmark"
+                                        onClick={handleRemoveBookmark}
                                     >
-                                        <Lock className="h-3 w-3" />
+                                        <Bookmark className="h-4 w-4 fill-current" />
                                     </button>
-                                ) : (
-                                    <span className="inline-flex items-center shrink-0 px-1.5 py-0.5 rounded text-[10px] font-normal bg-surface-subtle text-fg-subtle border border-line">
-                                        <Lock className="h-3 w-3" />
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="text-xs">Bookmarked — click to remove</TooltipContent>
+                            </Tooltip>
+                        )}
+                        {(showBadge || isIntakeRow) ? (
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <span className={`${hasStatus && !isIntakeRow ? '@[49rem]/file-table:hidden ' : ''}inline-flex items-center shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium border ${
+                                        isIntakeRow
+                                            ? 'bg-primary/10 text-primary border-primary/30'
+                                            : (isFolderApproved || isInsideApprovedDeliverable)
+                                                ? 'bg-primary text-white/70 border-primary'
+                                                : isAncestorShared
+                                                    ? 'bg-primary/5 text-primary/50 border-primary/20'
+                                                    : 'bg-primary/10 text-primary border-primary/30'
+                                    }`}>
+                                        {/* Approved or not, a deliverable's mark is folder-plus; the badge's fill says approved */}
+                                        {isIntakeRow ? <Share2 className="h-3 w-3" /> : <FolderPlus className="h-3.5 w-3.5" />}
                                     </span>
-                                )}
-                            </TooltipTrigger>
-                            <TooltipContent side="top">
-                                {isProjectLead
-                                    ? 'Document Finalized — read-only. Click to Return to Draft'
-                                    : 'Document Finalized — read-only. Engagement Lead can Return to Draft'}
-                            </TooltipContent>
-                        </Tooltip>
-                    ) : null}
-                    {file.isPrivate && !isFolder ? (
-                        <span className="inline-flex items-center gap-1 shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium bg-orange-50 text-orange-700 border border-orange-200">
-                            <FolderLock className="h-3 w-3" />
-                            Private
-                            {(canManage && file.lock?.type !== 'finalize') && (
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
+                                </TooltipTrigger>
+                                <TooltipContent side="top">
+                                    {isIntakeRow
+                                        ? 'Pending Review'
+                                        : (isFolderApproved || isInsideApprovedDeliverable)
+                                            ? 'Deliverable — Approved'
+                                            : isAncestorShared
+                                                ? 'Inside a Deliverable folder'
+                                                : 'Deliverable'}
+                                </TooltipContent>
+                            </Tooltip>
+                        ) : null}
+                        {file.lock?.type === 'finalize' && !isFolder ? (
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    {isProjectLead ? (
                                         <button
                                             type="button"
-                                            onClick={(e) => { e.stopPropagation(); onPrivacy(file, false) }}
-                                            className="ml-0.5 rounded-full text-orange-500 hover:text-orange-700 hover:bg-orange-100 p-0.5"
+                                            onClick={(e) => { e.stopPropagation(); onUnlockConfirm(file) }}
+                                            className="inline-flex items-center shrink-0 px-1.5 py-0.5 rounded text-[10px] font-normal bg-surface-subtle text-fg-subtle border border-line hover:bg-amber-50 hover:text-amber-600 hover:border-amber-200 transition-colors"
                                         >
-                                            <FolderUp className="h-3 w-3" />
+                                            <Lock className="h-3 w-3" />
                                         </button>
-                                    </TooltipTrigger>
-                                    <TooltipContent side="top" className="text-xs">Make Public</TooltipContent>
-                                </Tooltip>
-                            )}
-                        </span>
-                    ) : null}
-            </div>
+                                    ) : (
+                                        <span className="inline-flex items-center shrink-0 px-1.5 py-0.5 rounded text-[10px] font-normal bg-surface-subtle text-fg-subtle border border-line">
+                                            <Lock className="h-3 w-3" />
+                                        </span>
+                                    )}
+                                </TooltipTrigger>
+                                <TooltipContent side="top">
+                                    {isProjectLead
+                                        ? 'Document Finalized — read-only. Click to Return to Draft'
+                                        : 'Document Finalized — read-only. Engagement Lead can Return to Draft'}
+                                </TooltipContent>
+                            </Tooltip>
+                        ) : null}
+                        {file.isPrivate && !isFolder ? (
+                            <span className="inline-flex items-center gap-1 shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium bg-orange-50 text-orange-700 border border-orange-200">
+                                <FolderLock className="h-3 w-3" />
+                                Private
+                                {(canManage && file.lock?.type !== 'finalize') && (
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <button
+                                                type="button"
+                                                onClick={(e) => { e.stopPropagation(); onPrivacy(file, false) }}
+                                                className="ml-0.5 rounded-full text-orange-500 hover:text-orange-700 hover:bg-orange-100 p-0.5"
+                                            >
+                                                <FolderUp className="h-3 w-3" />
+                                            </button>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="top" className="text-xs">Make Public</TooltipContent>
+                                    </Tooltip>
+                                )}
+                            </span>
+                        ) : null}
+                </div>
 
-            {/* Quick icons */}
-            <div className="flex items-center justify-end">
-                <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                {/* Quick icons: on hover or focus (always on touch screens), and while the row is in use. At rest they
+                    take no width, so the name can use it. */}
+                <div className={cn(
+                    "flex shrink-0 items-center justify-end transition-opacity duration-ui-fast",
+                    !toolsPinned && "max-w-0 overflow-hidden opacity-0 focus-within:max-w-none focus-within:opacity-100 group-hover:max-w-none group-hover:opacity-100 [@media(hover:none)]:max-w-none [@media(hover:none)]:opacity-100"
+                )}>
+                    <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
 
-                    {!isFolder && file.documentType !== 'LINK' && (
+                        {!isFolder && file.documentType !== 'LINK' && (
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <button
+                                        type="button"
+                                        className={cn(
+                                            'h-7 w-7 rounded-md inline-flex items-center justify-center disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-fg-muted',
+                                            file.id === activePreviewDocId
+                                                ? 'text-fg-muted bg-surface-muted'
+                                                : 'text-fg-muted hover:text-fg-muted hover:bg-surface-hover'
+                                        )}
+                                        aria-label="Preview"
+                                        aria-pressed={file.id === activePreviewDocId}
+                                        disabled={isIntakeRow}
+                                        onClick={() => onOpenPreviewPane(file.id)}
+                                    >
+                                        <ScanEye className="h-4 w-4" />
+                                    </button>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="text-xs">Preview</TooltipContent>
+                            </Tooltip>
+                        )}
+
                         <Tooltip>
                             <TooltipTrigger asChild>
                                 <button
                                     type="button"
                                     className={cn(
                                         'h-7 w-7 rounded-md inline-flex items-center justify-center disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-fg-muted',
-                                        file.id === activePreviewDocId
+                                        file.id === highlightedFileId
                                             ? 'text-fg-muted bg-surface-muted'
                                             : 'text-fg-muted hover:text-fg-muted hover:bg-surface-hover'
                                     )}
-                                    aria-label="Preview"
-                                    aria-pressed={file.id === activePreviewDocId}
+                                    aria-label="Copy link"
+                                    aria-pressed={file.id === highlightedFileId}
                                     disabled={isIntakeRow}
-                                    onClick={() => onOpenPreviewPane(file.id)}
+                                    onClick={() => {
+                                        const docId = file.projectDocumentId || file.id
+                                        const base = typeof window !== 'undefined' ? window.location.href.replace(/#.*$/, '') : ''
+                                        const url = base ? `${base}#doc-file:${docId}` : ''
+                                        if (!url) return
+                                        navigator.clipboard.writeText(url).then(() => {
+                                            onAddToast({ type: 'success', title: 'Link copied', message: 'Document link copied to clipboard.' })
+                                        }).catch(() => {
+                                            const ta = document.createElement('textarea')
+                                            ta.value = url
+                                            document.body.appendChild(ta)
+                                            ta.select()
+                                            document.execCommand('copy')
+                                            document.body.removeChild(ta)
+                                            onAddToast({ type: 'success', title: 'Link copied', message: 'Document link copied to clipboard.' })
+                                        })
+                                    }}
                                 >
-                                    <ScanEye className="h-4 w-4" />
+                                    <Link2 className="h-4 w-4" />
                                 </button>
                             </TooltipTrigger>
-                            <TooltipContent side="top" className="text-xs">Preview</TooltipContent>
+                            <TooltipContent side="top" className="text-xs">Copy link</TooltipContent>
                         </Tooltip>
-                    )}
 
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <button
-                                type="button"
-                                className={cn(
-                                    'h-7 w-7 rounded-md inline-flex items-center justify-center disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-fg-muted',
-                                    file.id === highlightedFileId
-                                        ? 'text-fg-muted bg-surface-muted'
-                                        : 'text-fg-muted hover:text-fg-muted hover:bg-surface-hover'
-                                )}
-                                aria-label="Copy link"
-                                aria-pressed={file.id === highlightedFileId}
-                                disabled={isIntakeRow}
-                                onClick={() => {
-                                    const docId = file.projectDocumentId || file.id
-                                    const base = typeof window !== 'undefined' ? window.location.href.replace(/#.*$/, '') : ''
-                                    const url = base ? `${base}#doc-file:${docId}` : ''
-                                    if (!url) return
-                                    navigator.clipboard.writeText(url).then(() => {
-                                        onAddToast({ type: 'success', title: 'Link copied', message: 'Document link copied to clipboard.' })
-                                    }).catch(() => {
-                                        const ta = document.createElement('textarea')
-                                        ta.value = url
-                                        document.body.appendChild(ta)
-                                        ta.select()
-                                        document.execCommand('copy')
-                                        document.body.removeChild(ta)
-                                        onAddToast({ type: 'success', title: 'Link copied', message: 'Document link copied to clipboard.' })
-                                    })
-                                }}
-                            >
-                                <Link2 className="h-4 w-4" />
-                            </button>
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className="text-xs">Copy link</TooltipContent>
-                    </Tooltip>
+                        {isIndexing && (
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <span className="h-7 w-7 inline-flex items-center justify-center text-fg-subtle">
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                    </span>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="text-xs">Indexing in progress</TooltipContent>
+                            </Tooltip>
+                        )}
 
-                    {isIndexing && (
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <span className="h-7 w-7 inline-flex items-center justify-center text-fg-subtle">
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                </span>
-                            </TooltipTrigger>
-                            <TooltipContent side="top" className="text-xs">Indexing in progress</TooltipContent>
-                        </Tooltip>
-                    )}
-
-                    <DocumentActionMenu
-                        document={file}
-                        disabled={isIntakeRow}
-                        triggerIcon={<MoreVertical className="h-4 w-4" />}
-                        deeplinkBase={typeof window !== 'undefined' ? window.location.href.replace(/#.*$/, '') : ''}
-                        showShareModal={isProjectLead && !isIntakeRow}
-                        isAncestorShared={isAncestorShared}
-                        isDeliverable={isFolder && !!file.isDeliverable}
-                        isApprovedDeliverable={isFolderApproved || isInsideApprovedDeliverable}
-                        deliverableStatus={(file as any).deliverableStatus ?? undefined}
-                        isEngagementLead={isProjectLead}
-                        isExternalUser={isEC || isGuest}
-                        isExternalViewer={isGuest}
-                        projectId={projectId}
-                        orgSlug={orgSlug}
-                        onShareSaved={onShareSaved}
-                        onMarkAsDeliverable={onMarkAsDeliverable}
-                        onUntagAsDeliverable={(isInsideApprovedDeliverable || isFolderApproved) ? undefined : onUntagAsDeliverable}
-                        canManage={canOrganizeTree}
-                        currentFolderType={currentFolderType}
-                        onOpenCommentPane={(docId) => onOpenCommentPane(docId)}
-                        onOpenInfoPane={(docId) => onOpenInfoPane(docId)}
-                        onOpenActivityPane={(docId) => onOpenActivityPane(docId)}
-                        onOpenVersionPane={(docId) => onOpenVersionPane(docId)}
-                        onRenameDocument={canEdit && !locked && !isIntakeRow ? (doc) => onOpenRename(doc as DriveFile) : undefined}
-                        onDuplicateDocument={canEdit && !locked && !isIntakeRow ? (doc) => onDuplicate(doc as DriveFile) : undefined}
-                        onCopyDocument={generalFolderId && canEdit && !locked && !isIntakeRow ? (doc) => onOpenCopyMove(doc as DriveFile, 'copy') : undefined}
-                        onMoveDocument={generalFolderId && canEdit && !locked && !isIntakeRow ? (doc) => onOpenCopyMove(doc as DriveFile, 'move') : undefined}
-                        onCrossEngagementCopy={isProjectLead && canMutateFile ? (doc) => onOpenCrossEngagement(doc as DriveFile) : undefined}
-                        onDeleteDocument={canMutateFile ? (doc) => onTrash(doc as DriveFile) : undefined}
-                        onMakePrivate={canManage && !locked && !isIntakeRow && !file.isPrivate ? () => onPrivacy(file, true) : undefined}
-                        onMakePublic={canManage && !locked && !isIntakeRow && file.isPrivate ? () => onPrivacy(file, false) : undefined}
-                        onOpenChange={(open) => onActionMenuOpenChange(open)}
-                        onOpenDocument={(doc) => {
-                            const d = doc as DriveFile
-                            onOpenDocument(d)
-                        }}
-                        connectorAccountEmail={connectorAccountEmail}
-                        isOneDriveClient={isOneDriveClient}
-                    />
+                        <DocumentActionMenu
+                            document={file}
+                            disabled={isIntakeRow}
+                            triggerIcon={<MoreVertical className="h-4 w-4" />}
+                            deeplinkBase={typeof window !== 'undefined' ? window.location.href.replace(/#.*$/, '') : ''}
+                            showShareModal={isProjectLead && !isIntakeRow}
+                            isAncestorShared={isAncestorShared}
+                            isDeliverable={isFolder && !!file.isDeliverable}
+                            isApprovedDeliverable={isFolderApproved || isInsideApprovedDeliverable}
+                            deliverableStatus={(file as any).deliverableStatus ?? undefined}
+                            isEngagementLead={isProjectLead}
+                            isExternalUser={isEC || isGuest}
+                            isExternalViewer={isGuest}
+                            projectId={projectId}
+                            orgSlug={orgSlug}
+                            onShareSaved={onShareSaved}
+                            onMarkAsDeliverable={onMarkAsDeliverable}
+                            onUntagAsDeliverable={(isInsideApprovedDeliverable || isFolderApproved) ? undefined : onUntagAsDeliverable}
+                            canManage={canOrganizeTree}
+                            currentFolderType={currentFolderType}
+                            onOpenCommentPane={(docId) => onOpenCommentPane(docId)}
+                            onOpenInfoPane={(docId) => onOpenInfoPane(docId)}
+                            onOpenActivityPane={(docId) => onOpenActivityPane(docId)}
+                            onOpenVersionPane={(docId) => onOpenVersionPane(docId)}
+                            onRenameDocument={canEdit && !locked && !isIntakeRow ? (doc) => onOpenRename(doc as DriveFile) : undefined}
+                            onDuplicateDocument={canEdit && !locked && !isIntakeRow ? (doc) => onDuplicate(doc as DriveFile) : undefined}
+                            onCopyDocument={generalFolderId && canEdit && !locked && !isIntakeRow ? (doc) => onOpenCopyMove(doc as DriveFile, 'copy') : undefined}
+                            onMoveDocument={generalFolderId && canEdit && !locked && !isIntakeRow ? (doc) => onOpenCopyMove(doc as DriveFile, 'move') : undefined}
+                            onCrossEngagementCopy={isProjectLead && canMutateFile ? (doc) => onOpenCrossEngagement(doc as DriveFile) : undefined}
+                            onDeleteDocument={canMutateFile ? (doc) => onTrash(doc as DriveFile) : undefined}
+                            onMakePrivate={canManage && !locked && !isIntakeRow && !file.isPrivate ? () => onPrivacy(file, true) : undefined}
+                            onMakePublic={canManage && !locked && !isIntakeRow && file.isPrivate ? () => onPrivacy(file, false) : undefined}
+                            onOpenChange={(open) => onActionMenuOpenChange(open)}
+                            onOpenDocument={(doc) => {
+                                const d = doc as DriveFile
+                                onOpenDocument(d)
+                            }}
+                            connectorAccountEmail={connectorAccountEmail}
+                            isOneDriveClient={isOneDriveClient}
+                        />
+                    </div>
                 </div>
             </div>
 
+            {/* Status Column: the stage of a deliverable or a document inside one, the same pill as on the Board.
+                It changes in place, to the stages the viewer's role may move it to (lib/deliverable-stage-roles.ts). */}
+            <div className={cn('min-w-0 items-center', STATUS_COL_CLASS, FILE_TABLE_COL_LINE_CLASS)} onClick={(e) => { if (canEditStatus) e.stopPropagation() }}>
+                <FileStatusCell
+                    projectId={projectId}
+                    documentId={file.projectDocumentId ?? file.id}
+                    fileName={file.name}
+                    isFolder={isFolder}
+                    status={statusValue}
+                    roleSlug={canEditStatus ? roleSlug : null}
+                    emptyLabel={emptyTrackedValue}
+                    emptyClassName={isTracked ? 'text-fg-subtle' : 'text-[#45474c]/40'}
+                    onSaved={(next) => {
+                        file.activityStatus = next
+                        if (file.isDeliverable) file.deliverableStatus = next
+                        onShareSaved()
+                    }}
+                    onAddToast={onAddToast}
+                />
+            </div>
+
+            {/* Due Column — leads edit it in place (Notion-style); everyone else sees the relative date.
+                Files and deliverable folders both have one. */}
+            <div className={cn('min-w-0 whitespace-nowrap', DUE_DATE_COL_CLASS, FILE_TABLE_COL_LINE_CLASS)} onClick={(e) => { if (canEditDueDate) e.stopPropagation() }}>
+                {canEditDueDate ? (
+                    <FileDueDateCell
+                        projectId={projectId}
+                        documentId={(file as { projectDocumentId?: string }).projectDocumentId || file.id}
+                        dueDate={file.dueDate ?? null}
+                        placeholder={emptyTrackedValue}
+                        onSaved={(next) => { file.dueDate = next ?? undefined }}
+                        onError={(message) => onAddToast({ type: 'error', title: "Couldn't set due date", message })}
+                    />
+                ) : (
+                    <>
+                    {file.dueDate ? (() => {
+                        const due = new Date(file.dueDate)
+                        const now = Date.now()
+                        const diffMs = due.getTime() - now
+                        const diffDays = diffMs / 86400000
+                        const isUrgent = diffDays >= 0 && diffDays <= 7
+                        const isOverdue = diffDays < 0
+
+                        let relativeLabel: string
+                        if (isOverdue) {
+                            const days = Math.floor(-diffDays)
+                            relativeLabel = days === 0 ? 'today' : days === 1 ? '1d overdue' : `${days}d overdue`
+                        } else {
+                            const days = Math.floor(diffDays)
+                            relativeLabel = days === 0 ? 'today' : days === 1 ? 'in 1d' : `in ${days}d`
+                        }
+
+                        const colorClass = isOverdue || isUrgent ? 'text-red-500' : 'text-fg-muted'
+                        const iconColor = isOverdue || isUrgent ? 'text-red-300 hover:text-red-500' : 'text-line hover:text-fg-muted'
+
+                        return (
+                            <RelativeDateTime
+                                date={file.dueDate}
+                                displayFormat="short"
+                                textClassName={`text-[0.8125rem] ${colorClass}`}
+                                iconClassName={iconColor}
+                                tooltipSide="top"
+                                tooltipPrefix="Due on:"
+                                overrideDisplayText={relativeLabel}
+                            />
+                        )
+                    })() : (
+                        <span className={cn('text-[0.8125rem]', isTracked ? 'text-fg-subtle' : 'text-[#45474c]/40')}>{emptyTrackedValue}</span>
+                    )}
+                    </>
+                )}
+            </div>
+
             {/* Owner Column */}
-            <div className={`min-w-0 ${OWNER_COL_CLASS}`}>
+            <div className={cn('min-w-0', OWNER_COL_CLASS, FILE_TABLE_COL_LINE_CLASS)}>
                 {(() => {
                     const ownerName = file.owners?.[0]?.displayName
                         || file.lastModifyingUser?.displayName
@@ -601,9 +709,9 @@ export function EngagementFileRow({
                 })()}
             </div>
 
-            {/* Date Modified Column. Rows are a fixed h-9, so a date must never wrap onto a second line:
-                it would stick out of the row, and on the last row put a vertical scrollbar on the list. */}
-            <div className={cn('min-w-0 whitespace-nowrap', DATE_MODIFIED_COL_CLASS)}>
+            {/* Date Modified Column. Rows are a fixed 34px, so a date must never wrap onto a second line:
+                the row clips it, and the second line would be cut in half. */}
+            <div className={cn('min-w-0 whitespace-nowrap', DATE_MODIFIED_COL_CLASS, FILE_TABLE_COL_LINE_CLASS)}>
                 {file.modifiedTime ? (
                     <RelativeDateTime
                         date={file.modifiedTime}
@@ -616,58 +724,8 @@ export function EngagementFileRow({
                 )}
             </div>
 
-            {/* Due Date Column — leads edit it in place (Notion-style); everyone else sees the relative date */}
-            <div className={cn('min-w-0 whitespace-nowrap', DUE_DATE_COL_CLASS)} onClick={(e) => { if (canEditDueDate) e.stopPropagation() }}>
-                {canEditDueDate ? (
-                    <FileDueDateCell
-                        projectId={projectId}
-                        documentId={(file as { projectDocumentId?: string }).projectDocumentId || file.id}
-                        dueDate={file.dueDate ?? null}
-                        onSaved={(next) => { file.dueDate = next ?? undefined }}
-                        onError={(message) => onAddToast({ type: 'error', title: "Couldn't set due date", message })}
-                    />
-                ) : (
-                    <>
-                    {!isFolder && file.dueDate ? (() => {
-                        const due = new Date(file.dueDate)
-                        const now = Date.now()
-                        const diffMs = due.getTime() - now
-                        const diffDays = diffMs / 86400000
-                        const isUrgent = diffDays >= 0 && diffDays <= 7
-                        const isOverdue = diffDays < 0
-
-                        let relativeLabel: string
-                        if (isOverdue) {
-                            const days = Math.floor(-diffDays)
-                            relativeLabel = days === 0 ? 'today' : days === 1 ? '1d overdue' : `${days}d overdue`
-                        } else {
-                            const days = Math.floor(diffDays)
-                            relativeLabel = days === 0 ? 'today' : days === 1 ? 'in 1d' : `in ${days}d`
-                        }
-
-                        const colorClass = isOverdue || isUrgent ? 'text-red-500' : 'text-fg-muted'
-                        const iconColor = isOverdue || isUrgent ? 'text-red-300 hover:text-red-500' : 'text-line hover:text-fg-muted'
-
-                        return (
-                            <RelativeDateTime
-                                date={file.dueDate}
-                                displayFormat="short"
-                                textClassName={`text-[0.8125rem] ${colorClass}`}
-                                iconClassName={iconColor}
-                                tooltipSide="top"
-                                tooltipPrefix="Due on:"
-                                overrideDisplayText={relativeLabel}
-                            />
-                        )
-                    })() : (
-                        <span className="text-[0.8125rem] text-[#45474c]/40">—</span>
-                    )}
-                    </>
-                )}
-            </div>
-
             {/* File Size Column */}
-            <div className={`text-left ${FILE_SIZE_COL_CLASS}`}>
+            <div className={cn('text-left', FILE_SIZE_COL_CLASS, FILE_TABLE_COL_LINE_CLASS)}>
                 {isFolder ? (
                     <span className="text-[0.8125rem] text-[#45474c]/40">—</span>
                 ) : file.size ? (
@@ -690,17 +748,109 @@ export function EngagementFileRow({
     )
 }
 
-/** Inline due-date editor for one file — the same endpoint the row menu's "Set Due Date" uses. */
+const STAGES: ActivityStatus[] = ['to_do', 'in_progress', 'in_review', 'approved']
+
+/**
+ * The Status cell. Read-only unless the viewer may move this row; then a picker offering only the
+ * stages their role allows from here (getAllowedTransitions, as the Board and the server use). A
+ * deliverable can't be approved while a document inside it isn't — the Board's rule, checked first.
+ */
+function FileStatusCell({
+    projectId,
+    documentId,
+    fileName,
+    isFolder,
+    status,
+    roleSlug,
+    emptyLabel,
+    emptyClassName,
+    onSaved,
+    onAddToast,
+}: {
+    projectId: string
+    documentId: string
+    fileName: string
+    isFolder: boolean
+    status: ActivityStatus | null
+    /** null when the row can't be changed here. */
+    roleSlug: EngagementRoleSlug | null
+    emptyLabel: string
+    emptyClassName: string
+    onSaved: (next: ActivityStatus) => void
+    onAddToast: (toast: { type: string; title: string; message: string }) => void
+}) {
+    const [value, setValue] = React.useState<ActivityStatus | null>(status)
+    React.useEffect(() => { setValue(status) }, [status])
+    // A document with no stage yet is at "to do" as far as the rules go.
+    const allowed = roleSlug ? getAllowedTransitions(roleSlug, value ?? 'to_do') : []
+    if (allowed.length === 0) {
+        return value
+            ? <StatusPill kind="deliverable" status={value} />
+            : <span className={cn('text-[0.8125rem]', emptyClassName)}>{emptyLabel}</span>
+    }
+    return (
+        <StatusProperty
+            kind="deliverable"
+            value={value}
+            placeholder={emptyLabel}
+            options={STAGES.filter((s) => s === value || allowed.includes(s))}
+            onChange={async (next) => {
+                const stage = next as ActivityStatus
+                const { getSession } = await import('@/lib/supabase')
+                const session = await getSession()
+                const headers = { 'Content-Type': 'application/json', ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) }
+                if (stage === 'approved' && isFolder) {
+                    const res = await fetch(`/api/projects/${projectId}/documents/${encodeURIComponent(documentId)}/subtasks`, { headers })
+                    const data = await res.json().catch(() => ({}))
+                    const unapproved = ((data.subtasks ?? []) as { status: string | null }[]).filter((t) => t.status !== 'approved').length
+                    if (!res.ok || unapproved > 0) {
+                        onAddToast({
+                            type: 'error',
+                            title: 'Cannot approve yet',
+                            message: res.ok
+                                ? `${unapproved} document${unapproved > 1 ? 's' : ''} still need to be approved before this deliverable can be approved.`
+                                : 'Could not check the documents inside it. Please try again.',
+                        })
+                        return
+                    }
+                }
+                const res = await fetch(`/api/projects/${projectId}/documents/${encodeURIComponent(documentId)}/sharing/activity`, {
+                    method: 'PATCH',
+                    headers,
+                    body: JSON.stringify({ status: stage }),
+                })
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}))
+                    onAddToast({ type: 'error', title: "Couldn't change the stage", message: err.error ?? 'Please try again.' })
+                    return
+                }
+                setValue(stage)
+                onSaved(stage)
+                onAddToast({
+                    type: 'success',
+                    title: stage === 'approved' ? 'Approved' : 'Stage updated',
+                    message: `${fileName} · ${statusOf('deliverable', stage).label}`,
+                })
+                window.dispatchEvent(new CustomEvent('pockett-notifications-updated'))
+            }}
+        />
+    )
+}
+
+/** Inline Due editor for one file or deliverable folder — the same endpoint the row menu's "Due" uses. */
 function FileDueDateCell({
     projectId,
     documentId,
     dueDate,
+    placeholder,
     onSaved,
     onError,
 }: {
     projectId: string
     documentId: string
     dueDate: string | null
+    /** What an empty cell reads: "Not set" for a deliverable or what's inside one, otherwise a dash. */
+    placeholder: string
     onSaved: (next: string | null) => void
     onError: (message: string) => void
 }) {
@@ -709,8 +859,10 @@ function FileDueDateCell({
     return (
         <DateProperty
             value={value}
-            placeholder="—"
+            placeholder={placeholder}
             highlightOverdue
+            allowTime
+            compact
             onChange={async (next) => {
                 const { getSession } = await import('@/lib/supabase')
                 const session = await getSession()

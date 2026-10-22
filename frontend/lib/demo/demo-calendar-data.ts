@@ -1,4 +1,5 @@
 import { DemoFirm } from '@/lib/demo/static-demo-data'
+import { getDemoDeliverables, type DeliverableStatus } from '@/lib/demo/demo-deliverables'
 
 export type DemoCalendarEventType = 'kickoff' | 'due' | 'deliverable' | 'document'
 
@@ -20,6 +21,8 @@ export interface DemoCalendarEvent {
     date: string
     clientName: string
     engagementName: string
+    /** A deliverable's or document's stage, so its chip leads with the status icon as in the app. */
+    status?: DeliverableStatus
 }
 
 export interface DemoCalendarData {
@@ -69,8 +72,9 @@ export function buildDemoCalendarData(firm: DemoFirm): DemoCalendarData {
                 engagementName: engagement.name,
             })
 
-            // Deliverable check-in — current month.
+            // Deliverable check-in — current month. Its stage is the engagement's first open deliverable's, as on the Board.
             const deliverableDay = 5 + (engagementIndex % 18)
+            const openDeliverable = getDemoDeliverables(engagement).find((d) => d.status !== 'approved')
             events.push({
                 id: `demo-cal-evt-${eventIndex++}`,
                 engagementId,
@@ -79,6 +83,7 @@ export function buildDemoCalendarData(firm: DemoFirm): DemoCalendarData {
                 date: isoDate(new Date(thisMonth.getFullYear(), thisMonth.getMonth(), deliverableDay)),
                 clientName: client.name,
                 engagementName: engagement.name,
+                status: openDeliverable?.status ?? 'in_review',
             })
 
             // Document milestone — current month, a few days after the deliverable review.
@@ -91,6 +96,7 @@ export function buildDemoCalendarData(firm: DemoFirm): DemoCalendarData {
                 date: isoDate(new Date(thisMonth.getFullYear(), thisMonth.getMonth(), documentDay)),
                 clientName: client.name,
                 engagementName: engagement.name,
+                status: 'in_progress',
             })
 
             // Due date — next month.

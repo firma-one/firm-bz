@@ -105,7 +105,7 @@ export function AddReminderPopover({
 
                         <div>
                             <label className="text-small font-medium text-fg-muted block mb-1">
-                                Due date <span className="text-fg-subtle font-normal normal-case tracking-normal">— optional</span>
+                                Due <span className="text-fg-subtle font-normal normal-case tracking-normal">— optional</span>
                             </label>
                             <DateTimePicker value={dueDate} onChange={setDueDate} placeholder="Select date" defaultTime="09:00" />
                         </div>

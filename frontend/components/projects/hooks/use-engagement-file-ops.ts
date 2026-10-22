@@ -23,9 +23,9 @@ interface UseEngagementFileOpsOptions {
     setFiles: React.Dispatch<React.SetStateAction<DriveFile[]>>
     /** Called when an item leaves the current listing (e.g. moved elsewhere). */
     onItemRemoved?: (fileId: string) => void
-    /** The provider's name for its trash, for the "Moved to Bin" toast. */
+    /** The provider's name for its trash, for the "Moved to trash" toast. */
     storageBinName?: string
-    /** Whether "Moved to Bin" offers Undo: the provider can take a file back out of its Bin. */
+    /** Whether "Moved to trash" offers Undo: the provider can take a file back out of its trash. */
     canUndoTrash?: boolean
 }
 
@@ -43,7 +43,7 @@ export function useEngagementFileOps({
     stopProcessing,
     setFiles,
     onItemRemoved,
-    storageBinName = 'Google Drive Bin',
+    storageBinName = 'Google Drive trash',
     canUndoTrash = false,
 }: UseEngagementFileOpsOptions) {
     const { addToast } = useToast()
@@ -140,7 +140,7 @@ export function useEngagementFileOps({
         }, 200)
     }, [])
 
-    // Undo on the "Moved to Bin" toast: takes the item back out of the Bin. The cleanup that
+    // Undo on the "Moved to trash" toast: takes the item back out of the trash. The cleanup that
     // follows a trash waits a minute for this, so it comes back with its ID and comments
     // (.claude/plans/undo-move-to-bin.md).
     const undoTrash = useCallback(async (doc: DriveFile) => {
@@ -202,14 +202,14 @@ export function useEngagementFileOps({
                 })
             if (!res.ok) {
                 const err = await res.json()
-                throw new Error(err.error || (isLink ? 'Failed to delete link' : 'Failed to move to bin'))
+                throw new Error(err.error || (isLink ? 'Failed to delete link' : 'Failed to move to trash'))
             }
             addToast(
                 isLink
                     ? { type: 'success', title: 'Deleted', message: `${doc.name} was deleted` }
                     : {
                         type: 'success',
-                        title: 'Moved to Bin',
+                        title: 'Moved to trash',
                         message: `${doc.name} moved to ${storageBinName}`,
                         ...(canUndoTrash && { duration: 10_000, action: { label: 'Undo', onClick: () => void undoTrash(doc) } }),
                     }

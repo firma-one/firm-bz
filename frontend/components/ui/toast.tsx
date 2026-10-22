@@ -93,6 +93,10 @@ function AnimatedTick() {
         }
         .toast-circle { animation: toast-circle 1s cubic-bezier(0.65,0,0.45,1) forwards; }
         .toast-check  { animation: toast-check  0.25s cubic-bezier(0.65,0,0.45,1) 0.85s forwards; }
+        /* Reduced motion: the finished tick, drawn at once. */
+        @media (prefers-reduced-motion: reduce) {
+          .toast-circle, .toast-check { animation: none; stroke-dashoffset: 0; }
+        }
       `}</style>
       <svg width="28" height="28" viewBox="0 0 28 28" fill="none" aria-hidden>
         <circle cx="14" cy="14" r="9" stroke="currentColor" strokeWidth="1.75"

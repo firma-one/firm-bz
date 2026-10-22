@@ -15,7 +15,8 @@ import {
     NotionTableHeader,
     NotionTableRow,
 } from '@/components/ui/notion-table'
-import { StatusPill, Tag } from '@/components/ui/tag'
+import { Tag } from '@/components/ui/tag'
+import { StatusPill } from '@/components/ui/status-pill'
 import { PersonAvatar } from '@/components/ui/property-cells'
 import { EmptyPanel } from '@/components/ui/empty-panel'
 import { ShimmerBar, ShimmerBlock } from '@/components/ui/shimmer'
@@ -89,14 +90,14 @@ export function ProjectList({ projects, groupSlug, orgSlug, clientSlug, clientSt
             </NotionTableHeader>
             <NotionTableBody>
                 {isRefreshing && (
-                    <tr className="h-9 border-b border-line" aria-hidden>
-                        <td className="px-2 first:pl-1" colSpan={7}>
+                    <NotionTableRow aria-hidden>
+                        <NotionTableCell colSpan={7}>
                             <span className="flex items-center gap-2">
                                 <ShimmerBlock />
                                 <ShimmerBar className="w-48" />
                             </span>
-                        </td>
-                    </tr>
+                        </NotionTableCell>
+                    </NotionTableRow>
                 )}
                 {projects.map((project) => {
                     const href = hrefFor ? hrefFor(project) : engagementPath(groupSlug, orgSlug, clientSlug, project.slug)

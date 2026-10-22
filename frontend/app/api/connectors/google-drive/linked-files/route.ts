@@ -522,6 +522,8 @@ export async function POST(request: NextRequest) {
                     lock: getLock(row.settings),
                     isDeliverable: !!(s.share?.createdAt),
                     deliverableStatus: s.share?.createdAt ? (s.activity?.status ?? null) : null,
+                    // Every document's own stage: a deliverable's, or a document's inside one (the Files Status column).
+                    activityStatus: s.activity?.status ?? null,
                     isPendingApproval: intakeExternalIds.has(row.externalId),
                     pendingUploaderId: intakeUploaderByExternal.get(row.externalId) ?? null,
                 })}
@@ -592,6 +594,10 @@ export async function POST(request: NextRequest) {
                         const s = (r.settings as Record<string, any>) || {}
                         return [r.externalId, s.share?.createdAt ? (s.activity?.status ?? null) : null]
                     }))
+                    const activityStatusByExternal = new Map<string, string | null>(enrichRows.map((r: any) => {
+                        const s = (r.settings as Record<string, any>) || {}
+                        return [r.externalId, s.activity?.status ?? null]
+                    }))
 
                     // Build email → engagement role map for owner role display
                     const elMembers = await prisma.engagementMember.findMany({
@@ -626,6 +632,7 @@ export async function POST(request: NextRequest) {
                         isSharedWithExternal: sharedExternalByExternal.get(f.id) ?? false,
                         isDeliverable: isDeliverableByExternal.get(f.id) ?? false,
                         deliverableStatus: deliverableStatusByExternal.get(f.id) ?? null,
+                        activityStatus: activityStatusByExternal.get(f.id) ?? null,
                         isPendingApproval: pendingExternalIds.has(f.id),
                         pendingUploaderId: pendingUploaderByExternal.get(f.id) ?? null,
                         ownerRole: (() => {

@@ -3,16 +3,15 @@
 import {
     Dialog,
     DialogContent,
-    DialogHeader,
     DialogTitle,
     DialogDescription,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { Mail, ShieldCheck, AlertCircle, ExternalLink, Loader2 } from 'lucide-react'
+import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { Mail, AlertCircle, ExternalLink } from 'lucide-react'
 import { useState } from 'react'
 import { DocumentIcon } from '@/components/ui/document-icon'
-import { SharedFolderIcon } from '@/components/ui/folder-shared-icon'
-import { VisuallyHidden } from '@radix-ui/react-visually-hidden'
+import { DeliverableIcon } from '@/components/ui/deliverable-icon'
 import type { SecureOpenModalMode } from '@/lib/use-secure-open-document'
 
 interface SecureAccessModalProps {
@@ -34,6 +33,21 @@ interface SecureAccessModalProps {
     error?: string | null
 }
 
+/** Each state's heading: the visible title is also the dialog's accessible name. */
+const HEADINGS: Record<SecureOpenModalMode, { title: string; subtitle: (email: string) => string }> = {
+    loading: { title: 'Preparing secure access', subtitle: () => 'Checking your access, one moment…' },
+    opening: { title: 'Opening document', subtitle: () => 'Opening in a new tab…' },
+    blocked: { title: 'Ready to open', subtitle: () => 'Your access is ready — one more click' },
+    email: { title: 'Check your email', subtitle: (email) => `A verification link was sent to ${email}` },
+    error: { title: 'Access unavailable', subtitle: () => 'We couldn’t open this document' },
+}
+
+/**
+ * Opening a document through a per-person grant (lib/use-secure-open-document.ts), in the
+ * ConfirmDialog's Linear-style layout (.claude/plans/ui-ux-overhaul.md, Phase 6): an icon tile, a
+ * sentence-case title and subtitle, the body under the title, buttons bottom-right. The spinner in
+ * the tile is the only busy indicator; while busy there are no buttons, since nothing can be done.
+ */
 export function SecureAccessModal({
     isOpen,
     onClose,
@@ -58,6 +72,7 @@ export function SecureAccessModal({
 
     const effectiveMode: SecureOpenModalMode = mode ?? (error ? 'error' : isLoading ? 'loading' : 'email')
     const isBusy = effectiveMode === 'loading' || effectiveMode === 'opening'
+    const heading = HEADINGS[effectiveMode]
 
     return (
         <Dialog
@@ -68,148 +83,98 @@ export function SecureAccessModal({
             }}
         >
             <DialogContent
-                className="sm:max-w-sm p-0 gap-0"
+                className="gap-0 p-0 sm:max-w-sm"
                 hideClose={isBusy}
                 onInteractOutside={(e) => { if (isBusy) e.preventDefault() }}
                 onEscapeKeyDown={(e) => { if (isBusy) e.preventDefault() }}
             >
-                <VisuallyHidden><DialogTitle>Secure Access Request</DialogTitle></VisuallyHidden>
-
-                {/* Header */}
-                <div className="px-5 py-4 border-b border-line bg-surface flex items-start gap-3">
-                    <div className="mt-0.5 h-7 w-7 rounded flex items-center justify-center shrink-0 bg-surface-muted ring-1 ring-primary/20">
-                        {effectiveMode === 'error' ? (
-                            <AlertCircle className="h-4 w-4 text-destructive" />
-                        ) : effectiveMode === 'opening' || effectiveMode === 'blocked' ? (
-                            <ExternalLink className="h-4 w-4 text-primary" />
-                        ) : effectiveMode === 'loading' ? (
-                            <Loader2 className="h-4 w-4 text-primary animate-spin" />
-                        ) : (
-                            <ShieldCheck className="h-4 w-4 text-primary" />
-                        )}
+                <div className="flex items-start gap-3 px-5 pb-3 pt-5 pr-10">
+                    <div
+                        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-control [&_svg]:h-4 [&_svg]:w-4 ${
+                            effectiveMode === 'error' ? 'bg-tag-red-bg text-tag-red-fg' : 'bg-surface-muted text-fg-muted'
+                        }`}
+                    >
+                        {effectiveMode === 'error' ? <AlertCircle />
+                            : effectiveMode === 'loading' ? <LoadingSpinner size="sm" />
+                            : effectiveMode === 'email' ? <Mail />
+                            : <ExternalLink />}
                     </div>
-                    <div>
-                        <p className="text-ui font-semibold text-fg leading-tight">
-                            {effectiveMode === 'error' ? 'Access Unavailable'
-                                : effectiveMode === 'opening' ? 'Opening Document'
-                                : effectiveMode === 'blocked' ? 'Ready To Open'
-                                : effectiveMode === 'loading' ? 'Preparing Secure Access'
-                                : 'Secure Access Request'}
-                        </p>
-                        {effectiveMode === 'error' ? (
-                            <p className="text-xs text-destructive mt-0.5">Unable to complete secure access</p>
-                        ) : effectiveMode === 'opening' ? (
-                            <p className="text-xs text-fg-muted mt-0.5">Opening in a new tab…</p>
-                        ) : effectiveMode === 'blocked' ? (
-                            <p className="text-xs text-fg-muted mt-0.5">Your access is ready — one more click</p>
-                        ) : effectiveMode === 'loading' ? (
-                            <p className="text-xs text-fg-muted mt-0.5">Verifying access, one moment…</p>
-                        ) : (
-                            <p className="text-xs text-fg-muted mt-0.5">A verification link has been sent to your inbox</p>
-                        )}
+                    {/* Polite live region: the state changes while the dialog is open (loading →
+                        opening, email or error), and a new title alone isn't announced. */}
+                    <div className="min-w-0 pt-0.5" aria-live="polite">
+                        <DialogTitle className="text-ui font-semibold leading-tight text-fg">{heading.title}</DialogTitle>
+                        <DialogDescription className="mt-0.5 break-words text-small text-fg-muted">
+                            {heading.subtitle(email || 'your email')}
+                        </DialogDescription>
                     </div>
                 </div>
 
-                {/* Body */}
-                <div className="p-5 space-y-4">
+                <div className="space-y-3 px-5 pb-5 pl-16">
                     {effectiveMode === 'error' ? (
-                        <div className="flex items-start gap-3 p-3 rounded bg-surface border border-destructive/20">
-                            <AlertCircle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
-                            <p className="text-xs text-fg leading-relaxed">{error}</p>
-                        </div>
+                        <p className="text-small leading-relaxed text-fg">{error}</p>
                     ) : (
                         <>
-                            {/* File preview strip */}
-                            <div className="flex items-center gap-3 p-3 rounded bg-surface border border-line">
+                            {/* The file being opened */}
+                            <div className="flex items-center gap-2.5 rounded-control border border-line bg-surface p-2">
                                 {proxyThumbnailUrl && !thumbnailFailed ? (
-                                    <div className="h-10 w-10 rounded overflow-hidden shrink-0 border border-line">
+                                    <div className="h-8 w-8 shrink-0 overflow-hidden rounded-control border border-line">
                                         <img
                                             src={proxyThumbnailUrl}
-                                            alt={fileName}
+                                            alt=""
                                             className="h-full w-full object-cover"
                                             onError={() => setThumbnailFailed(true)}
                                         />
                                     </div>
                                 ) : isFolder ? (
-                                    <div className="h-10 w-10 flex items-center justify-center shrink-0">
-                                        <SharedFolderIcon fillLevel={1} tooltip="shared" className="h-8 w-8" />
+                                    <div className="flex h-8 w-8 shrink-0 items-center justify-center">
+                                        <DeliverableIcon hint className="h-7 w-7" />
                                     </div>
                                 ) : (
-                                    <div className="h-10 w-10 flex items-center justify-center shrink-0">
-                                        <DocumentIcon mimeType={mimeType} size={32} />
+                                    <div className="flex h-8 w-8 shrink-0 items-center justify-center">
+                                        <DocumentIcon mimeType={mimeType} size={24} />
                                     </div>
                                 )}
                                 {/* min-w-0 lets this shrink below its content so `truncate` engages.
                                     The dialog's own grid track is capped separately (see dialog.tsx)
                                     — without that cap this alone is not enough, because the ancestor
                                     grid item refuses to shrink and nothing here ever gets squeezed. */}
-                                <p className="min-w-0 text-xs font-medium text-fg truncate leading-snug">{fileName}</p>
+                                <p className="min-w-0 truncate text-small font-medium text-fg" title={fileName}>{fileName}</p>
                             </div>
 
-                            {effectiveMode === 'opening' ? (
-                                <p className="text-xs text-fg-muted leading-relaxed">
-                                    Your document is ready — it should open in a new tab momentarily.
+                            {effectiveMode === 'blocked' && (
+                                <p className="text-small leading-relaxed text-fg-muted">
+                                    Your browser blocked the new tab. Open the document from here.
                                 </p>
-                            ) : effectiveMode === 'blocked' ? (
-                                <div className="space-y-3">
-                                    <p className="text-xs text-fg-muted leading-relaxed">
-                                        Access has been granted, but your browser blocked the new tab. Use the
-                                        button below to open the document.
-                                    </p>
-                                    {documentUrl && (
-                                        <Button
-                                            variant="blackCta"
-                                            onClick={() => window.open(documentUrl, '_blank')}
-                                            className="w-full rounded"
-                                        >
-                                            <ExternalLink className="h-3.5 w-3.5 mr-1.5" />
-                                            Open Document
-                                        </Button>
-                                    )}
-                                </div>
-                            ) : effectiveMode === 'loading' ? (
-                                <div className="space-y-1.5">
-                                    <div className="h-3 w-full bg-line rounded animate-pulse" />
-                                    <div className="h-3 w-4/5 bg-line rounded animate-pulse" />
-                                </div>
-                            ) : (
-                                <>
-                                    {/* Email destination */}
-                                    <div className="flex items-center gap-3 p-3 rounded bg-surface border border-line">
-                                        <div className="h-7 w-7 rounded flex items-center justify-center shrink-0 bg-surface-subtle border border-line">
-                                            <Mail className="h-4 w-4 text-fg-muted" />
-                                        </div>
-                                        <div className="min-w-0">
-                                            <p className="text-ui font-semibold text-fg-muted leading-tight">Verification Inbox</p>
-                                            <p className="text-xs font-medium text-fg truncate mt-0.5">{email}</p>
-                                        </div>
-                                    </div>
-                                    <p className="text-xs text-fg-muted leading-relaxed">
-                                        Your storage provider requires a one-time verification step. Please follow the link in the email to open the document securely.
-                                    </p>
-                                </>
+                            )}
+                            {effectiveMode === 'email' && (
+                                <p className="text-small leading-relaxed text-fg-muted">
+                                    Your storage provider asks for a one-time check. Follow the link in the email to open the document.
+                                </p>
                             )}
                         </>
                     )}
                 </div>
 
-                {/* Footer */}
-                {effectiveMode !== 'opening' && (
-                    <div className="px-5 py-3 border-t border-line bg-surface flex items-center justify-end">
-                        <Button
-                            variant="blackCta"
-                            onClick={onClose}
-                            disabled={isBusy}
-                            className="rounded disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                            {effectiveMode === 'error' || effectiveMode === 'blocked' ? 'Close' : effectiveMode === 'loading' ? (
-                                <span className="inline-flex items-center gap-1" aria-label="Please wait">
-                                    <span className="w-1.5 h-1.5 bg-surface rounded-full animate-bounce [animation-delay:-0.3s]" />
-                                    <span className="w-1.5 h-1.5 bg-surface rounded-full animate-bounce [animation-delay:-0.15s]" />
-                                    <span className="w-1.5 h-1.5 bg-surface rounded-full animate-bounce" />
-                                </span>
-                            ) : 'I understand. Close this message'}
-                        </Button>
+                {!isBusy && (
+                    <div className="flex items-center justify-end gap-2 px-5 pb-5">
+                        {effectiveMode === 'blocked' ? (
+                            <>
+                                <Button variant="outline" size="sm" onClick={onClose}>Close</Button>
+                                {documentUrl && (
+                                    <Button
+                                        size="sm"
+                                        onClick={() => { window.open(documentUrl, '_blank'); onClose() }}
+                                    >
+                                        <ExternalLink className="h-3.5 w-3.5" />
+                                        Open document
+                                    </Button>
+                                )}
+                            </>
+                        ) : effectiveMode === 'email' ? (
+                            <Button size="sm" className="min-w-[5.5rem]" onClick={onClose}>Got it</Button>
+                        ) : (
+                            <Button variant="outline" size="sm" onClick={onClose}>Close</Button>
+                        )}
                     </div>
                 )}
             </DialogContent>

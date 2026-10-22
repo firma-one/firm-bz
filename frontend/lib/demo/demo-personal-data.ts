@@ -56,13 +56,14 @@ function dueLabel(delta: number): Pick<ReminderWithContext, 'label' | 'labelStyl
 }
 
 function reminder(
-    fields: Pick<ReminderWithContext, 'id' | 'action' | 'entityName' | 'ctaUrl'> & { note?: string; date?: string | null },
+    fields: Pick<ReminderWithContext, 'id' | 'entityKey' | 'action' | 'entityName' | 'ctaUrl'> & { note?: string; date?: string | null },
     now: Date,
 ): ReminderWithContext {
     const delta = fields.date ? daysFrom(now, fields.date) : null
     return {
         id: fields.id,
-        entityKey: 'demo',
+        // The keys the app's reminders use (lib/reminders/entity-registry.ts), so the Inbox shows what each is about.
+        entityKey: fields.entityKey,
         entityValue: fields.id,
         action: fields.action,
         dateKey: fields.date ? 'dueDate' : null,
@@ -106,6 +107,7 @@ export function demoReminders(now: Date): ReminderWithContext[] {
     const due = nextDeliverables().slice(0, 4).map(({ client, engagement, deliverable }) =>
         reminder({
             id: `rem-due-${engagement.slug}`,
+            entityKey: 'platform.engagements.shares',
             action: 'Deliverable due',
             entityName: deliverableName(deliverable.folder.name),
             note: `${client.name} · ${engagement.name}`,
@@ -117,6 +119,7 @@ export function demoReminders(now: Date): ReminderWithContext[] {
     const reviews = inReview().slice(0, 2).map(({ client, engagement, deliverable }) =>
         reminder({
             id: `rem-review-${deliverable.folder.id}`,
+            entityKey: 'platform.documents.id',
             action: 'Review document',
             entityName: deliverableName(deliverable.folder.name),
             note: `${client.name} · ${engagement.name}`,
@@ -128,6 +131,7 @@ export function demoReminders(now: Date): ReminderWithContext[] {
     const mention = mentionFile && pairs[0]
         ? [reminder({
             id: 'rem-mention',
+            entityKey: 'platform.doc_comments',
             action: 'Review comment',
             entityName: mentionFile.name,
             note: 'Sam Rivera: “@you Can we tighten the summary? The main recommendation should come first.”',
@@ -141,6 +145,7 @@ export function demoReminders(now: Date): ReminderWithContext[] {
         .map((client) =>
             reminder({
                 id: `rem-follow-${client.slug}`,
+                entityKey: 'platform.clients.followUpDate',
                 action: 'Follow-up',
                 entityName: client.name,
                 note: 'Check in on the next phase of work.',
@@ -300,6 +305,8 @@ export function demoWork(now: Date): MyWork {
         }] : []),
     ]
 
+    // A due deliverable carries its stage, so Home's chip leads with the status icon as in the app.
+    const dueStatus = new Map(nextDeliverables().map(({ engagement, deliverable }) => [`rem-due-${engagement.slug}`, deliverable.status]))
     const dueSoon: MyWork['dueSoon'] = demoReminders(now)
         .filter((r) => r.dateValue)
         .map((r) => ({
@@ -311,7 +318,7 @@ export function demoWork(now: Date): MyWork {
             href: r.ctaUrl ?? '/tour',
             dueDate: r.dateValue!,
             overdue: (r.delta ?? 0) < 0,
-            status: null,
+            status: dueStatus.get(r.id) ?? null,
         }))
 
     return { engagements, needsYou, dueSoon }
