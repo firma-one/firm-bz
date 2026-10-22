@@ -55,7 +55,7 @@ export async function POST(
     if (!ticket) {
       return NextResponse.json({ error: 'Ticket not found' }, { status: 404 })
     }
-    if (!(await canAccessSupportTicket(user.id, ticket))) {
+    if (!(await canAccessSupportTicket(user, ticket))) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 

@@ -53,7 +53,7 @@ export async function PATCH(
     if (!existing) {
       return NextResponse.json({ error: 'Ticket not found' }, { status: 404 })
     }
-    if (!(await canAccessSupportTicket(user.id, existing))) {
+    if (!(await canAccessSupportTicket(user, existing))) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 

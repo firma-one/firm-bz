@@ -147,7 +147,7 @@ export function DemoSidebar({ inboxCount }: { inboxCount: number }) {
                             href="/tour?tab=clients"
                             icon={<FolderOpen />}
                             label="All clients"
-                            active={view === 'clients' || (pathname.startsWith('/tour/') && pathname.split('/').length === 3 && !['/tour/home', '/tour/inbox'].includes(pathname))}
+                            active={view === 'clients' || (pathname.startsWith('/tour/') && pathname.split('/').length === 3 && !['/tour/home', '/tour/inbox', '/tour/support'].includes(pathname))}
                         />
                     </div>
                 </SidebarSection>
@@ -201,8 +201,11 @@ function DemoProfileMenu() {
                 <DropdownMenuItem disabled className="gap-2">
                     <CreditCard className="h-4 w-4 text-fg-muted" />Billing<AccessLock label={ADMIN_ONLY} side="right" className="ml-auto" />
                 </DropdownMenuItem>
-                <DropdownMenuItem disabled className="gap-2">
-                    <LifeBuoy className="h-4 w-4 text-fg-muted" />Support<AccessLock label={ADMIN_ONLY} side="right" className="ml-auto" />
+                {/* As in the app: Support is for firm admins, which the demo user is; it opens the tour's copy */}
+                <DropdownMenuItem asChild className="gap-2">
+                    <Link href="/tour/support">
+                        <LifeBuoy className="h-4 w-4 text-fg-muted" />Support<AccessLock label={ADMIN_ONLY} side="right" className="ml-auto" />
+                    </Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild className="gap-2">

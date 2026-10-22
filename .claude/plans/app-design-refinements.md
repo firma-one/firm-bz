@@ -465,3 +465,52 @@ uneven gaps. Rules between sections would have made it look like a form. Instead
 - **No one is notified of their own change:** a document or engagement due date set, a client
   accepting, a staging upload. Status changes already skipped the actor.
 - The tour's Inbox and badge follow the same rule over its demo data.
+
+## 14. Support: a table, one sidebar per request, New request beside the list (decided 2026-10-22)
+
+Mocked on the canvas (section 9), then built. The old Support components (list, details and comments
+panes, the create and view modals) stay on disk, unused, until signed off.
+
+- **The table** (`components/support/support-view.tsx`): the standard grid with Open (New, In progress),
+  Resolved (Resolved, Closed) and All views; filters for Type and Raised by me, sort by Last update or
+  Newest, and search. Columns: ID, Request (its first line, a reply count, a bolt for one the app filed
+  itself), Type (a gray tag with a colored icon, so it never reads as a status), Status (the status
+  language), Where, Raised by, Last update. Columns give way by container width (Where, then Raised
+  by and Type), so the open sidebar never squeezes the request.
+- **Whose turn it is:** Last update names who spoke last — "Firma replied" (darker on an open request:
+  your turn), "You", a teammate, or Raised/Filed. A Firma reply is a system admin's
+  (`SYSTEM_ADMIN_EMAILS`) who isn't a member of the request's firm; the list API marks it
+  (`fromFirma`) and names who raised each request.
+- **One sidebar per request** (`support-request-panel.tsx`), in the shell's right pane: properties
+  (Status, editable; Type; Where, linking to the engagement; Raised by; Browser), what was written,
+  what failed for an automatic one, files (download, remove, add), and the conversation with the reply
+  box held at the bottom. Header: copy link (`?ticket=` opens it), previous and next. The details and
+  comments were two panes; now one.
+- **New request in the sidebar** (`support-new-request-panel.tsx`), not a modal: the table stays in
+  view with a draft row where it will land; kind (segmented), Where (firm-wide or one engagement),
+  What happened (the first line is the title; there is no title field), and a large drop zone with
+  Browse files that turns away files over 8 MB up front. Sending turns the pane into the request.
+  Closing with something typed asks first.
+- **Title, browser, views and whose turn** are pure (`lib/support/ticket-view.ts`, tested), shared with
+  the tour. The page's data goes through a store (`support-store.ts`) so the table and the pane stay in
+  step; its source is the app's API or the tour's demo data.
+- **The tour**: `/tour/support` over sample requests (`lib/demo/demo-support-data.ts`; every answer
+  describes something the app does), Support linked from the profile menu, and a tour step after the
+  Profile menu.
+
+**The Firma team's side** (built 2026-10-22):
+
+- **Access:** `canAccessSupportTicket` also admits the Firma team (`SYSTEM_ADMIN_EMAILS`, the rule
+  /system uses) on any firm's request, to reply, change status and handle files. Firm-side access is
+  unchanged.
+- **Where they work:** `/system/customer-success` opens on the same table from the Firma side
+  (`SupportView side="firma"`, `support-staff-view.tsx`, with its own docked pane): no New request,
+  each request names its firm, and Last update reads darker when the firm spoke last (the team's turn).
+  The old list stays beside it under "Old list" until signed off. The page now checks system-admin
+  access on the server before reading any request; it used to rely on the layout's browser check.
+- **Listing:** `GET /api/support/requests?all=1` lists every firm's requests, for the team only. The
+  names, who raised each request, and which replies are Firma's come from `lib/support/enrich-requests.ts`,
+  which the API and this view share.
+- **The requester hears back:** a Firma reply emails whoever raised the request
+  (`lib/email-templates/support-reply.ts`) and adds a `SUPPORT_REPLY` item to their Inbox's Updates. Both
+  link to the request on their Support page (`?ticket=`). Status changes notify no one yet.

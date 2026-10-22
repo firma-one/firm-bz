@@ -3,7 +3,7 @@
 import { Fragment, type ReactNode } from 'react'
 import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
-import { BarChart3, Briefcase, Building2, CalendarDays, ChevronRight, ClipboardList, Folder, Home, Inbox, LayoutGrid, Menu, MessagesSquare, Search, Users } from 'lucide-react'
+import { BarChart3, Briefcase, Building2, CalendarDays, ChevronRight, ClipboardList, Folder, Home, Inbox, LayoutGrid, LifeBuoy, Menu, MessagesSquare, Search, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { DEMO_FIRM, getDemoClient } from '@/lib/demo/static-demo-data'
 import { DemoTourTopbarButton } from '@/components/demo/demo-tour-topbar-button'
@@ -36,6 +36,7 @@ function useDemoCrumbs(): Crumb[] {
     const tab = useSearchParams()?.get('tab') ?? null
     if (pathname === '/tour/home') return [{ label: 'Home', icon: <Home /> }]
     if (pathname === '/tour/inbox') return [{ label: 'Inbox', icon: <Inbox /> }]
+    if (pathname === '/tour/support') return [{ label: 'Support', icon: <LifeBuoy /> }]
 
     const firm: Crumb = { label: DEMO_FIRM.name, href: '/tour', icon: <Building2 /> }
     const view = demoFirmView(pathname, tab)

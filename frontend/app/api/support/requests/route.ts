@@ -1,6 +1,8 @@
 import { createClient } from '@/utils/supabase/server'
 import { prisma } from '@/lib/prisma'
 import { NextRequest, NextResponse } from 'next/server'
+import { isSystemAdminEmail } from '@/lib/system/admin-check'
+import { enrichSupportRequests } from '@/lib/support/enrich-requests'
 
 export async function GET(request: NextRequest) {
   try {
@@ -12,10 +14,16 @@ export async function GET(request: NextRequest) {
     }
 
     const firmSlug = request.nextUrl.searchParams.get('firmSlug')
+    // ?all=1: every firm's requests, for the Firma team only (SYSTEM_ADMIN_EMAILS, as /system).
+    const all = request.nextUrl.searchParams.get('all') === '1'
 
     let where: any = {}
 
-    if (firmSlug) {
+    if (all) {
+      if (!isSystemAdminEmail(user.email)) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      }
+    } else if (firmSlug) {
       // A firm's tickets are for its firm admins (same rule as canAccessSupportTicket). This had no
       // membership check, and an unknown slug left `where` empty — every ticket on the platform.
       // (.claude/plans/access-gates.md, P0 #10)
@@ -42,42 +50,8 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: 'desc' },
     })
 
-    // Fetch related context (firm, client, engagement) data
-    const enrichedRequests = await Promise.all(
-      requests.map(async (req: any) => {
-        let firm, client, engagement
-
-        if (req.firmId) {
-          firm = await prisma.firm.findUnique({
-            where: { id: req.firmId },
-            select: { name: true, slug: true }
-          })
-        }
-
-        if (req.clientId) {
-          client = await prisma.client.findUnique({
-            where: { id: req.clientId },
-            select: { name: true, slug: true }
-          })
-        }
-
-        if (req.engagementId) {
-          engagement = await (prisma as any).engagement.findUnique({
-            where: { id: req.engagementId },
-            select: { name: true, slug: true }
-          })
-        }
-
-        return {
-          ...req,
-          firm: firm || null,
-          client: client || null,
-          engagement: engagement || null,
-        }
-      })
-    )
-
-    return NextResponse.json(enrichedRequests)
+    // Firm, client and engagement names, who raised each one, and which replies are Firma's.
+    return NextResponse.json(await enrichSupportRequests(requests))
   } catch (error) {
     console.error('Failed to fetch support requests:', error)
     return NextResponse.json(

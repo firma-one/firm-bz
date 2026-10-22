@@ -4,12 +4,22 @@ import { Shield, MessageSquare, ChevronRight, Clock } from "lucide-react"
 import Link from "next/link"
 import { formatDistanceToNow } from "date-fns"
 import { Badge } from "@/components/ui/badge"
+import { notFound } from "next/navigation"
+import { createClient } from "@/utils/supabase/server"
+import { isSystemAdminEmail } from "@/lib/system/admin-check"
+import { SupportStaffView } from "@/components/support/support-staff-view"
 import { SentryTestButton } from "./sentry-test-button"
 import { RefreshControl } from "./refresh-control"
 
 export const dynamic = 'force-dynamic'
 
 export default async function CustomerSuccessPage() {
+    // The /system layout checks in the browser only; every firm's requests are read here, so this page
+    // checks for itself (SYSTEM_ADMIN_EMAILS) before reading anything.
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user || !isSystemAdminEmail(user.email)) notFound()
+
     const requests = await (prisma as any).customerRequest.findMany({
         orderBy: { createdAt: 'desc' },
     })
@@ -46,6 +56,10 @@ export default async function CustomerSuccessPage() {
                             Requests
                             <Badge variant="secondary" className="ml-1 h-5 px-1.5 min-w-[20px]">{requests.length}</Badge>
                         </TabsTrigger>
+                        {/* The list as it was, kept beside the new one until it's signed off. */}
+                        <TabsTrigger value="old" className="flex items-center gap-2">
+                            Old list
+                        </TabsTrigger>
                         <TabsTrigger value="analytics" disabled className="flex items-center gap-2 opacity-50">
                             Analytics
                         </TabsTrigger>
@@ -54,7 +68,12 @@ export default async function CustomerSuccessPage() {
                     <RefreshControl />
                 </div>
 
-                <TabsContent value="requests" className="space-y-4">
+                {/* Reply and set status from a request's sidebar (.claude/plans/app-design-refinements.md, section 14). */}
+                <TabsContent value="requests">
+                    <SupportStaffView myEmail={user.email ?? null} />
+                </TabsContent>
+
+                <TabsContent value="old" className="space-y-4">
                     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
                         <div className="overflow-x-auto">
                             <table className="w-full text-sm text-left">
