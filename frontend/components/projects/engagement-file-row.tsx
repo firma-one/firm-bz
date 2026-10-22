@@ -253,6 +253,12 @@ export function EngagementFileRow({
         }
     }
 
+    // A folder opens from its ID and Name cells only. In selection mode the click toggles the row instead.
+    const opensFolder = isFolder && selectedFileIdsSize === 0
+    const openFromCell = () => {
+        if (opensFolder) onItemClick(file)
+    }
+
     return (
         <div
             key={file.id}
@@ -266,7 +272,6 @@ export function EngagementFileRow({
             onDrop={(e) => onDrop(e, file)}
             className={`${FILE_TABLE_GRID_COLS_CLASS} ${cn(
                 "group grid gap-4 h-[34px] overflow-hidden pl-1 pr-2 transition-colors items-center cursor-default relative text-ui",
-                isFolder && selectedFileIdsSize === 0 && "cursor-pointer",
                 (isFolderApproved || isInsideApprovedDeliverable) && "bg-primary/5 hover:bg-primary/10",
                 (isIntakeRow || file.lock?.type === 'finalize' || (file.isPrivate && !isFolder)) ? "hover:bg-surface-hover opacity-60" : !(isFolderApproved || isInsideApprovedDeliverable) && "hover:bg-surface-hover",
                 !isIntakeRow && isSelected && "bg-surface-selected hover:bg-surface-selected",
@@ -278,14 +283,9 @@ export function EngagementFileRow({
             onMouseEnter={() => {
                 if (isDeeplinkHighlight) onClearHighlight()
             }}
-            onDoubleClick={() => { if (selectedFileIdsSize === 0) onItemClick(file) }}
             onClick={() => {
-                if (selectedFileIdsSize > 0) {
-                    // In selection mode: clicking anywhere on row toggles selection
-                    onToggleSelect(file.id)
-                } else {
-                    onItemClick(file)
-                }
+                // In selection mode: clicking anywhere on row toggles selection
+                if (selectedFileIdsSize > 0) onToggleSelect(file.id)
             }}
         >
             {/* Checkbox Column */}
@@ -302,8 +302,9 @@ export function EngagementFileRow({
                 />
             </div>
 
-            {/* ID Column */}
-            <div className="flex items-center min-w-0">
+            {/* ID Column — with the Name, the only cells that open a folder: the others hold values,
+                some of them editable, so a click there shouldn't navigate */}
+            <div className={cn("flex items-center min-w-0", opensFolder && "cursor-pointer")} onClick={openFromCell}>
                 {file.docId ? (
                     <span className="text-small text-fg-muted tabular-nums truncate">
                         {file.docId}
@@ -315,7 +316,7 @@ export function EngagementFileRow({
 
             {/* Name Column: icon and name (deeplink = skewed pastel marker on file name only), then the row's badges
                 and tools. It spans the Name, badge and tool tracks, so the name runs on into whatever space they leave. */}
-            <div className={cn("col-span-3 flex items-center gap-3 min-w-0", FILE_TABLE_COL_LINE_CLASS)}>
+            <div className={cn("col-span-3 flex items-center gap-3 min-w-0", opensFolder && "cursor-pointer", FILE_TABLE_COL_LINE_CLASS)} onClick={openFromCell}>
                 <div className="flex-shrink-0 w-4 h-4 flex items-center justify-center">
                     {/* A deliverable folder and the folders inside one wear folder-plus (inside ones a shade lighter);
                         documents keep their file-type icons; a folder that only contains a deliverable keeps the
