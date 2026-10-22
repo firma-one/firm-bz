@@ -17,6 +17,7 @@ import { blockIfEngagementFileMutationForbidden } from '@/lib/engagement-access'
 import { resolveEngagementConnector } from '@/lib/connectors/resolve-client-connector'
 import { IndexingInterceptor } from '@/lib/services/indexing-interceptor'
 import { getLock, isDocumentPrivate, buildSettingsForDb } from '@/lib/sharing-settings'
+import { byEmail, creatorOf, loadPeople } from '@/lib/files/file-creator'
 import { assertWithinDocumentCap } from '@/lib/billing/effective-billing-caps'
 import { getPermissionAdapter, getStorageAdapter, getContentAdapter } from '@/lib/connectors/registry'
 import { OneDriveConnector } from '@/lib/connectors/onedrive-connector'
@@ -441,29 +442,26 @@ export async function POST(request: NextRequest) {
 
                 const visibleDbRows = dbRows.filter((row) => !isDocumentPrivate(row.settings))
 
-                // Batch-resolve all relevant userIds → emails, and build email → engagement role map
+                // Batch-resolve all relevant userIds → people (email, name, photo), and build email → engagement role map
                 const allRows = [...visibleDbRows, ...intakeRows]
                 const creatorIds = Array.from(new Set(allRows.map((r: any) => r.createdBy).filter(Boolean)))
+                const intakeUploaderIds = intakeRows.map((r: any) => r.sharingUsers?.[0]?.userId).filter(Boolean)
                 const projectMembers = await prisma.engagementMember.findMany({
                     where: { engagementId: engagementContext.projectId },
                     select: { userId: true, role: true },
                 })
                 const memberRoleById = new Map<string, string>(projectMembers.map((m: any) => [m.userId, m.role]))
-                const allRelevantIds = Array.from(new Set([...creatorIds, ...projectMembers.map((m: any) => m.userId)]))
+                const allRelevantIds = Array.from(new Set([...creatorIds, ...intakeUploaderIds, ...projectMembers.map((m: any) => m.userId)]))
+                const people = await loadPeople(allRelevantIds)
                 const creatorEmailMap = new Map<string, string>()
+                // Keyed by lowercased email: a Drive owner's email may differ in case from the account's
                 const roleByEmail = new Map<string, string>()
-                {
-                    const { createAdminClient } = await import('@/utils/supabase/admin')
-                    const admin = createAdminClient()
-                    await Promise.all(allRelevantIds.map(async (uid: string) => {
-                        const { data: { user: u } } = await admin.auth.admin.getUserById(uid)
-                        if (u?.email) {
-                            creatorEmailMap.set(uid, u.email)
-                            const role = memberRoleById.get(uid)
-                            if (role) roleByEmail.set(u.email, role)
-                        }
-                    }))
+                for (const [uid, person] of Array.from(people)) {
+                    creatorEmailMap.set(uid, person.email)
+                    const role = memberRoleById.get(uid)
+                    if (role) roleByEmail.set(person.email.toLowerCase(), role)
                 }
+                const memberByEmail = byEmail(new Map(Array.from(people).filter(([uid]) => memberRoleById.has(uid))))
 
                 // For rows missing owners or modifiedTime in metadata, fetch from Drive and write back (one-time backfill)
                 type FreshMeta = { owners: any; lastModifyingUser: any; modifiedTime: string | null }
@@ -498,6 +496,13 @@ export async function POST(request: NextRequest) {
                 const mapRow = (row: any) => {
                     const fresh = freshMetaMap.get(row.externalId)
                     const s = (row.settings as Record<string, any>) || {}
+                    // Who added it: its member (an intake's uploader, for rows from before intake recorded one), else its Drive owner
+                    const creator = creatorOf(
+                        row.createdBy ?? intakeUploaderByExternal.get(row.externalId),
+                        (fresh?.owners ?? (row.metadata as any)?.owners)?.[0],
+                        people,
+                        memberByEmail,
+                    )
                     return ({
                     id: row.externalId,
                     name: row.fileName,
@@ -508,11 +513,8 @@ export async function POST(request: NextRequest) {
                     owners: fresh?.owners ?? (row.metadata as any)?.owners ?? null,
                     lastModifyingUser: fresh?.lastModifyingUser ?? (row.metadata as any)?.lastModifyingUser ?? null,
                     actorEmail: row.createdBy ? (creatorEmailMap.get(row.createdBy) ?? null) : null,
-                    ownerRole: (() => {
-                        const ownerEmail = row.createdBy ? creatorEmailMap.get(row.createdBy)
-                            : fresh?.owners?.[0]?.emailAddress ?? (row.metadata as any)?.owners?.[0]?.emailAddress ?? null
-                        return ownerEmail ? (roleByEmail.get(ownerEmail) ?? null) : null
-                    })(),
+                    creator,
+                    ownerRole: creator?.emailAddress ? (roleByEmail.get(creator.emailAddress.toLowerCase()) ?? null) : null,
                     isFolder: row.isFolder,
                     connectorId: connector.id,
                     projectDocumentId: row.id,
@@ -559,7 +561,7 @@ export async function POST(request: NextRequest) {
                         driveIds.length > 0
                             ? prisma.engagementDocument.findMany({
                                 where: { engagementId: bodyEngagementId, externalId: { in: driveIds } },
-                                select: { id: true, externalId: true, settings: true, status: true, dueDate: true, docId: true },
+                                select: { id: true, externalId: true, settings: true, status: true, dueDate: true, docId: true, createdBy: true },
                             })
                             : [],
                         // All PENDING intake folders in this folder (shadow rows for EL/internal)
@@ -570,7 +572,7 @@ export async function POST(request: NextRequest) {
                                 isFolder: true,
                                 sharingUsers: { some: { sharingPermissionStatus: 'PENDING' } },
                             },
-                            select: { id: true, externalId: true, fileName: true, mimeType: true, fileSize: true, isFolder: true, metadata: true, settings: true, status: true, dueDate: true, sharingUsers: { where: { sharingPermissionStatus: 'PENDING' }, select: { userId: true } } },
+                            select: { id: true, externalId: true, fileName: true, mimeType: true, fileSize: true, isFolder: true, metadata: true, settings: true, status: true, dueDate: true, createdBy: true, sharingUsers: { where: { sharingPermissionStatus: 'PENDING' }, select: { userId: true } } },
                         }),
                     ])
 
@@ -599,21 +601,28 @@ export async function POST(request: NextRequest) {
                         return [r.externalId, s.activity?.status ?? null]
                     }))
 
-                    // Build email → engagement role map for owner role display
+                    // Who added each file (the Created by column): the people behind it, and email → engagement role
                     const elMembers = await prisma.engagementMember.findMany({
                         where: { engagementId: bodyEngagementId as string },
                         select: { userId: true, role: true },
                     })
                     const elRoleById = new Map<string, string>(elMembers.map((m: any) => [m.userId, m.role]))
+                    const createdByByExternal = new Map<string, string | null>(enrichRows.map((r: any) => [r.externalId, r.createdBy ?? null]))
+                    const listingPeople = await loadPeople([
+                        ...elMembers.map((m: any) => m.userId),
+                        ...enrichRows.map((r: any) => r.createdBy),
+                        ...intakePendingRows.flatMap((r: any) => [r.createdBy, r.sharingUsers?.[0]?.userId]),
+                    ])
                     const elRoleByEmail = new Map<string, string>()
-                    if (elMembers.length > 0) {
-                        const { createAdminClient } = await import('@/utils/supabase/admin')
-                        const admin = createAdminClient()
-                        await Promise.all(elMembers.map(async (m: any) => {
-                            const { data: { user: u } } = await admin.auth.admin.getUserById(m.userId)
-                            if (u?.email) elRoleByEmail.set(u.email, m.role)
-                        }))
+                    // Keyed by lowercased email: a Drive owner's email may differ in case from the account's
+                    const elRoleByLowerEmail = new Map<string, string>()
+                    for (const [uid, person] of Array.from(listingPeople)) {
+                        const role = elRoleById.get(uid)
+                        if (!role) continue
+                        elRoleByEmail.set(person.email, role)
+                        elRoleByLowerEmail.set(person.email.toLowerCase(), role)
                     }
+                    const elMemberByEmail = byEmail(new Map(Array.from(listingPeople).filter(([uid]) => elRoleById.has(uid))))
 
                     // Build set of PENDING externalIds so Drive-present pending folders get flagged too
                     const pendingExternalIds = new Set(intakePendingRows.map((r: any) => r.externalId))
@@ -621,7 +630,15 @@ export async function POST(request: NextRequest) {
                         intakePendingRows.map((r: any) => [r.externalId, r.sharingUsers?.[0]?.userId ?? null]).filter(([, v]: [string, string | null]) => v)
                     )
 
-                    files = files.map((f: any) => ({
+                    files = files.map((f: any) => {
+                        // Who added it: its member (an intake's uploader, for rows from before intake recorded one), else its Drive owner
+                        const creator = creatorOf(
+                            createdByByExternal.get(f.id) ?? pendingUploaderByExternal.get(f.id),
+                            f.owners?.[0],
+                            listingPeople,
+                            elMemberByEmail,
+                        )
+                        return {
                         ...f,
                         projectDocumentId: internalByExternal.get(f.id) ?? undefined,
                         indexingStatus: statusByExternal.get(f.id) ?? undefined,
@@ -635,11 +652,11 @@ export async function POST(request: NextRequest) {
                         activityStatus: activityStatusByExternal.get(f.id) ?? null,
                         isPendingApproval: pendingExternalIds.has(f.id),
                         pendingUploaderId: pendingUploaderByExternal.get(f.id) ?? null,
-                        ownerRole: (() => {
-                            const ownerEmail = f.owners?.[0]?.emailAddress ?? f.actorEmail ?? null
-                            return ownerEmail ? (elRoleByEmail.get(ownerEmail) ?? null) : null
-                        })(),
-                    }))
+                        actorEmail: creator && !creator.viaDrive ? (creator.emailAddress ?? undefined) : f.actorEmail,
+                        creator,
+                        ownerRole: creator?.emailAddress ? (elRoleByLowerEmail.get(creator.emailAddress.toLowerCase()) ?? null) : null,
+                        }
+                    })
 
                     // Merge PENDING intake rows that aren't already in Drive listing (shadow rows)
                     const driveIdSet = new Set(files.map((f: any) => f.id))
@@ -660,6 +677,7 @@ export async function POST(request: NextRequest) {
                                 lock: getLock(row.settings),
                                 isPendingApproval: true,
                                 pendingUploaderId: row.sharingUsers?.[0]?.userId ?? null,
+                                creator: creatorOf(row.createdBy ?? row.sharingUsers?.[0]?.userId, (row.metadata as any)?.owners?.[0], listingPeople, elMemberByEmail),
                             })
                         }
                     }
@@ -710,6 +728,7 @@ export async function POST(request: NextRequest) {
                                 docId: row.docId ?? null,
                                 owners: creator ? [{ displayName: creator.displayName, emailAddress: creator.email }] : null,
                                 actorEmail: creator?.email ?? null,
+                                creator: creator ? { displayName: creator.displayName, emailAddress: creator.email, photoLink: null, viaDrive: false } : null,
                                 ownerRole: creator ? (elRoleByEmail.get(creator.email) ?? null) : null,
                             })
                         }

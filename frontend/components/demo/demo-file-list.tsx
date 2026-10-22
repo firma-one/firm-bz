@@ -49,6 +49,7 @@ import { getAllowedTransitions } from '@/lib/deliverable-stage-roles'
 import { statusOf } from '@/lib/ui/status'
 import { DuePickerPanel } from '@/components/ui/due-picker'
 import { DeliverableIcon } from '@/components/ui/deliverable-icon'
+import { ModifiedStamp } from '@/components/ui/modified-stamp'
 import { formatDue, isPastDue, readDue } from '@/lib/ui/due-date'
 import {
     DropdownMenu,
@@ -70,10 +71,10 @@ import {
     OWNER_COL_CLASS,
     STATUS_COL_CLASS,
 } from '@/components/projects/engagement-file-table-grid'
-import { cn, formatFileSize, formatSmartDateTime } from '@/lib/utils'
+import { cn, formatFileSize } from '@/lib/utils'
 import { initialsOf } from '@/lib/initials'
 import type { DemoFolder, DemoFile } from '@/lib/demo/static-demo-data'
-import type { DeliverableStatus } from '@/lib/demo/demo-deliverables'
+import { DELIVERABLE_ACTORS, type DeliverableStatus } from '@/lib/demo/demo-deliverables'
 
 const MIME_BY_TYPE: Record<string, string> = {
     pdf: 'application/pdf',
@@ -91,6 +92,8 @@ const MIME_BY_TYPE: Record<string, string> = {
 }
 
 const OWNER = 'Alex Jordan'
+/** Who added each file, as the app's Created by column shows it: one of the team, the same on every visit. */
+const creatorOf = (id: string) => DELIVERABLE_ACTORS[Array.from(id).reduce((n, c) => n + c.charCodeAt(0), 0) % DELIVERABLE_ACTORS.length]
 const NOT_IN_DEMO = 'Not available in this demo'
 const STAGES: DeliverableStatus[] = ['to_do', 'in_progress', 'in_review', 'approved']
 
@@ -200,27 +203,30 @@ function RowActionMenu({ entry, name, docId, deliverableStatus, dueDate, onSetDu
             </Hint>
             <DropdownMenuContent align="end" sideOffset={0} className={cn('flex w-72 flex-col overflow-hidden p-0', COMPACT_MENU_CLASS)} onClick={(e) => e.stopPropagation()}>
                 <div className="flex-none border-b border-line px-3 py-2">
-                    <div className="flex items-start gap-2.5">
+                    {/* As in the app: two lines — the name on one, then code, stage, type, size and who/when */}
+                    <div className="flex items-center gap-2.5">
                         <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-control bg-surface-muted">
                             {isFolder
                                 ? deliverableStatus ? <DeliverableIcon /> : <Folder className="h-4 w-4 fill-surface-muted text-fg-muted" />
                                 : <DocumentIcon mimeType={MIME_BY_TYPE[entry.file.type] ?? 'application/octet-stream'} className="h-4 w-4" />}
                         </div>
                         <div className="min-w-0 flex-1">
-                            <div className="flex items-start gap-1">
-                                <h3 className="min-w-0 cursor-default break-words text-small font-medium leading-snug text-fg line-clamp-2">{name}</h3>
+                            <div className="flex items-center gap-1">
+                                <Hint label={name} side="bottom">
+                                    <h3 className="min-w-0 cursor-default truncate text-small font-medium leading-snug text-fg">{name}</h3>
+                                </Hint>
                                 <Hint label={NOT_IN_DEMO}>
-                                    <button type="button" aria-label="Copy name" className="mt-0.5 shrink-0 rounded-control p-0.5 text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg">
+                                    <button type="button" aria-label="Copy name" className="shrink-0 rounded-control p-0.5 text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg">
                                         <Copy className="h-3 w-3" />
                                     </button>
                                 </Hint>
                             </div>
-                            <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-caption text-fg-muted">
-                                {docId && <span className="font-mono text-caption text-fg-subtle">{docId}</span>}
+                            <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-caption text-fg-muted">
+                                {docId && <span className="shrink-0 font-mono text-caption text-fg-subtle">{docId}</span>}
                                 {deliverableStatus && <StatusPill kind="deliverable" status={deliverableStatus} />}
-                                <span>{type}{size ? <> · {formatFileSize(size)}</> : null}</span>
+                                <span className="min-w-0 truncate">{type}{size ? <> · {formatFileSize(size)}</> : null}</span>
+                                {modified && <ModifiedStamp at={modified} by={OWNER} className="ml-auto pl-1" />}
                             </div>
-                            {modified && <p className="mt-0.5 text-caption text-fg-subtle">Modified {formatSmartDateTime(modified)} by {OWNER}</p>}
                         </div>
                     </div>
                 </div>
@@ -309,6 +315,7 @@ function EntryRow({
     deliverableStatus,
     dueDate,
     tracked,
+    inside = false,
     pinTools = false,
     selected,
     onToggleSelect,
@@ -321,8 +328,10 @@ function EntryRow({
     onOpenFolder?: () => void
     deliverableStatus?: DeliverableStatus
     dueDate?: string | null
-    /** A deliverable or something inside one: an empty Status or Due reads "Not set", not a dash. */
+    /** A deliverable, or a document inside one: an empty Status or Due reads "Not set", not a dash. */
     tracked: boolean
+    /** Inside a deliverable: a folder here wears the lighter folder-plus, though it has no Status or Due. */
+    inside?: boolean
     /** The first row keeps its tools showing: the guided tour points at its ⋯, which would otherwise wait for a hover. */
     pinTools?: boolean
     selected: boolean
@@ -336,17 +345,16 @@ function EntryRow({
 }) {
     const isFolder = entry.kind === 'folder'
     const docId = isFolder ? entry.folder.docId : entry.file.docId
+    const creator = creatorOf(entryId(entry))
     const name = isFolder ? entry.folder.name.replace(/_+/g, ' ').trim() : entry.file.name
     const approved = deliverableStatus === 'approved'
     const empty = <span className="text-small text-fg-subtle">{tracked ? 'Not set' : '—'}</span>
 
     return (
         <div
-            onClick={isFolder ? onOpenFolder : undefined}
             className={`${FILE_TABLE_GRID_COLS_CLASS} ${cn(
-                'group relative grid h-[34px] items-center gap-4 overflow-hidden pl-1 pr-2 text-ui transition-colors',
+                'group relative grid h-[34px] cursor-default items-center gap-4 overflow-hidden pl-1 pr-2 text-ui transition-colors',
                 selected ? 'bg-surface-selected' : approved ? 'bg-action/5 hover:bg-action/10' : 'hover:bg-surface-hover',
-                isFolder ? 'cursor-pointer' : 'cursor-default',
             )}`}
         >
             <div
@@ -359,20 +367,22 @@ function EntryRow({
                 <Checkbox checked={selected} className="pointer-events-none h-4 w-4" />
             </div>
 
-            <div className="flex min-w-0 items-center">
-                <span className="truncate text-small tabular-nums text-fg-subtle">{docId}</span>
+            {/* As in the app: a folder opens from its ID and Name cells only, not from the value cells */}
+            <div className={cn('flex min-w-0 items-center', isFolder && 'cursor-pointer')} onClick={isFolder ? onOpenFolder : undefined}>
+                <span className="truncate text-small tabular-nums text-fg-muted">{docId}</span>
             </div>
 
             {/* Name spans the badge and tool tracks, as in the app: the name runs on into the space the tools leave */}
-            <div className={`col-span-3 flex min-w-0 items-center gap-3 ${FILE_TABLE_COL_LINE_CLASS}`}>
+            <div className={cn('col-span-3 flex min-w-0 items-center gap-3', isFolder && 'cursor-pointer', FILE_TABLE_COL_LINE_CLASS)} onClick={isFolder ? onOpenFolder : undefined}>
                 <span className="flex h-4 w-4 flex-shrink-0 items-center justify-center">
+                    {/* As in the app: deliverable folders and the folders inside one wear folder-plus; documents keep their type icons */}
                     {isFolder ? (
-                        deliverableStatus ? <DeliverableIcon hint /> : <Folder className="h-4 w-4 fill-surface-muted text-fg-muted" />
+                        deliverableStatus ? <DeliverableIcon hint /> : inside ? <DeliverableIcon hint inside /> : <Folder className="h-4 w-4 fill-surface-muted text-fg-muted" />
                     ) : (
                         <DocumentIcon mimeType={MIME_BY_TYPE[entry.file.type] ?? 'application/octet-stream'} className="h-4 w-4" />
                     )}
                 </span>
-                <span className="min-w-0 flex-1 truncate text-fg">{name}</span>
+                <span className={cn('min-w-0 flex-1 truncate text-fg', isFolder && 'hover:underline')}>{name}</span>
                 {/* The deliverable marker steps aside once the Status column has room to say it. */}
                 {deliverableStatus && (
                     <Hint label={approved ? 'Deliverable — approved' : 'Deliverable'}>
@@ -384,6 +394,7 @@ function EntryRow({
 
                 {/* Row tools on hover or focus (always on touch screens), and while the row is in use; at rest they take no width */}
                 <div
+                    onClick={(e) => e.stopPropagation()}
                     className={cn(
                         'flex shrink-0 items-center justify-end gap-0.5 transition-opacity duration-ui-fast',
                         !selected && !pinTools && 'max-w-0 overflow-hidden opacity-0 focus-within:max-w-none focus-within:opacity-100 group-hover:max-w-none group-hover:opacity-100 has-[[data-state=open]]:max-w-none has-[[data-state=open]]:opacity-100 [@media(hover:none)]:max-w-none [@media(hover:none)]:opacity-100',
@@ -416,8 +427,8 @@ function EntryRow({
             </div>
 
             <div className={`min-w-0 items-center gap-1.5 ${OWNER_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}>
-                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-surface-muted text-[9px] font-medium text-fg-muted">{initialsOf(OWNER)}</span>
-                <span className="truncate text-fg-muted">{OWNER}</span>
+                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-surface-muted text-[9px] font-medium text-fg-muted">{initialsOf(creator)}</span>
+                <span className="truncate text-fg-muted">{creator}</span>
             </div>
 
             <div className={`items-center ${DATE_MODIFIED_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}>
@@ -503,6 +514,15 @@ export function DemoFileList({
             else next.add(id)
             return next
         })
+    // How many are here, on the crumb for here, as in the app; "2 of 5" while a filter narrows them
+    const countChip = totalCount > 0 ? (
+        <span
+            className="inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full bg-surface px-1 text-[11px] font-medium leading-none tabular-nums text-fg-muted shadow-[inset_0_0_0_1px_var(--ui-line)]"
+            aria-label={itemCount === totalCount ? `${totalCount} items` : `${itemCount} of ${totalCount} items`}
+        >
+            {itemCount === totalCount ? totalCount : `${itemCount} of ${totalCount}`}
+        </span>
+    ) : null
     const openFolder = (next: DemoFolder[]) => {
         setSelected(new Set())
         setPath(next)
@@ -529,10 +549,11 @@ export function DemoFileList({
                         <button
                             type="button"
                             onClick={() => openFolder([])}
-                            className={cn('flex items-center rounded-control px-1.5 py-1 transition-colors hover:bg-surface-hover', path.length === 0 ? 'text-fg' : 'text-fg-muted')}
+                            className={cn('flex items-center gap-1.5 rounded-control px-1.5 py-1 transition-colors hover:bg-surface-hover', path.length === 0 ? 'bg-surface-subtle text-fg' : 'text-fg-muted')}
                             aria-label="Files root"
                         >
                             <Briefcase className="h-3.5 w-3.5 text-fg-subtle" />
+                            {path.length === 0 && countChip}
                         </button>
                         {path.map((folder, i) => (
                             <div key={folder.id} className="flex min-w-0 items-center">
@@ -541,21 +562,20 @@ export function DemoFileList({
                                     type="button"
                                     onClick={() => openFolder(path.slice(0, i + 1))}
                                     className={cn(
-                                        'flex min-w-0 max-w-[200px] items-center gap-1.5 rounded-control px-1.5 py-1 transition-colors hover:bg-surface-hover',
-                                        i === path.length - 1 ? 'text-fg' : 'text-fg-muted',
+                                        'flex min-w-0 items-center gap-1.5 rounded-control px-1.5 py-1 transition-colors hover:bg-surface-hover',
+                                        i === path.length - 1 ? 'max-w-[220px] bg-surface-subtle text-fg' : 'max-w-[200px] text-fg-muted',
                                     )}
                                 >
-                                    <Folder className="h-3.5 w-3.5 shrink-0 text-fg-subtle" />
+                                    {/* As in the app: a deliverable crumb, or one inside a deliverable, wears folder-plus */}
+                                    {insideDeliverable
+                                        ? <DeliverableIcon inside={i > 0} className="h-3.5 w-3.5" />
+                                        : <Folder className="h-3.5 w-3.5 shrink-0 text-fg-subtle" />}
                                     <span className="truncate">{folder.name.replace(/_+/g, ' ').trim()}</span>
+                                    {i === path.length - 1 && countChip}
                                 </button>
                             </div>
                         ))}
                     </div>
-                    {totalCount > 0 && (
-                        <span className="shrink-0 text-caption font-normal tabular-nums text-fg-subtle" aria-label={`${itemCount} of ${totalCount} items`}>
-                            {itemCount === totalCount ? totalCount : `${itemCount} of ${totalCount}`}
-                        </span>
-                    )}
                 </div>
 
                 {selected.size > 0 ? (
@@ -626,7 +646,7 @@ export function DemoFileList({
                         <div className={`col-span-3 flex items-center ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Name" icon={<Type />} /></div>
                         <div className={`items-center ${STATUS_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Status" icon={<CircleDot />} /></div>
                         <div className={`items-center ${DUE_DATE_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Due" icon={<Flag />} /></div>
-                        <div className={`items-center ${OWNER_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Owner" icon={<UserRound />} /></div>
+                        <div className={`items-center ${OWNER_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Created by" icon={<UserRound />} /></div>
                         <div className={`items-center ${DATE_MODIFIED_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Modified" icon={<Clock3 />} /></div>
                         <div className={`items-center ${FILE_SIZE_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Size" icon={<HardDrive />} /></div>
                     </div>
@@ -642,11 +662,13 @@ export function DemoFileList({
                                 onOpenFolder={entry.kind === 'folder' ? () => openFolder([...path, entry.folder]) : undefined}
                                 deliverableStatus={entry.kind === 'folder' ? (statusOverrides[id] ?? deliverableStatusByFolderId?.[id]) : undefined}
                                 status={statusFor(entry)}
-                                statusEditable={(insideDeliverable && !deliverableApproved) || (entry.kind === 'folder' && !!deliverableStatusByFolderId?.[id] && statusFor(entry) !== 'approved')}
+                                // As in the app: the deliverable and its documents have a Status; the folders inside it only organize it
+                                statusEditable={(entry.kind === 'file' && insideDeliverable && !deliverableApproved) || (entry.kind === 'folder' && !!deliverableStatusByFolderId?.[id] && statusFor(entry) !== 'approved')}
                                 onSetStatus={(next) => setStatus(entry, next)}
                                 dueDate={id in dueOverrides ? dueOverrides[id] : entry.kind === 'folder' ? deliverableDueByFolderId?.[id] : null}
                                 onSetDue={(next) => setDueOverrides((prev) => ({ ...prev, [id]: next }))}
-                                tracked={insideDeliverable || (entry.kind === 'folder' && !!deliverableStatusByFolderId?.[id])}
+                                tracked={(entry.kind === 'file' && insideDeliverable) || (entry.kind === 'folder' && !!deliverableStatusByFolderId?.[id])}
+                                inside={insideDeliverable}
                                 pinTools={index === 0}
                                 selected={selected.has(id)}
                                 onToggleSelect={() => toggle(id)}

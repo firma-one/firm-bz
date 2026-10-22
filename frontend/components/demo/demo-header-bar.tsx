@@ -110,7 +110,7 @@ export function DemoHeaderBar({ onOpenMobileNav, inboxCount }: { onOpenMobileNav
                         'relative flex h-7 w-7 items-center justify-center rounded-control text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg',
                         pathname === '/tour/inbox' && 'bg-surface-selected text-fg',
                     )}
-                    aria-label={inboxCount > 0 ? `Inbox, ${inboxCount} unread` : 'Inbox'}
+                    aria-label={inboxCount > 0 ? `Inbox, ${inboxCount} need${inboxCount === 1 ? 's' : ''} you` : 'Inbox'}
                 >
                     <Inbox className="h-4 w-4" />
                     {inboxCount > 0 && <span aria-hidden className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-action" />}

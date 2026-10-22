@@ -492,8 +492,9 @@ export async function updateEngagement(
             const prev = project.dueDate ? new Date(project.dueDate).toISOString().slice(0, 10) : null
             const next = parsedDue ? parsedDue.toISOString().slice(0, 10) : null
             if (prev !== next && parsedDue) {
+                // Every member but whoever set it: no one is told of their own change
                 const members = await prisma.engagementMember.findMany({
-                    where: { engagementId: projectId },
+                    where: { engagementId: projectId, ...(user?.id ? { userId: { not: user.id } } : {}) },
                     select: { userId: true },
                 })
                 const rows = members.map((m: any) => ({

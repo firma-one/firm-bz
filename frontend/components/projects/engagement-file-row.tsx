@@ -225,9 +225,11 @@ export function EngagementFileRow({
     const canEditDueDate = canManage && (!isFolder || !!file.isDeliverable) && !isFolderApproved && !locked && !isIntakeRow
     // The Status column shows a deliverable's stage; the row's deliverable badge steps aside while it's visible.
     const hasStatus = !!file.isDeliverable && !!file.deliverableStatus
-    // A deliverable and everything inside one is tracked, so an empty Status or Due reads "Not set"; other rows show a dash.
-    const isTracked = !!file.isDeliverable || isInsideApprovedDeliverable
+    // Tracked work: a deliverable, and the documents inside one. An empty Status or Due reads "Not set" there.
+    // The folders inside a deliverable only organize it, so they have no Status or Due: a dash, as other rows.
+    const isInsideDeliverable = isInsideApprovedDeliverable
         || (isGuest ? descendantIdsForGuest : isEC ? descendantIdsForEC : descendantIds).has(file.id)
+    const isTracked = !!file.isDeliverable || (!isFolder && isInsideDeliverable)
     const emptyTrackedValue = isTracked ? 'Not set' : '—'
     // A row's own stage: the deliverable's, or a document's inside one.
     const statusValue = file.activityStatus ?? (file.isDeliverable ? file.deliverableStatus : null) ?? null
@@ -251,6 +253,12 @@ export function EngagementFileRow({
         }
     }
 
+    // A folder opens from its ID and Name cells only. In selection mode the click toggles the row instead.
+    const opensFolder = isFolder && selectedFileIdsSize === 0
+    const openFromCell = () => {
+        if (opensFolder) onItemClick(file)
+    }
+
     return (
         <div
             key={file.id}
@@ -264,7 +272,6 @@ export function EngagementFileRow({
             onDrop={(e) => onDrop(e, file)}
             className={`${FILE_TABLE_GRID_COLS_CLASS} ${cn(
                 "group grid gap-4 h-[34px] overflow-hidden pl-1 pr-2 transition-colors items-center cursor-default relative text-ui",
-                isFolder && selectedFileIdsSize === 0 && "cursor-pointer",
                 (isFolderApproved || isInsideApprovedDeliverable) && "bg-primary/5 hover:bg-primary/10",
                 (isIntakeRow || file.lock?.type === 'finalize' || (file.isPrivate && !isFolder)) ? "hover:bg-surface-hover opacity-60" : !(isFolderApproved || isInsideApprovedDeliverable) && "hover:bg-surface-hover",
                 !isIntakeRow && isSelected && "bg-surface-selected hover:bg-surface-selected",
@@ -276,14 +283,9 @@ export function EngagementFileRow({
             onMouseEnter={() => {
                 if (isDeeplinkHighlight) onClearHighlight()
             }}
-            onDoubleClick={() => { if (selectedFileIdsSize === 0) onItemClick(file) }}
             onClick={() => {
-                if (selectedFileIdsSize > 0) {
-                    // In selection mode: clicking anywhere on row toggles selection
-                    onToggleSelect(file.id)
-                } else {
-                    onItemClick(file)
-                }
+                // In selection mode: clicking anywhere on row toggles selection
+                if (selectedFileIdsSize > 0) onToggleSelect(file.id)
             }}
         >
             {/* Checkbox Column */}
@@ -300,28 +302,31 @@ export function EngagementFileRow({
                 />
             </div>
 
-            {/* ID Column */}
-            <div className="flex items-center min-w-0">
+            {/* ID Column — with the Name, the only cells that open a folder: the others hold values,
+                some of them editable, so a click there shouldn't navigate */}
+            <div className={cn("flex items-center min-w-0", opensFolder && "cursor-pointer")} onClick={openFromCell}>
                 {file.docId ? (
-                    <span className="text-small text-fg-subtle tabular-nums truncate">
+                    <span className="text-small text-fg-muted tabular-nums truncate">
                         {file.docId}
                     </span>
                 ) : (
-                    <span className="text-[11px] text-[#c0c1c6]">—</span>
+                    <span className="text-small text-fg-subtle">—</span>
                 )}
             </div>
 
             {/* Name Column: icon and name (deeplink = skewed pastel marker on file name only), then the row's badges
                 and tools. It spans the Name, badge and tool tracks, so the name runs on into whatever space they leave. */}
-            <div className={cn("col-span-3 flex items-center gap-3 min-w-0", FILE_TABLE_COL_LINE_CLASS)}>
+            <div className={cn("col-span-3 flex items-center gap-3 min-w-0", opensFolder && "cursor-pointer", FILE_TABLE_COL_LINE_CLASS)} onClick={openFromCell}>
                 <div className="flex-shrink-0 w-4 h-4 flex items-center justify-center">
+                    {/* A deliverable folder and the folders inside one wear folder-plus (inside ones a shade lighter);
+                        documents keep their file-type icons; a folder that only contains a deliverable keeps the
+                        shared-folder mark */}
                     {isFolder && file.isDeliverable ? (
                         <DeliverableIcon hint />
+                    ) : isFolder && (isAncestorShared || isInsideApprovedDeliverable) ? (
+                        <DeliverableIcon hint inside />
                     ) : isFolder && showBadge ? (
-                        <SharedFolderIcon
-                            fillLevel={isAncestorShared ? 0.5 : 1}
-                            tooltip={isAncestorShared ? 'contains-shared' : 'shared'}
-                        />
+                        <SharedFolderIcon fillLevel={1} tooltip="Contains a deliverable" />
                     ) : isFolder ? (
                         <Folder className="h-4 w-4 fill-surface-muted text-fg-muted flex-shrink-0" />
                     ) : (
@@ -401,7 +406,9 @@ export function EngagementFileRow({
                                 <TooltipContent side="top" className="text-xs">Bookmarked — click to remove</TooltipContent>
                             </Tooltip>
                         )}
-                        {(showBadge || isIntakeRow) ? (
+                        {/* Only a deliverable itself (until the Status column says it) and a pending upload carry this
+                            badge; rows inside a deliverable already show it in their icon and the breadcrumb */}
+                        {(isIntakeRow || directShared) ? (
                             <Tooltip>
                                 <TooltipTrigger asChild>
                                     <span className={`${hasStatus && !isIntakeRow ? '@[49rem]/file-table:hidden ' : ''}inline-flex items-center shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium border ${
@@ -605,7 +612,7 @@ export function EngagementFileRow({
                     documentId={file.projectDocumentId ?? file.id}
                     fileName={file.name}
                     isFolder={isFolder}
-                    status={statusValue}
+                    status={isFolder && !file.isDeliverable ? null : statusValue}
                     roleSlug={canEditStatus ? roleSlug : null}
                     emptyLabel={emptyTrackedValue}
                     emptyClassName={isTracked ? 'text-fg-subtle' : 'text-[#45474c]/40'}
@@ -632,7 +639,8 @@ export function EngagementFileRow({
                     />
                 ) : (
                     <>
-                    {file.dueDate ? (() => {
+                    {/* Folders other than deliverables have no Due, whatever an older value says */}
+                    {file.dueDate && (!isFolder || file.isDeliverable) ? (() => {
                         const due = new Date(file.dueDate)
                         const now = Date.now()
                         const diffMs = due.getTime() - now
@@ -670,17 +678,14 @@ export function EngagementFileRow({
                 )}
             </div>
 
-            {/* Owner Column */}
+            {/* Created by: who added it — the member who added it in the app, not the connector account
+                Drive names as the owner of everything the app adds; for a file added straight in Drive,
+                its Drive owner (lib/files/file-creator.ts) */}
             <div className={cn('min-w-0', OWNER_COL_CLASS, FILE_TABLE_COL_LINE_CLASS)}>
                 {(() => {
-                    const ownerName = file.owners?.[0]?.displayName
-                        || file.lastModifyingUser?.displayName
-                        || (file.actorEmail ? file.actorEmail.split('@')[0] : null)
-                        || null
-                    const ownerEmail = file.owners?.[0]?.emailAddress
-                        || file.actorEmail
-                        || null
-                    const ownerPhoto = file.owners?.[0]?.photoLink || null
+                    const ownerName = file.creator?.displayName || null
+                    const ownerEmail = file.creator?.emailAddress || null
+                    const ownerPhoto = file.creator?.photoLink || null
                     const isMe = ownerEmail && sessionUserEmail
                         && ownerEmail.toLowerCase() === sessionUserEmail.toLowerCase()
                     const ROLE_LABELS: Record<string, string> = {
@@ -689,7 +694,10 @@ export function EngagementFileRow({
                         eng_ext_collaborator: 'External Collaborator',
                         eng_viewer: 'Reviewer',
                     }
-                    const personaName = file.ownerRole ? (ROLE_LABELS[file.ownerRole] ?? file.ownerRole) : undefined
+                    const roleLabel = file.ownerRole ? (ROLE_LABELS[file.ownerRole] ?? file.ownerRole) : undefined
+                    const personaName = file.creator?.viaDrive
+                        ? (roleLabel ? `${roleLabel} · added in Drive` : 'Added in Drive')
+                        : roleLabel
                     if (!ownerName) return (
                         <span className="text-[0.8125rem] text-fg-muted">—</span>
                     )

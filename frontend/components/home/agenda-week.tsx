@@ -7,7 +7,7 @@ import { type LucideProps, AlertCircle, ArrowRight, Bell, Briefcase, CalendarDay
 import { DeliverableGlyph } from '@/components/ui/deliverable-icon'
 import type { CalendarEventType } from "@/lib/actions/calendar"
 import { getEngagementTagColor } from "@/lib/calendar/engagement-color"
-import { EmptyPanel } from "@/components/ui/empty-panel"
+import { HomeEmptyLine, HomeSection } from "./home-section"
 import { ShimmerBar } from "@/components/ui/shimmer"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
@@ -137,15 +137,15 @@ export function AgendaWeek({
 
     return (
         <TooltipProvider delayDuration={300}>
-        <section className="flex flex-col gap-2">
-            <div className="flex items-center justify-between gap-2">
-                <h2 className="text-h3 text-fg">Agenda</h2>
-                {calendarHref && (
-                    <Link href={calendarHref} className="flex items-center gap-1 text-small text-fg-muted transition-colors hover:text-fg">
-                        Open calendar <ArrowRight className="h-3.5 w-3.5" />
-                    </Link>
-                )}
-            </div>
+        <HomeSection
+            icon={<CalendarDays />}
+            title="Agenda"
+            actions={calendarHref && (
+                <Link href={calendarHref} className="flex items-center gap-1 text-small text-fg-muted transition-colors hover:text-fg">
+                    Open calendar <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+            )}
+        >
 
             {!today ? (
                 <div className="flex h-32 flex-col justify-center gap-2 rounded-card border border-line px-3" aria-hidden>
@@ -153,9 +153,7 @@ export function AgendaWeek({
                     <ShimmerBar className="w-1/2" />
                 </div>
             ) : total === 0 && overdue.length === 0 ? (
-                <div className="rounded-card border border-line">
-                    <EmptyPanel compact icon={<CalendarDays />} title="Nothing overdue or on the calendar this week" description="Kickoffs, due dates, follow-ups and your reminders show up here." />
-                </div>
+                <HomeEmptyLine>Nothing overdue or on the calendar this week.</HomeEmptyLine>
             ) : (
                 <div className="overflow-hidden rounded-card border border-line">
                 {overdue.length > 0 && (
@@ -255,7 +253,7 @@ export function AgendaWeek({
                 )}
                 </div>
             )}
-        </section>
+        </HomeSection>
         </TooltipProvider>
     )
 }

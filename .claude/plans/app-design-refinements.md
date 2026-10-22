@@ -372,8 +372,9 @@ From the canvas's section 7 (the full "views" redesign was judged too extreme; t
 - **Deliverables toggle.** A toggle pill shows only deliverables, what's inside them, and the folders above
   them.
 - **Status and Due columns.** Status is the deliverable's stage (the Board's pill); Due is editable in place
-  for files and deliverable folders. For a deliverable or anything inside one, an empty value reads
-  "Not set"; other rows show a dash. Columns hide from the right as the pane narrows: Size, Modified,
+  for files and deliverable folders. For a deliverable or a document inside one, an empty value reads
+  "Not set"; folders inside a deliverable only organize it, so they have neither (a dash, not editable), as
+  other rows. Columns hide from the right as the pane narrows: Size, Modified,
   Owner, Due, then Status.
 - **Status changes in place.** On a deliverable or a document inside one, the Status cell is a picker
   offering only the stages the viewer's role may move it to, from `getAllowedTransitions` — the rules the
@@ -386,14 +387,23 @@ From the canvas's section 7 (the full "views" redesign was judged too extreme; t
   where it stands alone (`DeliverableIcon`, `DeliverableGlyph`) — Files rows, the Board, the action menu's
   header, the deliverable panel, the share dialog, the Inbox, Home, the calendar's event dialog — and in
   the surrounding color inside calendar chips, filter pills (Files' Deliverables, Doc Search) and section
-  headers (the Overview's Deliverables and Status). No package icons remain. Folders inside or above a
-  deliverable keep their own marks.
+  headers (the Overview's Deliverables and Status). No package icons remain. A folder inside a deliverable,
+  and a breadcrumb crumb that is or sits inside one, wear it a shade lighter; documents keep their file-type
+  icons; rows inside a deliverable carry no trailing badge. A folder that only contains a deliverable keeps
+  the shared-folder mark.
 - **Promote and demote.** The menu says "Promote Folder to Deliverable" (folder-plus) and "Demote
   Deliverable to Folder" (folder-minus, in red), and so do their dialogs and toasts.
 - **"Due", everywhere.** Field labels, column headers, tooltips and placeholders say "Due" (and "Start"),
   not "Due date". Sentences keep "due date".
 - **Document action menu.** Stays three levels for now, made compact: 288px wide, 13px text, 26px rows,
   14px icons, a tighter header. Submenus slide 4px and fade in 100ms, without the zoom.
+- **Created by, not Owner** (Deepak, 2026-10-22). Everything added through the app goes through the
+  connector's Drive account, so Drive's owner was that account on every row. The column is now "Created
+  by": the member who added the file in the app (`engagement_documents.createdBy`); for a file added
+  straight in Drive, its Drive owner, by their member name when they're on the engagement, marked "added in
+  Drive" in the profile popup — never the last modifier (`lib/files/file-creator.ts`). The People filter
+  ("Created by me / others") and the menu's Details read the same value. External collaborators' intake
+  uploads now record the uploader, so approval no longer credits the approver.
 - **The tour mirrors every change** (`components/demo/*`), including the action menu, which the tour
   copies because the real one needs a signed-in session.
 
@@ -415,3 +425,43 @@ date, in place:
   read back as that day); a day with a time as an ISO instant. Table cells show the compact form
   ("Oct 30 · 3:30 PM"), so Files' Due column is 128px.
 - The tour's menu and Due cells use the same panel; Due is the one action that works there.
+
+## 13. Home: one heading style, and what "needs you" means (decided 2026-10-22)
+
+Home was hard to read because its sections had three heading styles (plain h3, gray collapsible bars,
+an icon heading with tabs), empty states that took 40% of the screen to say "nothing here", and
+uneven gaps. Rules between sections would have made it look like a form. Instead:
+
+- **One heading for every section** (`components/home/home-section.tsx`): a 16px muted icon, a 14px
+  semibold title, a muted count, any action at the right, over a hairline. Content starts 12px below,
+  and sections sit 40px apart.
+- **One-line empty states:** muted text under the heading, with no icon or box ("All caught up…",
+  "Nothing overdue or on the calendar this week.").
+- **A fixed order:** Needs you, Continue where you left off, Agenda, My engagements, Bookmarks. Needs
+  you is always first, so nothing moves with the day's state. When empty it's one line.
+- **Needs you is what is waiting on you, read from current state** (`lib/home/my-work.ts`), so an item
+  leaves once it is dealt with, never because a notification was read:
+  - deliverables in review, and client uploads to approve, for the lead (as before);
+  - **client comments no one has answered** (the document's latest comment is an external member's),
+    for the lead. A team reply clears it;
+  - **changes requested** on what you own (assignee, else whoever added it): the latest stage change
+    was In review → In progress, made by someone else, and it is still In progress;
+  - your reminders that are review requests or have no date (Reconnect Drive, say).
+  Deadlines stay in the Agenda (its Overdue row and week), so due work isn't listed twice.
+- The tour's Home is the same view over demo data, which now includes a client comment and changes
+  requested.
+
+**The Inbox, on the same rules** (built 2026-10-22):
+
+- **The badge counts only what needs you:** Home's Needs you, per firm (`lib/actions/inbox.ts`, through
+  `getMyWork`), so the badge, Home and the Inbox can't disagree. Notifications never add to it. The
+  reminder rule (review requests and undated reminders) lives in `lib/home/needs-you-rules.ts`, shared
+  by the server and the Inbox.
+- **Two views:** *Needs you*: "Waiting on you" (the badge's items; approvals, client comments and
+  changes requested open with their own action and have no Done or Dismiss, since they clear once dealt
+  with), then dated reminders (Overdue, Due today, Upcoming), which the badge doesn't count. *Updates*:
+  notifications, newest first, with unread dots and Mark all read. `?tab=notifications` lands on
+  Updates.
+- **No one is notified of their own change:** a document or engagement due date set, a client
+  accepting, a staging upload. Status changes already skipped the actor.
+- The tour's Inbox and badge follow the same rule over its demo data.

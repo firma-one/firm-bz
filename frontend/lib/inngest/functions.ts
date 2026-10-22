@@ -80,8 +80,9 @@ export const indexFileForSearch = inngest.createFunction(
 
                 if (!stagingFolderId || parentId !== stagingFolderId) return
 
+                // Not whoever put it there: no one is told of their own change
                 const leads = await prisma.engagementMember.findMany({
-                    where: { engagementId: projectId, role: 'eng_admin' },
+                    where: { engagementId: projectId, role: 'eng_admin', ...(event.data.actorId ? { userId: { not: event.data.actorId } } : {}) },
                     select: { userId: true },
                 })
                 if (!leads.length) return
@@ -131,7 +132,7 @@ export const indexFileForSearch = inngest.createFunction(
                 })
 
                 const leads = await prisma.engagementMember.findMany({
-                    where: { engagementId: projectId, role: { in: ['eng_admin', 'eng_member'] } },
+                    where: { engagementId: projectId, role: { in: ['eng_admin', 'eng_member'] }, userId: { not: uploadedBy } },
                     select: { userId: true },
                 })
                 if (!leads.length) return

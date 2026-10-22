@@ -182,6 +182,17 @@ export interface DueDateInfo {
   formattedDate: string
 }
 
+/**
+ * Who added a file: the member who added it through the app, or — `viaDrive` — the Drive owner of a
+ * file added straight in Drive.
+ */
+export interface FileCreator {
+  displayName: string
+  emailAddress: string | null
+  photoLink: string | null
+  viaDrive: boolean
+}
+
 export interface DriveFile {
   id: string
   /** Internal projectDocument UUID (never shown to end-users as Drive id). Present for files indexed into engagement_documents. */
@@ -207,6 +218,8 @@ export interface DriveFile {
   }[]
   /** Engagement role of the file owner (e.g. eng_admin, eng_viewer). Populated server-side for display. */
   ownerRole?: string | null
+  /** Who added it — the Files "Created by" column (lib/files/file-creator.ts). */
+  creator?: FileCreator | null
   parents?: string[]
   source?: string
   connectorId?: string
