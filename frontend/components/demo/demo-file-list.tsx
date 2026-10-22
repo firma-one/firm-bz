@@ -507,6 +507,15 @@ export function DemoFileList({
             else next.add(id)
             return next
         })
+    // How many are here, on the crumb for here, as in the app; "2 of 5" while a filter narrows them
+    const countChip = totalCount > 0 ? (
+        <span
+            className="inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full bg-surface px-1 text-[11px] font-medium leading-none tabular-nums text-fg-muted shadow-[inset_0_0_0_1px_var(--ui-line)]"
+            aria-label={itemCount === totalCount ? `${totalCount} items` : `${itemCount} of ${totalCount} items`}
+        >
+            {itemCount === totalCount ? totalCount : `${itemCount} of ${totalCount}`}
+        </span>
+    ) : null
     const openFolder = (next: DemoFolder[]) => {
         setSelected(new Set())
         setPath(next)
@@ -533,10 +542,11 @@ export function DemoFileList({
                         <button
                             type="button"
                             onClick={() => openFolder([])}
-                            className={cn('flex items-center rounded-control px-1.5 py-1 transition-colors hover:bg-surface-hover', path.length === 0 ? 'text-fg' : 'text-fg-muted')}
+                            className={cn('flex items-center gap-1.5 rounded-control px-1.5 py-1 transition-colors hover:bg-surface-hover', path.length === 0 ? 'bg-surface-subtle text-fg' : 'text-fg-muted')}
                             aria-label="Files root"
                         >
                             <Briefcase className="h-3.5 w-3.5 text-fg-subtle" />
+                            {path.length === 0 && countChip}
                         </button>
                         {path.map((folder, i) => (
                             <div key={folder.id} className="flex min-w-0 items-center">
@@ -545,8 +555,8 @@ export function DemoFileList({
                                     type="button"
                                     onClick={() => openFolder(path.slice(0, i + 1))}
                                     className={cn(
-                                        'flex min-w-0 max-w-[200px] items-center gap-1.5 rounded-control px-1.5 py-1 transition-colors hover:bg-surface-hover',
-                                        i === path.length - 1 ? 'text-fg' : 'text-fg-muted',
+                                        'flex min-w-0 items-center gap-1.5 rounded-control px-1.5 py-1 transition-colors hover:bg-surface-hover',
+                                        i === path.length - 1 ? 'max-w-[220px] bg-surface-subtle text-fg' : 'max-w-[200px] text-fg-muted',
                                     )}
                                 >
                                     {/* As in the app: a deliverable crumb, or one inside a deliverable, wears folder-plus */}
@@ -554,15 +564,11 @@ export function DemoFileList({
                                         ? <DeliverableIcon inside={i > 0} className="h-3.5 w-3.5" />
                                         : <Folder className="h-3.5 w-3.5 shrink-0 text-fg-subtle" />}
                                     <span className="truncate">{folder.name.replace(/_+/g, ' ').trim()}</span>
+                                    {i === path.length - 1 && countChip}
                                 </button>
                             </div>
                         ))}
                     </div>
-                    {totalCount > 0 && (
-                        <span className="shrink-0 text-caption font-normal tabular-nums text-fg-subtle" aria-label={`${itemCount} of ${totalCount} items`}>
-                            {itemCount === totalCount ? totalCount : `${itemCount} of ${totalCount}`}
-                        </span>
-                    )}
                 </div>
 
                 {selected.size > 0 ? (

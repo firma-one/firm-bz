@@ -2218,6 +2218,16 @@ const handleRefresh = async () => {
                                     : descendantIds.has(id) || descendantIdsForEC.has(id) || descendantIdsForGuest.has(id)
                                         ? <DeliverableIcon inside className="mr-1.5 h-3.5 w-3.5" />
                                         : <Folder className="h-3.5 w-3.5 mr-1.5 text-fg-subtle flex-shrink-0" />
+                            // How many are here, on the crumb for here; "2 of 5" while a filter or search narrows them
+                            const countChip = (index: number) =>
+                                index === breadcrumbs.length - 1 && !loading && files.length > 0 ? (
+                                    <span
+                                        className="ml-1.5 inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full bg-surface px-1 text-[11px] font-medium leading-none tabular-nums text-fg-muted shadow-[inset_0_0_0_1px_var(--ui-line)]"
+                                        aria-label={sortedFiles.length === files.length ? `${files.length} items` : `${sortedFiles.length} of ${files.length} items`}
+                                    >
+                                        {sortedFiles.length === files.length ? files.length : `${sortedFiles.length} of ${files.length}`}
+                                    </span>
+                                ) : null
                             const showAll = breadcrumbs.length <= 4
                             const displayItems: { item: BreadcrumbItem; index: number; isEllipsis: boolean; isRoot: boolean }[] = showAll
                                 ? breadcrumbs.map((item, index) => ({ item, index, isEllipsis: false, isRoot: index === ROOT_INDEX }))
@@ -2258,6 +2268,7 @@ const handleRefresh = async () => {
                                                             {currentFolderType === 'staging' && <Inbox className="h-3.5 w-3.5 mr-1.5 text-amber-500 flex-shrink-0" />}
                                                             {!currentFolderType && <Folder className="h-3.5 w-3.5 mr-1.5 text-fg-subtle flex-shrink-0" />}
                                                             <span className="truncate min-w-0 capitalize">{currentRootLabel}</span>
+                                                            {countChip(index)}
                                                             <ChevronDown className="h-3.5 w-3.5 ml-1 text-fg-subtle flex-shrink-0" />
                                                         </button>
                                                     </DropdownMenuTrigger>
@@ -2287,6 +2298,7 @@ const handleRefresh = async () => {
                                                     title="Files root"
                                                 >
                                                     <Briefcase className="h-3.5 w-3.5 text-primary flex-shrink-0" />
+                                                    {countChip(index)}
                                                 </button>
                                             ) : isEllipsis ? (
                                                 <button
@@ -2304,6 +2316,7 @@ const handleRefresh = async () => {
                                                     {index === 2 && <Briefcase className="h-3.5 w-3.5 mr-1.5 text-fg-subtle flex-shrink-0" />}
                                                     {index > 2 && crumbFolderIcon(item.id)}
                                                     <span className="truncate max-w-[140px]" title={item.name}>{item.name}</span>
+                                                    {countChip(index)}
                                                 </div>
                                             ) : item.isEngagementRoot ? (
                                                 <button
@@ -2316,19 +2329,21 @@ const handleRefresh = async () => {
                                                     title="Files root"
                                                 >
                                                     <Briefcase className="h-3.5 w-3.5 text-primary flex-shrink-0" />
+                                                    {countChip(index)}
                                                 </button>
                                             ) : (
                                                 <button
                                                     type="button"
                                                     onClick={() => handleBreadcrumbClick(index, item.id)}
                                                     className={cn(
-                                                        "flex items-center min-w-0 hover:bg-surface-hover px-2 py-1 rounded transition-colors max-w-[180px]",
-                                                        index === breadcrumbs.length - 1 ? "text-fg bg-surface-subtle" : "hover:text-fg"
+                                                        "flex items-center min-w-0 hover:bg-surface-hover px-2 py-1 rounded transition-colors",
+                                                        index === breadcrumbs.length - 1 ? "max-w-[220px] text-fg bg-surface-subtle" : "max-w-[180px] hover:text-fg"
                                                     )}
                                                     title={item.name}
                                                 >
                                                     {crumbFolderIcon(item.id)}
                                                     <span className="truncate min-w-0">{item.name}</span>
+                                                    {countChip(index)}
                                                 </button>
                                             )}
                                         </div>
@@ -2337,12 +2352,6 @@ const handleRefresh = async () => {
                             )
                         })()}
                     </div>
-                    {/* How many, beside where — it used to take a row of its own */}
-                    {!loading && files.length > 0 && (
-                        <span className="shrink-0 text-caption font-normal tabular-nums text-fg-subtle" aria-label={`${sortedFiles.length} of ${files.length} items`}>
-                            {sortedFiles.length === files.length ? files.length : `${sortedFiles.length} of ${files.length}`}
-                        </span>
-                    )}
                 </div>
 
                 {/* Selection bar: while files are selected, their bulk actions take the filters' row */}
