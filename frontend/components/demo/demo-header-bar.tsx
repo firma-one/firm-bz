@@ -3,7 +3,7 @@
 import { Fragment, type ReactNode } from 'react'
 import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
-import { BarChart3, Briefcase, Building2, CalendarDays, ChevronRight, ClipboardList, Folder, Home, Inbox, LayoutGrid, LifeBuoy, Menu, MessagesSquare, Search, Users } from 'lucide-react'
+import { BarChart3, Briefcase, Building2, CalendarDays, ChevronRight, ClipboardList, Folder, Home, Inbox, LayoutGrid, LifeBuoy, Menu, MessagesSquare, PanelLeftOpen, Search, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { DEMO_FIRM, getDemoClient } from '@/lib/demo/static-demo-data'
 import { DemoTourTopbarButton } from '@/components/demo/demo-tour-topbar-button'
@@ -59,7 +59,13 @@ function CrumbIcon({ icon }: { icon?: ReactNode }) {
 }
 
 /** Static counterpart to HeaderBar: breadcrumbs, then the tour, Sign up and the Inbox. */
-export function DemoHeaderBar({ onOpenMobileNav, inboxCount }: { onOpenMobileNav: () => void; inboxCount: number }) {
+export function DemoHeaderBar({ onOpenMobileNav, inboxCount, sidebarCollapsed = false, onExpandSidebar }: {
+    onOpenMobileNav: () => void
+    inboxCount: number
+    /** As the app's header: an expand button while the sidebar is collapsed. */
+    sidebarCollapsed?: boolean
+    onExpandSidebar?: () => void
+}) {
     const crumbs = useDemoCrumbs()
     const pathname = usePathname() ?? ''
 
@@ -73,6 +79,17 @@ export function DemoHeaderBar({ onOpenMobileNav, inboxCount }: { onOpenMobileNav
             >
                 <Menu className="h-4 w-4" />
             </button>
+            {sidebarCollapsed && onExpandSidebar && (
+                <button
+                    type="button"
+                    onClick={onExpandSidebar}
+                    className="hidden h-7 w-7 shrink-0 items-center justify-center rounded-control text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg lg:flex"
+                    title="Expand sidebar  ["
+                    aria-label="Expand sidebar"
+                >
+                    <PanelLeftOpen className="h-4 w-4" />
+                </button>
+            )}
 
             <nav aria-label="Breadcrumb" className="flex min-w-0 flex-1 items-center gap-1 text-ui">
                 {crumbs.map((crumb, i) => {

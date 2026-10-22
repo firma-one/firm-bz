@@ -15,6 +15,7 @@ import {
     Inbox,
     Info,
     LifeBuoy,
+    PanelLeftClose,
     ScrollText,
     Search,
     Settings,
@@ -35,6 +36,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { AccessLock } from '@/components/ui/access-lock'
 import { Hint } from '@/components/ui/tooltip'
+import { Kbd } from '@/components/ui/kbd'
 import { ClientGroup, CountBadge, SidebarItem, SidebarSection } from '@/components/shell/sidebar-v2'
 import { FirmMark } from '@/components/shell/workspace-switcher'
 import { StatusIcon } from '@/components/ui/status-icon'
@@ -58,7 +60,11 @@ export function demoFirmView(pathname: string, tab: string | null): string | nul
  *
  * Tour anchors sit on wrapping elements, so the shared rows need no demo-only props.
  */
-export function DemoSidebar({ inboxCount }: { inboxCount: number }) {
+export function DemoSidebar({ inboxCount, onCollapse }: {
+    inboxCount: number
+    /** Desktop collapse, as the app's sidebar; omitted in the mobile drawer. */
+    onCollapse?: () => void
+}) {
     const pathname = usePathname() ?? ''
     const view = demoFirmView(pathname, useSearchParams()?.get('tab') ?? null)
     const active = statusOf('engagement', 'ACTIVE')
@@ -94,6 +100,18 @@ export function DemoSidebar({ inboxCount }: { inboxCount: number }) {
                         </DropdownMenuItem>
                     </DropdownMenuContent>
                 </DropdownMenu>
+                {onCollapse && (
+                    <Hint label={<>Collapse sidebar <Kbd>[</Kbd></>} side="bottom">
+                        <button
+                            type="button"
+                            onClick={onCollapse}
+                            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-control text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg-muted"
+                            aria-label="Collapse sidebar"
+                        >
+                            <PanelLeftClose className="h-4 w-4" />
+                        </button>
+                    </Hint>
+                )}
             </div>
 
             {/* Primary */}
