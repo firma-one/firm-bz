@@ -305,11 +305,11 @@ export function EngagementFileRow({
             {/* ID Column */}
             <div className="flex items-center min-w-0">
                 {file.docId ? (
-                    <span className="text-small text-fg-subtle tabular-nums truncate">
+                    <span className="text-small text-fg-muted tabular-nums truncate">
                         {file.docId}
                     </span>
                 ) : (
-                    <span className="text-[11px] text-[#c0c1c6]">—</span>
+                    <span className="text-small text-fg-subtle">—</span>
                 )}
             </div>
 

@@ -370,7 +370,7 @@ function EntryRow({
             </div>
 
             <div className="flex min-w-0 items-center">
-                <span className="truncate text-small tabular-nums text-fg-subtle">{docId}</span>
+                <span className="truncate text-small tabular-nums text-fg-muted">{docId}</span>
             </div>
 
             {/* Name spans the badge and tool tracks, as in the app: the name runs on into the space the tools leave */}
