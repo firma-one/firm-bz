@@ -6,6 +6,7 @@ import { canViewProject } from '@/lib/permission-helpers'
 import { requireEngagementMember, visibleDocumentIdsFor } from '@/lib/engagement-access'
 import { taggedDocumentsIn } from '@/lib/comments/tagged-documents'
 import { loadPeople } from '@/lib/files/file-creator'
+import { parseSettingsFromDb } from '@/lib/sharing-settings'
 
 /**
  * GET /api/projects/[projectId]/doc-comments
@@ -90,55 +91,75 @@ export async function GET(
     engagementMembers.filter((m) => EXTERNAL_ROLES.has(m.role)).map((m) => m.userId)
   )
 
-  // When searching, match either the document name/ID or the comment text itself,
-  // so a query finds threads by what was actually said, not just by file name.
-  let matchingDocIdsFromContent: string[] = []
-  if (q) {
-    const matches = await prisma.docCommentMessage.findMany({
-      where: { engagementId: projectId, content: { contains: q, mode: 'insensitive' } },
-      select: { projectDocumentId: true },
-      distinct: ['projectDocumentId'],
-      take: 200,
-    })
-    matchingDocIdsFromContent = matches.map((m) => m.projectDocumentId)
-  }
-
-  const docs = (await prisma.engagementDocument.findMany({
-    where: {
-      engagementId: projectId,
-      ...(q
-        ? {
-            OR: [
-              { fileName: { contains: q, mode: 'insensitive' } },
-              { docId: { contains: q, mode: 'insensitive' } },
-              { id: { in: matchingDocIdsFromContent } },
-            ],
-          }
-        : {}),
-    },
-    select: { id: true, fileName: true, docId: true, externalId: true, isFolder: true, mimeType: true, settings: true },
-    take: 200,
+  // Every document with comments, as far as this viewer may see.
+  const counts = await prisma.docCommentMessage.groupBy({
+    by: ['projectDocumentId'],
+    where: { engagementId: projectId },
+    _count: { _all: true },
+  })
+  const countByDocId = Object.fromEntries(counts.map((c) => [c.projectDocumentId, c._count._all]))
+  const threadDocs = (await prisma.engagementDocument.findMany({
+    where: { engagementId: projectId, id: { in: Object.keys(countByDocId) } },
+    select: { id: true, fileName: true, docId: true, externalId: true, parentId: true, isFolder: true, mimeType: true, settings: true },
   })).filter((d) => !visible || visible.has(d.externalId))
+  if (threadDocs.length === 0) return NextResponse.json({ documents: [] })
+
+  // The deliverable a document is in: the nearest folder above it tagged as one (parentId holds
+  // the parent's Drive externalId, as in calendar-data.ts). Rows show it, and search matches it.
+  const isDeliverable = (settings: unknown) => {
+    try { return !!parseSettingsFromDb(settings).share?.createdAt } catch { return false }
+  }
+  const folders = await prisma.engagementDocument.findMany({
+    where: { engagementId: projectId, isFolder: true },
+    select: { externalId: true, parentId: true, docId: true, fileName: true, settings: true },
+  })
+  const folderByExternalId = new Map(folders.map((f) => [f.externalId, f]))
+  const deliverableAbove = (parentId: string | null): { docId: string | null; name: string } | null => {
+    for (let current = parentId, hops = 0; current && hops < 50; hops++) {
+      const folder = folderByExternalId.get(current)
+      if (!folder) return null
+      if (isDeliverable(folder.settings)) return { docId: folder.docId ?? null, name: folder.fileName }
+      current = folder.parentId
+    }
+    return null
+  }
+  const deliverableByDocId = new Map(threadDocs.map((d) => [d.id, deliverableAbove(d.parentId)]))
+
+  // Searching finds a thread by its document's name or ID, its deliverable's, or what was said in
+  // it. Comment text is encrypted at rest, so it's matched once read back, not in the query; the
+  // row then shows the newest comment that matches.
+  let docs = threadDocs
+  const matchByDocId: Record<string, { id: string; createdAt: Date; content: string; authorUserId: string | null }> = {}
+  if (q) {
+    const has = (text: string | null | undefined) => !!text && text.toLowerCase().includes(q)
+    const messages = await prisma.docCommentMessage.findMany({
+      where: { engagementId: projectId, projectDocumentId: { in: threadDocs.map((d) => d.id) } },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, projectDocumentId: true, createdAt: true, content: true, authorUserId: true },
+    })
+    for (const m of messages) {
+      if (!matchByDocId[m.projectDocumentId] && has(m.content)) matchByDocId[m.projectDocumentId] = m
+    }
+    docs = threadDocs.filter((d) => {
+      const deliverable = deliverableByDocId.get(d.id)
+      return has(d.fileName) || has(d.docId) || has(deliverable?.docId) || has(deliverable?.name) || d.id in matchByDocId
+    })
+  }
   const docIds = docs.map((d) => d.id)
   if (docIds.length === 0) return NextResponse.json({ documents: [] })
 
-  const counts = await prisma.docCommentMessage.groupBy({
-    by: ['projectDocumentId'],
-    where: { engagementId: projectId, projectDocumentId: { in: docIds } },
-    _count: { _all: true },
-  })
-
   // Latest message per document (small N; acceptable to do one query per doc for now)
-  const latestByDocId: Record<string, { createdAt: string; preview: string; authorUserId: string | null; authorIsExternal: boolean }> = {}
+  const latestByDocId: Record<string, { id: string; createdAt: string; preview: string; authorUserId: string | null; authorIsExternal: boolean }> = {}
   await Promise.all(
     docIds.map(async (docId) => {
       const latest = await prisma.docCommentMessage.findFirst({
         where: { engagementId: projectId, projectDocumentId: docId },
         orderBy: { createdAt: 'desc' },
-        select: { createdAt: true, content: true, authorUserId: true },
+        select: { id: true, createdAt: true, content: true, authorUserId: true },
       })
       if (!latest) return
       latestByDocId[docId] = {
+        id: latest.id,
         createdAt: latest.createdAt.toISOString(),
         preview: latest.content.slice(0, 220),
         authorUserId: latest.authorUserId ?? null,
@@ -147,23 +168,46 @@ export async function GET(
       }
     })
   )
+  // A match that isn't the latest comment is shown in its place.
+  const olderMatch = (docId: string) => {
+    const m = matchByDocId[docId]
+    return m && m.id !== latestByDocId[docId]?.id ? m : undefined
+  }
 
-  // Who wrote each latest comment, for a name on the row even if they've left the engagement.
-  const people = await loadPeople(Object.values(latestByDocId).map((l) => l.authorUserId ?? ''))
-  const countByDocId = Object.fromEntries(counts.map((c) => [c.projectDocumentId, c._count._all]))
+  // Who wrote each comment shown, for a name on the row even if they've left the engagement.
+  const people = await loadPeople([
+    ...Object.values(latestByDocId).map((l) => l.authorUserId ?? ''),
+    ...docIds.map((id) => olderMatch(id)?.authorUserId ?? ''),
+  ])
   const documents = docs
     .map((d) => {
       const latest = latestByDocId[d.id]
       const author = latest?.authorUserId ? people.get(latest.authorUserId) : undefined
+      const match = olderMatch(d.id)
+      const matchAuthor = match?.authorUserId ? people.get(match.authorUserId) : undefined
+      const kind = !d.isFolder ? 'file' : isDeliverable(d.settings) ? 'deliverable' : 'folder'
       return {
         projectDocumentId: d.id,
         documentName: d.fileName,
         docId: d.docId ?? null,
-        // A folder is a deliverable once it's tagged as one (settings.share.createdAt), the same rule as the Board.
-        kind: !d.isFolder ? 'file' : (d.settings as { share?: { createdAt?: unknown } } | null)?.share?.createdAt ? 'deliverable' : 'folder',
+        kind,
         mimeType: d.mimeType ?? null,
+        // The deliverable this document is in; none for a deliverable itself.
+        deliverable: kind === 'deliverable' ? null : deliverableByDocId.get(d.id) ?? null,
         count: countByDocId[d.id] ?? 0,
-        latest: latest ? { ...latest, authorName: author?.name ?? null, authorEmail: author?.email ?? null } : null,
+        latest: latest
+          ? {
+              createdAt: latest.createdAt,
+              preview: latest.preview,
+              authorUserId: latest.authorUserId,
+              authorIsExternal: latest.authorIsExternal,
+              authorName: author?.name ?? null,
+              authorEmail: author?.email ?? null,
+            }
+          : null,
+        match: match
+          ? { createdAt: match.createdAt.toISOString(), preview: match.content.slice(0, 220), authorUserId: match.authorUserId, authorName: matchAuthor?.name ?? null, authorEmail: matchAuthor?.email ?? null }
+          : null,
       }
     })
     .filter((d) => d.count > 0)
@@ -173,7 +217,11 @@ export async function GET(
       return bt.localeCompare(at)
     })
 
-  const taggedDocuments = await taggedDocumentsIn(projectId, documents.flatMap((d) => (d.latest ? [d.latest.preview] : [])), visible)
+  const taggedDocuments = await taggedDocumentsIn(
+    projectId,
+    documents.flatMap((d) => [d.latest?.preview ?? '', d.match?.preview ?? '']),
+    visible,
+  )
 
   return NextResponse.json({ documents, taggedDocuments })
 }

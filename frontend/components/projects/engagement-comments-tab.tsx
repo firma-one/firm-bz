@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useCallback, useEffect, useId, useMemo, useState } from 'react'
-import { AtSign, Search, ArrowRight, ArrowUp, MessagesSquare } from 'lucide-react'
+import { AtSign, Search, ArrowRight, MessagesSquare, Reply } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { RelativeDateTime } from '@/components/ui/relative-date-time'
@@ -31,6 +31,8 @@ export type DocRow = {
   /** What the thread is on: a deliverable shows its folder-plus mark, a file its type icon. */
   kind?: 'deliverable' | 'folder' | 'file'
   mimeType?: string | null
+  /** The deliverable a document is in, shown after its name; none for a deliverable itself. */
+  deliverable?: { docId: string | null; name: string } | null
   count: number
   latest: {
     createdAt: string
@@ -40,6 +42,71 @@ export type DocRow = {
     authorEmail: string | null
     authorIsExternal?: boolean
   } | null
+  /** When a search matched an older comment than the latest: that comment, shown in the row instead. */
+  match?: {
+    createdAt: string
+    preview: string
+    authorUserId: string | null
+    authorName: string | null
+    authorEmail: string | null
+  } | null
+}
+
+export type CommentsView = 'all' | 'awaiting' | 'mentions'
+
+/**
+ * The page's views — All, Awaiting reply (a client or external collaborator spoke last), Mentions —
+ * as small toggles like the Inbox's, with search on the same row. Shared with the tour's copy.
+ */
+export function CommentsToolbar({
+  view,
+  onView,
+  counts,
+  query,
+  onQuery,
+}: {
+  view: CommentsView
+  onView: (view: CommentsView) => void
+  counts: Record<CommentsView, number | null>
+  query: string
+  onQuery: (query: string) => void
+}) {
+  const toggle = (id: CommentsView, icon: React.ReactNode, label: string) => (
+    <button
+      type="button"
+      onClick={() => onView(id)}
+      aria-pressed={view === id}
+      className={cn(
+        'inline-flex items-center gap-1.5 rounded-control px-2 py-1 text-small transition-colors',
+        view === id
+          ? 'bg-surface-selected text-fg'
+          : 'text-fg-muted hover:bg-surface-hover hover:text-fg'
+      )}
+    >
+      {icon}
+      {label}
+      {counts[id] ? <span className="tabular-nums text-fg-subtle">{counts[id]}</span> : null}
+    </button>
+  )
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex items-center gap-0.5">
+        {toggle('all', <MessagesSquare className="h-3.5 w-3.5" />, 'All')}
+        {toggle('awaiting', <Reply className="h-3.5 w-3.5" />, 'Awaiting reply')}
+        {toggle('mentions', <AtSign className="h-3.5 w-3.5" />, 'Mentions')}
+      </div>
+      <div className="relative w-52">
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-fg-muted" />
+        <Input
+          value={query}
+          onChange={(e) => onQuery(e.target.value)}
+          placeholder="Search comments…"
+          aria-label="Search comments, documents and deliverables"
+          className="pl-8"
+        />
+      </div>
+    </div>
+  )
 }
 
 type MentionRow = {
@@ -69,7 +136,7 @@ export function EngagementCommentsTab({
   orgSlug?: string
   boardUrl?: string
 }) {
-  const [activeTab, setActiveTab] = useState<'all' | 'mentions'>('all')
+  const [activeTab, setActiveTab] = useState<CommentsView>('all')
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(true)
   const [rows, setRows] = useState<DocRow[]>([])
@@ -200,8 +267,17 @@ export function EngagementCommentsTab({
     if (opening && threads[projectDocumentId]?.status !== 'ready') loadThread(projectDocumentId)
   }
 
-  const empty = !loading && !error && rows.length === 0
-  const mentionsEmpty = !mentionsLoading && !mentionsError && mentionRows.length === 0
+  const searching = query.trim().length > 0
+  /** Threads where a client or external collaborator spoke last: the firm owes a reply. */
+  const awaiting = useMemo(() => rows.filter((r) => r.latest?.authorIsExternal), [rows])
+  const shownRows = activeTab === 'awaiting' ? awaiting : rows
+  // Mentions are few, so the search box narrows them here, by what was said or the document.
+  const shownMentions = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    return q ? mentionRows.filter((m) => m.preview.toLowerCase().includes(q) || m.documentName.toLowerCase().includes(q)) : mentionRows
+  }, [mentionRows, query])
+  const empty = !loading && !error && shownRows.length === 0
+  const mentionsEmpty = !mentionsLoading && !mentionsError && shownMentions.length === 0
 
   const goToDeliverable = (projectDocumentId: string) => {
     if (boardUrl) {
@@ -211,61 +287,19 @@ export function EngagementCommentsTab({
 
   return (
     <div className="flex flex-col gap-3">
-      {/* Filter: All / Mentions — small toggles, like the Inbox */}
-      <div className="flex items-center gap-0.5">
-        <button
-          type="button"
-          onClick={() => setActiveTab('all')}
-          className={cn(
-            'inline-flex items-center gap-1.5 rounded-control px-2 py-1 text-small transition-colors',
-            activeTab === 'all'
-              ? 'bg-surface-selected text-fg'
-              : 'text-fg-muted hover:bg-surface-hover hover:text-fg'
-          )}
-        >
-          <MessagesSquare className="h-3.5 w-3.5" />
-          All
-          {!loading && rows.length > 0 && (
-            <span className="tabular-nums text-fg-subtle">
-              {rows.length}
-            </span>
-          )}
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab('mentions')}
-          className={cn(
-            'inline-flex items-center gap-1.5 rounded-control px-2 py-1 text-small transition-colors',
-            activeTab === 'mentions'
-              ? 'bg-surface-selected text-fg'
-              : 'text-fg-muted hover:bg-surface-hover hover:text-fg'
-          )}
-        >
-          <AtSign className="h-3.5 w-3.5" />
-          Mentions
-          {!mentionsLoading && mentionRows.length > 0 && (
-            <span className="tabular-nums text-fg-subtle">
-              {mentionRows.length}
-            </span>
-          )}
-        </button>
-      </div>
+      <CommentsToolbar
+        view={activeTab}
+        onView={setActiveTab}
+        counts={{
+          all: loading ? null : rows.length,
+          awaiting: loading ? null : awaiting.length,
+          mentions: mentionsLoading ? null : shownMentions.length,
+        }}
+        query={query}
+        onQuery={setQuery}
+      />
 
-      {activeTab === 'all' && (
-        <>
-          {/* search */}
-          <div className="flex items-center justify-end">
-            <div className="relative w-52">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-fg-muted" />
-              <Input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search comments…"
-                className="pl-8"
-              />
-            </div>
-          </div>
-
+      {activeTab !== 'mentions' && (
           <div className="overflow-hidden border-t border-line">
             {error ? (
               <div className="p-6 text-sm text-rose-700 bg-rose-50 border-b border-rose-100">{error}</div>
@@ -273,30 +307,48 @@ export function EngagementCommentsTab({
               <div className="p-6 text-sm text-fg-muted">Loading comments…</div>
             ) : empty ? (
               <div className="py-12 text-center">
-                <MessagesSquare className="h-7 w-7 text-line mx-auto mb-2.5" />
-                <div className="text-sm font-medium text-fg">No comments yet</div>
-                <div className="text-xs text-fg-muted mt-1">Add a comment from any document, then it will show up here.</div>
+                {activeTab === 'awaiting' && !searching ? (
+                  <>
+                    <Reply className="h-7 w-7 text-line mx-auto mb-2.5" />
+                    <div className="text-sm font-medium text-fg">Nothing awaiting a reply</div>
+                    <div className="text-xs text-fg-muted mt-1">Threads where a client or external collaborator spoke last show up here.</div>
+                  </>
+                ) : searching ? (
+                  <>
+                    <Search className="h-7 w-7 text-line mx-auto mb-2.5" />
+                    <div className="text-sm font-medium text-fg">No comments match “{query.trim()}”</div>
+                    <div className="text-xs text-fg-muted mt-1">Search looks in what was said, and in document and deliverable names and IDs.</div>
+                  </>
+                ) : (
+                  <>
+                    <MessagesSquare className="h-7 w-7 text-line mx-auto mb-2.5" />
+                    <div className="text-sm font-medium text-fg">No comments yet</div>
+                    <div className="text-xs text-fg-muted mt-1">Add a comment from any document, then it will show up here.</div>
+                  </>
+                )}
               </div>
             ) : (
               <div className="divide-y divide-line">
-                {rows.map((r) => (
-                  <ThreadRow
-                    key={r.projectDocumentId}
-                    row={r}
-                    author={r.latest ? authorOf(r.latest.authorUserId, r.latest.authorName, r.latest.authorEmail) : null}
-                    open={expanded.has(r.projectDocumentId)}
-                    thread={threads[r.projectDocumentId]}
-                    text={text}
-                    authorOf={authorOf}
-                    onToggle={() => toggle(r.projectDocumentId)}
-                    onRetry={() => loadThread(r.projectDocumentId)}
-                    onOpenThread={() => goToDeliverable(r.projectDocumentId)}
-                  />
-                ))}
+                {shownRows.map((r) => {
+                  const shown = r.match ?? r.latest
+                  return (
+                    <ThreadRow
+                      key={r.projectDocumentId}
+                      row={r}
+                      author={shown ? authorOf(shown.authorUserId, shown.authorName, shown.authorEmail) : null}
+                      open={expanded.has(r.projectDocumentId)}
+                      thread={threads[r.projectDocumentId]}
+                      text={text}
+                      authorOf={authorOf}
+                      onToggle={() => toggle(r.projectDocumentId)}
+                      onRetry={() => loadThread(r.projectDocumentId)}
+                      onOpenThread={() => goToDeliverable(r.projectDocumentId)}
+                    />
+                  )
+                })}
               </div>
             )}
           </div>
-        </>
       )}
 
       {activeTab === 'mentions' && (
@@ -313,7 +365,7 @@ export function EngagementCommentsTab({
             </div>
           ) : (
             <div className="divide-y divide-line">
-              {mentionRows.map((r) => (
+              {shownMentions.map((r) => (
                 <div key={r.messageId} className="flex items-center gap-2 px-4 py-3 hover:bg-surface-hover transition-colors">
                   <div className="min-w-0 flex-1">
                     <div className="text-xs font-semibold text-primary truncate flex items-center gap-1">
@@ -376,6 +428,8 @@ export function ThreadRow({
   onOpenThread: () => void
 }) {
   const listId = useId()
+  /** The comment the closed row shows: the one a search matched, else the latest. */
+  const preview = r.match ?? r.latest
   const earlier = Math.min(r.count, PEEK) - 1
   const shown = thread?.status === 'ready' ? thread.messages : []
   const older = r.count - shown.length
@@ -405,6 +459,14 @@ export function ThreadRow({
             )}
           </span>
           <span className="text-sm font-semibold text-fg truncate">{r.documentName}</span>
+          {r.deliverable && (
+            <span className="flex min-w-0 shrink items-center gap-1 text-xs text-fg-subtle" title={`In ${r.deliverable.name}`}>
+              <span className="shrink-0">in</span>
+              <DeliverableIcon className="h-3 w-3" />
+              {r.deliverable.docId && <span className="shrink-0 font-mono text-[11px] font-semibold tracking-wide text-fg-muted">{r.deliverable.docId}</span>}
+              <span className="truncate">{r.deliverable.name}</span>
+            </span>
+          )}
           <span className="shrink-0 inline-flex items-center rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary tabular-nums leading-none">
             {r.count}
           </span>
@@ -413,22 +475,22 @@ export function ThreadRow({
                   className="shrink-0 inline-flex items-center gap-0.5 rounded-full bg-amber-50 border border-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-600 leading-none"
                   title="Last message is from an external contributor — awaiting your reply."
               >
-                  <ArrowUp className="h-2.5 w-2.5" />
+                  <Reply className="h-2.5 w-2.5" />
                   Awaiting reply
               </span>
           )}
         </div>
 
-        {!open && r.latest ? (
+        {!open && preview ? (
           <>
             <div className="mt-0.5 text-xs text-fg-muted line-clamp-1">
-              <span className="text-[9px] font-bold uppercase tracking-wide text-fg-subtle mr-1.5">Latest</span>
-              <CommentText content={r.latest.preview} {...text} />
+              <span className="text-[9px] font-bold uppercase tracking-wide text-fg-subtle mr-1.5">{r.match ? 'Match' : 'Latest'}</span>
+              <CommentText content={preview.preview} {...text} />
             </div>
             <div className="mt-1 flex items-center gap-1.5 text-[10px] text-fg-subtle">
               {author && <span className="font-medium text-fg-muted">{author.name}</span>}
               {author && <span aria-hidden>·</span>}
-              <RelativeDateTime date={r.latest.createdAt} iconClassName="hidden" />
+              <RelativeDateTime date={preview.createdAt} iconClassName="hidden" />
               {earlier > 0 && (
                 <>
                   <span aria-hidden>·</span>

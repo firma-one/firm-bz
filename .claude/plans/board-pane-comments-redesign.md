@@ -89,5 +89,12 @@ five on the page.
   deliverable pane, this page and their tour copies).
 - **The tour** draws the app's own `ThreadRow` over sample threads on two deliverables and a
   document in each.
-- Open: searching by comment text can't match (content is encrypted at rest, and the search filters
-  in the database); the Comments tab count still counts threads on documents an external can't see.
+- **Search** (same day, after Deepak asked whether to add Deliverable filters: no, search covers it)
+  finds a thread by what was said, by its document's name or ID, or by its deliverable's, so
+  `QSR-9` brings up the deliverable's thread and its documents'. Comment text is encrypted at rest,
+  so it's matched after reading, not in the query; a match on an older comment shows that comment in
+  the row, labeled Match. Rows for documents inside a deliverable say "in" with its mark, ID and name.
+- **Awaiting reply** sits beside All and Mentions: threads where a client or external collaborator
+  spoke last. Search is on the same row (`CommentsToolbar`, shared with the tour), and narrows
+  Mentions too.
+- Open: the Comments tab count still counts threads on documents an external can't see.

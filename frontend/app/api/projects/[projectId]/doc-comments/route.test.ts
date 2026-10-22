@@ -29,13 +29,17 @@ vi.mock('@/lib/prisma', () => ({
         userPersonalization: { findUnique: async () => ({ reminders: db.reminders }) },
         engagementMember: { findMany: async () => [] },
         engagementDocument: {
-            findMany: async ({ where }: any) => db.docs.filter((d) => !where.id?.in || where.id.in.includes(d.id)),
+            findMany: async ({ where }: any) =>
+                db.docs.filter((d) => (!where.id?.in || where.id.in.includes(d.id)) && (where.isFolder === undefined || d.isFolder === where.isFolder)),
         },
         docCommentMessage: {
-            findMany: async ({ where }: any) => db.messages.filter((m) => !where.id?.in || where.id.in.includes(m.id)),
-            groupBy: async ({ where }: any) => {
-                const ids = where.projectDocumentId.in as string[]
-                return ids.map((id) => ({ projectDocumentId: id, _count: { _all: db.messages.filter((m) => m.projectDocumentId === id).length } })).filter((c) => c._count._all > 0)
+            findMany: async ({ where, orderBy }: any) => {
+                const found = db.messages.filter((m) => (!where.id?.in || where.id.in.includes(m.id)) && (!where.projectDocumentId?.in || where.projectDocumentId.in.includes(m.projectDocumentId)))
+                return orderBy?.createdAt === 'desc' ? [...found].reverse() : found
+            },
+            groupBy: async () => {
+                const ids = Array.from(new Set(db.messages.map((m) => m.projectDocumentId)))
+                return ids.map((id) => ({ projectDocumentId: id, _count: { _all: db.messages.filter((m) => m.projectDocumentId === id).length } }))
             },
             findFirst: async ({ where }: any) => db.messages.filter((m) => m.projectDocumentId === where.projectDocumentId).at(-1) ?? null,
         },
@@ -50,8 +54,8 @@ beforeEach(() => {
     access.member = { role: 'eng_admin' }
     access.visible = null
     db.docs = [
-        { id: 'd1', externalId: 'ext1', fileName: 'Report', docId: 'QSR-9', isFolder: true, mimeType: null, settings: { share: { createdAt: '2026-09-01' } } },
-        { id: 'd2', externalId: 'ext2', fileName: 'Budget.xlsx', docId: 'QSR-14', isFolder: false, mimeType: 'application/vnd.ms-excel', settings: {} },
+        { id: 'd1', externalId: 'ext1', parentId: 'root', fileName: 'Report', docId: 'QSR-9', isFolder: true, mimeType: null, settings: { share: { createdAt: '2026-09-01' } } },
+        { id: 'd2', externalId: 'ext2', parentId: 'ext1', fileName: 'Budget.xlsx', docId: 'QSR-14', isFolder: false, mimeType: 'application/vnd.ms-excel', settings: {} },
     ]
     db.messages = [
         { id: 'm1', projectDocumentId: 'd1', createdAt: new Date('2026-10-01'), content: 'first', authorUserId: 'u1' },
@@ -66,7 +70,23 @@ describe('GET /api/projects/[projectId]/doc-comments', () => {
         const { documents } = await (await get()).json()
         const report = documents.find((d: any) => d.projectDocumentId === 'd1')
         expect(report).toMatchObject({ kind: 'deliverable', count: 2, latest: { preview: 'second', authorName: 'Name of u2' } })
-        expect(documents.find((d: any) => d.projectDocumentId === 'd2')).toMatchObject({ kind: 'file', mimeType: 'application/vnd.ms-excel' })
+        expect(report.deliverable).toBeNull()
+        expect(documents.find((d: any) => d.projectDocumentId === 'd2')).toMatchObject({
+            kind: 'file', mimeType: 'application/vnd.ms-excel', deliverable: { docId: 'QSR-9', name: 'Report' },
+        })
+    })
+
+    it('finds threads by their deliverable: the deliverable’s own, and its documents’', async () => {
+        const { documents } = await (await get('?q=qsr-9')).json()
+        expect(documents.map((d: any) => d.projectDocumentId).sort()).toEqual(['d1', 'd2'])
+    })
+
+    it('finds a thread by what was said, showing the comment that matched when it isn’t the latest', async () => {
+        const { documents } = await (await get('?q=FIRST')).json()
+        expect(documents).toHaveLength(1)
+        expect(documents[0]).toMatchObject({ projectDocumentId: 'd1', latest: { preview: 'second' }, match: { preview: 'first', authorName: 'Name of u1' } })
+        const latestHit = (await (await get('?q=second')).json()).documents[0]
+        expect(latestHit.match).toBeNull()
     })
 
     it('is for engagement members only, as a document’s thread is', async () => {
