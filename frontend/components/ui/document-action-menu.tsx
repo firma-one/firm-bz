@@ -1350,7 +1350,20 @@ export function DocumentActionMenu({
                                   <span className="text-xs">{formatSmartDateTime(document.createdTime)}</span>
                                 </div>
                               )}
-                              {(document.owners?.[0]?.displayName || document.lastModifyingUser?.displayName) && (
+                              {/* Who added it, as the Files Created by column says (lib/files/file-creator.ts) */}
+                              {document.creator?.displayName ? (
+                                <div className="flex justify-between items-center">
+                                  <span className="text-xs text-fg-muted">Created by</span>
+                                  <UserAvatarWithTooltip
+                                    displayName={document.creator.displayName}
+                                    photoLink={document.creator.photoLink ?? undefined}
+                                    email={document.creator.emailAddress ?? undefined}
+                                    avatarSize="md"
+                                    showEmail={true}
+                                    showRole={false}
+                                  />
+                                </div>
+                              ) : (document.owners?.[0]?.displayName || document.lastModifyingUser?.displayName) && (
                                 <div className="flex justify-between items-center">
                                   <span className="text-xs text-fg-muted">Owner</span>
                                   {document.owners?.[0] ? (

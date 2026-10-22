@@ -677,17 +677,14 @@ export function EngagementFileRow({
                 )}
             </div>
 
-            {/* Owner Column */}
+            {/* Created by: who added it — the member who added it in the app, not the connector account
+                Drive names as the owner of everything the app adds; for a file added straight in Drive,
+                its Drive owner (lib/files/file-creator.ts) */}
             <div className={cn('min-w-0', OWNER_COL_CLASS, FILE_TABLE_COL_LINE_CLASS)}>
                 {(() => {
-                    const ownerName = file.owners?.[0]?.displayName
-                        || file.lastModifyingUser?.displayName
-                        || (file.actorEmail ? file.actorEmail.split('@')[0] : null)
-                        || null
-                    const ownerEmail = file.owners?.[0]?.emailAddress
-                        || file.actorEmail
-                        || null
-                    const ownerPhoto = file.owners?.[0]?.photoLink || null
+                    const ownerName = file.creator?.displayName || null
+                    const ownerEmail = file.creator?.emailAddress || null
+                    const ownerPhoto = file.creator?.photoLink || null
                     const isMe = ownerEmail && sessionUserEmail
                         && ownerEmail.toLowerCase() === sessionUserEmail.toLowerCase()
                     const ROLE_LABELS: Record<string, string> = {
@@ -696,7 +693,10 @@ export function EngagementFileRow({
                         eng_ext_collaborator: 'External Collaborator',
                         eng_viewer: 'Reviewer',
                     }
-                    const personaName = file.ownerRole ? (ROLE_LABELS[file.ownerRole] ?? file.ownerRole) : undefined
+                    const roleLabel = file.ownerRole ? (ROLE_LABELS[file.ownerRole] ?? file.ownerRole) : undefined
+                    const personaName = file.creator?.viaDrive
+                        ? (roleLabel ? `${roleLabel} · added in Drive` : 'Added in Drive')
+                        : roleLabel
                     if (!ownerName) return (
                         <span className="text-[0.8125rem] text-fg-muted">—</span>
                     )

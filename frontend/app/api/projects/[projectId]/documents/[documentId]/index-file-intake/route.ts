@@ -105,6 +105,9 @@ export async function POST(
           fileSize: (driveMeta as any).size ? BigInt((driveMeta as any).size) : null,
           isFolder: false,
           settings: pendingSettings as object,
+          // The uploader added it; without this, approval's re-index would record the approver
+          createdBy: user.id,
+          updatedBy: user.id,
           metadata: {
             modifiedTime: (driveMeta as any).modifiedTime ?? new Date().toISOString(),
             webViewLink: (driveMeta as any).webViewLink ?? null,

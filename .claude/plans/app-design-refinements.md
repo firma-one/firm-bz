@@ -397,6 +397,13 @@ From the canvas's section 7 (the full "views" redesign was judged too extreme; t
   not "Due date". Sentences keep "due date".
 - **Document action menu.** Stays three levels for now, made compact: 288px wide, 13px text, 26px rows,
   14px icons, a tighter header. Submenus slide 4px and fade in 100ms, without the zoom.
+- **Created by, not Owner** (Deepak, 2026-10-22). Everything added through the app goes through the
+  connector's Drive account, so Drive's owner was that account on every row. The column is now "Created
+  by": the member who added the file in the app (`engagement_documents.createdBy`); for a file added
+  straight in Drive, its Drive owner, by their member name when they're on the engagement, marked "added in
+  Drive" in the profile popup — never the last modifier (`lib/files/file-creator.ts`). The People filter
+  ("Created by me / others") and the menu's Details read the same value. External collaborators' intake
+  uploads now record the uploader, so approval no longer credits the approver.
 - **The tour mirrors every change** (`components/demo/*`), including the action menu, which the tour
   copies because the real one needs a signed-in session.
 

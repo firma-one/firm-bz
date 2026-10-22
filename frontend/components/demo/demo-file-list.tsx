@@ -74,7 +74,7 @@ import {
 import { cn, formatFileSize } from '@/lib/utils'
 import { initialsOf } from '@/lib/initials'
 import type { DemoFolder, DemoFile } from '@/lib/demo/static-demo-data'
-import type { DeliverableStatus } from '@/lib/demo/demo-deliverables'
+import { DELIVERABLE_ACTORS, type DeliverableStatus } from '@/lib/demo/demo-deliverables'
 
 const MIME_BY_TYPE: Record<string, string> = {
     pdf: 'application/pdf',
@@ -92,6 +92,8 @@ const MIME_BY_TYPE: Record<string, string> = {
 }
 
 const OWNER = 'Alex Jordan'
+/** Who added each file, as the app's Created by column shows it: one of the team, the same on every visit. */
+const creatorOf = (id: string) => DELIVERABLE_ACTORS[Array.from(id).reduce((n, c) => n + c.charCodeAt(0), 0) % DELIVERABLE_ACTORS.length]
 const NOT_IN_DEMO = 'Not available in this demo'
 const STAGES: DeliverableStatus[] = ['to_do', 'in_progress', 'in_review', 'approved']
 
@@ -343,6 +345,7 @@ function EntryRow({
 }) {
     const isFolder = entry.kind === 'folder'
     const docId = isFolder ? entry.folder.docId : entry.file.docId
+    const creator = creatorOf(entryId(entry))
     const name = isFolder ? entry.folder.name.replace(/_+/g, ' ').trim() : entry.file.name
     const approved = deliverableStatus === 'approved'
     const empty = <span className="text-small text-fg-subtle">{tracked ? 'Not set' : '—'}</span>
@@ -424,8 +427,8 @@ function EntryRow({
             </div>
 
             <div className={`min-w-0 items-center gap-1.5 ${OWNER_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}>
-                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-surface-muted text-[9px] font-medium text-fg-muted">{initialsOf(OWNER)}</span>
-                <span className="truncate text-fg-muted">{OWNER}</span>
+                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-surface-muted text-[9px] font-medium text-fg-muted">{initialsOf(creator)}</span>
+                <span className="truncate text-fg-muted">{creator}</span>
             </div>
 
             <div className={`items-center ${DATE_MODIFIED_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}>
@@ -643,7 +646,7 @@ export function DemoFileList({
                         <div className={`col-span-3 flex items-center ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Name" icon={<Type />} /></div>
                         <div className={`items-center ${STATUS_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Status" icon={<CircleDot />} /></div>
                         <div className={`items-center ${DUE_DATE_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Due" icon={<Flag />} /></div>
-                        <div className={`items-center ${OWNER_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Owner" icon={<UserRound />} /></div>
+                        <div className={`items-center ${OWNER_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Created by" icon={<UserRound />} /></div>
                         <div className={`items-center ${DATE_MODIFIED_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Modified" icon={<Clock3 />} /></div>
                         <div className={`items-center ${FILE_SIZE_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Size" icon={<HardDrive />} /></div>
                     </div>

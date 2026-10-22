@@ -134,7 +134,7 @@ const FILE_TYPE_FILTERS: Array<[string, string]> = [
     ['image', 'Images'],
     ['other', 'Other'],
 ]
-const OWNER_FILTER_LABEL = { me: 'Owned by me', 'not-me': 'Owned by others', 'private-me': 'Private to me' } as const
+const OWNER_FILTER_LABEL = { me: 'Created by me', 'not-me': 'Created by others', 'private-me': 'Private to me' } as const
 const MODIFIED_FILTER_LABEL = { '7d': 'Last 7 days', '30d': 'Last 30 days', year: 'This year' } as const
 const SORT_BY_LABEL: Record<SortByOption, string> = {
     name: 'Name',
@@ -2138,7 +2138,8 @@ const handleRefresh = async () => {
         if (filterOwner !== 'any' && session?.user?.email) {
             const myEmail = session.user.email.toLowerCase()
             result = result.filter(f => {
-                const owner = (f.actorEmail || '').toLowerCase()
+                // Matches the Created by column: who added it
+                const owner = (f.creator?.emailAddress || f.actorEmail || '').toLowerCase()
                 if (filterOwner === 'me') return owner === myEmail || owner === '' || !owner
                 if (filterOwner === 'not-me') return owner !== '' && owner !== myEmail
                 if (filterOwner === 'private-me') {
@@ -2895,7 +2896,7 @@ const handleRefresh = async () => {
                         </div>
                         <div className={`items-center ${STATUS_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Status" icon={<CircleDot />} /></div>
                         <div className={`items-center ${DUE_DATE_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Due" icon={<Flag />} /></div>
-                        <div className={`items-center ${OWNER_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Owner" icon={<UserRound />} /></div>
+                        <div className={`items-center ${OWNER_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Created by" icon={<UserRound />} /></div>
                         <div className={`items-center ${DATE_MODIFIED_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Modified" icon={<Clock3 />} /></div>
                         <div className={`items-center ${FILE_SIZE_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Size" icon={<HardDrive />} /></div>
                     </div>
