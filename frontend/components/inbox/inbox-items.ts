@@ -1,4 +1,6 @@
 import type { ReminderWithContext } from "@/lib/actions/user-reminders"
+import type { NeedsYouItem } from "@/lib/home/my-work"
+import { isNeedsYouReminder } from "@/lib/home/needs-you-rules"
 import type { StatusStage } from "@/lib/ui/status"
 
 /** Dispatched on window after any Inbox change, so the shell refreshes its badges. */
@@ -27,7 +29,11 @@ export type ApiNotification = {
 
 export type InboxItem = {
     key: string
-    source: "notification" | "reminder"
+    /**
+     * "work" is something waiting on you that clears itself once it's dealt with — an approval, a
+     * client comment to answer, changes requested (Home's Needs you): no Done or Dismiss.
+     */
+    source: "notification" | "reminder" | "work"
     sourceId: string
     /** The firm it belongs to, for the firm label; null for platform-wide notifications. */
     firmId: string | null
@@ -46,6 +52,8 @@ export type InboxItem = {
     stage?: StatusStage | null
     /** What it's about, for its leading icon; null falls back to a generic reminder or notification icon. */
     entity: InboxEntity | null
+    /** The open button's words for "work" ("Review", "Reply"); others say "Open". */
+    actionLabel?: string
 }
 
 export type InboxEntity = "firm" | "client" | "engagement" | "deliverable" | "document" | "comment" | "invitation" | "member" | "storage"
@@ -173,4 +181,77 @@ export function groupReminders(firms: string | ReadonlySet<string>, reminders: R
 /** Notifications for the Inbox: newest first. */
 export function sortNotifications(notifications: ApiNotification[]): InboxItem[] {
     return [...notifications].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map(notificationToItem)
+}
+
+const WORK_LABEL: Record<Exclude<NeedsYouItem["kind"], "reminder">, string> = {
+    deliverable_review: "Waiting for your approval",
+    intake: "Upload to approve",
+    client_comment: "Client comment",
+    changes_requested: "Changes requested",
+}
+const WORK_STAGE: Record<Exclude<NeedsYouItem["kind"], "reminder">, StatusStage | null> = {
+    deliverable_review: "waiting",
+    intake: "waiting",
+    client_comment: null,
+    changes_requested: "problem",
+}
+const WORK_ENTITY: Record<Exclude<NeedsYouItem["kind"], "reminder">, InboxEntity> = {
+    deliverable_review: "deliverable",
+    intake: "document",
+    client_comment: "comment",
+    changes_requested: "deliverable",
+}
+
+/** One of Home's Needs you items as an Inbox row: always marked, since it is waiting on you. */
+export function needsYouToItem(n: NeedsYouItem & { kind: Exclude<NeedsYouItem["kind"], "reminder"> }): InboxItem {
+    return {
+        key: `w:${n.id}`,
+        source: "work",
+        sourceId: n.id,
+        firmId: n.firmId,
+        title: n.title,
+        body: n.context,
+        label: WORK_LABEL[n.kind],
+        href: n.href,
+        at: n.at,
+        unread: true,
+        overdue: false,
+        dueLabel: null,
+        stage: WORK_STAGE[n.kind],
+        entity: WORK_ENTITY[n.kind],
+        actionLabel: n.actionLabel,
+    }
+}
+
+export type InboxLists = {
+    /** Waiting on you: Home's Needs you — approvals, client comments, changes requested, and review or undated reminders. */
+    needsYou: InboxItem[]
+    /** Dated reminders — deadlines, which the badge doesn't count (Home shows them in its Agenda). */
+    overdue: InboxItem[]
+    today: InboxItem[]
+    upcoming: InboxItem[]
+}
+
+/**
+ * The Inbox's Needs you view (.claude/plans/app-design-refinements.md, section 13): Home's items
+ * first, then the reminders by date. A reminder is in Needs you by the same rule Home uses
+ * (isNeedsYouReminder); the rest are deadlines.
+ */
+export function needsYouLists(firms: ReadonlySet<string>, work: NeedsYouItem[], reminders: ReminderWithContext[]): InboxLists {
+    const groups = groupReminders(firms, reminders)
+    const byId = new Map(reminders.map((r) => [r.id, r]))
+    const needsReminder = (item: InboxItem) => {
+        const r = byId.get(item.sourceId)
+        return !!r && isNeedsYouReminder(r)
+    }
+    const workItems = work
+        .filter((n) => n.kind !== "reminder" && !!n.firmId && firms.has(n.firmId))
+        .map((n) => needsYouToItem(n as NeedsYouItem & { kind: Exclude<NeedsYouItem["kind"], "reminder"> }))
+    const all = [...groups.overdue, ...groups.today, ...groups.undated, ...groups.upcoming]
+    return {
+        needsYou: [...workItems, ...all.filter(needsReminder)],
+        overdue: groups.overdue.filter((i) => !needsReminder(i)),
+        today: groups.today.filter((i) => !needsReminder(i)),
+        upcoming: groups.upcoming.filter((i) => !needsReminder(i)),
+    }
 }

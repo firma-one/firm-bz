@@ -9,6 +9,7 @@ import { DEMO_FIRM, type DemoClient, type DemoEngagement } from './static-demo-d
 import { deliverableName } from './demo-brio'
 import { getDemoDeliverables } from './demo-deliverables'
 import { buildDemoCalendarData } from './demo-calendar-data'
+import { isNeedsYouReminder } from '@/lib/home/needs-you-rules'
 
 /**
  * The demo user's own data — recents, reminders, notifications, bookmarks and work — in the shapes
@@ -209,9 +210,9 @@ export function demoNotifications(now: Date): ApiNotification[] {
 }
 
 /** The Inbox badge, by the app's rule (lib/actions/inbox.ts): unread notifications plus reminders due today, overdue or undated. */
+/** The Inbox badge, by the app's rule (lib/actions/inbox.ts): Home's Needs you, never notifications. */
 export function demoInboxCount(now: Date): number {
-    const reminders = demoReminders(now).filter((r) => r.delta === null || r.delta <= 0).length
-    return reminders + demoNotifications(now).filter((n) => !n.readAt).length
+    return demoWork(now).needsYou.length
 }
 
 /** Home's "Continue where you left off": the last few pages the demo user opened. */
@@ -328,12 +329,23 @@ export function demoWork(now: Date): MyWork {
                 actionLabel: 'See changes',
                 at: new Date(now.getTime() - 26 * HOUR).toISOString(),
             })),
+        // The demo user's reminders that need them now, by Home's rule: review requests and undated ones.
+        ...demoReminders(now).filter(isNeedsYouReminder).map((r) => ({
+            id: `reminder:${r.id}`,
+            kind: 'reminder' as const,
+            firmId: r.firmId,
+            title: r.entityName,
+            context: r.action,
+            href: r.ctaUrl ?? '/tour',
+            actionLabel: 'Open',
+            at: r.dateValue,
+        })),
     ]
 
     // A due deliverable carries its stage, so Home's chip leads with the status icon as in the app.
     const dueStatus = new Map(nextDeliverables().map(({ engagement, deliverable }) => [`rem-due-${engagement.slug}`, deliverable.status]))
     const dueSoon: MyWork['dueSoon'] = demoReminders(now)
-        .filter((r) => r.dateValue)
+        .filter((r) => r.dateValue && !isNeedsYouReminder(r))
         .map((r) => ({
             id: r.id,
             kind: r.action === 'Deliverable due' ? ('deliverable' as const) : ('reminder' as const),

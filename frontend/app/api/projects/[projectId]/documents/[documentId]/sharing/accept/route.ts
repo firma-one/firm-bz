@@ -110,7 +110,7 @@ export async function PATCH(
     // Notify all engagement leads
     try {
       const leads = await prisma.engagementMember.findMany({
-        where: { engagementId: projectId, role: 'eng_admin' },
+        where: { engagementId: projectId, role: 'eng_admin', userId: { not: user.id } },
         select: { userId: true },
       })
       if (leads.length) {

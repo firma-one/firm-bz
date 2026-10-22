@@ -74,8 +74,8 @@ export async function PATCH(
     }
 
     if (dueDate) {
-      // In-app notifications for all members
-      const rows = memberUserIds.map((userId) => ({
+      // In-app notifications for every member but whoever set it: no one is told of their own change
+      const rows = memberUserIds.filter((userId) => userId !== user.id).map((userId) => ({
         firmId: doc.firmId,
         clientId: doc.clientId ?? ctx.clientId,
         engagementId: projectId,

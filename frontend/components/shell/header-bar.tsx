@@ -177,7 +177,7 @@ export function HeaderBar({
                         "relative flex h-7 w-7 items-center justify-center rounded-control text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg",
                         pathname === inboxHref && "bg-surface-selected text-fg"
                     )}
-                    aria-label={inboxCount > 0 ? `Inbox, ${inboxCount} unread` : "Inbox"}
+                    aria-label={inboxCount > 0 ? `Inbox, ${inboxCount} need${inboxCount === 1 ? "s" : ""} you` : "Inbox"}
                     title="Inbox"
                 >
                     <Inbox className="h-4 w-4" />

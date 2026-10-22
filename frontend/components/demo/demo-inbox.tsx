@@ -1,7 +1,7 @@
 'use client'
 
 import { InboxView, type InboxSource } from '@/components/inbox/inbox-view'
-import { DEMO_HOME_FIRM, demoNotifications, demoReminders } from '@/lib/demo/demo-personal-data'
+import { DEMO_HOME_FIRM, demoNotifications, demoReminders, demoWork } from '@/lib/demo/demo-personal-data'
 
 const noop = async () => {}
 
@@ -13,7 +13,7 @@ const noop = async () => {}
 const DEMO_SOURCE: InboxSource = {
     load: async () => {
         const now = new Date()
-        return { reminders: demoReminders(now), notifications: demoNotifications(now) }
+        return { reminders: demoReminders(now), notifications: demoNotifications(now), needsYou: demoWork(now).needsYou }
     },
     markRead: noop,
     dismiss: noop,

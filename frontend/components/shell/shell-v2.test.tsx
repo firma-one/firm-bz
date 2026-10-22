@@ -126,7 +126,7 @@ describe('SidebarV2', () => {
         expect(screen.queryByText('Engagement letter.pdf')).toBeNull()
     })
 
-    it('links Home and Inbox to the cross-firm pages, Inbox with the unread total', () => {
+    it('links Home and Inbox to the cross-firm pages, Inbox with what needs you', () => {
         render(<SidebarV2 />)
         expect(screen.getByText('Home').closest('a')!.getAttribute('href')).toBe('/d/u/home')
         const inbox = screen.getByText('Inbox').closest('a')!
@@ -207,7 +207,7 @@ describe('HeaderBar breadcrumbs', () => {
         pathname = '/d/u/inbox'
         header()
         expect(within(screen.getByLabelText('Breadcrumb')).getByText('Inbox')).toBeTruthy()
-        expect(screen.getByLabelText('Inbox, 3 unread').getAttribute('href')).toBe('/d/u/inbox')
+        expect(screen.getByLabelText('Inbox, 3 need you').getAttribute('href')).toBe('/d/u/inbox')
     })
 
     it('names firm-less pages', () => {

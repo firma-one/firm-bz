@@ -1,54 +1,57 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const { prisma, auth, reminders } = vi.hoisted(() => ({
-    prisma: { notification: { groupBy: vi.fn() } },
+const { auth, reminders, work } = vi.hoisted(() => ({
     auth: { user: { id: 'u1' } as { id: string } | null },
     reminders: { list: [] as any[] },
+    work: { needsYou: [] as any[] },
 }))
-vi.mock('@/lib/prisma', () => ({ prisma }))
 vi.mock('@/lib/logger', () => ({ logger: { error: vi.fn() } }))
 vi.mock('@/utils/supabase/server', () => ({
     createClient: async () => ({ auth: { getUser: async () => ({ data: { user: auth.user } }) } }),
 }))
 vi.mock('@/lib/reminders/reminder-service', () => ({ computeDueReminders: vi.fn(async () => reminders.list) }))
+vi.mock('@/lib/home/home-firms', () => ({ getHomeFirms: vi.fn(async () => ({ firms: [{ id: 'f1' }, { id: 'f2' }], unavailable: [] })) }))
+vi.mock('@/lib/home/my-work', () => ({ getMyWork: vi.fn(async () => ({ engagements: [], needsYou: work.needsYou, dueSoon: [] })) }))
 
-import { getInboxCounts } from './inbox'
-import { computeDueReminders } from '@/lib/reminders/reminder-service'
+import { getInboxCounts, getNeedsYou } from './inbox'
+import { getMyWork } from '@/lib/home/my-work'
 
 beforeEach(() => {
     vi.clearAllMocks()
     auth.user = { id: 'u1' }
     reminders.list = []
-    prisma.notification.groupBy.mockResolvedValue([])
+    work.needsYou = []
 })
 
 describe('getInboxCounts', () => {
-    it('counts only the signed-in user\'s unread notifications, per firm', async () => {
-        prisma.notification.groupBy.mockResolvedValue([
-            { firmId: 'f1', _count: { _all: 2 } },
-            { firmId: null, _count: { _all: 1 } },
-        ])
-        const counts = await getInboxCounts()
-        expect(prisma.notification.groupBy.mock.calls[0][0].where).toEqual({ userId: 'u1', readAt: null })
-        expect(counts).toEqual({ byFirm: { f1: 2 }, platform: 1 })
-    })
-
-    it('adds reminders due today, overdue or undated — not future or hidden ones', async () => {
-        reminders.list = [
-            { firmId: 'f1', hiddenAt: null, delta: 0 },
-            { firmId: 'f1', hiddenAt: null, delta: -3 },
-            { firmId: 'f2', hiddenAt: null, delta: null },
-            { firmId: 'f2', hiddenAt: null, delta: 4 },
-            { firmId: 'f2', hiddenAt: '2026-10-01', delta: -1 },
+    it('counts Home\'s Needs you per firm, from the user\'s firms and reminders', async () => {
+        reminders.list = [{ id: 'r1' }]
+        work.needsYou = [
+            { id: 'review:a', firmId: 'f1' },
+            { id: 'comment:b', firmId: 'f1' },
+            { id: 'reminder:c', firmId: 'f2' },
         ]
         const counts = await getInboxCounts()
-        expect(computeDueReminders).toHaveBeenCalledWith('u1')
-        expect(counts.byFirm).toEqual({ f1: 2, f2: 1 })
+        expect(getMyWork).toHaveBeenCalledWith({ userId: 'u1', firms: [{ id: 'f1' }, { id: 'f2' }], reminders: [{ id: 'r1' }] })
+        expect(counts).toEqual({ byFirm: { f1: 2, f2: 1 }, platform: 0 })
+    })
+
+    it('never counts notifications: they are updates, not things waiting on you', async () => {
+        expect(await getInboxCounts()).toEqual({ byFirm: {}, platform: 0 })
     })
 
     it('returns nothing when signed out', async () => {
         auth.user = null
         expect(await getInboxCounts()).toEqual({ byFirm: {}, platform: 0 })
-        expect(prisma.notification.groupBy).not.toHaveBeenCalled()
+        expect(getMyWork).not.toHaveBeenCalled()
+    })
+})
+
+describe('getNeedsYou', () => {
+    it('returns the same items Home lists, for the signed-in user only', async () => {
+        work.needsYou = [{ id: 'review:a', firmId: 'f1' }]
+        expect(await getNeedsYou()).toEqual([{ id: 'review:a', firmId: 'f1' }])
+        auth.user = null
+        expect(await getNeedsYou()).toEqual([])
     })
 })

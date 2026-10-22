@@ -451,7 +451,17 @@ uneven gaps. Rules between sections would have made it look like a form. Instead
 - The tour's Home is the same view over demo data, which now includes a client comment and changes
   requested.
 
-**Next (not built):** the Inbox badge still counts every unread notification, so it can disagree with
-Needs you (it showed 2 when Needs you said 0: both were "Document due date updated", sent to every member
-including the one who set the date). Planned: the badge counts only what needs you, from the same rules;
-the Inbox gets "Needs you" and "Updates" views; and no one is notified of their own change.
+**The Inbox, on the same rules** (built 2026-10-22):
+
+- **The badge counts only what needs you:** Home's Needs you, per firm (`lib/actions/inbox.ts`, through
+  `getMyWork`), so the badge, Home and the Inbox can't disagree. Notifications never add to it. The
+  reminder rule (review requests and undated reminders) lives in `lib/home/needs-you-rules.ts`, shared
+  by the server and the Inbox.
+- **Two views:** *Needs you*: "Waiting on you" (the badge's items; approvals, client comments and
+  changes requested open with their own action and have no Done or Dismiss, since they clear once dealt
+  with), then dated reminders (Overdue, Due today, Upcoming), which the badge doesn't count. *Updates*:
+  notifications, newest first, with unread dots and Mark all read. `?tab=notifications` lands on
+  Updates.
+- **No one is notified of their own change:** a document or engagement due date set, a client
+  accepting, a staging upload. Status changes already skipped the actor.
+- The tour's Inbox and badge follow the same rule over its demo data.

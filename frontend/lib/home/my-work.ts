@@ -7,6 +7,7 @@ import { canViewDeliverable, type EngagementRoleSlug } from '@/lib/deliverable-s
 import type { ActivityStatus } from '@/lib/sharing-settings'
 import type { ReminderWithContext } from '@/lib/actions/user-reminders'
 import type { HomeFirm } from '@/lib/home/home-firms'
+import { isNeedsYouReminder } from '@/lib/home/needs-you-rules'
 
 /**
  * Data for the New UI Home (.claude/plans/ui-ux-overhaul.md, Phase 3), across the firms it is
@@ -78,11 +79,6 @@ export type MyWork = {
 }
 
 const INTERNAL_ROLES = new Set(['eng_admin', 'eng_member'])
-
-function isReviewReminder(r: ReminderWithContext): boolean {
-    // "Review comment" (@mention), "Review document", "Review shared document", `Review: "<file>"` (intake).
-    return r.action.startsWith('Review')
-}
 
 function startOfToday(): Date {
     const d = new Date()
@@ -340,7 +336,7 @@ function remindersOnly(reminders: ReminderWithContext[], firmIds: Set<string>): 
     const dueSoon: DueItem[] = []
     for (const r of reminders) {
         if (r.hiddenAt || !r.firmId || !firmIds.has(r.firmId)) continue
-        if (isReviewReminder(r) || !r.dateValue) {
+        if (isNeedsYouReminder(r)) {
             needsYou.push({
                 id: `reminder:${r.id}`,
                 kind: 'reminder',
