@@ -27,7 +27,7 @@ vi.mock('@/lib/comments/tagged-documents', () => ({ taggedDocumentsIn: async () 
 vi.mock('@/lib/prisma', () => ({
     prisma: {
         userPersonalization: { findUnique: async () => ({ reminders: db.reminders }) },
-        engagementMember: { findMany: async () => [] },
+        engagementMember: { findMany: async () => [{ userId: 'u3', role: 'eng_member' }] },
         engagementDocument: {
             findMany: async ({ where }: any) =>
                 db.docs.filter((d) => (!where.id?.in || where.id.in.includes(d.id)) && (where.isFolder === undefined || d.isFolder === where.isFolder)),
@@ -60,7 +60,7 @@ beforeEach(() => {
     db.messages = [
         { id: 'm1', projectDocumentId: 'd1', createdAt: new Date('2026-10-01'), content: 'first', authorUserId: 'u1' },
         { id: 'm2', projectDocumentId: 'd1', createdAt: new Date('2026-10-02'), content: 'second', authorUserId: 'u2' },
-        { id: 'm3', projectDocumentId: 'd2', createdAt: new Date('2026-10-03'), content: 'on the budget', authorUserId: 'u1' },
+        { id: 'm3', projectDocumentId: 'd2', createdAt: new Date('2026-10-03'), content: '@Name of u3 can you check the budget?', authorUserId: 'u1' },
     ]
     db.reminders = [{ entityKey: 'platform.doc_comments', entityValue: 'm1' }, { entityKey: 'platform.doc_comments', entityValue: 'm3' }]
 })
@@ -79,14 +79,21 @@ describe('GET /api/projects/[projectId]/doc-comments', () => {
     it('finds threads by their deliverable: the deliverable’s own, and its documents’', async () => {
         const { documents } = await (await get('?q=qsr-9')).json()
         expect(documents.map((d: any) => d.projectDocumentId).sort()).toEqual(['d1', 'd2'])
+        // Written as a tag is, with "#"
+        const tagged = (await (await get('?q=%23QSR-9')).json()).documents
+        expect(tagged.map((d: any) => d.projectDocumentId).sort()).toEqual(['d1', 'd2'])
     })
 
-    it('finds a thread by what was said, showing the comment that matched when it isn’t the latest', async () => {
-        const { documents } = await (await get('?q=FIRST')).json()
-        expect(documents).toHaveLength(1)
-        expect(documents[0]).toMatchObject({ projectDocumentId: 'd1', latest: { preview: 'second' }, match: { preview: 'first', authorName: 'Name of u1' } })
-        const latestHit = (await (await get('?q=second')).json()).documents[0]
-        expect(latestHit.match).toBeNull()
+    it('finds threads by a member who wrote in them, or was mentioned in them', async () => {
+        const ids = async (q: string) => (await (await get(`?q=${encodeURIComponent(q)}`)).json()).documents.map((d: any) => d.projectDocumentId).sort()
+        expect(await ids('name of u2')).toEqual(['d1'])
+        expect(await ids('Name of U1')).toEqual(['d1', 'd2'])
+        expect(await ids('u3')).toEqual(['d2'])
+    })
+
+    it('doesn’t look in what was said or in file names: only DOC-IDs and members', async () => {
+        const { documents } = await (await get('?q=budget')).json()
+        expect(documents).toEqual([])
     })
 
     it('is for engagement members only, as a document’s thread is', async () => {

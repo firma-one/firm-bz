@@ -5,6 +5,7 @@ import { AtSign, Reply, Search } from 'lucide-react'
 import { DemoEngagement, DemoFolder } from '@/lib/demo/static-demo-data'
 import { DELIVERABLE_ACTORS, getDemoDeliverables } from '@/lib/demo/demo-deliverables'
 import { MIME_BY_TYPE } from '@/components/demo/demo-file-list'
+import { mentionedNames } from '@/lib/comments/mentions'
 import {
     CommentsToolbar, PEEK, ThreadRow, type CommentsView, type DocRow, type TextKit, type ThreadMessage,
 } from '@/components/projects/engagement-comments-tab'
@@ -26,8 +27,8 @@ const EXTERNAL = new Set(['Taylor Kim'])
 /**
  * Static counterpart to engagement-comments-tab.tsx: the same toolbar (All, Awaiting reply, Mentions,
  * and search) and thread rows (the app's own ThreadRow), on two of the engagement's deliverables and a
- * document in each, over sample comments with a mention and a document tag. Search looks in what was
- * said and in document and deliverable names and IDs; "Show N earlier" opens a row in place. No
+ * document in each, over sample comments with a mention and a document tag. Search finds a thread by
+ * ID or by a member who wrote or was mentioned in it; "Show N earlier" opens a row in place. No
  * fetching. Mentions shows its real empty state.
  */
 export function DemoEngagementComments({ engagement }: { engagement: DemoEngagement }) {
@@ -83,21 +84,15 @@ export function DemoEngagementComments({ engagement }: { engagement: DemoEngagem
         })
     }, [subjects, now])
 
-    // Search as the app's: a thread's document, its deliverable, or what was said; an older comment
-    // that matches is shown in the row instead of the latest.
-    const q = query.trim().toLowerCase()
+    // Search as the app's: by ID (the thread's document's or its deliverable's; a leading "#" ignored), or by a member
+    // who wrote in the thread or was mentioned in it.
+    const q = query.trim().replace(/^#/, '').toLowerCase()
     const found = useMemo(() => {
-        if (!q) return threads.map((t) => t.row)
         const has = (text: string | null | undefined) => !!text && text.toLowerCase().includes(q)
-        return threads.flatMap(({ row, messages }) => {
-            const hit = [...messages].reverse().find((m) => has(m.content))
-            if (!(has(row.documentName) || has(row.docId) || has(row.deliverable?.docId) || has(row.deliverable?.name) || hit)) return []
-            const older = hit && hit !== messages[messages.length - 1] ? hit : null
-            return [{
-                ...row,
-                match: older ? { createdAt: older.createdAt, preview: older.content, authorUserId: null, authorName: older.authorName ?? null, authorEmail: null } : null,
-            }]
-        })
+        return threads
+            .filter(({ row, messages }) => !q || has(row.docId) || has(row.deliverable?.docId)
+                || messages.some((m) => has(m.authorName) || mentionedNames(m.content, DELIVERABLE_ACTORS).some(has)))
+            .map((t) => t.row)
     }, [threads, q])
     const awaiting = found.filter((r) => r.latest?.authorIsExternal)
     const rows = view === 'awaiting' ? awaiting : found
@@ -143,20 +138,20 @@ export function DemoEngagementComments({ engagement }: { engagement: DemoEngagem
                             ) : (
                                 <>
                                     <Search className="mx-auto mb-2.5 h-7 w-7 text-line" />
-                                    <div className="text-sm font-medium text-fg">No comments match “{query.trim()}”</div>
-                                    <div className="mt-1 text-xs text-fg-muted">Search looks in what was said, and in document and deliverable names and IDs.</div>
+                                    <div className="text-sm font-medium text-fg">No threads for “{query.trim()}”</div>
+                                    <div className="mt-1 text-xs text-fg-muted">Search finds a thread by its ID or its deliverable’s, or by a member who wrote or was mentioned in it.</div>
                                 </>
                             )}
                         </div>
                     ) : (
                         <div className="divide-y divide-line">
                             {rows.map((row) => {
-                                const shown = row.match ?? row.latest
+                                const latest = row.latest
                                 return (
                                     <ThreadRow
                                         key={row.projectDocumentId}
                                         row={row}
-                                        author={shown?.authorName ? { name: shown.authorName } : null}
+                                        author={latest?.authorName ? { name: latest.authorName } : null}
                                         open={expanded.has(row.projectDocumentId)}
                                         thread={{ status: 'ready', messages: messagesOf(row.projectDocumentId).slice(-PEEK) }}
                                         text={text}

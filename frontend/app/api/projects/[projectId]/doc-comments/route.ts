@@ -7,6 +7,7 @@ import { requireEngagementMember, visibleDocumentIdsFor } from '@/lib/engagement
 import { taggedDocumentsIn } from '@/lib/comments/tagged-documents'
 import { loadPeople } from '@/lib/files/file-creator'
 import { parseSettingsFromDb } from '@/lib/sharing-settings'
+import { formatDisplayName, mentionedNames } from '@/lib/comments/mentions'
 
 /**
  * GET /api/projects/[projectId]/doc-comments
@@ -59,9 +60,10 @@ export async function GET(
     const docIds = Array.from(new Set(messages.map((m) => m.projectDocumentId)))
     const docs = (await prisma.engagementDocument.findMany({
       where: { id: { in: docIds } },
-      select: { id: true, fileName: true, externalId: true },
+      select: { id: true, fileName: true, docId: true, externalId: true },
     })).filter((d) => !visible || visible.has(d.externalId))
     const docNameById = Object.fromEntries(docs.map((d) => [d.id, d.fileName]))
+    const docIdById = Object.fromEntries(docs.map((d) => [d.id, d.docId ?? null]))
 
     const mentions = messages.filter((m) => m.projectDocumentId in docNameById).map((m) => ({
       messageId: m.id,
@@ -70,6 +72,7 @@ export async function GET(
       authorUserId: m.authorUserId ?? null,
       projectDocumentId: m.projectDocumentId,
       documentName: docNameById[m.projectDocumentId] ?? '',
+      docId: docIdById[m.projectDocumentId] ?? null,
     }))
     const taggedDocuments = await taggedDocumentsIn(projectId, mentions.map((m) => m.preview), visible)
 
@@ -77,8 +80,6 @@ export async function GET(
   }
 
   // ── Default: document rollup ──────────────────────────────────────────────
-  const q = request.nextUrl.searchParams.get('q')?.trim().toLowerCase() || ''
-
   // Build the external-user set so we can flag threads awaiting a firm reply.
   // Mirror the exact rule the insights route uses for `unansweredThreads` so
   // the Action Center count and per-thread pips agree byte-for-byte.
@@ -105,7 +106,7 @@ export async function GET(
   if (threadDocs.length === 0) return NextResponse.json({ documents: [] })
 
   // The deliverable a document is in: the nearest folder above it tagged as one (parentId holds
-  // the parent's Drive externalId, as in calendar-data.ts). Rows show it, and search matches it.
+  // the parent's Drive externalId, as in calendar-data.ts). A document's row shows it, and search finds it by it.
   const isDeliverable = (settings: unknown) => {
     try { return !!parseSettingsFromDb(settings).share?.createdAt } catch { return false }
   }
@@ -125,41 +126,41 @@ export async function GET(
   }
   const deliverableByDocId = new Map(threadDocs.map((d) => [d.id, deliverableAbove(d.parentId)]))
 
-  // Searching finds a thread by its document's name or ID, its deliverable's, or what was said in
-  // it. Comment text is encrypted at rest, so it's matched once read back, not in the query; the
-  // row then shows the newest comment that matches.
+  // Search looks a thread up by ID (its document's, or its deliverable's) or by a member who
+  // wrote in it or was @mentioned in it. A leading "#", as a tag is written, is ignored. Comment
+  // text is encrypted at rest, so mentions are read after loading, not matched in the query.
+  const q = (request.nextUrl.searchParams.get('q') ?? '').trim().replace(/^#/, '').toLowerCase()
   let docs = threadDocs
-  const matchByDocId: Record<string, { id: string; createdAt: Date; content: string; authorUserId: string | null }> = {}
   if (q) {
     const has = (text: string | null | undefined) => !!text && text.toLowerCase().includes(q)
     const messages = await prisma.docCommentMessage.findMany({
       where: { engagementId: projectId, projectDocumentId: { in: threadDocs.map((d) => d.id) } },
-      orderBy: { createdAt: 'desc' },
-      select: { id: true, projectDocumentId: true, createdAt: true, content: true, authorUserId: true },
+      select: { projectDocumentId: true, authorUserId: true, content: true },
     })
+    const members = await loadPeople([...engagementMembers.map((m) => m.userId), ...messages.map((m) => m.authorUserId ?? '')])
+    const namesOf = (p: { name: string; email: string }) => [p.name, formatDisplayName(p.name, p.email)]
+    const allNames = Array.from(members.values()).flatMap(namesOf)
+    const byMember = new Set<string>()
     for (const m of messages) {
-      if (!matchByDocId[m.projectDocumentId] && has(m.content)) matchByDocId[m.projectDocumentId] = m
+      const author = m.authorUserId ? members.get(m.authorUserId) : undefined
+      if ((author && namesOf(author).some(has)) || mentionedNames(m.content, allNames).some(has)) byMember.add(m.projectDocumentId)
     }
-    docs = threadDocs.filter((d) => {
-      const deliverable = deliverableByDocId.get(d.id)
-      return has(d.fileName) || has(d.docId) || has(deliverable?.docId) || has(deliverable?.name) || d.id in matchByDocId
-    })
+    docs = threadDocs.filter((d) => has(d.docId) || has(deliverableByDocId.get(d.id)?.docId) || byMember.has(d.id))
   }
   const docIds = docs.map((d) => d.id)
   if (docIds.length === 0) return NextResponse.json({ documents: [] })
 
   // Latest message per document (small N; acceptable to do one query per doc for now)
-  const latestByDocId: Record<string, { id: string; createdAt: string; preview: string; authorUserId: string | null; authorIsExternal: boolean }> = {}
+  const latestByDocId: Record<string, { createdAt: string; preview: string; authorUserId: string | null; authorIsExternal: boolean }> = {}
   await Promise.all(
     docIds.map(async (docId) => {
       const latest = await prisma.docCommentMessage.findFirst({
         where: { engagementId: projectId, projectDocumentId: docId },
         orderBy: { createdAt: 'desc' },
-        select: { id: true, createdAt: true, content: true, authorUserId: true },
+        select: { createdAt: true, content: true, authorUserId: true },
       })
       if (!latest) return
       latestByDocId[docId] = {
-        id: latest.id,
         createdAt: latest.createdAt.toISOString(),
         preview: latest.content.slice(0, 220),
         authorUserId: latest.authorUserId ?? null,
@@ -168,23 +169,12 @@ export async function GET(
       }
     })
   )
-  // A match that isn't the latest comment is shown in its place.
-  const olderMatch = (docId: string) => {
-    const m = matchByDocId[docId]
-    return m && m.id !== latestByDocId[docId]?.id ? m : undefined
-  }
-
-  // Who wrote each comment shown, for a name on the row even if they've left the engagement.
-  const people = await loadPeople([
-    ...Object.values(latestByDocId).map((l) => l.authorUserId ?? ''),
-    ...docIds.map((id) => olderMatch(id)?.authorUserId ?? ''),
-  ])
+  // Who wrote each latest comment, for a name on the row even if they've left the engagement.
+  const people = await loadPeople(Object.values(latestByDocId).map((l) => l.authorUserId ?? ''))
   const documents = docs
     .map((d) => {
       const latest = latestByDocId[d.id]
       const author = latest?.authorUserId ? people.get(latest.authorUserId) : undefined
-      const match = olderMatch(d.id)
-      const matchAuthor = match?.authorUserId ? people.get(match.authorUserId) : undefined
       const kind = !d.isFolder ? 'file' : isDeliverable(d.settings) ? 'deliverable' : 'folder'
       return {
         projectDocumentId: d.id,
@@ -205,9 +195,6 @@ export async function GET(
               authorEmail: author?.email ?? null,
             }
           : null,
-        match: match
-          ? { createdAt: match.createdAt.toISOString(), preview: match.content.slice(0, 220), authorUserId: match.authorUserId, authorName: matchAuthor?.name ?? null, authorEmail: matchAuthor?.email ?? null }
-          : null,
       }
     })
     .filter((d) => d.count > 0)
@@ -217,11 +204,7 @@ export async function GET(
       return bt.localeCompare(at)
     })
 
-  const taggedDocuments = await taggedDocumentsIn(
-    projectId,
-    documents.flatMap((d) => [d.latest?.preview ?? '', d.match?.preview ?? '']),
-    visible,
-  )
+  const taggedDocuments = await taggedDocumentsIn(projectId, documents.flatMap((d) => (d.latest ? [d.latest.preview] : [])), visible)
 
   return NextResponse.json({ documents, taggedDocuments })
 }

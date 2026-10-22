@@ -42,21 +42,14 @@ export type DocRow = {
     authorEmail: string | null
     authorIsExternal?: boolean
   } | null
-  /** When a search matched an older comment than the latest: that comment, shown in the row instead. */
-  match?: {
-    createdAt: string
-    preview: string
-    authorUserId: string | null
-    authorName: string | null
-    authorEmail: string | null
-  } | null
 }
 
 export type CommentsView = 'all' | 'awaiting' | 'mentions'
 
 /**
  * The page's views — All, Awaiting reply (a client or external collaborator spoke last), Mentions —
- * as small toggles like the Inbox's, with search on the same row. Shared with the tour's copy.
+ * as small toggles like the Inbox's, with search on the same row: it looks a thread up by ID (its
+ * document's or its deliverable's) or by a member who wrote or was mentioned in it. Shared with the tour's copy.
  */
 export function CommentsToolbar({
   view,
@@ -95,13 +88,13 @@ export function CommentsToolbar({
         {toggle('awaiting', <Reply className="h-3.5 w-3.5" />, 'Awaiting reply')}
         {toggle('mentions', <AtSign className="h-3.5 w-3.5" />, 'Mentions')}
       </div>
-      <div className="relative w-52">
+      <div className="relative w-60">
         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-fg-muted" />
         <Input
           value={query}
           onChange={(e) => onQuery(e.target.value)}
-          placeholder="Search comments…"
-          aria-label="Search comments, documents and deliverables"
+          placeholder="ID or member name"
+          aria-label="Find threads by ID or member name"
           className="pl-8"
         />
       </div>
@@ -115,6 +108,8 @@ type MentionRow = {
   preview: string
   projectDocumentId: string
   documentName: string
+  docId?: string | null
+  authorUserId?: string | null
 }
 
 export type ThreadMessage = { id: string; createdAt: string; authorUserId: string | null; authorEmail: string | null; authorName?: string | null; content: string }
@@ -271,11 +266,15 @@ export function EngagementCommentsTab({
   /** Threads where a client or external collaborator spoke last: the firm owes a reply. */
   const awaiting = useMemo(() => rows.filter((r) => r.latest?.authorIsExternal), [rows])
   const shownRows = activeTab === 'awaiting' ? awaiting : rows
-  // Mentions are few, so the search box narrows them here, by what was said or the document.
+  // Mentions are few, so search narrows them here, the same way: by ID (a leading "#" ignored), or by who wrote them.
   const shownMentions = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    return q ? mentionRows.filter((m) => m.preview.toLowerCase().includes(q) || m.documentName.toLowerCase().includes(q)) : mentionRows
-  }, [mentionRows, query])
+    const q = query.trim().replace(/^#/, '').toLowerCase()
+    if (!q) return mentionRows
+    return mentionRows.filter((m) => {
+      const author = authorOf(m.authorUserId ?? null, null, null)
+      return !!m.docId?.toLowerCase().includes(q) || !!author?.name.toLowerCase().includes(q)
+    })
+  }, [mentionRows, query, authorOf])
   const empty = !loading && !error && shownRows.length === 0
   const mentionsEmpty = !mentionsLoading && !mentionsError && shownMentions.length === 0
 
@@ -316,8 +315,8 @@ export function EngagementCommentsTab({
                 ) : searching ? (
                   <>
                     <Search className="h-7 w-7 text-line mx-auto mb-2.5" />
-                    <div className="text-sm font-medium text-fg">No comments match “{query.trim()}”</div>
-                    <div className="text-xs text-fg-muted mt-1">Search looks in what was said, and in document and deliverable names and IDs.</div>
+                    <div className="text-sm font-medium text-fg">No threads for “{query.trim()}”</div>
+                    <div className="text-xs text-fg-muted mt-1">Search finds a thread by its ID or its deliverable’s, or by a member who wrote or was mentioned in it.</div>
                   </>
                 ) : (
                   <>
@@ -329,13 +328,11 @@ export function EngagementCommentsTab({
               </div>
             ) : (
               <div className="divide-y divide-line">
-                {shownRows.map((r) => {
-                  const shown = r.match ?? r.latest
-                  return (
+                {shownRows.map((r) => (
                     <ThreadRow
                       key={r.projectDocumentId}
                       row={r}
-                      author={shown ? authorOf(shown.authorUserId, shown.authorName, shown.authorEmail) : null}
+                      author={r.latest ? authorOf(r.latest.authorUserId, r.latest.authorName, r.latest.authorEmail) : null}
                       open={expanded.has(r.projectDocumentId)}
                       thread={threads[r.projectDocumentId]}
                       text={text}
@@ -344,8 +341,7 @@ export function EngagementCommentsTab({
                       onRetry={() => loadThread(r.projectDocumentId)}
                       onOpenThread={() => goToDeliverable(r.projectDocumentId)}
                     />
-                  )
-                })}
+                ))}
               </div>
             )}
           </div>
@@ -428,8 +424,7 @@ export function ThreadRow({
   onOpenThread: () => void
 }) {
   const listId = useId()
-  /** The comment the closed row shows: the one a search matched, else the latest. */
-  const preview = r.match ?? r.latest
+  const preview = r.latest
   const earlier = Math.min(r.count, PEEK) - 1
   const shown = thread?.status === 'ready' ? thread.messages : []
   const older = r.count - shown.length
@@ -484,7 +479,7 @@ export function ThreadRow({
         {!open && preview ? (
           <>
             <div className="mt-0.5 text-xs text-fg-muted line-clamp-1">
-              <span className="text-[9px] font-bold uppercase tracking-wide text-fg-subtle mr-1.5">{r.match ? 'Match' : 'Latest'}</span>
+              <span className="text-[9px] font-bold uppercase tracking-wide text-fg-subtle mr-1.5">Latest</span>
               <CommentText content={preview.preview} {...text} />
             </div>
             <div className="mt-1 flex items-center gap-1.5 text-[10px] text-fg-subtle">
