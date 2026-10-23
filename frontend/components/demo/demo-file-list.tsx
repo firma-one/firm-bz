@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
     ArrowDownUp,
     Bookmark,
@@ -36,6 +36,7 @@ import {
     UserRound,
     FolderPlus,
     FolderMinus,
+    Upload,
 } from 'lucide-react'
 import { DocumentIcon } from '@/components/ui/document-icon'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -45,6 +46,7 @@ import { RelativeDateTime } from '@/components/ui/relative-date-time'
 import { StatusPill } from '@/components/ui/status-pill'
 import { DateProperty, StatusProperty } from '@/components/ui/property-cells'
 import { useToast } from '@/components/ui/toast'
+import { FILES_DROP_TARGET_ROW_CLASS, FILES_DROP_ZONE_ACTIVE_CLASS, FilesDropPill, FilesDropRow } from '@/components/projects/files-drop-zone'
 import { getAllowedTransitions } from '@/lib/deliverable-stage-roles'
 import { statusOf } from '@/lib/ui/status'
 import { DuePickerPanel } from '@/components/ui/due-picker'
@@ -323,6 +325,9 @@ function EntryRow({
     status,
     statusEditable,
     onSetStatus,
+    uploadTarget = false,
+    onFileDragOver,
+    onFileDrop,
 }: {
     entry: Entry
     onOpenFolder?: () => void
@@ -342,6 +347,10 @@ function EntryRow({
     /** As in the app: changeable on tracked rows until their deliverable is approved. */
     statusEditable: boolean
     onSetStatus: (next: DeliverableStatus) => void
+    /** Files from the computer dragged over this folder row would land in it (the drop zone, as in the app). */
+    uploadTarget?: boolean
+    onFileDragOver?: (e: React.DragEvent) => void
+    onFileDrop?: (e: React.DragEvent) => void
 }) {
     const isFolder = entry.kind === 'folder'
     const docId = isFolder ? entry.folder.docId : entry.file.docId
@@ -352,11 +361,20 @@ function EntryRow({
 
     return (
         <div
+            onDragOver={onFileDragOver}
+            onDrop={onFileDrop}
             className={`${FILE_TABLE_GRID_COLS_CLASS} ${cn(
                 'group relative grid h-[34px] cursor-default items-center gap-4 overflow-hidden pl-1 pr-2 text-ui transition-colors',
                 selected ? 'bg-surface-selected' : approved ? 'bg-action/5 hover:bg-action/10' : 'hover:bg-surface-hover',
+                uploadTarget && `${FILES_DROP_TARGET_ROW_CLASS} z-[1]`,
             )}`}
         >
+            {uploadTarget && (
+                <span className="pointer-events-none absolute right-3 top-1/2 z-10 inline-flex -translate-y-1/2 items-center gap-1 rounded-full bg-action px-2 py-0.5 text-caption text-action-fg">
+                    <Upload className="h-3 w-3" aria-hidden />
+                    Drop here
+                </span>
+            )}
             <div
                 className="flex h-4 w-4 flex-shrink-0 cursor-pointer items-center justify-center"
                 onClick={(e) => {
@@ -472,6 +490,12 @@ export function DemoFileList({
     const [dueOverrides, setDueOverrides] = useState<Record<string, string | null>>({})
     const [statusOverrides, setStatusOverrides] = useState<Record<string, DeliverableStatus>>({})
     const { addToast } = useToast()
+    // The drop zone, as in the app (components/projects/files-drop-zone.tsx): files dropped on the list, or
+    // on a folder row, or picked with Browse, are added on screen only; the tour uploads nothing.
+    const [added, setAdded] = useState<Record<string, DemoFile[]>>({})
+    const [drag, setDrag] = useState<{ count: number; target: DemoFolder | null } | null>(null)
+    const browseRef = useRef<HTMLInputElement>(null)
+    const addedCount = useRef(0)
     const statusFor = (entry: Entry): DeliverableStatus | null => {
         const id = entryId(entry)
         return statusOverrides[id] ?? (entry.kind === 'folder' ? deliverableStatusByFolderId?.[id] ?? null : null)
@@ -491,8 +515,51 @@ export function DemoFileList({
         addToast({ type: 'success', title: next === 'approved' ? 'Approved' : 'Stage updated', message: `${name} · ${statusOf('deliverable', next).label}` })
     }
 
+    const here = path.length > 0 ? path[path.length - 1] : null
     const allFolders = path.length === 0 ? folders : path[path.length - 1].subfolders
-    const allFiles = path.length === 0 ? [] : path[path.length - 1].files
+    const allFiles = here ? [...here.files, ...(added[here.id] ?? [])] : []
+    // As in the app: no uploads at the engagement's top level, or into an approved deliverable.
+    const canUpload = !!here && !deliverableApproved
+    const isApproved = (folder: DemoFolder) => (statusOverrides[folder.id] ?? deliverableStatusByFolderId?.[folder.id]) === 'approved'
+    const shownName = (folder: DemoFolder) => folder.name.replace(/_+/g, ' ').trim()
+    const addFiles = (list: FileList, into: DemoFolder) => {
+        const prefix = into.docId.split('-')[0]
+        const made: DemoFile[] = Array.from(list).map((file) => {
+            addedCount.current += 1
+            return {
+                id: `tour-upload-${addedCount.current}`,
+                docId: `${prefix}-${900 + addedCount.current}`,
+                name: file.name,
+                type: file.name.split('.').pop()?.toLowerCase() ?? '',
+                modifiedTime: new Date().toISOString(),
+                size: file.size,
+            }
+        })
+        if (made.length === 0) return
+        setAdded((prev) => ({ ...prev, [into.id]: [...(prev[into.id] ?? []), ...made] }))
+        addToast({ type: 'success', title: 'Added on screen', message: `${made.length} file${made.length > 1 ? 's' : ''} added to ${shownName(into)}. The tour doesn't upload anything.` })
+    }
+    const isFileDrag = (e: React.DragEvent) => e.dataTransfer.types.includes('Files')
+    const onListDragOver = (e: React.DragEvent) => {
+        if (!canUpload || !isFileDrag(e)) return
+        e.preventDefault()
+        e.dataTransfer.dropEffect = 'copy'
+        setDrag({ count: e.dataTransfer.items.length, target: null })
+    }
+    const onRowDragOver = (e: React.DragEvent, entry: Entry) => {
+        if (!canUpload || !isFileDrag(e)) return
+        e.preventDefault()
+        e.stopPropagation()
+        e.dataTransfer.dropEffect = 'copy'
+        setDrag({ count: e.dataTransfer.items.length, target: entry.kind === 'folder' && !isApproved(entry.folder) ? entry.folder : null })
+    }
+    const onDropFiles = (e: React.DragEvent, target: DemoFolder | null) => {
+        if (!isFileDrag(e)) return
+        e.preventDefault()
+        e.stopPropagation()
+        setDrag(null)
+        if (canUpload && here) addFiles(e.dataTransfer.files, target ?? here)
+    }
     // Deliverables: the deliverable folders at the top, and everything inside one.
     const insideDeliverable = path.length > 0 && !!deliverableStatusByFolderId?.[path[0].id]
     const currentFolders = !deliverablesOnly || insideDeliverable
@@ -633,7 +700,8 @@ export function DemoFileList({
                 )}
             </div>
 
-            <div className={`flex min-h-0 flex-1 flex-col ${FILE_TABLE_CONTAINER_CLASS}`}>
+            <div className={`relative flex min-h-0 flex-1 flex-col ${FILE_TABLE_CONTAINER_CLASS}`}>
+                {drag && here && <FilesDropPill count={drag.count} folderName={shownName(drag.target ?? here)} />}
                 <div className="sticky top-0 z-10 flex h-[34px] shrink-0 flex-col justify-center overflow-hidden border-y border-line bg-surface pl-1 pr-2">
                     <div className={`grid items-center gap-4 ${FILE_TABLE_GRID_COLS_CLASS}`}>
                         <div
@@ -652,7 +720,13 @@ export function DemoFileList({
                     </div>
                 </div>
 
-                <div className="flex-1 divide-y divide-line overflow-y-auto [&>.group:last-child]:border-b [&>.group:last-child]:border-line">
+                <div
+                    onDragOver={onListDragOver}
+                    onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDrag(null) }}
+                    onDrop={(e) => onDropFiles(e, null)}
+                    className={cn('flex-1 overflow-y-auto', drag && !drag.target && FILES_DROP_ZONE_ACTIVE_CLASS)}
+                >
+                    <div className="divide-y divide-line [&>.group:last-child]:border-b [&>.group:last-child]:border-line">
                     {entries.map((entry, index) => {
                         const id = entryId(entry)
                         return (
@@ -672,6 +746,9 @@ export function DemoFileList({
                                 pinTools={index === 0}
                                 selected={selected.has(id)}
                                 onToggleSelect={() => toggle(id)}
+                                uploadTarget={!!drag?.target && drag.target.id === id}
+                                onFileDragOver={(e) => onRowDragOver(e, entry)}
+                                onFileDrop={(e) => onDropFiles(e, entry.kind === 'folder' && !isApproved(entry.folder) ? entry.folder : null)}
                             />
                         )
                     })}
@@ -681,6 +758,24 @@ export function DemoFileList({
                             <p className="text-small text-fg-muted">{deliverablesOnly && totalCount > 0 ? 'No deliverables in this folder' : 'This folder is empty'}</p>
                         </div>
                     )}
+                    </div>
+                    {canUpload && here && itemCount > 0 && (
+                        <FilesDropRow
+                            state={!drag ? 'idle' : drag.target ? 'elsewhere' : 'here'}
+                            folderName={shownName(here)}
+                            onBrowse={() => browseRef.current?.click()}
+                        />
+                    )}
+                    <input
+                        ref={browseRef}
+                        type="file"
+                        multiple
+                        hidden
+                        onChange={(e) => {
+                            if (e.target.files && here) addFiles(e.target.files, here)
+                            e.target.value = ''
+                        }}
+                    />
                 </div>
             </div>
         </div>

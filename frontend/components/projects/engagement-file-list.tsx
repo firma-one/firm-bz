@@ -73,6 +73,7 @@ import { useSecureOpenDocument } from '@/lib/use-secure-open-document'
 import { SecureAccessModal } from '@/components/projects/shares/secure-access-modal'
 import { ProfileBubbleWithPopup } from '@/components/ui/profile-bubble-popup'
 import { EngagementFileRow } from '@/components/projects/engagement-file-row'
+import { FilesDropPill, FilesDropRow, FILES_DROP_ZONE_ACTIVE_CLASS } from '@/components/projects/files-drop-zone'
 import {
     FILE_TABLE_GRID_COLS_CLASS,
     FILE_TABLE_CONTAINER_CLASS,
@@ -270,6 +271,13 @@ function CopyMoveSubmitButton({ label, submitting, disabled, onClick }: { label:
 /** The toolbar's quiet icons (Search, Refresh): 28px, no border, a 14px glyph like the filter pills'. */
 const TOOLBAR_ICON_CLASS =
     'inline-flex h-7 w-7 items-center justify-center rounded-control text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg disabled:pointer-events-none disabled:opacity-40'
+
+/**
+ * The Files drop zone (design canvas section 10, 2026-10-23): a drop row under the files, the list
+ * outlined while it is the target, folder rows as targets, and a pill naming the folder. False brings
+ * back the old full-cover overlay; kept until Deepak signs off.
+ */
+const NEW_DROP_ZONE = true
 
 /** A bulk action in the selection bar: a label beside its icon, so a destructive one is never a bare glyph. */
 const SELECTION_ACTION_CLASS =
@@ -1612,12 +1620,23 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
         if (currentFolderId) fetchFiles(currentFolderId, true)
     }, [pendingBulkTrashIds, sessionRef, files, projectId, currentFolderIdRef, fetchFiles, addToast])
 
+    // Where files from the computer can land: the same rule as the New menu's Upload files (below, by the
+    // header), so the drop zone shows exactly where uploading is offered.
+    const canUploadHere =
+        !(currentFolderId === connectorRootFolderId || (!currentFolderId && !generalFolderId && !confidentialFolderId))
+        && !currentFolderIsApprovedDeliverable
+        && (canEdit || (restrictToSharedOnly && currentFolderIsDeliverable))
+    /** The open folder's name, for the drop zone's "Upload … to <folder>". */
+    const currentFolderName = breadcrumbs[breadcrumbs.length - 1]?.name ?? rootFolderName
+
     // Drag & drop hook
     const {
         draggedItem,
         dragOverFolderId,
         isInternalDragging,
         isDragging,
+        dropTargetFolder,
+        dragFileCount,
         handleDragOver,
         handleDragLeave,
         handleDrop,
@@ -1631,6 +1650,9 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
         processUploads,
         handleCopyMoveToFolder,
         addToast,
+        canUpload: canUploadHere,
+        // External members' uploads land in their shared folder whatever the row, so only the list is a target.
+        canUploadIntoFolders: canEdit && !restrictToSharedOnly,
     })
 
     const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => handleFileUploadFromHook(e, fileInputRef)
@@ -2840,9 +2862,9 @@ const handleRefresh = async () => {
                     onChange={handleFolderUpload}
                 />
 
-                {/* Drag Drop Overlay (External Upload) */}
+                {/* Drag Drop Overlay (External Upload) — the old full cover, kept behind NEW_DROP_ZONE until sign-off */}
                 {
-                    isDragging && (
+                    !NEW_DROP_ZONE && isDragging && (
                         <div className="absolute inset-0 z-50 bg-slate-100/90 border-2 border-dashed border-slate-400 flex flex-col items-center justify-center pointer-events-none">
                             <Upload className="h-16 w-16 text-fg-muted mb-4" />
                             <h3 className="text-xl font-medium text-fg-muted">Drop files to upload</h3>
@@ -2904,7 +2926,10 @@ const handleRefresh = async () => {
                 </div>
 
                 {/* File List, with the app's slim, light scrollbar (`subtle-scrollbar`, globals.css). */}
-                <div className="subtle-scrollbar relative flex-1 overflow-y-auto">
+                {NEW_DROP_ZONE && isDragging && (
+                    <FilesDropPill count={dragFileCount} folderName={dropTargetFolder?.name ?? currentFolderName} />
+                )}
+                <div className={cn("subtle-scrollbar relative flex-1 overflow-y-auto", NEW_DROP_ZONE && isDragging && !dropTargetFolder && FILES_DROP_ZONE_ACTIVE_CLASS)}>
                     {deeplinkResolving || loading || isLoadingFolders ? (
                         // Rows shaped like the table that is coming (same grid as the header and
                         // FileRow), so nothing jumps when the files arrive.
@@ -3002,6 +3027,7 @@ const handleRefresh = async () => {
                             </p>
                         </div>
                     ) : (
+                        <>
                         <div className={cn("divide-y divide-line border-b border-line", isUploading && "opacity-50 transition-opacity")}>
                             {sortedFiles.map((file) => (
                                 <EngagementFileRow
@@ -3091,9 +3117,19 @@ const handleRefresh = async () => {
                                     isOneDriveClient={isOneDriveClient}
                                     bookmarkId={bookmarkIdByDocumentId.get(file.projectDocumentId ?? '')}
                                     hideBadges={rightPane.content != null && rightPane.paneSize === 'medium'}
+                                    isUploadTarget={NEW_DROP_ZONE && dropTargetFolder?.id === file.id}
                                 />
                             ))}
                         </div>
+                        {/* Always somewhere to drop, once a folder has files (an empty one says so itself) */}
+                        {NEW_DROP_ZONE && canUploadHere && (
+                            <FilesDropRow
+                                state={!isDragging ? 'idle' : dropTargetFolder ? 'elsewhere' : 'here'}
+                                folderName={currentFolderName}
+                                onBrowse={() => fileInputRef.current?.click()}
+                            />
+                        )}
+                        </>
                     )}
                 </div>
 

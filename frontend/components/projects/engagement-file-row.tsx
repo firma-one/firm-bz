@@ -14,6 +14,7 @@ import {
     Loader2,
     Bookmark,
     FolderPlus,
+    Upload,
 } from 'lucide-react'
 import { DocumentIcon } from '@/components/ui/document-icon'
 import { SharedFolderIcon } from '@/components/ui/folder-shared-icon'
@@ -33,6 +34,7 @@ import {
     TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
+import { FILES_DROP_TARGET_ROW_CLASS } from '@/components/projects/files-drop-zone'
 import { formatFileSize } from '@/lib/utils'
 import { DriveFile } from '@/lib/types'
 import {
@@ -127,6 +129,8 @@ export interface EngagementFileRowProps {
     bookmarkId?: string
     /** When true, hides the dynamic badges column (shared/bookmark/intake/lock) to save horizontal space. */
     hideBadges?: boolean
+    /** Files from the computer dragged over this folder row will upload into it (the Files drop zone). */
+    isUploadTarget?: boolean
     /** When true, the current folder is an approved deliverable — disable all write operations. */
     isInsideApprovedDeliverable?: boolean
     /** The viewer's engagement role: decides which stages they may move a row to (as on the Board). */
@@ -199,6 +203,7 @@ export function EngagementFileRow({
     isOneDriveClient = false,
     bookmarkId,
     hideBadges = false,
+    isUploadTarget = false,
     isInsideApprovedDeliverable = false,
     roleSlug = null,
 }: EngagementFileRowProps) {
@@ -278,7 +283,8 @@ export function EngagementFileRow({
                 !isIntakeRow && isActionMenuOpen && "bg-surface-muted",
                 !isIntakeRow && (file.id === activeCommentDocId || file.id === activeInfoDocId || file.id === activeActivityDocId || file.id === activeVersionDocId || file.id === activePreviewDocId) && "bg-surface-muted",
                 draggedItem?.id === file.id && "opacity-40 grayscale",
-                dragOverFolderId === file.id && "bg-line ring-2 ring-inset ring-line z-[1]"
+                dragOverFolderId === file.id && "bg-line ring-2 ring-inset ring-line z-[1]",
+                isUploadTarget && `${FILES_DROP_TARGET_ROW_CLASS} z-[1]`
             )}`}
             onMouseEnter={() => {
                 if (isDeeplinkHighlight) onClearHighlight()
@@ -751,6 +757,12 @@ export function EngagementFileRow({
                         <div className="h-full bg-primary animate-indeterminate-progress" />
                     </div>
                 </div>
+            )}
+            {isUploadTarget && (
+                <span className="pointer-events-none absolute right-3 top-1/2 z-10 inline-flex -translate-y-1/2 items-center gap-1 rounded-full bg-action px-2 py-0.5 text-caption text-action-fg">
+                    <Upload className="h-3 w-3" aria-hidden />
+                    Drop here
+                </span>
             )}
         </div>
     )
