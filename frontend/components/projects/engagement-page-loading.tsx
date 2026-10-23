@@ -8,6 +8,7 @@ import { LoadingAnnouncement, ShimmerBar, ShimmerBlock } from '@/components/ui/s
 import { useShellData } from '@/components/shell/shell-data-context'
 import { EngagementHeader } from './engagement-header'
 import { EngagementTabsList, engagementChromeKey, readEngagementChrome } from './engagement-tabs'
+import { HorizontalScroll } from '@/components/ui/horizontal-scroll'
 
 const TABS = new Set(['analytics', 'files', 'board', 'shares', 'comments', 'wiki', 'audit', 'members', 'settings', 'sources'])
 
@@ -103,7 +104,7 @@ export function EngagementPageLoading() {
 
                 <Tabs value={targetTab ?? ''} className="flex min-h-0 flex-1 flex-col">
                     <div className="mb-4 flex shrink-0 items-end justify-between gap-3 border-b border-line">
-                        <div className="min-w-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                        <HorizontalScroll>
                             {snapshot ? (
                                 <EngagementTabsList {...snapshot.tabs} pendingTab={targetTab} />
                             ) : (
@@ -113,7 +114,7 @@ export function EngagementPageLoading() {
                                     ))}
                                 </div>
                             )}
-                        </div>
+                        </HorizontalScroll>
                     </div>
                     <BodySkeleton />
                 </Tabs>

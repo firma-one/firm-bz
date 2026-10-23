@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Hint } from '@/components/ui/tooltip'
 import { EngagementHeader } from '@/components/projects/engagement-header'
 import { EngagementTabsList } from '@/components/projects/engagement-tabs'
+import { HorizontalScroll } from '@/components/ui/horizontal-scroll'
 import { DemoClient, DemoEngagement, countFilesInEngagement } from '@/lib/demo/static-demo-data'
 import { getDeliverableDueMap, getDeliverableStatusMap, getDemoDeliverables } from '@/lib/demo/demo-deliverables'
 import { DemoFileList } from '@/components/demo/demo-file-list'
@@ -78,7 +79,7 @@ export function DemoEngagementWorkspace({ client, engagement }: DemoEngagementWo
 
             <Tabs value={currentTab} onValueChange={handleTabChange} className="flex flex-1 flex-col min-h-0">
                 <div className="mb-4 flex shrink-0 items-end justify-between gap-3 border-b border-line">
-                    <div className="min-w-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                    <HorizontalScroll>
                         <EngagementTabsList
                             clientConnectorType="GOOGLE_DRIVE"
                             sharesCount={deliverableCount}
@@ -88,7 +89,7 @@ export function DemoEngagementWorkspace({ client, engagement }: DemoEngagementWo
                             canManage={true}
                             canViewSettings={false}
                         />
-                    </div>
+                    </HorizontalScroll>
                     {currentTab === 'files' && (
                         <div className="flex shrink-0 items-center pb-1">
                             <Hint label="Not available in this demo" side="bottom">

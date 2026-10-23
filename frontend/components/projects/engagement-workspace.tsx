@@ -21,6 +21,7 @@ import { EngagementWikiTab } from './wiki/engagement-wiki-tab'
 import type { LwCrmEngagementStatus } from '@/lib/actions/project'
 import { EngagementHeader } from './engagement-header'
 import { EngagementTabsList, engagementChromeKey, rememberEngagementChrome, type EngagementTabsConfig } from './engagement-tabs'
+import { HorizontalScroll } from '@/components/ui/horizontal-scroll'
 
 export interface ProjectPathSegments {
     tab: string
@@ -242,9 +243,9 @@ export function EngagementWorkspace({
             <Tabs value={currentTab} onValueChange={handleTabChange} className="flex-1 flex flex-col min-h-0">
                 {/* Underline tabs (Linear/Notion); page actions sit at the right end of the tab row. */}
                 <div className="mb-4 flex shrink-0 items-end justify-between gap-3 border-b border-line">
-                    <div className="min-w-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                    <HorizontalScroll>
                         <EngagementTabsList {...tabsConfig} pendingTab={pendingTab} />
-                    </div>
+                    </HorizontalScroll>
                     {/* New Document button slot — EngagementFileList portals into this when Files is active */}
                     {currentTab === 'files' && (
                         <div ref={setFilesNavSlot} className="flex shrink-0 items-center pb-1" />
