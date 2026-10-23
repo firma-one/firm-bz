@@ -22,8 +22,10 @@ describe('parseAppPath', () => {
 
     it('reads the engagement tab, ignoring query and hash', () => {
         expect(parseAppPath('/d/g/f/acme/c/contoso/e/fy26/files?x=1#doc-file:abc')?.engagementTab).toBe('files')
-        expect(parseAppPath('/d/g/f/acme/c/contoso/e/fy26/shares/board')?.engagementTab).toBe('shares')
-        expect(parseAppPath('/d/g/f/acme/c/contoso/e/fy26/board')?.engagementTab).toBe('shares')
+        // The Board replaced the old Shares page: a visit to either reopens the Board.
+        expect(parseAppPath('/d/g/f/acme/c/contoso/e/fy26/shares/board')?.engagementTab).toBe('board')
+        expect(parseAppPath('/d/g/f/acme/c/contoso/e/fy26/shares/grid')?.engagementTab).toBe('board')
+        expect(parseAppPath('/d/g/f/acme/c/contoso/e/fy26/board')?.engagementTab).toBe('board')
         expect(parseAppPath('/d/g/f/acme/c/contoso/e/fy26/wiki/page-1')?.engagementTab).toBe('wiki')
         expect(parseAppPath('/d/g/f/acme/c/contoso/e/fy26/nonsense')?.engagementTab).toBeNull()
     })

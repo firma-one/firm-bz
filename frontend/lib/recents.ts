@@ -37,7 +37,9 @@ export function parseAppPath(path: string): ParsedAppPath | null {
         return { groupSlug: seg[1], firmSlug: seg[3], clientSlug: null, engagementSlug: null, engagementTab: null }
     }
     const sub = hasEngagement ? seg[8] : undefined
-    const tab = sub === 'board' ? 'shares' : sub && ENGAGEMENT_TABS.has(sub) ? sub : null
+    // The Board replaced the old Shares page (which once hosted it as a view): a visit to either
+    // reopens the Board. Mapping /board to 'shares' brought back the old sharing grid, with no tab lit.
+    const tab = sub === 'board' || sub === 'shares' ? 'board' : sub && ENGAGEMENT_TABS.has(sub) ? sub : null
     return {
         groupSlug: seg[1],
         firmSlug: seg[3],
