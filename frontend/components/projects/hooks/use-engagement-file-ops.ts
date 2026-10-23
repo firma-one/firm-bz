@@ -2,6 +2,7 @@ import { useState, useCallback, useRef } from 'react'
 import { logger } from '@/lib/logger'
 import { useToast } from '@/components/ui/toast'
 import { DriveFile } from '@/lib/types'
+import { ENGAGEMENT_ROOT_LABEL } from '@/lib/files/engagement-root'
 
 type Session = {
     access_token?: string
@@ -626,7 +627,8 @@ export function useEngagementFileOps({
 
         const rootId = currentFolderType === 'general' ? generalFolderId :
             currentFolderType === 'confidential' ? confidentialFolderId : stagingFolderId
-        const rootName = currentFolderType.charAt(0).toUpperCase() + currentFolderType.slice(1)
+        // The engagement's own top folder is "general" in Drive; users know it as the engagement root.
+        const rootName = currentFolderType === 'general' ? ENGAGEMENT_ROOT_LABEL : currentFolderType.charAt(0).toUpperCase() + currentFolderType.slice(1)
 
         if (!rootId) {
             setCopyMoveModalOpen(true)

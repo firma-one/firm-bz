@@ -78,6 +78,7 @@ import { cn, formatFileSize } from '@/lib/utils'
 import { initialsOf } from '@/lib/initials'
 import type { DemoFolder, DemoFile } from '@/lib/demo/static-demo-data'
 import { DELIVERABLE_ACTORS, type DeliverableStatus } from '@/lib/demo/demo-deliverables'
+import { ENGAGEMENT_ROOT_LABEL } from '@/lib/files/engagement-root'
 
 export const MIME_BY_TYPE: Record<string, string> = {
     pdf: 'application/pdf',
@@ -621,9 +622,10 @@ export function DemoFileList({
                             type="button"
                             onClick={() => openFolder([])}
                             className={cn('flex items-center gap-1.5 rounded-control px-1.5 py-1 transition-colors hover:bg-surface-hover', path.length === 0 ? 'bg-surface-subtle text-fg' : 'text-fg-muted')}
-                            aria-label="Files root"
+                            title={ENGAGEMENT_ROOT_LABEL}
                         >
-                            <Briefcase className="h-3.5 w-3.5 text-fg-subtle" />
+                            <Briefcase className="h-3.5 w-3.5 text-primary" />
+                            <span className="whitespace-nowrap">{ENGAGEMENT_ROOT_LABEL}</span>
                             {path.length === 0 && countChip}
                         </button>
                         {path.map((folder, i) => (

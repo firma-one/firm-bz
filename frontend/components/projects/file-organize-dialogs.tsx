@@ -144,7 +144,7 @@ export function CopyMoveDialog({
             <DialogContent className={PANEL_CLASS}>
                 <DividedHeader
                     title={`${verb} to folder`}
-                    description={<><FileChip name={targetName} mimeType={targetMimeType} /> will be {action === 'copy' ? 'copied' : 'moved'} to the folder you pick in {root?.name || 'the engagement'}.</>}
+                    description={<><FileChip name={targetName} mimeType={targetMimeType} /> will be {action === 'copy' ? 'copied' : 'moved'} to the folder you pick.</>}
                 />
 
                 <div className="space-y-4 px-5 pb-5 pt-4">
@@ -175,7 +175,10 @@ export function CopyMoveDialog({
                                                     i === path.length - 1 ? 'font-medium text-fg' : 'text-fg-muted hover:text-fg'
                                                 )}
                                             >
-                                                <Folder className="h-3.5 w-3.5 shrink-0 text-fg-muted" aria-hidden />
+                                                {/* The root is the engagement's own top folder: the breadcrumb's Briefcase and label */}
+                                                {i === 0
+                                                    ? <Briefcase className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
+                                                    : <Folder className="h-3.5 w-3.5 shrink-0 text-fg-muted" aria-hidden />}
                                                 <span className="truncate">{seg.name}</span>
                                             </button>
                                         </div>

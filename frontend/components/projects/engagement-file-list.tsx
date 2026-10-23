@@ -75,6 +75,7 @@ import { ProfileBubbleWithPopup } from '@/components/ui/profile-bubble-popup'
 import { EngagementFileRow } from '@/components/projects/engagement-file-row'
 import { FilesDropPill, FilesDropRow, FILES_DROP_ZONE_ACTIVE_CLASS } from '@/components/projects/files-drop-zone'
 import { CopyMoveDialog, CopyToEngagementDialog, RenameDialog } from '@/components/projects/file-organize-dialogs'
+import { ENGAGEMENT_ROOT_LABEL } from '@/lib/files/engagement-root'
 import {
     FILE_TABLE_GRID_COLS_CLASS,
     FILE_TABLE_CONTAINER_CLASS,
@@ -1638,7 +1639,9 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
         && !currentFolderIsApprovedDeliverable
         && (canEdit || (restrictToSharedOnly && currentFolderIsDeliverable))
     /** The open folder's name, for the drop zone's "Upload … to <folder>". */
-    const currentFolderName = breadcrumbs[breadcrumbs.length - 1]?.name ?? rootFolderName
+    // The open folder's name for the upload texts; at the top, the engagement root's label, not Drive's "general".
+    const lastCrumb = breadcrumbs[breadcrumbs.length - 1]
+    const currentFolderName = !lastCrumb || breadcrumbs.length === 1 || lastCrumb.isEngagementRoot ? ENGAGEMENT_ROOT_LABEL : lastCrumb.name
 
     // Drag & drop hook
     const {
@@ -2336,9 +2339,10 @@ const handleRefresh = async () => {
                                                         "flex items-center hover:bg-surface-hover px-1.5 py-1 rounded transition-colors",
                                                         index === breadcrumbs.length - 1 ? "text-fg bg-surface-subtle" : "hover:text-fg"
                                                     )}
-                                                    title="Files root"
+                                                    title={ENGAGEMENT_ROOT_LABEL}
                                                 >
                                                     <Briefcase className="h-3.5 w-3.5 text-primary flex-shrink-0" />
+                                                    <span className="ml-1.5 whitespace-nowrap">{ENGAGEMENT_ROOT_LABEL}</span>
                                                     {countChip(index)}
                                                 </button>
                                             ) : isEllipsis ? (
@@ -2367,9 +2371,10 @@ const handleRefresh = async () => {
                                                         "flex items-center hover:bg-surface-hover px-1.5 py-1 rounded transition-colors",
                                                         index === breadcrumbs.length - 1 ? "text-fg bg-surface-subtle" : "hover:text-fg"
                                                     )}
-                                                    title="Files root"
+                                                    title={ENGAGEMENT_ROOT_LABEL}
                                                 >
                                                     <Briefcase className="h-3.5 w-3.5 text-primary flex-shrink-0" />
+                                                    <span className="ml-1.5 whitespace-nowrap">{ENGAGEMENT_ROOT_LABEL}</span>
                                                     {countChip(index)}
                                                 </button>
                                             ) : (
