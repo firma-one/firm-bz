@@ -340,12 +340,13 @@ export function InboxView({
             )}
         >
             <span className="mt-1.5 flex h-2 w-2 shrink-0 items-center justify-center">
-                {item.unread && <span className={cn("h-2 w-2 rounded-full", item.overdue ? "bg-danger" : "bg-action")} aria-label="Needs attention" />}
+                {/* A dot (and bold) means unread, so only Updates have one; a reminder's urgency is its due chip. */}
+                {item.source === "notification" && item.unread && <span className="h-2 w-2 rounded-full bg-action" aria-label="Unread" />}
             </span>
             <ItemIcon item={item} className="mt-0.5 h-4 w-4 shrink-0 text-fg-muted" />
             <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                 <span className="flex min-w-0 items-baseline justify-between gap-2">
-                    <span className={cn("truncate text-ui text-fg", item.unread && "font-semibold")}>{item.title}</span>
+                    <span className={cn("truncate text-ui text-fg", item.source === "notification" && item.unread && "font-semibold")}>{item.title}</span>
                     <span className="shrink-0 text-caption font-normal text-fg-subtle">
                         <ItemTime item={item} />
                     </span>

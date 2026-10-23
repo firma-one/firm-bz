@@ -58,6 +58,9 @@ export type NeedsYouItem = {
     href: string
     actionLabel: string
     at: string | null
+    /** A dated reminder that needs you (due today or overdue): its due label, shown in place of `at`. */
+    dueLabel?: string | null
+    overdue?: boolean
 }
 
 export type DueItem = {
@@ -328,8 +331,9 @@ export async function getMyWork(params: {
 }
 
 /**
- * The caller's own reminders in these firms: review requests and undated ones (Reconnect Drive, say —
- * waiting on them now) → Needs you; dated ones → Due soon, which the Agenda shows.
+ * The caller's own reminders in these firms: review requests, undated ones (Reconnect Drive, say) and
+ * dated ones due today or overdue — waiting on them now → Needs you; dated ones due later → Due soon,
+ * which the Agenda shows (isNeedsYouReminder).
  */
 function remindersOnly(reminders: ReminderWithContext[], firmIds: Set<string>): Pick<MyWork, 'needsYou' | 'dueSoon'> {
     const needsYou: NeedsYouItem[] = []
@@ -346,6 +350,8 @@ function remindersOnly(reminders: ReminderWithContext[], firmIds: Set<string>): 
                 href: r.ctaUrl ?? '#',
                 actionLabel: 'Open',
                 at: r.dateValue,
+                dueLabel: r.dateValue ? r.label : null,
+                overdue: r.delta !== null && r.delta < 0,
             })
         } else if (r.dateValue && r.delta !== null && r.delta <= DUE_SOON_DAYS) {
             dueSoon.push({

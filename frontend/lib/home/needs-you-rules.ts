@@ -12,9 +12,11 @@ export function isReviewReminder(r: Pick<ReminderWithContext, 'action'>): boolea
 }
 
 /**
- * A review request, or a reminder with no date (Reconnect Drive, say): waiting on you now. A dated
- * reminder is a deadline instead, which Home's Agenda and the Inbox's due lists show.
+ * Waiting on you now: a review request, a reminder with no date (Reconnect Drive, say), or a dated one
+ * that is due today or overdue (2026-10-23: an overdue kickoff sat under Needs you uncounted, so the
+ * tab said 0 and no badge showed). A reminder due later is a deadline, which Home's Agenda and the
+ * Inbox's Upcoming list show.
  */
-export function isNeedsYouReminder(r: Pick<ReminderWithContext, 'action' | 'dateValue'>): boolean {
-    return isReviewReminder(r) || !r.dateValue
+export function isNeedsYouReminder(r: Pick<ReminderWithContext, 'action' | 'dateValue' | 'delta'>): boolean {
+    return isReviewReminder(r) || !r.dateValue || (r.delta !== null && r.delta <= 0)
 }
