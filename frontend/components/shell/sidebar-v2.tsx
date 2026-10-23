@@ -11,7 +11,6 @@ import {
     ChevronRight,
     ClipboardList,
     CreditCard,
-    FolderOpen,
     Home,
     Inbox,
     LayoutGrid,
@@ -27,6 +26,7 @@ import {
     UserCircle,
     Users,
 } from "lucide-react"
+import { ClientIcon } from "@/components/ui/client-icon"
 import { useAuth } from "@/lib/auth-context"
 import { buildBillingPageHref } from "@/lib/billing/build-billing-page-href"
 import { AccessLock } from "@/components/ui/access-lock"
@@ -409,7 +409,7 @@ export function SidebarV2({
                     {base && (
                         <SidebarItem
                             href={firmTabPath(groupSlug!, firmSlug!, "clients")}
-                            icon={<FolderOpen />}
+                            icon={<ClientIcon />}
                             label={visibleClients.length > MAX_CLIENTS ? `All clients (${visibleClients.length})` : "All clients"}
                             active={tab === "clients" || (pathname.startsWith(`${base}/c`) && !pathname.includes("/e/"))}
                         />
@@ -473,7 +473,7 @@ export function ClientGroup({ name, defaultOpen, storageId, children }: { name: 
             >
                 {/* Notion page tree: the client's icon, swapped for the expand chevron on hover. */}
                 <span className="relative flex h-4 w-4 shrink-0 items-center justify-center text-fg-subtle">
-                    <Users className="h-4 w-4 transition-opacity group-hover:opacity-0 group-focus-visible:opacity-0" />
+                    <ClientIcon className="h-4 w-4 transition-opacity group-hover:opacity-0 group-focus-visible:opacity-0" />
                     <ChevronRight
                         className={cn(
                             "absolute h-3.5 w-3.5 opacity-0 transition-[opacity,transform] group-hover:opacity-100 group-focus-visible:opacity-100",

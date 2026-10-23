@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { format } from "date-fns"
-import { ArrowRight, AtSign, Bell, Clock, History, Home, Inbox, Briefcase, MessageSquare, Users } from "lucide-react"
+import { ArrowRight, AtSign, Bell, Clock, History, Home, Inbox, Briefcase, MessageSquare } from "lucide-react"
+import { ClientIcon } from "@/components/ui/client-icon"
 import type { RecentVisit } from "@/lib/recents"
 import type { MyWork, NeedsYouItem } from "@/lib/home/my-work"
 import type { HomeFirm, UnavailableFirm } from "@/lib/home/home-firms"
@@ -74,7 +75,7 @@ function ContinueSection({ recents, label }: { recents: RecentVisit[]; label: La
                     >
                         <div className="flex min-w-0 flex-col gap-1">
                             <span className="flex min-w-0 items-center gap-1.5 text-caption text-fg-muted">
-                                {r.entityType === "engagement" ? <Briefcase className="h-3.5 w-3.5 shrink-0" /> : <Users className="h-3.5 w-3.5 shrink-0" />}
+                                {r.entityType === "engagement" ? <Briefcase className="h-3.5 w-3.5 shrink-0" /> : <ClientIcon className="h-3.5 w-3.5 shrink-0" />}
                                 <span className="truncate">{label(r.firmId, r.context ?? (r.entityType === "client" ? "Client" : "Engagement"))}</span>
                             </span>
                             <span className="line-clamp-2 text-ui font-medium text-fg">{r.title}</span>

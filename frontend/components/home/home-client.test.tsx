@@ -8,14 +8,14 @@ const engagement = (over: Partial<HomeEngagement>): HomeEngagement => ({
     status: 'ACTIVE', dueDate: null, updatedAt: new Date().toISOString(), role: 'eng_admin', ...over,
 })
 
-/** The lucide icons inside an element, by name ("users", "briefcase", "building2"). */
+/** The lucide icons inside an element, by name ("handshake" for a client, "briefcase", "building2"). */
 const icons = (el: Element) => Array.from(el.querySelectorAll('svg')).map((s) => (s.getAttribute('class') ?? '').match(/lucide-([a-z0-9-]+)/)?.[1])
 
 describe('MyEngagementsList — icons', () => {
     it('marks client groups with the client icon and every engagement with the engagement icon', () => {
         render(<MyEngagementsList engagements={[engagement({})]} />)
         const group = screen.getByRole('button', { name: /DataSentry/ })
-        expect(icons(group)).toContain('users')
+        expect(icons(group)).toContain('handshake')
         const row = screen.getByRole('link', { name: /GTM Positioning/ })
         expect(icons(row)).toContain('briefcase')
     })
@@ -25,13 +25,13 @@ describe('MyEngagementsList — icons', () => {
         const group = screen.getByRole('button', { name: /FirmaOne/ })
         expect(icons(group)).toContain('building2')
         const row = screen.getByRole('link', { name: /GTM Positioning/ })
-        expect(icons(row)).toEqual(expect.arrayContaining(['briefcase', 'users']))
+        expect(icons(row)).toEqual(expect.arrayContaining(['briefcase', 'handshake']))
     })
 
     it('by status, a row carries its client and firm, each with its icon', () => {
         render(<MyEngagementsList engagements={[engagement({})]} firmNames={{ f1: 'FirmaOne' }} />)
         fireEvent.click(screen.getByRole('button', { name: 'By status' }))
         const row = screen.getByRole('link', { name: /GTM Positioning/ })
-        expect(icons(row)).toEqual(expect.arrayContaining(['briefcase', 'users', 'building2']))
+        expect(icons(row)).toEqual(expect.arrayContaining(['briefcase', 'handshake', 'building2']))
     })
 })

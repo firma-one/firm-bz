@@ -7,7 +7,8 @@ import { useAuth } from "@/lib/auth-context"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
-import { CheckCircle2, ArrowRight, ArrowLeft, Building2, Lock, AlertCircle, Users, Briefcase, HardDrive, FolderOpen, Folder, SquarePlus, Info, Copy, Check, Loader2, Cloud } from "lucide-react"
+import { CheckCircle2, ArrowRight, ArrowLeft, Building2, Lock, AlertCircle, Briefcase, HardDrive, FolderOpen, Folder, SquarePlus, Info, Copy, Check, Loader2, Cloud } from "lucide-react"
+import { ClientIcon } from "@/components/ui/client-icon"
 import { GoogleDriveIcon } from "@/components/ui/google-drive-icon"
 import { GoogleSharedDriveIcon } from "@/components/ui/google-shared-drive-icon"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
@@ -110,7 +111,7 @@ function SandboxHierarchyPreview({
                         <div key={ci}>
                             <div className="mb-1.5 flex items-center gap-2.5">
                                 <OrgTreeProgressCheck status={nodeStatus(clientStep)} size="md" />
-                                <Users className="h-4 w-4 shrink-0 text-fg-subtle" strokeWidth={1.75} />
+                                <ClientIcon className="h-4 w-4 shrink-0 text-fg-subtle" strokeWidth={1.75} />
                                 <span className="min-w-0 truncate text-ui text-fg">{client.clientName}</span>
                                 <Tag className="ml-auto">Client</Tag>
                             </div>

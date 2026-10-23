@@ -5,6 +5,7 @@ import Link from "next/link"
 import { ShimmerBar } from "@/components/ui/shimmer"
 import { usePathname, useSearchParams } from "next/navigation"
 import { BarChart3, Briefcase, Building2, CalendarDays, ChevronRight, ClipboardList, CreditCard, Folder, Home, Inbox, LayoutGrid, LifeBuoy, Menu, MessagesSquare, PanelLeftOpen, PenTool, Search, Settings, UserCircle, Users } from "lucide-react"
+import { ClientIcon } from "@/components/ui/client-icon"
 import { AiCreditsIndicator } from "@/components/app/ai-credits-indicator"
 import { clientPath, engagementPath, firmPath } from "@/lib/navigation/firm-paths"
 import { useDailyDigestToast } from "./use-daily-digest-toast"
@@ -13,11 +14,11 @@ import { useShellData } from "./shell-data-context"
 
 type Crumb = { label: string; href?: string; pending?: boolean; icon?: ReactNode }
 
-// Icons are the app's existing ones: firm Building2, client Users, engagement Briefcase, and each
+// Icons are the app's existing ones: firm Building2, client ClientIcon (handshake), engagement Briefcase, and each
 // tab's own icon from the sidebar or the engagement tab row.
 const FIRM_TABS: Record<string, { label: string; icon: ReactNode }> = {
     analytics: { label: "Overview", icon: <BarChart3 /> },
-    clients: { label: "Clients", icon: <Users /> },
+    clients: { label: "Clients", icon: <ClientIcon /> },
     calendar: { label: "Calendar", icon: <CalendarDays /> },
     "doc-search": { label: "Doc Search", icon: <Search /> },
     members: { label: "Members", icon: <Users /> },
@@ -84,7 +85,7 @@ function useBreadcrumbs(): Crumb[] {
     // Until the shell data arrives, show a placeholder rather than the slug ("Datasen Jixw").
     const pending = loading || !data
     const client = data?.clients.find((x) => x.slug === c)
-    crumbs.push({ label: client?.name ?? humanize(c), href: clientPath(g, f, c), pending: !client && pending, icon: <Users /> })
+    crumbs.push({ label: client?.name ?? humanize(c), href: clientPath(g, f, c), pending: !client && pending, icon: <ClientIcon /> })
     if (!e) return crumbs
 
     const engagement = client?.engagements.find((x) => x.slug === e)

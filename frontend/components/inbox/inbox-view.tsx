@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { formatDistanceToNowStrict, format } from "date-fns"
 import { AlarmClock, ArrowLeft, Bell, Briefcase, Building2, CheckCheck, CheckCircle2, EyeOff, ExternalLink, FileText, HardDrive, Inbox as InboxIcon, Loader2, Mail, MessagesSquare, Users } from "lucide-react"
+import { ClientIcon } from "@/components/ui/client-icon"
 import { DeliverableGlyph } from '@/components/ui/deliverable-icon'
 import { getAllUserReminders, hideReminder, markReminderDone, type ReminderWithContext } from "@/lib/actions/user-reminders"
 import { getNeedsYou } from "@/lib/actions/inbox"
@@ -37,7 +38,7 @@ function isTypingTarget(target: EventTarget | null): boolean {
  */
 const ENTITY_ICON: Record<InboxEntity, React.ElementType> = {
     firm: Building2,
-    client: Users,
+    client: ClientIcon,
     engagement: Briefcase,
     deliverable: DeliverableGlyph,
     document: FileText,

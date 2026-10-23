@@ -10,7 +10,6 @@ import {
     ClipboardList,
     CreditCard,
     ExternalLink,
-    FolderOpen,
     Home,
     Inbox,
     Info,
@@ -23,6 +22,7 @@ import {
     UserPlus,
     Users,
 } from 'lucide-react'
+import { ClientIcon } from '@/components/ui/client-icon'
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -163,7 +163,7 @@ export function DemoSidebar({ inboxCount, onCollapse }: {
                     <div data-demo-tour="firm-clients-tab">
                         <SidebarItem
                             href="/tour?tab=clients"
-                            icon={<FolderOpen />}
+                            icon={<ClientIcon />}
                             label="All clients"
                             active={view === 'clients' || (pathname.startsWith('/tour/') && pathname.split('/').length === 3 && !['/tour/home', '/tour/inbox', '/tour/support'].includes(pathname))}
                         />

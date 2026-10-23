@@ -6,7 +6,8 @@ import { getProjectMemberSummaries, type ProjectMemberSummary } from '@/lib/acti
 import { ProjectList } from './engagement-list'
 import { ClientSettingsForm } from './client-settings-form'
 import type { LwCrmClientStatus } from '@/lib/actions/client'
-import { Plus, Users, Briefcase, Settings, UserCog, Contact } from 'lucide-react'
+import { Plus, Briefcase, Settings, UserCog, Contact } from 'lucide-react'
+import { ClientIcon } from '@/components/ui/client-icon'
 import { Button } from '@/components/ui/button'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { AddEngagementModal } from './add-engagement-modal'
@@ -112,7 +113,7 @@ export function ClientProjectView({ clients, groupSlug, firmSlug, firmName, firm
 
     if (clients.length === 0) {
         return (
-            <EmptyPanel icon={<Users />} title="No clients yet" description="Create your first client from the sidebar." />
+            <EmptyPanel icon={<ClientIcon />} title="No clients yet" description="Create your first client from the sidebar." />
         )
     }
 

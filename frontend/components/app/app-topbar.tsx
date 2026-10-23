@@ -7,7 +7,8 @@ import { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react
 import { usePathname } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { supabase } from "@/lib/supabase"
-import { Bell, Bookmark, Briefcase, ChevronDown, ChevronRight, ChevronUp, History, Info, Megaphone, MapPinned as MapIcon, Search, Send, SquareX, Trash2, Users, X, ArrowUpRight } from "lucide-react"
+import { Bell, Bookmark, Briefcase, ChevronDown, ChevronRight, ChevronUp, History, Info, Megaphone, MapPinned as MapIcon, Search, Send, SquareX, Trash2, X, ArrowUpRight } from "lucide-react"
+import { ClientIcon } from "@/components/ui/client-icon"
 import { AiCreditsIndicator } from "@/components/app/ai-credits-indicator"
 import Link from "next/link"
 import { Tip } from "@/components/ui/tip"
@@ -677,7 +678,7 @@ export function AppTopbar() {
                       {/* Line 1: icon + name + chevron */}
                       <div className="flex items-center gap-1.5 min-w-0">
                         {item.type === 'client' ? (
-                          <Users className="h-3.5 w-3.5 shrink-0 text-[#45474c]" />
+                          <ClientIcon className="h-3.5 w-3.5 shrink-0 text-[#45474c]" />
                         ) : (
                           <Briefcase className="h-3.5 w-3.5 shrink-0 text-[#45474c]" />
                         )}

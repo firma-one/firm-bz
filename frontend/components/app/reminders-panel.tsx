@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import { usePathname } from "next/navigation"
-import { AlarmClock, ArrowUpRight, BellOff, Building2, CheckCircle2, ChevronRight, Clock, Eye, EyeOff, FileText, SquareX, Undo2, Users } from "lucide-react"
+import { AlarmClock, ArrowUpRight, BellOff, Building2, CheckCircle2, ChevronRight, Clock, Eye, EyeOff, FileText, SquareX, Undo2 } from "lucide-react"
+import { ClientIcon } from "@/components/ui/client-icon"
 import Link from "next/link"
 import {
     getUserReminders,
@@ -15,7 +16,7 @@ import {
 import { Tip } from "@/components/ui/tip"
 
 const ENTITY_KEY_ICON: Record<string, React.ElementType> = {
-    'platform.clients': Users,
+    'platform.clients': ClientIcon,
     'platform.engagements': AlarmClock,
     'platform.firms': Building2,
     'platform.documents': FileText,

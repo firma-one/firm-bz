@@ -25,9 +25,9 @@ import {
   RotateCcw,
   Share2,
   UserPlus,
-  Users,
   X,
 } from 'lucide-react'
+import { ClientIcon } from '@/components/ui/client-icon'
 import { Button } from '@/components/ui/button'
 import { EmptyPanel } from '@/components/ui/empty-panel'
 import { formatSmartDateTime } from '@/lib/utils'
@@ -350,7 +350,7 @@ function EventIcon({ eventType }: { eventType: string }) {
   if (eventType.startsWith('FIRM_')) return <Building2 className="h-3.5 w-3.5 text-fg-subtle" />
   if (eventType.startsWith('CLIENT_CONTACT_')) return <MessageSquare className="h-3.5 w-3.5 text-fg-subtle" />
   if (eventType.startsWith('CLIENT_MEMBER_')) return <UserPlus className="h-3.5 w-3.5 text-fg-subtle" />
-  if (eventType.startsWith('CLIENT_')) return <Users className="h-3.5 w-3.5 text-fg-subtle" />
+  if (eventType.startsWith('CLIENT_')) return <ClientIcon className="h-3.5 w-3.5 text-fg-subtle" />
   if (eventType.startsWith('ENGAGEMENT_MEMBER_')) return <UserPlus className="h-3.5 w-3.5 text-fg-subtle" />
   if (eventType.startsWith('ENGAGEMENT_')) return <Briefcase className="h-3.5 w-3.5 text-fg-subtle" />
   if (eventType === 'DOCUMENT_OPENED') return <Eye className="h-3.5 w-3.5 text-fg-subtle" />
@@ -851,7 +851,7 @@ export function AuditWithFilters({
             <DropdownMenu open={clientMenuOpen} onOpenChange={setClientMenuOpen}>
               <DropdownMenuTrigger asChild>
                 <FilterPill
-                  icon={<Users />}
+                  icon={<ClientIcon />}
                   label="Client"
                   value={clientIdsFilter.length
                     ? summarizePicks(clientIdsFilter.map((id) => clients.find((c) => c.id === id)?.name ?? 'Client'))

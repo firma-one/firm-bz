@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter, usePathname, useParams } from 'next/navigation'
-import { Building2, ArrowRight, Loader2, Plus, Users } from 'lucide-react'
+import { Building2, ArrowRight, Loader2, Plus } from 'lucide-react'
+import { ClientIcon } from '@/components/ui/client-icon'
 import { getDomainOnboardingOptionsForCurrentUser, joinOrganizationByDomain, type DomainOnboardingOptions, type DomainOrgOption } from '@/lib/actions/domain-onboarding'
 import { getUserFirms, getIsGroupAdmin, type FirmOption } from '@/lib/actions/firms'
 import { BRAND_NAME } from '@/config/brand'
@@ -118,7 +119,7 @@ export default function WorkspacePickerPage() {
             {firms.length > 0 && viewMode === 'list' ? (
                 <WorkspaceTable
                     countLabel="Clients"
-                    countIcon={<Users />}
+                    countIcon={<ClientIcon />}
                     rows={firms.map((firm) => ({
                         key: firm.id,
                         name: firm.name,
@@ -159,7 +160,7 @@ export default function WorkspacePickerPage() {
                     {viewMode === 'list' ? (
                         <WorkspaceTable
                             countLabel="Clients"
-                            countIcon={<Users />}
+                            countIcon={<ClientIcon />}
                             trailingLabel="Access"
                             rows={joinableFirms.map((org) => ({
                                 key: org.id,

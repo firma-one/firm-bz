@@ -1,7 +1,8 @@
 'use client'
 
 import React, { useMemo, useState } from 'react'
-import { ArrowUpRight, Briefcase, Building2, CalendarClock, FileText, Folder, Hash, Search, Sparkles, Users, X, FolderPlus } from 'lucide-react'
+import { ArrowUpRight, Briefcase, Building2, CalendarClock, FileText, Folder, Hash, Search, Sparkles, X, FolderPlus } from 'lucide-react'
+import { ClientIcon } from '@/components/ui/client-icon'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { FilterMenuLabel, FilterMenuRow, FilterPill } from '@/components/ui/filter-pill'
 import { DocumentIcon } from '@/components/ui/document-icon'
@@ -56,7 +57,7 @@ const matchTypeFor = (fileName: string): 'name' | 'semantic' => (fileName.toLowe
 
 type Stage = 'client' | 'engagement' | 'deliverable' | 'type' | 'time'
 const STAGES: { stage: Stage; label: string; icon: React.ReactNode }[] = [
-    { stage: 'client', label: 'Client', icon: <Users /> },
+    { stage: 'client', label: 'Client', icon: <ClientIcon /> },
     { stage: 'engagement', label: 'Engagement', icon: <Briefcase /> },
     { stage: 'deliverable', label: 'Deliverable', icon: <FolderPlus /> },
     { stage: 'type', label: 'Type', icon: <FileText /> },

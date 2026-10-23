@@ -4,6 +4,7 @@ import { Fragment, type ReactNode } from 'react'
 import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
 import { BarChart3, Briefcase, Building2, CalendarDays, ChevronRight, ClipboardList, Folder, Home, Inbox, LayoutGrid, LifeBuoy, Menu, MessagesSquare, PanelLeftOpen, Search, Users } from 'lucide-react'
+import { ClientIcon } from '@/components/ui/client-icon'
 import { cn } from '@/lib/utils'
 import { DEMO_FIRM, getDemoClient } from '@/lib/demo/static-demo-data'
 import { DemoTourTopbarButton } from '@/components/demo/demo-tour-topbar-button'
@@ -15,7 +16,7 @@ type Crumb = { label: string; href?: string; icon?: ReactNode }
 /** The same names and icons as the app's HeaderBar (components/shell/header-bar.tsx). */
 const FIRM_VIEWS: Record<string, Crumb> = {
     analytics: { label: 'Overview', icon: <BarChart3 /> },
-    clients: { label: 'Clients', icon: <Users /> },
+    clients: { label: 'Clients', icon: <ClientIcon /> },
     calendar: { label: 'Calendar', icon: <CalendarDays /> },
     'doc-search': { label: 'Doc Search', icon: <Search /> },
     members: { label: 'Members', icon: <Users /> },
@@ -45,7 +46,7 @@ function useDemoCrumbs(): Crumb[] {
     const [, , clientSlug, engagementSlug] = pathname.split('/')
     const client = clientSlug ? getDemoClient(clientSlug) : undefined
     if (!client) return [firm]
-    const crumbs: Crumb[] = [firm, { label: client.name, href: `/tour/${client.slug}`, icon: <Users /> }]
+    const crumbs: Crumb[] = [firm, { label: client.name, href: `/tour/${client.slug}`, icon: <ClientIcon /> }]
     const engagement = engagementSlug ? client.engagements.find((e) => e.slug === engagementSlug) : undefined
     if (!engagement) return crumbs
     crumbs.push({ label: engagement.name, href: `/tour/${client.slug}/${engagement.slug}`, icon: <Briefcase /> })

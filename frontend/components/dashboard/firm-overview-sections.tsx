@@ -2,7 +2,8 @@
 
 import React from 'react'
 import Link from 'next/link'
-import { Briefcase, CalendarClock, CalendarDays, Coins, Layers, Users } from 'lucide-react'
+import { Briefcase, CalendarClock, CalendarDays, Coins, Layers } from 'lucide-react'
+import { ClientIcon } from '@/components/ui/client-icon'
 import { cn } from '@/lib/utils'
 import { PersonAvatar } from '@/components/ui/property-cells'
 import { ChartBlock, Legend, SegmentedBar, Stat, type ChartSegment } from '@/components/projects/overview-charts'
@@ -101,7 +102,7 @@ function ClientsCard({ data }: { data: FirmOverviewData }) {
     const c = data.clients
     return (
         <Card id="firm-clients">
-            <ChartBlock fill icon={Users} title="Clients" aside={c.active > 0 ? `${c.active} active` : undefined}>
+            <ChartBlock fill icon={ClientIcon} title="Clients" aside={c.active > 0 ? `${c.active} active` : undefined}>
                 {/* One row where they fit, wrapping where the card is narrow: kept short so the
                     cards column stays close to the brief's height. */}
                 <div className="flex flex-wrap gap-x-6 gap-y-3">

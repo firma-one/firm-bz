@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useTransition, type ReactNode } from 'react'
 import { ClientSummary, getFirmName } from '@/lib/actions/hierarchy'
-import { Settings, Users, ClipboardList, Printer, CalendarDays, Plus, Table2, BarChart3 } from 'lucide-react'
+import { Settings, ClipboardList, Printer, CalendarDays, Plus, Table2, BarChart3 } from 'lucide-react'
+import { ClientIcon } from '@/components/ui/client-icon'
 import { PageHeading } from '@/components/ui/page-heading'
 import { AccessLock } from '@/components/ui/access-lock'
 import { ShimmerBar } from '@/components/ui/shimmer'
@@ -47,7 +48,7 @@ const VIEW_MODE_KEY = 'fm-clients-view'
  */
 const VIEW_TITLES: Record<string, { title: string; icon: ReactNode; lock?: string }> = {
     analytics: { title: 'Overview', icon: <BarChart3 />, lock: FIRM_ADMINS_ONLY },
-    clients: { title: 'Clients', icon: <Users /> },
+    clients: { title: 'Clients', icon: <ClientIcon /> },
     calendar: { title: 'Calendar', icon: <CalendarDays /> },
     audit: { title: 'Audit', icon: <ClipboardList />, lock: FIRM_ADMINS_ONLY },
     settings: { title: 'Settings', icon: <Settings />, lock: FIRM_ADMINS_ONLY },

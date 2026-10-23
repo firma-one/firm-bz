@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Briefcase, CalendarDays, Flag, Users } from "lucide-react"
+import { ClientIcon } from "@/components/ui/client-icon"
 import { updateProject, type LwCrmEngagementStatus } from "@/lib/actions/project"
 import { DateProperty, PersonAvatar, StatusProperty, type PersonOption } from "@/components/ui/property-cells"
 import { Tag } from "@/components/ui/tag"
@@ -150,8 +151,8 @@ export function EngagementHeader({
 
                 {showPeople && members !== null && everyone.length > 0 && (
                     <Prop label="Members">
-                        {/* Faces say "people"; the Users mark belongs to the client, as in the breadcrumb and sidebar. */}
                         <Link href={membersHref} className="inline-flex h-7 items-center gap-1.5 rounded-control px-1.5 text-small text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg">
+                            <Users className="h-3.5 w-3.5" />
                             <span className="flex -space-x-1">
                                 {everyone.slice(0, 4).map((p) => <PersonAvatar key={p.id} person={p} size={18} />)}
                             </span>
@@ -185,7 +186,7 @@ export function EngagementHeader({
                             href={clientHref ?? clientPath(groupSlug, orgSlug, clientSlug)}
                             className="inline-flex h-7 items-center gap-1.5 rounded-control px-1.5 text-small text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg"
                         >
-                            <Users className="h-3.5 w-3.5" />
+                            <ClientIcon className="h-3.5 w-3.5" />
                             {clientName}
                         </Link>
                     </Prop>
