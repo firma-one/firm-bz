@@ -1,7 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { CopyMoveDialog, CopyToEngagementDialog, RenameDialog } from './file-organize-dialogs'
-import { FilesMovePill } from './files-drop-zone'
 import type { DriveFile } from '@/lib/types'
 
 const folder = (id: string, name: string) => ({ id, name, mimeType: 'application/vnd.google-apps.folder' }) as DriveFile
@@ -101,14 +100,5 @@ describe('RenameDialog', () => {
         expect((screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(true)
         fireEvent.submit(screen.getByRole('textbox', { name: 'New name' }).closest('form')!)
         expect(onSubmit).not.toHaveBeenCalled()
-    })
-})
-
-describe('FilesMovePill', () => {
-    it('names the folder when over one, else asks to drop on a folder', () => {
-        const { rerender } = render(<FilesMovePill itemName="Plan.xlsx" />)
-        expect(screen.getByRole('status').textContent).toBe('Drop on a folder to move Plan.xlsx· Esc to cancel')
-        rerender(<FilesMovePill itemName="Plan.xlsx" folderName="Reports" />)
-        expect(screen.getByRole('status').textContent).toBe('Move Plan.xlsx to Reports· Esc to cancel')
     })
 })

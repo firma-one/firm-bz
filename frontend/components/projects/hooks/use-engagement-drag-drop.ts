@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { DriveFile } from '@/lib/types'
 import { type ToastType } from '@/components/ui/toast'
+import { setRowDragImage } from '@/components/projects/files-drop-zone'
 
 const FOLDER_MIME = 'application/vnd.google-apps.folder'
 
@@ -14,6 +15,8 @@ interface UseEngagementDragDropOptions {
     canUpload?: boolean
     /** Whether a folder row may take dropped files itself; off for external members, whose uploads land in their shared folder. */
     canUploadIntoFolders?: boolean
+    /** Drag a row as a small card (its icon and name) rather than the browser's copy of the whole row. */
+    compactDragImage?: boolean
 }
 
 /** Whether a drag carries files from the computer (not a row being moved inside the list). */
@@ -43,6 +46,7 @@ export function useEngagementDragDrop({
     addToast,
     canUpload = true,
     canUploadIntoFolders = true,
+    compactDragImage = false,
 }: UseEngagementDragDropOptions) {
     const [draggedItem, setDraggedItem] = useState<DriveFile | null>(null)
     const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null)
@@ -104,6 +108,7 @@ export function useEngagementDragDrop({
         setIsInternalDragging(true)
         e.dataTransfer.setData('application/x-pockett-item', item.id)
         e.dataTransfer.effectAllowed = 'move'
+        if (compactDragImage) setRowDragImage(e, item.name, item.mimeType === FOLDER_MIME)
     }
 
     const handleItemDragEnd = () => {

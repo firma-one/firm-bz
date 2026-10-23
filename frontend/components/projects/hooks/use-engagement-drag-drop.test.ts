@@ -20,7 +20,7 @@ function fileDrag(names: string[]) {
     } as unknown as React.DragEvent
 }
 
-function setup(opts: { canUpload?: boolean; canUploadIntoFolders?: boolean } = {}) {
+function setup(opts: { canUpload?: boolean; canUploadIntoFolders?: boolean; compactDragImage?: boolean } = {}) {
     const processUploads = vi.fn(async () => {})
     const { result } = renderHook(() =>
         useEngagementDragDrop({ canEdit: true, processUploads, handleCopyMoveToFolder: vi.fn(async () => {}), addToast: vi.fn(), ...opts })
@@ -69,5 +69,26 @@ describe('useEngagementDragDrop — files from the computer', () => {
         await act(async () => { await result.current.handleDrop(fileDrag(['a.pdf'])) })
         await act(async () => { await result.current.handleItemDrop(fileDrag(['a.pdf']), folder('sub')) })
         expect(processUploads).not.toHaveBeenCalled()
+    })
+})
+
+describe('useEngagementDragDrop — moving a row', () => {
+    const rowDrag = () => ({ dataTransfer: { setData: vi.fn(), setDragImage: vi.fn(), effectAllowed: 'none' } }) as unknown as React.DragEvent & { dataTransfer: { setDragImage: ReturnType<typeof vi.fn> } }
+
+    it('drags as a small card with the file\'s name, not a copy of the whole row', () => {
+        const { result } = setup({ compactDragImage: true })
+        const e = rowDrag()
+        act(() => { result.current.handleItemDragStart(e, file('Plan.pdf')) })
+        expect(e.dataTransfer.setDragImage).toHaveBeenCalledTimes(1)
+        const card = e.dataTransfer.setDragImage.mock.calls[0][0] as HTMLElement
+        expect(card.textContent).toBe('Plan.pdf')
+        expect(result.current.isInternalDragging).toBe(true)
+    })
+
+    it('keeps the browser\'s own drag image when it\'s off', () => {
+        const { result } = setup()
+        const e = rowDrag()
+        act(() => { result.current.handleItemDragStart(e, file('Plan.pdf')) })
+        expect(e.dataTransfer.setDragImage).not.toHaveBeenCalled()
     })
 })

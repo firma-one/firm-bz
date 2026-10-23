@@ -73,7 +73,7 @@ import { useSecureOpenDocument } from '@/lib/use-secure-open-document'
 import { SecureAccessModal } from '@/components/projects/shares/secure-access-modal'
 import { ProfileBubbleWithPopup } from '@/components/ui/profile-bubble-popup'
 import { EngagementFileRow } from '@/components/projects/engagement-file-row'
-import { FilesDropPill, FilesDropRow, FilesMovePill, FILES_DROP_ZONE_ACTIVE_CLASS } from '@/components/projects/files-drop-zone'
+import { FilesDropPill, FilesDropRow, FILES_DROP_ZONE_ACTIVE_CLASS } from '@/components/projects/files-drop-zone'
 import { CopyMoveDialog, CopyToEngagementDialog, RenameDialog } from '@/components/projects/file-organize-dialogs'
 import {
     FILE_TABLE_GRID_COLS_CLASS,
@@ -1664,6 +1664,7 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
         canUpload: canUploadHere,
         // External members' uploads land in their shared folder whatever the row, so only the list is a target.
         canUploadIntoFolders: canEdit && !restrictToSharedOnly,
+        compactDragImage: NEW_DROP_ZONE,
     })
 
     const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => handleFileUploadFromHook(e, fileInputRef)
@@ -2888,7 +2889,7 @@ const handleRefresh = async () => {
                     )
                 }
 
-                {/* Internal Drag Guide Overlay (the old dark pill; FilesMovePill below replaces it) */}
+                {/* Internal Drag Guide Overlay (the old dark pill; with NEW_DROP_ZONE, the folder row's outline and "Move here" tag say where it lands) */}
                 {
                     !NEW_DROP_ZONE && isInternalDragging && (
                         <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-50 bg-slate-900/90 text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-3 backdrop-blur-sm animate-in fade-in slide-in-from-bottom-4 duration-300">
@@ -2944,12 +2945,6 @@ const handleRefresh = async () => {
                 {/* File List, with the app's slim, light scrollbar (`subtle-scrollbar`, globals.css). */}
                 {NEW_DROP_ZONE && isDragging && (
                     <FilesDropPill count={dragFileCount} folderName={dropTargetFolder?.name ?? currentFolderName} />
-                )}
-                {NEW_DROP_ZONE && isInternalDragging && draggedItem && (
-                    <FilesMovePill
-                        itemName={draggedItem.name}
-                        folderName={dragOverFolderId ? files.find((f) => f.id === dragOverFolderId)?.name : undefined}
-                    />
                 )}
                 <div className={cn("subtle-scrollbar relative flex-1 overflow-y-auto", NEW_DROP_ZONE && isDragging && !dropTargetFolder && FILES_DROP_ZONE_ACTIVE_CLASS)}>
                     {deeplinkResolving || loading || isLoadingFolders ? (

@@ -1,6 +1,6 @@
 'use client'
 
-import { FolderInput, Upload } from 'lucide-react'
+import { Upload } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 /*
@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils'
  * by the Files list and the tour's copy:
  * - FilesDropRow: a quiet last row under the files, so there's always somewhere to drop, with Browse.
  * - FilesDropPill: while files are dragged in, which folder they'll land in.
- * - FilesMovePill: while a row is dragged onto a folder, what's moving and where.
+ * - setRowDragImage: a compact drag image for a row being moved onto a folder.
  * - FILES_DROP_ZONE_ACTIVE_CLASS: the list's outline while it is the target (inset, so a scroll box can't clip it).
  */
 
@@ -79,22 +79,27 @@ export function FilesDropPill({ count, folderName }: { count: number; folderName
     )
 }
 
+const SVG_ATTRS = 'width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0 text-fg-muted" aria-hidden="true"'
+/** lucide's File and Folder glyphs, as markup: the drag image is plain DOM, drawn before React could render it. */
+const FILE_GLYPH = `<svg ${SVG_ATTRS}><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>`
+const FOLDER_GLYPH = `<svg ${SVG_ATTRS}><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>`
+
 /**
- * While a row is dragged onto a folder to move it: what's moving and where, or a nudge to drop it
- * on a folder. It replaces the old dark guide, whose Cancel couldn't be clicked mid-drag — Esc ends a drag.
+ * The drag image for a row being moved onto a folder: its icon and name on a small card, in place of
+ * the browser's translucent copy of the whole row, which slid over the folder rows it passed (and
+ * their "Move here" tag). The folder row's outline and tag say where it lands, so there's no pill.
  */
-export function FilesMovePill({ itemName, folderName }: { itemName: string; folderName?: string }) {
-    return (
-        <div role="status" className={DRAG_PILL_CLASS}>
-            <FolderInput className="h-4 w-4 shrink-0" aria-hidden />
-            <span className="truncate">
-                {folderName ? (
-                    <>Move <span className="font-semibold">{itemName}</span> to <span className="font-semibold">{folderName}</span></>
-                ) : (
-                    <>Drop on a folder to move <span className="font-semibold">{itemName}</span></>
-                )}
-            </span>
-            <span className="shrink-0 opacity-70">· Esc to cancel</span>
-        </div>
-    )
+export function setRowDragImage(e: React.DragEvent, name: string, isFolder: boolean) {
+    if (typeof document === 'undefined' || typeof e.dataTransfer?.setDragImage !== 'function') return
+    const card = document.createElement('div')
+    card.className = 'fixed -left-[9999px] top-0 flex max-w-[260px] items-center gap-1.5 rounded-control bg-surface px-2 py-1 text-small text-fg shadow-popover'
+    card.innerHTML = isFolder ? FOLDER_GLYPH : FILE_GLYPH
+    const label = document.createElement('span')
+    label.className = 'truncate'
+    label.textContent = name
+    card.appendChild(label)
+    document.body.appendChild(card)
+    e.dataTransfer.setDragImage(card, 12, 14)
+    // The browser takes its snapshot during dragstart; the card can go right after.
+    setTimeout(() => card.remove(), 0)
 }
