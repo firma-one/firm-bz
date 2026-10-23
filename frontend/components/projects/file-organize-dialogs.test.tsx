@@ -1,6 +1,6 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
-import { CopyMoveDialog, CopyToEngagementDialog, RenameDialog } from './file-organize-dialogs'
+import { CopyMoveDialog, CopyToEngagementDialog, RenameDialog, UploadConflictDialog } from './file-organize-dialogs'
 import type { DriveFile } from '@/lib/types'
 
 const folder = (id: string, name: string) => ({ id, name, mimeType: 'application/vnd.google-apps.folder' }) as DriveFile
@@ -100,5 +100,35 @@ describe('RenameDialog', () => {
         expect((screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(true)
         fireEvent.submit(screen.getByRole('textbox', { name: 'New name' }).closest('form')!)
         expect(onSubmit).not.toHaveBeenCalled()
+    })
+})
+
+describe('UploadConflictDialog', () => {
+    // Radix's checkbox measures itself; jsdom has no ResizeObserver.
+    beforeAll(() => { vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} }) })
+    afterAll(() => { vi.unstubAllGlobals() })
+    const files = [{ name: 'Plan.xlsx' }, { name: 'Deck.pptx' }]
+
+    it('names how many, says what each will do, and Replace all toggles them all', () => {
+        const onReplaceAllChange = vi.fn()
+        render(<UploadConflictDialog files={files} replace={new Set(['Plan.xlsx'])} onReplaceChange={vi.fn()} onReplaceAllChange={onReplaceAllChange} onCancel={vi.fn()} onConfirm={vi.fn()} />)
+        expect(screen.getByRole('dialog', { name: '2 files already in this folder' })).toBeTruthy()
+        expect(screen.getByText('Replaces the existing file')).toBeTruthy()
+        expect(screen.getByText('Uploads as a copy')).toBeTruthy()
+        fireEvent.click(screen.getByRole('checkbox', { name: 'Replace all' }))
+        expect(onReplaceAllChange).toHaveBeenCalledWith(true)
+    })
+
+    it('one file: no Replace all; its checkbox, Upload and Cancel do what they say', () => {
+        const onReplaceChange = vi.fn(), onConfirm = vi.fn(), onCancel = vi.fn()
+        render(<UploadConflictDialog files={[files[0]]} replace={new Set()} onReplaceChange={onReplaceChange} onReplaceAllChange={vi.fn()} onCancel={onCancel} onConfirm={onConfirm} />)
+        expect(screen.getByRole('dialog', { name: 'This file is already in the folder' })).toBeTruthy()
+        expect(screen.queryByRole('checkbox', { name: 'Replace all' })).toBeNull()
+        fireEvent.click(screen.getByRole('checkbox', { name: 'Replace Plan.xlsx' }))
+        expect(onReplaceChange).toHaveBeenCalledWith('Plan.xlsx', true)
+        fireEvent.click(screen.getByRole('button', { name: 'Upload' }))
+        expect(onConfirm).toHaveBeenCalled()
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+        expect(onCancel).toHaveBeenCalled()
     })
 })

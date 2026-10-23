@@ -5,6 +5,7 @@ import { Briefcase, Building2, Check, ChevronRight, Copy, Folder, FolderInput } 
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Hint } from '@/components/ui/tooltip'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { ClientIcon } from '@/components/ui/client-icon'
@@ -14,7 +15,8 @@ import { cn } from '@/lib/utils'
 import type { DriveFile } from '@/lib/types'
 
 /*
- * The Files list's organize dialogs — Move/Copy to folder, Copy to another engagement and Rename —
+ * The Files list's organize dialogs — Move/Copy to folder, Copy to another engagement, Rename, and
+ * the upload's duplicate files —
  * on the design system's dialog frame (2026-10-23, .claude/plans/ui-ux-overhaul.md Phase 6): the
  * 10px dialog radius, a sentence-case title with one line of context (CreateDialogHeader), 14px
  * rows on a 6px card, `sm` buttons and Cancel bottom-right under a hairline. They replace the
@@ -424,6 +426,62 @@ export function RenameDialog({ open, onOpenChange, targetName, targetMimeType, v
                         submitting={submitting}
                         submitLabel="Save"
                     />
+                </form>
+            </DialogContent>
+        </Dialog>
+    )
+}
+
+export interface UploadConflictDialogProps {
+    /** Files in the upload whose names already exist in the destination folder. */
+    files: { name: string; type?: string }[]
+    /** Names of the files that replace the existing one; the rest upload as a renamed copy. */
+    replace: Set<string>
+    onReplaceChange: (name: string, replace: boolean) => void
+    onReplaceAllChange: (replace: boolean) => void
+    onCancel: () => void
+    onConfirm: () => void
+}
+
+/**
+ * An upload whose files already exist in the folder: per file, replace the existing one or upload a
+ * renamed copy (the default the hook starts from is replace). Cancel stops the whole upload.
+ */
+export function UploadConflictDialog({ files, replace, onReplaceChange, onReplaceAllChange, onCancel, onConfirm }: UploadConflictDialogProps) {
+    const allReplaced = files.length > 0 && replace.size === files.length
+    const many = files.length > 1
+    return (
+        <Dialog open={files.length > 0} onOpenChange={(open) => { if (!open) onCancel() }}>
+            <DialogContent className={PANEL_CLASS}>
+                <form onSubmit={(e) => { e.preventDefault(); onConfirm() }}>
+                    <DividedHeader
+                        title={many ? `${files.length} files already in this folder` : 'This file is already in the folder'}
+                        description={many
+                            ? 'Choose which to replace. The others upload as a copy with a new name.'
+                            : 'Replace the existing file, or upload this one as a copy with a new name.'}
+                    />
+                    <div className="px-5 pb-5 pt-4">
+                        <div className={cn(LIST_CLASS, 'divide-y divide-line')}>
+                            {many && (
+                                <label className="flex h-9 cursor-pointer items-center gap-2.5 px-3 text-small text-fg-muted">
+                                    <Checkbox checked={allReplaced} onCheckedChange={(checked) => onReplaceAllChange(checked === true)} aria-label="Replace all" />
+                                    <span className="font-medium">Replace all</span>
+                                </label>
+                            )}
+                            {files.map((f) => {
+                                const replacing = replace.has(f.name)
+                                return (
+                                    <label key={f.name} className="flex min-h-10 cursor-pointer items-center gap-2.5 px-3 py-1.5 transition-colors hover:bg-surface-hover">
+                                        <Checkbox checked={replacing} onCheckedChange={(checked) => onReplaceChange(f.name, checked === true)} aria-label={`Replace ${f.name}`} />
+                                        <DocumentIcon mimeType={f.type} className="h-4 w-4 shrink-0" />
+                                        <span className="min-w-0 flex-1 truncate text-ui text-fg" title={f.name}>{f.name}</span>
+                                        <span className="shrink-0 text-small text-fg-muted">{replacing ? 'Replaces the existing file' : 'Uploads as a copy'}</span>
+                                    </label>
+                                )
+                            })}
+                        </div>
+                    </div>
+                    <CreateDialogFooter onCancel={onCancel} submitLabel="Upload" />
                 </form>
             </DialogContent>
         </Dialog>

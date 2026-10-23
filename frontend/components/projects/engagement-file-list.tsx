@@ -74,7 +74,7 @@ import { SecureAccessModal } from '@/components/projects/shares/secure-access-mo
 import { ProfileBubbleWithPopup } from '@/components/ui/profile-bubble-popup'
 import { EngagementFileRow } from '@/components/projects/engagement-file-row'
 import { FilesDropPill, FilesDropRow, FILES_DROP_ZONE_ACTIVE_CLASS } from '@/components/projects/files-drop-zone'
-import { CopyMoveDialog, CopyToEngagementDialog, RenameDialog } from '@/components/projects/file-organize-dialogs'
+import { CopyMoveDialog, CopyToEngagementDialog, RenameDialog, UploadConflictDialog } from '@/components/projects/file-organize-dialogs'
 import { ENGAGEMENT_ROOT_LABEL } from '@/lib/files/engagement-root'
 import {
     FILE_TABLE_GRID_COLS_CLASS,
@@ -283,9 +283,9 @@ const TOOLBAR_ICON_CLASS =
 const NEW_DROP_ZONE = true
 
 /**
- * The organize dialogs (Move/Copy to folder, Copy to another engagement, Rename) on the design
- * system's dialog frame — components/projects/file-organize-dialogs.tsx (2026-10-23). False brings
- * back the uppercase "themed" dialogs below; kept until Deepak signs off.
+ * The organize dialogs (Move/Copy to folder, Copy to another engagement, Rename, and the upload's
+ * duplicate files) on the design system's dialog frame — components/projects/file-organize-dialogs.tsx
+ * (2026-10-23). False brings back the old dialogs below; kept until Deepak signs off.
  */
 const NEW_ORGANIZE_DIALOGS = true
 
@@ -3615,8 +3615,24 @@ const handleRefresh = async () => {
                     </DialogContent>
                 </Dialog>
 
-                {/* Batch Conflict Dialog */}
-                <Dialog open={conflictItems.length > 0} onOpenChange={(open) => !open && cancelBatchResolution()}>
+                {NEW_ORGANIZE_DIALOGS && (
+                    <UploadConflictDialog
+                        files={conflictItems.map((i) => ({ name: i.file.name, type: i.file.type }))}
+                        replace={overwriteSelections}
+                        onReplaceChange={(name, replace) => setOverwriteSelections((prev) => {
+                            const next = new Set(prev)
+                            if (replace) next.add(name)
+                            else next.delete(name)
+                            return next
+                        })}
+                        onReplaceAllChange={(replace) => setOverwriteSelections(replace ? new Set(conflictItems.map((i) => i.file.name)) : new Set())}
+                        onCancel={cancelBatchResolution}
+                        onConfirm={handleBatchResolution}
+                    />
+                )}
+
+                {/* Batch Conflict Dialog (the old one; UploadConflictDialog above replaces it) */}
+                <Dialog open={!NEW_ORGANIZE_DIALOGS && conflictItems.length > 0} onOpenChange={(open) => !open && cancelBatchResolution()}>
                     <DialogContent className="max-w-md">
                         <DialogHeader>
                             <DialogTitle>Duplicate files found</DialogTitle>
