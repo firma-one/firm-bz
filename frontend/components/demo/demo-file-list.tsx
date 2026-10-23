@@ -26,7 +26,8 @@ import {
     Link2,
     MessagesSquare,
     MoreVertical,
-    Move,
+    FolderInput,
+    CopyPlus,
     RefreshCw,
     ScanEye,
     Search,
@@ -241,7 +242,7 @@ function RowActionMenu({ entry, name, docId, deliverableStatus, dueDate, onSetDu
                                 : <DemoMenuItem icon={<FolderPlus />} accent>Promote Folder to Deliverable</DemoMenuItem>}
                             <DemoSubmenu icon={<FolderOpen />} label="Organize">
                                 <DemoMenuItem icon={<Edit3 />}>Rename</DemoMenuItem>
-                                <DemoMenuItem icon={<Move />}>Move</DemoMenuItem>
+                                <DemoMenuItem icon={<FolderInput />}>Move to…</DemoMenuItem>
                                 <DropdownMenuSeparator />
                                 <DemoMenuItem icon={<FolderLock />}>Make private</DemoMenuItem>
                             </DemoSubmenu>
@@ -281,9 +282,11 @@ function RowActionMenu({ entry, name, docId, deliverableStatus, dueDate, onSetDu
                             <DropdownMenuSeparator />
                             <DemoSubmenu icon={<FolderOpen />} label="Organize">
                                 <DemoMenuItem icon={<Edit3 />}>Rename</DemoMenuItem>
-                                <DemoMenuItem icon={<Copy />}>Duplicate</DemoMenuItem>
-                                <DemoMenuItem icon={<Copy />}>Copy</DemoMenuItem>
-                                <DemoMenuItem icon={<Move />}>Move</DemoMenuItem>
+                                <DemoMenuItem icon={<CopyPlus />}>Duplicate</DemoMenuItem>
+                                <DemoMenuItem icon={<Copy />}>Copy to…</DemoMenuItem>
+                                <DemoMenuItem icon={<FolderInput />}>Move to…</DemoMenuItem>
+                                <DropdownMenuSeparator />
+                                <DemoMenuItem icon={<Briefcase />}>Copy to another engagement…</DemoMenuItem>
                                 <DropdownMenuSeparator />
                                 <DemoMenuItem icon={<FolderLock />}>Make private</DemoMenuItem>
                             </DemoSubmenu>

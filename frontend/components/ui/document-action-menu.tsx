@@ -27,7 +27,9 @@ import {
   Bookmark,
   Edit3,
   Copy,
-  Move,
+  FolderInput,
+  CopyPlus,
+  Briefcase,
   Clock,
   Trash2,
   Calendar,
@@ -47,7 +49,6 @@ import {
   Folder,
   CheckCircle2,
   XCircle,
-  Building2,
   Loader2,
   Flag,
   FolderPlus,
@@ -781,11 +782,11 @@ export function DocumentActionMenu({
                       {onDuplicateDocument && (
                         isApprovedDeliverable ? (
                           <div className="flex items-center gap-2 px-2 py-1 text-small text-fg-subtle opacity-40 cursor-not-allowed select-none">
-                            <Copy className="h-3.5 w-3.5" /><span>Duplicate</span>
+                            <CopyPlus className="h-3.5 w-3.5" /><span>Duplicate</span>
                           </div>
                         ) : (
                           <DropdownMenuItem onSelect={() => onDuplicateDocument(document)} className="flex cursor-pointer items-center gap-2">
-                            <Copy className="h-3.5 w-3.5 text-fg-muted" />
+                            <CopyPlus className="h-3.5 w-3.5 text-fg-muted" />
                             <span>Duplicate</span>
                           </DropdownMenuItem>
                         )
@@ -793,18 +794,18 @@ export function DocumentActionMenu({
                       {onCopyDocument && (
                         <DropdownMenuItem onSelect={() => onCopyDocument(document)} className="flex cursor-pointer items-center gap-2">
                           <Copy className="h-3.5 w-3.5 text-fg-muted" />
-                          <span>Copy</span>
+                          <span>Copy to…</span>
                         </DropdownMenuItem>
                       )}
                       {onMoveDocument && (
                         isApprovedDeliverable ? (
                           <div className="flex items-center gap-2 px-2 py-1 text-small text-fg-subtle opacity-40 cursor-not-allowed select-none">
-                            <Move className="h-3.5 w-3.5" /><span>Move</span>
+                            <FolderInput className="h-3.5 w-3.5" /><span>Move to…</span>
                           </div>
                         ) : (
                           <DropdownMenuItem onSelect={() => onMoveDocument(document)} className="flex cursor-pointer items-center gap-2">
-                            <Move className="h-3.5 w-3.5 text-fg-muted" />
-                            <span>Move</span>
+                            <FolderInput className="h-3.5 w-3.5 text-fg-muted" />
+                            <span>Move to…</span>
                           </DropdownMenuItem>
                         )
                       )}
@@ -1195,14 +1196,14 @@ export function DocumentActionMenu({
                       {onDuplicateDocument && document.documentType !== 'LINK' && (
                         isApprovedDeliverable ? (
                           <div className="flex items-center gap-2 px-2 py-1 text-small text-fg-subtle opacity-40 cursor-not-allowed select-none">
-                            <Copy className="h-3.5 w-3.5" /><span>Duplicate</span>
+                            <CopyPlus className="h-3.5 w-3.5" /><span>Duplicate</span>
                           </div>
                         ) : (
                           <DropdownMenuItem
                             onSelect={() => onDuplicateDocument(document)}
                             className="flex cursor-pointer items-center gap-2"
                           >
-                            <Copy className="h-3.5 w-3.5 text-fg-muted" />
+                            <CopyPlus className="h-3.5 w-3.5 text-fg-muted" />
                             <span>Duplicate</span>
                           </DropdownMenuItem>
                         )
@@ -1213,21 +1214,21 @@ export function DocumentActionMenu({
                           className="flex cursor-pointer items-center gap-2"
                         >
                           <Copy className="h-3.5 w-3.5 text-fg-muted" />
-                          <span>Copy</span>
+                          <span>Copy to…</span>
                         </DropdownMenuItem>
                       )}
                       {onMoveDocument && document.documentType !== 'LINK' && (
                         isApprovedDeliverable ? (
                           <div className="flex items-center gap-2 px-2 py-1 text-small text-fg-subtle opacity-40 cursor-not-allowed select-none">
-                            <Move className="h-3.5 w-3.5" /><span>Move</span>
+                            <FolderInput className="h-3.5 w-3.5" /><span>Move to…</span>
                           </div>
                         ) : (
                           <DropdownMenuItem
                             onSelect={() => onMoveDocument(document)}
                             className="flex cursor-pointer items-center gap-2"
                           >
-                            <Move className="h-3.5 w-3.5 text-fg-muted" />
-                            <span>Move</span>
+                            <FolderInput className="h-3.5 w-3.5 text-fg-muted" />
+                            <span>Move to…</span>
                           </DropdownMenuItem>
                         )
                       )}
@@ -1237,7 +1238,7 @@ export function DocumentActionMenu({
                           onSelect={() => onCrossEngagementCopy(document)}
                           className="flex cursor-pointer items-center gap-2"
                         >
-                          <Building2 className="h-3.5 w-3.5 flex-shrink-0 text-fg-subtle" />
+                          <Briefcase className="h-3.5 w-3.5 flex-shrink-0 text-fg-subtle" />
                           <span className="whitespace-nowrap">Copy to another engagement…</span>
                         </DropdownMenuItem>
                       )}
