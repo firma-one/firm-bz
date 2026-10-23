@@ -1321,7 +1321,7 @@ export function EngagementAiChat({
                                     className={headerButton}
                                     aria-label="Collapse the assistant"
                                 >
-                                    <ChevronDown className="h-4 w-4" />
+                                    <WindowGlyph variant="minimize" />
                                 </button>
                             </TooltipTrigger>
                             <TooltipContent side="bottom">Collapse{shortcutLabel ? ` · ${shortcutLabel}` : ''}</TooltipContent>

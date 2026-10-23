@@ -17,8 +17,8 @@ describe('WindowGlyph', () => {
         expect(container.querySelector('line')?.getAttribute('x1')).toBe('6')
     })
 
-    it('keeps full and float filled, as they have no edge to show', () => {
-        for (const variant of ['full', 'float'] as const) {
+    it('keeps full, float and minimize filled, as they have no edge to show', () => {
+        for (const variant of ['full', 'float', 'minimize'] as const) {
             const { container, unmount } = render(<WindowGlyph variant={variant} filled={false} />)
             expect(container.querySelectorAll('rect')).toHaveLength(2)
             unmount()
