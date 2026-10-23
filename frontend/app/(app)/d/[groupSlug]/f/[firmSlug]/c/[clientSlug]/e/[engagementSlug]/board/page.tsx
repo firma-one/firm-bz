@@ -14,6 +14,7 @@ import { notFound, redirect } from "next/navigation"
 import { ErrorBoundary } from "@/components/error-boundary"
 import type { ProjectPathSegments } from "@/components/projects/engagement-workspace"
 import { getAccessibleFileCountForPersona } from "@/lib/engagement-sharing-ids"
+import { countOpenDiscussions } from "@/lib/comments/discussions"
 
 const BOARD_PATH_SEGMENTS: ProjectPathSegments = { tab: 'board', viewMode: 'list', wikiPageSlug: null }
 
@@ -89,7 +90,8 @@ export default async function EngagementBoardPage({ params }: PageProps) {
          AND ((ed.settings->'share'->>'createdAt') IS NOT NULL OR su.id IS NOT NULL)`,
       project.id
     ).then((r: any[]) => r[0]?.count ?? 0),
-    (basePrisma as any).docCommentMessage.groupBy({ by: ['projectDocumentId'], where: { engagementId: project.id } }).then((r: any[]) => r.length),
+    // Discussions: open ones (not resolved) on documents this viewer may open, as the page lists them.
+    countOpenDiscussions(project.id, projectRole),
     (basePrisma as any).engagementMember.count({ where: { engagementId: project.id } }),
     (basePrisma as any).engagementInvitation.count({ where: { engagementId: project.id, status: { not: 'JOINED' } } }),
     (basePrisma as any).platformAuditEvent.count({ where: { engagementId: project.id, scope: 'PROJECT' } }),

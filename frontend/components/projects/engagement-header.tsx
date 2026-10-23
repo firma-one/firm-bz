@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Briefcase, CalendarDays, Flag, FolderOpen, Users } from "lucide-react"
+import { Briefcase, CalendarDays, Flag, Users } from "lucide-react"
+import { ClientIcon } from "@/components/ui/client-icon"
 import { updateProject, type LwCrmEngagementStatus } from "@/lib/actions/project"
 import { DateProperty, PersonAvatar, StatusProperty, type PersonOption } from "@/components/ui/property-cells"
 import { Tag } from "@/components/ui/tag"
@@ -185,7 +186,7 @@ export function EngagementHeader({
                             href={clientHref ?? clientPath(groupSlug, orgSlug, clientSlug)}
                             className="inline-flex h-7 items-center gap-1.5 rounded-control px-1.5 text-small text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg"
                         >
-                            <FolderOpen className="h-3.5 w-3.5" />
+                            <ClientIcon className="h-3.5 w-3.5" />
                             {clientName}
                         </Link>
                     </Prop>

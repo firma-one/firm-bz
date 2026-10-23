@@ -2,7 +2,7 @@
 
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { ArrowUpDown, AtSign, BellRing, CalendarClock, Check, Link2, Loader2, MessagesSquare, Send, Smile, Trash2, UserCheck, Users, X } from 'lucide-react'
+import { ArrowUpDown, AtSign, BellRing, CalendarClock, Check, Hash, Link2, Loader2, MessagesSquare, Send, Smile, Trash2, UserCheck, Users, X } from 'lucide-react'
 import { cn, formatDateTimeWithTZ, formatRelativeTime } from '@/lib/utils'
 import { useRightPane } from '@/lib/right-pane-context'
 import { useAuth } from '@/lib/auth-context'
@@ -24,7 +24,11 @@ import { DateTimePicker } from '@/components/ui/date-time-picker'
 import { SetupReminderModal } from '@/components/ui/setup-reminder-modal'
 import { FilterMenuLabel, FilterMenuRow, FilterPill, summarizePicks } from '@/components/ui/filter-pill'
 import { PersonAvatar } from '@/components/ui/property-cells'
-import { ENGAGEMENT_ROLE_LABEL, findMentionQuery, insertMention, mentionedNames, splitMentions } from '@/lib/comments/mentions'
+import { ENGAGEMENT_ROLE_LABEL, findMentionQuery, findTagQuery, formatDisplayName, insertMention, insertTag, mentionedNames, splitDocTags, splitMentions } from '@/lib/comments/mentions'
+import { CommentText } from '@/components/comments/comment-text'
+import { REACTIONS, ReactionMark, type ReactionKey } from '@/components/comments/reactions'
+import { DocumentIcon } from '@/components/ui/document-icon'
+import { caretOffset } from '@/lib/ui/caret-offset'
 
 /*
  * Comments on a document or deliverable (.claude/plans/board-pane-comments-redesign.md). Shared
@@ -33,9 +37,20 @@ import { ENGAGEMENT_ROLE_LABEL, findMentionQuery, insertMention, mentionedNames,
  * - Mentions: typing "@" opens a menu at the caret that narrows as you type; picking inserts
  *   "@Name " where you were typing. People still mentioned when the comment is sent are notified.
  * - Reminders: the composer's Remind button schedules that notification for everyone mentioned.
+ * - Document tags: typing "#" opens a menu of the deliverable's documents (`taggableDocuments`);
+ *   picking inserts "#DOC-ID ". In the thread a tag is a chip with the document's ID (its name on hover), which opens it.
  * - The thread: avatar and name (email on hover), relative time, actions on hover; filters and
  *   sorting in one compact row, once a thread is long enough to need them.
  */
+
+/** A document that can be tagged with "#" — one of the deliverable's, as its viewer may see them. */
+export type TaggableDocument = {
+  documentId: string
+  docId: string | null
+  fileName: string
+  mimeType?: string | null
+  breadcrumb?: string[]
+}
 
 export interface DocumentDocCommentsPaneProps {
   engagementId: string
@@ -43,6 +58,12 @@ export interface DocumentDocCommentsPaneProps {
   documentName?: string
   documentMimeType?: string
   orgSlug?: string
+  /** The deliverable's documents the viewer may see; given, "#" tags them. */
+  taggableDocuments?: TaggableDocument[]
+  /** Called after a comment is posted or deleted, so a list showing this discussion can refresh. */
+  onChange?: () => void
+  /** Opens a tagged document (its preview) from a chip in the thread. */
+  onOpenDocument?: (doc: TaggableDocument) => void
 }
 
 type CommentMessage = {
@@ -56,19 +77,6 @@ type CommentMessage = {
 
 type Member = { userId: string; email: string; name: string; role: string; avatarUrl?: string | null; isAgent?: boolean }
 
-type ReactionKey = 'urgent' | 'looking' | 'done' | 'thumbs_up' | 'yes' | 'no' | 'ok' | 'plus_one' | 'celebrate'
-const REACTIONS: { key: ReactionKey; label: string; emoji: string }[] = [
-  { key: 'urgent', label: 'Urgent', emoji: '⚠️' },
-  { key: 'looking', label: 'Looking', emoji: '👀' },
-  { key: 'done', label: 'Done', emoji: '✅' },
-  // Slack-style quick signals
-  { key: 'yes', label: 'Yes', emoji: '🇾' },
-  { key: 'no', label: 'No', emoji: '🇳' },
-  { key: 'ok', label: 'OK', emoji: '🆗' },
-  { key: 'plus_one', label: '+1', emoji: '➕' },
-  { key: 'thumbs_up', label: 'Thumbs up', emoji: '👍' },
-  { key: 'celebrate', label: 'Celebrate', emoji: '🎉' },
-]
 
 /** Filters and sorting appear once a thread is longer than this, or when a filter is on. */
 const TOOLBAR_AFTER = 3
@@ -79,18 +87,6 @@ const DATE_PRESETS: { value: DatePreset; label: string; days: number | null }[] 
   { value: '7d', label: 'Last 7 days', days: 7 },
   { value: '30d', label: 'Last 30 days', days: 30 },
 ]
-
-/** Format a raw auth name (may be username-style like "deepaksshettigar") into a readable display name. */
-function formatDisplayName(name: string, email: string): string {
-  if (!name || name === email.split('@')[0]) {
-    const local = email.split('@')[0]
-    return local.replace(/[._\-+]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()).trim()
-  }
-  if (name.includes(' ') || name.includes('.') || name.includes('_')) {
-    return name.split(/[\s._-]+/).map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ').trim()
-  }
-  return name
-}
 
 /** 9:00 AM local, `days` from today — the reminder presets. */
 function nineAm(days: number): string {
@@ -106,30 +102,7 @@ function nextMondayNineAm(): string {
 }
 const shortDateTime = (iso: string) => new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
 
-/**
- * Where the caret sits inside a textarea, in px from its top-left — measured with a mirror div
- * styled like the textarea, so the mention menu can open right where "@" was typed.
- */
-function caretOffset(el: HTMLTextAreaElement, position: number): { left: number; top: number } {
-  const style = window.getComputedStyle(el)
-  const mirror = document.createElement('div')
-  const props = ['boxSizing', 'width', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft', 'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth', 'fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'wordSpacing', 'textTransform'] as const
-  for (const p of props) mirror.style[p] = style[p]
-  mirror.style.position = 'absolute'
-  mirror.style.visibility = 'hidden'
-  mirror.style.whiteSpace = 'pre-wrap'
-  mirror.style.overflowWrap = 'break-word'
-  mirror.textContent = el.value.slice(0, position)
-  const marker = document.createElement('span')
-  marker.textContent = '​'
-  mirror.appendChild(marker)
-  document.body.appendChild(mirror)
-  const offset = { left: marker.offsetLeft, top: marker.offsetTop - el.scrollTop }
-  document.body.removeChild(mirror)
-  return offset
-}
-
-export function DocumentDocCommentsPane({ engagementId, documentId, documentName, documentMimeType }: DocumentDocCommentsPaneProps) {
+export function DocumentDocCommentsPane({ engagementId, documentId, documentName, documentMimeType, taggableDocuments, onOpenDocument, onChange }: DocumentDocCommentsPaneProps) {
   const rightPane = useRightPane()
   const { user } = useAuth()
   const myEmail = user?.email ?? ''
@@ -155,6 +128,10 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
   /** An "@" whose menu was closed with Escape: it stays closed until the caret leaves it. */
   const dismissedAtRef = useRef<number | null>(null)
   const [menuIndex, setMenuIndex] = useState(0)
+  /** The "#query" being typed at the caret (a document tag), and where its menu opens. */
+  const [tagQuery, setTagQuery] = useState<{ start: number; query: string; left: number } | null>(null)
+  /** A "#" whose menu was closed with Escape: it stays closed until the caret leaves it. */
+  const tagDismissedAtRef = useRef<number | null>(null)
   /** When to remind the people mentioned; empty = notify them as soon as it is sent. */
   const [remindAt, setRemindAt] = useState('')
   const [remindOpen, setRemindOpen] = useState(false)
@@ -235,6 +212,8 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
       }
       const data = await res.json()
       setMessages(data.messages ?? [])
+      // Seen: the Discussions page drops this discussion's unread dot.
+      fetch(`/api/projects/${engagementId}/documents/${documentId}/doc-comments/read`, { method: 'POST' }).catch(() => {})
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load comments')
     } finally {
@@ -380,6 +359,85 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
     })
   }
 
+  // ── Document tags in the composer ──────────────────────────────────────────
+
+  /** The deliverable's documents that have an ID to tag them by. */
+  const taggable = useMemo(() => (taggableDocuments ?? []).filter((d): d is TaggableDocument & { docId: string } => !!d.docId), [taggableDocuments])
+  const docByDocId = useMemo(() => new Map(taggable.map((d) => [d.docId, d])), [taggable])
+
+  /** Opens, narrows or closes the document menu from where the caret is. */
+  const syncTagQuery = useCallback((value: string, caret: number) => {
+    const q = findTagQuery(value, caret)
+    if (!q || !taggableDocuments) {
+      tagDismissedAtRef.current = null
+      setTagQuery(null)
+      return
+    }
+    if (tagDismissedAtRef.current === q.start) { setTagQuery(null); return }
+    const el = textareaRef.current
+    const left = el ? caretOffset(el, q.start).left : 0
+    setTagQuery((prev) => {
+      if (!prev || prev.query !== q.query || prev.start !== q.start) setMenuIndex(0)
+      return { ...q, left }
+    })
+  }, [taggableDocuments])
+
+  /** Both menus follow the caret; at most one can match it. */
+  const syncQueries = (value: string, caret: number) => {
+    syncMentionQuery(value, caret)
+    syncTagQuery(value, caret)
+  }
+
+  const tagCandidates = useMemo(() => {
+    if (!tagQuery) return []
+    const q = tagQuery.query.toLowerCase()
+    const rank = (d: TaggableDocument & { docId: string }) => {
+      if (!q) return 0
+      const id = d.docId.toLowerCase()
+      const name = d.fileName.toLowerCase()
+      if (id.startsWith(q) || id.replace('-', '').startsWith(q)) return 0
+      if (name.startsWith(q)) return 1
+      if (name.split(/[\s._-]+/).some((w) => w.startsWith(q))) return 2
+      if (name.includes(q)) return 3
+      return -1
+    }
+    return taggable
+      .map((d) => ({ d, r: rank(d) }))
+      .filter((x) => x.r >= 0)
+      .sort((a, b) => a.r - b.r || a.d.fileName.localeCompare(b.d.fileName))
+      .slice(0, 8)
+      .map((x) => x.d)
+  }, [tagQuery, taggable])
+
+  const pickTag = (doc: TaggableDocument & { docId: string }) => {
+    const el = textareaRef.current
+    if (!tagQuery || !el) return
+    const caret = el.selectionStart ?? newContent.length
+    const next = insertTag(newContent, tagQuery.start, caret, doc.docId)
+    setNewContent(next.text)
+    setTagQuery(null)
+    requestAnimationFrame(() => {
+      el.focus()
+      el.setSelectionRange(next.caret, next.caret)
+    })
+  }
+
+  /** The # button: types a "#" at the caret, which opens the document menu. */
+  const startTag = () => {
+    const el = textareaRef.current
+    if (!el) return
+    const caret = el.selectionStart ?? newContent.length
+    const needsSpace = caret > 0 && !/\s/.test(newContent[caret - 1])
+    const insert = `${needsSpace ? ' ' : ''}#`
+    const value = newContent.slice(0, caret) + insert + newContent.slice(caret)
+    setNewContent(value)
+    requestAnimationFrame(() => {
+      el.focus()
+      el.setSelectionRange(caret + insert.length, caret + insert.length)
+      syncTagQuery(value, caret + insert.length)
+    })
+  }
+
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault()
     const content = newContent.trim()
@@ -401,6 +459,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
       setMessages((prev) => [...prev, newMsg])
       setNewContent('')
       setMentionQuery(null)
+      setTagQuery(null)
 
       // Notify everyone still mentioned: now, or on the reminder date.
       if (recipients.length > 0) {
@@ -420,6 +479,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
       }
       setMentionedUsers([])
       setRemindAt('')
+      onChange?.()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to add comment')
     } finally {
@@ -442,6 +502,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
       }
       setMessages((prev) => prev.filter((m) => m.id !== messageId))
       setDeleteConfirmId(null)
+      onChange?.()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to delete comment')
     } finally {
@@ -528,29 +589,20 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
     else bottomSentinelRef.current?.scrollIntoView({ behavior: 'auto', block: 'end' })
   }, [loading, sortOrder, visibleMessages.length])
 
-  /** A comment's text with its mentions drawn as pills (name and email on hover). */
-  const renderContentWithMentions = (content: string) =>
-    splitMentions(content, knownNames).map((t, i) => {
-      if (t.type !== 'mention') return <span key={i}>{t.value}</span>
-      const name = t.value.replace(/^@/, '')
-      const member = firmMembers.find((m) => displayNameOf(m) === name || m.name === name)
-      const pill = <span className="rounded-[4px] bg-action/10 px-1 py-px font-medium text-action">{t.value}</span>
-      if (!member) return <span key={i}>{pill}</span>
-      return (
-        <Tooltip key={i}>
-          <TooltipTrigger asChild>{pill}</TooltipTrigger>
-          <TooltipContent side="top" className="z-[9999] border border-line bg-surface p-2 text-xs text-fg shadow-popover">
-            <div className="flex items-center gap-2">
-              <PersonAvatar person={{ name: displayNameOf(member), avatarUrl: member.avatarUrl }} size={28} />
-              <div>
-                <div className="font-semibold">{displayNameOf(member)}</div>
-                <div className="text-caption text-fg-subtle">{member.email}</div>
-              </div>
-            </div>
-          </TooltipContent>
-        </Tooltip>
-      )
-    })
+  /** A comment's text with its mentions drawn as pills (name and email on hover) and its document tags as ID chips (name on hover) that open the document. */
+  const personForName = (name: string) => {
+    const member = firmMembers.find((m) => displayNameOf(m) === name || m.name === name)
+    return member ? { name: displayNameOf(member), email: member.email, avatarUrl: member.avatarUrl } : undefined
+  }
+  const renderContentWithMentions = (content: string) => (
+    <CommentText
+      content={content}
+      names={knownNames}
+      personFor={personForName}
+      docFor={(docId) => docByDocId.get(docId)}
+      onOpenDocument={onOpenDocument}
+    />
+  )
 
   // Setting or changing a posted comment's reminder date (from its bell, or "Remind" on hover).
   const [reminderEditPicker, setReminderEditPicker] = useState<{
@@ -703,7 +755,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
           <FilterMenuLabel>Has reaction</FilterMenuLabel>
           {REACTIONS.map((r) => (
             <FilterMenuRow key={r.key} multi selected={statusKeysFilter.includes(r.key)} onSelect={() => setStatusKeysFilter((l) => (l.includes(r.key) ? l.filter((x) => x !== r.key) : [...l, r.key]))}>
-              <span className="mr-1">{r.emoji}</span>{r.label}
+              <span className="mr-1.5 inline-flex w-6 justify-center"><ReactionMark reaction={r} size="pill" /></span>{r.label}
             </FilterMenuRow>
           ))}
         </DropdownMenuContent>
@@ -778,7 +830,13 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
         <div ref={backdropRef} aria-hidden className={cn(COMPOSER_TEXT, 'pointer-events-none absolute inset-x-0 top-0 overflow-hidden text-transparent')}>
           {backdropSegments.map((t, i) => t.type === 'mention'
             ? <mark key={i} className="-mx-0.5 rounded-[4px] bg-action/15 px-0.5 text-transparent [box-decoration-break:clone]">{t.value}</mark>
-            : <span key={i}>{t.value}</span>)}
+            : (
+              <span key={i}>
+                {splitDocTags(t.value).map((d, j) => d.type === 'doc' && docByDocId.has(d.docId)
+                  ? <mark key={j} className="-mx-0.5 rounded-[4px] bg-surface-muted px-0.5 text-transparent [box-decoration-break:clone]">{d.value}</mark>
+                  : <span key={j}>{d.value}</span>)}
+              </span>
+            ))}
           {/* A trailing new line needs a character to take up its line, as it does in the text box. */}
           {newContent.endsWith('\n') && '\u200b'}
         </div>
@@ -792,14 +850,33 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
           aria-label="Comment"
           onChange={(e) => {
             setNewContent(e.target.value)
-            syncMentionQuery(e.target.value, e.target.selectionStart ?? e.target.value.length)
+            syncQueries(e.target.value, e.target.selectionStart ?? e.target.value.length)
           }}
-          onClick={(e) => syncMentionQuery(e.currentTarget.value, e.currentTarget.selectionStart ?? 0)}
+          onClick={(e) => syncQueries(e.currentTarget.value, e.currentTarget.selectionStart ?? 0)}
           onKeyUp={(e) => {
-            if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) syncMentionQuery(e.currentTarget.value, e.currentTarget.selectionStart ?? 0)
+            if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) syncQueries(e.currentTarget.value, e.currentTarget.selectionStart ?? 0)
           }}
-          onBlur={() => window.setTimeout(() => setMentionQuery(null), 120)}
+          onBlur={() => window.setTimeout(() => { setMentionQuery(null); setTagQuery(null) }, 120)}
           onKeyDown={(e) => {
+            // The document menu, when "#" is being typed: the same keys as the mention menu.
+            if (tagQuery) {
+              if (tagCandidates.length > 0) {
+                if (e.key === 'ArrowDown') { e.preventDefault(); setMenuIndex((i) => (i + 1) % tagCandidates.length); return }
+                if (e.key === 'ArrowUp') { e.preventDefault(); setMenuIndex((i) => (i - 1 + tagCandidates.length) % tagCandidates.length); return }
+                if ((e.key === 'Enter' && !e.metaKey && !e.ctrlKey) || e.key === 'Tab') {
+                  e.preventDefault()
+                  pickTag(tagCandidates[Math.min(menuIndex, tagCandidates.length - 1)])
+                  return
+                }
+              }
+              if (e.key === 'Escape') {
+                e.preventDefault()
+                e.stopPropagation()
+                tagDismissedAtRef.current = tagQuery.start
+                setTagQuery(null)
+                return
+              }
+            }
             const menuOpen = !!mentionQuery
             if (menuOpen && mentionCandidates.length > 0) {
               if (e.key === 'ArrowDown') { e.preventDefault(); setMenuIndex((i) => (i + 1) % mentionCandidates.length); return }
@@ -831,6 +908,13 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
               <AtSign className="h-3.5 w-3.5" />
             </button>
           </Hint>
+          {taggableDocuments && (
+            <Hint label="Tag a document (#)">
+              <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={startTag} aria-label="Tag a document" className="flex h-7 w-7 items-center justify-center rounded-control text-fg-subtle hover:bg-surface-hover hover:text-fg-muted">
+                <Hash className="h-3.5 w-3.5" />
+              </button>
+            </Hint>
+          )}
           <Popover open={remindOpen} onOpenChange={setRemindOpen}>
             <Hint label={currentMentions.length > 0 ? 'Remind the people you mention' : 'Mention someone to set a reminder'}>
               <PopoverTrigger asChild>
@@ -876,6 +960,37 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
             {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
           </button>
         </div>
+
+        {/* The document menu: just above the composer, where "#" was typed. */}
+        {tagQuery && (
+          <div
+            role="listbox"
+            aria-label="Tag a document"
+            className="absolute bottom-full z-[200] mb-1.5 w-80 overflow-hidden rounded-card border border-line bg-surface p-1 shadow-popover"
+            style={{ left: Math.max(0, Math.min(tagQuery.left, (composerRef.current?.clientWidth ?? 320) - 320)) }}
+          >
+            {tagCandidates.length === 0 ? (
+              <p className="px-2 py-1.5 text-small text-fg-subtle">
+                {taggable.length === 0 ? 'No documents in this deliverable yet' : `No document matches “${tagQuery.query}”`}
+              </p>
+            ) : tagCandidates.map((d, idx) => (
+              <button
+                key={d.documentId}
+                type="button"
+                role="option"
+                aria-selected={idx === menuIndex}
+                onMouseDown={(e) => e.preventDefault()}
+                onMouseEnter={() => setMenuIndex(idx)}
+                onClick={() => pickTag(d)}
+                className={cn('flex h-9 w-full items-center gap-2 rounded-control px-2 text-left', idx === menuIndex && 'bg-surface-hover')}
+              >
+                <DocumentIcon mimeType={d.mimeType ?? undefined} className="h-4 w-4 shrink-0" />
+                <span className="min-w-0 flex-1 truncate text-small text-fg">{d.fileName}</span>
+                <span className="shrink-0 text-caption tabular-nums text-fg-subtle">{d.docId}</span>
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* The mention menu: just above the composer, where "@" was typed. */}
         {mentionQuery && (
@@ -996,7 +1111,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
                                     onClick={() => void toggleReaction(msg.id, r.key, reactedByMe ? 'remove' : 'add')}
                                     className={cn('inline-flex h-6 items-center gap-1 rounded-full border px-2 text-caption tabular-nums transition-colors', reactedByMe ? 'border-action/30 bg-action/10 text-action' : 'border-line bg-surface text-fg-muted hover:bg-surface-hover')}
                                   >
-                                    <span className="leading-none">{r.emoji}</span>{users.length}
+                                    <ReactionMark reaction={r} size="pill" />{users.length}
                                   </button>
                                 </TooltipTrigger>
                                 <TooltipContent side="top" className="z-[9999] max-w-[240px] border border-line bg-surface p-2 text-caption text-fg-muted shadow-popover">
@@ -1045,9 +1160,10 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
                                       <button
                                         type="button"
                                         onClick={() => void toggleReaction(msg.id, r.key, reactedByMe ? 'remove' : 'add')}
-                                        className={cn('flex h-9 w-9 items-center justify-center rounded-control text-lg leading-none hover:bg-surface-hover', reactedByMe && 'bg-action/10 ring-1 ring-inset ring-action/30')}
+                                        aria-label={r.label}
+                                        className={cn('flex h-9 w-9 items-center justify-center rounded-control hover:bg-surface-hover', reactedByMe && 'bg-action/10 ring-1 ring-inset ring-action/30')}
                                       >
-                                        {r.emoji}
+                                        <ReactionMark reaction={r} size="picker" />
                                       </button>
                                     </Hint>
                                   )

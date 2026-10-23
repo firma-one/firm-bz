@@ -1,4 +1,5 @@
-import { Briefcase, Share2, Users } from 'lucide-react'
+import { Briefcase, Share2 } from 'lucide-react'
+import { ClientIcon } from '@/components/ui/client-icon'
 import { DemoFirm } from '@/lib/demo/static-demo-data'
 import { DemoAuditLog, type DemoAuditRow } from '@/components/demo/demo-audit-log'
 
@@ -22,7 +23,7 @@ function buildAuditRows(firm: DemoFirm): AuditRow[] {
             details: client.name,
             actorName: ACTORS[ci % ACTORS.length],
             client: client.name,
-            icon: Users,
+            icon: ClientIcon,
         })
         client.engagements.forEach((engagement, ei) => {
             rows.push({

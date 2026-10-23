@@ -156,16 +156,16 @@
   --ui-dur-base: 200ms;
   --ui-dur-slow: 320ms;
 
-  /* Chart series — filled bars, segments and legend swatches. The tag colors above are text
-     tones (too dark and muddy as fills); these are their vivid counterparts, picked to stay apart
-     from each other at small sizes. Use as var(--ui-chart-blue) etc. */
-  --ui-chart-blue: #4f7df3;
-  --ui-chart-orange: #ef7a3c;
-  --ui-chart-green: #3fae74;
-  --ui-chart-yellow: #e9b63b;
-  --ui-chart-purple: #9b6ce0;
-  --ui-chart-pink: #e2629a;
-  --ui-chart-teal: #34b3b0;
+  /* Chart series for categories that aren't a status (which feature spent AI credits): filled bars,
+     segments and legend swatches. Muted, at about the status bars' lightness, so a chart sits as
+     quietly as the rest of the page; and in hues the status language doesn't use — no green, yellow,
+     orange, red or sky blue — so a segment never reads as done, waiting or a problem. Every pair stays
+     at least ΔE 25 apart. Use as var(--ui-chart-slate) etc. (2026-10-22) */
+  --ui-chart-slate: #8fa1c2;
+  --ui-chart-teal: #6fbab6;
+  --ui-chart-purple: #ad93d6;
+  --ui-chart-pink: #de92b6;
+  --ui-chart-brown: #c29a80;
 
   /* shadcn base variables, tuned to the warm neutrals so the token-based primitives (Select, Tabs,
      Badge, Avatar, borders) match. */

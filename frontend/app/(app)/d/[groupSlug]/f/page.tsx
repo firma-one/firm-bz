@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter, usePathname, useParams } from 'next/navigation'
-import { Building2, ArrowRight, Loader2, Plus, Users } from 'lucide-react'
+import { Building2, ArrowRight, Loader2, Plus } from 'lucide-react'
+import { ClientIcon } from '@/components/ui/client-icon'
 import { getDomainOnboardingOptionsForCurrentUser, joinOrganizationByDomain, type DomainOnboardingOptions, type DomainOrgOption } from '@/lib/actions/domain-onboarding'
 import { getUserFirms, getIsGroupAdmin, type FirmOption } from '@/lib/actions/firms'
 import { BRAND_NAME } from '@/config/brand'
@@ -90,7 +91,9 @@ export default function WorkspacePickerPage() {
 
     return (
         <TooltipProvider>
-        <div className="flex flex-col h-full overflow-y-auto">
+        {/* A scroll box clips at every edge, so it reaches into the shell's padding (4px at the sides,
+            8px below) and pads back: room for the cards' ring and shadow, with nothing moved. */}
+        <div className="-mx-1 -mb-2 flex h-full flex-col overflow-y-auto px-1 pb-2">
 
             <PageHeading
                 icon={<Building2 />}
@@ -118,7 +121,7 @@ export default function WorkspacePickerPage() {
             {firms.length > 0 && viewMode === 'list' ? (
                 <WorkspaceTable
                     countLabel="Clients"
-                    countIcon={<Users />}
+                    countIcon={<ClientIcon />}
                     rows={firms.map((firm) => ({
                         key: firm.id,
                         name: firm.name,
@@ -159,7 +162,7 @@ export default function WorkspacePickerPage() {
                     {viewMode === 'list' ? (
                         <WorkspaceTable
                             countLabel="Clients"
-                            countIcon={<Users />}
+                            countIcon={<ClientIcon />}
                             trailingLabel="Access"
                             rows={joinableFirms.map((org) => ({
                                 key: org.id,

@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useTransition, type ReactNode } from 'react'
 import { ClientSummary, getFirmName } from '@/lib/actions/hierarchy'
-import { Settings, Users, ClipboardList, Printer, CalendarDays, Plus, Table2, BarChart3 } from 'lucide-react'
+import { Settings, ClipboardList, Printer, CalendarDays, Plus, Table2, BarChart3 } from 'lucide-react'
+import { ClientIcon } from '@/components/ui/client-icon'
 import { PageHeading } from '@/components/ui/page-heading'
 import { AccessLock } from '@/components/ui/access-lock'
 import { ShimmerBar } from '@/components/ui/shimmer'
@@ -47,7 +48,7 @@ const VIEW_MODE_KEY = 'fm-clients-view'
  */
 const VIEW_TITLES: Record<string, { title: string; icon: ReactNode; lock?: string }> = {
     analytics: { title: 'Overview', icon: <BarChart3 />, lock: FIRM_ADMINS_ONLY },
-    clients: { title: 'Clients', icon: <Users /> },
+    clients: { title: 'Clients', icon: <ClientIcon /> },
     calendar: { title: 'Calendar', icon: <CalendarDays /> },
     audit: { title: 'Audit', icon: <ClipboardList />, lock: FIRM_ADMINS_ONLY },
     settings: { title: 'Settings', icon: <Settings />, lock: FIRM_ADMINS_ONLY },
@@ -237,7 +238,8 @@ export function FirmClientsView({ clients, groupSlug, orgSlug, orgId, firmSandbo
             <Tabs value={currentTab} onValueChange={handleTabChange} className="flex-1 flex flex-col min-h-0 print:block print:flex-none animate-in fade-in duration-200 ease-out">
                 {heading}
 
-                <div className="flex-1 overflow-y-auto custom-scrollbar print:overflow-visible print:flex-none print:h-auto">
+                {/* Room for the client cards' ring and shadow (4px at the sides, 8px below), which a scroll box clips */}
+                <div className="-mx-1 -mb-2 flex-1 overflow-y-auto px-1 pb-2 custom-scrollbar print:overflow-visible print:flex-none print:h-auto">
                     <TabsContent value="clients" className="m-0 h-full">
                         <div className="py-2">
                             <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">

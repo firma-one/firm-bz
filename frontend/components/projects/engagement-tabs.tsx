@@ -66,7 +66,7 @@ export function EngagementTabsList({ pendingTab, ...c }: EngagementTabsConfig & 
             </TabsTrigger>
             <TabsTrigger value="comments" data-demo-tour="engagement-comments-tab" className="relative gap-1.5">
                 <MessagesSquare className="h-4 w-4" />
-                Comments
+                Discussions
                 {count(c.commentsCount)}
                 {pending('comments')}
             </TabsTrigger>

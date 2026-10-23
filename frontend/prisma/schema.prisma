@@ -686,6 +686,8 @@ model EngagementDocument {
   client         Client?                     @relation(fields: [clientId], references: [id], onDelete: SetNull)
   engagement     Engagement                 @relation(fields: [engagementId], references: [id], onDelete: Cascade)
   docCommentMessages DocCommentMessage[]
+  docCommentThread   DocCommentThread?
+  docCommentReads    DocCommentRead[]
   platformAuditEvents PlatformAuditEvent[]
   notifications       Notification[]
 
@@ -874,6 +876,40 @@ model DocCommentMessage {
 
   @@index([engagementId, projectDocumentId, createdAt])
   @@map("doc_comment_messages")
+  @@schema("platform")
+}
+
+/// A document's discussion (its comments, as the engagement's Discussions page lists them), once
+/// someone resolves it: resolved discussions leave All and Awaiting reply. A new comment reopens it
+/// (resolvedAt back to null). .claude/plans/board-pane-comments-redesign.md, "Next".
+model DocCommentThread {
+  projectDocumentId String    @id @db.Uuid
+  engagementId      String    @db.Uuid
+  resolvedAt        DateTime? @db.Timestamptz(6)
+  resolvedBy        String?   @db.Uuid
+  createdAt         DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  projectDocument   EngagementDocument @relation(fields: [projectDocumentId], references: [id], onDelete: Cascade)
+
+  @@index([engagementId])
+  @@map("doc_comment_threads")
+  @@schema("platform")
+}
+
+/// When a member last read a document's discussion. A comment by someone else after it makes the
+/// discussion unread for them (a dot on the Discussions page).
+model DocCommentRead {
+  userId            String   @db.Uuid
+  projectDocumentId String   @db.Uuid
+  engagementId      String   @db.Uuid
+  lastReadAt        DateTime @db.Timestamptz(6)
+
+  projectDocument   EngagementDocument @relation(fields: [projectDocumentId], references: [id], onDelete: Cascade)
+
+  @@id([userId, projectDocumentId])
+  @@index([engagementId, userId])
+  @@map("doc_comment_reads")
   @@schema("platform")
 }
 

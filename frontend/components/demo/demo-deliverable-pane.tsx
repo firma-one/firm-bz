@@ -10,6 +10,7 @@ import { StatusPill } from '@/components/ui/status-pill'
 import { STAGE_BAR_CLASSES, STATUS, type LaneStage } from '@/lib/ui/status'
 import { DemoFolder } from '@/lib/demo/static-demo-data'
 import { DemoDeliverable } from '@/lib/demo/demo-deliverables'
+import { DemoDeliverableComments } from './demo-deliverable-comments'
 
 const MIME_BY_TYPE: Record<string, string> = {
     pdf: 'application/pdf',
@@ -35,7 +36,7 @@ function collectSubtasks(folder: DemoFolder): { id: string; docId: string; name:
     return [...own, ...nested]
 }
 
-/** Static counterpart to deliverable-detail-panel.tsx, docked the same way layout-right-panel.tsx renders its 'small'/'medium' pane. Details tab is real (folder's files as subtasks); Comments/Settings are inert per the same tab strip, not wired up. */
+/** Static counterpart to deliverable-detail-panel.tsx, docked the same way layout-right-panel.tsx renders its 'small'/'medium' pane. Details is real (the folder's files as subtasks); Comments works on screen, with @ and # (demo-deliverable-comments.tsx); Settings is inert. */
 export function DemoDeliverablePane({ deliverable, onClose, embedded = false }: {
     deliverable: DemoDeliverable
     onClose?: () => void
@@ -101,13 +102,13 @@ export function DemoDeliverablePane({ deliverable, onClose, embedded = false }: 
                         <TooltipTrigger asChild>
                             <button
                                 type="button"
-                                onClick={() => tab.id === 'details' && setActiveTab(tab.id)}
-                                disabled={tab.id !== 'details'}
+                                onClick={() => tab.id !== 'delivery' && setActiveTab(tab.id)}
+                                disabled={tab.id === 'delivery'}
                                 className={cn(
                                     'inline-flex items-center px-4 py-2.5 text-xs font-medium border-b-2 -mb-px transition-all',
                                     activeTab === tab.id
                                         ? 'border-primary text-[#1b1b1d] font-bold opacity-100'
-                                        : tab.id !== 'details'
+                                        : tab.id === 'delivery'
                                             ? 'border-transparent text-[#c0c1c6] cursor-not-allowed opacity-50'
                                             : 'border-transparent text-[#45474c] opacity-60 hover:text-[#1b1b1d] hover:opacity-100'
                                 )}
@@ -116,15 +117,22 @@ export function DemoDeliverablePane({ deliverable, onClose, embedded = false }: 
                                 {tab.label}
                             </button>
                         </TooltipTrigger>
-                        {tab.id !== 'details' && (
+                        {tab.id === 'delivery' && (
                             <TooltipContent side="bottom" className="text-xs">Not available in this demo</TooltipContent>
                         )}
                     </Tooltip>
                 ))}
             </div>
 
-            {/* Tab content — Details only */}
-            <div className="flex-1 min-h-0 overflow-y-auto">
+            {/* Comments: the app's composer over sample comments, @ to mention and # to tag a document */}
+            {activeTab === 'comments' && (
+                <DemoDeliverableComments
+                    documents={subtasks.map((s) => ({ id: s.id, docId: s.docId, name: s.name, mimeType: MIME_BY_TYPE[s.type] ?? 'application/octet-stream' }))}
+                />
+            )}
+
+            {/* Details */}
+            {activeTab === 'details' && <div className="flex-1 min-h-0 overflow-y-auto">
                 <div className="divide-y divide-[#e5e7eb]">
                     <div className="px-4 py-4">
                         <div className="flex items-center gap-3 mb-3">
@@ -159,7 +167,7 @@ export function DemoDeliverablePane({ deliverable, onClose, embedded = false }: 
                         )}
                     </div>
                 </div>
-            </div>
+            </div>}
         </div>
     )
 }

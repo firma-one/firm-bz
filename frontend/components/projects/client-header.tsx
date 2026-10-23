@@ -1,7 +1,8 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { Briefcase, Building2, CalendarCheck, CalendarDays, Globe, Users } from "lucide-react"
+import { Briefcase, Building2, CalendarCheck, CalendarDays, Globe } from "lucide-react"
+import { ClientIcon } from "@/components/ui/client-icon"
 import { format } from "date-fns"
 import { updateClient, type LwCrmClientStatus } from "@/lib/actions/client"
 import type { HierarchyClient } from "@/lib/actions/hierarchy"
@@ -64,7 +65,7 @@ export function ClientHeader({
                         </span>
                     ) : (
                         <span className="flex shrink-0 items-center text-fg-muted [&_svg]:h-7 [&_svg]:w-7" aria-hidden>
-                            <Users />
+                            <ClientIcon />
                         </span>
                     )}
                     <h1 className="min-w-0 truncate text-h1 text-fg">{client.name}</h1>

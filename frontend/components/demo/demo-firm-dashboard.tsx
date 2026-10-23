@@ -3,6 +3,7 @@
 import { useState, type ReactNode } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { BarChart3, CalendarDays, ClipboardList, Plus, Printer, Search, UserPlus, Users } from 'lucide-react'
+import { ClientIcon } from '@/components/ui/client-icon'
 import { PageHeading } from '@/components/ui/page-heading'
 import { AccessLock } from '@/components/ui/access-lock'
 import { Button } from '@/components/ui/button'
@@ -22,7 +23,7 @@ const NOT_IN_DEMO = 'Not available in this demo'
 
 const VIEWS: Record<string, { title: string; icon: ReactNode; lock?: boolean; description?: string }> = {
     analytics: { title: 'Overview', icon: <BarChart3 />, lock: true },
-    clients: { title: 'Clients', icon: <Users /> },
+    clients: { title: 'Clients', icon: <ClientIcon /> },
     calendar: { title: 'Calendar', icon: <CalendarDays /> },
     'doc-search': { title: 'Doc Search', icon: <Search />, description: 'Search documents across every client and engagement you have access to.' },
     members: { title: 'Members', icon: <Users />, lock: true, description: "Firm administrators manage the firm's settings, members and every client." },

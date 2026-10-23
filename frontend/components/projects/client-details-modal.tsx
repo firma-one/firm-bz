@@ -3,6 +3,7 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { ClientSummary } from '@/lib/actions/hierarchy'
 import { Users, Building, Calendar, Clock, Tag, TrendingUp, GitBranch, Lock, Linkedin, Users2, MapPin } from 'lucide-react'
+import { ClientIcon } from '@/components/ui/client-icon'
 import { formatDistanceToNow, format } from 'date-fns'
 import { formatFullDate } from '@/lib/utils'
 import { Globe, Link2 } from 'lucide-react'
@@ -35,7 +36,7 @@ export function ClientDetailsModal({ client, open, onOpenChange }: ClientDetails
             <DialogContent className="sm:max-w-[500px]">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2.5 text-xl">
-                        <Users className="h-6 w-6 text-fg-muted" />
+                        <ClientIcon className="h-6 w-6 text-fg-muted" />
                         {client.name}
                     </DialogTitle>
                 </DialogHeader>

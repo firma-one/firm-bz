@@ -91,6 +91,7 @@ const NOTIFICATION_ENTITY: Record<string, InboxEntity> = {
     ENGAGEMENT_INVITE_ACCEPTED: "member",
     PROJECT_DUE_DATE_SET: "engagement",
     CLIENT_FOLLOWUP_DUE: "client",
+    SUPPORT_REPLY: "comment",
 }
 
 /**

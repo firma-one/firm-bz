@@ -138,7 +138,7 @@ export function EngagementOverviewFrame() {
           </div>
           <div style={{ marginTop: 18, display: 'flex', gap: 22, borderBottom: '1px solid rgba(55,53,47,0.09)', color: MUTED }}>
             <span style={{ paddingBottom: 9, color: '#37352F', fontWeight: 500, borderBottom: '2px solid #37352F' }}>Overview</span>
-            {['Files', 'Board 4', 'Comments', 'Audit', 'Members 4'].map((t) => (
+            {['Files', 'Board 4', 'Discussions', 'Audit', 'Members 4'].map((t) => (
               <span key={t} style={{ paddingBottom: 9 }}>
                 {t}
               </span>

@@ -12,7 +12,8 @@ import { LoadingAnnouncement, ShimmerBar, ShimmerBlock } from "@/components/ui/s
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { FilterMenuLabel, FilterMenuRow, FilterPill, summarizePicks } from "@/components/ui/filter-pill"
 import { CoffeeIcon, type CoffeeIconHandle } from "@/components/ui/coffee-icon"
-import { SquarePlus, Upload, FolderUp, X, Folder, File as FileIcon, ArrowUp, ArrowDown, ChevronRight, Search, List as ListIcon, LayoutGrid, ChevronDown, User, FileText, FileSpreadsheet, Presentation, ListChecks, PenTool, Map as MapIcon, LayoutTemplate, FileCode, AlertCircle, ShieldCheck, Maximize2, Minimize2, CheckCircle2, XCircle, Trash2, Layout, Code, Laptop, RefreshCw, Info, Share2, Layers, Building2, Users, Briefcase, Lock, FolderLock, Inbox, Sparkles, Link2, ExternalLink, MessagesSquare, CircleChevronLeft, Download, MoreVertical, Clock, Copy, FolderInput, Loader2, Pencil, Hash, Type, UserRound, Clock3, Flag, HardDrive, Plus, CircleDot, FolderPlus } from 'lucide-react'
+import { SquarePlus, Upload, FolderUp, X, Folder, File as FileIcon, ArrowUp, ArrowDown, ChevronRight, Search, List as ListIcon, LayoutGrid, ChevronDown, User, FileText, FileSpreadsheet, Presentation, ListChecks, PenTool, Map as MapIcon, LayoutTemplate, FileCode, AlertCircle, ShieldCheck, Maximize2, Minimize2, CheckCircle2, XCircle, Trash2, Layout, Code, Laptop, RefreshCw, Info, Share2, Layers, Building2, Briefcase, Lock, FolderLock, Inbox, Sparkles, Link2, ExternalLink, MessagesSquare, CircleChevronLeft, Download, MoreVertical, Clock, Copy, FolderInput, Loader2, Pencil, Hash, Type, UserRound, Clock3, Flag, HardDrive, Plus, CircleDot, FolderPlus } from 'lucide-react'
+import { ClientIcon } from '@/components/ui/client-icon'
 import Fuse from 'fuse.js'
 import { config } from "@/lib/config"
 import { DocumentIcon } from '@/components/ui/document-icon'
@@ -2313,7 +2314,7 @@ const handleRefresh = async () => {
                                             ) : item.clickable === false ? (
                                                 <div className="flex items-center px-2 py-1 text-fg-muted cursor-default">
                                                     {index === 0 && <Building2 className="h-3.5 w-3.5 mr-1.5 text-fg-subtle flex-shrink-0" />}
-                                                    {index === 1 && <Users className="h-3.5 w-3.5 mr-1.5 text-fg-subtle flex-shrink-0" />}
+                                                    {index === 1 && <ClientIcon className="h-3.5 w-3.5 mr-1.5 text-fg-subtle flex-shrink-0" />}
                                                     {index === 2 && <Briefcase className="h-3.5 w-3.5 mr-1.5 text-fg-subtle flex-shrink-0" />}
                                                     {index > 2 && crumbFolderIcon(item.id)}
                                                     <span className="truncate max-w-[140px]" title={item.name}>{item.name}</span>
@@ -3280,7 +3281,7 @@ const handleRefresh = async () => {
                                                         {/* Client row */}
                                                         <div className="flex items-center gap-1.5 relative pl-4 py-1">
                                                             <span className="absolute left-0 top-1/2 w-3 border-t border-line" />
-                                                            <Users className="h-3.5 w-3.5 flex-shrink-0 text-fg-subtle" />
+                                                            <ClientIcon className="h-3.5 w-3.5 flex-shrink-0 text-fg-subtle" />
                                                             <span className="text-[10px] font-semibold uppercase tracking-wider text-fg-muted">{group.clientName}</span>
                                                         </div>
                                                         {/* Engagement rows */}

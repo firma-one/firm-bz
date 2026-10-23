@@ -6,7 +6,8 @@ import { getProjectMemberSummaries, type ProjectMemberSummary } from '@/lib/acti
 import { ProjectList } from './engagement-list'
 import { ClientSettingsForm } from './client-settings-form'
 import type { LwCrmClientStatus } from '@/lib/actions/client'
-import { Plus, Users, Briefcase, Settings, UserCog, Contact } from 'lucide-react'
+import { Plus, Briefcase, Settings, UserCog, Contact } from 'lucide-react'
+import { ClientIcon } from '@/components/ui/client-icon'
 import { Button } from '@/components/ui/button'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { AddEngagementModal } from './add-engagement-modal'
@@ -112,14 +113,16 @@ export function ClientProjectView({ clients, groupSlug, firmSlug, firmName, firm
 
     if (clients.length === 0) {
         return (
-            <EmptyPanel icon={<Users />} title="No clients yet" description="Create your first client from the sidebar." />
+            <EmptyPanel icon={<ClientIcon />} title="No clients yet" description="Create your first client from the sidebar." />
         )
     }
 
     return (
         <div className="flex flex-col h-full">
 
-            <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+            {/* Here and on the scroller below: room for the engagement cards' ring and shadow (4px at the
+                sides, 8px below), which a clipping box would cut */}
+            <div className="-mx-1 -mb-2 flex min-h-0 flex-1 flex-col overflow-hidden px-1 pb-2">
                 {selectedClient ? (
                     <>
                         <ClientHeader client={selectedClient} firmSlug={firmSlug} canManage={canManageClient} />
@@ -185,7 +188,7 @@ export function ClientProjectView({ clients, groupSlug, firmSlug, firmName, firm
                                 )}
                             </div>
 
-                            <div className="flex-1 overflow-y-auto custom-scrollbar">
+                            <div className="-mx-1 -mb-2 flex-1 overflow-y-auto px-1 pb-2 custom-scrollbar">
                                 <TabsContent value="projects" className="m-0">
                                     <ProjectList
                                         projects={selectedClient.engagements}

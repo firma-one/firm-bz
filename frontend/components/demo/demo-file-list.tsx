@@ -76,7 +76,7 @@ import { initialsOf } from '@/lib/initials'
 import type { DemoFolder, DemoFile } from '@/lib/demo/static-demo-data'
 import { DELIVERABLE_ACTORS, type DeliverableStatus } from '@/lib/demo/demo-deliverables'
 
-const MIME_BY_TYPE: Record<string, string> = {
+export const MIME_BY_TYPE: Record<string, string> = {
     pdf: 'application/pdf',
     doc: 'application/msword',
     docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',

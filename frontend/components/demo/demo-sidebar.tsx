@@ -10,11 +10,11 @@ import {
     ClipboardList,
     CreditCard,
     ExternalLink,
-    FolderOpen,
     Home,
     Inbox,
     Info,
     LifeBuoy,
+    PanelLeftClose,
     ScrollText,
     Search,
     Settings,
@@ -22,6 +22,7 @@ import {
     UserPlus,
     Users,
 } from 'lucide-react'
+import { ClientIcon } from '@/components/ui/client-icon'
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -35,6 +36,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { AccessLock } from '@/components/ui/access-lock'
 import { Hint } from '@/components/ui/tooltip'
+import { Kbd } from '@/components/ui/kbd'
 import { ClientGroup, CountBadge, SidebarItem, SidebarSection } from '@/components/shell/sidebar-v2'
 import { FirmMark } from '@/components/shell/workspace-switcher'
 import { StatusIcon } from '@/components/ui/status-icon'
@@ -58,7 +60,11 @@ export function demoFirmView(pathname: string, tab: string | null): string | nul
  *
  * Tour anchors sit on wrapping elements, so the shared rows need no demo-only props.
  */
-export function DemoSidebar({ inboxCount }: { inboxCount: number }) {
+export function DemoSidebar({ inboxCount, onCollapse }: {
+    inboxCount: number
+    /** Desktop collapse, as the app's sidebar; omitted in the mobile drawer. */
+    onCollapse?: () => void
+}) {
     const pathname = usePathname() ?? ''
     const view = demoFirmView(pathname, useSearchParams()?.get('tab') ?? null)
     const active = statusOf('engagement', 'ACTIVE')
@@ -94,6 +100,18 @@ export function DemoSidebar({ inboxCount }: { inboxCount: number }) {
                         </DropdownMenuItem>
                     </DropdownMenuContent>
                 </DropdownMenu>
+                {onCollapse && (
+                    <Hint label={<>Collapse sidebar <Kbd>[</Kbd></>} side="bottom">
+                        <button
+                            type="button"
+                            onClick={onCollapse}
+                            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-control text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg-muted"
+                            aria-label="Collapse sidebar"
+                        >
+                            <PanelLeftClose className="h-4 w-4" />
+                        </button>
+                    </Hint>
+                )}
             </div>
 
             {/* Primary */}
@@ -145,9 +163,9 @@ export function DemoSidebar({ inboxCount }: { inboxCount: number }) {
                     <div data-demo-tour="firm-clients-tab">
                         <SidebarItem
                             href="/tour?tab=clients"
-                            icon={<FolderOpen />}
+                            icon={<ClientIcon />}
                             label="All clients"
-                            active={view === 'clients' || (pathname.startsWith('/tour/') && pathname.split('/').length === 3 && !['/tour/home', '/tour/inbox'].includes(pathname))}
+                            active={view === 'clients' || (pathname.startsWith('/tour/') && pathname.split('/').length === 3 && !['/tour/home', '/tour/inbox', '/tour/support'].includes(pathname))}
                         />
                     </div>
                 </SidebarSection>
@@ -201,8 +219,11 @@ function DemoProfileMenu() {
                 <DropdownMenuItem disabled className="gap-2">
                     <CreditCard className="h-4 w-4 text-fg-muted" />Billing<AccessLock label={ADMIN_ONLY} side="right" className="ml-auto" />
                 </DropdownMenuItem>
-                <DropdownMenuItem disabled className="gap-2">
-                    <LifeBuoy className="h-4 w-4 text-fg-muted" />Support<AccessLock label={ADMIN_ONLY} side="right" className="ml-auto" />
+                {/* As in the app: Support is for firm admins, which the demo user is; it opens the tour's copy */}
+                <DropdownMenuItem asChild className="gap-2">
+                    <Link href="/tour/support">
+                        <LifeBuoy className="h-4 w-4 text-fg-muted" />Support<AccessLock label={ADMIN_ONLY} side="right" className="ml-auto" />
+                    </Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild className="gap-2">

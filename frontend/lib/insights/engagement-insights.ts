@@ -610,7 +610,7 @@ export async function computeEngagementInsights(
     }
 
     /**
-     * Reactions that leave a thread OPEN. Mirrors the picker in document-doc-comments-pane.tsx,
+     * Reactions that leave a thread OPEN. Mirrors the picker (components/comments/reactions.tsx),
      * minus the three that close a thread (`done`, `celebrate`, `thumbs_up`) — surfacing those as
      * needing attention would flag exactly the conversations someone just marked resolved.
      *
@@ -620,8 +620,16 @@ export async function computeEngagementInsights(
 
     const unansweredThreads: UnansweredThreadItem[] = []
     const docMap = new Map(docs.map((d) => [d.id, d]))
+    // A resolved discussion isn't waiting on anyone — the same rule as the Discussions page's Awaiting reply.
+    const resolvedDiscussions = new Set(
+      (await prisma.docCommentThread.findMany({
+        where: { engagementId: projectId, resolvedAt: { not: null } },
+        select: { projectDocumentId: true },
+      })).map((t) => t.projectDocumentId)
+    )
 
     for (const [docId, thread] of Array.from(commentsByDoc.entries())) {
+      if (resolvedDiscussions.has(docId)) continue
       const lastMsg = thread[thread.length - 1]
       if (!lastMsg.authorUserId) continue
       if (!externalUserIds.has(lastMsg.authorUserId)) continue

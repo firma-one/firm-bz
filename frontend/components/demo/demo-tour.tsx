@@ -196,8 +196,8 @@ const STEPS: TourStep[] = [
         },
         {
             target: '[data-demo-tour="engagement-comments-tab"]',
-            title: 'Comments',
-            content: <p>See all in-app comments across documents in this engagement in one place. Collaborate and resolve threads without switching files.</p>,
+            title: 'Discussions',
+            content: <p>Every deliverable’s discussion in one place: see what’s new and who’s waiting on a reply, answer without leaving the page, and resolve what’s settled.</p>,
             route: `${eng}?tab=comments`,
             placement: 'bottom' as const,
             skipScroll: true,
@@ -251,6 +251,19 @@ const STEPS: TourStep[] = [
         ),
         route: firm,
         placement: 'right',
+    },
+    {
+        target: '[data-demo-tour="support-requests"]',
+        title: 'Support',
+        content: (
+            <div className="space-y-2">
+                <p>Every request your firm has raised with the Firma team, with whose turn it is. <strong>Last update</strong> reads darker when Firma has replied.</p>
+                <p>Open one to see the whole conversation and reply; <strong>New request</strong> opens beside the list, with room to drop screenshots.</p>
+            </div>
+        ),
+        route: `${firm}/support`,
+        placement: 'bottom',
+        skipScroll: true,
     },
 ]
 

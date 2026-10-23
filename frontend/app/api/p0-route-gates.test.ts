@@ -24,7 +24,7 @@ const { who, db, polar, admin } = vi.hoisted(() => {
 })
 
 const prismaMock = {
-    firm: { findUnique: vi.fn(async () => db.firmBySlug), findFirst: vi.fn(async () => null) },
+    firm: { findUnique: vi.fn(async () => db.firmBySlug), findFirst: vi.fn(async () => null), findMany: vi.fn(async () => []) },
     firmMember: {
         findFirst: vi.fn(async ({ where }: any) => {
             if (where.role === 'firm_admin') return db.firmAdmin ? { id: 'm' } : null
@@ -33,9 +33,9 @@ const prismaMock = {
         findMany: vi.fn(async () => [{ userId: 'u9' }]),
     },
     customerRequest: { findMany: vi.fn(async ({ where }: any) => db.tickets.filter((t) => Object.entries(where).every(([k, v]) => t[k] === v))) },
-    client: { findFirst: vi.fn(async () => (db.clientInFirm ? { id: 'c1' } : null)), findUnique: vi.fn(async () => null) },
+    client: { findFirst: vi.fn(async () => (db.clientInFirm ? { id: 'c1' } : null)), findUnique: vi.fn(async () => null), findMany: vi.fn(async () => []) },
     clientMember: { findMany: vi.fn(async () => [{ userId: 'u9' }]) },
-    engagement: { findFirst: vi.fn(async () => (db.clientInFirm ? { id: 'e1' } : null)), findUnique: vi.fn(async () => null) },
+    engagement: { findFirst: vi.fn(async () => (db.clientInFirm ? { id: 'e1' } : null)), findUnique: vi.fn(async () => null), findMany: vi.fn(async () => []) },
     engagementMember: { findMany: vi.fn(async () => []) },
     connector: { findFirst: vi.fn(async () => (db.ownedConnector ? { id: 'conn' } : null)) },
     notification: { createMany: vi.fn(async () => ({ count: 1 })) },
@@ -106,6 +106,18 @@ describe('GET /api/support/requests (P0 #10)', () => {
         db.firmBySlug = null
         const { GET } = await import('./support/requests/route')
         expect((await GET(req('/api/support/requests?firmSlug=nope'))).status).toBe(404)
+    })
+
+    it('keeps every firm\'s tickets (?all=1) to the Firma team', async () => {
+        vi.stubEnv('SYSTEM_ADMIN_EMAILS', 'staff@firma.bz')
+        const { GET } = await import('./support/requests/route')
+        who.user = { ...who.user, email: 'someone@acme.com' }
+        expect((await GET(req('/api/support/requests?all=1'))).status).toBe(403)
+        who.user = { ...who.user, email: 'staff@firma.bz' }
+        const text = JSON.stringify(await (await GET(req('/api/support/requests?all=1'))).json())
+        expect(text).toContain('t2')
+        expect(text).toContain('t3')
+        vi.unstubAllEnvs()
     })
 })
 

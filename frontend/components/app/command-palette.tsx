@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from "react"
 import { usePathname, useRouter, useParams } from "next/navigation"
 import {
-  Users,
   BarChart3,
   Bell,
   Bookmark,
@@ -16,6 +15,7 @@ import {
   Settings,
   Clock,
 } from "lucide-react"
+import { ClientIcon } from "@/components/ui/client-icon"
 import { getFirmRole } from "@/lib/actions/firm"
 import { FIRMA_COLOR } from "@/config/brand"
 
@@ -88,7 +88,7 @@ function buildItems(firmSlug: string | null, groupSlug: string | null, canManage
       id: "clients",
       label: "Clients",
       description: "View all clients",
-      icon: <Users className="h-4 w-4" />,
+      icon: <ClientIcon className="h-4 w-4" />,
       href: firmBase,
       group: "Firm",
     })
@@ -233,7 +233,7 @@ export function CommandPalette({ onOpenChange }: { onOpenChange?: (open: boolean
     id: `recent-${r.type}-${r.slug}`,
     label: r.name,
     description: r.type === "client" ? "Client" : "Engagement",
-    icon: r.type === "client" ? <Users className="h-4 w-4" /> : <Briefcase className="h-4 w-4" />,
+    icon: r.type === "client" ? <ClientIcon className="h-4 w-4" /> : <Briefcase className="h-4 w-4" />,
     href: r.href,
     group: "Recent",
   }))

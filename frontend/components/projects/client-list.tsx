@@ -3,7 +3,8 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { formatDistanceToNowStrict } from 'date-fns'
-import { Briefcase, Building2, CircleDot, Clock3, Type, Users } from 'lucide-react'
+import { Briefcase, Building2, CircleDot, Clock3, Type } from 'lucide-react'
+import { ClientIcon } from '@/components/ui/client-icon'
 import type { ClientSummary } from '@/lib/actions/hierarchy'
 import { clientPath } from '@/lib/navigation/firm-paths'
 import { useBranding } from '@/lib/use-branding'
@@ -52,7 +53,7 @@ function ClientMark({ client, accent, size = 'sm' }: { client: ClientSummary; ac
             className={`flex ${box} shrink-0 items-center justify-center rounded-control bg-surface-muted text-fg-subtle`}
             style={accent ? { backgroundColor: `${accent}1f`, color: accent } : undefined}
         >
-            <Users className={size === 'md' ? 'h-4 w-4' : 'h-3 w-3'} />
+            <ClientIcon className={size === 'md' ? 'h-4 w-4' : 'h-3 w-3'} />
         </span>
     )
 }
@@ -70,7 +71,7 @@ export function ClientList({ clients, groupSlug, orgSlug, viewMode = 'list', isR
         (c.brandPrimaryColor && /^#[0-9A-Fa-f]{6}$/.test(c.brandPrimaryColor) ? c.brandPrimaryColor : null) ?? firmAccent
 
     if (clients.length === 0 && !isRefreshing) {
-        return <EmptyPanel icon={<Users />} title="No clients yet" description="Clients you add show up here." />
+        return <EmptyPanel icon={<ClientIcon />} title="No clients yet" description="Clients you add show up here." />
     }
 
     if (viewMode === 'list') {

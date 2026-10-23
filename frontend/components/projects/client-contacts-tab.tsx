@@ -5,14 +5,13 @@ import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Input } from '@/components/ui/input'
 import { useToast } from '@/components/ui/toast'
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import { VisuallyHidden } from '@radix-ui/react-visually-hidden'
+import { Dialog, DialogContent } from '@/components/ui/dialog'
+import { Textarea } from '@/components/ui/textarea'
+import { CreateDialogFooter, CreateDialogHeader } from '@/components/ui/create-dialog'
+import { OptionalFieldsSection } from '@/components/ui/optional-fields-toggle'
+import { PropertyList, PropertyRow, PROPERTY_FIELD_CLASS, PROPERTY_TEXTAREA_CLASS } from '@/components/ui/property-list'
 import { createClientContact, deleteClientContact, listClientContacts, updateClientContact, type ClientContactRecord } from '@/lib/actions/client'
-import { AtSign, Briefcase, Contact, CornerDownLeft, Pencil, Phone, Plus, RefreshCw, Search, Star, Tags, Type, UserMinus, UserPlus, X } from 'lucide-react'
+import { AtSign, Briefcase, Contact, CornerDownLeft, FileText, Pencil, Phone, Plus, RefreshCw, Search, Star, Tags, Type, UserMinus, X } from 'lucide-react'
 import {
   NotionTable,
   NotionTableActions,
@@ -53,6 +52,8 @@ export function ClientContactsTab({
   const [tags, setTags] = useState<string[]>([])
   const [tagInput, setTagInput] = useState('')
   const tagInputRef = useRef<HTMLInputElement>(null)
+  /** Tags and Notes, under More properties: open when editing a contact that has either. */
+  const [showOptional, setShowOptional] = useState(false)
 
   const [contactToDelete, setContactToDelete] = useState<ClientContactRecord | null>(null)
 
@@ -89,6 +90,7 @@ export function ClientContactsTab({
     setDraft(EMPTY_DRAFT)
     setTags([])
     setTagInput('')
+    setShowOptional(false)
     setModalOpen(true)
   }
 
@@ -97,6 +99,7 @@ export function ClientContactsTab({
     setDraft({ name: c.name ?? '', email: c.email ?? '', phone: c.phone ?? '', title: c.title ?? '', notes: c.notes ?? '' })
     setTags(c.tags ?? [])
     setTagInput('')
+    setShowOptional((c.tags?.length ?? 0) > 0 || !!c.notes)
     setModalOpen(true)
   }
 
@@ -164,9 +167,6 @@ export function ClientContactsTab({
       }
     })
   }
-
-  const fieldLabel = 'mb-1 block text-small font-medium text-fg-muted'
-  const optional = <span className="font-normal text-fg-subtle">(optional)</span>
 
   return (
     <div className="space-y-3">
@@ -270,106 +270,81 @@ export function ClientContactsTab({
         </NotionTable>
       )}
 
-      {/* Add / Edit modal */}
+      {/* Add / Edit — the shared create frame (components/ui/create-dialog.tsx), as New firm, client and
+          engagement: property rows, the rest under More properties. */}
       <Dialog open={modalOpen} onOpenChange={(open) => { if (!open) closeModal() }}>
-        <DialogContent className="sm:max-w-[560px] max-h-[90vh] overflow-y-auto p-0 gap-0">
-          <VisuallyHidden><DialogTitle>{isEditing ? 'Edit Contact' : 'New Client Contact'}</DialogTitle></VisuallyHidden>
+        <DialogContent className="max-h-[90vh] gap-0 overflow-y-auto p-0 sm:max-w-[600px]">
+          <CreateDialogHeader
+            title={isEditing ? `Edit ${editingContact?.name}` : 'New contact'}
+            description={isEditing ? 'Update the details for this contact.' : 'Add a contact person for this client.'}
+          />
 
-          {/* Header */}
-          <div className="px-5 py-4 border-b border-line flex items-start gap-3">
-            <div className="mt-0.5 h-7 w-7 rounded-control bg-surface-muted text-fg-muted flex items-center justify-center shrink-0">
-              {isEditing ? <Pencil className="h-3.5 w-3.5" /> : <UserPlus className="h-3.5 w-3.5" />}
-            </div>
-            <div>
-              <p className="text-ui font-semibold text-fg leading-tight">
-                {isEditing ? `Edit ${editingContact?.name}` : 'New contact'}
-              </p>
-              <p className="text-small text-fg-muted mt-0.5">
-                {isEditing ? 'Update the details for this contact.' : 'Add a contact person for this client.'}
-              </p>
-            </div>
-          </div>
+          <form onSubmit={(e) => { e.preventDefault(); handleSubmit() }}>
+            <div className="flex flex-col gap-3 px-5 pb-5 pt-2">
+              <PropertyList>
+                <PropertyRow label={<label htmlFor="contact-name">Name <span className="text-danger">*</span></label>} icon={<Type />}>
+                  <Input id="contact-name" value={draft.name} onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
+                    placeholder="Full name" required autoFocus className={PROPERTY_FIELD_CLASS} />
+                </PropertyRow>
+                <PropertyRow label={<label htmlFor="contact-email">Email</label>} icon={<AtSign />}>
+                  <Input id="contact-email" type="email" value={draft.email} onChange={(e) => setDraft((d) => ({ ...d, email: e.target.value }))}
+                    placeholder="name@company.com" className={PROPERTY_FIELD_CLASS} />
+                </PropertyRow>
+                <PropertyRow label={<label htmlFor="contact-phone">Phone</label>} icon={<Phone />}>
+                  <Input id="contact-phone" type="tel" value={draft.phone} onChange={(e) => setDraft((d) => ({ ...d, phone: e.target.value }))}
+                    placeholder="+1 (555) 000-0000" className={PROPERTY_FIELD_CLASS} />
+                </PropertyRow>
+                <PropertyRow label={<label htmlFor="contact-title">Job title</label>} icon={<Briefcase />}>
+                  <Input id="contact-title" value={draft.title} onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))}
+                    placeholder="CFO, Legal Counsel…" className={PROPERTY_FIELD_CLASS} />
+                </PropertyRow>
+              </PropertyList>
 
-          <div className="p-5 space-y-4">
-
-            {/* Name */}
-            <div>
-              <label className={fieldLabel}>Name <span className="text-danger">*</span></label>
-              <Input value={draft.name} onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))} placeholder="Full name" />
-            </div>
-
-            {/* Email + Phone */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className={fieldLabel}>Email {optional}</label>
-                <Input value={draft.email} onChange={(e) => setDraft((d) => ({ ...d, email: e.target.value }))} placeholder="name@company.com" type="email" />
-              </div>
-              <div>
-                <label className={fieldLabel}>Phone {optional}</label>
-                <Input value={draft.phone} onChange={(e) => setDraft((d) => ({ ...d, phone: e.target.value }))} placeholder="+1 (555) 000-0000" type="tel" />
-              </div>
-            </div>
-
-            {/* Title */}
-            <div>
-              <label className={fieldLabel}>Job title {optional}</label>
-              <Input value={draft.title} onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))} placeholder="e.g. CFO, Legal Counsel" />
-            </div>
-
-            {/* Tags */}
-            <div>
-              <label className={fieldLabel}>Tags {optional}</label>
-              <div
-                className="flex flex-wrap gap-1.5 min-h-[36px] w-full rounded-control border border-line-strong bg-surface px-3 py-2 text-ui transition-colors cursor-text focus-within:ring-2 focus-within:ring-action/30 focus-within:border-action"
-                onClick={() => tagInputRef.current?.focus()}
-              >
-                {tags.map((tag) => (
-                  <span key={tag} className="inline-flex items-center gap-1 rounded-control bg-surface-muted px-1.5 py-0.5 text-small text-fg-muted">
-                    {tag}
-                    <button type="button" onClick={(e) => { e.stopPropagation(); setTags((prev) => prev.filter((t) => t !== tag)); tagInputRef.current?.focus() }} className="text-fg-subtle hover:text-fg transition-colors" aria-label={`Remove ${tag}`}>
-                      <X className="h-3 w-3" />
-                    </button>
-                  </span>
-                ))}
-                <input
-                  ref={tagInputRef}
-                  value={tagInput}
-                  onChange={handleTagChange}
-                  onKeyDown={handleTagKeyDown}
-                  onBlur={() => { if (tagInput.trim()) commitTag(tagInput) }}
-                  placeholder={tags.length === 0 ? 'e.g. billing, primary…' : ''}
-                  className="flex-1 min-w-[120px] bg-transparent outline-none placeholder:text-fg-subtle text-fg text-small disabled:cursor-not-allowed"
-                />
-                <CornerDownLeft className="h-3 w-3 text-fg-subtle shrink-0 self-center ml-1" />
-              </div>
+              <OptionalFieldsSection open={showOptional} onToggle={() => setShowOptional((v) => !v)}>
+                <PropertyList>
+                  <PropertyRow label={<label htmlFor="contact-tags">Tags</label>} icon={<Tags />}>
+                    {/* Chips and the entry box read as one borderless field, like the rows around it. */}
+                    <div
+                      className="flex min-h-8 w-full cursor-text flex-wrap items-center gap-1.5 rounded-control border border-transparent px-2 py-1 transition-colors hover:bg-surface-hover focus-within:border-action/60 focus-within:bg-surface focus-within:ring-2 focus-within:ring-action/20"
+                      onClick={() => tagInputRef.current?.focus()}
+                    >
+                      {tags.map((tag) => (
+                        <span key={tag} className="inline-flex items-center gap-1 rounded-control bg-surface-muted px-1.5 py-0.5 text-small text-fg-muted">
+                          {tag}
+                          <button type="button" onClick={(e) => { e.stopPropagation(); setTags((prev) => prev.filter((t) => t !== tag)); tagInputRef.current?.focus() }} className="text-fg-subtle transition-colors hover:text-fg" aria-label={`Remove ${tag}`}>
+                            <X className="h-3 w-3" />
+                          </button>
+                        </span>
+                      ))}
+                      <input
+                        id="contact-tags"
+                        ref={tagInputRef}
+                        value={tagInput}
+                        onChange={handleTagChange}
+                        onKeyDown={handleTagKeyDown}
+                        onBlur={() => { if (tagInput.trim()) commitTag(tagInput) }}
+                        placeholder={tags.length === 0 ? 'billing, primary…' : ''}
+                        className="min-w-[120px] flex-1 bg-transparent text-ui text-fg outline-none placeholder:text-fg-subtle"
+                      />
+                      <CornerDownLeft className="ml-1 h-3 w-3 shrink-0 text-fg-subtle" aria-hidden />
+                    </div>
+                  </PropertyRow>
+                  <PropertyRow label={<label htmlFor="contact-notes">Notes</label>} icon={<FileText />}>
+                    <Textarea id="contact-notes" value={draft.notes} onChange={(e) => setDraft((d) => ({ ...d, notes: e.target.value }))}
+                      placeholder="Anything worth knowing about this contact" rows={2} className={PROPERTY_TEXTAREA_CLASS} />
+                  </PropertyRow>
+                </PropertyList>
+              </OptionalFieldsSection>
             </div>
 
-            {/* Notes */}
-            <div>
-              <label className={fieldLabel}>Notes {optional}</label>
-              <textarea
-                value={draft.notes}
-                onChange={(e) => setDraft((d) => ({ ...d, notes: e.target.value }))}
-                placeholder="Any notes about this contact"
-                rows={2}
-                className="flex w-full rounded-control border border-line-strong bg-surface px-3 py-2 text-ui text-fg placeholder:text-fg-subtle focus:outline-none focus:ring-2 focus:ring-action/30 focus:border-action disabled:opacity-50 disabled:cursor-not-allowed"
-              />
-            </div>
-          </div>
-
-          {/* Footer */}
-          <div className="px-5 py-3 border-t border-line flex items-center justify-end gap-2">
-            <Button variant="outline" disabled={isPending} onClick={closeModal}>
-              Cancel
-            </Button>
-            <Button
-              disabled={!canManage || isPending || !draft.name.trim()}
-              className="min-w-[8rem]"
-              onClick={handleSubmit}
-            >
-              {isPending ? 'Saving…' : isEditing ? 'Save changes' : 'Create'}
-            </Button>
-          </div>
+            <CreateDialogFooter
+              onCancel={closeModal}
+              cancelDisabled={isPending}
+              submitDisabled={!canManage || isPending || !draft.name.trim()}
+              submitting={isPending}
+              submitLabel={isEditing ? 'Save' : 'Create'}
+            />
+          </form>
         </DialogContent>
       </Dialog>
 

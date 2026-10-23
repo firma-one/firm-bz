@@ -139,18 +139,20 @@ export function AiCreditsRow({ usage }: { usage: BillingPlanUsage | null | undef
     //
     // One categorical color per feature (the chart palette in ui-tokens.css), like a context-usage
     // breakdown: the question this answers is "which feature spent the credits", so each one needs
-    // its own hue. What's left of the allowance is the gray track, listed last as "Remaining".
+    // its own hue — muted, and never a status hue. Firm features are the cool pair (slate, teal),
+    // engagement features the warm three. What's left of the allowance is the gray track, listed
+    // last as "Remaining".
     const chart = (c: string) => `var(--ui-chart-${c})`
     //
     // Doc Search's Ask Brio mode is hidden (2026-10-15), so it no longer spends credits and its row
     // is left out — unless this period already has credits from it, which stay listed so the rows
     // still add up to the total. It drops off by itself when the period rolls over.
     const AI_FEATURES: Array<{ key: keyof typeof ai.byFeature; label: string; fill: string }> = [
-        { key: 'brief' as const, label: 'Firm briefs', fill: chart('blue') },
-        { key: 'searchInterpret' as const, label: 'Firm Doc Search', fill: chart('orange') },
-        { key: 'summary' as const, label: 'Engagement summaries', fill: chart('green') },
-        { key: 'chat' as const, label: 'Engagement assistant chat', fill: chart('yellow') },
-        { key: 'filesAgent' as const, label: 'Files agent', fill: chart('purple') },
+        { key: 'brief' as const, label: 'Firm briefs', fill: chart('slate') },
+        { key: 'searchInterpret' as const, label: 'Firm Doc Search', fill: chart('teal') },
+        { key: 'summary' as const, label: 'Engagement summaries', fill: chart('purple') },
+        { key: 'chat' as const, label: 'Engagement assistant chat', fill: chart('pink') },
+        { key: 'filesAgent' as const, label: 'Files agent', fill: chart('brown') },
     ].filter((f) => f.key !== 'searchInterpret' || (ai.byFeature.searchInterpret ?? 0) > 0)
     const fmt = (n: number) => (n % 1 === 0 ? String(n) : n.toFixed(1))
     const since = new Date(ai.periodStartIso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
@@ -236,7 +238,7 @@ export function AiCreditsRow({ usage }: { usage: BillingPlanUsage | null | undef
                     <div className="grid gap-x-8 gap-y-1 sm:grid-cols-2">
                         {rows.map(({ key, label, fill, value }) => (
                             <div key={key} className="flex min-w-0 items-center gap-2 text-small">
-                                <span className={cn('h-2.5 w-2.5 shrink-0 rounded-[3px]', key === 'remaining' && 'ring-1 ring-inset ring-line-strong')} style={{ backgroundColor: fill }} aria-hidden="true" />
+                                <span className={cn('h-2.5 w-2.5 shrink-0 rounded-[3px]', key === 'remaining' && 'ring-1 ring-inset ring-fg-subtle')} style={{ backgroundColor: fill }} aria-hidden="true" />
                                 <span className="min-w-0 flex-1 truncate text-fg-muted">{label}</span>
                                 <span className="tabular-nums text-fg">{fmt(value)}</span>
                                 <span className="w-12 text-right tabular-nums text-fg-subtle">{share(value)}</span>

@@ -3,7 +3,8 @@
 import { Fragment, type ReactNode } from 'react'
 import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
-import { BarChart3, Briefcase, Building2, CalendarDays, ChevronRight, ClipboardList, Folder, Home, Inbox, LayoutGrid, Menu, MessagesSquare, Search, Users } from 'lucide-react'
+import { BarChart3, Briefcase, Building2, CalendarDays, ChevronRight, ClipboardList, Folder, Home, Inbox, LayoutGrid, LifeBuoy, Menu, MessagesSquare, PanelLeftOpen, Search, Users } from 'lucide-react'
+import { ClientIcon } from '@/components/ui/client-icon'
 import { cn } from '@/lib/utils'
 import { DEMO_FIRM, getDemoClient } from '@/lib/demo/static-demo-data'
 import { DemoTourTopbarButton } from '@/components/demo/demo-tour-topbar-button'
@@ -15,7 +16,7 @@ type Crumb = { label: string; href?: string; icon?: ReactNode }
 /** The same names and icons as the app's HeaderBar (components/shell/header-bar.tsx). */
 const FIRM_VIEWS: Record<string, Crumb> = {
     analytics: { label: 'Overview', icon: <BarChart3 /> },
-    clients: { label: 'Clients', icon: <Users /> },
+    clients: { label: 'Clients', icon: <ClientIcon /> },
     calendar: { label: 'Calendar', icon: <CalendarDays /> },
     'doc-search': { label: 'Doc Search', icon: <Search /> },
     members: { label: 'Members', icon: <Users /> },
@@ -26,7 +27,7 @@ const ENGAGEMENT_TABS: Record<string, Crumb> = {
     analytics: { label: 'Overview', icon: <BarChart3 /> },
     files: { label: 'Files', icon: <Folder /> },
     board: { label: 'Board', icon: <LayoutGrid /> },
-    comments: { label: 'Comments', icon: <MessagesSquare /> },
+    comments: { label: 'Discussions', icon: <MessagesSquare /> },
     audit: { label: 'Audit', icon: <ClipboardList /> },
     members: { label: 'Members', icon: <Users /> },
 }
@@ -36,6 +37,7 @@ function useDemoCrumbs(): Crumb[] {
     const tab = useSearchParams()?.get('tab') ?? null
     if (pathname === '/tour/home') return [{ label: 'Home', icon: <Home /> }]
     if (pathname === '/tour/inbox') return [{ label: 'Inbox', icon: <Inbox /> }]
+    if (pathname === '/tour/support') return [{ label: 'Support', icon: <LifeBuoy /> }]
 
     const firm: Crumb = { label: DEMO_FIRM.name, href: '/tour', icon: <Building2 /> }
     const view = demoFirmView(pathname, tab)
@@ -44,7 +46,7 @@ function useDemoCrumbs(): Crumb[] {
     const [, , clientSlug, engagementSlug] = pathname.split('/')
     const client = clientSlug ? getDemoClient(clientSlug) : undefined
     if (!client) return [firm]
-    const crumbs: Crumb[] = [firm, { label: client.name, href: `/tour/${client.slug}`, icon: <Users /> }]
+    const crumbs: Crumb[] = [firm, { label: client.name, href: `/tour/${client.slug}`, icon: <ClientIcon /> }]
     const engagement = engagementSlug ? client.engagements.find((e) => e.slug === engagementSlug) : undefined
     if (!engagement) return crumbs
     crumbs.push({ label: engagement.name, href: `/tour/${client.slug}/${engagement.slug}`, icon: <Briefcase /> })
@@ -58,7 +60,13 @@ function CrumbIcon({ icon }: { icon?: ReactNode }) {
 }
 
 /** Static counterpart to HeaderBar: breadcrumbs, then the tour, Sign up and the Inbox. */
-export function DemoHeaderBar({ onOpenMobileNav, inboxCount }: { onOpenMobileNav: () => void; inboxCount: number }) {
+export function DemoHeaderBar({ onOpenMobileNav, inboxCount, sidebarCollapsed = false, onExpandSidebar }: {
+    onOpenMobileNav: () => void
+    inboxCount: number
+    /** As the app's header: an expand button while the sidebar is collapsed. */
+    sidebarCollapsed?: boolean
+    onExpandSidebar?: () => void
+}) {
     const crumbs = useDemoCrumbs()
     const pathname = usePathname() ?? ''
 
@@ -72,6 +80,17 @@ export function DemoHeaderBar({ onOpenMobileNav, inboxCount }: { onOpenMobileNav
             >
                 <Menu className="h-4 w-4" />
             </button>
+            {sidebarCollapsed && onExpandSidebar && (
+                <button
+                    type="button"
+                    onClick={onExpandSidebar}
+                    className="hidden h-7 w-7 shrink-0 items-center justify-center rounded-control text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg lg:flex"
+                    title="Expand sidebar  ["
+                    aria-label="Expand sidebar"
+                >
+                    <PanelLeftOpen className="h-4 w-4" />
+                </button>
+            )}
 
             <nav aria-label="Breadcrumb" className="flex min-w-0 flex-1 items-center gap-1 text-ui">
                 {crumbs.map((crumb, i) => {

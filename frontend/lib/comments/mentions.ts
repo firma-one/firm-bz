@@ -19,10 +19,15 @@ const MAX_QUERY = 40
  * ("ana@firm.com") never opens the menu.
  */
 export function findMentionQuery(text: string, caret: number): { start: number; query: string } | null {
+    return findTriggerQuery(text, caret, '@')
+}
+
+/** The "@query" or "#query" at the caret, for whichever trigger character. */
+function findTriggerQuery(text: string, caret: number, trigger: '@' | '#'): { start: number; query: string } | null {
     let i = caret - 1
     while (i >= 0 && caret - i <= MAX_QUERY + 1) {
         const ch = text[i]
-        if (ch === '@') {
+        if (ch === trigger) {
             const before = i === 0 ? '' : text[i - 1]
             if (before && !/\s/.test(before)) return null
             return { start: i, query: text.slice(i + 1, caret) }
@@ -104,4 +109,60 @@ export const ENGAGEMENT_ROLE_LABEL: Record<string, string> = {
     eng_member: 'Member',
     eng_ext_collaborator: 'Collaborator',
     eng_viewer: 'Reviewer',
+}
+
+/*
+ * #-tags: a document in the deliverable, written as "#" + its document ID ("#QSR-12") where it was
+ * typed. The ID, not the name: it is short, unique in the engagement and survives a rename. A tag is
+ * drawn as a chip with the document's name when the thread knows it, and as its ID otherwise.
+ */
+
+/** The document tag being typed at the caret: the "#" that starts it and the text after it. */
+export function findTagQuery(text: string, caret: number): { start: number; query: string } | null {
+    return findTriggerQuery(text, caret, '#')
+}
+
+/** Replaces the "#query" at [start, caret) with "#DOC-ID " and says where the caret goes. */
+export function insertTag(text: string, start: number, caret: number, docId: string): { text: string; caret: number } {
+    const inserted = `#${docId} `
+    const after = text.slice(caret).replace(/^ /, '')
+    return { text: text.slice(0, start) + inserted + after, caret: start + inserted.length }
+}
+
+/** "#QSR-12", "#QSR2-7": a document ID after "#", at the start or after whitespace or "(". */
+const DOC_TAG = /(^|[\s(])#([A-Z][A-Z0-9]{1,7}-\d{1,6})(?![A-Za-z0-9-])/g
+
+export type DocTagToken = { type: 'text'; value: string } | { type: 'doc'; value: string; docId: string }
+
+/** Text split into plain text and document tags. */
+export function splitDocTags(text: string): DocTagToken[] {
+    const tokens: DocTagToken[] = []
+    let last = 0
+    let m: RegExpExecArray | null
+    DOC_TAG.lastIndex = 0
+    while ((m = DOC_TAG.exec(text))) {
+        const at = m.index + m[1].length
+        if (at > last) tokens.push({ type: 'text', value: text.slice(last, at) })
+        tokens.push({ type: 'doc', value: `#${m[2]}`, docId: m[2] })
+        last = at + 1 + m[2].length
+    }
+    if (last < text.length) tokens.push({ type: 'text', value: text.slice(last) })
+    return tokens
+}
+
+/** The document IDs tagged in a comment, each once, in order. */
+export function taggedDocIds(text: string): string[] {
+    return Array.from(new Set(splitDocTags(text).flatMap((t) => (t.type === 'doc' ? [t.docId] : []))))
+}
+
+/** A raw auth name (may be username-style like "deepaksshettigar") as a readable display name. */
+export function formatDisplayName(name: string, email: string): string {
+    if (!name || name === email.split('@')[0]) {
+        const local = email.split('@')[0]
+        return local.replace(/[._\-+]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()).trim()
+    }
+    if (name.includes(' ') || name.includes('.') || name.includes('_')) {
+        return name.split(/[\s._-]+/).map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ').trim()
+    }
+    return name
 }

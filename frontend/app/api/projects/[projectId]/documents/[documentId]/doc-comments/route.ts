@@ -6,7 +6,9 @@ import { resolveProjectContext } from '@/lib/resolve-project-context'
 import { canViewProject } from '@/lib/permission-helpers'
 import { getProjectDocumentContext } from '@/lib/file-utils'
 import { createClient as createSupabaseAdmin } from '@supabase/supabase-js'
-import { requireEngagementMember, externalMemberCanAccessDocument, isExternalEngagementRole } from '@/lib/engagement-access'
+import { requireEngagementMember, externalMemberCanAccessDocument, isExternalEngagementRole, visibleDocumentIdsFor } from '@/lib/engagement-access'
+import { taggedDocumentsIn } from '@/lib/comments/tagged-documents'
+import { markDiscussionRead, reopenDiscussion } from '@/lib/comments/discussions'
 import { loadAnchorForCaps, effectiveCommentHistoryDays } from '@/lib/billing/effective-billing-caps'
 import { engagementDocCommentPath } from '@/lib/navigation/firm-paths'
 import { getFirmReminderConfig } from '@/lib/firm-reminder-config'
@@ -35,9 +37,12 @@ async function purgeStaleDocComments(firmId: string): Promise<void> {
  * GET /api/projects/[projectId]/documents/[documentId]/doc-comments
  * List append-only doc comments for a document. Visible to all personas with project access.
  * Messages are immutable (no UPDATE at DB or API level).
+ *
+ * ?limit=N — only the latest N comments, oldest first (the Comments page's peek at a thread).
+ * Also returns `taggedDocuments`: the documents tagged with "#" that the viewer may access, by doc ID.
  */
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ projectId: string; documentId: string }> }
 ) {
   try {
@@ -57,15 +62,18 @@ export async function GET(
     const docCtx = await getProjectDocumentContext(projectId, documentIdParam)
     if (!docCtx) return NextResponse.json({ error: 'Document not found in this project' }, { status: 404 })
 
-    const canDoc = await externalMemberCanAccessDocument(projectId, member.role, docCtx.externalId)
-    if (!canDoc) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    const visible = await visibleDocumentIdsFor(projectId, member.role)
+    if (visible && !visible.has(docCtx.externalId)) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-    const messages = await prisma.docCommentMessage.findMany({
+    const limitParam = Number(request.nextUrl.searchParams.get('limit'))
+    const limit = Number.isInteger(limitParam) && limitParam > 0 ? Math.min(limitParam, 50) : null
+    const latest = await prisma.docCommentMessage.findMany({
       where: {
         projectDocumentId: docCtx.id,
         engagementId: projectId,
       },
-      orderBy: { createdAt: 'asc' },
+      orderBy: { createdAt: limit ? 'desc' : 'asc' },
+      ...(limit ? { take: limit } : {}),
       select: {
         id: true,
         createdAt: true,
@@ -74,6 +82,7 @@ export async function GET(
         reactions: true,
       },
     })
+    const messages = limit ? latest.reverse() : latest
 
     const uniqueUserIds = Array.from(
       new Set(
@@ -118,7 +127,9 @@ export async function GET(
       ),
     }))
 
-    return NextResponse.json({ messages: enriched })
+    const taggedDocuments = await taggedDocumentsIn(projectId, messages.map((m) => m.content), visible)
+
+    return NextResponse.json({ messages: enriched, taggedDocuments })
   } catch (e) {
     const err = e instanceof Error ? e : new Error(typeof e === 'string' ? e : 'Unknown error')
     console.error('GET doc-comments error', { message: err.message, stack: err.stack })
@@ -193,6 +204,13 @@ export async function POST(
 
     // Fire-and-forget rolling purge — do not await, never block the caller
     void purgeStaleDocComments(ctx.orgId)
+
+    // A new comment reopens a resolved discussion, and the author has read it.
+    try {
+      await Promise.all([reopenDiscussion(docCtx.id), markDiscussionRead(user.id, docCtx.id, projectId)])
+    } catch (e) {
+      console.error('doc-comments: discussion state not updated', { message: e instanceof Error ? e.message : String(e) })
+    }
 
     // Event notification — new comment from an external client (EC/EV), gated per-firm
     if (isExternalEngagementRole(member.role)) {

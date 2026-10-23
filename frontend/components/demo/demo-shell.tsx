@@ -1,6 +1,7 @@
 'use client'
 
-import { Suspense, useEffect, useLayoutEffect, useState, type ReactNode } from 'react'
+import { Suspense, useCallback, useEffect, useLayoutEffect, useState, type ReactNode } from 'react'
+import { usePathname } from 'next/navigation'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { LayoutRightPanel } from '@/components/app/layout-right-panel'
@@ -90,17 +91,48 @@ function DemoShellFrame({ children }: { children: ReactNode }) {
     const [inboxCount, setInboxCount] = useState(0)
     useEffect(() => setInboxCount(demoInboxCount(new Date())), [])
 
+    // As d-layout-client.tsx: a pane belongs to the page that opened it, so leaving the page closes it.
+    const pathname = usePathname()
+    const { clearPane } = useRightPane()
+    useEffect(() => { clearPane() }, [pathname, clearPane])
+
+    // The sidebar collapses as the app's does (AppShellV2): its button, the header's expand button, or "[".
+    const [collapsed, setCollapsed] = useState(false)
+    const toggleSidebar = useCallback(() => setCollapsed((c) => !c), [])
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key !== '[' || e.metaKey || e.ctrlKey || e.altKey) return
+            const el = e.target as HTMLElement | null
+            if (el && (el.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName))) return
+            e.preventDefault()
+            toggleSidebar()
+        }
+        window.addEventListener('keydown', onKey)
+        return () => window.removeEventListener('keydown', onKey)
+    }, [toggleSidebar])
+
     return (
         <div className="flex h-screen overflow-hidden bg-surface text-fg">
-            <aside className="hidden w-60 shrink-0 overflow-hidden border-r border-line lg:flex">
-                <Suspense fallback={null}>
-                    <DemoSidebar inboxCount={inboxCount} />
-                </Suspense>
+            {/* As AppShellV2: stays mounted so collapse can animate, and is inert while collapsed. */}
+            <aside
+                inert={collapsed}
+                aria-hidden={collapsed || undefined}
+                className={cn(
+                    'hidden shrink-0 overflow-hidden border-line lg:flex',
+                    'transition-[width] duration-150 ease-out motion-reduce:transition-none',
+                    collapsed ? 'w-0' : 'w-60 border-r',
+                )}
+            >
+                <div className={cn('flex w-60 shrink-0 transition-opacity duration-150 ease-out motion-reduce:transition-none', collapsed ? 'opacity-0' : 'opacity-100')}>
+                    <Suspense fallback={null}>
+                        <DemoSidebar inboxCount={inboxCount} onCollapse={toggleSidebar} />
+                    </Suspense>
+                </div>
             </aside>
 
             <div className="flex min-w-0 flex-1 flex-col">
                 <Suspense fallback={<div className="h-11 shrink-0 border-b border-line" />}>
-                    <DemoHeaderBar onOpenMobileNav={() => setMobileNavOpen(true)} inboxCount={inboxCount} />
+                    <DemoHeaderBar onOpenMobileNav={() => setMobileNavOpen(true)} inboxCount={inboxCount} sidebarCollapsed={collapsed} onExpandSidebar={toggleSidebar} />
                 </Suspense>
                 <div className="flex min-h-0 flex-1">
                     <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden">

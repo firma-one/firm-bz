@@ -423,7 +423,7 @@ export async function GET(
     const engagementIdList = engagements.map((e) => e.id)
     let unansweredThreads: UnansweredThreadItem[] = []
     if (engagementIdList.length > 0) {
-      const [firmMessages, externalMembers] = await Promise.all([
+      const [firmMessages, externalMembers, resolvedThreads] = await Promise.all([
         prisma.docCommentMessage.findMany({
           where: { engagementId: { in: engagementIdList } },
           select: { projectDocumentId: true, authorUserId: true, content: true, createdAt: true, engagementId: true },
@@ -434,7 +434,13 @@ export async function GET(
           where: { engagementId: { in: engagementIdList }, role: { in: ['eng_ext_collaborator', 'eng_viewer'] } },
           select: { userId: true, engagementId: true },
         }),
+        // Resolved discussions aren't waiting on anyone (the Discussions page's Awaiting reply rule).
+        prisma.docCommentThread.findMany({
+          where: { engagementId: { in: engagementIdList }, resolvedAt: { not: null } },
+          select: { projectDocumentId: true },
+        }),
       ])
+      const resolvedDiscussions = new Set(resolvedThreads.map((t) => t.projectDocumentId))
       const docIdsNeeded = Array.from(new Set(firmMessages.map((m) => m.projectDocumentId).filter(Boolean))) as string[]
       const firmDocs = docIdsNeeded.length > 0
         ? await prisma.engagementDocument.findMany({ where: { id: { in: docIdsNeeded } }, select: { id: true, fileName: true } })
@@ -452,6 +458,7 @@ export async function GET(
       }
 
       for (const [docId, thread] of Array.from(threadsByDoc.entries())) {
+        if (resolvedDiscussions.has(docId)) continue
         const lastMsg = thread[thread.length - 1]
         if (!lastMsg.authorUserId || !externalUserIds.has(lastMsg.authorUserId)) continue
         const eng = engMap.get(thread[0].engagementId)

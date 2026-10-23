@@ -182,7 +182,7 @@ function PlanScreen() {
             <span style={{ paddingBottom: 9 }}>Overview</span>
             <span style={{ paddingBottom: 9 }}>Files</span>
             <span style={{ paddingBottom: 9, color: '#37352F', fontWeight: 500, borderBottom: '2px solid #37352F' }}>Board 4</span>
-            <span style={{ paddingBottom: 9 }}>Comments</span>
+            <span style={{ paddingBottom: 9 }}>Discussions</span>
             <span style={{ paddingBottom: 9 }}>Audit</span>
             <span style={{ paddingBottom: 9 }}>Members 4</span>
           </div>

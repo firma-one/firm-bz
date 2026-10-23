@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react"
 import { Briefcase, Building2, Users } from "lucide-react"
+import { ClientIcon } from "@/components/ui/client-icon"
 import { formatDistanceToNowStrict, format } from "date-fns"
 import { ListGroup, ListRow } from "@/components/ui/list-row"
 import { StatusPill } from "@/components/ui/status-pill"
@@ -45,7 +46,7 @@ function ClientAndFirm({ client, firm }: { client: string; firm?: string }) {
     return (
         <span className="inline-flex min-w-0 items-center gap-1.5">
             <span className="inline-flex min-w-0 items-center gap-1">
-                <Users className="h-3 w-3 shrink-0" aria-hidden />
+                <ClientIcon className="h-3 w-3 shrink-0" aria-hidden />
                 <span className="truncate">{client}</span>
             </span>
             {firm && (
@@ -139,7 +140,7 @@ export function MyEngagementsList({
                             count={items.length}
                             icon={
                                 grouping === "firm" ? <Building2 className={GROUP_ICON_CLASS} aria-hidden />
-                                : grouping === "client" ? <Users className={GROUP_ICON_CLASS} aria-hidden />
+                                : grouping === "client" ? <ClientIcon className={GROUP_ICON_CLASS} aria-hidden />
                                 // By status, each group leads with its stage's icon (the status language).
                                 : <StatusIcon stage={statusOf("engagement", key).stage} />
                             }

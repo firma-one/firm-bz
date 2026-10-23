@@ -1088,6 +1088,12 @@ export function DeliverableDetailPanel({
             documentId={documentId}
             documentName={fileName}
             orgSlug={orgSlug}
+            // "#" tags the deliverable's documents — the ones this viewer may see (persona-filtered above)
+            taggableDocuments={subtasks.map((t) => ({ documentId: t.documentId, docId: t.docId, fileName: t.fileName, mimeType: t.mimeType, breadcrumb: t.breadcrumb }))}
+            onOpenDocument={onPreviewSubtaskDocument ? (doc) => {
+              const subtask = subtasks.find((t) => t.documentId === doc.documentId)
+              if (subtask) onPreviewSubtaskDocument(subtask)
+            } : undefined}
           />
         )}
 

@@ -20,7 +20,6 @@ import {
   Building2,
   Settings,
   Lock,
-  Users,
   Briefcase,
   FolderOpen,
   Folder,
@@ -29,6 +28,7 @@ import {
   SquarePlus,
   Lock as LockIcon,
 } from "lucide-react"
+import { ClientIcon } from "@/components/ui/client-icon"
 import { GoogleDriveIcon } from "@/components/ui/google-drive-icon"
 import { GoogleSharedDriveIcon } from "@/components/ui/google-shared-drive-icon"
 import { GooglePickerButton } from "@/components/google-drive/google-picker-button"
@@ -167,7 +167,7 @@ export function ConfigureWorkspaceHomeLegacy({
                       </div>
                       <div className="ml-2 space-y-2 border-l border-line pl-5">
                         <div className="flex items-center gap-2.5 text-ui text-fg-muted">
-                          <Users className="h-4 w-4 shrink-0 text-fg-subtle" strokeWidth={1.75} />
+                          <ClientIcon className="h-4 w-4 shrink-0 text-fg-subtle" strokeWidth={1.75} />
                           <span>Client</span>
                         </div>
                         <div className="ml-2 space-y-2 border-l border-line pl-5">
