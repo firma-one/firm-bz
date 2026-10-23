@@ -399,6 +399,14 @@ export function EngagementFileRow({
                     </Tooltip>
                 </div>
 
+                {/* While this folder is the drop target: in the Name cell, after the name, so it reads with the folder it names */}
+                {(isUploadTarget || isMoveTarget) && (
+                    <span className="pointer-events-none inline-flex shrink-0 items-center gap-1 rounded-full bg-action px-2 py-0.5 text-caption text-action-fg">
+                        {isMoveTarget ? <FolderInput className="h-3 w-3" aria-hidden /> : <Upload className="h-3 w-3" aria-hidden />}
+                        {isMoveTarget ? 'Move here' : 'Drop here'}
+                    </span>
+                )}
+
                 {/* Badges — hidden when hideBadges=true (e.g. medium pane) to prevent icon overflow */}
                 <div className={cn("flex shrink-0 items-center justify-end gap-1", hideBadges && "hidden")} onClick={(e) => e.stopPropagation()}>
                         {bookmarkId && (
@@ -761,12 +769,6 @@ export function EngagementFileRow({
                         <div className="h-full bg-primary animate-indeterminate-progress" />
                     </div>
                 </div>
-            )}
-            {(isUploadTarget || isMoveTarget) && (
-                <span className="pointer-events-none absolute right-3 top-1/2 z-10 inline-flex -translate-y-1/2 items-center gap-1 rounded-full bg-action px-2 py-0.5 text-caption text-action-fg">
-                    {isMoveTarget ? <FolderInput className="h-3 w-3" aria-hidden /> : <Upload className="h-3 w-3" aria-hidden />}
-                    {isMoveTarget ? 'Move here' : 'Drop here'}
-                </span>
             )}
         </div>
     )

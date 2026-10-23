@@ -372,12 +372,6 @@ function EntryRow({
                 uploadTarget && `${FILES_DROP_TARGET_ROW_CLASS} z-[1]`,
             )}`}
         >
-            {uploadTarget && (
-                <span className="pointer-events-none absolute right-3 top-1/2 z-10 inline-flex -translate-y-1/2 items-center gap-1 rounded-full bg-action px-2 py-0.5 text-caption text-action-fg">
-                    <Upload className="h-3 w-3" aria-hidden />
-                    Drop here
-                </span>
-            )}
             <div
                 className="flex h-4 w-4 flex-shrink-0 cursor-pointer items-center justify-center"
                 onClick={(e) => {
@@ -404,6 +398,13 @@ function EntryRow({
                     )}
                 </span>
                 <span className={cn('min-w-0 flex-1 truncate text-fg', isFolder && 'hover:underline')}>{name}</span>
+                {/* As in the app: the drop target's tag sits in the Name cell, after the name */}
+                {uploadTarget && (
+                    <span className="pointer-events-none inline-flex shrink-0 items-center gap-1 rounded-full bg-action px-2 py-0.5 text-caption text-action-fg">
+                        <Upload className="h-3 w-3" aria-hidden />
+                        Drop here
+                    </span>
+                )}
                 {/* The deliverable marker steps aside once the Status column has room to say it. */}
                 {deliverableStatus && (
                     <Hint label={approved ? 'Deliverable — approved' : 'Deliverable'}>
