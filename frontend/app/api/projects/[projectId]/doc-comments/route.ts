@@ -112,14 +112,14 @@ export async function GET(
   }
   const folders = await prisma.engagementDocument.findMany({
     where: { engagementId: projectId, isFolder: true },
-    select: { externalId: true, parentId: true, docId: true, fileName: true, settings: true },
+    select: { id: true, externalId: true, parentId: true, docId: true, fileName: true, settings: true },
   })
   const folderByExternalId = new Map(folders.map((f) => [f.externalId, f]))
-  const deliverableAbove = (parentId: string | null): { docId: string | null; name: string } | null => {
+  const deliverableAbove = (parentId: string | null): { id: string; docId: string | null; name: string } | null => {
     for (let current = parentId, hops = 0; current && hops < 50; hops++) {
       const folder = folderByExternalId.get(current)
       if (!folder) return null
-      if (isDeliverable(folder.settings)) return { docId: folder.docId ?? null, name: folder.fileName }
+      if (isDeliverable(folder.settings)) return { id: folder.id, docId: folder.docId ?? null, name: folder.fileName }
       current = folder.parentId
     }
     return null
@@ -169,13 +169,42 @@ export async function GET(
       }
     })
   )
-  // Who wrote each latest comment, for a name on the row even if they've left the engagement.
-  const people = await loadPeople(Object.values(latestByDocId).map((l) => l.authorUserId ?? ''))
+  // Each discussion's state for this viewer: resolved (and by whom), and unread — a comment by
+  // someone else since they last read it (no read marker: never read).
+  const [resolvedThreads, reads, othersLatest] = await Promise.all([
+    prisma.docCommentThread.findMany({
+      where: { projectDocumentId: { in: docIds }, resolvedAt: { not: null } },
+      select: { projectDocumentId: true, resolvedAt: true, resolvedBy: true },
+    }),
+    prisma.docCommentRead.findMany({
+      where: { userId: user.id, projectDocumentId: { in: docIds } },
+      select: { projectDocumentId: true, lastReadAt: true },
+    }),
+    prisma.docCommentMessage.groupBy({
+      by: ['projectDocumentId'],
+      where: { engagementId: projectId, projectDocumentId: { in: docIds }, OR: [{ authorUserId: null }, { authorUserId: { not: user.id } }] },
+      _max: { createdAt: true },
+    }),
+  ])
+  const resolvedByDocId = new Map(resolvedThreads.map((t) => [t.projectDocumentId, t]))
+  const lastReadByDocId = new Map(reads.map((r) => [r.projectDocumentId, r.lastReadAt]))
+  const unread = (docId: string) => {
+    const latestOther = othersLatest.find((o) => o.projectDocumentId === docId)?._max.createdAt
+    const lastRead = lastReadByDocId.get(docId)
+    return !!latestOther && (!lastRead || latestOther > lastRead)
+  }
+
+  // Who wrote each latest comment, and who resolved each discussion, by name even if they've left the engagement.
+  const people = await loadPeople([
+    ...Object.values(latestByDocId).map((l) => l.authorUserId ?? ''),
+    ...resolvedThreads.map((t) => t.resolvedBy ?? ''),
+  ])
   const documents = docs
     .map((d) => {
       const latest = latestByDocId[d.id]
       const author = latest?.authorUserId ? people.get(latest.authorUserId) : undefined
       const kind = !d.isFolder ? 'file' : isDeliverable(d.settings) ? 'deliverable' : 'folder'
+      const resolved = resolvedByDocId.get(d.id)
       return {
         projectDocumentId: d.id,
         documentName: d.fileName,
@@ -195,10 +224,16 @@ export async function GET(
               authorEmail: author?.email ?? null,
             }
           : null,
+        resolved: resolved?.resolvedAt
+          ? { at: resolved.resolvedAt.toISOString(), byName: (resolved.resolvedBy && people.get(resolved.resolvedBy)?.name) || null }
+          : null,
+        unread: unread(d.id),
       }
     })
     .filter((d) => d.count > 0)
+    // Unread first, then the most recent.
     .sort((a, b) => {
+      if (a.unread !== b.unread) return a.unread ? -1 : 1
       const at = a.latest?.createdAt ?? ''
       const bt = b.latest?.createdAt ?? ''
       return bt.localeCompare(at)

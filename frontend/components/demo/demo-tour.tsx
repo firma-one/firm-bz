@@ -196,8 +196,8 @@ const STEPS: TourStep[] = [
         },
         {
             target: '[data-demo-tour="engagement-comments-tab"]',
-            title: 'Comments',
-            content: <p>See all in-app comments across documents in this engagement in one place. Collaborate and resolve threads without switching files.</p>,
+            title: 'Discussions',
+            content: <p>Every deliverable’s discussion in one place: see what’s new and who’s waiting on a reply, answer without leaving the page, and resolve what’s settled.</p>,
             route: `${eng}?tab=comments`,
             placement: 'bottom' as const,
             skipScroll: true,

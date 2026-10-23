@@ -26,7 +26,7 @@ const ENGAGEMENT_TABS: Record<string, Crumb> = {
     analytics: { label: 'Overview', icon: <BarChart3 /> },
     files: { label: 'Files', icon: <Folder /> },
     board: { label: 'Board', icon: <LayoutGrid /> },
-    comments: { label: 'Comments', icon: <MessagesSquare /> },
+    comments: { label: 'Discussions', icon: <MessagesSquare /> },
     audit: { label: 'Audit', icon: <ClipboardList /> },
     members: { label: 'Members', icon: <Users /> },
 }

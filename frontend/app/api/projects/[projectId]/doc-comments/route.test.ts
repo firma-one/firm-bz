@@ -5,6 +5,8 @@ const { db, access } = vi.hoisted(() => ({
         docs: [] as any[],
         messages: [] as any[],
         reminders: [] as any[],
+        threads: [] as any[],
+        reads: [] as any[],
     },
     access: { member: { role: 'eng_admin' } as { role: string } | null, visible: null as Set<string> | null },
 }))
@@ -37,12 +39,20 @@ vi.mock('@/lib/prisma', () => ({
                 const found = db.messages.filter((m) => (!where.id?.in || where.id.in.includes(m.id)) && (!where.projectDocumentId?.in || where.projectDocumentId.in.includes(m.projectDocumentId)))
                 return orderBy?.createdAt === 'desc' ? [...found].reverse() : found
             },
-            groupBy: async () => {
+            groupBy: async ({ where, _max }: any) => {
+                // The newest comment by someone other than the caller, per discussion (for unread).
+                if (_max) {
+                    const others = db.messages.filter((m) => where.projectDocumentId.in.includes(m.projectDocumentId) && m.authorUserId !== 'me')
+                    const ids = Array.from(new Set(others.map((m) => m.projectDocumentId)))
+                    return ids.map((id) => ({ projectDocumentId: id, _max: { createdAt: others.filter((m) => m.projectDocumentId === id).at(-1).createdAt } }))
+                }
                 const ids = Array.from(new Set(db.messages.map((m) => m.projectDocumentId)))
                 return ids.map((id) => ({ projectDocumentId: id, _count: { _all: db.messages.filter((m) => m.projectDocumentId === id).length } }))
             },
             findFirst: async ({ where }: any) => db.messages.filter((m) => m.projectDocumentId === where.projectDocumentId).at(-1) ?? null,
         },
+        docCommentThread: { findMany: async ({ where }: any) => db.threads.filter((t) => where.projectDocumentId.in.includes(t.projectDocumentId) && t.resolvedAt) },
+        docCommentRead: { findMany: async ({ where }: any) => db.reads.filter((r) => r.userId === where.userId && where.projectDocumentId.in.includes(r.projectDocumentId)) },
     },
 }))
 
@@ -63,9 +73,30 @@ beforeEach(() => {
         { id: 'm3', projectDocumentId: 'd2', createdAt: new Date('2026-10-03'), content: '@Name of u3 can you check the budget?', authorUserId: 'u1' },
     ]
     db.reminders = [{ entityKey: 'platform.doc_comments', entityValue: 'm1' }, { entityKey: 'platform.doc_comments', entityValue: 'm3' }]
+    // Both read before the latest comments: d2 read after its comment, d1 before its second.
+    db.reads = [
+        { userId: 'me', projectDocumentId: 'd1', lastReadAt: new Date('2026-10-01T12:00:00Z') },
+        { userId: 'me', projectDocumentId: 'd2', lastReadAt: new Date('2026-10-04') },
+    ]
+    db.threads = []
 })
 
 describe('GET /api/projects/[projectId]/doc-comments', () => {
+    it('marks a discussion unread when someone else commented since you last read it, and lists it first', async () => {
+        const { documents } = await (await get()).json()
+        expect(documents.map((d: any) => [d.projectDocumentId, d.unread])).toEqual([['d1', true], ['d2', false]])
+        db.reads = []
+        const never = (await (await get()).json()).documents
+        expect(never.every((d: any) => d.unread)).toBe(true)
+    })
+
+    it('says which discussions are resolved, and by whom', async () => {
+        db.threads = [{ projectDocumentId: 'd2', resolvedAt: new Date('2026-10-05'), resolvedBy: 'u3' }]
+        const { documents } = await (await get()).json()
+        expect(documents.find((d: any) => d.projectDocumentId === 'd2').resolved).toEqual({ at: '2026-10-05T00:00:00.000Z', byName: 'Name of u3' })
+        expect(documents.find((d: any) => d.projectDocumentId === 'd1').resolved).toBeNull()
+    })
+
     it('lists each thread with what it is on and who wrote its latest comment', async () => {
         const { documents } = await (await get()).json()
         const report = documents.find((d: any) => d.projectDocumentId === 'd1')

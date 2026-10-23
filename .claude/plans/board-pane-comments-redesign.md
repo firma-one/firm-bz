@@ -99,3 +99,76 @@ five on the page.
   spoke last. Search is on the same row (`CommentsToolbar`, shared with the tour), and narrows
   Mentions too.
 - Open: the Comments tab count still counts threads on documents an external can't see.
+
+## Next: the Comments page becomes Discussions (planned and built 2026-10-23)
+
+Deepak agreed to all the recommendations for the engagement Comments page and asked for them the same
+day; all five steps below are built. Decisions taken: "Show N earlier" stays for now (skim without
+opening); at launch existing discussions start as read (the migration gives every current member a
+read marker; members who join later see them unread). A reload after posting or resolving keeps the
+rows' order (`keepOrder`), so the open row doesn't jump. Migration:
+`prisma/migrations/20261023120000_discussions_resolve_and_unread` (two tables, plus the backfill).
+Follow-up spotted: the subtasks endpoint trusts the `persona` the client sends.
+
+### 1. Rename the page to "Discussions"
+
+- Why: the tab counts threads, so "Comments 1" read as one comment when there were three. "Discussions
+  1" reads right (one discussion, three comments), covers team-internal and client threads, and fits
+  what the page does (awaiting reply, read, resolved). Not "Messages" or "Chat" (sound like DMs), not
+  "Threads" (jargon for clients), not "Conversations" (long for the tab bar).
+- Change the label where the page is named: the engagement tab (`components/projects/engagement-tabs.tsx`),
+  the breadcrumb (`components/shell/header-bar.tsx`, `comments:` entry), the tour's crumb
+  (`components/demo/demo-header-bar.tsx`) and its tour step (`components/demo/demo-tour.tsx`, title and
+  copy), and the page's empty-state copy. The marketing mock tab rows (`components/marketing/v2/home/
+  hero-overview.tsx`, `product-story.tsx`) show the tab bar too; update them to match.
+- Keep: the `comments` URL slug and `?tab=comments` (links and notifications keep working), the
+  `data-demo-tour="engagement-comments-tab"` hook, and component and file names. Individual comments stay
+  "Comments": the deliverable pane's tab, the Files comments pane title, "Leave a comment".
+- Also fix the open item from before: the tab count counts threads on documents an external can't
+  see. Count only what the viewer may open, as the list does (`visibleDocumentIdsFor`).
+
+### 2. Rows: the latest author's avatar, and a muted count
+
+- Replace the left tile (the same chat icon on every row) with the latest author's avatar
+  (`PersonAvatar`, as the Inbox rows show who). It carries the unread dot from step 4.
+- The count becomes a muted number (`text-fg-subtle tabular-nums`), not the green pill; the all-caps
+  "LATEST" label gets quieter or goes.
+- `ThreadRow` is shared with the tour, so the tour follows.
+
+### 3. Reply in the right pane
+
+- Clicking a row opens the whole thread with its composer in the right pane, as the Support page opens
+  a request, instead of navigating to the Board. Reuse `DocumentDocCommentsPane`
+  (`components/projects/document-doc-comments-pane.tsx`); pane title is the row's ID and name, with its
+  folder-plus or file icon, and a header action "Open in deliverable" (today's `goToDeliverable`).
+- `#` tags in the pane need the deliverable's documents (`taggableDocuments`): for a deliverable row,
+  its documents, loaded as the Board's deliverable panel loads them (`subtasks?persona=…`); for a
+  document row, the documents of the deliverable it's in.
+- Posting in the pane refreshes the row (count, latest, Awaiting reply).
+- Decide after seeing it: whether "Show N earlier" stays for skimming without opening, or the pane
+  replaces it.
+- The tour: the row opens the tour's composer (`components/demo/demo-deliverable-comments.tsx`) in the
+  tour's right pane.
+
+### 4. Resolve (schema change)
+
+- "Mark resolved" on a discussion (in the pane header and the row's hover actions); a new comment
+  reopens it. Resolved discussions leave All and Awaiting reply, under a "Resolved" view or filter.
+- Store it per discussion, not in `EngagementDocument.settings` (that holds sharing settings): a small
+  table keyed by `projectDocumentId` with `resolvedAt` and `resolvedBy`. Migration with
+  `prisma migrate dev --create-only`.
+- The Overview's "Unanswered comments" (the insights route's `unansweredThreads`, the same rule as
+  Awaiting reply) must skip resolved ones too, so the two counts keep agreeing.
+
+### 5. Unread (schema change)
+
+- A dot on discussions with comments since you last opened them, and unread ones first.
+- Store per person and discussion: `userId`, `projectDocumentId`, `lastReadAt` (unique on the pair).
+  Opening a discussion (the pane, or the deliverable's Comments tab) marks it read. Unread = a
+  comment by someone else after `lastReadAt`. Migration with `--create-only`.
+- Decide: on launch, treat existing discussions as read (no flood of dots) or unread.
+
+### Not doing
+
+- No flat feed of individual comments (it loses which discussion each belongs to).
+- The Mentions view stays (Deepak, 2026-10-23), although mentions also reach the Inbox's Needs you.

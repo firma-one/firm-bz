@@ -8,6 +8,7 @@ import { getProjectDocumentContext } from '@/lib/file-utils'
 import { createClient as createSupabaseAdmin } from '@supabase/supabase-js'
 import { requireEngagementMember, externalMemberCanAccessDocument, isExternalEngagementRole, visibleDocumentIdsFor } from '@/lib/engagement-access'
 import { taggedDocumentsIn } from '@/lib/comments/tagged-documents'
+import { markDiscussionRead, reopenDiscussion } from '@/lib/comments/discussions'
 import { loadAnchorForCaps, effectiveCommentHistoryDays } from '@/lib/billing/effective-billing-caps'
 import { engagementDocCommentPath } from '@/lib/navigation/firm-paths'
 import { getFirmReminderConfig } from '@/lib/firm-reminder-config'
@@ -203,6 +204,13 @@ export async function POST(
 
     // Fire-and-forget rolling purge — do not await, never block the caller
     void purgeStaleDocComments(ctx.orgId)
+
+    // A new comment reopens a resolved discussion, and the author has read it.
+    try {
+      await Promise.all([reopenDiscussion(docCtx.id), markDiscussionRead(user.id, docCtx.id, projectId)])
+    } catch (e) {
+      console.error('doc-comments: discussion state not updated', { message: e instanceof Error ? e.message : String(e) })
+    }
 
     // Event notification — new comment from an external client (EC/EV), gated per-firm
     if (isExternalEngagementRole(member.role)) {

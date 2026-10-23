@@ -17,12 +17,15 @@ const MEMBERS = [
 ]
 
 let posted: { method: string; body: any }[] = []
+/** Marks of the discussion as read (POST …/doc-comments/read), kept apart from what's posted. */
+let reads: string[] = []
 let existing: any[] = []
 /** messageId → its reminder records, as the reminders endpoint returns them. */
 let reminders: Record<string, { userId: string; reminderId: string; dateValue: string | null }[]> = {}
 
 beforeEach(() => {
     posted = []
+    reads = []
     existing = []
     reminders = {}
     vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => { cb(0); return 0 })
@@ -31,8 +34,12 @@ beforeEach(() => {
     vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
         const method = init?.method ?? 'GET'
         const body = init?.body ? JSON.parse(init.body as string) : null
-        if (method !== 'GET') posted.push({ method, body })
         const json = (data: unknown) => ({ ok: true, json: async () => data }) as Response
+        if (url.endsWith('/doc-comments/read')) {
+            reads.push(url)
+            return json({ ok: true })
+        }
+        if (method !== 'GET') posted.push({ method, body })
         if (url.includes('/members')) return json({ members: MEMBERS })
         if (url.includes('filter=mentions')) return json({ mentions: [] })
         if (url.includes('/reminders')) return json({ reminders: reminders[new URL(url, 'http://x').searchParams.get('messageId') ?? ''] ?? [] })
@@ -54,6 +61,15 @@ function type(textarea: HTMLTextAreaElement, value: string) {
     // and the change would then look like no change.
     fireEvent.change(textarea, { target: { value, selectionStart: value.length, selectionEnd: value.length } })
 }
+
+describe('DocumentDocCommentsPane — reading', () => {
+    it('marks the discussion read once it has loaded, so the Discussions page drops its dot', async () => {
+        renderPane()
+        await screen.findByLabelText('Comment')
+        await settle()
+        expect(reads).toEqual(['/api/projects/e1/documents/d1/doc-comments/read'])
+    })
+})
 
 describe('DocumentDocCommentsPane — mentions', () => {
     it('opens a menu at "@" that narrows as you type, without you or Brio', async () => {

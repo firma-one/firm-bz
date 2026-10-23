@@ -22,7 +22,8 @@ import {
 export type DemoTaggableDocument = { id: string; docId: string; name: string; mimeType: string }
 
 type Person = { name: string; role: string }
-type Comment = { id: string; author: string; at: string; content: string }
+export type DemoComment = { id: string; author: string; at: string; content: string }
+type Comment = DemoComment
 
 const ME = 'Demo User'
 const TEAM: Person[] = [
@@ -56,8 +57,12 @@ function sampleThread(docs: DemoTaggableDocument[], now: Date): Comment[] {
 // The text box and the chip layer behind it share this box exactly, so each chip sits under its text.
 const COMPOSER_TEXT = 'max-h-48 w-full overflow-y-auto whitespace-pre-wrap break-words px-3 pb-1 pt-2.5 text-ui leading-relaxed [scrollbar-gutter:stable]'
 
-export function DemoDeliverableComments({ documents }: { documents: DemoTaggableDocument[] }) {
-    const [comments, setComments] = useState<Comment[]>(() => sampleThread(documents, new Date()))
+/**
+ * `thread` starts the pane on a given discussion (the tour's Discussions page passes the row's) instead
+ * of the sample; `onPost` hears each comment posted, so that page's row can follow.
+ */
+export function DemoDeliverableComments({ documents, thread, onPost }: { documents: DemoTaggableDocument[]; thread?: DemoComment[]; onPost?: (comment: DemoComment) => void }) {
+    const [comments, setComments] = useState<Comment[]>(() => thread ?? sampleThread(documents, new Date()))
     const [text, setText] = useState('')
     const [picked, setPicked] = useState<string[]>([])
     const [mention, setMention] = useState<{ start: number; query: string; left: number } | null>(null)
@@ -140,7 +145,9 @@ export function DemoDeliverableComments({ documents }: { documents: DemoTaggable
     const send = () => {
         const content = text.trim()
         if (!content) return
-        setComments((prev) => [...prev, { id: `c-${Date.now()}`, author: ME, at: new Date().toISOString(), content }])
+        const posted = { id: `c-${Date.now()}`, author: ME, at: new Date().toISOString(), content }
+        setComments((prev) => [...prev, posted])
+        onPost?.(posted)
         setText('')
         setPicked([])
         setMention(null)

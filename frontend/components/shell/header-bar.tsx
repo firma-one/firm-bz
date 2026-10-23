@@ -30,7 +30,7 @@ const ENGAGEMENT_TABS: Record<string, { label: string; icon: ReactNode }> = {
     files: { label: "Files", icon: <Folder /> },
     shares: { label: "Board", icon: <LayoutGrid /> },
     board: { label: "Board", icon: <LayoutGrid /> },
-    comments: { label: "Comments", icon: <MessagesSquare /> },
+    comments: { label: "Discussions", icon: <MessagesSquare /> },
     wiki: { label: "Dossier", icon: <PenTool /> },
     audit: { label: "Audit", icon: <ClipboardList /> },
     members: { label: "Members", icon: <Users /> },

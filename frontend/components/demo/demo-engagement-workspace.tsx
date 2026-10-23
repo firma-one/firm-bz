@@ -27,7 +27,7 @@ interface DemoEngagementWorkspaceProps {
 const VALID_TABS = new Set(['analytics', 'files', 'board', 'comments', 'audit', 'members'])
 
 /** Static counterpart to engagement-workspace.tsx: the app's engagement header and tab row over the
- * selected engagement's sample data. Overview, Files, Board, Comments, Audit and Members are static
+ * selected engagement's sample data. Overview, Files, Board, Discussions, Audit and Members are static
  * pages; Settings is left out, as for a viewer who can't manage the engagement. */
 export function DemoEngagementWorkspace({ client, engagement }: DemoEngagementWorkspaceProps) {
     const router = useRouter()

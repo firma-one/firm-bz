@@ -59,6 +59,8 @@ export interface DocumentDocCommentsPaneProps {
   orgSlug?: string
   /** The deliverable's documents the viewer may see; given, "#" tags them. */
   taggableDocuments?: TaggableDocument[]
+  /** Called after a comment is posted or deleted, so a list showing this discussion can refresh. */
+  onChange?: () => void
   /** Opens a tagged document (its preview) from a chip in the thread. */
   onOpenDocument?: (doc: TaggableDocument) => void
 }
@@ -112,7 +114,7 @@ function nextMondayNineAm(): string {
 }
 const shortDateTime = (iso: string) => new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
 
-export function DocumentDocCommentsPane({ engagementId, documentId, documentName, documentMimeType, taggableDocuments, onOpenDocument }: DocumentDocCommentsPaneProps) {
+export function DocumentDocCommentsPane({ engagementId, documentId, documentName, documentMimeType, taggableDocuments, onOpenDocument, onChange }: DocumentDocCommentsPaneProps) {
   const rightPane = useRightPane()
   const { user } = useAuth()
   const myEmail = user?.email ?? ''
@@ -222,6 +224,8 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
       }
       const data = await res.json()
       setMessages(data.messages ?? [])
+      // Seen: the Discussions page drops this discussion's unread dot.
+      fetch(`/api/projects/${engagementId}/documents/${documentId}/doc-comments/read`, { method: 'POST' }).catch(() => {})
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load comments')
     } finally {
@@ -487,6 +491,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
       }
       setMentionedUsers([])
       setRemindAt('')
+      onChange?.()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to add comment')
     } finally {
@@ -509,6 +514,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
       }
       setMessages((prev) => prev.filter((m) => m.id !== messageId))
       setDeleteConfirmId(null)
+      onChange?.()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to delete comment')
     } finally {
