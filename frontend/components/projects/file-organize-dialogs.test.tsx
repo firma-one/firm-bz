@@ -1,0 +1,105 @@
+import { describe, it, expect, vi } from 'vitest'
+import { render, screen, fireEvent, within } from '@testing-library/react'
+import { CopyMoveDialog, CopyToEngagementDialog, RenameDialog } from './file-organize-dialogs'
+import { FilesMovePill } from './files-drop-zone'
+import type { DriveFile } from '@/lib/types'
+
+const folder = (id: string, name: string) => ({ id, name, mimeType: 'application/vnd.google-apps.folder' }) as DriveFile
+
+describe('CopyMoveDialog', () => {
+    const base = {
+        open: true, onOpenChange: vi.fn(), action: 'move' as const, targetName: 'Plan.xlsx', keepBoth: true,
+        onKeepBothChange: vi.fn(), path: [{ id: 'gen', name: 'General' }], onPathClick: vi.fn(), loading: false,
+        folders: [folder('f1', 'Reports'), folder('f2', 'Empty')], emptyFolderIds: new Set(['f2']), checkingFolderId: null,
+        submittingFolderId: null, onOpenFolder: vi.fn(), onSubmit: vi.fn(), onCancel: vi.fn(),
+    }
+
+    it('a sentence-case title, the file in the context line, and no uppercase labels', () => {
+        render(<CopyMoveDialog {...base} />)
+        expect(screen.getByRole('dialog', { name: 'Move to folder' })).toBeTruthy()
+        expect(screen.getByText('Plan.xlsx')).toBeTruthy()
+        expect(screen.getByText('If the name already exists')).toBeTruthy()
+        expect(document.querySelector('.uppercase')).toBeNull()
+    })
+
+    it('moves into a folder row, into the root, opens a folder that has subfolders, and switches Keep both / Replace', () => {
+        render(<CopyMoveDialog {...base} />)
+        fireEvent.click(screen.getByRole('button', { name: 'Move here' }))
+        expect(base.onSubmit).toHaveBeenCalledWith('gen')
+        const reports = screen.getByText('Reports').closest('div.group') as HTMLElement
+        fireEvent.click(within(reports).getByRole('button', { name: 'Move' }))
+        expect(base.onSubmit).toHaveBeenCalledWith('f1')
+        fireEvent.click(screen.getByTitle('Open Reports'))
+        expect(base.onOpenFolder).toHaveBeenCalledWith(expect.objectContaining({ id: 'f1' }))
+        fireEvent.click(screen.getByTitle('No subfolders'))
+        expect(base.onOpenFolder).toHaveBeenCalledTimes(1)
+        fireEvent.click(screen.getByRole('button', { name: 'Replace' }))
+        expect(base.onKeepBothChange).toHaveBeenCalledWith(false)
+        expect(screen.getByRole('button', { name: 'Keep both' }).getAttribute('aria-pressed')).toBe('true')
+    })
+
+    it('Copy reads Copy, and Cancel cancels', () => {
+        render(<CopyMoveDialog {...base} action="copy" />)
+        expect(screen.getByRole('dialog', { name: 'Copy to folder' })).toBeTruthy()
+        expect(screen.getByRole('button', { name: 'Copy here' })).toBeTruthy()
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+        expect(base.onCancel).toHaveBeenCalled()
+    })
+})
+
+describe('CopyToEngagementDialog', () => {
+    const base = {
+        open: true, onOpenChange: vi.fn(), targetName: 'Plan.xlsx', firmName: 'FirmaOne', loading: false,
+        engagements: [
+            { id: 'e2', name: 'Zeta rollout', clientId: 'c1', clientName: 'Acme' },
+            { id: 'e1', name: 'Alpha audit', clientId: 'c1', clientName: 'Acme' },
+        ],
+        selectedId: null as string | null, onSelect: vi.fn(), submitting: false, onSubmit: vi.fn(), onCancel: vi.fn(),
+    }
+
+    it('lists engagements by client, alphabetically; Copy waits for a pick', () => {
+        render(<CopyToEngagementDialog {...base} />)
+        expect(screen.getByRole('dialog', { name: 'Copy to another engagement' })).toBeTruthy()
+        expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual(['Alpha audit', 'Zeta rollout'])
+        expect((screen.getByRole('button', { name: 'Copy' }) as HTMLButtonElement).disabled).toBe(true)
+        fireEvent.click(screen.getByRole('option', { name: 'Alpha audit' }))
+        expect(base.onSelect).toHaveBeenCalledWith('e1')
+    })
+
+    it('with a pick, Copy submits', () => {
+        render(<CopyToEngagementDialog {...base} selectedId="e1" />)
+        expect(screen.getByRole('option', { name: 'Alpha audit' }).getAttribute('aria-selected')).toBe('true')
+        fireEvent.click(screen.getByRole('button', { name: 'Copy' }))
+        expect(base.onSubmit).toHaveBeenCalled()
+    })
+})
+
+describe('RenameDialog', () => {
+    it('Enter or Save submits a name; the extension shows after the field', () => {
+        const onSubmit = vi.fn()
+        render(<RenameDialog open onOpenChange={vi.fn()} targetName="Plan.xlsx" value="Plan v2" onChange={vi.fn()} extension=".xlsx" submitting={false} onSubmit={onSubmit} onCancel={vi.fn()} />)
+        expect(screen.getByRole('dialog', { name: 'Rename' })).toBeTruthy()
+        expect(screen.getByText('.xlsx')).toBeTruthy()
+        fireEvent.submit(screen.getByRole('textbox', { name: 'New name' }).closest('form')!)
+        expect(onSubmit).toHaveBeenCalledTimes(1)
+        fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+        expect(onSubmit).toHaveBeenCalledTimes(2)
+    })
+
+    it('an empty name cannot be saved', () => {
+        const onSubmit = vi.fn()
+        render(<RenameDialog open onOpenChange={vi.fn()} value="  " onChange={vi.fn()} submitting={false} onSubmit={onSubmit} onCancel={vi.fn()} />)
+        expect((screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(true)
+        fireEvent.submit(screen.getByRole('textbox', { name: 'New name' }).closest('form')!)
+        expect(onSubmit).not.toHaveBeenCalled()
+    })
+})
+
+describe('FilesMovePill', () => {
+    it('names the folder when over one, else asks to drop on a folder', () => {
+        const { rerender } = render(<FilesMovePill itemName="Plan.xlsx" />)
+        expect(screen.getByRole('status').textContent).toBe('Drop on a folder to move Plan.xlsx· Esc to cancel')
+        rerender(<FilesMovePill itemName="Plan.xlsx" folderName="Reports" />)
+        expect(screen.getByRole('status').textContent).toBe('Move Plan.xlsx to Reports· Esc to cancel')
+    })
+})

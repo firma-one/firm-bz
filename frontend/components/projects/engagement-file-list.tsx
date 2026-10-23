@@ -73,7 +73,8 @@ import { useSecureOpenDocument } from '@/lib/use-secure-open-document'
 import { SecureAccessModal } from '@/components/projects/shares/secure-access-modal'
 import { ProfileBubbleWithPopup } from '@/components/ui/profile-bubble-popup'
 import { EngagementFileRow } from '@/components/projects/engagement-file-row'
-import { FilesDropPill, FilesDropRow, FILES_DROP_ZONE_ACTIVE_CLASS } from '@/components/projects/files-drop-zone'
+import { FilesDropPill, FilesDropRow, FilesMovePill, FILES_DROP_ZONE_ACTIVE_CLASS } from '@/components/projects/files-drop-zone'
+import { CopyMoveDialog, CopyToEngagementDialog, RenameDialog } from '@/components/projects/file-organize-dialogs'
 import {
     FILE_TABLE_GRID_COLS_CLASS,
     FILE_TABLE_CONTAINER_CLASS,
@@ -274,10 +275,18 @@ const TOOLBAR_ICON_CLASS =
 
 /**
  * The Files drop zone (design canvas section 10, 2026-10-23): a drop row under the files, the list
- * outlined while it is the target, folder rows as targets, and a pill naming the folder. False brings
- * back the old full-cover overlay; kept until Deepak signs off.
+ * outlined while it is the target, folder rows as targets, and a pill naming the folder — the same
+ * pill and folder-row target when a row is dragged onto a folder to move it. False brings back the
+ * old full-cover overlay and the dark move guide; kept until Deepak signs off.
  */
 const NEW_DROP_ZONE = true
+
+/**
+ * The organize dialogs (Move/Copy to folder, Copy to another engagement, Rename) on the design
+ * system's dialog frame — components/projects/file-organize-dialogs.tsx (2026-10-23). False brings
+ * back the uppercase "themed" dialogs below; kept until Deepak signs off.
+ */
+const NEW_ORGANIZE_DIALOGS = true
 
 /** A bulk action in the selection bar: a label beside its icon, so a destructive one is never a bare glyph. */
 const SELECTION_ACTION_CLASS =
@@ -2878,9 +2887,9 @@ const handleRefresh = async () => {
                     )
                 }
 
-                {/* Internal Drag Guide Overlay */}
+                {/* Internal Drag Guide Overlay (the old dark pill; FilesMovePill below replaces it) */}
                 {
-                    isInternalDragging && (
+                    !NEW_DROP_ZONE && isInternalDragging && (
                         <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-50 bg-slate-900/90 text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-3 backdrop-blur-sm animate-in fade-in slide-in-from-bottom-4 duration-300">
                             <Layers className="h-5 w-5 text-indigo-400" />
                             <div>
@@ -2934,6 +2943,12 @@ const handleRefresh = async () => {
                 {/* File List, with the app's slim, light scrollbar (`subtle-scrollbar`, globals.css). */}
                 {NEW_DROP_ZONE && isDragging && (
                     <FilesDropPill count={dragFileCount} folderName={dropTargetFolder?.name ?? currentFolderName} />
+                )}
+                {NEW_DROP_ZONE && isInternalDragging && draggedItem && (
+                    <FilesMovePill
+                        itemName={draggedItem.name}
+                        folderName={dragOverFolderId ? files.find((f) => f.id === dragOverFolderId)?.name : undefined}
+                    />
                 )}
                 <div className={cn("subtle-scrollbar relative flex-1 overflow-y-auto", NEW_DROP_ZONE && isDragging && !dropTargetFolder && FILES_DROP_ZONE_ACTIVE_CLASS)}>
                     {deeplinkResolving || loading || isLoadingFolders ? (
@@ -3124,6 +3139,7 @@ const handleRefresh = async () => {
                                     bookmarkId={bookmarkIdByDocumentId.get(file.projectDocumentId ?? '')}
                                     hideBadges={rightPane.content != null && rightPane.paneSize === 'medium'}
                                     isUploadTarget={NEW_DROP_ZONE && dropTargetFolder?.id === file.id}
+                                    isMoveTarget={NEW_DROP_ZONE && dragOverFolderId === file.id}
                                 />
                             ))}
                         </div>
@@ -3139,8 +3155,55 @@ const handleRefresh = async () => {
                     )}
                 </div>
 
+                {NEW_ORGANIZE_DIALOGS && (
+                    <>
+                        <CopyMoveDialog
+                            open={copyMoveModalOpen}
+                            onOpenChange={(open) => { setCopyMoveModalOpen(open); if (!open) setCopyMoveTarget(null) }}
+                            action={copyMoveAction}
+                            targetName={copyMoveTarget?.name}
+                            keepBoth={copyMoveKeepBoth}
+                            onKeepBothChange={setCopyMoveKeepBoth}
+                            path={currentPath}
+                            onPathClick={handleCopyMoveBreadcrumbClick}
+                            loading={loadingDestinations}
+                            folders={destinationFolders}
+                            emptyFolderIds={emptyFolderIds}
+                            checkingFolderId={checkingFolderId}
+                            submittingFolderId={copyMoveSubmittingFolderId}
+                            onOpenFolder={handleNavigateIntoFolder}
+                            onSubmit={(folderId) => handleCopyMoveToFolder(folderId)}
+                            onCancel={() => setCopyMoveModalOpen(false)}
+                        />
+                        <CopyToEngagementDialog
+                            open={crossEngagementModalOpen}
+                            onOpenChange={(open) => { setCrossEngagementModalOpen(open); if (!open) { setCrossEngagementTarget(null); setCrossEngagementFirmName(null) } }}
+                            targetName={crossEngagementTarget?.name}
+                            firmName={crossEngagementFirmName}
+                            loading={crossEngagementLoading}
+                            engagements={crossEngagementEngagements}
+                            selectedId={crossEngagementSelectedId}
+                            onSelect={setCrossEngagementSelectedId}
+                            submitting={crossEngagementSubmitting}
+                            onSubmit={handleCrossEngagementSubmit}
+                            onCancel={() => setCrossEngagementModalOpen(false)}
+                        />
+                        <RenameDialog
+                            open={renameModalOpen}
+                            onOpenChange={(open) => { setRenameModalOpen(open); if (!open) setRenameTarget(null) }}
+                            targetName={renameTarget?.name}
+                            value={renameNewName}
+                            onChange={setRenameNewName}
+                            extension={renameExtension}
+                            submitting={renameSubmitting}
+                            onSubmit={handleConfirmRename}
+                            onCancel={() => setRenameModalOpen(false)}
+                        />
+                    </>
+                )}
+
                 {/* Copy / Move destination picker (within General) */}
-                <Dialog open={copyMoveModalOpen} onOpenChange={(open) => { setCopyMoveModalOpen(open); if (!open) setCopyMoveTarget(null) }}>
+                <Dialog open={!NEW_ORGANIZE_DIALOGS && copyMoveModalOpen} onOpenChange={(open) => { setCopyMoveModalOpen(open); if (!open) setCopyMoveTarget(null) }}>
                     <DialogContent className={THEMED_DIALOG_CONTENT}>
                         <ThemedDialogHeader
                             icon={copyMoveAction === 'copy' ? <Copy className="h-3.5 w-3.5" /> : <FolderInput className="h-3.5 w-3.5" />}
@@ -3284,7 +3347,7 @@ const handleRefresh = async () => {
                 </Dialog>
 
                 {/* Cross-Engagement Copy Modal */}
-                <Dialog open={crossEngagementModalOpen} onOpenChange={(open) => { setCrossEngagementModalOpen(open); if (!open) { setCrossEngagementTarget(null); setCrossEngagementFirmName(null) } }}>
+                <Dialog open={!NEW_ORGANIZE_DIALOGS && crossEngagementModalOpen} onOpenChange={(open) => { setCrossEngagementModalOpen(open); if (!open) { setCrossEngagementTarget(null); setCrossEngagementFirmName(null) } }}>
                     <DialogContent className={THEMED_DIALOG_CONTENT}>
                         <ThemedDialogHeader icon={<Copy className="h-3.5 w-3.5" />} title="Copy to another engagement">
                             Pick the engagement to copy <span className="font-medium text-fg">{crossEngagementTarget?.name}</span> to. It lands in that engagement&apos;s General folder.
@@ -3370,7 +3433,7 @@ const handleRefresh = async () => {
                 </Dialog>
 
                 {/* Rename file/folder */}
-                <Dialog open={renameModalOpen} onOpenChange={(open) => { setRenameModalOpen(open); if (!open) setRenameTarget(null) }}>
+                <Dialog open={!NEW_ORGANIZE_DIALOGS && renameModalOpen} onOpenChange={(open) => { setRenameModalOpen(open); if (!open) setRenameTarget(null) }}>
                     <DialogContent className={THEMED_DIALOG_CONTENT}>
                         <ThemedDialogHeader icon={<Pencil className="h-3.5 w-3.5" />} title="Rename">
                             Enter a new name for <span className="font-medium text-fg">{renameTarget?.name ?? 'this item'}</span>.
