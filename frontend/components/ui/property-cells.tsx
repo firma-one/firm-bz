@@ -6,6 +6,7 @@ import { DuePickerPanel } from "@/components/ui/due-picker"
 import { formatDue, isPastDue, readDue } from "@/lib/ui/due-date"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { StatusPill } from "@/components/ui/status-pill"
+import { STAGE_PILL_CLASSES } from "@/lib/ui/status"
 import { cn } from "@/lib/utils"
 import type { StatusKind } from "@/lib/ui/status"
 import { initialsOf } from '@/lib/initials'
@@ -104,6 +105,7 @@ export function DateProperty({
     highlightOverdue = false,
     allowTime = false,
     compact = false,
+    chip = false,
 }: {
     /** "yyyy-MM-dd", an ISO date-time, or null. */
     value: string | null
@@ -117,6 +119,11 @@ export function DateProperty({
     allowTime?: boolean
     /** For a narrow table cell: leaves out this year's year, on one line. */
     compact?: boolean
+    /**
+     * Show a set date as a pill in the status pills' pastels (not started; red, the "problem" stage,
+     * when overdue), so an editable cell reads as a value you can change rather than plain text.
+     */
+    chip?: boolean
 }) {
     const [open, setOpen] = React.useState(false)
     const { saving, run } = useSaving(onChange)
@@ -124,7 +131,13 @@ export function DateProperty({
     const shown = parts && !allowTime ? { ...parts, time: null } : parts
     const overdue = highlightOverdue && !!shown && isPastDue(shown)
     const label = shown ? (
-        <span className={cn("truncate whitespace-nowrap tabular-nums", overdue && "text-danger")}>{formatDue(shown, { compact })}</span>
+        chip ? (
+            <span className={cn("inline-flex h-5 max-w-full items-center whitespace-nowrap rounded-control px-1.5 text-caption tabular-nums", STAGE_PILL_CLASSES[overdue ? "problem" : "not-started"])}>
+                <span className="truncate">{formatDue(shown, { compact })}</span>
+            </span>
+        ) : (
+            <span className={cn("truncate whitespace-nowrap tabular-nums", overdue && "text-danger")}>{formatDue(shown, { compact })}</span>
+        )
     ) : (
         <Empty label={placeholder} />
     )

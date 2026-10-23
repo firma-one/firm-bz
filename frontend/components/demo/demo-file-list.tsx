@@ -440,7 +440,7 @@ function EntryRow({
             <div className={`items-center ${DUE_DATE_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}>
                 {/* As in the app: files and deliverable folders take a Due; other folders have none */}
                 {!isFolder || deliverableStatus ? (
-                    <DateProperty value={dueDate ?? null} onChange={onSetDue} placeholder={tracked ? 'Not set' : '—'} highlightOverdue allowTime={!isFolder} compact />
+                    <DateProperty value={dueDate ?? null} onChange={onSetDue} placeholder={tracked ? 'Not set' : '—'} highlightOverdue allowTime={!isFolder} compact chip />
                 ) : empty}
             </div>
 
