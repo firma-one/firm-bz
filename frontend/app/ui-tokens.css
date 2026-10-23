@@ -147,6 +147,9 @@
   /* Cards you open or drag: Notion's card shadow (the 1px ring stands in for a border). Page sections
      stay flat. -drag is the card lifted under the pointer. */
   --ui-shadow-card: 0 0 0 1px rgba(15, 15, 15, 0.1), 0 2px 4px rgba(15, 15, 15, 0.1);
+  /* A card under the pointer: a firmer ring and a little more lift (the hover's main cue, with a
+     near-white fill, so the gray inside a card — avatars, empty progress — still shows). */
+  --ui-shadow-card-hover: 0 0 0 1px rgba(15, 15, 15, 0.16), 0 3px 8px rgba(15, 15, 15, 0.12);
   --ui-shadow-card-drag: 0 0 0 1px rgba(15, 15, 15, 0.1), 0 14px 32px -8px rgba(15, 15, 15, 0.35);
 
   /* Motion: hover, enter, expand. Reduced motion is handled once, in globals (MotionConfig and the
