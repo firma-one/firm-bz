@@ -2088,7 +2088,12 @@ const handleRefresh = async () => {
             window.history.replaceState(null, '', window.location.pathname + window.location.search)
         } else {
             const docId = item?.projectDocumentId ?? id
-            window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#doc-file:${docId}`)
+            const newHash = `doc-file:${docId}`
+            // Mark as already-handled, as handleFolderClick does — otherwise the deeplink effect reads
+            // this hash on the next render, takes it for an incoming link, and resolves it on the
+            // server alongside the folder's own list request (going back took 5–10s on prod).
+            lastHandledDeeplinkHashRef.current = newHash
+            window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#${newHash}`)
         }
     }
 
