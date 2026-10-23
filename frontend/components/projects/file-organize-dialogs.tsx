@@ -1,12 +1,14 @@
 'use client'
 
 import type { ReactNode } from 'react'
-import { Briefcase, Building2, Check, ChevronRight, Folder } from 'lucide-react'
+import { Briefcase, Building2, Check, ChevronRight, Copy, Folder, FolderInput } from 'lucide-react'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Hint } from '@/components/ui/tooltip'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { ClientIcon } from '@/components/ui/client-icon'
+import { DocumentIcon } from '@/components/ui/document-icon'
 import { CreateDialogFooter, CreateDialogHeader } from '@/components/ui/create-dialog'
 import { cn } from '@/lib/utils'
 import type { DriveFile } from '@/lib/types'
@@ -23,19 +25,51 @@ import type { DriveFile } from '@/lib/types'
 /** The frame's panel: the Dialog's own radius and surface, no padding of its own. */
 const PANEL_CLASS = 'gap-0 p-0 sm:max-w-md'
 
-/** The bordered list a picker scrolls in. */
-const LIST_CLASS = 'max-h-64 overflow-y-auto rounded-card border border-line'
-
-/** Footer with only Cancel (the pickers act per row): same placement as CreateDialogFooter. */
-function CancelFooter({ onCancel }: { onCancel: () => void }) {
+/**
+ * The title block over a hairline, mirroring the footer's: the title and close button read as their
+ * own row, apart from the controls under them.
+ */
+function DividedHeader({ title, description }: { title: string; description: ReactNode }) {
     return (
-        <div className="flex items-center justify-end gap-2 border-t border-line px-5 py-3">
-            <Button type="button" variant="ghost" size="sm" onClick={onCancel}>Cancel</Button>
+        <div className="border-b border-line pb-3">
+            <CreateDialogHeader title={title} description={description} />
         </div>
     )
 }
 
-/** A two-option segmented control, styled like the table/gallery view toggle. */
+/**
+ * The file or folder being acted on, as a chip in the header's context line: the Discussions
+ * document chip's look (icon and name on a muted 4px tile), cut short with the full name on hover.
+ */
+function FileChip({ name, mimeType }: { name?: string; mimeType?: string }) {
+    if (!name) return <>this item</>
+    return (
+        <span title={name} className="inline-flex max-w-full items-center gap-1 rounded-[4px] bg-surface-muted px-1.5 py-px align-bottom font-medium text-fg">
+            <DocumentIcon mimeType={mimeType} className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">{name}</span>
+        </span>
+    )
+}
+
+/** The bordered list a picker scrolls in. */
+const LIST_CLASS = 'max-h-64 overflow-y-auto rounded-card border border-line'
+
+/**
+ * Footer with only Cancel (the pickers act per row): CreateDialogFooter's placement, but outlined,
+ * as in ConfirmDialog — a ghost Cancel with no primary beside it didn't read as a button.
+ */
+function CancelFooter({ onCancel }: { onCancel: () => void }) {
+    return (
+        <div className="flex items-center justify-end gap-2 border-t border-line px-5 py-3">
+            <Button type="button" variant="outline" size="sm" onClick={onCancel}>Cancel</Button>
+        </div>
+    )
+}
+
+/**
+ * A two-option segmented control: the view toggle's shape on a grey (`surface-muted`) track, with
+ * the picked option raised in white — on the view toggle's near-white track it barely showed.
+ */
 function Segmented<T extends string | boolean>({ label, value, options, onChange }: {
     label: string
     value: T
@@ -43,7 +77,7 @@ function Segmented<T extends string | boolean>({ label, value, options, onChange
     onChange: (value: T) => void
 }) {
     return (
-        <div className="inline-flex items-center rounded-control border border-line bg-surface-subtle p-0.5" role="group" aria-label={label}>
+        <div className="inline-flex items-center rounded-control bg-surface-muted p-0.5" role="group" aria-label={label}>
             {options.map((o) => (
                 <button
                     key={String(o.value)}
@@ -52,7 +86,7 @@ function Segmented<T extends string | boolean>({ label, value, options, onChange
                     onClick={() => onChange(o.value)}
                     className={cn(
                         'h-6 rounded-[4px] px-2.5 text-small outline-none transition-colors focus-visible:ring-2 focus-visible:ring-action/30',
-                        value === o.value ? 'bg-surface font-medium text-fg shadow-sm' : 'text-fg-muted hover:text-fg'
+                        value === o.value ? 'bg-surface font-medium text-fg shadow-sm ring-1 ring-line-strong' : 'text-fg-muted hover:text-fg'
                     )}
                 >
                     {o.label}
@@ -79,6 +113,8 @@ export interface CopyMoveDialogProps {
     onOpenChange: (open: boolean) => void
     action: 'copy' | 'move'
     targetName?: string
+    /** Picks the chip's icon. */
+    targetMimeType?: string
     keepBoth: boolean
     onKeepBothChange: (keepBoth: boolean) => void
     /** From the root (General, Confidential or Staging) down to the folder being shown. */
@@ -87,6 +123,8 @@ export interface CopyMoveDialogProps {
     loading: boolean
     folders: DriveFile[]
     emptyFolderIds: Set<string>
+    /** Folders known to have subfolders (the look-ahead's answer): only these show an arrow. */
+    subfolderIds: Set<string>
     checkingFolderId: string | null
     submittingFolderId: string | null
     onOpenFolder: (folder: DriveFile) => void
@@ -96,20 +134,20 @@ export interface CopyMoveDialogProps {
 
 /** Move/Copy to folder: browse the root's folders and move or copy into one, or into the root itself. */
 export function CopyMoveDialog({
-    open, onOpenChange, action, targetName, keepBoth, onKeepBothChange, path, onPathClick, loading, folders,
-    emptyFolderIds, checkingFolderId, submittingFolderId, onOpenFolder, onSubmit, onCancel,
+    open, onOpenChange, action, targetName, targetMimeType, keepBoth, onKeepBothChange, path, onPathClick, loading, folders,
+    emptyFolderIds, subfolderIds, checkingFolderId, submittingFolderId, onOpenFolder, onSubmit, onCancel,
 }: CopyMoveDialogProps) {
     const verb = action === 'copy' ? 'Copy' : 'Move'
     const root = path[0]
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className={PANEL_CLASS}>
-                <CreateDialogHeader
+                <DividedHeader
                     title={`${verb} to folder`}
-                    description={<><span className="font-medium text-fg">{targetName}</span> will be {action === 'copy' ? 'copied' : 'moved'} to the folder you pick in {root?.name || 'the engagement'}.</>}
+                    description={<><FileChip name={targetName} mimeType={targetMimeType} /> will be {action === 'copy' ? 'copied' : 'moved'} to the folder you pick in {root?.name || 'the engagement'}.</>}
                 />
 
-                <div className="space-y-4 px-5 pb-5 pt-2">
+                <div className="space-y-4 px-5 pb-5 pt-4">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                         <span className="text-small text-fg-muted">If the name already exists</span>
                         <Segmented
@@ -145,12 +183,17 @@ export function CopyMoveDialog({
                                 </nav>
                                 {/* Into the root itself — only at the root (General/Confidential/Staging) level */}
                                 {path.length === 1 && root && (
-                                    <RowAction
-                                        label={`${verb} here`}
-                                        busy={submittingFolderId === root.id}
-                                        disabled={!!submittingFolderId}
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
                                         onClick={() => onSubmit(root.id)}
-                                    />
+                                        disabled={!!submittingFolderId}
+                                        className={cn('h-7 shrink-0 gap-1.5 px-2 text-small text-fg-muted hover:text-fg', submittingFolderId === root.id && 'disabled:opacity-100')}
+                                    >
+                                        {submittingFolderId === root.id ? <LoadingSpinner size="sm" /> : <ActionIcon action={action} />}
+                                        {verb} here
+                                    </Button>
                                 )}
                             </div>
                         )}
@@ -163,6 +206,7 @@ export function CopyMoveDialog({
                             ) : (
                                 folders.map((f) => {
                                     const isEmpty = emptyFolderIds.has(f.id)
+                                    const hasSubfolders = subfolderIds.has(f.id)
                                     const isChecking = checkingFolderId === f.id
                                     return (
                                         <div key={f.id} className="group flex h-9 items-center justify-between gap-3 pl-2 pr-1.5 transition-colors hover:bg-surface-hover">
@@ -170,20 +214,22 @@ export function CopyMoveDialog({
                                                 type="button"
                                                 onClick={() => !isEmpty && !isChecking && onOpenFolder(f)}
                                                 disabled={isChecking}
-                                                title={isEmpty ? 'No subfolders' : `Open ${f.name}`}
+                                                title={isEmpty ? 'No subfolders' : hasSubfolders ? `Open ${f.name}` : undefined}
                                                 className={cn(
                                                     'flex min-w-0 flex-1 items-center gap-2 rounded-control px-1 text-left text-ui text-fg outline-none focus-visible:ring-2 focus-visible:ring-action/30',
-                                                    isEmpty || isChecking ? 'cursor-default' : 'cursor-pointer'
+                                                    hasSubfolders && !isChecking ? 'cursor-pointer' : 'cursor-default'
                                                 )}
                                             >
                                                 <Folder className="h-4 w-4 shrink-0 text-fg-muted" aria-hidden />
                                                 <span className="truncate">{f.name}</span>
                                                 <span className="flex h-4 w-4 shrink-0 items-center justify-center">
-                                                    {isChecking ? <LoadingSpinner size="sm" /> : !isEmpty ? <ChevronRight className="h-3.5 w-3.5 text-fg-subtle" aria-hidden /> : null}
+                                                    {/* The arrow waits for the look-ahead: one that showed and then vanished read as "has subfolders" for a moment. */}
+                                                    {isChecking ? <LoadingSpinner size="sm" /> : hasSubfolders ? <ChevronRight className="h-3.5 w-3.5 text-fg-subtle animate-in fade-in duration-150" aria-hidden /> : null}
                                                 </span>
                                             </button>
                                             <RowAction
-                                                label={verb}
+                                                action={action}
+                                                folderName={f.name}
                                                 busy={submittingFolderId === f.id}
                                                 disabled={!!submittingFolderId}
                                                 onClick={() => onSubmit(f.id)}
@@ -202,13 +248,41 @@ export function CopyMoveDialog({
     )
 }
 
-/** A picker row's action: a quiet `sm` outline button that keeps its width while busy. */
-function RowAction({ label, busy, disabled, onClick }: { label: string; busy: boolean; disabled: boolean; onClick: () => void }) {
+/** Copy's or Move's 14px glyph. */
+function ActionIcon({ action }: { action: 'copy' | 'move' }) {
+    const Icon = action === 'copy' ? Copy : FolderInput
+    return <Icon className="h-3.5 w-3.5" aria-hidden />
+}
+
+/**
+ * A picker row's action: a quiet 28px icon (like the Files toolbar's), named in its hint and label,
+ * darker on the row's hover. Busy, it shows a spinner in place; while another row is busy it dims.
+ */
+function RowAction({ action, folderName, busy, disabled, onClick }: {
+    action: 'copy' | 'move'
+    folderName: string
+    busy: boolean
+    disabled: boolean
+    onClick: () => void
+}) {
+    const label = `${action === 'copy' ? 'Copy' : 'Move'} to ${folderName}`
     return (
-        <Button type="button" variant="outline" size="sm" onClick={onClick} disabled={disabled} className="relative h-7 shrink-0 px-2.5 disabled:opacity-100">
-            <span className={cn(busy && 'invisible')}>{label}</span>
-            {busy && <span className="absolute inset-0 flex items-center justify-center"><LoadingSpinner size="sm" /></span>}
-        </Button>
+        <Hint label={label}>
+            <button
+                type="button"
+                aria-label={label}
+                onClick={onClick}
+                disabled={disabled}
+                className={cn(
+                    'inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-control text-fg-muted transition-colors',
+                    'hover:bg-surface-muted hover:text-fg group-hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action/30',
+                    'disabled:pointer-events-none disabled:opacity-40',
+                    busy && 'disabled:opacity-100'
+                )}
+            >
+                {busy ? <LoadingSpinner size="sm" /> : <ActionIcon action={action} />}
+            </button>
+        </Hint>
     )
 }
 
@@ -216,6 +290,8 @@ export interface CopyToEngagementDialogProps {
     open: boolean
     onOpenChange: (open: boolean) => void
     targetName?: string
+    /** Picks the chip's icon. */
+    targetMimeType?: string
     firmName: string | null
     loading: boolean
     engagements: { id: string; name: string; clientId: string; clientName: string }[]
@@ -228,7 +304,7 @@ export interface CopyToEngagementDialogProps {
 
 /** Copy to another engagement: the firm's engagements by client; the copy lands in that engagement's General folder. */
 export function CopyToEngagementDialog({
-    open, onOpenChange, targetName, firmName, loading, engagements, selectedId, onSelect, submitting, onSubmit, onCancel,
+    open, onOpenChange, targetName, targetMimeType, firmName, loading, engagements, selectedId, onSelect, submitting, onSubmit, onCancel,
 }: CopyToEngagementDialogProps) {
     const groups = Object.values(
         engagements.reduce<Record<string, { clientName: string; engagements: typeof engagements }>>((acc, e) => {
@@ -242,11 +318,11 @@ export function CopyToEngagementDialog({
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className={PANEL_CLASS}>
                 <form onSubmit={(e) => { e.preventDefault(); if (selectedId && !submitting) onSubmit() }}>
-                    <CreateDialogHeader
+                    <DividedHeader
                         title="Copy to another engagement"
-                        description={<>Pick where to copy <span className="font-medium text-fg">{targetName}</span>. It lands in that engagement’s General folder.</>}
+                        description={<>Pick where to copy <FileChip name={targetName} mimeType={targetMimeType} />. It lands in that engagement’s General folder.</>}
                     />
-                    <div className="px-5 pb-5 pt-2">
+                    <div className="px-5 pb-5 pt-4">
                         <div className={cn(LIST_CLASS, 'p-1')} role="listbox" aria-label="Engagements">
                             {loading ? (
                                 <ListLoading />
@@ -308,6 +384,8 @@ export interface RenameDialogProps {
     open: boolean
     onOpenChange: (open: boolean) => void
     targetName?: string
+    /** Picks the chip's icon. */
+    targetMimeType?: string
     value: string
     onChange: (value: string) => void
     /** The file's extension, shown after the field and kept as is. */
@@ -318,16 +396,16 @@ export interface RenameDialogProps {
 }
 
 /** Rename a file or folder; the extension stays as it is. */
-export function RenameDialog({ open, onOpenChange, targetName, value, onChange, extension, submitting, onSubmit, onCancel }: RenameDialogProps) {
+export function RenameDialog({ open, onOpenChange, targetName, targetMimeType, value, onChange, extension, submitting, onSubmit, onCancel }: RenameDialogProps) {
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className={PANEL_CLASS}>
                 <form onSubmit={(e) => { e.preventDefault(); if (value.trim() && !submitting) onSubmit() }}>
-                    <CreateDialogHeader
+                    <DividedHeader
                         title="Rename"
-                        description={<>Enter a new name for <span className="font-medium text-fg">{targetName ?? 'this item'}</span>.</>}
+                        description={<>Enter a new name for <FileChip name={targetName} mimeType={targetMimeType} />.</>}
                     />
-                    <div className="flex items-center gap-1.5 px-5 pb-5 pt-2">
+                    <div className="flex items-center gap-1.5 px-5 pb-5 pt-4">
                         <Input
                             value={value}
                             onChange={(e) => onChange(e.target.value)}

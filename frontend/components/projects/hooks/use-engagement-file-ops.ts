@@ -71,6 +71,8 @@ export function useEngagementFileOps({
     const [loadingDestinations, setLoadingDestinations] = useState(false)
     const [copyMoveSubmittingFolderId, setCopyMoveSubmittingFolderId] = useState<string | null>(null)
     const [emptyFolderIds, setEmptyFolderIds] = useState<Set<string>>(new Set())
+    /** Picker folders known to have subfolders: only these show an arrow, so none appears and then vanishes. */
+    const [subfolderIds, setSubfolderIds] = useState<Set<string>>(new Set())
     const [checkingFolderId, setCheckingFolderId] = useState<string | null>(null)
 
     // Cross-engagement state
@@ -237,19 +239,62 @@ export function useEngagementFileOps({
             },
             body: JSON.stringify({ action: 'list', folderId, projectId, pageSize: 500 })
         })
-        const data = r.ok ? await r.json() : { files: [] }
+        // A failed list throws rather than reading as "no subfolders", which hid the folder's arrow.
+        if (!r.ok) throw new Error(`Could not list folder (${r.status})`)
+        const data = await r.json()
         const list = (data.files || []) as DriveFile[]
         return list.filter((f: DriveFile) => f.mimeType === 'application/vnd.google-apps.folder')
     }, [projectId])
 
+    /**
+     * The Move/Copy picker's look-ahead: each listed folder's own subfolders, fetched in the
+     * background as a level loads, so a folder with none shows no arrow before anyone clicks it
+     * (it used to take a click and a "No subfolders" toast), and opening one is instant.
+     * Cleared each time the picker opens.
+     */
+    const childFoldersRef = useRef<Map<string, DriveFile[]>>(new Map())
+
+    const lookAheadFolders = useCallback((folders: DriveFile[]) => {
+        const knownEmpty = folders.filter((f) => childFoldersRef.current.get(f.id)?.length === 0).map((f) => f.id)
+        if (knownEmpty.length) setEmptyFolderIds((prev) => new Set(Array.from(prev).concat(knownEmpty)))
+        const knownSome = folders.filter((f) => (childFoldersRef.current.get(f.id)?.length ?? 0) > 0).map((f) => f.id)
+        if (knownSome.length) setSubfolderIds((prev) => new Set(Array.from(prev).concat(knownSome)))
+        const queue = folders.filter((f) => !childFoldersRef.current.has(f.id))
+        // Four at a time: each one is a list call to the storage provider.
+        const next = async (): Promise<void> => {
+            const folder = queue.shift()
+            if (!folder) return
+            try {
+                const children = await fetchFolderChildrenResult(folder.id)
+                childFoldersRef.current.set(folder.id, children)
+                if (children.length === 0) setEmptyFolderIds((prev) => new Set(prev).add(folder.id))
+                else setSubfolderIds((prev) => new Set(prev).add(folder.id))
+            } catch {
+                // Unknown: the folder keeps its arrow and is checked when clicked.
+            }
+            return next()
+        }
+        for (let i = 0; i < 4; i++) void next()
+    }, [fetchFolderChildrenResult])
+
     const fetchFolderChildren = useCallback((folderId: string) => {
         if (!sessionRef.current?.access_token) return
+        const cached = childFoldersRef.current.get(folderId)
+        if (cached) {
+            setDestinationFolders(cached)
+            lookAheadFolders(cached)
+            return
+        }
         setLoadingDestinations(true)
         fetchFolderChildrenResult(folderId)
-            .then((folders) => setDestinationFolders(folders))
+            .then((folders) => {
+                childFoldersRef.current.set(folderId, folders)
+                setDestinationFolders(folders)
+                lookAheadFolders(folders)
+            })
             .catch(() => setDestinationFolders([]))
             .finally(() => setLoadingDestinations(false))
-    }, [fetchFolderChildrenResult])
+    }, [fetchFolderChildrenResult, lookAheadFolders])
 
     const handleCopyMoveBreadcrumbClick = useCallback((index: number) => {
         setCurrentPath(prev => {
@@ -267,23 +312,28 @@ export function useEngagementFileOps({
 
     const handleNavigateIntoFolder = useCallback(async (folder: DriveFile) => {
         if (!sessionRef.current?.access_token) return
-        setCheckingFolderId(folder.id)
+        const cached = childFoldersRef.current.get(folder.id)
+        if (!cached) setCheckingFolderId(folder.id)
         try {
-            const folders = await fetchFolderChildrenResult(folder.id)
+            const folders = cached ?? await fetchFolderChildrenResult(folder.id)
+            childFoldersRef.current.set(folder.id, folders)
             if (folders.length === 0) {
+                // Only when clicked before the look-ahead got to it.
                 addToast({ type: 'info', title: 'No subfolders', message: 'This folder has no subfolders' })
                 setEmptyFolderIds(prev => new Set(prev).add(folder.id))
                 return
             }
+            setSubfolderIds(prev => new Set(prev).add(folder.id))
             setSelectedDestinationId(folder.id)
             setCurrentPath(prev => [...prev, { id: folder.id, name: folder.name }])
             setDestinationFolders(folders)
+            lookAheadFolders(folders)
         } catch {
             addToast({ type: 'error', title: 'Error', message: 'Could not load folder' })
         } finally {
             setCheckingFolderId(null)
         }
-    }, [fetchFolderChildrenResult, addToast])
+    }, [fetchFolderChildrenResult, lookAheadFolders, addToast])
 
     const handleCopyMoveToFolder = useCallback(async (destinationFolderId: string, sourceFileOverride?: DriveFile, actionOverride?: 'copy' | 'move') => {
         const target = sourceFileOverride || copyMoveTarget
@@ -570,7 +620,9 @@ export function useEngagementFileOps({
         setCopyMoveAction(action)
         setCopyMoveKeepBoth(true)
         setEmptyFolderIds(new Set())
+        setSubfolderIds(new Set())
         setCheckingFolderId(null)
+        childFoldersRef.current = new Map()
 
         const rootId = currentFolderType === 'general' ? generalFolderId :
             currentFolderType === 'confidential' ? confidentialFolderId : stagingFolderId
@@ -605,11 +657,13 @@ export function useEngagementFileOps({
             .then((data) => {
                 const list = (data.files || []) as DriveFile[]
                 const folders = list.filter((f: DriveFile) => f.mimeType === 'application/vnd.google-apps.folder')
+                childFoldersRef.current.set(rootId, folders)
                 setDestinationFolders(folders)
+                lookAheadFolders(folders)
             })
             .catch(() => setDestinationFolders([]))
             .finally(() => setLoadingDestinations(false))
-    }, [generalFolderId, confidentialFolderId, stagingFolderId, currentFolderType, projectId])
+    }, [generalFolderId, confidentialFolderId, stagingFolderId, currentFolderType, projectId, lookAheadFolders])
 
     const openCrossEngagementModal = useCallback(async (doc: DriveFile) => {
         setCrossEngagementTarget(doc)
@@ -717,6 +771,7 @@ export function useEngagementFileOps({
         loadingDestinations,
         copyMoveSubmittingFolderId,
         emptyFolderIds,
+        subfolderIds,
         checkingFolderId,
         // Cross-engagement state
         crossEngagementModalOpen,

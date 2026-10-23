@@ -1483,6 +1483,7 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
         loadingDestinations,
         copyMoveSubmittingFolderId,
         emptyFolderIds,
+        subfolderIds,
         checkingFolderId,
         crossEngagementModalOpen, setCrossEngagementModalOpen,
         crossEngagementTarget, setCrossEngagementTarget,
@@ -3162,6 +3163,7 @@ const handleRefresh = async () => {
                             onOpenChange={(open) => { setCopyMoveModalOpen(open); if (!open) setCopyMoveTarget(null) }}
                             action={copyMoveAction}
                             targetName={copyMoveTarget?.name}
+                            targetMimeType={copyMoveTarget?.mimeType}
                             keepBoth={copyMoveKeepBoth}
                             onKeepBothChange={setCopyMoveKeepBoth}
                             path={currentPath}
@@ -3169,6 +3171,7 @@ const handleRefresh = async () => {
                             loading={loadingDestinations}
                             folders={destinationFolders}
                             emptyFolderIds={emptyFolderIds}
+                            subfolderIds={subfolderIds}
                             checkingFolderId={checkingFolderId}
                             submittingFolderId={copyMoveSubmittingFolderId}
                             onOpenFolder={handleNavigateIntoFolder}
@@ -3179,6 +3182,7 @@ const handleRefresh = async () => {
                             open={crossEngagementModalOpen}
                             onOpenChange={(open) => { setCrossEngagementModalOpen(open); if (!open) { setCrossEngagementTarget(null); setCrossEngagementFirmName(null) } }}
                             targetName={crossEngagementTarget?.name}
+                            targetMimeType={crossEngagementTarget?.mimeType}
                             firmName={crossEngagementFirmName}
                             loading={crossEngagementLoading}
                             engagements={crossEngagementEngagements}
@@ -3192,6 +3196,7 @@ const handleRefresh = async () => {
                             open={renameModalOpen}
                             onOpenChange={(open) => { setRenameModalOpen(open); if (!open) setRenameTarget(null) }}
                             targetName={renameTarget?.name}
+                            targetMimeType={renameTarget?.mimeType}
                             value={renameNewName}
                             onChange={setRenameNewName}
                             extension={renameExtension}

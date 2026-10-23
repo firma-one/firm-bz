@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent, within } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { CopyMoveDialog, CopyToEngagementDialog, RenameDialog } from './file-organize-dialogs'
 import { FilesMovePill } from './files-drop-zone'
 import type { DriveFile } from '@/lib/types'
@@ -10,14 +10,15 @@ describe('CopyMoveDialog', () => {
     const base = {
         open: true, onOpenChange: vi.fn(), action: 'move' as const, targetName: 'Plan.xlsx', keepBoth: true,
         onKeepBothChange: vi.fn(), path: [{ id: 'gen', name: 'General' }], onPathClick: vi.fn(), loading: false,
-        folders: [folder('f1', 'Reports'), folder('f2', 'Empty')], emptyFolderIds: new Set(['f2']), checkingFolderId: null,
+        folders: [folder('f1', 'Reports'), folder('f2', 'Empty'), folder('f3', 'Pending')], emptyFolderIds: new Set(['f2']), subfolderIds: new Set(['f1']), checkingFolderId: null,
         submittingFolderId: null, onOpenFolder: vi.fn(), onSubmit: vi.fn(), onCancel: vi.fn(),
     }
 
     it('a sentence-case title, the file in the context line, and no uppercase labels', () => {
         render(<CopyMoveDialog {...base} />)
         expect(screen.getByRole('dialog', { name: 'Move to folder' })).toBeTruthy()
-        expect(screen.getByText('Plan.xlsx')).toBeTruthy()
+        // The file as a chip, with its full name on hover.
+        expect(screen.getByTitle('Plan.xlsx').textContent).toBe('Plan.xlsx')
         expect(screen.getByText('If the name already exists')).toBeTruthy()
         expect(document.querySelector('.uppercase')).toBeNull()
     })
@@ -26,8 +27,7 @@ describe('CopyMoveDialog', () => {
         render(<CopyMoveDialog {...base} />)
         fireEvent.click(screen.getByRole('button', { name: 'Move here' }))
         expect(base.onSubmit).toHaveBeenCalledWith('gen')
-        const reports = screen.getByText('Reports').closest('div.group') as HTMLElement
-        fireEvent.click(within(reports).getByRole('button', { name: 'Move' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Move to Reports' }))
         expect(base.onSubmit).toHaveBeenCalledWith('f1')
         fireEvent.click(screen.getByTitle('Open Reports'))
         expect(base.onOpenFolder).toHaveBeenCalledWith(expect.objectContaining({ id: 'f1' }))
@@ -38,10 +38,19 @@ describe('CopyMoveDialog', () => {
         expect(screen.getByRole('button', { name: 'Keep both' }).getAttribute('aria-pressed')).toBe('true')
     })
 
+    it('only a folder known to have subfolders shows an arrow — none for an empty one or one still being checked', () => {
+        render(<CopyMoveDialog {...base} />)
+        const arrows = (name: string) => (screen.getByText(name).closest('button') as HTMLElement).querySelectorAll('svg.lucide-chevron-right').length
+        expect(arrows('Reports')).toBe(1)
+        expect(arrows('Empty')).toBe(0)
+        expect(arrows('Pending')).toBe(0)
+    })
+
     it('Copy reads Copy, and Cancel cancels', () => {
         render(<CopyMoveDialog {...base} action="copy" />)
         expect(screen.getByRole('dialog', { name: 'Copy to folder' })).toBeTruthy()
         expect(screen.getByRole('button', { name: 'Copy here' })).toBeTruthy()
+        expect(screen.getByRole('button', { name: 'Copy to Reports' })).toBeTruthy()
         fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
         expect(base.onCancel).toHaveBeenCalled()
     })
