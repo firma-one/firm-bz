@@ -107,7 +107,10 @@ export function EngagementHeader({
                     <span className="flex shrink-0 items-center text-fg-muted [&_svg]:h-7 [&_svg]:w-7" aria-hidden>
                         <Briefcase />
                     </span>
-                    <h1 className="min-w-0 text-h1 text-fg">{name || "Engagement"}</h1>
+                    {/* One line, cut short when a pane narrows the page: wrapping to two lines shifted everything below. */}
+                    <Hint label={name || "Engagement"} side="bottom">
+                        <h1 className="min-w-0 truncate text-h1 text-fg">{name || "Engagement"}</h1>
+                    </Hint>
                 </div>
                 {personaDisplayName && (
                     <Hint label="Your role on this engagement">

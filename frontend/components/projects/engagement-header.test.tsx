@@ -10,6 +10,7 @@ vi.mock('@/components/ui/tooltip', () => ({
     Tooltip: ({ children }: any) => <>{children}</>,
     TooltipTrigger: ({ children }: any) => <>{children}</>,
     TooltipContent: () => null,
+    Hint: ({ children }: any) => <>{children}</>,
 }))
 
 import { EngagementHeader } from './engagement-header'
