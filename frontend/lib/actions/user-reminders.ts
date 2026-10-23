@@ -23,6 +23,13 @@ export type { ReminderItem, ReminderWithContext } from '@/lib/reminders/reminder
 
 // ─── Date field clearer map ──────────────────────────────────────────────────
 
+/**
+ * Done takes a reminder out of your own list only (2026-10-23). It used to clear the date the
+ * reminder watches as well (DATE_FIELD_CLEARERS below), so marking "Engagement due" done erased the
+ * engagement's due date for everyone. Kept behind this switch until the change is signed off.
+ */
+const DONE_KEEPS_ENTITY_DATES = true
+
 const DATE_FIELD_CLEARERS: Record<string, (entityValue: string) => Promise<void>> = {
     // KEEP: client follow-up dates are paused, not retired — hidden from the UI on 2026-10-17 and to be revived. Don't remove this as unused.
     'platform.clients.followUpDate': async (id) => {
@@ -108,7 +115,7 @@ export async function checkDailyReminderDigest(): Promise<{ notify: boolean; cou
     }
 }
 
-/** Mark a reminder done: remove the node, clear the dateKey column, cancel Inngest. */
+/** Mark a reminder done: remove the node and cancel Inngest. The date it watches stays (DONE_KEEPS_ENTITY_DATES). */
 export async function markReminderDone(reminderId: string): Promise<void> {
     const supabase = await createClient()
     const { data: { user }, error } = await supabase.auth.getUser()
@@ -119,8 +126,8 @@ export async function markReminderDone(reminderId: string): Promise<void> {
         const item = items.find((r) => r.id === reminderId)
         if (!item) return
 
-        // Clear the date column in the DB
-        if (item.dateKey && DATE_FIELD_CLEARERS[item.dateKey]) {
+        // Clear the date column in the DB (off: see DONE_KEEPS_ENTITY_DATES)
+        if (!DONE_KEEPS_ENTITY_DATES && item.dateKey && DATE_FIELD_CLEARERS[item.dateKey]) {
             await DATE_FIELD_CLEARERS[item.dateKey](item.entityValue).catch(() => {})
         }
 

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { ReminderWithContext } from '@/lib/actions/user-reminders'
-import { groupReminders, notificationToItem, reminderEntity, sortNotifications, type ApiNotification } from './inbox-items'
+import { groupReminders, notificationToItem, readableDates, reminderEntity, sortNotifications, type ApiNotification } from './inbox-items'
 
 function reminder(over: Partial<ReminderWithContext>): ReminderWithContext {
     return {
@@ -66,5 +66,11 @@ describe('what an item is about', () => {
         expect(notificationToItem(n('ENGAGEMENT_INVITE_ACCEPTED')).entity).toBe('member')
         expect(notificationToItem(n('DELIVERABLE_OVERDUE')).entity).toBe('deliverable')
         expect(notificationToItem(n('BROADCAST')).entity).toBeNull()
+    })
+
+    it('writes the dates in a notification as Nov 30, 2026', () => {
+        expect(readableDates('Playbook.pdf due on 2026-11-30')).toBe('Playbook.pdf due on Nov 30, 2026')
+        expect(readableDates('Kickoff 2027-01-05 and 2027-01-31')).toBe('Kickoff Jan 05, 2027 and Jan 31, 2027')
+        expect(readableDates('No dates here')).toBe('No dates here')
     })
 })

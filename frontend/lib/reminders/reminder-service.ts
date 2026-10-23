@@ -106,6 +106,8 @@ export async function computeDueReminders(
                 firmSlug: ctx?.firmSlug ?? null,
                 firmId: ctx?.firmId ?? null,
                 ctaUrl,
+                clientName: ctx?.clientName ?? null,
+                engagementName: ctx?.engagementName ?? null,
                 delta,
                 label,
                 labelStyle,

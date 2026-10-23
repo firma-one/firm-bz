@@ -17,8 +17,9 @@ describe('platform.documents resolver', () => {
         documentFindUnique.mockResolvedValue({
             fileName: 'Q3 Board Pack.pdf',
             engagement: {
+                name: 'Year-end audit',
                 slug: 'audit',
-                client: { slug: 'acme', firm: { id: 'firm-1', slug: 'acme-advisory', group: { slug: 'grp' } } },
+                client: { name: 'Acme', slug: 'acme', firm: { id: 'firm-1', slug: 'acme-advisory', group: { slug: 'grp' } } },
             },
         })
     })
@@ -34,5 +35,7 @@ describe('platform.documents resolver', () => {
 
         expect(ctx).toMatchObject({ name: 'Q3 Board Pack.pdf', firmId: 'firm-1', firmSlug: 'acme-advisory' })
         expect(ctx?.ctaUrl).toBeTruthy()
+        // The Inbox's place chips: where the document sits.
+        expect(ctx).toMatchObject({ clientName: 'Acme', engagementName: 'Year-end audit' })
     })
 })

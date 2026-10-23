@@ -7,8 +7,8 @@ const noop = async () => {}
 
 /**
  * The demo user's reminders and notifications, built when the Inbox loads (in the browser, so due
- * dates count from the viewer's today). Done, Dismiss, Hide and Mark all read change only the list
- * on screen; nothing is sent anywhere.
+ * dates count from the viewer's today). Done and Mark all read change only the list on screen;
+ * nothing is sent anywhere.
  */
 const DEMO_SOURCE: InboxSource = {
     load: async () => {
@@ -18,7 +18,6 @@ const DEMO_SOURCE: InboxSource = {
     markRead: noop,
     dismiss: noop,
     markDone: noop,
-    hide: noop,
     markAllRead: noop,
 }
 

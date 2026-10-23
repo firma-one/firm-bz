@@ -55,6 +55,9 @@ export type NeedsYouItem = {
     firmId: string | null
     title: string
     context: string
+    /** Where it sits, for the Inbox's place chips; `context` is the same as one line for Home. */
+    clientName?: string | null
+    engagementName?: string | null
     href: string
     actionLabel: string
     at: string | null
@@ -140,6 +143,10 @@ export async function getMyWork(params: {
         const contextOf = (id: string) => {
             const e = byId.get(id)
             return e ? `${e.clientName} · ${e.name}` : ''
+        }
+        const placeOf = (id: string) => {
+            const e = byId.get(id)
+            return { clientName: e?.clientName ?? null, engagementName: e?.name ?? null }
         }
         const firmOf = (id: string) => byId.get(id)?.firmId ?? null
         const sharesBoard = (id: string) => pathOf(rows.find((r) => r.id === id)!, { tab: 'shares', subpath: 'board' })
@@ -239,6 +246,7 @@ export async function getMyWork(params: {
                 firmId: firmOf(d.engagementId),
                 title: d.fileName,
                 context: contextOf(d.engagementId),
+                ...placeOf(d.engagementId),
                 href: sharesBoard(d.engagementId),
                 actionLabel: 'Review',
                 at: d.updatedAt.toISOString(),
@@ -249,6 +257,7 @@ export async function getMyWork(params: {
                 firmId: firmOf(d.engagementId),
                 title: d.fileName,
                 context: contextOf(d.engagementId),
+                ...placeOf(d.engagementId),
                 href: sharesBoard(d.engagementId),
                 actionLabel: 'Approve upload',
                 at: d.createdAt.toISOString(),
@@ -262,6 +271,7 @@ export async function getMyWork(params: {
                     firmId: firmOf(c.engagementId),
                     title: c.fileName,
                     context: contextOf(c.engagementId),
+                    ...placeOf(c.engagementId),
                     href: engagementDocCommentPath(firm.groupSlug, firm.slug, e.client.slug, e.slug, c.projectDocumentId, c.id),
                     actionLabel: 'Reply',
                     at: c.createdAt.toISOString(),
@@ -279,6 +289,7 @@ export async function getMyWork(params: {
                     firmId: firmOf(d.engagementId),
                     title: d.fileName,
                     context: contextOf(d.engagementId),
+                    ...placeOf(d.engagementId),
                     href: sharesBoard(d.engagementId),
                     actionLabel: 'See changes',
                     at: d.eventAt.toISOString(),

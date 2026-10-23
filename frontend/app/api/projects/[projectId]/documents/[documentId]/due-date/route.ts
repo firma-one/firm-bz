@@ -8,7 +8,8 @@ import { sendEmail } from '@/lib/email'
 import { renderReminderEmail } from '@/lib/email-templates/reminder'
 import { safeInngestSend } from '@/lib/inngest/client'
 import { parseSettingsFromDb } from '@/lib/sharing-settings'
-import { engagementPath } from '@/lib/navigation/firm-paths'
+import { formatFullDate } from '@/lib/utils'
+import { documentLink } from '@/lib/notification-links'
 
 export async function PATCH(
   request: NextRequest,
@@ -74,7 +75,23 @@ export async function PATCH(
     }
 
     if (dueDate) {
-      // In-app notifications for every member but whoever set it: no one is told of their own change
+      // Where the notification and the deliverable's reminders link to: its card on the Board, or
+      // the document in Files.
+      const eng = await prisma.engagement.findUnique({
+        where: { id: projectId },
+        select: { slug: true, client: { select: { slug: true, firm: { select: { slug: true, group: { select: { slug: true } } } } } } },
+      })
+      const groupSlug = eng?.client?.firm?.group?.slug ?? ''
+      const firmSlug = eng?.client?.firm?.slug ?? ''
+      const clientSlug = eng?.client?.slug ?? ''
+      const engSlug = eng?.slug ?? ''
+      const docUrl = groupSlug && firmSlug && clientSlug && engSlug
+        ? documentLink({ groupSlug, firmSlug, clientSlug, engagementSlug: engSlug }, { id: doc.id, deliverable: isDeliverableFolder })
+        : null
+
+      // In-app notifications for every member but whoever set it: no one is told of their own change.
+      // The title says which it is, a deliverable or a document.
+      const kind = isDeliverableFolder ? 'Deliverable' : 'Document'
       const rows = memberUserIds.filter((userId) => userId !== user.id).map((userId) => ({
         firmId: doc.firmId,
         clientId: doc.clientId ?? ctx.clientId,
@@ -82,10 +99,10 @@ export async function PATCH(
         documentId: doc.id,
         userId,
         type: 'DOCUMENT_DUE_DATE_SET',
-        title: 'Document due date updated',
-        body: `${doc.fileName} due on ${dueDate.toISOString().slice(0, 10)}`,
-        ctaUrl: null,
-        metadata: { dueDate: dueDate.toISOString() },
+        title: `${kind} due date updated`,
+        body: `${doc.fileName} is due on ${formatFullDate(dueDate)}`,
+        ctaUrl: docUrl,
+        metadata: { dueDate: dueDate.toISOString(), kind: kind.toLowerCase() },
         channels: { inApp: true, email: false },
         dedupeKey: `doc:${doc.id}:due:${dueDate.toISOString().slice(0, 10)}`,
       }))
@@ -94,18 +111,8 @@ export async function PATCH(
       }
 
       if (isDeliverableFolder) {
-        // Resolve slugs so the reminder CTA deep-links to the Board card
-        const eng = await prisma.engagement.findUnique({
-          where: { id: projectId },
-          select: { slug: true, client: { select: { slug: true, firm: { select: { slug: true, group: { select: { slug: true } } } } } } },
-        })
-        const groupSlug = eng?.client?.firm?.group?.slug ?? ''
-        const firmSlug = eng?.client?.firm?.slug ?? ''
-        const clientSlug = eng?.client?.slug ?? ''
-        const engSlug = eng?.slug ?? ''
-        const boardUrl = groupSlug && firmSlug && clientSlug && engSlug
-          ? engagementPath(groupSlug, firmSlug, clientSlug, engSlug, { tab: 'shares', subpath: 'board', hash: `doc-file:${doc.id}` })
-          : null
+        // The reminder CTA deep-links to the Board card
+        const boardUrl = docUrl
 
         // Schedule 24h + 1h reminders via Inngest for deliverable folders
         await safeInngestSend('deliverable.due_date.set', {
@@ -129,7 +136,7 @@ export async function PATCH(
               const email = data?.user?.email
               if (!email) return
               const { subject, html } = renderReminderEmail({
-                entityName: `${doc.fileName} is due on ${dueDate.toISOString().slice(0, 10)}.`,
+                entityName: `${doc.fileName} is due on ${formatFullDate(dueDate)}.`,
                 action: 'Document due soon',
                 kind: 'created',
               })

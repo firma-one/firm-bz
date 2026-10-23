@@ -54,7 +54,9 @@ describe('/api/notifications?firms=all', () => {
         const json = await res.json()
 
         const list = prisma.notification.findMany.mock.calls.find((c: any[]) => c[0].take === 50)![0]
-        expect(list.where).toEqual(ALL_FIRMS_WHERE)
+        // A retracted update (an earlier "due on …" whose date changed) is neither listed nor counted.
+        expect(list.where).toEqual({ ...ALL_FIRMS_WHERE, dismissedAt: null })
+        expect(prisma.notification.count).toHaveBeenCalledWith({ where: { ...ALL_FIRMS_WHERE, dismissedAt: null, readAt: null } })
         expect(list.select.firmId).toBe(true)
         expect(json.notifications).toEqual([{ id: 'n1', firmId: 'f2', createdAt: '2026-10-15T10:00:00.000Z', readAt: null }])
         expect(json.canBroadcast).toBe(false)
@@ -74,7 +76,7 @@ describe('/api/notifications?firms=all', () => {
         prisma.firmMember.findFirst.mockResolvedValue(null)
         await GET(req('/api/notifications?firmId=f1'))
         const list = prisma.notification.findMany.mock.calls.find((c: any[]) => c[0].take === 30)![0]
-        expect(list.where).toEqual({ userId: 'u1', OR: [{ firmId: 'f1' }, { scope: 'PLATFORM' }] })
+        expect(list.where).toEqual({ userId: 'u1', OR: [{ firmId: 'f1' }, { scope: 'PLATFORM' }], dismissedAt: null })
         expect(getHomeFirms).not.toHaveBeenCalled()
     })
 })
