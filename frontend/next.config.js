@@ -91,6 +91,9 @@ const nextConfig = {
 
   // Experimental features for faster compilation
   experimental: {
+    // Lower webpack's peak memory in production builds, at a small cost in build time. Vercel's build
+    // container has run out of memory more than once (#123 at type checking, #129 while compiling).
+    webpackMemoryOptimizations: true,
     // Optimize package imports - reduces compilation time
     optimizePackageImports: [
       'lucide-react',
@@ -235,6 +238,12 @@ const sentryWebpackPluginOptions = {
 
   // Creates source maps
   hideSourceMaps: true,
+
+  // Source maps only when they can be uploaded. Sentry v10 otherwise turns on full source maps for
+  // every server bundle and hidden ones for every client bundle in a production build; without
+  // SENTRY_AUTH_TOKEN (unset on Vercel and locally) they are never uploaded, only paid for in memory.
+  // The PR #129 preview build ran out of memory (SIGKILL) while compiling with them.
+  sourcemaps: { disable: !process.env.SENTRY_AUTH_TOKEN },
 };
 
 // Make sure adding Sentry options is the last code to run before exporting
