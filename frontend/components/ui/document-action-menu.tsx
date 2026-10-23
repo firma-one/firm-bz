@@ -1540,8 +1540,8 @@ export function DocumentActionMenu({
         icon={<FolderMinus className="h-3.5 w-3.5" />}
         iconVariant="red"
         title="Demote Deliverable to Folder"
-        subtitle="This action will revoke all external access."
-        description={<>This will turn <span className="font-semibold text-fg">{document.name}</span> back into a plain folder, take it off the Board, and revoke all sharing access for external collaborators and viewers.</>}
+        subtitle={document.name}
+        description="It goes back to being a plain folder and comes off the Board. External collaborators and viewers lose their access to it."
         confirmLabel="Demote"
         confirmVariant="red"
         onCancel={() => setShowUntagConfirm(false)}

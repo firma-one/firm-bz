@@ -434,8 +434,8 @@ export default function IntegrationsPage() {
         icon={<RotateCw className="h-3.5 w-3.5" />}
         iconVariant="primary"
         title="Resume Provisioning"
-        subtitle="Inngest jobs will be re-enqueued immediately."
-        description={`This will re-enqueue Inngest jobs for ${selectedFirms.size} firm${selectedFirms.size === 1 ? '' : 's'}. The provisioning process will start immediately.`}
+        subtitle={`${selectedFirms.size} firm${selectedFirms.size === 1 ? '' : 's'} selected`}
+        description="Their Inngest jobs will be re-enqueued, and provisioning starts immediately."
         confirmLabel="Resume Provisioning"
         confirmVariant="primary"
         onCancel={() => setShowConfirm(false)}

@@ -342,7 +342,7 @@ export function EngagementSettingsForm({
                 iconVariant="red"
                 title="Delete engagement"
                 subtitle="This action cannot be undone."
-                description="Permanently delete this engagement? All members will be removed and Drive access revoked. The folder remains in Google Drive for the firm admin. This cannot be undone."
+                description="All members will be removed and their Drive access revoked. The folder stays in the firm's storage for the firm admin."
                 confirmLabel="Delete engagement"
                 confirmVariant="red"
                 onCancel={() => setIsDeleteDialogOpen(false)}

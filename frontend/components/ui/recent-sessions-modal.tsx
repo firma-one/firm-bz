@@ -224,7 +224,7 @@ export function RecentSessionsModal({ isOpen, onClose, onLoadSession }: RecentSe
         iconVariant="red"
         title="Clear all chat sessions"
         subtitle="Stored sessions will be removed from this browser."
-        description="This removes every stored session from this browser. This cannot be undone."
+        description="This cannot be undone."
         confirmLabel="Clear all"
         confirmVariant="red"
         onCancel={() => setClearAllConfirmOpen(false)}

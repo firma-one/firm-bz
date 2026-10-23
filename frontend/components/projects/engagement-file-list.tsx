@@ -314,10 +314,11 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
     /** Provider's own name for the trash location. */
     // OneDrive's "Recycle bin" is Microsoft's own name for it; Google's is the trash.
     const storageBinName = isOneDriveClient ? 'OneDrive recycle bin' : 'Google Drive trash'
-    // How long the provider keeps trashed items: Google 30 days; Microsoft 30 on personal OneDrive, up to 93 on work accounts.
+    // How long the provider keeps trashed items, as a clause after storageBinName in the trash confirm:
+    // Google 30 days; Microsoft 30 on personal OneDrive, up to 93 on work accounts.
     const storageRetention = isOneDriveClient
-        ? 'It keeps items for 30 days (up to 93 on work accounts).'
-        : 'Items there are permanently deleted after 30 days.'
+        ? 'which keeps items for 30 days (up to 93 on work accounts)'
+        : 'where items are permanently deleted after 30 days'
     const { session } = useAuth()
     const sessionRef = useRef(session)
     const onFileCountChangeRef = useRef(onFileCountChange)
@@ -3624,8 +3625,8 @@ const handleRefresh = async () => {
                     icon={<Trash2 className="h-3.5 w-3.5" />}
                     iconVariant="red"
                     title="Move to trash"
-                    subtitle={`This file will be moved to ${storageBinName}.`}
-                    description={<><span className="font-semibold text-fg">{trashConfirmTarget?.name}</span>{' '}will be moved to your {storageBinName}. {storageRetention}</>}
+                    subtitle={trashConfirmTarget?.name}
+                    description={<>It will be moved to your {storageBinName}, {storageRetention}.</>}
                     confirmLabel="Move to trash"
                     confirmVariant="red"
                     onCancel={() => setTrashConfirmTarget(null)}
@@ -3640,8 +3641,8 @@ const handleRefresh = async () => {
                     icon={<Trash2 className="h-3.5 w-3.5" />}
                     iconVariant="red"
                     title="Move to trash"
-                    subtitle={`${pendingBulkTrashIds.size} item${pendingBulkTrashIds.size > 1 ? 's' : ''} will be moved to ${storageBinName}.`}
-                    description={<>{pendingBulkTrashIds.size} item{pendingBulkTrashIds.size > 1 ? 's' : ''} will be moved to your {storageBinName}. {storageRetention}</>}
+                    subtitle={`${pendingBulkTrashIds.size} item${pendingBulkTrashIds.size > 1 ? 's' : ''} selected`}
+                    description={<>{pendingBulkTrashIds.size > 1 ? 'They' : 'It'} will be moved to your {storageBinName}, {storageRetention}.</>}
                     confirmLabel="Move to trash"
                     confirmVariant="red"
                     onCancel={() => { setBulkTrashConfirmOpen(false); setPendingBulkTrashIds(new Set()) }}
@@ -3655,8 +3656,8 @@ const handleRefresh = async () => {
                     icon={<FileText className="h-3.5 w-3.5" />}
                     iconVariant="primary"
                     title="Return to Draft"
-                    subtitle="Unlock this document for further edits."
-                    description={<><span className="font-semibold text-fg">{unlockConfirmFile?.name}</span>{' '}will be unlocked. All collaborators will regain their prior access level based on their role and sharing settings.</>}
+                    subtitle={unlockConfirmFile?.name}
+                    description="It will be unlocked for further edits. All collaborators will regain their prior access level based on their role and sharing settings."
                     confirmLabel="Return to Draft"
                     confirmVariant="primary"
                     onCancel={() => setUnlockConfirmFile(null)}
