@@ -610,7 +610,7 @@ export async function computeEngagementInsights(
     }
 
     /**
-     * Reactions that leave a thread OPEN. Mirrors the picker in document-doc-comments-pane.tsx,
+     * Reactions that leave a thread OPEN. Mirrors the picker (components/comments/reactions.tsx),
      * minus the three that close a thread (`done`, `celebrate`, `thumbs_up`) — surfacing those as
      * needing attention would flag exactly the conversations someone just marked resolved.
      *

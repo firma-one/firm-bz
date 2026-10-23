@@ -2,11 +2,13 @@
 
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { formatDistanceToNowStrict } from 'date-fns'
-import { AtSign, Hash, Send } from 'lucide-react'
+import { AtSign, Hash, Send, Smile } from 'lucide-react'
 import { PersonAvatar } from '@/components/ui/property-cells'
 import { DocumentIcon } from '@/components/ui/document-icon'
 import { Hint } from '@/components/ui/tooltip'
 import { CommentText } from '@/components/comments/comment-text'
+import { REACTIONS, ReactionMark, type ReactionKey } from '@/components/comments/reactions'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
 import { caretOffset } from '@/lib/ui/caret-offset'
 import {
@@ -22,7 +24,8 @@ import {
 export type DemoTaggableDocument = { id: string; docId: string; name: string; mimeType: string }
 
 type Person = { name: string; role: string }
-export type DemoComment = { id: string; author: string; at: string; content: string }
+/** `reactions`: how many teammates reacted with each, before the visitor. */
+export type DemoComment = { id: string; author: string; at: string; content: string; reactions?: Partial<Record<ReactionKey, number>> }
 type Comment = DemoComment
 
 const ME = 'Demo User'
@@ -40,13 +43,13 @@ function sampleThread(docs: DemoTaggableDocument[], now: Date): Comment[] {
     const [first, second] = docs
     return [
         {
-            id: 's1', author: 'Sam Rivera', at: ago(30),
+            id: 's1', author: 'Sam Rivera', at: ago(30), reactions: { looking: 1 },
             content: first
                 ? `@Alex Jordan the figures are in #${first.docId}. Can you check them before this goes to review?`
                 : '@Alex Jordan can you check the figures before this goes to review?',
         },
         {
-            id: 's2', author: 'Alex Jordan', at: ago(6),
+            id: 's2', author: 'Alex Jordan', at: ago(6), reactions: { thumbs_up: 2, done: 1 },
             content: second
                 ? `Checked, they hold up. #${second.docId} still needs the latest numbers; I'll move this to review once it does.`
                 : 'Checked, they hold up. Moving this to review.',
@@ -63,6 +66,13 @@ const COMPOSER_TEXT = 'max-h-48 w-full overflow-y-auto whitespace-pre-wrap break
  */
 export function DemoDeliverableComments({ documents, thread, onPost }: { documents: DemoTaggableDocument[]; thread?: DemoComment[]; onPost?: (comment: DemoComment) => void }) {
     const [comments, setComments] = useState<Comment[]>(() => thread ?? sampleThread(documents, new Date()))
+    /** The visitor's own reactions, by comment: shown as theirs, on top of the sample counts. */
+    const [mine, setMine] = useState<Record<string, ReactionKey[]>>({})
+    const react = (commentId: string, key: ReactionKey) =>
+        setMine((prev) => {
+            const keys = prev[commentId] ?? []
+            return { ...prev, [commentId]: keys.includes(key) ? keys.filter((k) => k !== key) : [...keys, key] }
+        })
     const [text, setText] = useState('')
     const [picked, setPicked] = useState<string[]>([])
     const [mention, setMention] = useState<{ start: number; query: string; left: number } | null>(null)
@@ -190,8 +200,12 @@ export function DemoDeliverableComments({ documents, thread, onPost }: { documen
     return (
         <div className="flex min-h-0 flex-1 flex-col gap-3 p-4">
             <ol className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
-                {comments.map((c) => (
-                    <li key={c.id} className="grid grid-cols-[24px_minmax(0,1fr)] gap-x-2.5">
+                {comments.map((c) => {
+                    const myKeys = mine[c.id] ?? []
+                    const count = (key: ReactionKey) => (c.reactions?.[key] ?? 0) + (myKeys.includes(key) ? 1 : 0)
+                    const reacted = REACTIONS.filter((r) => count(r.key) > 0)
+                    return (
+                    <li key={c.id} className="group relative grid grid-cols-[24px_minmax(0,1fr)] gap-x-2.5">
                         <PersonAvatar person={{ name: c.author, avatarUrl: null }} size={24} />
                         <div className="min-w-0">
                             <div className="flex items-center gap-1.5 text-small">
@@ -199,9 +213,53 @@ export function DemoDeliverableComments({ documents, thread, onPost }: { documen
                                 <span className="text-fg-subtle" suppressHydrationWarning>{Date.now() - Date.parse(c.at) < 60_000 ? 'just now' : formatDistanceToNowStrict(new Date(c.at), { addSuffix: true })}</span>
                             </div>
                             <p className="mt-0.5 whitespace-pre-wrap break-words text-ui leading-relaxed text-fg">{render(c.content)}</p>
+                            {/* Reactions, as the app draws them (components/comments/reactions.tsx) */}
+                            {reacted.length > 0 && (
+                                <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                                    {reacted.map((r) => (
+                                        <Hint key={r.key} label={r.label}>
+                                            <button
+                                                type="button"
+                                                onClick={() => react(c.id, r.key)}
+                                                className={cn('inline-flex h-6 items-center gap-1 rounded-full border px-2 text-caption tabular-nums transition-colors', myKeys.includes(r.key) ? 'border-action/30 bg-action/10 text-action' : 'border-line bg-surface text-fg-muted hover:bg-surface-hover')}
+                                            >
+                                                <ReactionMark reaction={r} size="pill" />{count(r.key)}
+                                            </button>
+                                        </Hint>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                        <div className="absolute right-0 top-0 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+                            <DropdownMenu>
+                                <Hint label="React">
+                                    <DropdownMenuTrigger asChild>
+                                        <button type="button" aria-label="Add reaction" className="flex h-6 w-6 items-center justify-center rounded-[4px] border border-line bg-surface text-fg-subtle shadow-sm hover:bg-surface-hover hover:text-fg-muted">
+                                            <Smile className="h-3.5 w-3.5" />
+                                        </button>
+                                    </DropdownMenuTrigger>
+                                </Hint>
+                                <DropdownMenuContent align="end" className="w-[156px] p-1.5">
+                                    <div className="grid grid-cols-3 gap-1">
+                                        {REACTIONS.map((r) => (
+                                            <Hint key={r.key} label={r.label}>
+                                                <button
+                                                    type="button"
+                                                    aria-label={r.label}
+                                                    onClick={() => react(c.id, r.key)}
+                                                    className={cn('flex h-9 w-9 items-center justify-center rounded-control hover:bg-surface-hover', myKeys.includes(r.key) && 'bg-action/10 ring-1 ring-inset ring-action/30')}
+                                                >
+                                                    <ReactionMark reaction={r} size="picker" />
+                                                </button>
+                                            </Hint>
+                                        ))}
+                                    </div>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
                         </div>
                     </li>
-                ))}
+                    )
+                })}
                 <div ref={endRef} />
             </ol>
 

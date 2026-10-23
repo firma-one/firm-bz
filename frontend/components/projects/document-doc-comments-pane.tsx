@@ -26,6 +26,7 @@ import { FilterMenuLabel, FilterMenuRow, FilterPill, summarizePicks } from '@/co
 import { PersonAvatar } from '@/components/ui/property-cells'
 import { ENGAGEMENT_ROLE_LABEL, findMentionQuery, findTagQuery, formatDisplayName, insertMention, insertTag, mentionedNames, splitDocTags, splitMentions } from '@/lib/comments/mentions'
 import { CommentText } from '@/components/comments/comment-text'
+import { REACTIONS, ReactionMark, type ReactionKey } from '@/components/comments/reactions'
 import { DocumentIcon } from '@/components/ui/document-icon'
 import { caretOffset } from '@/lib/ui/caret-offset'
 
@@ -76,19 +77,6 @@ type CommentMessage = {
 
 type Member = { userId: string; email: string; name: string; role: string; avatarUrl?: string | null; isAgent?: boolean }
 
-type ReactionKey = 'urgent' | 'looking' | 'done' | 'thumbs_up' | 'yes' | 'no' | 'ok' | 'plus_one' | 'celebrate'
-const REACTIONS: { key: ReactionKey; label: string; emoji: string }[] = [
-  { key: 'urgent', label: 'Urgent', emoji: '⚠️' },
-  { key: 'looking', label: 'Looking', emoji: '👀' },
-  { key: 'done', label: 'Done', emoji: '✅' },
-  // Slack-style quick signals
-  { key: 'yes', label: 'Yes', emoji: '🇾' },
-  { key: 'no', label: 'No', emoji: '🇳' },
-  { key: 'ok', label: 'OK', emoji: '🆗' },
-  { key: 'plus_one', label: '+1', emoji: '➕' },
-  { key: 'thumbs_up', label: 'Thumbs up', emoji: '👍' },
-  { key: 'celebrate', label: 'Celebrate', emoji: '🎉' },
-]
 
 /** Filters and sorting appear once a thread is longer than this, or when a filter is on. */
 const TOOLBAR_AFTER = 3
@@ -767,7 +755,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
           <FilterMenuLabel>Has reaction</FilterMenuLabel>
           {REACTIONS.map((r) => (
             <FilterMenuRow key={r.key} multi selected={statusKeysFilter.includes(r.key)} onSelect={() => setStatusKeysFilter((l) => (l.includes(r.key) ? l.filter((x) => x !== r.key) : [...l, r.key]))}>
-              <span className="mr-1">{r.emoji}</span>{r.label}
+              <span className="mr-1.5 inline-flex w-6 justify-center"><ReactionMark reaction={r} size="pill" /></span>{r.label}
             </FilterMenuRow>
           ))}
         </DropdownMenuContent>
@@ -1123,7 +1111,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
                                     onClick={() => void toggleReaction(msg.id, r.key, reactedByMe ? 'remove' : 'add')}
                                     className={cn('inline-flex h-6 items-center gap-1 rounded-full border px-2 text-caption tabular-nums transition-colors', reactedByMe ? 'border-action/30 bg-action/10 text-action' : 'border-line bg-surface text-fg-muted hover:bg-surface-hover')}
                                   >
-                                    <span className="leading-none">{r.emoji}</span>{users.length}
+                                    <ReactionMark reaction={r} size="pill" />{users.length}
                                   </button>
                                 </TooltipTrigger>
                                 <TooltipContent side="top" className="z-[9999] max-w-[240px] border border-line bg-surface p-2 text-caption text-fg-muted shadow-popover">
@@ -1172,9 +1160,10 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
                                       <button
                                         type="button"
                                         onClick={() => void toggleReaction(msg.id, r.key, reactedByMe ? 'remove' : 'add')}
-                                        className={cn('flex h-9 w-9 items-center justify-center rounded-control text-lg leading-none hover:bg-surface-hover', reactedByMe && 'bg-action/10 ring-1 ring-inset ring-action/30')}
+                                        aria-label={r.label}
+                                        className={cn('flex h-9 w-9 items-center justify-center rounded-control hover:bg-surface-hover', reactedByMe && 'bg-action/10 ring-1 ring-inset ring-action/30')}
                                       >
-                                        {r.emoji}
+                                        <ReactionMark reaction={r} size="picker" />
                                       </button>
                                     </Hint>
                                   )
