@@ -120,7 +120,9 @@ export function ClientProjectView({ clients, groupSlug, firmSlug, firmName, firm
     return (
         <div className="flex flex-col h-full">
 
-            <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+            {/* Here and on the scroller below: room for the engagement cards' ring and shadow (4px at the
+                sides, 8px below), which a clipping box would cut */}
+            <div className="-mx-1 -mb-2 flex min-h-0 flex-1 flex-col overflow-hidden px-1 pb-2">
                 {selectedClient ? (
                     <>
                         <ClientHeader client={selectedClient} firmSlug={firmSlug} canManage={canManageClient} />
@@ -186,7 +188,7 @@ export function ClientProjectView({ clients, groupSlug, firmSlug, firmName, firm
                                 )}
                             </div>
 
-                            <div className="flex-1 overflow-y-auto custom-scrollbar">
+                            <div className="-mx-1 -mb-2 flex-1 overflow-y-auto px-1 pb-2 custom-scrollbar">
                                 <TabsContent value="projects" className="m-0">
                                     <ProjectList
                                         projects={selectedClient.engagements}

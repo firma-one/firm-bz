@@ -156,7 +156,9 @@ export function GroupPicker() {
 
     return (
         <TooltipProvider>
-        <div className="flex flex-col h-full overflow-y-auto">
+        {/* A scroll box clips at every edge, so it reaches into the shell's padding (4px at the sides,
+            8px below) and pads back: room for the cards' ring and shadow, with nothing moved. */}
+        <div className="-mx-1 -mb-2 flex h-full flex-col overflow-y-auto px-1 pb-2">
 
             <PageHeading
                 icon={<LayoutGrid />}
