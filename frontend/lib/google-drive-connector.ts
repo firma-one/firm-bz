@@ -15,6 +15,10 @@ import { getGoogleDriveOAuthServerCredentials } from '@/lib/config'
 import { SUGGESTED_WORKSPACE_FOLDER_NAME } from './suggested-workspace-folder-name'
 import { generateWorkspaceFolderName, FIRMA_PARENT_FOLDER_NAME } from '@/lib/generate-unique-workspace-folder-name'
 import { logger } from '@/lib/logger'
+import { CONNECTOR_CACHE_TTL_MS, createShortLivedCache, tokenCacheExpiry } from '@/lib/connectors/short-lived-cache'
+
+/** Access tokens by connection id, so a run of Drive calls (a secure open, a list) reads the row once. */
+const accessTokenCache = createShortLivedCache<string>(CONNECTOR_CACHE_TTL_MS)
 
 /** Max chars of Drive API error body included in structured migrate logs. */
 const DRIVE_MIGRATE_LOG_BODY_MAX_CHARS = 8192
@@ -355,6 +359,7 @@ export class GoogleDriveConnector {
   }
 
   async disconnectConnection(connectionId: string): Promise<void> {
+    accessTokenCache.delete(connectionId)
     // Get connector to revoke tokens
     const connector = await (prisma as any).connector.findUnique({
       where: { id: connectionId }
@@ -2132,6 +2137,7 @@ export class GoogleDriveConnector {
       data,
     })
 
+    accessTokenCache.set(connectionId, tokens.access_token, tokenCacheExpiry(newExpiry))
     return tokens.access_token
   }
 
@@ -2705,6 +2711,8 @@ export class GoogleDriveConnector {
    * Returns decrypted plaintext token for API calls
    */
   public async getAccessToken(connectionId: string): Promise<string | null> {
+    const cached = accessTokenCache.get(connectionId)
+    if (cached) return cached
     try {
       const connector = await prisma.connector.findUnique({ where: { id: connectionId } })
       if (!connector) return null
@@ -2734,6 +2742,7 @@ export class GoogleDriveConnector {
       }
 
       if (!access?.trim()) return null
+      accessTokenCache.set(connectionId, access, expired ? undefined : tokenCacheExpiry(connector.tokenExpiresAt))
       return access
     } catch (error) {
       logger.error('Failed to get access token', error as Error)
@@ -3308,6 +3317,34 @@ export class GoogleDriveConnector {
     } catch (error) {
       logger.error('Failed to list file permissions', error as Error, 'GoogleDrive', { fileId })
       return []
+    }
+  }
+
+  /**
+   * One permission on a file by id (shared drive safe), or null when it's gone or the lookup
+   * failed — callers treat both as "grant again".
+   */
+  async getFilePermission(
+    connectorId: string,
+    fileId: string,
+    permissionId: string
+  ): Promise<{ id: string; role: string; type: string; emailAddress?: string | null; deleted?: boolean } | null> {
+    try {
+      const accessToken = await this.getAccessToken(connectorId)
+      if (!accessToken) throw new Error('Could not get access token')
+
+      const url = new URL(`https://www.googleapis.com/drive/v3/files/${fileId}/permissions/${permissionId}`)
+      url.searchParams.set('supportsAllDrives', 'true')
+      url.searchParams.set('fields', 'id,role,type,emailAddress,deleted')
+
+      const res = await fetch(url.toString(), {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      if (!res.ok) return null
+      return await res.json()
+    } catch (error) {
+      logger.error('Failed to get file permission', error as Error, 'GoogleDrive', { fileId, permissionId })
+      return null
     }
   }
 

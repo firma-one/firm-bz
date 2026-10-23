@@ -365,7 +365,7 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
             setDeeplinkResolving(true)
         }
     }, [])
-    const { handleSecureOpen, secureModalOpen, secureModalMode, secureModalData, setSecureModalOpen, isRegrantingId, isRegrantLoading, regrantError } = useSecureOpenDocument({
+    const { handleSecureOpen, requestNewAccessLink, secureModalOpen, secureModalMode, secureModalData, setSecureModalOpen, isRegrantingId, isRegrantLoading, regrantError } = useSecureOpenDocument({
         projectId,
         firmId,
         logContext: 'EngagementFileList',
@@ -3718,6 +3718,7 @@ const handleRefresh = async () => {
                     mode={secureModalMode}
                     isLoading={isRegrantLoading}
                     error={regrantError}
+                    onRequestNewLink={requestNewAccessLink}
                 />
             </div>
 

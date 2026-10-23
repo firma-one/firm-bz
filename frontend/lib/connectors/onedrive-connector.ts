@@ -17,8 +17,12 @@ import { getMicrosoftOAuthServerCredentials } from '@/lib/config'
 import { logger } from '@/lib/logger'
 import type { IConnectorInstance } from './registry'
 import type { ConnectorConnection } from './registry'
+import { CONNECTOR_CACHE_TTL_MS, createShortLivedCache, tokenCacheExpiry } from './short-lived-cache'
 
 const GRAPH_TOKEN_URL = 'https://login.microsoftonline.com/common/oauth2/v2.0/token'
+
+/** Access tokens by connection id, so a secure open's several Graph calls read the row once. */
+const accessTokenCache = createShortLivedCache<string>(CONNECTOR_CACHE_TTL_MS)
 
 /** Thrown when OneDrive token refresh fails; API routes map this to 401/503. */
 export class OneDriveAuthError extends Error {
@@ -251,10 +255,13 @@ export class OneDriveConnector implements IConnectorInstance {
     if (tokens.refresh_token) data.refreshToken = tokens.refresh_token
 
     await prisma.connector.update({ where: { id: connectionId }, data })
+    accessTokenCache.set(connectionId, tokens.access_token, tokenCacheExpiry(newExpiry))
     return tokens.access_token
   }
 
   async getAccessToken(connectionId: string): Promise<string | null> {
+    const cached = accessTokenCache.get(connectionId)
+    if (cached) return cached
     try {
       const connector = await prisma.connector.findUnique({ where: { id: connectionId } })
       if (!connector) return null
@@ -277,6 +284,7 @@ export class OneDriveConnector implements IConnectorInstance {
       }
 
       if (!access?.trim()) return null
+      accessTokenCache.set(connectionId, access, expired ? undefined : tokenCacheExpiry(connector.tokenExpiresAt))
       return access
     } catch (error) {
       logger.error('Failed to get OneDrive access token', error as Error)
@@ -305,6 +313,7 @@ export class OneDriveConnector implements IConnectorInstance {
   }
 
   async disconnectConnection(connectionId: string): Promise<void> {
+    accessTokenCache.delete(connectionId)
     await prisma.connector.update({
       where: { id: connectionId },
       data: { status: ConnectorStatus.REVOKED, accessToken: '', refreshToken: null, tokenExpiresAt: null },

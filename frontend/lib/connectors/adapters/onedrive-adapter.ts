@@ -12,18 +12,25 @@ import { prisma } from '@/lib/prisma'
 import { WorkspaceRootLocation, type Connector } from '@prisma/client'
 import type { IConnectorStorageAdapter } from '../types'
 import { logger } from '@/lib/logger'
+import { CONNECTOR_CACHE_TTL_MS, createShortLivedCache } from '../short-lived-cache'
 
 const GRAPH_API = 'https://graph.microsoft.com/v1.0'
 
 export type GetAccessToken = (connectionId: string) => Promise<string>
 
+/** Drive base URLs by connection id: every adapter call resolves one, alongside its token. */
+const driveBaseCache = createShortLivedCache<string>(CONNECTOR_CACHE_TTL_MS)
+
 async function resolveDriveBase(connectionId: string): Promise<string> {
+  const cached = driveBaseCache.get(connectionId)
+  if (cached) return cached
   const connector = await prisma.connector.findUnique({ where: { id: connectionId } })
   if (!connector) throw new Error('Connection not found')
-  if (connector.workspaceRootLocation === WorkspaceRootLocation.SHARED && connector.workspaceRootSharedStorageId) {
-    return `${GRAPH_API}/sites/${connector.workspaceRootSharedStorageId}/drive`
-  }
-  return `${GRAPH_API}/me/drive`
+  const base = connector.workspaceRootLocation === WorkspaceRootLocation.SHARED && connector.workspaceRootSharedStorageId
+    ? `${GRAPH_API}/sites/${connector.workspaceRootSharedStorageId}/drive`
+    : `${GRAPH_API}/me/drive`
+  driveBaseCache.set(connectionId, base)
+  return base
 }
 
 async function graphFetch(token: string, url: string, init?: RequestInit): Promise<Response> {

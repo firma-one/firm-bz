@@ -60,6 +60,7 @@ export function DocumentListCard({
         setSecureModalOpen,
         isRegrantLoading,
         regrantError,
+        requestNewAccessLink,
     } = useSecureOpenDocument({ logContext: 'DocumentListCard' })
 
     // Initialize with All Selected once availableTypes are ready
@@ -435,6 +436,7 @@ export function DocumentListCard({
                 mode={secureModalMode}
                 isLoading={isRegrantLoading}
                 error={regrantError}
+                onRequestNewLink={requestNewAccessLink}
             />
         </div>
     )

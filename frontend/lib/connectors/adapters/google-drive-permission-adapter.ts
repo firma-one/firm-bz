@@ -71,6 +71,12 @@ export function createGoogleDrivePermissionAdapter(): IConnectorPermissionAdapte
         .map((p) => ({ id: p.id, email: p.emailAddress ?? null, role: fromDriveRole(p.role) }))
     },
 
+    getFilePermission: async (id, fileId, permissionId) => {
+      const p = await g.getFilePermission(id, fileId, permissionId)
+      if (!p || p.deleted) return null
+      return { id: p.id, email: p.emailAddress ?? null, role: fromDriveRole(p.role) }
+    },
+
     deleteFile: async (id, fileId, opts) => {
       if (opts?.permanent) {
         await g.permanentlyDeleteFile(id, fileId)
