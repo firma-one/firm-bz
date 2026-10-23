@@ -11,6 +11,7 @@ import { PropertyList, PropertyRow, PROPERTY_FIELD_CLASS, PROPERTY_HINT_CLASS } 
 import { CreateDialogFooter, CreateDialogHeader, CreateDialogNotice } from '@/components/ui/create-dialog'
 import { cn } from '@/lib/utils'
 import { inviteMember } from '@/lib/actions/invitations'
+import { InviteeNameFields } from '@/components/projects/members/invitee-name-fields'
 import { PersonaUiRole, PersonaUiSubRole, SUB_ROLE_LABEL, resolvePersonaSlug } from '@/lib/persona-ui-groups'
 
 type ProjectPersonaWithRole = Persona
@@ -34,6 +35,8 @@ interface InviteMemberModalProps {
 
 export function InviteMemberModal({ projectId, open, onOpenChange, personas, preselectedUiRole, onSuccess }: InviteMemberModalProps) {
     const [email, setEmail] = useState('')
+    const [firstName, setFirstName] = useState('')
+    const [lastName, setLastName] = useState('')
     const [emailError, setEmailError] = useState('')
     const [selectedPersonaId, setSelectedPersonaId] = useState('')
     const [uiRole, setUiRole] = useState<PersonaUiRole | ''>('')
@@ -77,6 +80,8 @@ export function InviteMemberModal({ projectId, open, onOpenChange, personas, pre
             setUiRole('')
             setSubRole('internal')
             setEmail('')
+            setFirstName('')
+            setLastName('')
             setError('')
             setEmailError('')
         }
@@ -109,7 +114,7 @@ export function InviteMemberModal({ projectId, open, onOpenChange, personas, pre
         setIsSubmitting(true)
 
         try {
-            await inviteMember(projectId, email, selectedPersonaId)
+            await inviteMember(projectId, email, selectedPersonaId, { firstName, lastName })
             onSuccess()
             onOpenChange(false)
         } catch (err: any) {
@@ -153,6 +158,15 @@ export function InviteMemberModal({ projectId, open, onOpenChange, personas, pre
                                     {emailError && <p className="px-2 text-caption text-danger">{emailError}</p>}
                                 </div>
                             </PropertyRow>
+
+                            <InviteeNameFields
+                                idPrefix="invite"
+                                firstName={firstName}
+                                lastName={lastName}
+                                onFirstNameChange={setFirstName}
+                                onLastNameChange={setLastName}
+                                disabled={isSubmitting}
+                            />
 
                             <PropertyRow label="Role" icon={<Shield />}>
                                 <div className="flex w-full flex-col gap-1">

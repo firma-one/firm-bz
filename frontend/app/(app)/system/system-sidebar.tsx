@@ -14,6 +14,7 @@ import {
     ExternalLink,
 } from "lucide-react"
 import { useSidebar } from "@/lib/sidebar-context"
+import { resolveDisplayName } from "@/lib/auth/display-name"
 
 export function SystemSidebar() {
     const { user, signOut } = useAuth()
@@ -35,10 +36,7 @@ export function SystemSidebar() {
     }, [])
 
     const getUserDisplayName = () => {
-        if (user?.user_metadata?.full_name) return user.user_metadata.full_name
-        if (user?.user_metadata?.name) return user.user_metadata.name
-        if (user?.email) return user.email.split('@')[0]
-        return 'User'
+        return resolveDisplayName(user?.user_metadata, user?.email) || 'User'
     }
 
     const getUserInitials = () => {

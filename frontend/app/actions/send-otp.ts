@@ -82,6 +82,7 @@ export async function sendOTPWithTurnstile(
                       last_name: ln,
                       full_name: `${fn} ${ln}`,
                       name: `${fn} ${ln}`,
+                      name_source: 'user',
                   }
                 : undefined
 

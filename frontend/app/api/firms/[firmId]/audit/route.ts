@@ -7,6 +7,7 @@ import { createClient as createSupabaseAdmin } from '@supabase/supabase-js'
 import { type Prisma } from '@prisma/client'
 import { isValidAuditEventType } from '@/lib/audit-event-types'
 import { withResolvedFileNames } from '@/lib/audit/file-names'
+import { resolveDisplayName } from '@/lib/auth/display-name'
 
 function firmPrivileges(scopes: Record<string, string[]> | undefined): string[] {
   if (!scopes) return []
@@ -97,7 +98,7 @@ export async function GET(
           try {
             const { data: { user: u } } = await supabaseAdmin.auth.admin.getUserById(actorId)
             actorEmailMap[actorId] = u?.email ?? ''
-            actorNameMap[actorId] = (u?.user_metadata?.full_name as string | undefined) ?? (u?.user_metadata?.name as string | undefined) ?? u?.email ?? ''
+            actorNameMap[actorId] = resolveDisplayName(u?.user_metadata, u?.email)
           } catch {
             actorEmailMap[actorId] = ''
             actorNameMap[actorId] = ''

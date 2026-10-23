@@ -51,6 +51,7 @@ import { cn } from "@/lib/utils"
 import { useShellData } from "./shell-data-context"
 import { WorkspaceSwitcher } from "./workspace-switcher"
 import { initialsOf } from '@/lib/initials'
+import { resolveDisplayName } from '@/lib/auth/display-name'
 
 export function CountBadge({ count }: { count: number }) {
     return (
@@ -168,8 +169,8 @@ function ProfileMenu({ isSystemAdmin }: { isSystemAdmin: boolean }) {
     const pathname = usePathname()
     const { firmSlug, groupSlug, canManage } = useShellData()
 
-    const meta = (user?.user_metadata ?? {}) as { full_name?: string; name?: string; avatar_url?: string; picture?: string }
-    const name = meta.full_name || meta.name || user?.email?.split("@")[0] || "Account"
+    const meta = (user?.user_metadata ?? {}) as { avatar_url?: string; picture?: string }
+    const name = resolveDisplayName(user?.user_metadata, user?.email) || "Account"
     const avatar = meta.avatar_url || meta.picture || null
 
     return (

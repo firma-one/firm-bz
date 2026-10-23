@@ -51,6 +51,8 @@ export async function updateProfileNames(
             last_name: last,
             full_name: fullName,
             name: fullName,
+            // Typed here, so an OAuth sign-in must not overwrite it — see lib/auth/display-name.
+            name_source: 'user',
         },
     })
 

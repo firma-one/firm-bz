@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { config } from '@/lib/config'
 import { generateFirmSlug, generateGroupSlug } from '@/lib/slug-utils'
 import { logger } from '@/lib/logger'
+import { resolveDisplayName } from '@/lib/auth/display-name'
 
 /**
  * POST /api/provision
@@ -55,7 +56,7 @@ export async function POST(request: NextRequest) {
 
         userId = user.id
         const userEmail = user.email
-        const userName = user.user_metadata?.full_name || userEmail.split('@')[0]
+        const userName = resolveDisplayName(user.user_metadata, userEmail)
 
         // 3. Check for existing Organization Membership
         // We look for the "Default" org first, or any org

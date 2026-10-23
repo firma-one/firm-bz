@@ -592,6 +592,10 @@ model EngagementInvitation {
   updatedBy       String?          @db.Uuid
   engagementId    String           @db.Uuid
   email           String
+  /// Optional name supplied by the inviter, seeded onto the account at acceptance so an invited
+  /// user is not rendered from their email address until they find the profile form.
+  firstName       String?          @map("first_name")
+  lastName        String?          @map("last_name")
   personaId       String           @db.Uuid
   status          InvitationStatus @default(PENDING)
   token           String           @unique
@@ -615,6 +619,10 @@ model FirmInvitation {
   updatedBy       String?          @db.Uuid
   firmId          String           @db.Uuid
   email           String
+  /// Optional name supplied by the inviter, seeded onto the account at acceptance so an invited
+  /// user is not rendered from their email address until they find the profile form.
+  firstName       String?          @map("first_name")
+  lastName        String?          @map("last_name")
   personaId       String           @db.Uuid
   status          InvitationStatus @default(PENDING)
   token           String           @unique
@@ -638,6 +646,10 @@ model ClientInvitation {
   updatedBy       String?          @db.Uuid
   clientId        String           @db.Uuid
   email           String
+  /// Optional name supplied by the inviter, seeded onto the account at acceptance so an invited
+  /// user is not rendered from their email address until they find the profile form.
+  firstName       String?          @map("first_name")
+  lastName        String?          @map("last_name")
   personaId       String           @db.Uuid
   status          InvitationStatus @default(PENDING)
   token           String           @unique

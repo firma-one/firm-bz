@@ -6,6 +6,7 @@ import { userSettingsPlus } from '@/lib/user-settings-plus'
 import { findFirmInPermissions } from '@/lib/permission-helpers'
 import { assertFirmSubscriptionAccess } from '@/lib/billing/subscription-gate'
 import { SubscriptionRevokedError } from '@/lib/errors/api-error'
+import { resolveDisplayName } from '@/lib/auth/display-name'
 
 const supabaseAdmin = createAdminClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:54321',
@@ -60,7 +61,7 @@ export async function GET(
             const email = data?.user?.email
             if (!email) return null
             const meta = data?.user?.user_metadata ?? {}
-            const name = (meta.full_name ?? meta.name ?? email.split('@')[0]) as string
+            const name = resolveDisplayName(meta, email)
             const avatarUrl = (meta.avatar_url ?? meta.picture ?? null) as string | null
             return { userId: m.userId, email, name, avatarUrl }
           } catch {

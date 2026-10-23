@@ -12,6 +12,7 @@ import { maybeProvisionInviteeAccount } from '@/lib/actions/account-provisioning
 import { canManageClient } from '@/lib/permission-helpers'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 import { getAvatarUrlFromSupabaseUser } from '@/lib/supabase-user-helpers'
+import { normalizeInviteeName, type InviteeName } from '@/lib/auth/invite-names'
 
 const supabaseAdmin = createSupabaseAdmin(
     process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:54321',
@@ -68,7 +69,8 @@ export async function getClientMembers(clientId: string) {
     return { members: enrichedMembers, invitations }
 }
 
-export async function inviteClientMember(firmId: string, clientId: string, email: string) {
+export async function inviteClientMember(firmId: string, clientId: string, email: string, invitee?: InviteeName) {
+    const inviteeName = normalizeInviteeName(invitee)
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) throw new Error('Unauthorized')
@@ -122,14 +124,17 @@ export async function inviteClientMember(firmId: string, clientId: string, email
             throw new Error('This user has already joined the client')
         }
         await prisma.clientInvitation.update({
+            // A re-invite without a name leaves the one already on the row alone.
             where: { id: existing.id },
-            data: { status: 'PENDING', token, expireAt, updatedBy: user.id }
+            data: { status: 'PENDING', token, expireAt, updatedBy: user.id, ...(inviteeName ?? {}) }
         })
     } else {
         await prisma.clientInvitation.create({
             data: {
                 clientId,
                 email: normalizedEmail,
+                firstName: inviteeName?.firstName ?? null,
+                lastName: inviteeName?.lastName ?? null,
                 personaId: persona.id,
                 status: 'PENDING',
                 token,
@@ -140,7 +145,7 @@ export async function inviteClientMember(firmId: string, clientId: string, email
         })
     }
 
-    await maybeProvisionInviteeAccount(normalizedEmail)
+    await maybeProvisionInviteeAccount(normalizedEmail, inviteeName)
 
     const inviteUrl = `${process.env.NEXT_PUBLIC_APP_URL}/invite/${token}`
     const { subject, html } = renderInviteEmail({

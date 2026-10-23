@@ -10,17 +10,19 @@ import { renderInviteEmail } from '@/lib/email-templates/invite'
 import { invalidateUserSettingsPlus } from '@/lib/permissions/invalidate-user-settings'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { mergeLeanAppMetadata } from '@/lib/auth/supabase-jwt-metadata'
-import { maybeProvisionInviteeAccount } from '@/lib/actions/account-provisioning'
+import { maybeProvisionInviteeAccount, applyInvitedName } from '@/lib/actions/account-provisioning'
 import { findAuthUserIdByEmail } from '@/lib/actions/auth-user-lookup'
 import { joinEngagementForUser, provisionAndNotifyExistingUser } from '@/lib/actions/engagement-membership'
 import { InvitationStatus } from '@prisma/client'
 import { engagementPath, clientPath, firmPath } from '@/lib/navigation/firm-paths'
 import { requireEngagementManager, isEngagementPersonaSlug } from '@/lib/permissions/require-engagement-manager'
+import { normalizeInviteeName, type InviteeName } from '@/lib/auth/invite-names'
 
 /**
  * Invite a member to a project (V2)
  */
-export async function inviteMember(projectId: string, email: string, personaId: string) {
+export async function inviteMember(projectId: string, email: string, personaId: string, invitee?: InviteeName) {
+    const inviteeName = normalizeInviteeName(invitee)
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) throw new Error("Unauthorized")
@@ -70,12 +72,14 @@ export async function inviteMember(projectId: string, email: string, personaId: 
 
         await prisma.engagementInvitation.update({
             where: { id: existing.id },
+            // A re-invite without a name leaves the one already on the row alone.
             data: {
                 personaId,
                 status: InvitationStatus.PENDING,
                 token,
                 expireAt,
-                updatedAt: new Date()
+                updatedAt: new Date(),
+                ...(inviteeName ?? {})
             }
         })
 
@@ -87,7 +91,7 @@ export async function inviteMember(projectId: string, email: string, personaId: 
             return await provisionAndNotifyExistingUser(existingAuthUserId, normalizedEmail, inviteWithRelations, projectOrg)
         }
 
-        await maybeProvisionInviteeAccount(normalizedEmail)
+        await maybeProvisionInviteeAccount(normalizedEmail, inviteeName)
 
         const inviteUrl = `${process.env.NEXT_PUBLIC_APP_URL}/invite/${token}`
         try {
@@ -126,6 +130,8 @@ export async function inviteMember(projectId: string, email: string, personaId: 
         data: {
             engagementId: projectId,
             email: normalizedEmail,
+            firstName: inviteeName?.firstName ?? null,
+            lastName: inviteeName?.lastName ?? null,
             personaId,
             token,
             status: InvitationStatus.PENDING,
@@ -142,7 +148,7 @@ export async function inviteMember(projectId: string, email: string, personaId: 
         return await provisionAndNotifyExistingUser(existingAuthUserId, normalizedEmail, inviteWithRelations, projectOrg)
     }
 
-    await maybeProvisionInviteeAccount(normalizedEmail)
+    await maybeProvisionInviteeAccount(normalizedEmail, inviteeName)
 
     const inviteUrl = `${process.env.NEXT_PUBLIC_APP_URL}/invite/${token}`
     try {
@@ -399,6 +405,8 @@ export async function acceptInvitation(token: string): Promise<{ success: true; 
         if (invite.email.toLowerCase() !== user.email.toLowerCase()) {
             throw new Error(`This invitation is for ${invite.email}`)
         }
+        // Name the account now if the inviter supplied one and nobody has named it yet.
+        await applyInvitedName(user.id, invite)
         const existing = await prisma.firmMember.findFirst({
             where: { firmId: invite.firmId, userId: user.id }
         })
@@ -465,6 +473,8 @@ export async function acceptInvitation(token: string): Promise<{ success: true; 
         if (invite.email.toLowerCase() !== user.email.toLowerCase()) {
             throw new Error(`This invitation is for ${invite.email}`)
         }
+        // Name the account now if the inviter supplied one and nobody has named it yet.
+        await applyInvitedName(user.id, invite)
         const existing = await prisma.clientMember.findFirst({
             where: { clientId: invite.clientId, userId: user.id }
         })
@@ -531,6 +541,9 @@ export async function acceptInvitation(token: string): Promise<{ success: true; 
     if (invite.email.toLowerCase() !== user.email.toLowerCase()) {
         throw new Error(`This invitation is for ${invite.email}`)
     }
+
+    // Name the account now if the inviter supplied one and nobody has named it yet.
+    await applyInvitedName(user.id, invite)
 
     const { redirectUrl } = await joinEngagementForUser(user.id, user.email, invite)
 

@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { parseSettingsFromDb, flattenForLegacyUI } from '@/lib/sharing-settings'
 import { resolveProjectContext } from '@/lib/resolve-project-context'
 import { canViewProject } from '@/lib/permission-helpers'
+import { resolveDisplayName } from '@/lib/auth/display-name'
 
 function getAvatarUrlFromUser(dbUser: { user_metadata?: Record<string, unknown>; identities?: Array<{ identity_data?: Record<string, unknown> }> } | null | undefined): string | null {
   if (!dbUser) return null
@@ -156,7 +157,7 @@ parentId: share.parentId ?? (indexMetadata.parents?.[0] ?? indexMetadata.parentI
         try {
           const { data: { user: dbUser } } = await supabaseAdmin.auth.admin.getUserById(userId)
           const meta = dbUser?.user_metadata ?? {}
-          const name = (meta.full_name ?? meta.name ?? dbUser?.email?.split('@')[0] ?? null) as string | null
+          const name = resolveDisplayName(meta, dbUser?.email) || null
           userMap[userId] = {
             email: dbUser?.email ?? null,
             name,
