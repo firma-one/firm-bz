@@ -149,6 +149,8 @@ export function AppShellV2({
                                     "fixed inset-y-0 right-0 z-[110] flex w-full flex-col border-l border-line bg-surface shadow-dialog sm:w-[480px]",
                                     "lg:static lg:z-auto lg:shadow-none",
                                     rightPaneWide ? "lg:w-[50vw]" : "lg:w-[420px]",
+                                    // Side panel ↔ half screen eases instead of jumping (close and full screen already animate).
+                                    "lg:transition-[width] lg:duration-ui-base lg:ease-ui-out motion-reduce:transition-none",
                                     "print:hidden"
                                 )}
                             >
