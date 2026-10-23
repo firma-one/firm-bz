@@ -42,7 +42,8 @@ const ICON_TILE: Record<string, string> = {
 /**
  * Linear-style confirmation (.claude/plans/ui-ux-overhaul.md, Phase 6): an icon tile, a sentence-case
  * title and subtitle, the consequence in plain text, and the two buttons bottom-right — no header
- * strip, no tinted body, no uppercase.
+ * strip, no tinted body, no uppercase. A hairline under the title row and over the buttons (as in the
+ * Files organize dialogs, 2026-10-23) keeps the three apart.
  */
 export function ConfirmDialog({
   open,
@@ -64,7 +65,7 @@ export function ConfirmDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="gap-0 p-0 sm:max-w-sm">
-        <div className="flex items-start gap-3 px-5 pb-3 pt-5 pr-10">
+        <div className="flex items-start gap-3 border-b border-line px-5 pb-4 pt-5 pr-10">
           <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-control [&_svg]:h-4 [&_svg]:w-4 ${ICON_TILE[iconVariant]}`}>
             {icon}
           </div>
@@ -74,12 +75,12 @@ export function ConfirmDialog({
           </div>
         </div>
 
-        <div className="space-y-3 px-5 pb-4 pl-16">
+        <div className="space-y-3 px-5 py-4 pl-16">
           <div className="text-small leading-relaxed text-fg-muted">{description}</div>
           {extra}
         </div>
 
-        <div className="flex items-center justify-end gap-2 px-5 pb-5">
+        <div className="flex items-center justify-end gap-2 border-t border-line px-5 py-3">
           <Button variant="outline" size="sm" onClick={onCancel} disabled={loading}>
             {cancelLabel}
           </Button>

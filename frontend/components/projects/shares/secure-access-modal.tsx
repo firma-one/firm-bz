@@ -93,7 +93,7 @@ export function SecureAccessModal({
                 onInteractOutside={(e) => { if (isBusy) e.preventDefault() }}
                 onEscapeKeyDown={(e) => { if (isBusy) e.preventDefault() }}
             >
-                <div className="flex items-start gap-3 px-5 pb-3 pt-5 pr-10">
+                <div className="flex items-start gap-3 border-b border-line px-5 pb-4 pt-5 pr-10">
                     <div
                         className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-control [&_svg]:h-4 [&_svg]:w-4 ${
                             effectiveMode === 'error' ? 'bg-tag-red-bg text-tag-red-fg' : 'bg-surface-muted text-fg-muted'
@@ -114,7 +114,7 @@ export function SecureAccessModal({
                     </div>
                 </div>
 
-                <div className="space-y-3 px-5 pb-5 pl-16">
+                <div className="space-y-3 px-5 py-4 pl-16">
                     {effectiveMode === 'error' ? (
                         <p className="text-small leading-relaxed text-fg">{error}</p>
                     ) : (
@@ -166,7 +166,7 @@ export function SecureAccessModal({
                 </div>
 
                 {!isBusy && (
-                    <div className="flex items-center justify-end gap-2 px-5 pb-5">
+                    <div className="flex items-center justify-end gap-2 border-t border-line px-5 py-3">
                         {effectiveMode === 'blocked' ? (
                             <>
                                 <Button variant="outline" size="sm" onClick={onClose}>Close</Button>
