@@ -91,15 +91,21 @@ const FOLDER_GLYPH = `<svg ${SVG_ATTRS}><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 
  */
 export function setRowDragImage(e: React.DragEvent, name: string, isFolder: boolean) {
     if (typeof document === 'undefined' || typeof e.dataTransfer?.setDragImage !== 'function') return
+    // A transparent frame with the pointer at its top-left corner and the card inset below-right of it,
+    // so the card rides under the pointer, clear of the row it's over (on the pointer's line it covered
+    // that row's "Move here" tag). The inset, not a negative offset, which browsers treat differently.
+    const frame = document.createElement('div')
+    frame.className = 'fixed -left-[9999px] top-0 pl-3 pt-7'
     const card = document.createElement('div')
-    card.className = 'fixed -left-[9999px] top-0 flex max-w-[260px] items-center gap-1.5 rounded-control bg-surface px-2 py-1 text-small text-fg shadow-popover'
+    card.className = 'flex max-w-[260px] items-center gap-1.5 rounded-control bg-surface px-2 py-1 text-small text-fg shadow-popover'
     card.innerHTML = isFolder ? FOLDER_GLYPH : FILE_GLYPH
     const label = document.createElement('span')
     label.className = 'truncate'
     label.textContent = name
     card.appendChild(label)
-    document.body.appendChild(card)
-    e.dataTransfer.setDragImage(card, 12, 14)
-    // The browser takes its snapshot during dragstart; the card can go right after.
-    setTimeout(() => card.remove(), 0)
+    frame.appendChild(card)
+    document.body.appendChild(frame)
+    e.dataTransfer.setDragImage(frame, 0, 0)
+    // The browser takes its snapshot during dragstart; the frame can go right after.
+    setTimeout(() => frame.remove(), 0)
 }
