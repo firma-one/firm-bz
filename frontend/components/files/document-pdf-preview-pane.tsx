@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useCallback, useEffect, useLayoutEffect, useRef, useMemo } from 'react'
-import { ZoomIn, ZoomOut, RotateCcw, RotateCw, Undo2, ChevronUp, ChevronDown, ChevronsLeftRight, ChevronsDownUp, List, PanelLeft, Search, X, MoreHorizontal, Table2 } from 'lucide-react'
+import { ZoomIn, ZoomOut, RotateCcw, RotateCw, Undo2, ChevronUp, ChevronDown, ChevronsLeftRight, ChevronsDownUp, List, Search, X, MoreHorizontal, Table2 } from 'lucide-react'
+import { WindowGlyph } from '@/components/ui/window-glyph'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu'
 import { PreviewLoadingState } from '@/components/files/preview-loading-state'
@@ -1029,7 +1030,7 @@ export function DocumentPdfPreviewPane({ document, projectId, alternateView }: D
                             aria-label={sidebarTab ? 'Hide sidebar' : 'Show page thumbnails and bookmarks'}
                             aria-pressed={Boolean(sidebarTab)}
                         >
-                            <PanelLeft className="h-3.5 w-3.5" />
+                            <WindowGlyph variant="left" filled={Boolean(sidebarTab)} className="h-3.5 w-3.5" />
                         </button>
                     </TooltipTrigger>
                     <TooltipContent side="bottom" className="text-xs">
@@ -1312,7 +1313,7 @@ export function DocumentPdfPreviewPane({ document, projectId, alternateView }: D
                                 onClick={() => setSidebarTab('thumbnails')}
                                 className={`flex-1 h-7 inline-flex items-center justify-center gap-1 text-[10px] font-medium ${sidebarTab === 'thumbnails' ? 'text-fg border-b-2 border-slate-700' : 'text-slate-500 hover:text-slate-700'}`}
                             >
-                                <PanelLeft className="h-3 w-3" /> Pages
+                                <WindowGlyph variant="left" className="h-3 w-3" /> Pages
                             </button>
                         </div>
 

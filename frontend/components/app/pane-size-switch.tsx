@@ -1,6 +1,7 @@
 'use client'
 
 import { Hint } from '@/components/ui/tooltip'
+import { WindowGlyph, type WindowGlyphVariant } from '@/components/ui/window-glyph'
 import { cn } from '@/lib/utils'
 import type { PaneSize } from '@/lib/right-pane-context'
 
@@ -10,26 +11,17 @@ import type { PaneSize } from '@/lib/right-pane-context'
  * small → medium → large and showed only where the next click went.
  */
 
-/** Window-tiling glyph: a window outline with the share of it the pane takes filled in. */
-function TileGlyph({ fillX }: { fillX: number }) {
-    return (
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-            <rect x="1.5" y="2.5" width="13" height="11" rx="2" stroke="currentColor" strokeWidth="1.25" />
-            <rect x={fillX} y="4.5" width={12.5 - fillX} height="7" rx="0.75" fill="currentColor" />
-        </svg>
-    )
-}
-
-const SIZES: { size: PaneSize; label: string; fillX: number }[] = [
-    { size: 'small', label: 'Side panel', fillX: 9.5 },
-    { size: 'medium', label: 'Half screen', fillX: 7.5 },
-    { size: 'large', label: 'Full screen', fillX: 3.5 },
+/** Each size as its window glyph (components/ui/window-glyph.tsx), the family the app's panel toggles share. */
+const SIZES: { size: PaneSize; label: string; glyph: WindowGlyphVariant }[] = [
+    { size: 'small', label: 'Side panel', glyph: 'right' },
+    { size: 'medium', label: 'Half screen', glyph: 'half' },
+    { size: 'large', label: 'Full screen', glyph: 'full' },
 ]
 
 export function PaneSizeSwitch({ value, onChange }: { value: PaneSize; onChange: (size: PaneSize) => void }) {
     return (
         <div className="mr-0.5 inline-flex shrink-0 items-center rounded-control bg-surface-muted p-0.5" role="group" aria-label="Pane size">
-            {SIZES.map(({ size, label, fillX }) => (
+            {SIZES.map(({ size, label, glyph }) => (
                 <Hint key={size} label={label} side="bottom">
                     <button
                         type="button"
@@ -41,7 +33,7 @@ export function PaneSizeSwitch({ value, onChange }: { value: PaneSize; onChange:
                             value === size ? 'bg-surface text-fg shadow-sm ring-1 ring-line-strong' : 'text-fg-subtle hover:text-fg'
                         )}
                     >
-                        <TileGlyph fillX={fillX} />
+                        <WindowGlyph variant={glyph} />
                     </button>
                 </Hint>
             ))}

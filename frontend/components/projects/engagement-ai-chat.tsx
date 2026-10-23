@@ -1,7 +1,8 @@
 'use client'
 
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
-import { Send, Copy, Check, RotateCcw, History, ThumbsUp, ThumbsDown, ClipboardList, Square, Clock, GripVertical, ChevronDown, Trash2, PanelLeft, Pin, PinOff, SquarePen, Info, MoreHorizontal, PanelRight, PictureInPicture2, MessageSquare, CornerDownRight, Briefcase, Folder } from 'lucide-react'
+import { Send, Copy, Check, RotateCcw, History, ThumbsUp, ThumbsDown, ClipboardList, Square, Clock, GripVertical, ChevronDown, Trash2, Pin, PinOff, SquarePen, Info, MoreHorizontal, MessageSquare, CornerDownRight, Briefcase, Folder } from 'lucide-react'
+import { WindowGlyph } from '@/components/ui/window-glyph'
 import { ASSISTANT } from '@/lib/ai/assistant'
 import { Brio } from '@/components/ui/brio'
 import { RelativeDateTime } from '@/components/ui/relative-date-time'
@@ -1099,7 +1100,7 @@ export function EngagementAiChat({
                     aria-label={`Collapse ${title.toLowerCase()}`}
                     title="Collapse"
                 >
-                    <PanelLeft className="h-3.5 w-3.5" />
+                    <WindowGlyph variant="left" className="h-3.5 w-3.5" />
                 </button>
             </div>
             <TooltipProvider delayDuration={150}>
@@ -1299,8 +1300,8 @@ export function EngagementAiChat({
                                     <DropdownMenuSeparator />
                                     <DropdownMenuItem className="gap-2" onSelect={() => onLayoutChange(layout === 'dock' ? 'float' : 'dock')}>
                                         {layout === 'dock'
-                                            ? <PictureInPicture2 className="h-4 w-4 text-fg-muted" />
-                                            : <PanelRight className="h-4 w-4 text-fg-muted" />}
+                                            ? <WindowGlyph variant="float" className="text-fg-muted" />
+                                            : <WindowGlyph variant="right" className="text-fg-muted" />}
                                         {layout === 'dock' ? 'Float over the page' : 'Dock to the side'}
                                     </DropdownMenuItem>
                                 </>

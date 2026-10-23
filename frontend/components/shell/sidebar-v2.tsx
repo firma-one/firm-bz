@@ -20,12 +20,12 @@ import {
     ExternalLink,
     Info,
     ScrollText,
-    PanelLeftClose,
     Search,
     Settings,
     UserCircle,
     Users,
 } from "lucide-react"
+import { WindowGlyph } from '@/components/ui/window-glyph'
 import { ClientIcon } from "@/components/ui/client-icon"
 import { useAuth } from "@/lib/auth-context"
 import { buildBillingPageHref } from "@/lib/billing/build-billing-page-href"
@@ -335,7 +335,7 @@ export function SidebarV2({
                             className="flex h-7 w-7 shrink-0 items-center justify-center rounded-control text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg-muted"
                             aria-label="Collapse sidebar"
                         >
-                            <PanelLeftClose className="h-4 w-4" />
+                            <WindowGlyph variant="left" />
                         </button>
                     </Hint>
                 )}

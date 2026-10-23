@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
-import { PanelLeft } from "lucide-react"
+import { WindowGlyph } from '@/components/ui/window-glyph'
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
 import { SystemSidebar } from "./system-sidebar"
 import { Outfit } from "next/font/google"
@@ -91,7 +91,7 @@ function SystemLayoutContent({
                     <Tooltip>
                         <TooltipTrigger asChild>
                             <Button variant="ghost" size="icon" onClick={toggleSidebar} className="text-slate-500 hover:text-slate-700 hover:bg-slate-100 h-8 w-8">
-                                <PanelLeft className="h-5 w-5" />
+                                <WindowGlyph variant="left" filled={!isCollapsed} className="h-5 w-5" />
                             </Button>
                         </TooltipTrigger>
                         <TooltipContent>

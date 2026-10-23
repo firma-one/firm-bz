@@ -14,7 +14,6 @@ import {
     Inbox,
     Info,
     LifeBuoy,
-    PanelLeftClose,
     ScrollText,
     Search,
     Settings,
@@ -22,6 +21,7 @@ import {
     UserPlus,
     Users,
 } from 'lucide-react'
+import { WindowGlyph } from '@/components/ui/window-glyph'
 import { ClientIcon } from '@/components/ui/client-icon'
 import {
     DropdownMenu,
@@ -108,7 +108,7 @@ export function DemoSidebar({ inboxCount, onCollapse }: {
                             className="flex h-7 w-7 shrink-0 items-center justify-center rounded-control text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg-muted"
                             aria-label="Collapse sidebar"
                         >
-                            <PanelLeftClose className="h-4 w-4" />
+                            <WindowGlyph variant="left" />
                         </button>
                     </Hint>
                 )}
