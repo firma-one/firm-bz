@@ -19,6 +19,12 @@ export interface Toast {
   message?: string
   duration?: number
   action?: ToastAction
+  /**
+   * Called once when the toast goes without its action being clicked: it timed out, was closed,
+   * or a newer toast with the same title replaced it. An action that runs only once its Undo has
+   * passed (the Inbox's Done) commits here.
+   */
+  onDismiss?: () => void
 }
 
 interface ToastContextType {
@@ -35,17 +41,31 @@ type Announcement = { text: string; assertive: boolean; n: number }
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([])
   const [announcement, setAnnouncement] = useState<Announcement | null>(null)
+  // The list as of the last change, so a toast's action or onDismiss runs once, outside a state update.
+  const toastsRef = useRef<Toast[]>([])
 
-  const removeToast = useCallback((id: string) => {
-    setToasts(prev => prev.filter(t => t.id !== id))
+  /** Takes a toast away, running its action (`acted`) or else its onDismiss. */
+  const settle = useCallback((id: string, acted: boolean) => {
+    const toast = toastsRef.current.find(t => t.id === id)
+    if (!toast) return
+    toastsRef.current = toastsRef.current.filter(t => t.id !== id)
+    setToasts(toastsRef.current)
+    if (acted) toast.action?.onClick()
+    else toast.onDismiss?.()
   }, [])
+
+  const removeToast = useCallback((id: string) => settle(id, false), [settle])
+  const actOnToast = useCallback((id: string) => settle(id, true), [settle])
 
   const addToast = useCallback((toast: Omit<Toast, 'id'>) => {
     const id = crypto.randomUUID()
     const newToast = { ...toast, id }
     // A newer toast with the same title replaces the older one rather than stacking a
     // duplicate, so it is the latest message (and the latest Undo) that shows.
-    setToasts(prev => [...prev.filter(t => t.title !== newToast.title), newToast])
+    const replaced = toastsRef.current.filter(t => t.title === newToast.title)
+    toastsRef.current = [...toastsRef.current.filter(t => t.title !== newToast.title), newToast]
+    setToasts(toastsRef.current)
+    replaced.forEach(t => t.onDismiss?.())
     setAnnouncement(prev => ({
       text: [toast.title, toast.message].filter(Boolean).join('. '),
       assertive: toast.type === 'error' || toast.type === 'warning',
@@ -58,7 +78,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={ctx}>
       {children}
-      <ToastContainer toasts={toasts} removeToast={removeToast} />
+      <ToastContainer toasts={toasts} removeToast={removeToast} actOnToast={actOnToast} />
       {/* Always in the page, so screen readers are listening before a toast arrives — a live
           region that mounts together with its text is often not read at all. Keyed, so the same
           message twice is read twice. */}
@@ -125,7 +145,7 @@ const DEFAULT_DURATION_MS = 8000
 // ── Container ────────────────────────────────────────────────────
 const MAX_PEEK = 3
 
-function ToastContainer({ toasts, removeToast }: { toasts: Toast[], removeToast: (id: string) => void }) {
+function ToastContainer({ toasts, removeToast, actOnToast }: { toasts: Toast[], removeToast: (id: string) => void, actOnToast: (id: string) => void }) {
   const [hovered, setHovered] = useState(false)
   const [focused, setFocused] = useState(false)
   const expanded = hovered && toasts.length > 1
@@ -206,7 +226,7 @@ function ToastContainer({ toasts, removeToast }: { toasts: Toast[], removeToast:
                 marginBottom: expanded && idx < reversed.length - 1 ? 8 : 0,
               }}
             >
-              <ToastItem toast={toast} onRemove={removeToast} paused={hovered || focused} />
+              <ToastItem toast={toast} onRemove={removeToast} onAct={actOnToast} paused={hovered || focused} />
             </div>
           )
         })}
@@ -223,7 +243,7 @@ function ToastContainer({ toasts, removeToast }: { toasts: Toast[], removeToast:
 }
 
 // ── Item ─────────────────────────────────────────────────────────
-function ToastItem({ toast, onRemove, paused }: { toast: Toast, onRemove: (id: string) => void, paused: boolean }) {
+function ToastItem({ toast, onRemove, onAct, paused }: { toast: Toast, onRemove: (id: string) => void, onAct: (id: string) => void, paused: boolean }) {
   const cfg = TOAST_CONFIG[toast.type]
 
   // Closes itself after its duration, but not while the pointer or focus is on the stack: an
@@ -255,7 +275,7 @@ function ToastItem({ toast, onRemove, paused }: { toast: Toast, onRemove: (id: s
       {toast.action && (
         <button
           type="button"
-          onClick={() => { toast.action!.onClick(); onRemove(toast.id) }}
+          onClick={() => onAct(toast.id)}
           className="h-7 shrink-0 self-center rounded-control px-2 text-small font-medium text-action outline-none transition-colors hover:bg-surface-hover focus-visible:ring-2 focus-visible:ring-action/30"
         >
           {toast.action.label}

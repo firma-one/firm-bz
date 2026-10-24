@@ -759,7 +759,7 @@ export function ClientSettingsForm({
                 iconVariant="red"
                 title="Delete client"
                 subtitle="This action cannot be undone."
-                description="Permanently delete this client? All engagements and members will be removed. This cannot be undone."
+                description="All of this client's engagements and members will be removed."
                 confirmLabel="Delete client"
                 confirmVariant="red"
                 onCancel={() => setDeleteConfirmOpen(false)}

@@ -201,6 +201,24 @@ export function createOneDrivePermissionAdapter(): IConnectorPermissionAdapter {
       }))
     },
 
+    async getFilePermission(connectionId, fileId, permissionId) {
+      const [token, base] = await Promise.all([auth(connectionId), resolveOneDriveDriveBase(connectionId)])
+      const res = await fetch(`${base}/items/${fileId}/permissions/${permissionId}`, { headers: { Authorization: `Bearer ${token}` } })
+      if (!res.ok) return null
+      const p = await res.json() as {
+        id: string
+        roles?: string[]
+        // Same two shapes as listFilePermissions: /invite grants vs createLink(blocksDownload) grants.
+        grantedToV2?: { user?: { email?: string } }
+        grantedToIdentitiesV2?: Array<{ user?: { email?: string } }>
+      }
+      return {
+        id: p.id,
+        email: p.grantedToV2?.user?.email ?? p.grantedToIdentitiesV2?.[0]?.user?.email ?? null,
+        role: fromGraphRole(p.roles),
+      }
+    },
+
     async deleteFile(connectionId, fileId, _opts) {
       const [token, base] = await Promise.all([auth(connectionId), resolveOneDriveDriveBase(connectionId)])
       // Graph has no true hard-delete via this endpoint (always recycle-bins) — see file header.

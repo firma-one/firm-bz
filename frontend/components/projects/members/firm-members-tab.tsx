@@ -282,7 +282,7 @@ export function FirmMembersTab({ firmId, groupSlug, orgSlug, canManage = false }
                 iconVariant="red"
                 title="Cancel invitation"
                 subtitle="The invitation will be revoked."
-                description="This invitation will be revoked. You can send a new invite later if needed."
+                description="You can send a new invite later if needed."
                 cancelLabel="Keep invitation"
                 confirmLabel="Cancel invitation"
                 confirmVariant="red"
@@ -297,10 +297,10 @@ export function FirmMembersTab({ firmId, groupSlug, orgSlug, canManage = false }
                 icon={<AlertTriangle className="h-3.5 w-3.5" />}
                 iconVariant="amber"
                 title="Cannot remove this member"
-                subtitle="This administrator owns the Drive Connector."
+                subtitle="Removing them would disconnect document storage."
                 description={
                     <span>
-                        <strong>{memberToRemove?.name}</strong>{memberToRemove?.email ? ` (${memberToRemove.email})` : ''} is the owner of this firm's Storage Drive Connector. Removing them would disconnect document storage for all clients and engagements.
+                        <strong>{memberToRemove?.name}</strong>{memberToRemove?.email ? ` (${memberToRemove.email})` : ''} is the owner of this firm's Storage Drive Connector, through which all its clients and engagements store their documents.
                         <br /><br />
                         To remove this member, first transfer the Storage Connector to another Firm Administrator in <a href={firmSettingsPath(groupSlug, orgSlug, 'storage')} className="text-primary underline underline-offset-2">Firm Settings → Data Storage</a> — then come back and remove them.
                     </span>
@@ -323,10 +323,10 @@ export function FirmMembersTab({ firmId, groupSlug, orgSlug, canManage = false }
                 icon={<UserMinus className="h-3.5 w-3.5" />}
                 iconVariant="red"
                 title="Revoke Firm Administrator"
-                subtitle={`${memberToRemove?.name}'s admin role will be revoked.`}
+                subtitle="Their engagement access stays as it is."
                 description={
                     <span>
-                        <strong>{memberToRemove?.name}</strong>{memberToRemove?.email ? ` (${memberToRemove.email})` : ''} will lose their Firm Administrator role and can no longer manage this firm, its clients, or engagements. Any existing engagement-level access remains unchanged.
+                        <strong>{memberToRemove?.name}</strong>{memberToRemove?.email ? ` (${memberToRemove.email})` : ''} will lose their Firm Administrator role and can no longer manage this firm, its clients, or engagements.
                     </span>
                 }
                 cancelLabel="Cancel"

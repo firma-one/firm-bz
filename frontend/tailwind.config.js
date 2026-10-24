@@ -36,6 +36,7 @@ module.exports = {
 				popover: 'var(--ui-shadow-popover)',
 				dialog: 'var(--ui-shadow-dialog)',
 				card: 'var(--ui-shadow-card)',
+				'card-hover': 'var(--ui-shadow-card-hover)',
 				'card-drag': 'var(--ui-shadow-card-drag)'
 			},
 			transitionTimingFunction: {

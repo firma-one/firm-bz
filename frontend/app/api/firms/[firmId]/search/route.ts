@@ -6,6 +6,7 @@ import { requireFirmSearch } from '@/lib/api/firm-search-auth'
 import { computeGlobalSearchAccessScope } from '@/lib/services/global-search-access'
 import { parseDateRangeFromText } from '@/lib/services/date-query-parser'
 import { cleanSemanticQuery } from '@/lib/services/semantic-query-cleaner'
+import { resolveDisplayName } from '@/lib/auth/display-name'
 
 // Duplicated from app/api/projects/[projectId]/shares/route.ts's getAvatarUrlFromUser — same
 // inline-per-route pattern used ~10 times elsewhere in this codebase (no shared util exists yet).
@@ -193,7 +194,7 @@ export async function GET(
                 try {
                     const { data: { user: dbUser } } = await supabaseAdmin.auth.admin.getUserById(userId)
                     const meta = dbUser?.user_metadata ?? {}
-                    const name = (meta.full_name ?? meta.name ?? dbUser?.email?.split('@')[0] ?? null) as string | null
+                    const name = resolveDisplayName(meta, dbUser?.email) || null
                     userMap[userId] = { name, email: dbUser?.email ?? null, avatarUrl: getAvatarUrlFromUser(dbUser) }
                 } catch {
                     // ignore - that user's avatar/name just won't resolve

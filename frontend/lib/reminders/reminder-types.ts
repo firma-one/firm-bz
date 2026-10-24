@@ -37,6 +37,9 @@ export type ReminderWithContext = {
     firmSlug: string | null
     firmId: string | null
     ctaUrl: string | null
+    /** Where it sits, for the Inbox's place chips: its client, and its engagement unless it is one. */
+    clientName?: string | null
+    engagementName?: string | null
     // computed (null when dateValue is null)
     delta: number | null
     label: string

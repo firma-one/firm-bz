@@ -7,6 +7,7 @@ import { getRecentVisits } from "@/lib/recents"
 import { loadCalendarData } from "@/lib/calendar/calendar-data"
 import { getUserReminders } from "@/lib/actions/user-reminders"
 import { HomeView } from "@/components/home/home-view"
+import { resolveNames } from "@/lib/auth/display-name"
 
 
 /**
@@ -36,8 +37,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
     ])
     const work = await getMyWork({ userId: user.id, firms, reminders })
 
-    const meta = (user.user_metadata ?? {}) as { full_name?: string; name?: string }
-    const firstName = (meta.full_name || meta.name || "").trim().split(/\s+/)[0] || null
+    const firstName = resolveNames(user.user_metadata, user.email).firstName
 
     return (
         <HomeView

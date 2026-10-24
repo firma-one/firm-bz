@@ -93,6 +93,38 @@ describe('Toast', () => {
     expect(first).not.toHaveBeenCalled()
   })
 
+  it('calls onDismiss when it goes without its action: timed out, closed or replaced — never after Undo', () => {
+    const timedOut = vi.fn()
+    const closed = vi.fn()
+    const undone = vi.fn()
+    renderWith(
+      { type: 'success', title: 'Timed', duration: 1000, onDismiss: timedOut },
+      { type: 'success', title: 'Closed', onDismiss: closed },
+      { type: 'success', title: 'Undone', action: { label: 'Undo', onClick: () => {} }, onDismiss: undone },
+    )
+    raise('Timed')
+    act(() => { vi.advanceTimersByTime(1000) })
+    expect(timedOut).toHaveBeenCalledTimes(1)
+
+    raise('Closed')
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
+    expect(closed).toHaveBeenCalledTimes(1)
+
+    raise('Undone')
+    fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
+    act(() => { vi.advanceTimersByTime(10_000) })
+    expect(undone).not.toHaveBeenCalled()
+  })
+
+  it('a replaced toast is dismissed, so whatever waited on its Undo goes ahead', () => {
+    const first = vi.fn()
+    renderWith({ type: 'success', title: 'Done', onDismiss: first, action: { label: 'Undo', onClick: () => {} } })
+    raise('Done')
+    raise('Done')
+    expect(first).toHaveBeenCalledTimes(1)
+    expect(screen.getAllByRole('button', { name: 'Undo' })).toHaveLength(1)
+  })
+
   it('sits beside the docked panes', () => {
     renderWith({ type: 'success', title: 'Saved' })
     raise('Saved')

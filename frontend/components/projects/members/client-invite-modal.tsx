@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { PropertyList, PropertyRow, PROPERTY_FIELD_CLASS, PROPERTY_HINT_CLASS } from '@/components/ui/property-list'
 import { CreateDialogFooter, CreateDialogHeader, CreateDialogNotice } from '@/components/ui/create-dialog'
 import { inviteClientMember } from '@/lib/actions/client-members'
+import { InviteeNameFields } from '@/components/projects/members/invitee-name-fields'
 
 interface ClientInviteModalProps {
     firmId: string
@@ -18,6 +19,8 @@ interface ClientInviteModalProps {
 
 export function ClientInviteModal({ firmId, clientId, open, onOpenChange, onSuccess }: ClientInviteModalProps) {
     const [email, setEmail] = useState('')
+    const [firstName, setFirstName] = useState('')
+    const [lastName, setLastName] = useState('')
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [error, setError] = useState('')
 
@@ -26,10 +29,12 @@ export function ClientInviteModal({ firmId, clientId, open, onOpenChange, onSucc
         setError('')
         setIsSubmitting(true)
         try {
-            await inviteClientMember(firmId, clientId, email)
+            await inviteClientMember(firmId, clientId, email, { firstName, lastName })
             onSuccess()
             onOpenChange(false)
             setEmail('')
+            setFirstName('')
+            setLastName('')
         } catch (err: unknown) {
             setError(err instanceof Error ? err.message : 'Failed to send invitation')
         } finally {
@@ -64,6 +69,14 @@ export function ClientInviteModal({ firmId, clientId, open, onOpenChange, onSucc
                                     className={PROPERTY_FIELD_CLASS}
                                 />
                             </PropertyRow>
+                            <InviteeNameFields
+                                idPrefix="client-invite"
+                                firstName={firstName}
+                                lastName={lastName}
+                                onFirstNameChange={setFirstName}
+                                onLastNameChange={setLastName}
+                                disabled={isSubmitting}
+                            />
                             <PropertyRow label="Role" icon={<ShieldCheck />}>
                                 <div className="flex w-full flex-col gap-1">
                                     <span className="px-2 text-ui text-fg">Client administrator</span>

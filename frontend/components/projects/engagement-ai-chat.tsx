@@ -1,7 +1,8 @@
 'use client'
 
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
-import { Send, Copy, Check, RotateCcw, History, ThumbsUp, ThumbsDown, ClipboardList, Square, Clock, GripVertical, ChevronDown, Trash2, PanelLeft, Pin, PinOff, SquarePen, Info, MoreHorizontal, PanelRight, PictureInPicture2, MessageSquare, CornerDownRight, Briefcase, Folder } from 'lucide-react'
+import { Send, Copy, Check, RotateCcw, History, ThumbsUp, ThumbsDown, ClipboardList, Square, Clock, GripVertical, ChevronDown, Trash2, Pin, PinOff, SquarePen, Info, MessageSquare, CornerDownRight, Briefcase, Folder } from 'lucide-react'
+import { WindowGlyph } from '@/components/ui/window-glyph'
 import { ASSISTANT } from '@/lib/ai/assistant'
 import { Brio } from '@/components/ui/brio'
 import { RelativeDateTime } from '@/components/ui/relative-date-time'
@@ -15,7 +16,7 @@ import {
 } from '@/lib/ai/chat-conversations'
 import { ElapsedTime } from '@/components/ui/elapsed-time'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { ShimmerBar } from '@/components/ui/shimmer'
 import { ChatTaskList, type ChatAction } from '@/components/projects/chat-action-row'
 // The same list the API narrows against, so the scope chip can never offer a scope the
@@ -529,6 +530,8 @@ export function EngagementAiChat({
     // The panel widens while a pane is open, so it costs the conversation nothing.
     useEffect(() => { onHistoryOpenChange?.(sidePaneOpen) }, [sidePaneOpen, onHistoryOpenChange])
     const [copiedIndex, setCopiedIndex] = useState<number | null>(null)
+    /** The header's Copy conversation shows a check for a moment, as an answer's Copy does. */
+    const [transcriptCopied, setTranscriptCopied] = useState(false)
     // Ratings by message index. Session-only: the thumbs are an affordance on an answer still on
     // screen, and the durable record lives server-side in platform_ai_feedback.
     const [ratings, setRatings] = useState<Record<number, { helpful: boolean; reason?: FeedbackReason }>>({})
@@ -907,12 +910,13 @@ export function EngagementAiChat({
         if (!text) return
         try {
             await navigator.clipboard.writeText(text)
-            // A toast, since the action now lives in the ⋯ menu, which closes on click.
-            addToast({ type: 'success', title: 'Conversation copied', message: 'Paste it into a note or an update.' })
+            // The button is in the header now, so a check on it says it worked (no toast needed).
+            setTranscriptCopied(true)
+            setTimeout(() => setTranscriptCopied(false), 1500)
         } catch {
             // Clipboard blocked (permissions, insecure context). Nothing useful to say.
         }
-    }, [messages, engagementName, clientName, addToast])
+    }, [messages, engagementName, clientName])
 
     /** Copies the visible answer — parsed, so the follow-up sentinel never lands on the clipboard. */
     const copyAnswer = useCallback(async (index: number, content: string) => {
@@ -1099,7 +1103,7 @@ export function EngagementAiChat({
                     aria-label={`Collapse ${title.toLowerCase()}`}
                     title="Collapse"
                 >
-                    <PanelLeft className="h-3.5 w-3.5" />
+                    <WindowGlyph variant="left" className="h-3.5 w-3.5" />
                 </button>
             </div>
             <TooltipProvider delayDuration={150}>
@@ -1275,38 +1279,46 @@ export function EngagementAiChat({
                         </TooltipContent>
                     </Tooltip>
 
-                    <DropdownMenu>
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <DropdownMenuTrigger asChild>
-                                    <button type="button" onPointerDown={noDrag} className={headerButton} aria-label="More">
-                                        <MoreHorizontal className="h-4 w-4" />
+                    {/* COPY CONVERSATION. Only once there is one to export. The panel is shown to internal
+                        roles only, so a transcript cannot reach an external collaborator who never had
+                        access to Brio. (It and Dock/Float sat in a ⋯ menu; with room in the header they're
+                        buttons, and a ⋯ menu comes back only if more actions arrive.) */}
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <button
+                                type="button"
+                                onPointerDown={noDrag}
+                                onClick={() => void copyTranscript()}
+                                disabled={!hasConversation}
+                                className={headerButton}
+                                aria-label="Copy conversation as Markdown"
+                            >
+                                {transcriptCopied ? <Check className="h-4 w-4 text-action" /> : <ClipboardList className="h-4 w-4" />}
+                            </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom">{transcriptCopied ? 'Copied' : 'Copy conversation as Markdown'}</TooltipContent>
+                    </Tooltip>
+
+                    {/* Window controls after the conversation's: where the panel sits, then Collapse. */}
+                    {onLayoutChange && (
+                        <>
+                            <span aria-hidden className="mx-0.5 h-4 w-px shrink-0 bg-line" />
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <button
+                                        type="button"
+                                        onPointerDown={noDrag}
+                                        onClick={() => onLayoutChange(layout === 'dock' ? 'float' : 'dock')}
+                                        className={headerButton}
+                                        aria-label={layout === 'dock' ? 'Float over the page' : 'Dock to the side'}
+                                    >
+                                        <WindowGlyph variant={layout === 'dock' ? 'float' : 'right'} />
                                     </button>
-                                </DropdownMenuTrigger>
-                            </TooltipTrigger>
-                            <TooltipContent side="bottom">More</TooltipContent>
-                        </Tooltip>
-                        <DropdownMenuContent align="end" className="w-60 p-1">
-                            {/* Only once there is a conversation to export. The panel is shown to
-                                internal roles only, so a transcript cannot reach an external
-                                collaborator who never had access to Brio. */}
-                            <DropdownMenuItem className="gap-2" disabled={!hasConversation} onSelect={() => void copyTranscript()}>
-                                <ClipboardList className="h-4 w-4 text-fg-muted" />
-                                Copy conversation as Markdown
-                            </DropdownMenuItem>
-                            {onLayoutChange && (
-                                <>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuItem className="gap-2" onSelect={() => onLayoutChange(layout === 'dock' ? 'float' : 'dock')}>
-                                        {layout === 'dock'
-                                            ? <PictureInPicture2 className="h-4 w-4 text-fg-muted" />
-                                            : <PanelRight className="h-4 w-4 text-fg-muted" />}
-                                        {layout === 'dock' ? 'Float over the page' : 'Dock to the side'}
-                                    </DropdownMenuItem>
-                                </>
-                            )}
-                        </DropdownMenuContent>
-                    </DropdownMenu>
+                                </TooltipTrigger>
+                                <TooltipContent side="bottom">{layout === 'dock' ? 'Float over the page' : 'Dock to the side'}</TooltipContent>
+                            </Tooltip>
+                        </>
+                    )}
 
                     {/* Collapse, not close: the conversation is kept and the panel returns to its
                         launcher. An X claims the thread is being discarded. */}
@@ -1320,7 +1332,7 @@ export function EngagementAiChat({
                                     className={headerButton}
                                     aria-label="Collapse the assistant"
                                 >
-                                    <ChevronDown className="h-4 w-4" />
+                                    <WindowGlyph variant="minimize" />
                                 </button>
                             </TooltipTrigger>
                             <TooltipContent side="bottom">Collapse{shortcutLabel ? ` · ${shortcutLabel}` : ''}</TooltipContent>

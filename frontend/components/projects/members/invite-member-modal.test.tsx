@@ -74,9 +74,25 @@ describe('InviteMemberModal', () => {
         await waitFor(() => expect((sendButton() as HTMLButtonElement).disabled).toBe(false))
 
         fireEvent.click(sendButton())
-        await waitFor(() => expect(inviteMember).toHaveBeenCalledWith('eng-1', 'sam@out.test', 'p-ext'))
+        await waitFor(() => expect(inviteMember).toHaveBeenCalledWith('eng-1', 'sam@out.test', 'p-ext', { firstName: '', lastName: '' }))
         expect(onSuccess).toHaveBeenCalled()
         expect(onOpenChange).toHaveBeenCalledWith(false)
+    })
+
+    it('passes the optional invitee name through', async () => {
+        renderModal('contributor')
+        fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'sam@out.test' } })
+        fireEvent.change(screen.getByPlaceholderText('First name'), { target: { value: 'Sam' } })
+        fireEvent.change(screen.getByPlaceholderText('Last name'), { target: { value: 'Reed' } })
+        await waitFor(() => expect((sendButton() as HTMLButtonElement).disabled).toBe(false))
+
+        fireEvent.click(sendButton())
+        await waitFor(() =>
+            expect(inviteMember).toHaveBeenCalledWith('eng-1', 'sam@out.test', expect.any(String), {
+                firstName: 'Sam',
+                lastName: 'Reed',
+            })
+        )
     })
 
     it('shows the server error in the notice', async () => {

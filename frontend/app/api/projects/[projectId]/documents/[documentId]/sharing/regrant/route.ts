@@ -16,12 +16,38 @@ import { isDescendantOfGrantedFolder } from '@/lib/document-sharing-access'
 import { logger } from '@/lib/logger'
 import { resolveEngagementConnectorId } from '@/lib/connectors/resolve-client-connector'
 import { GraphSharingPolicyError } from '@/lib/connectors/adapters/onedrive-permission-adapter'
+import {
+    connectorAccountEmail,
+    createStepTimer,
+    isKnownGoogleAccount,
+    isSameEmailDomain,
+    withGoogleAccountHint,
+} from '@/lib/secure-open-grant'
 
+/**
+ * Check first (2026-10-23): reuse a permission that still stands instead of revoking and
+ * granting again on every open — that took 5–45s on SharePoint and emailed Google users each
+ * time (see lib/secure-open-grant.ts for why neither provider needs it). False restores the old
+ * always-regrant flow; kept until sign-off.
+ */
+const REUSE_STANDING_GRANT = true
+
+/**
+ * POST — open a document through the person's own grant. `?fresh=1` ("Email me a new access
+ * link") skips the reuse and always grants again, with Google's sharing email.
+ * Responds `{ success, provider, documentUrl? }`: with documentUrl the client opens it directly;
+ * without it (Google, emailed) the client says to check email.
+ */
 export async function POST(
-    _request: NextRequest,
+    request: NextRequest,
     { params }: { params: Promise<{ projectId: string; documentId: string }> }
 ) {
+    const timer = createStepTimer()
+    let timingPath = 'error'
+    const logTimings = (provider?: string) =>
+        logger.warn('[regrant] timings', { path: timingPath, provider, ...timer.summary() })
     try {
+        const fresh = request.nextUrl?.searchParams.get('fresh') === '1'
         const supabase = await createClient()
         const { data: { user } } = await supabase.auth.getUser()
         if (!user || (!user.email && !user.user_metadata?.email)) {
@@ -126,20 +152,21 @@ export async function POST(
             return NextResponse.json({ error: 'No active storage connection found' }, { status: 500 })
         }
 
-        const connectorRecord = await prisma.connector.findUnique({ where: { id: connectorId }, select: { type: true } })
+        const connectorRecord = await prisma.connector.findUnique({
+            where: { id: connectorId },
+            select: { type: true, settings: true, externalAccountId: true },
+        })
         const isOneDriveConnector = connectorRecord?.type === 'ONEDRIVE'
-
-        if (sharingUser.connectorPermissionId) {
-            try {
-                await permissionAdapter.revokePermission(connectorId, fileInfo.externalId, sharingUser.connectorPermissionId)
-            } catch (e) {
-                console.warn('revokePermission failed (stale permissionId?), continuing:', e)
-            }
-            await prisma.engagementDocumentSharingUser.update({
-                where: { id: sharingUser.id },
-                data: { connectorPermissionId: null, updatedBy: user.id },
-            })
-        }
+        const provider = isOneDriveConnector ? 'onedrive' : 'google'
+        // On the connected account's own domain: a SharePoint tenant member (no guest invite needed)
+        // or a Google Workspace account (no PIN needed).
+        const accountEmail = connectorAccountEmail(connectorRecord)
+        const recipientOnConnectorDomain = isSameEmailDomain(email, accountEmail)
+        // Only a known Google account gets the authuser hint: for a visitor (no Google account) it
+        // would send them to a Google sign-in page instead of the PIN check.
+        const knownGoogleAccount = !isOneDriveConnector && isKnownGoogleAccount(email, user.identities, accountEmail)
+        const openUrlFor = (webViewLink: string) => (knownGoogleAccount ? withGoogleAccountHint(webViewLink, email) : webViewLink)
+        timer.step('checks')
 
         const versionLocked = isDocumentFinalized(document.settings)
 
@@ -158,6 +185,83 @@ export async function POST(
         const sharePdfOnly = isViewer && guestOptions.sharePdfOnly
         const addWatermark = isViewer && guestOptions.addWatermark
         const allowDownload = guestOptions.allowDownload ?? false
+
+        const isExternalMember = isExternalEngagementRole(projectMember.role)
+        // Viewers and external collaborators get Drive's native download blocked (Branch B and the
+        // EC step below). On OneDrive that grant is a blocksDownload link, which is view-only.
+        const downloadBlocked = isViewer || isExternalMember
+
+        // Check first: a permission that still stands, for this person, with the role they should
+        // have, is reused — no revoke, no new grant, no email. PDF-only sharing is left out: its
+        // copy is re-exported (and re-watermarked) on every open, so it always takes the full path.
+        const standingPermissionId = sharingUser.connectorPermissionId
+        if (
+            REUSE_STANDING_GRANT
+            && !fresh
+            && !sharePdfOnly
+            && standingPermissionId
+            && (sharingUser.sharingPermissionStatus === DocumentSharingPermissionStatus.GRANTED
+                || sharingUser.sharingPermissionStatus === DocumentSharingPermissionStatus.INHERITED)
+        ) {
+            const [standing, meta] = await Promise.all([
+                permissionAdapter.getFilePermission(connectorId, fileInfo.externalId, standingPermissionId),
+                permissionAdapter.getFilesMetadata(connectorId, [fileInfo.externalId]).catch(() => []),
+            ])
+            timer.step('lookup')
+            const webViewLink = meta[0]?.webViewLink
+            const forThisPerson = !!standing && (!standing.email || standing.email.toLowerCase() === email.toLowerCase())
+            const expectedRole = isOneDriveConnector && downloadBlocked ? 'viewer' : role
+            let reusable = forThisPerson && !!webViewLink && standing!.role === expectedRole
+
+            if (!reusable && forThisPerson && webViewLink && !isOneDriveConnector) {
+                // Google, role changed (e.g. read-only once the engagement completed): change it in
+                // place. Revoking and sharing again would email the person for nothing.
+                if (downloadBlocked) {
+                    try {
+                        await contentAdapter.setCopyRestricted(connectorId, fileInfo.externalId, true)
+                    } catch (e) {
+                        console.error('Failed to set copyRequiresWriterPermission on role change:', e)
+                    }
+                }
+                reusable = await permissionAdapter.patchFilePermissionRole(connectorId, fileInfo.externalId, standing!.id, role)
+                timer.step('patchRole')
+                timingPath = 'role-changed'
+            }
+
+            if (reusable && webViewLink) {
+                let documentUrl = openUrlFor(webViewLink)
+                if (isOneDriveConnector && !recipientOnConnectorDomain) {
+                    // A SharePoint guest still gets a fresh redemption link, the known-good way in
+                    // that skips the blank "enter your email" prompt (see the full path below).
+                    try {
+                        const { inviteRedeemUrl } = await permissionAdapter.preInviteGuest?.(connectorId, email, webViewLink) ?? { inviteRedeemUrl: null }
+                        if (inviteRedeemUrl) documentUrl = inviteRedeemUrl
+                    } catch (inviteErr) {
+                        logger.warn('[regrant] preInviteGuest failed on a standing grant, opening webViewLink', {
+                            connectorId, email, error: inviteErr instanceof Error ? inviteErr.message : String(inviteErr),
+                        })
+                    }
+                    timer.step('preInvite')
+                }
+                if (timingPath !== 'role-changed') timingPath = 'reused'
+                logTimings(provider)
+                return NextResponse.json({ success: true, provider, documentUrl })
+            }
+            timingPath = 'error'
+        }
+
+        if (standingPermissionId) {
+            try {
+                await permissionAdapter.revokePermission(connectorId, fileInfo.externalId, standingPermissionId)
+            } catch (e) {
+                console.warn('revokePermission failed (stale permissionId?), continuing:', e)
+            }
+            await prisma.engagementDocumentSharingUser.update({
+                where: { id: sharingUser.id },
+                data: { connectorPermissionId: null, updatedBy: user.id },
+            })
+            timer.step('revoke')
+        }
 
         const fileName = document.fileName || 'a document'
         const message = `POCKETT SECURE ACCESS\n\nYou have requested to open "${fileName}". For your security, your storage provider requires a one-time email verification. Please click the "Open" button below to receive your one-time passcode and access the document.`
@@ -268,11 +372,18 @@ export async function POST(
             }
         }
 
+        timer.step('prepare')
+
+        // Google: share silently and open straight away when this is known to be a Google account
+        // (no PIN, and the sharing email would only repeat the link). Otherwise — a visitor with
+        // no Google account, or "Email me a new access link" — Google's sharing email is the way in.
+        const googleSilent = knownGoogleAccount && !fresh
+
         // Resolve the document's own webViewLink FIRST — needed both as the fallback "open" URL
         // and as inviteRedirectUrl below, so a first-time external guest's redemption lands
         // directly on this document rather than a generic page.
         let documentUrl: string | undefined
-        if (isOneDriveConnector) {
+        if (isOneDriveConnector || googleSilent) {
             try {
                 const filesMeta = await permissionAdapter.getFilesMetadata?.(connectorId, [targetFileId])
                 documentUrl = filesMeta?.[0]?.webViewLink
@@ -280,8 +391,9 @@ export async function POST(
                     logger.warn('[regrant] Could not resolve document webViewLink', { connectorId, targetFileId })
                 }
             } catch (metaErr) {
-                logger.error('[regrant] Failed to resolve document webViewLink', metaErr as Error, 'OneDrive', { targetFileId })
+                logger.error('[regrant] Failed to resolve document webViewLink', metaErr as Error, provider, { targetFileId })
             }
+            timer.step('link')
         }
 
         // Pre-invite the guest to capture inviteRedeemUrl BEFORE the actual permission grant —
@@ -303,7 +415,9 @@ export async function POST(
         // sign-in prompt. Both best-effort — either failing just falls back to prior behavior. See
         // preInviteGuest's doc comment (onedrive-permission-adapter.ts) and
         // .claude/plans/connector-microsoft-impl.md.
-        if (isOneDriveConnector) {
+        // Skipped for the tenant's own domain: Graph always declines to invite a member as a guest
+        // ("verified domain of this directory"), so it was a wasted round trip on every open.
+        if (isOneDriveConnector && !recipientOnConnectorDomain) {
             try {
                 const { inviteRedeemUrl } = await permissionAdapter.preInviteGuest?.(connectorId, email, documentUrl) ?? { inviteRedeemUrl: null }
                 if (inviteRedeemUrl) {
@@ -326,11 +440,25 @@ export async function POST(
                     connectorId, targetFileId, email, error: inviteErr instanceof Error ? inviteErr.message : String(inviteErr),
                 })
             }
+            timer.step('preInvite')
         }
 
         let permissionId: string | null = null
+        // Whether Google's sharing email went out (the client then says to check email).
+        let emailed = !isOneDriveConnector && !googleSilent
         try {
-            permissionId = await permissionAdapter.grantFilePermission(connectorId, targetFileId, email, role, { message, preventDownload: copyRestricted })
+            permissionId = await permissionAdapter.grantFilePermission(connectorId, targetFileId, email, role, {
+                message,
+                preventDownload: copyRestricted,
+                ...(googleSilent ? { notify: false } : {}),
+            })
+            if (!permissionId && googleSilent) {
+                // Drive won't share silently with an address that has no Google account, so this
+                // wasn't one after all: share again with the email, which is how a visitor gets in.
+                permissionId = await permissionAdapter.grantFilePermission(connectorId, targetFileId, email, role, { message, preventDownload: copyRestricted })
+                emailed = true
+            }
+            timer.step('grant')
         } catch (grantErr) {
             if (grantErr instanceof GraphSharingPolicyError) {
                 // Confirmed live 2026-08-14: this specific Graph error only occurs for external
@@ -341,6 +469,7 @@ export async function POST(
                 logger.warn('[regrant] Graph sharing policy blocked this grant', {
                     connectorId, targetFileId, email, error: grantErr.message,
                 })
+                logTimings(provider)
                 return NextResponse.json({
                     error: `This document's storage provider (SharePoint) is configured to block sharing with external accounts like ${email}. Ask your Microsoft 365 administrator to allow external sharing for this site, or ask your engagement lead to switch you to an internal Microsoft account.`,
                     code: 'external_sharing_blocked',
@@ -384,7 +513,9 @@ export async function POST(
                 where: { id: sharingUser.id },
                 data: { sharingPermissionStatus: DocumentSharingPermissionStatus.GRANTED, updatedBy: user.id },
             })
-            return NextResponse.json({ success: true })
+            timingPath = 'membership-only'
+            logTimings(provider)
+            return NextResponse.json({ success: true, provider })
         }
 
         await prisma.engagementDocumentSharingUser.update({
@@ -406,8 +537,18 @@ export async function POST(
         // recipient is already present, so the frontend opens documentUrl directly in a new tab,
         // same as Google's existing "Open in browser" pattern elsewhere in this app
         // (document-edit-sheet.tsx). See .claude/plans/connector-microsoft-impl.md.
-        return NextResponse.json({ success: true, documentUrl })
+        timer.step('save')
+        timingPath = 'granted'
+        logTimings(provider)
+        if (!isOneDriveConnector) {
+            if (emailed) return NextResponse.json({ success: true, provider })
+            // Shared silently: open it here. Drive's own open link stands in if the metadata read failed.
+            const googleUrl = documentUrl ?? `https://drive.google.com/open?id=${encodeURIComponent(targetFileId)}`
+            return NextResponse.json({ success: true, provider, documentUrl: openUrlFor(googleUrl) })
+        }
+        return NextResponse.json({ success: true, provider, documentUrl })
     } catch (e) {
+        logTimings()
         console.error('POST regrant sharing error', e)
         return NextResponse.json({ error: 'Failed to authenticate editor access' }, { status: 500 })
     }

@@ -35,7 +35,7 @@ const count = (n: number | undefined) =>
     n !== undefined && n > 0 ? <span className="text-small tabular-nums text-fg-subtle">{n}</span> : null
 
 /**
- * The engagement's underline tab row. Shared by the page and its loading state, so a tab switch
+ * The engagement's underline tab row: each tab reads {label} {count} {lock}. Shared by the page and its loading state, so a tab switch
  * keeps the exact same row on screen while the next tab loads. Must sit inside a `<Tabs>`.
  */
 export function EngagementTabsList({ pendingTab, ...c }: EngagementTabsConfig & { pendingTab?: string | null }) {
@@ -84,8 +84,8 @@ export function EngagementTabsList({ pendingTab, ...c }: EngagementTabsConfig & 
                 <TabsTrigger value="audit" data-demo-tour="engagement-audit-tab" className="relative gap-1.5">
                     <ClipboardList className="h-4 w-4" />
                     Audit
-                    <AccessLock label="Engagement leads and firm admins only" />
                     {count(c.auditCount)}
+                    <AccessLock label="Engagement leads and firm admins only" />
                     {pending('audit')}
                 </TabsTrigger>
             )}
@@ -93,8 +93,8 @@ export function EngagementTabsList({ pendingTab, ...c }: EngagementTabsConfig & 
                 <TabsTrigger value="members" data-demo-tour="engagement-members-tab" className="relative gap-1.5">
                     <Users className="h-4 w-4" />
                     Members
-                    <AccessLock label="Internal only — external contributors and reviewers don't see this" />
                     {count(c.memberCount)}
+                    <AccessLock label="Internal only — external contributors and reviewers don't see this" />
                     {pending('members')}
                 </TabsTrigger>
             )}

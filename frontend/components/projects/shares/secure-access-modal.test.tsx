@@ -50,6 +50,17 @@ describe('SecureAccessModal', () => {
         expect(onClose).toHaveBeenCalled()
     })
 
+    it('opened (Google, direct): offers a new access link by email, and Done closes', () => {
+        const onRequestNewLink = vi.fn()
+        const { onClose } = show('opened', { onRequestNewLink })
+        expect(screen.getByRole('dialog', { name: 'Opened in a new tab' })).toBeTruthy()
+        expect(screen.getByText(/Didn’t get in\?/)).toBeTruthy()
+        fireEvent.click(screen.getByRole('button', { name: 'Email me a new access link' }))
+        expect(onRequestNewLink).toHaveBeenCalled()
+        fireEvent.click(screen.getByRole('button', { name: 'Done' }))
+        expect(onClose).toHaveBeenCalled()
+    })
+
     it('error: shows the reason, with Close', () => {
         show('error', { error: 'Your access to this document has been revoked.' })
         expect(screen.getByRole('dialog', { name: 'Access unavailable' })).toBeTruthy()
@@ -58,7 +69,7 @@ describe('SecureAccessModal', () => {
     })
 
     it('titles are sentence case in every state', () => {
-        for (const mode of ['loading', 'opening', 'blocked', 'email', 'error'] as const) {
+        for (const mode of ['loading', 'opening', 'opened', 'blocked', 'email', 'error'] as const) {
             const { unmount } = render(<SecureAccessModal isOpen onClose={vi.fn()} email="" fileName="f" mode={mode} />)
             const title = screen.getByRole('dialog').getAttribute('aria-labelledby')!
             const words = document.getElementById(title)!.textContent!.split(' ').slice(1)

@@ -9,6 +9,7 @@ import type { HomeBookmark } from "@/lib/home/bookmarks"
 import type { CalendarEvent } from "@/lib/calendar/calendar-data"
 import { firmTabPath } from "@/lib/navigation/firm-paths"
 import { PageHeading } from "@/components/ui/page-heading"
+import { cn } from "@/lib/utils"
 import { ListRow } from "@/components/ui/list-row"
 import { EmptyPanel } from "@/components/ui/empty-panel"
 import { interactiveCardClass } from "@/components/ui/interactive-card"
@@ -116,7 +117,10 @@ function NeedsYouSection({ items, label }: { items: NeedsYouItem[]; label: Label
                         meta={label(item.firmId, item.context)}
                         trailing={
                             <>
-                                {item.at && <RelativeTime iso={item.at} className="hidden md:inline" />}
+                                {/* A due or overdue reminder says so ("18 days overdue"), as the Inbox does; the rest, how long ago. */}
+                                {item.dueLabel
+                                    ? <span className={cn('hidden text-caption md:inline', item.overdue ? 'text-danger' : 'text-fg-muted')}>{item.dueLabel}</span>
+                                    : item.at && <RelativeTime iso={item.at} className="hidden md:inline" />}
                                 <span className="rounded-control border border-line px-1.5 py-0.5 text-caption text-fg group-hover:border-line-strong group-hover:text-fg">
                                     {item.actionLabel}
                                 </span>

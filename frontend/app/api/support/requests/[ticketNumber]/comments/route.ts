@@ -7,6 +7,7 @@ import { splitDescription } from '@/lib/support/ticket-view'
 import { buildAbsoluteUrl, createEventNotifications, sendEventEmailToUser } from '@/lib/notify-event'
 import { renderSupportReplyEmail } from '@/lib/email-templates/support-reply'
 import { logger } from '@/lib/logger'
+import { resolveDisplayName } from '@/lib/auth/display-name'
 
 export async function POST(
   request: NextRequest,
@@ -43,7 +44,7 @@ export async function POST(
       createdAt: new Date().toISOString(),
       createdBy: user.id,
       authorEmail: user.email ?? '',
-      authorName: user.user_metadata?.full_name ?? user.user_metadata?.name ?? null,
+      authorName: resolveDisplayName(user.user_metadata, user.email) || null,
     }
 
     const existing = Array.isArray(ticket.comments) ? ticket.comments : []

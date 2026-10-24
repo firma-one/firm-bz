@@ -20,12 +20,12 @@ import {
     ExternalLink,
     Info,
     ScrollText,
-    PanelLeftClose,
     Search,
     Settings,
     UserCircle,
     Users,
 } from "lucide-react"
+import { WindowGlyph } from '@/components/ui/window-glyph'
 import { ClientIcon } from "@/components/ui/client-icon"
 import { useAuth } from "@/lib/auth-context"
 import { buildBillingPageHref } from "@/lib/billing/build-billing-page-href"
@@ -51,6 +51,7 @@ import { cn } from "@/lib/utils"
 import { useShellData } from "./shell-data-context"
 import { WorkspaceSwitcher } from "./workspace-switcher"
 import { initialsOf } from '@/lib/initials'
+import { resolveDisplayName } from '@/lib/auth/display-name'
 
 export function CountBadge({ count }: { count: number }) {
     return (
@@ -168,8 +169,8 @@ function ProfileMenu({ isSystemAdmin }: { isSystemAdmin: boolean }) {
     const pathname = usePathname()
     const { firmSlug, groupSlug, canManage } = useShellData()
 
-    const meta = (user?.user_metadata ?? {}) as { full_name?: string; name?: string; avatar_url?: string; picture?: string }
-    const name = meta.full_name || meta.name || user?.email?.split("@")[0] || "Account"
+    const meta = (user?.user_metadata ?? {}) as { avatar_url?: string; picture?: string }
+    const name = resolveDisplayName(user?.user_metadata, user?.email) || "Account"
     const avatar = meta.avatar_url || meta.picture || null
 
     return (
@@ -335,7 +336,7 @@ export function SidebarV2({
                             className="flex h-7 w-7 shrink-0 items-center justify-center rounded-control text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg-muted"
                             aria-label="Collapse sidebar"
                         >
-                            <PanelLeftClose className="h-4 w-4" />
+                            <WindowGlyph variant="left" />
                         </button>
                     </Hint>
                 )}

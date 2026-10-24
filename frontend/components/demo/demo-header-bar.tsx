@@ -3,7 +3,8 @@
 import { Fragment, type ReactNode } from 'react'
 import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
-import { BarChart3, Briefcase, Building2, CalendarDays, ChevronRight, ClipboardList, Folder, Home, Inbox, LayoutGrid, LifeBuoy, Menu, MessagesSquare, PanelLeftOpen, Search, Users } from 'lucide-react'
+import { BarChart3, Briefcase, Building2, CalendarDays, ChevronRight, ClipboardList, Folder, Home, Inbox, LayoutGrid, LifeBuoy, Menu, MessagesSquare, Search, Users } from 'lucide-react'
+import { WindowGlyph } from '@/components/ui/window-glyph'
 import { ClientIcon } from '@/components/ui/client-icon'
 import { cn } from '@/lib/utils'
 import { DEMO_FIRM, getDemoClient } from '@/lib/demo/static-demo-data'
@@ -88,7 +89,7 @@ export function DemoHeaderBar({ onOpenMobileNav, inboxCount, sidebarCollapsed = 
                     title="Expand sidebar  ["
                     aria-label="Expand sidebar"
                 >
-                    <PanelLeftOpen className="h-4 w-4" />
+                    <WindowGlyph variant="left" filled={false} />
                 </button>
             )}
 

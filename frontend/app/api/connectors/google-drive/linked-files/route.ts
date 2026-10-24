@@ -30,6 +30,7 @@ import {
     recursiveCopyOneDrive,
     ensureOneDriveFolderPath,
 } from '@/lib/connectors/adapters/onedrive-file-ops'
+import { resolveDisplayName } from '@/lib/auth/display-name'
 
 const oneDriveConnector = OneDriveConnector.getInstance()
 
@@ -702,9 +703,7 @@ export async function POST(request: NextRequest) {
                             const { data: { user: u } } = await admin.auth.admin.getUserById(uid)
                             if (u?.email) {
                                 const meta = (u.user_metadata ?? {}) as Record<string, unknown>
-                                const displayName = (typeof meta.full_name === 'string' && meta.full_name.trim())
-                                    || (typeof meta.name === 'string' && meta.name.trim())
-                                    || u.email.split('@')[0]
+                                const displayName = resolveDisplayName(meta, u.email)
                                 linkCreatorById.set(uid, { email: u.email, displayName })
                             }
                         }))

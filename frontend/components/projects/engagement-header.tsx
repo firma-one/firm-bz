@@ -99,6 +99,10 @@ export function EngagementHeader({
     const leads: PersonOption[] = (members ?? []).filter((m) => m.role === "eng_admin").map((m) => ({ id: m.userId, name: m.name, avatarUrl: m.avatarUrl }))
     const everyone: PersonOption[] = (members ?? []).map((m) => ({ id: m.userId, name: m.name, avatarUrl: m.avatarUrl }))
     const isCompleted = status === "COMPLETED"
+    // When the second row's properties step aside (by the row's width; see the row below). Without the
+    // people (external guests, the tour) the row is shorter, so Start and Client can stay longer.
+    const showStart = showPeople ? "hidden @[34rem]/engagement-meta:inline-flex" : "hidden @[21rem]/engagement-meta:inline-flex"
+    const showClient = showPeople ? "hidden @[50rem]/engagement-meta:inline-flex" : "hidden @[30rem]/engagement-meta:inline-flex"
 
     return (
         <header className="flex flex-col gap-2 pb-3" data-demo-tour="engagement-header">
@@ -107,7 +111,10 @@ export function EngagementHeader({
                     <span className="flex shrink-0 items-center text-fg-muted [&_svg]:h-7 [&_svg]:w-7" aria-hidden>
                         <Briefcase />
                     </span>
-                    <h1 className="min-w-0 text-h1 text-fg">{name || "Engagement"}</h1>
+                    {/* One line, cut short when a pane narrows the page: wrapping to two lines shifted everything below. */}
+                    <Hint label={name || "Engagement"} side="bottom">
+                        <h1 className="min-w-0 truncate text-h1 text-fg">{name || "Engagement"}</h1>
+                    </Hint>
                 </div>
                 {personaDisplayName && (
                     <Hint label="Your role on this engagement">
@@ -119,7 +126,11 @@ export function EngagementHeader({
             </div>
             {description && <p className="max-w-3xl text-ui text-fg-muted line-clamp-2">{description}</p>}
 
-            <div className="-ml-1.5 flex flex-wrap items-center gap-x-1 gap-y-1">
+            {/* One line, never wrapping: as a side pane narrows the page, the properties shown elsewhere step
+                aside first, by the row's own width (as the Files table drops columns): Client (in the breadcrumb),
+                then Members (the Members tab's count), then Start (the Overview's Timeline), then the lead's
+                name (the avatar stays). Status, Lead and Due always show. */}
+            <div className="@container/engagement-meta -ml-1.5 flex flex-nowrap items-center gap-x-1 overflow-hidden">
                 <Prop label="Status">
                     <StatusProperty
                         kind="engagement"
@@ -131,7 +142,7 @@ export function EngagementHeader({
                 </Prop>
 
                 {showPeople && (
-                    <Prop label={leads.length > 1 ? "Leads" : "Lead"}>
+                    <Prop label={leads.length > 1 ? "Leads" : leads.length === 1 ? `Lead · ${leads[0].name}` : "Lead"}>
                         <span className="inline-flex h-7 items-center gap-1.5 px-1.5 text-small text-fg">
                             {members === null ? (
                                 <span className="text-fg-subtle">…</span>
@@ -142,7 +153,7 @@ export function EngagementHeader({
                                     <span className="flex -space-x-1">
                                         {leads.slice(0, 3).map((l) => <PersonAvatar key={l.id} person={l} />)}
                                     </span>
-                                    <span className="max-w-[10rem] truncate">{leads.length === 1 ? leads[0].name : `${leads.length} leads`}</span>
+                                    <span className="hidden max-w-[10rem] truncate @[27rem]/engagement-meta:block">{leads.length === 1 ? leads[0].name : `${leads.length} leads`}</span>
                                 </>
                             )}
                         </span>
@@ -150,7 +161,7 @@ export function EngagementHeader({
                 )}
 
                 {showPeople && members !== null && everyone.length > 0 && (
-                    <Prop label="Members">
+                    <Prop label="Members" className="hidden @[42rem]/engagement-meta:inline-flex">
                         <Link href={membersHref} className="inline-flex h-7 items-center gap-1.5 rounded-control px-1.5 text-small text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg">
                             <Users className="h-3.5 w-3.5" />
                             <span className="flex -space-x-1">
@@ -161,7 +172,7 @@ export function EngagementHeader({
                     </Prop>
                 )}
 
-                <Prop label="Start" icon={<CalendarDays className="h-3.5 w-3.5" />}>
+                <Prop label="Start" icon={<CalendarDays className="h-3.5 w-3.5" />} className={showStart}>
                     <DateProperty
                         value={kickoffDate}
                         placeholder="Start"
@@ -181,7 +192,7 @@ export function EngagementHeader({
                 </Prop>
 
                 {clientName && (
-                    <Prop label="Client">
+                    <Prop label="Client" className={showClient}>
                         <Link
                             href={clientHref ?? clientPath(groupSlug, orgSlug, clientSlug)}
                             className="inline-flex h-7 items-center gap-1.5 rounded-control px-1.5 text-small text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg"

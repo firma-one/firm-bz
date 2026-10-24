@@ -5,6 +5,7 @@ import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { prisma } from '@/lib/prisma'
 import { resolveProjectContext } from '@/lib/resolve-project-context'
 import { canViewProject } from '@/lib/permission-helpers'
+import { resolveDisplayName } from '@/lib/auth/display-name'
 
 const supabaseAdmin = createAdminClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:54321',
@@ -45,7 +46,7 @@ export async function GET(
             const email = data?.user?.email
             if (!email) return null
             const meta = data?.user?.user_metadata ?? {}
-            const name = (meta.full_name ?? meta.name ?? email.split('@')[0]) as string
+            const name = resolveDisplayName(meta, email)
             const avatarUrl = (meta.avatar_url ?? meta.picture ?? null) as string | null
             // Flagged rather than filtered: Brio belongs in the Members list, but not in pickers
             // that are choosing a person to do work. Consumers decide which they are.

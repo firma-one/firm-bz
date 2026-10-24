@@ -3,6 +3,7 @@ import { createClient } from '@/utils/supabase/server'
 import { getPrismaWithRls } from '@/lib/prisma'
 import { canManageClient, canManageProject } from '@/lib/permission-helpers'
 import { getHomeFirms } from '@/lib/home/home-firms'
+import { placeNotifications } from '@/lib/notification-links'
 
 function daysAgoUtc(days: number) {
   const d = new Date()
@@ -24,6 +25,12 @@ async function allFirmsWhere(userId: string) {
   const { firms } = await getHomeFirms(userId)
   return { userId, OR: [{ firmId: { in: firms.map((f) => f.id) } }, { scope: 'PLATFORM' }] }
 }
+
+/**
+ * Retracted rows are left out of the list and its unread count: a due date that changed again
+ * dismisses its earlier "due on …" update (documents/[documentId]/due-date), and it must not linger.
+ */
+const NOT_RETRACTED = { dismissedAt: null }
 
 const NOTIFICATION_SELECT = {
   id: true,
@@ -144,12 +151,12 @@ export async function GET(request: NextRequest) {
   if (wantsAllFirms(request)) {
     // Cleanup covers every row the caller has; the list only the firms they may open now.
     await pruneNotifications(prisma, { userId: user.id })
-    const where = await allFirmsWhere(user.id)
+    const where = { ...(await allFirmsWhere(user.id)), ...NOT_RETRACTED }
     const [notifications, unreadCount] = await Promise.all([
       prisma.notification.findMany({ where, orderBy: { createdAt: 'desc' }, take: 50, select: NOTIFICATION_SELECT }),
       prisma.notification.count({ where: { ...where, readAt: null } }),
     ])
-    return NextResponse.json({ unreadCount, canBroadcast: false, broadcastScopes: [], notifications: serialize(notifications) })
+    return NextResponse.json({ unreadCount, canBroadcast: false, broadcastScopes: [], notifications: serialize(await placeNotifications(prisma, notifications)) })
   }
 
   const orgId =
@@ -184,6 +191,7 @@ export async function GET(request: NextRequest) {
   const notificationWhere = {
     userId: user.id,
     OR: [{ firmId: orgId }, { scope: 'PLATFORM' }],
+    ...NOT_RETRACTED,
   }
 
   const notifications = await prisma.notification.findMany({
@@ -201,7 +209,7 @@ export async function GET(request: NextRequest) {
     unreadCount,
     canBroadcast,
     broadcastScopes,
-    notifications: serialize(notifications),
+    notifications: serialize(await placeNotifications(prisma, notifications)),
   })
 }
 

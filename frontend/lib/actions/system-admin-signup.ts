@@ -119,6 +119,7 @@ async function sendInviteEmailAndGenerateLink(input: {
         first_name: input.firstName,
         last_name: input.lastName,
         full_name: fullName,
+        name_source: 'user',
       },
     },
   })

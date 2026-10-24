@@ -105,6 +105,10 @@ export default async function EngagementPage({ params }: PageProps) {
   // The bare engagement URL reopens the tab the user was last on, else Files. An unknown tab
   // segment falls back to Overview.
   const defaultTab = rest?.[0] ? 'analytics' : ((await getLastEngagementTab(user.id, project.id)) ?? 'files')
+  // The Board has its own route (…/board), so a last visit there reopens it there.
+  if (!rest?.[0] && defaultTab === 'board') {
+    redirect(`${engagementPath(groupSlug, firmSlug, clientSlug, engagementSlug)}/board`)
+  }
   const pathSegments = parseRest(rest, defaultTab)
 
   const filesPath = engagementPath(groupSlug, firmSlug, clientSlug, engagementSlug, { tab: 'files' })

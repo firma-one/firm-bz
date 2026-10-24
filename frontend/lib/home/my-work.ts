@@ -55,9 +55,15 @@ export type NeedsYouItem = {
     firmId: string | null
     title: string
     context: string
+    /** Where it sits, for the Inbox's place chips; `context` is the same as one line for Home. */
+    clientName?: string | null
+    engagementName?: string | null
     href: string
     actionLabel: string
     at: string | null
+    /** A dated reminder that needs you (due today or overdue): its due label, shown in place of `at`. */
+    dueLabel?: string | null
+    overdue?: boolean
 }
 
 export type DueItem = {
@@ -137,6 +143,10 @@ export async function getMyWork(params: {
         const contextOf = (id: string) => {
             const e = byId.get(id)
             return e ? `${e.clientName} · ${e.name}` : ''
+        }
+        const placeOf = (id: string) => {
+            const e = byId.get(id)
+            return { clientName: e?.clientName ?? null, engagementName: e?.name ?? null }
         }
         const firmOf = (id: string) => byId.get(id)?.firmId ?? null
         const sharesBoard = (id: string) => pathOf(rows.find((r) => r.id === id)!, { tab: 'shares', subpath: 'board' })
@@ -236,6 +246,7 @@ export async function getMyWork(params: {
                 firmId: firmOf(d.engagementId),
                 title: d.fileName,
                 context: contextOf(d.engagementId),
+                ...placeOf(d.engagementId),
                 href: sharesBoard(d.engagementId),
                 actionLabel: 'Review',
                 at: d.updatedAt.toISOString(),
@@ -246,6 +257,7 @@ export async function getMyWork(params: {
                 firmId: firmOf(d.engagementId),
                 title: d.fileName,
                 context: contextOf(d.engagementId),
+                ...placeOf(d.engagementId),
                 href: sharesBoard(d.engagementId),
                 actionLabel: 'Approve upload',
                 at: d.createdAt.toISOString(),
@@ -259,6 +271,7 @@ export async function getMyWork(params: {
                     firmId: firmOf(c.engagementId),
                     title: c.fileName,
                     context: contextOf(c.engagementId),
+                    ...placeOf(c.engagementId),
                     href: engagementDocCommentPath(firm.groupSlug, firm.slug, e.client.slug, e.slug, c.projectDocumentId, c.id),
                     actionLabel: 'Reply',
                     at: c.createdAt.toISOString(),
@@ -276,6 +289,7 @@ export async function getMyWork(params: {
                     firmId: firmOf(d.engagementId),
                     title: d.fileName,
                     context: contextOf(d.engagementId),
+                    ...placeOf(d.engagementId),
                     href: sharesBoard(d.engagementId),
                     actionLabel: 'See changes',
                     at: d.eventAt.toISOString(),
@@ -328,8 +342,9 @@ export async function getMyWork(params: {
 }
 
 /**
- * The caller's own reminders in these firms: review requests and undated ones (Reconnect Drive, say —
- * waiting on them now) → Needs you; dated ones → Due soon, which the Agenda shows.
+ * The caller's own reminders in these firms: review requests, undated ones (Reconnect Drive, say) and
+ * dated ones due today or overdue — waiting on them now → Needs you; dated ones due later → Due soon,
+ * which the Agenda shows (isNeedsYouReminder).
  */
 function remindersOnly(reminders: ReminderWithContext[], firmIds: Set<string>): Pick<MyWork, 'needsYou' | 'dueSoon'> {
     const needsYou: NeedsYouItem[] = []
@@ -346,6 +361,8 @@ function remindersOnly(reminders: ReminderWithContext[], firmIds: Set<string>): 
                 href: r.ctaUrl ?? '#',
                 actionLabel: 'Open',
                 at: r.dateValue,
+                dueLabel: r.dateValue ? r.label : null,
+                overdue: r.delta !== null && r.delta < 0,
             })
         } else if (r.dateValue && r.delta !== null && r.delta <= DUE_SOON_DAYS) {
             dueSoon.push({

@@ -1,5 +1,6 @@
 import 'server-only'
 import { createAdminClient } from '@/utils/supabase/admin'
+import { resolveNames } from '@/lib/auth/display-name'
 
 /**
  * Resolving Supabase auth identities in bulk for system-admin pages.
@@ -22,24 +23,14 @@ export type AuthLite = {
 }
 
 /**
- * Names are read from `user_metadata`, which is not uniform.
- *
- * Email/password signups write `first_name` / `last_name`. Google OAuth writes only `full_name` and
- * `name`, so splitting the full name is the only way to show anything for those accounts. Last name
- * takes the remainder, so "Mary Jane Watson" keeps "Jane Watson" together rather than dropping it.
+ * Names are read from `user_metadata`, which is not uniform — see `lib/auth/display-name` for the
+ * precedence and why it exists. Kept as a named export because admin pages want the pair apart,
+ * and deliberately passes no email: an admin directory should show a blank cell for someone who
+ * has not supplied a name rather than a guess made from their address.
  */
 export function namesFrom(meta: Record<string, unknown>): { firstName: string | null; lastName: string | null } {
-    const first = typeof meta.first_name === 'string' ? meta.first_name.trim() : ''
-    const last = typeof meta.last_name === 'string' ? meta.last_name.trim() : ''
-    if (first || last) return { firstName: first || null, lastName: last || null }
-
-    const full = typeof meta.full_name === 'string' ? meta.full_name.trim()
-        : typeof meta.name === 'string' ? meta.name.trim() : ''
-    if (!full) return { firstName: null, lastName: null }
-
-    const parts = full.split(/\s+/)
-    if (parts.length === 1) return { firstName: parts[0], lastName: null }
-    return { firstName: parts[0], lastName: parts.slice(1).join(' ') }
+    const { firstName, lastName } = resolveNames(meta)
+    return { firstName, lastName }
 }
 
 /**

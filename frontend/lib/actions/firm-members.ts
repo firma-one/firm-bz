@@ -15,6 +15,7 @@ import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 import { upsertFollowUpReminder, removeRemindersByEntity } from '@/lib/reminders/reminder-service'
 import { getAvatarUrlFromSupabaseUser } from '@/lib/supabase-user-helpers'
 import { firmSettingsPath } from '@/lib/navigation/firm-paths'
+import { normalizeInviteeName, type InviteeName } from '@/lib/auth/invite-names'
 
 const supabaseAdmin = createSupabaseAdmin(
     process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:54321',
@@ -137,7 +138,8 @@ export async function removeFirmMember(firmId: string, memberId: string) {
     revalidatePath('/d/[groupSlug]/f/[firmSlug]', 'layout')
 }
 
-export async function inviteFirmMember(firmId: string, email: string) {
+export async function inviteFirmMember(firmId: string, email: string, invitee?: InviteeName) {
+    const inviteeName = normalizeInviteeName(invitee)
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) throw new Error('Unauthorized')
@@ -189,8 +191,9 @@ export async function inviteFirmMember(firmId: string, email: string) {
             throw new Error('This user has already joined the firm')
         }
         await prisma.firmInvitation.update({
+            // A re-invite without a name leaves the one already on the row alone.
             where: { id: existing.id },
-            data: { status: 'PENDING', token, expireAt, updatedBy: user.id }
+            data: { status: 'PENDING', token, expireAt, updatedBy: user.id, ...(inviteeName ?? {}) }
         })
         invitationId = existing.id
     } else {
@@ -198,6 +201,8 @@ export async function inviteFirmMember(firmId: string, email: string) {
             data: {
                 firmId,
                 email: normalizedEmail,
+                firstName: inviteeName?.firstName ?? null,
+                lastName: inviteeName?.lastName ?? null,
                 personaId: persona.id,
                 status: 'PENDING',
                 token,
@@ -221,7 +226,7 @@ export async function inviteFirmMember(firmId: string, email: string) {
         ctaUrl: firmSettingsPath(firm.group.slug, firm.slug),
     }).catch(() => {})
 
-    await maybeProvisionInviteeAccount(normalizedEmail)
+    await maybeProvisionInviteeAccount(normalizedEmail, inviteeName)
 
     const inviteUrl = `${process.env.NEXT_PUBLIC_APP_URL}/invite/${token}`
     const { subject, html } = renderInviteEmail({ firmName: firm.name, inviteUrl })

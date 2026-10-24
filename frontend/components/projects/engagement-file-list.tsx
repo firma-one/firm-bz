@@ -73,6 +73,9 @@ import { useSecureOpenDocument } from '@/lib/use-secure-open-document'
 import { SecureAccessModal } from '@/components/projects/shares/secure-access-modal'
 import { ProfileBubbleWithPopup } from '@/components/ui/profile-bubble-popup'
 import { EngagementFileRow } from '@/components/projects/engagement-file-row'
+import { FilesDropPill, FilesDropRow, FILES_DROP_ZONE_ACTIVE_CLASS } from '@/components/projects/files-drop-zone'
+import { CopyMoveDialog, CopyToEngagementDialog, RenameDialog, UploadConflictDialog } from '@/components/projects/file-organize-dialogs'
+import { ENGAGEMENT_ROOT_LABEL } from '@/lib/files/engagement-root'
 import {
     FILE_TABLE_GRID_COLS_CLASS,
     FILE_TABLE_CONTAINER_CLASS,
@@ -271,6 +274,21 @@ function CopyMoveSubmitButton({ label, submitting, disabled, onClick }: { label:
 const TOOLBAR_ICON_CLASS =
     'inline-flex h-7 w-7 items-center justify-center rounded-control text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg disabled:pointer-events-none disabled:opacity-40'
 
+/**
+ * The Files drop zone (design canvas section 10, 2026-10-23): a drop row under the files, the list
+ * outlined while it is the target, folder rows as targets, and a pill naming the folder — the same
+ * pill and folder-row target when a row is dragged onto a folder to move it. False brings back the
+ * old full-cover overlay and the dark move guide; kept until Deepak signs off.
+ */
+const NEW_DROP_ZONE = true
+
+/**
+ * The organize dialogs (Move/Copy to folder, Copy to another engagement, Rename, and the upload's
+ * duplicate files) on the design system's dialog frame — components/projects/file-organize-dialogs.tsx
+ * (2026-10-23). False brings back the old dialogs below; kept until Deepak signs off.
+ */
+const NEW_ORGANIZE_DIALOGS = true
+
 /** A bulk action in the selection bar: a label beside its icon, so a destructive one is never a bare glyph. */
 const SELECTION_ACTION_CLASS =
     'inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-control px-2 text-small text-fg transition-colors hover:bg-surface-hover'
@@ -306,10 +324,11 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
     /** Provider's own name for the trash location. */
     // OneDrive's "Recycle bin" is Microsoft's own name for it; Google's is the trash.
     const storageBinName = isOneDriveClient ? 'OneDrive recycle bin' : 'Google Drive trash'
-    // How long the provider keeps trashed items: Google 30 days; Microsoft 30 on personal OneDrive, up to 93 on work accounts.
+    // How long the provider keeps trashed items, as a clause after storageBinName in the trash confirm:
+    // Google 30 days; Microsoft 30 on personal OneDrive, up to 93 on work accounts.
     const storageRetention = isOneDriveClient
-        ? 'It keeps items for 30 days (up to 93 on work accounts).'
-        : 'Items there are permanently deleted after 30 days.'
+        ? 'which keeps items for 30 days (up to 93 on work accounts)'
+        : 'where items are permanently deleted after 30 days'
     const { session } = useAuth()
     const sessionRef = useRef(session)
     const onFileCountChangeRef = useRef(onFileCountChange)
@@ -357,7 +376,7 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
             setDeeplinkResolving(true)
         }
     }, [])
-    const { handleSecureOpen, secureModalOpen, secureModalMode, secureModalData, setSecureModalOpen, isRegrantingId, isRegrantLoading, regrantError } = useSecureOpenDocument({
+    const { handleSecureOpen, requestNewAccessLink, secureModalOpen, secureModalMode, secureModalData, setSecureModalOpen, isRegrantingId, isRegrantLoading, regrantError } = useSecureOpenDocument({
         projectId,
         firmId,
         logContext: 'EngagementFileList',
@@ -1465,6 +1484,7 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
         loadingDestinations,
         copyMoveSubmittingFolderId,
         emptyFolderIds,
+        subfolderIds,
         checkingFolderId,
         crossEngagementModalOpen, setCrossEngagementModalOpen,
         crossEngagementTarget, setCrossEngagementTarget,
@@ -1612,12 +1632,25 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
         if (currentFolderId) fetchFiles(currentFolderId, true)
     }, [pendingBulkTrashIds, sessionRef, files, projectId, currentFolderIdRef, fetchFiles, addToast])
 
+    // Where files from the computer can land: the same rule as the New menu's Upload files (below, by the
+    // header), so the drop zone shows exactly where uploading is offered.
+    const canUploadHere =
+        !(currentFolderId === connectorRootFolderId || (!currentFolderId && !generalFolderId && !confidentialFolderId))
+        && !currentFolderIsApprovedDeliverable
+        && (canEdit || (restrictToSharedOnly && currentFolderIsDeliverable))
+    /** The open folder's name, for the drop zone's "Upload … to <folder>". */
+    // The open folder's name for the upload texts; at the top, the engagement root's label, not Drive's "general".
+    const lastCrumb = breadcrumbs[breadcrumbs.length - 1]
+    const currentFolderName = !lastCrumb || breadcrumbs.length === 1 || lastCrumb.isEngagementRoot ? ENGAGEMENT_ROOT_LABEL : lastCrumb.name
+
     // Drag & drop hook
     const {
         draggedItem,
         dragOverFolderId,
         isInternalDragging,
         isDragging,
+        dropTargetFolder,
+        dragFileCount,
         handleDragOver,
         handleDragLeave,
         handleDrop,
@@ -1631,6 +1664,10 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
         processUploads,
         handleCopyMoveToFolder,
         addToast,
+        canUpload: canUploadHere,
+        // External members' uploads land in their shared folder whatever the row, so only the list is a target.
+        canUploadIntoFolders: canEdit && !restrictToSharedOnly,
+        compactDragImage: NEW_DROP_ZONE,
     })
 
     const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => handleFileUploadFromHook(e, fileInputRef)
@@ -2066,7 +2103,12 @@ const handleRefresh = async () => {
             window.history.replaceState(null, '', window.location.pathname + window.location.search)
         } else {
             const docId = item?.projectDocumentId ?? id
-            window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#doc-file:${docId}`)
+            const newHash = `doc-file:${docId}`
+            // Mark as already-handled, as handleFolderClick does — otherwise the deeplink effect reads
+            // this hash on the next render, takes it for an incoming link, and resolves it on the
+            // server alongside the folder's own list request (going back took 5–10s on prod).
+            lastHandledDeeplinkHashRef.current = newHash
+            window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#${newHash}`)
         }
     }
 
@@ -2297,9 +2339,10 @@ const handleRefresh = async () => {
                                                         "flex items-center hover:bg-surface-hover px-1.5 py-1 rounded transition-colors",
                                                         index === breadcrumbs.length - 1 ? "text-fg bg-surface-subtle" : "hover:text-fg"
                                                     )}
-                                                    title="Files root"
+                                                    title={ENGAGEMENT_ROOT_LABEL}
                                                 >
                                                     <Briefcase className="h-3.5 w-3.5 text-primary flex-shrink-0" />
+                                                    <span className="ml-1.5 whitespace-nowrap">{ENGAGEMENT_ROOT_LABEL}</span>
                                                     {countChip(index)}
                                                 </button>
                                             ) : isEllipsis ? (
@@ -2328,9 +2371,10 @@ const handleRefresh = async () => {
                                                         "flex items-center hover:bg-surface-hover px-1.5 py-1 rounded transition-colors",
                                                         index === breadcrumbs.length - 1 ? "text-fg bg-surface-subtle" : "hover:text-fg"
                                                     )}
-                                                    title="Files root"
+                                                    title={ENGAGEMENT_ROOT_LABEL}
                                                 >
                                                     <Briefcase className="h-3.5 w-3.5 text-primary flex-shrink-0" />
+                                                    <span className="ml-1.5 whitespace-nowrap">{ENGAGEMENT_ROOT_LABEL}</span>
                                                     {countChip(index)}
                                                 </button>
                                             ) : (
@@ -2840,9 +2884,9 @@ const handleRefresh = async () => {
                     onChange={handleFolderUpload}
                 />
 
-                {/* Drag Drop Overlay (External Upload) */}
+                {/* Drag Drop Overlay (External Upload) — the old full cover, kept behind NEW_DROP_ZONE until sign-off */}
                 {
-                    isDragging && (
+                    !NEW_DROP_ZONE && isDragging && (
                         <div className="absolute inset-0 z-50 bg-slate-100/90 border-2 border-dashed border-slate-400 flex flex-col items-center justify-center pointer-events-none">
                             <Upload className="h-16 w-16 text-fg-muted mb-4" />
                             <h3 className="text-xl font-medium text-fg-muted">Drop files to upload</h3>
@@ -2850,9 +2894,9 @@ const handleRefresh = async () => {
                     )
                 }
 
-                {/* Internal Drag Guide Overlay */}
+                {/* Internal Drag Guide Overlay (the old dark pill; with NEW_DROP_ZONE, the folder row's outline and "Move here" tag say where it lands) */}
                 {
-                    isInternalDragging && (
+                    !NEW_DROP_ZONE && isInternalDragging && (
                         <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-50 bg-slate-900/90 text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-3 backdrop-blur-sm animate-in fade-in slide-in-from-bottom-4 duration-300">
                             <Layers className="h-5 w-5 text-indigo-400" />
                             <div>
@@ -2904,7 +2948,10 @@ const handleRefresh = async () => {
                 </div>
 
                 {/* File List, with the app's slim, light scrollbar (`subtle-scrollbar`, globals.css). */}
-                <div className="subtle-scrollbar relative flex-1 overflow-y-auto">
+                {NEW_DROP_ZONE && isDragging && (
+                    <FilesDropPill count={dragFileCount} folderName={dropTargetFolder?.name ?? currentFolderName} />
+                )}
+                <div className={cn("subtle-scrollbar relative flex-1 overflow-y-auto", NEW_DROP_ZONE && isDragging && !dropTargetFolder && FILES_DROP_ZONE_ACTIVE_CLASS)}>
                     {deeplinkResolving || loading || isLoadingFolders ? (
                         // Rows shaped like the table that is coming (same grid as the header and
                         // FileRow), so nothing jumps when the files arrive.
@@ -3002,6 +3049,7 @@ const handleRefresh = async () => {
                             </p>
                         </div>
                     ) : (
+                        <>
                         <div className={cn("divide-y divide-line border-b border-line", isUploading && "opacity-50 transition-opacity")}>
                             {sortedFiles.map((file) => (
                                 <EngagementFileRow
@@ -3091,14 +3139,76 @@ const handleRefresh = async () => {
                                     isOneDriveClient={isOneDriveClient}
                                     bookmarkId={bookmarkIdByDocumentId.get(file.projectDocumentId ?? '')}
                                     hideBadges={rightPane.content != null && rightPane.paneSize === 'medium'}
+                                    isUploadTarget={NEW_DROP_ZONE && dropTargetFolder?.id === file.id}
+                                    isMoveTarget={NEW_DROP_ZONE && dragOverFolderId === file.id}
                                 />
                             ))}
                         </div>
+                        {/* Always somewhere to drop, once a folder has files (an empty one says so itself) */}
+                        {NEW_DROP_ZONE && canUploadHere && (
+                            <FilesDropRow
+                                state={!isDragging ? 'idle' : dropTargetFolder ? 'elsewhere' : 'here'}
+                                folderName={currentFolderName}
+                                onBrowse={() => fileInputRef.current?.click()}
+                            />
+                        )}
+                        </>
                     )}
                 </div>
 
+                {NEW_ORGANIZE_DIALOGS && (
+                    <>
+                        <CopyMoveDialog
+                            open={copyMoveModalOpen}
+                            onOpenChange={(open) => { setCopyMoveModalOpen(open); if (!open) setCopyMoveTarget(null) }}
+                            action={copyMoveAction}
+                            targetName={copyMoveTarget?.name}
+                            targetMimeType={copyMoveTarget?.mimeType}
+                            keepBoth={copyMoveKeepBoth}
+                            onKeepBothChange={setCopyMoveKeepBoth}
+                            path={currentPath}
+                            onPathClick={handleCopyMoveBreadcrumbClick}
+                            loading={loadingDestinations}
+                            folders={destinationFolders}
+                            emptyFolderIds={emptyFolderIds}
+                            subfolderIds={subfolderIds}
+                            checkingFolderId={checkingFolderId}
+                            submittingFolderId={copyMoveSubmittingFolderId}
+                            onOpenFolder={handleNavigateIntoFolder}
+                            onSubmit={(folderId) => handleCopyMoveToFolder(folderId)}
+                            onCancel={() => setCopyMoveModalOpen(false)}
+                        />
+                        <CopyToEngagementDialog
+                            open={crossEngagementModalOpen}
+                            onOpenChange={(open) => { setCrossEngagementModalOpen(open); if (!open) { setCrossEngagementTarget(null); setCrossEngagementFirmName(null) } }}
+                            targetName={crossEngagementTarget?.name}
+                            targetMimeType={crossEngagementTarget?.mimeType}
+                            firmName={crossEngagementFirmName}
+                            loading={crossEngagementLoading}
+                            engagements={crossEngagementEngagements}
+                            selectedId={crossEngagementSelectedId}
+                            onSelect={setCrossEngagementSelectedId}
+                            submitting={crossEngagementSubmitting}
+                            onSubmit={handleCrossEngagementSubmit}
+                            onCancel={() => setCrossEngagementModalOpen(false)}
+                        />
+                        <RenameDialog
+                            open={renameModalOpen}
+                            onOpenChange={(open) => { setRenameModalOpen(open); if (!open) setRenameTarget(null) }}
+                            targetName={renameTarget?.name}
+                            targetMimeType={renameTarget?.mimeType}
+                            value={renameNewName}
+                            onChange={setRenameNewName}
+                            extension={renameExtension}
+                            submitting={renameSubmitting}
+                            onSubmit={handleConfirmRename}
+                            onCancel={() => setRenameModalOpen(false)}
+                        />
+                    </>
+                )}
+
                 {/* Copy / Move destination picker (within General) */}
-                <Dialog open={copyMoveModalOpen} onOpenChange={(open) => { setCopyMoveModalOpen(open); if (!open) setCopyMoveTarget(null) }}>
+                <Dialog open={!NEW_ORGANIZE_DIALOGS && copyMoveModalOpen} onOpenChange={(open) => { setCopyMoveModalOpen(open); if (!open) setCopyMoveTarget(null) }}>
                     <DialogContent className={THEMED_DIALOG_CONTENT}>
                         <ThemedDialogHeader
                             icon={copyMoveAction === 'copy' ? <Copy className="h-3.5 w-3.5" /> : <FolderInput className="h-3.5 w-3.5" />}
@@ -3242,7 +3352,7 @@ const handleRefresh = async () => {
                 </Dialog>
 
                 {/* Cross-Engagement Copy Modal */}
-                <Dialog open={crossEngagementModalOpen} onOpenChange={(open) => { setCrossEngagementModalOpen(open); if (!open) { setCrossEngagementTarget(null); setCrossEngagementFirmName(null) } }}>
+                <Dialog open={!NEW_ORGANIZE_DIALOGS && crossEngagementModalOpen} onOpenChange={(open) => { setCrossEngagementModalOpen(open); if (!open) { setCrossEngagementTarget(null); setCrossEngagementFirmName(null) } }}>
                     <DialogContent className={THEMED_DIALOG_CONTENT}>
                         <ThemedDialogHeader icon={<Copy className="h-3.5 w-3.5" />} title="Copy to another engagement">
                             Pick the engagement to copy <span className="font-medium text-fg">{crossEngagementTarget?.name}</span> to. It lands in that engagement&apos;s General folder.
@@ -3328,7 +3438,7 @@ const handleRefresh = async () => {
                 </Dialog>
 
                 {/* Rename file/folder */}
-                <Dialog open={renameModalOpen} onOpenChange={(open) => { setRenameModalOpen(open); if (!open) setRenameTarget(null) }}>
+                <Dialog open={!NEW_ORGANIZE_DIALOGS && renameModalOpen} onOpenChange={(open) => { setRenameModalOpen(open); if (!open) setRenameTarget(null) }}>
                     <DialogContent className={THEMED_DIALOG_CONTENT}>
                         <ThemedDialogHeader icon={<Pencil className="h-3.5 w-3.5" />} title="Rename">
                             Enter a new name for <span className="font-medium text-fg">{renameTarget?.name ?? 'this item'}</span>.
@@ -3505,8 +3615,24 @@ const handleRefresh = async () => {
                     </DialogContent>
                 </Dialog>
 
-                {/* Batch Conflict Dialog */}
-                <Dialog open={conflictItems.length > 0} onOpenChange={(open) => !open && cancelBatchResolution()}>
+                {NEW_ORGANIZE_DIALOGS && (
+                    <UploadConflictDialog
+                        files={conflictItems.map((i) => ({ name: i.file.name, type: i.file.type }))}
+                        replace={overwriteSelections}
+                        onReplaceChange={(name, replace) => setOverwriteSelections((prev) => {
+                            const next = new Set(prev)
+                            if (replace) next.add(name)
+                            else next.delete(name)
+                            return next
+                        })}
+                        onReplaceAllChange={(replace) => setOverwriteSelections(replace ? new Set(conflictItems.map((i) => i.file.name)) : new Set())}
+                        onCancel={cancelBatchResolution}
+                        onConfirm={handleBatchResolution}
+                    />
+                )}
+
+                {/* Batch Conflict Dialog (the old one; UploadConflictDialog above replaces it) */}
+                <Dialog open={!NEW_ORGANIZE_DIALOGS && conflictItems.length > 0} onOpenChange={(open) => !open && cancelBatchResolution()}>
                     <DialogContent className="max-w-md">
                         <DialogHeader>
                             <DialogTitle>Duplicate files found</DialogTitle>
@@ -3583,8 +3709,8 @@ const handleRefresh = async () => {
                     icon={<Trash2 className="h-3.5 w-3.5" />}
                     iconVariant="red"
                     title="Move to trash"
-                    subtitle={`This file will be moved to ${storageBinName}.`}
-                    description={<><span className="font-semibold text-fg">{trashConfirmTarget?.name}</span>{' '}will be moved to your {storageBinName}. {storageRetention}</>}
+                    subtitle={trashConfirmTarget?.name}
+                    description={<>It will be moved to your {storageBinName}, {storageRetention}.</>}
                     confirmLabel="Move to trash"
                     confirmVariant="red"
                     onCancel={() => setTrashConfirmTarget(null)}
@@ -3599,8 +3725,8 @@ const handleRefresh = async () => {
                     icon={<Trash2 className="h-3.5 w-3.5" />}
                     iconVariant="red"
                     title="Move to trash"
-                    subtitle={`${pendingBulkTrashIds.size} item${pendingBulkTrashIds.size > 1 ? 's' : ''} will be moved to ${storageBinName}.`}
-                    description={<>{pendingBulkTrashIds.size} item{pendingBulkTrashIds.size > 1 ? 's' : ''} will be moved to your {storageBinName}. {storageRetention}</>}
+                    subtitle={`${pendingBulkTrashIds.size} item${pendingBulkTrashIds.size > 1 ? 's' : ''} selected`}
+                    description={<>{pendingBulkTrashIds.size > 1 ? 'They' : 'It'} will be moved to your {storageBinName}, {storageRetention}.</>}
                     confirmLabel="Move to trash"
                     confirmVariant="red"
                     onCancel={() => { setBulkTrashConfirmOpen(false); setPendingBulkTrashIds(new Set()) }}
@@ -3614,8 +3740,8 @@ const handleRefresh = async () => {
                     icon={<FileText className="h-3.5 w-3.5" />}
                     iconVariant="primary"
                     title="Return to Draft"
-                    subtitle="Unlock this document for further edits."
-                    description={<><span className="font-semibold text-fg">{unlockConfirmFile?.name}</span>{' '}will be unlocked. All collaborators will regain their prior access level based on their role and sharing settings.</>}
+                    subtitle={unlockConfirmFile?.name}
+                    description="It will be unlocked for further edits. All collaborators will regain their prior access level based on their role and sharing settings."
                     confirmLabel="Return to Draft"
                     confirmVariant="primary"
                     onCancel={() => setUnlockConfirmFile(null)}
@@ -3677,6 +3803,7 @@ const handleRefresh = async () => {
                     mode={secureModalMode}
                     isLoading={isRegrantLoading}
                     error={regrantError}
+                    onRequestNewLink={requestNewAccessLink}
                 />
             </div>
 

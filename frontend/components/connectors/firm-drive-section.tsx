@@ -1223,7 +1223,7 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
           iconVariant="red"
           title="Disconnect OneDrive/SharePoint"
           subtitle="The live session will be revoked."
-          description="This will revoke the live session. You can reconnect the same account afterwards."
+          description="You can reconnect the same account afterwards."
           confirmLabel="Disconnect"
           confirmVariant="red"
           onCancel={() => setOneDriveDisconnectTarget(null)}
@@ -1238,7 +1238,7 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
           iconVariant="red"
           title="Remove connector"
           subtitle="This action cannot be undone."
-          description="Permanently delete this OneDrive/SharePoint connection. This cannot be undone."
+          description="This permanently deletes the OneDrive/SharePoint connection."
           extra={removeTargetWarnings(oneDriveRemoveTarget)}
           confirmLabel="Remove"
           confirmVariant="red"
@@ -1273,7 +1273,7 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
           iconVariant="red"
           title="Disconnect Google Drive"
           subtitle="The live session will be revoked."
-          description="This will revoke the live session. You can reconnect the same account afterwards."
+          description="You can reconnect the same account afterwards."
           confirmLabel="Disconnect"
           confirmVariant="red"
           onCancel={() => setDisconnectTarget(null)}
@@ -1288,7 +1288,7 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
           iconVariant="red"
           title="Remove connector"
           subtitle="This action cannot be undone."
-          description="Permanently delete this Google Drive connection. This cannot be undone."
+          description="This permanently deletes the Google Drive connection."
           extra={removeTargetWarnings(removeTarget)}
           confirmLabel="Remove"
           confirmVariant="red"

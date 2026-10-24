@@ -158,6 +158,12 @@ export interface IConnectorPermissionAdapter {
   grantFilePermission(connectionId: string, fileId: string, email: string, role: ConnectorRole, opts?: { notify?: boolean; message?: string; preventDownload?: boolean }): Promise<string | null>
   /** List permissions currently set on a single file. */
   listFilePermissions(connectionId: string, fileId: string): Promise<Array<{ id: string; email: string | null; role: ConnectorRole }>>
+  /**
+   * One permission on a file by its id, or null when it's gone (removed by hand, expired by a
+   * tenant's guest-expiry policy) or the lookup failed. Lets regrant reuse a grant that still
+   * stands instead of revoking and re-granting on every open.
+   */
+  getFilePermission(connectionId: string, fileId: string, permissionId: string): Promise<{ id: string; email: string | null; role: ConnectorRole } | null>
   /** Delete a file. permanent:true bypasses trash (irreversible); omitted/false trashes it (same as trashFile). */
   deleteFile(connectionId: string, fileId: string, opts?: { permanent?: boolean }): Promise<void>
   /** PATCH a permission's role (e.g. writer -> reader for version lock/unlock). Returns true on success. */

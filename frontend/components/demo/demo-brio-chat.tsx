@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Briefcase, ChevronDown, CornerDownRight, Folder, Info, MessageSquare, Send } from 'lucide-react'
+import { Briefcase, CornerDownRight, Folder, Info, MessageSquare, Send } from 'lucide-react'
+import { WindowGlyph } from '@/components/ui/window-glyph'
 import { ASSISTANT } from '@/lib/ai/assistant'
 import { Brio } from '@/components/ui/brio'
 import { ChatMarkdown } from '@/components/ui/chat-markdown'
@@ -190,7 +191,7 @@ export function DemoBrioChat({
                         </div>
                         <Hint label={`Collapse · ${modKey}J`} side="bottom">
                             <button type="button" onClick={() => setOpen(false)} className={headerButton} aria-label="Collapse the assistant">
-                                <ChevronDown className="h-4 w-4" />
+                                <WindowGlyph variant="minimize" />
                             </button>
                         </Hint>
                     </div>

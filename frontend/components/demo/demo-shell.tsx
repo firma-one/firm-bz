@@ -47,6 +47,8 @@ function DemoRightPane() {
                         'fixed inset-y-0 right-0 z-[110] flex w-full flex-col border-l border-line bg-surface shadow-dialog sm:w-[480px]',
                         'lg:static lg:z-auto lg:shadow-none',
                         paneSize === 'medium' ? 'lg:w-[50vw]' : 'lg:w-[420px]',
+                        // As in the app: side panel ↔ half screen eases instead of jumping.
+                        'lg:transition-[width] lg:duration-ui-base lg:ease-ui-out motion-reduce:transition-none',
                     )}
                 >
                     <LayoutRightPanel

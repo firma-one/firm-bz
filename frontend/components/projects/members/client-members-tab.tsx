@@ -234,7 +234,7 @@ export function ClientMembersTab({ firmId, clientId, orgSlug, clientSlug, canMan
                 iconVariant="red"
                 title="Cancel invitation"
                 subtitle="The invitation will be revoked."
-                description="This invitation will be revoked. You can send a new invite later if needed."
+                description="You can send a new invite later if needed."
                 cancelLabel="Keep invitation"
                 confirmLabel="Cancel invitation"
                 confirmVariant="red"

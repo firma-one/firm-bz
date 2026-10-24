@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { logger } from '@/lib/logger'
 
@@ -33,6 +33,9 @@ export interface SecureOpenModalData {
  * 'opening' — OneDrive/SharePoint: grant succeeded, opening the document in a new tab now; the
  *   modal shows a brief confirmation then auto-closes (no email round-trip needed for this
  *   provider, see handleSecureOpen below).
+ * 'opened' — Google Drive, opened directly (the permission stood, or it's a known Google account
+ *   shared silently): stays open with "Email me a new access link", for a visitor whose 7 days
+ *   are up or who landed on Google's "You need access" page.
  * 'email' — Google Drive: grant succeeded, Google's own OTP is delivered via email — the modal
  *   stays open with "check your inbox" copy until the user dismisses it.
  * 'blocked' — grant succeeded but the browser refused the new tab (see handleSecureOpen). The
@@ -40,7 +43,47 @@ export interface SecureOpenModalData {
  *   click carries its own user activation.
  * 'error' — request failed.
  */
-export type SecureOpenModalMode = 'loading' | 'opening' | 'email' | 'blocked' | 'error'
+export type SecureOpenModalMode = 'loading' | 'opening' | 'opened' | 'email' | 'blocked' | 'error'
+
+/**
+ * Opens the new tab on the click itself, while the browser still allows it, and shows a holding
+ * line in it until the grant comes back (sendTabTo then points it at the document). A grant can
+ * take longer than Chrome's ~5s window for opening tabs, which used to leave the tab blocked.
+ * Null when the browser refused anyway; the caller then falls back to opening it afterwards.
+ */
+function openHoldingTab(fileName: string): Window | null {
+  if (typeof window === 'undefined') return null
+  const tab = window.open('', '_blank')
+  if (!tab) return null
+  try {
+    tab.document.title = 'Opening…'
+    const line = tab.document.createElement('p')
+    line.textContent = `Preparing secure access to ${fileName}…`
+    line.setAttribute('style', 'margin:40vh auto 0;max-width:32rem;padding:0 16px;text-align:center;font:14px/1.5 system-ui,sans-serif;color:#6f6e69')
+    tab.document.body.appendChild(line)
+  } catch {
+    // The blank tab still works as a target without the holding line.
+  }
+  return tab
+}
+
+/** Points the holding tab at the document, cutting its link back to this page first. */
+function sendTabTo(tab: Window, url: string) {
+  try {
+    tab.opener = null
+  } catch {
+    // Some browsers don't allow it once the tab has moved on; navigating still works.
+  }
+  tab.location.replace(url)
+}
+
+function closeHoldingTab(tab: Window | null) {
+  try {
+    tab?.close()
+  } catch {
+    // Already closed by the user.
+  }
+}
 
 export interface UseSecureOpenDocumentOptions {
   /** When omitted, each call must provide doc.projectId (e.g. dashboard with mixed projects). */
@@ -65,12 +108,20 @@ export function useSecureOpenDocument({
   const [isRegrantLoading, setIsRegrantLoading] = useState(false)
   const [regrantError, setRegrantError] = useState<string | null>(null)
   const [isRegrantingId, setIsRegrantingId] = useState<string | null>(null)
+  /** The last document opened, so "Email me a new access link" can ask again for it. */
+  const lastOpenRef = useRef<{ doc: SecureOpenDocumentInput; itemId?: string } | null>(null)
 
   const handleSecureOpen = useCallback(
-    async (doc: SecureOpenDocumentInput, itemId?: string) => {
+    async (doc: SecureOpenDocumentInput, itemId?: string, opts?: { newAccessLink?: boolean }) => {
       const effectiveProjectId = doc.projectId ?? projectId
       if (!effectiveProjectId) return
       const id = itemId ?? doc.documentId
+      const newAccessLink = opts?.newAccessLink === true
+      lastOpenRef.current = { doc, itemId }
+
+      // Before any await, while the click still allows opening a tab. "Email me a new access link"
+      // ends in an email, not a tab, so it opens none.
+      const holdingTab = newAccessLink ? null : openHoldingTab(doc.fileName)
 
       // Open immediately with a generic, provider-neutral "Preparing secure access…" loading
       // state — we don't know yet whether this is Google (genuinely needs "check your inbox",
@@ -93,6 +144,7 @@ export function useSecureOpenDocument({
       try {
         const { data: { session } } = await supabase.auth.getSession()
         if (!session?.access_token) {
+          closeHoldingTab(holdingTab)
           setRegrantError('Session expired. Please refresh and try again.')
           setSecureModalMode('error')
           return
@@ -117,7 +169,7 @@ export function useSecureOpenDocument({
         const startedAt = Date.now()
         const res = await Promise.race([
           fetch(
-            `/api/projects/${effectiveProjectId}/documents/${encodeURIComponent(doc.documentId)}/sharing/regrant`,
+            `/api/projects/${effectiveProjectId}/documents/${encodeURIComponent(doc.documentId)}/sharing/regrant${newAccessLink ? '?fresh=1' : ''}`,
             { method: 'POST', headers: { Authorization: `Bearer ${session.access_token}` } }
           ),
           timeout,
@@ -125,6 +177,7 @@ export function useSecureOpenDocument({
         const elapsedMs = Date.now() - startedAt
 
         if (!res.ok) {
+          closeHoldingTab(holdingTab)
           const status = res.status
           const errBody = await res.json().catch(() => ({} as { error?: string; code?: string }))
           // warn, not debug — logger.debug is a no-op outside development, which made this
@@ -163,9 +216,15 @@ export function useSecureOpenDocument({
           // ignored, so the modal flipped to "opening", auto-closed 1.2s later, and the user saw
           // the document simply never open with no error anywhere. Detect that and hand them a
           // link to click instead: that click carries its own activation and always works.
-          const opened = typeof window !== 'undefined'
-            ? window.open(body.documentUrl, '_blank')
-            : null
+          // The holding tab opened on the click avoids all of that; window.open here is only the
+          // fallback for when the browser refused even that, or the user closed it meanwhile.
+          let opened: Window | null = null
+          if (holdingTab && !holdingTab.closed) {
+            sendTabTo(holdingTab, body.documentUrl)
+            opened = holdingTab
+          } else if (typeof window !== 'undefined') {
+            opened = window.open(body.documentUrl, '_blank')
+          }
           const wasBlocked = !opened || opened.closed || typeof opened.closed === 'undefined'
 
           if (wasBlocked) {
@@ -178,14 +237,21 @@ export function useSecureOpenDocument({
             return
           }
 
+          if (body.provider === 'google') {
+            // Stays up (the user is on the new tab meanwhile) so that, back here, a visitor whose
+            // 7 days are up can ask for a new access link.
+            setSecureModalMode('opened')
+            return
+          }
           setSecureModalMode('opening')
           setTimeout(() => setSecureModalOpen(false), 1200)
           return
         }
 
-        // Google Drive: unchanged — Google's own OTP is delivered via this email, so "check your
-        // inbox" is the actual verification mechanism, not just a notification. Modal stays open
-        // until the user dismisses it.
+        // Google Drive, shared by email: Google's own OTP is delivered via this email, so "check
+        // your inbox" is the actual verification mechanism, not just a notification. Modal stays
+        // open until the user dismisses it.
+        closeHoldingTab(holdingTab)
         const { data: { user } } = await supabase.auth.getUser()
         const email = user?.email || user?.user_metadata?.email || 'your email'
 
@@ -198,6 +264,7 @@ export function useSecureOpenDocument({
         })
         setSecureModalMode('email')
       } catch (e) {
+        closeHoldingTab(holdingTab)
         const isTimeout = e instanceof Error && e.message === 'timeout'
         logger.error(
           isTimeout ? 'Secure access timed out' : 'Failed to trigger secure access',
@@ -219,10 +286,17 @@ export function useSecureOpenDocument({
     [projectId, hookFirmId, logContext]
   )
 
+  /** "Email me a new access link": grant the last-opened document again, with Google's sharing email. */
+  const requestNewAccessLink = useCallback(() => {
+    const last = lastOpenRef.current
+    if (last) void handleSecureOpen(last.doc, last.itemId, { newAccessLink: true })
+  }, [handleSecureOpen])
+
   const canSecureOpen = (doc: SecureOpenDocumentInput) => Boolean(doc.projectId ?? projectId)
 
   return {
     handleSecureOpen,
+    requestNewAccessLink,
     canSecureOpen,
     secureModalOpen,
     secureModalMode,

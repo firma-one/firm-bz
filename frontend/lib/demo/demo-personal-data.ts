@@ -57,7 +57,7 @@ function dueLabel(delta: number): Pick<ReminderWithContext, 'label' | 'labelStyl
 }
 
 function reminder(
-    fields: Pick<ReminderWithContext, 'id' | 'entityKey' | 'action' | 'entityName' | 'ctaUrl'> & { note?: string; date?: string | null },
+    fields: Pick<ReminderWithContext, 'id' | 'entityKey' | 'action' | 'entityName' | 'ctaUrl'> & { note?: string; clientName?: string; engagementName?: string; date?: string | null },
     now: Date,
 ): ReminderWithContext {
     const delta = fields.date ? daysFrom(now, fields.date) : null
@@ -76,6 +76,8 @@ function reminder(
         firmSlug: DEMO_HOME_FIRM.slug,
         firmId: DEMO_HOME_FIRM.id,
         ctaUrl: fields.ctaUrl,
+        clientName: fields.clientName ?? null,
+        engagementName: fields.engagementName ?? null,
         delta,
         ...(delta === null ? { label: '', labelStyle: 'slate' as const } : dueLabel(delta)),
     }
@@ -111,7 +113,8 @@ export function demoReminders(now: Date): ReminderWithContext[] {
             entityKey: 'platform.engagements.shares',
             action: 'Deliverable due',
             entityName: deliverableName(deliverable.folder.name),
-            note: `${client.name} · ${engagement.name}`,
+            clientName: client.name,
+            engagementName: engagement.name,
             ctaUrl: `${engagementHref(client, engagement)}?tab=board`,
             date: deliverable.dueDate,
         }, now),
@@ -123,7 +126,8 @@ export function demoReminders(now: Date): ReminderWithContext[] {
             entityKey: 'platform.documents.id',
             action: 'Review document',
             entityName: deliverableName(deliverable.folder.name),
-            note: `${client.name} · ${engagement.name}`,
+            clientName: client.name,
+            engagementName: engagement.name,
             ctaUrl: `${engagementHref(client, engagement)}?tab=board`,
         }, now),
     )
@@ -135,6 +139,8 @@ export function demoReminders(now: Date): ReminderWithContext[] {
             entityKey: 'platform.doc_comments',
             action: 'Review comment',
             entityName: mentionFile.name,
+            clientName: pairs[0].client.name,
+            engagementName: pairs[0].engagement.name,
             note: 'Sam Rivera: “@you Can we tighten the summary? The main recommendation should come first.”',
             ctaUrl: `${engagementHref(pairs[0].client, pairs[0].engagement)}?tab=comments`,
         }, now)]
@@ -164,6 +170,8 @@ export function demoNotifications(now: Date): ApiNotification[] {
     const approved = first ? getDemoDeliverables(first.engagement).find((d) => d.status === 'approved') : undefined
     const at = (hoursAgo: number) => new Date(now.getTime() - hoursAgo * HOUR).toISOString()
     const base = { firmId: DEMO_HOME_FIRM.id, scope: 'FIRM', priority: 'INFO', body: null as string | null }
+    // Where each sits, as the app's notifications API adds it (lib/notification-links.ts).
+    const place = (p: (typeof pairs)[number]) => ({ clientName: p.client.name, engagementName: p.engagement.name })
 
     return [
         ...(first ? [{
@@ -175,6 +183,7 @@ export function demoNotifications(now: Date): ApiNotification[] {
             body: `3 files added to ${first.engagement.name}. Approve them before they join the engagement.`,
             ctaUrl: `${engagementHref(first.client, first.engagement)}?tab=files`,
             readAt: null,
+            ...place(first),
         }] : []),
         ...(first && approved ? [{
             ...base,
@@ -185,6 +194,9 @@ export function demoNotifications(now: Date): ApiNotification[] {
             body: `${first.client.name} approved the deliverable. It is now locked.`,
             ctaUrl: `${engagementHref(first.client, first.engagement)}?tab=board`,
             readAt: null,
+            ...place(first),
+            subject: 'deliverable' as const,
+            subjectName: deliverableName(approved.folder.name),
         }] : []),
         ...(second ? [{
             ...base,
@@ -195,6 +207,7 @@ export function demoNotifications(now: Date): ApiNotification[] {
             body: 'A few numbers here look outdated. Should these reflect the latest figures?',
             ctaUrl: `${engagementHref(second.client, second.engagement)}?tab=comments`,
             readAt: at(20),
+            ...place(second),
         }] : []),
         ...(second ? [{
             ...base,
@@ -205,6 +218,7 @@ export function demoNotifications(now: Date): ApiNotification[] {
             body: 'They accepted your invitation as a Reviewer.',
             ctaUrl: `${engagementHref(second.client, second.engagement)}?tab=members`,
             readAt: at(70),
+            ...place(second),
         }] : []),
     ]
 }
@@ -290,6 +304,8 @@ export function demoWork(now: Date): MyWork {
             firmId: DEMO_HOME_FIRM.id,
             title: deliverableName(deliverable.folder.name),
             context: `${client.name} · ${engagement.name}`,
+            clientName: client.name,
+            engagementName: engagement.name,
             href: `${engagementHref(client, engagement)}?tab=board`,
             actionLabel: 'Review',
             at: new Date(now.getTime() - (i + 1) * 7 * HOUR).toISOString(),
@@ -300,6 +316,8 @@ export function demoWork(now: Date): MyWork {
             firmId: DEMO_HOME_FIRM.id,
             title: `3 files from ${pairs[0].client.name}`,
             context: `${pairs[0].client.name} · ${pairs[0].engagement.name}`,
+            clientName: pairs[0].client.name,
+            engagementName: pairs[0].engagement.name,
             href: `${engagementHref(pairs[0].client, pairs[0].engagement)}?tab=files`,
             actionLabel: 'Approve upload',
             at: new Date(now.getTime() - 2 * HOUR).toISOString(),
@@ -311,6 +329,8 @@ export function demoWork(now: Date): MyWork {
             firmId: DEMO_HOME_FIRM.id,
             title: deliverableName(deliverable.folder.name),
             context: `${client.name} · ${engagement.name}`,
+            clientName: client.name,
+            engagementName: engagement.name,
             href: `${engagementHref(client, engagement)}?tab=files`,
             actionLabel: 'Reply',
             at: new Date(now.getTime() - 3 * HOUR).toISOString(),
@@ -325,6 +345,8 @@ export function demoWork(now: Date): MyWork {
                 firmId: DEMO_HOME_FIRM.id,
                 title: deliverableName(deliverable.folder.name),
                 context: `${client.name} · ${engagement.name}`,
+                clientName: client.name,
+                engagementName: engagement.name,
                 href: `${engagementHref(client, engagement)}?tab=board`,
                 actionLabel: 'See changes',
                 at: new Date(now.getTime() - 26 * HOUR).toISOString(),
@@ -351,7 +373,7 @@ export function demoWork(now: Date): MyWork {
             kind: r.action === 'Deliverable due' ? ('deliverable' as const) : ('reminder' as const),
             firmId: r.firmId,
             title: r.entityName,
-            context: r.note ?? r.action,
+            context: (r.clientName && r.engagementName ? `${r.clientName} · ${r.engagementName}` : null) ?? r.note ?? r.action,
             href: r.ctaUrl ?? '/tour',
             dueDate: r.dateValue!,
             overdue: (r.delta ?? 0) < 0,

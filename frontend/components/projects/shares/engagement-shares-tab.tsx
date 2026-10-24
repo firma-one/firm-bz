@@ -1553,6 +1553,7 @@ export function EngagementSharesTab({
     isRegrantingId,
     isRegrantLoading,
     regrantError,
+    requestNewAccessLink,
   } = useSecureOpenDocument({
     projectId,
     logContext: 'ProjectShares',
@@ -2503,6 +2504,7 @@ export function EngagementSharesTab({
         mode={secureModalMode}
         isLoading={isRegrantLoading}
         error={regrantError}
+        onRequestNewLink={requestNewAccessLink}
       />
 
     </div>

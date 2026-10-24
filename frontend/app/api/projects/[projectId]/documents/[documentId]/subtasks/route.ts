@@ -6,6 +6,7 @@ import { getFileInfo } from '@/lib/file-utils'
 import { resolveProjectContext } from '@/lib/resolve-project-context'
 import { canViewProject } from '@/lib/permission-helpers'
 import { parseSettingsFromDb } from '@/lib/sharing-settings'
+import { resolveDisplayName } from '@/lib/auth/display-name'
 
 /**
  * GET /api/projects/[projectId]/documents/[documentId]/subtasks
@@ -173,7 +174,7 @@ export async function GET(
           const { data } = await admin.auth.admin.getUserById(userId)
           const meta = data?.user?.user_metadata ?? {}
           assigneeMap[userId] = {
-            name: (meta.full_name ?? meta.name ?? data?.user?.email?.split('@')[0] ?? null) as string | null,
+            name: resolveDisplayName(meta, data?.user?.email) || null,
             email: data?.user?.email ?? null,
             avatarUrl: (meta.avatar_url ?? meta.picture ?? null) as string | null,
           }

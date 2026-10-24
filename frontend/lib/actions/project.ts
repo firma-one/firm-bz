@@ -2,7 +2,7 @@
 
 import { prisma } from '@/lib/prisma'
 import { ensureFirmAgentUser } from '@/lib/ai/files-agent/agent-identity'
-import { type EngagementStatus, DocumentSharingPermissionStatus } from '@prisma/client'
+import { type EngagementStatus, type NotificationPriority, DocumentSharingPermissionStatus } from '@prisma/client'
 import { createClient as createSupabaseClient } from '@/utils/supabase/server'
 import { upsertFollowUpReminder } from '@/lib/reminders/reminder-service'
 import { createClient as createSupabaseAdmin } from '@supabase/supabase-js'
@@ -15,6 +15,9 @@ import { logger } from '@/lib/logger'
 import { safeInngestSend } from '@/lib/inngest/client'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 import { engagementPath, clientPath } from '@/lib/navigation/firm-paths'
+import { buildAbsoluteUrl, sendEventEmailToUser } from '@/lib/notify-event'
+import { ctaButton, emailHeading, emailText, escHtml, renderEmail } from '@/lib/email-templates/base'
+import { formatFullDate } from '@/lib/utils'
 
 const supabaseAdmin = createSupabaseAdmin(
     (process.env.NEXT_PUBLIC_SUPABASE_URL || "http://127.0.0.1:54321"),
@@ -486,6 +489,18 @@ export async function updateEngagement(
         })
         .fireAndForget()
 
+    // The engagement's name and link, for the due-date notifications and the caller's date reminders.
+    const datesChanged = parsedDue !== undefined || parsedKickoff !== undefined || parsedFollowUp !== undefined
+    const engDetails = datesChanged
+        ? await prisma.engagement.findFirst({
+            where: { id: projectId },
+            select: { name: true, slug: true, settings: true },
+        })
+        : null
+    const engCtaUrl = engDetails
+        ? engagementPath(project.firm.group.slug, firmSlug, clientSlug, engDetails.slug)
+        : clientPath(project.firm.group.slug, firmSlug, clientSlug)
+
     // Notifications (in-app + email for critical): emit when dueDate changes
     try {
         if (parsedDue !== undefined) {
@@ -497,45 +512,47 @@ export async function updateEngagement(
                     where: { engagementId: projectId, ...(user?.id ? { userId: { not: user.id } } : {}) },
                     select: { userId: true },
                 })
-                const rows = members.map((m: any) => ({
-                    organizationId: project.firmId,
+                const engagementName = engDetails?.name || 'Your engagement'
+                const dueOn = formatFullDate(parsedDue)
+                // Due within a day is critical, and is emailed as well.
+                const hours = (parsedDue.getTime() - Date.now()) / (1000 * 60 * 60)
+                const priority: NotificationPriority = hours <= 24 ? 'CRITICAL' : 'WARNING'
+                const rows = members.map((m) => ({
+                    firmId: project.firmId,
                     clientId: project.clientId,
-                    projectId,
+                    engagementId: projectId,
                     documentId: null,
                     userId: m.userId,
                     type: 'PROJECT_DUE_DATE_SET',
-                    priority: hours <= 24 ? 'CRITICAL' : 'WARNING',
-                    title: 'Project due date updated',
-                    body: `Due on ${parsedDue.toISOString().slice(0, 10)}`,
-                    ctaUrl: null,
-                    metadata: { dueDate: parsedDue.toISOString(), scope: 'project', priority: hours <= 24 ? 'CRITICAL' : 'WARNING' },
+                    priority,
+                    title: 'Engagement due date updated',
+                    body: `${engagementName} due on ${dueOn}`,
+                    ctaUrl: engCtaUrl,
+                    metadata: { dueDate: parsedDue.toISOString(), scope: 'project', priority },
                     channels: { inApp: true, email: false },
-                    dedupeKey: `project:${projectId}:due:${parsedDue.toISOString().slice(0, 10)}`,
+                    dedupeKey: `project:${projectId}:due:${next}`,
                 }))
                 if (rows.length) {
-                    await (prisma as any).notification.createMany({ data: rows, skipDuplicates: true })
+                    await prisma.notification.createMany({ data: rows, skipDuplicates: true })
                 }
 
-                // Critical email: due within 24 hours (best-effort)
-                const hours = (parsedDue.getTime() - Date.now()) / (1000 * 60 * 60)
+                // Critical email: due within 24 hours (best-effort; sendEventEmailToUser never throws)
                 if (hours <= 24) {
-                    const { createAdminClient } = await import('@/utils/supabase/admin')
-                    const { sendEmail } = await import('@/lib/email')
-                    const admin = createAdminClient()
-                    await Promise.all(members.map(async (m: any) => {
-                        try {
-                            const { data } = await admin.auth.admin.getUserById(m.userId)
-                            const email = data?.user?.email
-                            if (!email) return
-                            await sendEmail(
-                                email,
-                                'Project due soon',
-                                `<p><strong>Project due soon</strong></p><p>Your project is due on <strong>${parsedDue.toISOString().slice(0, 10)}</strong>.</p>`
-                            )
-                        } catch {
-                            // ignore individual failures
-                        }
-                    }))
+                    const link = buildAbsoluteUrl(engCtaUrl)
+                    await Promise.all(members.map((m) =>
+                        sendEventEmailToUser(m.userId, () => ({
+                            subject: 'Engagement due soon',
+                            html: renderEmail({
+                                title: 'Engagement due soon',
+                                preheader: `${engagementName} is due on ${dueOn}`,
+                                body: [
+                                    emailHeading('Engagement due soon'),
+                                    emailText(`<strong>${escHtml(engagementName)}</strong> is due on <strong>${dueOn}</strong>.`),
+                                    link ? ctaButton('Open engagement', link) : '',
+                                ].join('\n'),
+                            }),
+                        }))
+                    ))
                 }
             }
         }
@@ -543,14 +560,7 @@ export async function updateEngagement(
         logger.warn('Failed to create due date notifications', e as Error)
     }
 
-    if ((parsedDue !== undefined || parsedKickoff !== undefined || parsedFollowUp !== undefined) && user) {
-        const engDetails = await prisma.engagement.findFirst({
-            where: { id: projectId },
-            select: { name: true, slug: true, settings: true },
-        })
-        const engCtaUrl = engDetails
-            ? engagementPath(project.firm.group.slug, firmSlug, clientSlug, engDetails.slug)
-            : clientPath(project.firm.group.slug, firmSlug, clientSlug)
+    if (datesChanged && user) {
         const engNote = data.internalMemo !== undefined
             ? data.internalMemo
             : ((engDetails?.settings as any)?.internalMemo ?? null)

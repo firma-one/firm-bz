@@ -73,6 +73,8 @@ type Session = {
 type ConflictItem = {
     file: File
     existingId: string
+    /** Set when the file was dropped on a folder row: the folder it uploads into, not the open one. */
+    parentFolderId?: string
 }
 
 interface UseEngagementUploadOptions {
@@ -348,9 +350,9 @@ export function useEngagementUpload({
 
             let result: { success: boolean; error?: string, finalFile?: { name: string, id: string } }
             if (overwriteSelections.has(item.file.name)) {
-                result = await uploadFile(item.file, item.existingId, false, updateProgress, undefined, false)
+                result = await uploadFile(item.file, item.existingId, false, updateProgress, item.parentFolderId, false)
             } else {
-                result = await uploadFile(item.file, undefined, true, updateProgress, undefined, false)
+                result = await uploadFile(item.file, undefined, true, updateProgress, item.parentFolderId, false)
             }
             let attempts = 1
             while (!result.success && isRetryableError(result.error) && attempts < maxAttemptsPerFile) {
@@ -359,9 +361,9 @@ export function useEngagementUpload({
                 updateQueueItem(queueId, { progress: 0 })
                 await new Promise(r => setTimeout(r, 1500))
                 if (overwriteSelections.has(item.file.name)) {
-                    result = await uploadFile(item.file, item.existingId, false, updateProgress, undefined, false)
+                    result = await uploadFile(item.file, item.existingId, false, updateProgress, item.parentFolderId, false)
                 } else {
-                    result = await uploadFile(item.file, undefined, true, updateProgress, undefined, false)
+                    result = await uploadFile(item.file, undefined, true, updateProgress, item.parentFolderId, false)
                 }
             }
 
@@ -423,11 +425,32 @@ export function useEngagementUpload({
         setIsUploading(false)
     }
 
-    // Queue Processor
-    const processUploads = async (fileList: FileList) => {
+    /** A folder's files, for the duplicate-name check when uploading into a folder other than the open one. */
+    const listFolderFiles = async (folderId: string): Promise<DriveFile[]> => {
+        const token = sessionRef.current?.access_token
+        if (!token) return []
+        const isSharedOnlyPersona = viewAsPersonaSlug === 'eng_ext_collaborator' || viewAsPersonaSlug === 'eng_viewer'
+        try {
+            const res = await fetch('/api/connectors/google-drive/linked-files', {
+                method: 'POST',
+                credentials: 'include',
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'list', folderId, projectId, ...(isSharedOnlyPersona ? { viewAsPersonaSlug } : {}) }),
+            })
+            if (!res.ok) return []
+            return (await res.json()).files ?? []
+        } catch {
+            return []
+        }
+    }
+
+    // Queue Processor. `targetFolderId`: a folder row the files were dropped on; else the open folder.
+    const processUploads = async (fileList: FileList, targetFolderId?: string) => {
         const totalFiles = fileList.length
         const capAllowed = await checkDocumentCap(totalFiles)
         if (!capAllowed) return
+
+        const intoFolder = targetFolderId && targetFolderId !== currentFolderIdRef.current ? targetFolderId : undefined
 
         setIsUploading(true)
         setIsUploadModalOpen(true)
@@ -436,12 +459,14 @@ export function useEngagementUpload({
             const uploads = Array.from(fileList).filter(f => !isJunkFile(f.name))
             const conflicts: ConflictItem[] = []
             const safeUploads: File[] = []
+            // Names already there: the open folder's list, or the drop target's, loaded for the check.
+            const existingFiles = intoFolder ? await listFolderFiles(intoFolder) : files
 
             // 1. Classify
             for (const file of uploads) {
-                const existing = files.find(f => f.name === file.name && f.mimeType !== 'application/vnd.google-apps.folder')
+                const existing = existingFiles.find(f => f.name === file.name && f.mimeType !== 'application/vnd.google-apps.folder')
                 if (existing) {
-                    conflicts.push({ file, existingId: existing.id })
+                    conflicts.push({ file, existingId: existing.id, ...(intoFolder ? { parentFolderId: intoFolder } : {}) })
                 } else {
                     safeUploads.push(file)
                 }
@@ -486,7 +511,7 @@ export function useEngagementUpload({
 
                     let result = await uploadFile(file, undefined, false, (p) => {
                         updateQueueItem(queueId, { progress: p })
-                    })
+                    }, intoFolder)
                     let attempts = 1
 
                     while (!result.success && isRetryableError(result.error) && attempts < maxAttemptsPerFile) {
@@ -496,7 +521,7 @@ export function useEngagementUpload({
                         await new Promise(r => setTimeout(r, 1500))
                         result = await uploadFile(file, undefined, false, (p) => {
                             updateQueueItem(queueId, { progress: p })
-                        })
+                        }, intoFolder)
                     }
 
                     if (!result.success) {

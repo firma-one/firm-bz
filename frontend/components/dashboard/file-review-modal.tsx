@@ -146,6 +146,7 @@ export function FileReviewModal({
         secureModalData,
         setSecureModalOpen,
         regrantError,
+        requestNewAccessLink,
     } = useSecureOpenDocument({ logContext: 'FileReviewModal' })
 
     // Filters
@@ -713,6 +714,7 @@ export function FileReviewModal({
                     documentUrl={secureModalData.documentUrl}
                     mode={secureModalMode}
                     error={regrantError}
+                    onRequestNewLink={requestNewAccessLink}
                 />
             </SheetContent>
         </Sheet >

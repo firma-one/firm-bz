@@ -8,6 +8,7 @@ import { createAdminClient } from '@/utils/supabase/admin'
 import { mergeLeanAppMetadata } from '@/lib/auth/supabase-jwt-metadata'
 import { FirmService } from '@/lib/firm-service'
 import { userSettingsPlus } from '@/lib/user-settings-plus'
+import { reconcileUserNames } from '@/lib/auth/reconcile-names'
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
@@ -44,6 +45,10 @@ export async function GET(request: Request) {
     if (!error && data.session) {
       const user = data.session.user
       const userId = user.id
+
+      // An OAuth sign-in has just merged the provider's identity_data over user_metadata, so
+      // settle the name keys before anything renders from them.
+      await reconcileUserNames(user, supabase)
 
       if (!requestedNext) {
         const resolved = await resolveDefaultFirmLandingPath(userId)

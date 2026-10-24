@@ -888,7 +888,7 @@ export function FirmSettingsForm({
                 iconVariant="red"
                 title="Delete firm"
                 subtitle="This action cannot be undone."
-                description="Permanently delete this organization? All clients, projects, and members will be removed. This cannot be undone."
+                description="All of this firm's clients, engagements and members will be removed."
                 confirmLabel="Delete firm"
                 confirmVariant="red"
                 onCancel={() => setDeleteConfirmOpen(false)}

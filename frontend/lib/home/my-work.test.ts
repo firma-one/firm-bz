@@ -188,4 +188,19 @@ describe('getMyWork — reminders', () => {
         expect(work.needsYou.map((n) => n.id)).toEqual(['reminder:mention', 'reminder:reconnect'])
         expect(work.dueSoon.map((d) => d.id)).toEqual(['reminder:follow'])
     })
+
+    it('a dated reminder due today or overdue needs you (counted, with its due label); one due later stays a deadline', async () => {
+        const work = await getMyWork({
+            ...base,
+            reminders: [
+                reminder({ id: 'kickoff', action: 'Engagement kickoff', delta: -18, label: '18 days overdue' }),
+                reminder({ id: 'today', action: 'Follow-up', delta: 0, label: 'Today' }),
+                reminder({ id: 'soon', action: 'Follow-up', delta: 2 }),
+            ],
+        })
+        expect(work.needsYou.map((n) => n.id)).toEqual(['reminder:kickoff', 'reminder:today'])
+        expect(work.needsYou[0]).toMatchObject({ dueLabel: '18 days overdue', overdue: true })
+        expect(work.needsYou[1]).toMatchObject({ dueLabel: 'Today', overdue: false })
+        expect(work.dueSoon.map((d) => d.id)).toEqual(['reminder:soon'])
+    })
 })

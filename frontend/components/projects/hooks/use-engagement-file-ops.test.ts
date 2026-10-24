@@ -74,3 +74,56 @@ describe('Moved to trash — Undo', () => {
         expect(toast.action).toBeUndefined()
     })
 })
+
+describe('Move/Copy picker — look-ahead', () => {
+    const folder = (id: string, name: string) => ({ id, name, mimeType: 'application/vnd.google-apps.folder' })
+    // folder-1 (General) holds A and B; A holds A1; B and A1 hold no folders.
+    const tree: Record<string, ReturnType<typeof folder>[]> = {
+        'folder-1': [folder('A', 'Reports'), folder('B', 'Internal')],
+        A: [folder('A1', 'Q3')],
+        B: [],
+        A1: [],
+    }
+
+    beforeEach(() => {
+        vi.useRealTimers()
+        vi.stubGlobal('fetch', vi.fn(async (_url: string, init?: RequestInit) => {
+            const body = JSON.parse(init!.body as string)
+            requests.push(body)
+            return { ok: true, json: async () => ({ files: tree[body.folderId] ?? [] }) } as Response
+        }))
+    })
+
+    const settle = () => act(async () => { for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0)) })
+
+    it('knows which folders have no subfolders before any click, and opens a folder without asking again', async () => {
+        const { result } = setup()
+        act(() => { result.current.openCopyMoveModal(FILE, 'copy') })
+        await settle()
+        expect(result.current.destinationFolders.map((f) => f.id)).toEqual(['A', 'B'])
+        expect(Array.from(result.current.emptyFolderIds)).toEqual(['B'])
+        expect(Array.from(result.current.subfolderIds)).toEqual(['A'])
+
+        const listed = requests.length
+        await act(async () => { await result.current.handleNavigateIntoFolder(folder('A', 'Reports') as any) })
+        await settle()
+        expect(result.current.destinationFolders.map((f) => f.id)).toEqual(['A1'])
+        // Opening A used what the look-ahead fetched; only A's own children (A1) were looked up.
+        expect(requests.slice(listed).map((r: any) => r.folderId)).toEqual(['A1'])
+        expect(result.current.emptyFolderIds.has('A1')).toBe(true)
+        expect(addToast).not.toHaveBeenCalled()
+    })
+
+    it('a failed lookup leaves the folder openable instead of marking it empty', async () => {
+        vi.stubGlobal('fetch', vi.fn(async (_url: string, init?: RequestInit) => {
+            const body = JSON.parse(init!.body as string)
+            if (body.folderId === 'B') return { ok: false, status: 500, json: async () => ({}) } as Response
+            return { ok: true, json: async () => ({ files: tree[body.folderId] ?? [] }) } as Response
+        }))
+        const { result } = setup()
+        act(() => { result.current.openCopyMoveModal(FILE, 'copy') })
+        await settle()
+        expect(result.current.emptyFolderIds.has('B')).toBe(false)
+        expect(result.current.subfolderIds.has('B')).toBe(false)
+    })
+})

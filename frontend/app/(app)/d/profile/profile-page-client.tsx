@@ -23,6 +23,7 @@ export function ProfilePageClient({
     lastName: initialLastName,
     email,
     avatarUrl,
+    needsName = false,
     hideChrome = false,
 }: {
     displayName: string
@@ -30,6 +31,8 @@ export function ProfilePageClient({
     lastName: string
     email: string
     avatarUrl: string | null
+    /** True when nobody has supplied this person's name, so the one shown is derived from their email. */
+    needsName?: boolean
     hideChrome?: boolean
 }) {
     const router = useRouter()
@@ -140,6 +143,15 @@ export function ProfilePageClient({
                             <p className="truncate text-small text-fg-muted">{email}</p>
                         </div>
                     </div>
+                    {needsName && !isDirty && (
+                        // Invited users arrive without a name and are shown by their email address
+                        // until they set one. A quiet line, not a modal: they are usually mid-task
+                        // in somebody else's engagement when they first get here.
+                        <p className="px-1 pb-2 text-small text-fg-muted">
+                            We&rsquo;re showing a name worked out from your email address. Add your real
+                            one below so colleagues see it on your comments and files.
+                        </p>
+                    )}
                     <PropertyList>
                         <PropertyRow label={<label htmlFor="profile-first-name">First name</label>} icon={<User />}>
                             <Input

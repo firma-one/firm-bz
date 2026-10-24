@@ -144,10 +144,10 @@ export function ClientProjectView({ clients, groupSlug, firmSlug, firmName, firm
                                             <TabsTrigger value="contacts" className="relative gap-1.5">
                                                 <Contact className="h-4 w-4" />
                                                 Contacts
-                                                <AccessLock label="Firm admins only — hidden from other members" />
                                                 {contactCount !== undefined && contactCount > 0 && (
                                                     <span className="text-small tabular-nums text-fg-subtle">{contactCount}</span>
                                                 )}
+                                                <AccessLock label="Firm admins only — hidden from other members" />
                                                 {pendingTab === 'contacts' && <PendingBar />}
                                             </TabsTrigger>
                                         )}
@@ -155,8 +155,8 @@ export function ClientProjectView({ clients, groupSlug, firmSlug, firmName, firm
                                             <TabsTrigger value="members" className="relative gap-1.5">
                                                 <UserCog className="h-4 w-4" />
                                                 Members
-                                                <AccessLock label="Client managers only" />
                                                 {(memberCount ?? 0) > 0 && <span className="text-small tabular-nums text-fg-subtle">{memberCount}</span>}
+                                                <AccessLock label="Client managers only" />
                                                 {pendingTab === 'members' && <PendingBar />}
                                             </TabsTrigger>
                                         )}

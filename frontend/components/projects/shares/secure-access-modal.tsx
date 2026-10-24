@@ -25,18 +25,22 @@ interface SecureAccessModalProps {
     /** Target for the manual link shown in 'blocked' mode. */
     documentUrl?: string
     /** 'loading' (generic, provider-neutral, shown before the provider is known) | 'opening'
-     *  (OneDrive/SharePoint — auto-closes) | 'email' (Google — stays open) | 'blocked' (the
-     *  browser refused the new tab; user clicks the link themselves) | 'error'. Falls back
-     *  to the old isLoading/error boolean props' behavior when omitted. */
+     *  (OneDrive/SharePoint — auto-closes) | 'opened' (Google, opened directly — stays open with
+     *  "Email me a new access link") | 'email' (Google — stays open) | 'blocked' (the browser
+     *  refused the new tab; user clicks the link themselves) | 'error'. Falls back to the old
+     *  isLoading/error boolean props' behavior when omitted. */
     mode?: SecureOpenModalMode
     isLoading?: boolean
     error?: string | null
+    /** "Email me a new access link" in the 'opened' state (useSecureOpenDocument's requestNewAccessLink). */
+    onRequestNewLink?: () => void
 }
 
 /** Each state's heading: the visible title is also the dialog's accessible name. */
 const HEADINGS: Record<SecureOpenModalMode, { title: string; subtitle: (email: string) => string }> = {
     loading: { title: 'Preparing secure access', subtitle: () => 'Checking your access, one moment…' },
     opening: { title: 'Opening document', subtitle: () => 'Opening in a new tab…' },
+    opened: { title: 'Opened in a new tab', subtitle: () => 'Your access is ready' },
     blocked: { title: 'Ready to open', subtitle: () => 'Your access is ready — one more click' },
     email: { title: 'Check your email', subtitle: (email) => `A verification link was sent to ${email}` },
     error: { title: 'Access unavailable', subtitle: () => 'We couldn’t open this document' },
@@ -60,6 +64,7 @@ export function SecureAccessModal({
     mode,
     isLoading,
     error,
+    onRequestNewLink,
 }: SecureAccessModalProps) {
     const isFolder = mimeType?.includes('folder')
     const proxyThumbnailUrl = externalId && firmId
@@ -88,7 +93,7 @@ export function SecureAccessModal({
                 onInteractOutside={(e) => { if (isBusy) e.preventDefault() }}
                 onEscapeKeyDown={(e) => { if (isBusy) e.preventDefault() }}
             >
-                <div className="flex items-start gap-3 px-5 pb-3 pt-5 pr-10">
+                <div className="flex items-start gap-3 border-b border-line px-5 pb-4 pt-5 pr-10">
                     <div
                         className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-control [&_svg]:h-4 [&_svg]:w-4 ${
                             effectiveMode === 'error' ? 'bg-tag-red-bg text-tag-red-fg' : 'bg-surface-muted text-fg-muted'
@@ -109,7 +114,7 @@ export function SecureAccessModal({
                     </div>
                 </div>
 
-                <div className="space-y-3 px-5 pb-5 pl-16">
+                <div className="space-y-3 px-5 py-4 pl-16">
                     {effectiveMode === 'error' ? (
                         <p className="text-small leading-relaxed text-fg">{error}</p>
                     ) : (
@@ -151,12 +156,17 @@ export function SecureAccessModal({
                                     Your storage provider asks for a one-time check. Follow the link in the email to open the document.
                                 </p>
                             )}
+                            {effectiveMode === 'opened' && onRequestNewLink && (
+                                <p className="text-small leading-relaxed text-fg-muted">
+                                    Didn’t get in? We can email you a new access link.
+                                </p>
+                            )}
                         </>
                     )}
                 </div>
 
                 {!isBusy && (
-                    <div className="flex items-center justify-end gap-2 px-5 pb-5">
+                    <div className="flex items-center justify-end gap-2 border-t border-line px-5 py-3">
                         {effectiveMode === 'blocked' ? (
                             <>
                                 <Button variant="outline" size="sm" onClick={onClose}>Close</Button>
@@ -172,6 +182,16 @@ export function SecureAccessModal({
                             </>
                         ) : effectiveMode === 'email' ? (
                             <Button size="sm" className="min-w-[5.5rem]" onClick={onClose}>Got it</Button>
+                        ) : effectiveMode === 'opened' ? (
+                            <>
+                                {onRequestNewLink && (
+                                    <Button variant="outline" size="sm" onClick={onRequestNewLink}>
+                                        <Mail className="h-3.5 w-3.5" />
+                                        Email me a new access link
+                                    </Button>
+                                )}
+                                <Button size="sm" className="min-w-[5.5rem]" onClick={onClose}>Done</Button>
+                            </>
                         ) : (
                             <Button variant="outline" size="sm" onClick={onClose}>Close</Button>
                         )}

@@ -14,12 +14,12 @@ import {
     Inbox,
     Keyboard,
     Loader2,
-    PanelLeft,
     Search,
     Settings,
     UserCircle,
     Users,
 } from "lucide-react"
+import { WindowGlyph } from '@/components/ui/window-glyph'
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { Kbd } from "@/components/ui/kbd"
 import { getCommandRecents, quickSearch, type QuickResult } from "@/lib/actions/quick-search"
@@ -153,7 +153,7 @@ export function CommandMenu({ onToggleSidebar, onShowShortcuts }: { onToggleSide
         }
         items.push(
             { id: "act-profile", section: "Actions", icon: <UserCircle />, label: "Profile", run: () => go("/d/u/profile") },
-            { id: "act-sidebar", section: "Actions", icon: <PanelLeft />, label: "Toggle sidebar", hint: <Kbd>[</Kbd>, run: () => { setOpen(false); onToggleSidebar() } },
+            { id: "act-sidebar", section: "Actions", icon: <WindowGlyph variant="left" />, label: "Toggle sidebar", hint: <Kbd>[</Kbd>, run: () => { setOpen(false); onToggleSidebar() } },
             { id: "act-shortcuts", section: "Actions", icon: <Keyboard />, label: "Keyboard shortcuts", hint: <Kbd>?</Kbd>, run: () => { setOpen(false); onShowShortcuts() } }
         )
         return items

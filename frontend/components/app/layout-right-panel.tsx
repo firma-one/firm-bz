@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils'
 import { useSidebar } from '@/lib/sidebar-context'
 import { useBranding } from '@/lib/use-branding'
 import { useRightPane, type PaneSize } from '@/lib/right-pane-context'
+import { PaneSizeSwitch } from '@/components/app/pane-size-switch'
 
 const TRANSITION_MS = 300
 
@@ -65,6 +66,12 @@ function PanelTitle({ icon, iconTooltip, title, subtitle }: { icon?: React.React
     </div>
   )
 }
+
+/**
+ * The pane's size control in every pane (docked and full screen): the three-way PaneSizeSwitch
+ * (2026-10-23). False brings back the single cycling button below; kept until Deepak signs off.
+ */
+const PANE_SIZE_SWITCH = true
 
 /** Icon + tooltip for the cycle button — shows where clicking will take you next. */
 const CYCLE_META: Record<PaneSize, { icon: React.ReactNode; title: string; next: PaneSize }> = {
@@ -200,12 +207,16 @@ export function LayoutRightPanel({
           <header className="flex min-h-11 shrink-0 items-center gap-0.5 border-b border-line bg-surface py-1.5 pl-3 pr-1.5">
             <PanelTitle icon={icon} iconTooltip={iconTooltip} title={title} subtitle={subtitle} />
             {headerActions}
-            {/* Single cycling button — the icon shows the next state. */}
-            <Hint label={cycleMeta.title} side="bottom">
-              <button type="button" className={HEADER_BUTTON} onClick={() => setPaneSize(cycleMeta.next)} aria-label={cycleMeta.title}>
-                {cycleMeta.icon}
-              </button>
-            </Hint>
+            {PANE_SIZE_SWITCH ? (
+              <PaneSizeSwitch value={paneSize} onChange={setPaneSize} />
+            ) : (
+              // Single cycling button — the icon shows the next state.
+              <Hint label={cycleMeta.title} side="bottom">
+                <button type="button" className={HEADER_BUTTON} onClick={() => setPaneSize(cycleMeta.next)} aria-label={cycleMeta.title}>
+                  {cycleMeta.icon}
+                </button>
+              </Hint>
+            )}
             <Hint label="Close" side="bottom">
               <button type="button" className={HEADER_BUTTON} onClick={handleClose} aria-label="Close">
                 <X className="h-4 w-4" />
@@ -241,12 +252,16 @@ export function LayoutRightPanel({
           </div>
           <div className="mx-2 h-6 w-px shrink-0 bg-line" />
           <PanelTitle icon={icon} iconTooltip={iconTooltip} title={title} subtitle={subtitle} />
-          {/* Cycle from large → small */}
-          <Hint label={CYCLE_META.large.title} side="bottom">
-            <button type="button" className={HEADER_BUTTON} onClick={() => setPaneSize(CYCLE_META.large.next)} aria-label={CYCLE_META.large.title}>
-              <Minimize2 className="h-4 w-4" />
-            </button>
-          </Hint>
+          {PANE_SIZE_SWITCH ? (
+            <PaneSizeSwitch value={paneSize} onChange={setPaneSize} />
+          ) : (
+            // Cycle from large → small
+            <Hint label={CYCLE_META.large.title} side="bottom">
+              <button type="button" className={HEADER_BUTTON} onClick={() => setPaneSize(CYCLE_META.large.next)} aria-label={CYCLE_META.large.title}>
+                <Minimize2 className="h-4 w-4" />
+              </button>
+            </Hint>
+          )}
           <Hint label="Close" side="bottom">
             <button type="button" className={HEADER_BUTTON} onClick={handleClose} aria-label="Close">
               <X className="h-4 w-4" />
