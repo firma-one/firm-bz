@@ -26,9 +26,11 @@ export interface ReindexEngagementResult {
 /**
  * System-admin force re-index: re-runs SearchService.indexFile over every file of every
  * engagement in a firm. indexFile upserts on (engagementId, firmId, externalId), so existing
- * rows get fresh summaries/embeddings in place — lets an admin backfill after indexing
- * changes (e.g. the SEARCH_SUMMARY_MODE snippet rollout) without deleting or re-uploading
- * documents. Scan logic mirrors app/api/projects/[projectId]/index-project/route.ts
+ * rows get fresh metadata/embeddings in place — lets an admin backfill after indexing
+ * changes without deleting or re-uploading documents. Because indexFile replaces `metadata`
+ * wholesale, a re-index is also what sheds metadata an earlier indexer wrote, and what
+ * regenerates a row's embedding from the file name alone now that SearchService's
+ * INDEX_DOCUMENT_TEXT is off. Scan logic mirrors app/api/projects/[projectId]/index-project/route.ts
  * (deliberately duplicated — that route is engagement-user-facing with per-project manage
  * auth; this one is system-admin-only and firm-wide).
  */

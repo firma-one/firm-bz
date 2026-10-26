@@ -63,7 +63,7 @@ function PrivacyPolicyPageView() {
       }
       meta={
         <>
-          Last updated <time dateTime="2026-01">January 2026</time>
+          Last updated <time dateTime="2026-10">October 2026</time>
         </>
       }
       toc={TOC}
@@ -79,10 +79,17 @@ function PrivacyPolicyPageView() {
           </Clause>
           <Clause icon={FolderOpen} title="Storage metadata">
             We request access to file names, folder structures, and permission settings to organize your client
-            portal. <strong>We do not store the actual content of your files.</strong>
+            portal. <strong>We do not store the contents of your files.</strong> When you search inside your
+            documents, the search runs in your own storage provider — Google Drive, OneDrive or SharePoint — and
+            we receive only which files matched. Our own index holds names and structure, not document text.
+            Files indexed before October 2026 may still carry a short extract from the start of the document,
+            left by how search used to work; we are removing those.
           </Clause>
           <Clause icon={BarChart3} title="Usage telemetry">
-            Anonymized data on how you interact with the platform to improve performance.
+            Aggregated data on how you interact with the platform, to improve performance. We use Google
+            Analytics for this, and only after you accept analytics cookies — decline and it never loads. It
+            identifies a browser rather than a person, so treat it as pseudonymous rather than anonymous. See
+            section 07.
           </Clause>
         </Clauses>
       </Section>
@@ -108,8 +115,9 @@ function PrivacyPolicyPageView() {
         </LegalLead>
         <Clauses>
           <Clause icon={Server} title="Service providers">
-            AWS/Vercel (Hosting), Supabase (Database), Polar (Payments), Anthropic (AI assistant) – strictly for
-            infrastructure. See section 05 for what the AI assistant sends and what it does not.
+            AWS/Vercel (Hosting), Supabase (Database), Polar (Payments), Anthropic (AI assistant), Google
+            Analytics (site analytics, only with your consent) – strictly for infrastructure. See section 05 for
+            what the AI assistant sends and what it does not.
           </Clause>
           <Clause icon={Scale} title="Legal compliance">
             If compelled by law enforcement (highly specific and rare).
@@ -120,14 +128,29 @@ function PrivacyPolicyPageView() {
       <Section index={3}>
         <LegalLead>Encryption protocols and data lifecycle management policies.</LegalLead>
         <Clauses>
-          <Clause icon={ShieldCheck} title="Encryption">
+          <Clause icon={ShieldCheck} title="Encryption in transit">
             We employ enterprise-grade encryption (TLS 1.2+) for all data in transit. Since we do not store your
-            files, the security of your documents rests primarily on Google&apos;s world-class infrastructure,
-            layered with our access governance.
+            files, the security of your documents rests primarily on your own storage provider&apos;s
+            infrastructure — Google, Microsoft — layered with our access governance.
+          </Clause>
+          <Clause icon={ShieldCheck} title="Encryption at rest">
+            The sensitive fields we do hold are encrypted with AES-256-GCM before they are written to our
+            database, each with its own initialization vector: your workspace, firm, client and engagement
+            names and descriptions, client contact details, the text of comments, and your storage
+            provider&apos;s access tokens. Keys are held outside the database and are versioned, so they can be
+            rotated without losing access to older data.
+          </Clause>
+          <Clause icon={Server} title="Comment and audit history">
+            How long we keep comments and audit records is set by your plan — from 15 days of comments on the
+            free plan up to unlimited on the top tier, with both windows shown against each plan on our pricing
+            page. Anything older is deleted permanently and cannot be recovered, so export what you need to
+            keep. This also bounds the audit history your data export can contain.
           </Clause>
           <Clause icon={Server} title="Purge protocol">
-            When you delete your {BRAND_NAME} account, all metadata stored on our servers is permanently erased
-            within 30 days. Your actual files in your own storage remain untouched.
+            When you ask us to delete your {BRAND_NAME} account, the metadata we hold about you is permanently
+            erased and we confirm by email, in any case within 45 days of your request (see section 06, which
+            also explains the two things that survive and why). Your actual files in your own storage remain
+            untouched.
           </Clause>
         </Clauses>
       </Section>
@@ -146,8 +169,10 @@ function PrivacyPolicyPageView() {
           </Clause>
           <Clause icon={ShieldCheck} title="Not used for training">
             We use Anthropic&apos;s commercial API. Anthropic does not use what we send to train its models, and
-            retains it only briefly for abuse monitoring under its own terms. We do not use your data to train any
-            model, and we do not send it to any other AI provider.
+            under its terms does not retain the questions we send or the answers it returns. The exception is
+            content its automated abuse-detection systems flag, or that it must keep to comply with the law,
+            which it may retain for up to two years. We do not use your data to train any model, and we do not
+            send it to any other AI provider.
           </Clause>
           <Clause icon={Check} title="Nothing without your approval">
             Brio can rename and move files and create folders, and only ever after you approve each change. It
@@ -188,7 +213,7 @@ function PrivacyPolicyPageView() {
             workspace you share with colleagues continues without you, since it is not yours alone to delete.
           </Clause>
           <Clause icon={Scale} title="No sale, no discrimination">
-            We do not sell your personal information and we do not share it for cross-context behavioural
+            We do not sell your personal information and we do not share it for cross-context behavioral
             advertising, so there is nothing to opt out of. Exercising any of these rights will never change your
             price, your plan or the service you receive.
           </Clause>

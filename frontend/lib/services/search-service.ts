@@ -9,6 +9,25 @@ import type { IConnectorContentAdapter } from '../connectors/types'
 const MAX_INDEXABLE_TEXT_SIZE_BYTES = 15 * 1024 * 1024
 
 /**
+ * Whether indexing reads document text to build a content-based embedding.
+ *
+ * Off. Searching inside a document is delegated to the storage provider, whose own full-text
+ * index covers the whole file rather than the leading extract this path produced
+ * (IConnectorPermissionAdapter.searchFiles — `fullText contains` on Drive, /search(q=) on
+ * Graph), and that path already runs first in the engagement search route.
+ *
+ * With it off, indexFile stores names, parentage, mime types and provider metadata, and embeds
+ * the file name alone: no document text is read, stored or vectorized. That is what lets the
+ * privacy policy say we do not store the contents of your files, so turning this back on is a
+ * change to what we have published, not just a change to search relevance.
+ *
+ * A constant and not an env var deliberately — a published claim should not be able to stop
+ * being true because of a value set in an environment. The extraction path below is kept intact
+ * so this stays a one-line decision.
+ */
+const INDEX_DOCUMENT_TEXT: boolean = false
+
+/**
  * Extract plain text from a OneDrive file's raw bytes for embeddings/summarization —
  * OneDrive equivalent of GoogleDriveConnector.getFileText's Office/PDF-parsing branch.
  * No native-export-format branch (Graph has no .gdoc/.gsheet equivalent); text/CSV/JSON
@@ -186,7 +205,7 @@ export class SearchService {
                         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                         'application/pdf',
                     ]
-                const isSummarizable = !!meta.mimeType && summarizableMimes.includes(meta.mimeType)
+                const isSummarizable = INDEX_DOCUMENT_TEXT && !!meta.mimeType && summarizableMimes.includes(meta.mimeType)
 
                 if (isSummarizable && connectorId) {
                     const text = onOneDrive

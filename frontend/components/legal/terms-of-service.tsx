@@ -50,7 +50,7 @@ function TermsOfServicePageView() {
       }
       meta={
         <>
-          Last updated <time dateTime="2026-01">January 2026</time>
+          Last updated <time dateTime="2026-10">October 2026</time>
         </>
       }
       toc={TOC}
@@ -58,12 +58,14 @@ function TermsOfServicePageView() {
       <Section index={0}>
         <LegalLead>
           {BRAND_NAME} operates on a <strong>Non-Custodial</strong> architecture. We provide an interface to
-          organize and govern files that reside in <strong>your</strong> Google Drive.
+          organize and govern files that reside in <strong>your</strong> own storage — Google Drive, OneDrive or
+          SharePoint.
         </LegalLead>
         <Checks
           items={[
             "We do not take ownership of your intellectual property.",
             "We do not store file content on our servers.",
+            "Searching inside your documents runs in your own storage provider; we receive only which files matched.",
             "You retain full liability for the content you share via our platform.",
           ]}
         />
@@ -72,8 +74,10 @@ function TermsOfServicePageView() {
       <Section index={1}>
         <LegalLead>Access is provided on a subscription basis (monthly or annual).</LegalLead>
         <Clauses>
-          <Clause icon={CreditCard} title="Fair use">
-            API limits may apply to prevent abuse of the Google Drive integration.
+          <Clause icon={CreditCard} title="Plan limits and fair use">
+            Your plan sets what it includes — how many clients, engagements and documents you may have, how long
+            comment history is kept, and your AI credits. We enforce those limits, and your storage
+            provider&apos;s own API quotas apply on top of them. Current limits are on our pricing page.
           </Clause>
           <Clause icon={HardDrive} title="Cancellation">
             You may cancel at any time. Your portals remain active until the end of the billing cycle.
