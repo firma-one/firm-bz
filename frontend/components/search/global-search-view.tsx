@@ -71,10 +71,14 @@ interface GlobalSearchResult {
   updatedByAvatarUrl?: string | null
 }
 
-// File-type categories for the multi-select Type filter. 'any' is exclusive with the rest —
-// selecting it clears any other selected category and vice versa, since "Any" means no filtering.
+// File-type categories for the multi-select Type filter. 'any' is not stored as a value: it is
+// the absence of a type chip, and it displays with every category checked, since "Any" and "all
+// of them" filter identically. Picking 'any' therefore clears the rest; unchecking a category
+// under it narrows to the others. See toggleFileTypeSimple.
 const FILE_TYPE_OPTIONS = ['document', 'spreadsheet', 'presentation', 'image', 'audio', 'video', 'folder', 'any'] as const
 type FileTypeOption = typeof FILE_TYPE_OPTIONS[number]
+/** Every concrete category, i.e. the options minus the exclusive 'any'. */
+const CONCRETE_FILE_TYPES = FILE_TYPE_OPTIONS.filter((t) => t !== 'any') as Exclude<FileTypeOption, 'any'>[]
 const FILE_TYPE_LABEL: Record<FileTypeOption, string> = {
   document: 'Document', spreadsheet: 'Spreadsheet', presentation: 'Presentation',
   image: 'Image', audio: 'Audio', video: 'Video', folder: 'Folder', any: 'Any',
@@ -543,17 +547,28 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
     setInferredStages((prev) => prev.filter((s) => s !== stage))
   }, [])
 
-  /** Type is multi-select; 'any' is exclusive with the rest. */
+  /**
+   * Type is multi-select. 'any' is the absence of a chip rather than a value of its own, and
+   * because every category is shown as checked under it, a click on one has to read as
+   * UNCHECKING that one — so narrowing starts from all categories and removes the clicked one,
+   * not from nothing and adds it.
+   *
+   * Selecting every category back is the same filter as 'any' (classifyFileType buckets every
+   * result into one of them), so it collapses to no chip instead of listing all seven.
+   */
   const toggleFileTypeSimple = useCallback((opt: FileTypeOption) => {
     setChips((prev) => {
       const current = prev.find((c) => c.stage === 'type')
       const selected = current ? (current.id.split(',').filter(Boolean) as FileTypeOption[]) : []
+      // No chip means 'any', which shows every category checked — so start from all of them.
+      const base: FileTypeOption[] = selected.length === 0 ? [...CONCRETE_FILE_TYPES] : selected
       const next = opt === 'any'
         ? []
-        : selected.includes(opt) ? selected.filter((t) => t !== opt) : [...selected, opt]
+        : base.includes(opt) ? base.filter((t) => t !== opt) : [...base, opt]
 
       const without = prev.filter((c) => c.stage !== 'type')
-      if (next.length === 0) return without
+      // Nothing left, or everything selected — both mean "don't filter by type".
+      if (next.length === 0 || next.length === CONCRETE_FILE_TYPES.length) return without
       return [...without, {
         stage: 'type' as FilterStage,
         id: next.join(','),
@@ -1029,8 +1044,8 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                                       {STAGE_ANY_LABEL.type}
                                     </FilterMenuRow>
                                     <DropdownMenuSeparator className="mx-0 my-1" />
-                                    {FILE_TYPE_OPTIONS.filter((opt) => opt !== 'any').map((opt) => (
-                                      <FilterMenuRow key={opt} multi selected={selectedFileTypes.includes(opt)} onSelect={() => toggleFileTypeSimple(opt)}>
+                                    {CONCRETE_FILE_TYPES.map((opt) => (
+                                      <FilterMenuRow key={opt} multi selected={selectedFileTypes.length === 0 || selectedFileTypes.includes(opt)} onSelect={() => toggleFileTypeSimple(opt)}>
                                         {FILE_TYPE_LABEL[opt]}
                                       </FilterMenuRow>
                                     ))}
