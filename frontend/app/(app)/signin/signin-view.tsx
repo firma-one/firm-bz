@@ -105,13 +105,13 @@ export function SigninView({ microsoftSignInEnabled = false }: { microsoftSignIn
 
           {prefilledFromMemory && (
             // The address is remembered from the last sign-in on this browser, nothing more —
-            // the session itself is not kept, so a code is still required.
-            <AuthNote>
-              Filled in from your last sign-in here.{' '}
+            // the session itself is not kept, so a code is still required. The filled-in field
+            // says that much, so all it needs is a way out.
+            <p className="mk-auth-switch">
               <button type="button" className="mk-auth-text-btn" onClick={clearRememberedEmail}>
                 Use a different email
               </button>
-            </AuthNote>
+            </p>
           )}
 
           {noAccountMessage && (
