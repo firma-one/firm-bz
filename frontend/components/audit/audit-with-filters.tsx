@@ -137,6 +137,9 @@ const EVENT_TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: 'DOCUMENT_COMMENT_CREATED', label: 'File comment added' },
   { value: 'DOCUMENT_COMMENT_CHANGED', label: 'File comment updated' },
   { value: 'DOCUMENT_COMMENT_DELETED', label: 'File comment deleted' },
+  { value: 'DOCUMENT_NOTE_CREATED', label: 'File note added' },
+  { value: 'DOCUMENT_NOTE_CHANGED', label: 'File note edited' },
+  { value: 'DOCUMENT_NOTE_DELETED', label: 'File note deleted' },
   // File sharing
   { value: 'DOCUMENT_SHARE_CREATED', label: 'File shared' },
   { value: 'DOCUMENT_SHARE_CHANGED', label: 'File share updated' },
