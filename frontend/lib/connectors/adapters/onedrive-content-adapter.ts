@@ -215,6 +215,56 @@ export function createOneDriveContentAdapter(): IConnectorContentAdapter {
       }
     },
 
+    /**
+     * Graph's version list for a file (`/items/{id}/versions`, v1.0). It comes newest first, with the
+     * current version at the top; reversed here to the oldest-first order the pane takes from Drive.
+     * A folder or a file in a library with versioning off answers with no versions.
+     */
+    async listVersions(connectionId, fileId) {
+      const [token, base] = await Promise.all([auth(connectionId), resolveOneDriveDriveBase(connectionId)])
+      const res = await fetch(`${base}/items/${fileId}/versions`, { headers: { Authorization: `Bearer ${token}` } })
+      if (res.status === 404) throw new ConnectorContentError('not_found', `File ${fileId} not found`)
+      if (res.status === 403) throw new ConnectorContentError('forbidden', `No access to file ${fileId}`)
+      if (!res.ok) throw new Error(`Failed to list versions for ${fileId}: ${res.status}`)
+      const data = await res.json()
+      type GraphVersion = { id: string; lastModifiedDateTime: string; size?: number; lastModifiedBy?: { user?: { displayName?: string } } }
+      return ((data.value ?? []) as GraphVersion[])
+        .map((v) => ({
+          id: v.id,
+          mimeType: '',
+          modifiedTime: v.lastModifiedDateTime,
+          size: v.size != null ? String(v.size) : undefined,
+          lastModifyingUser: v.lastModifiedBy?.user?.displayName ? { displayName: v.lastModifiedBy.user.displayName } : undefined,
+        }))
+        .reverse()
+    },
+
+    /**
+     * An earlier version's bytes (`/items/{id}/versions/{versionId}/content`, which redirects to a
+     * pre-authenticated download). The name and type are the file's: a version keeps neither.
+     */
+    async getVersionContent(connectionId, fileId, versionId) {
+      const [token, base] = await Promise.all([auth(connectionId), resolveOneDriveDriveBase(connectionId)])
+      const metaRes = await fetch(`${base}/items/${fileId}?$select=id,name,file`, { headers: { Authorization: `Bearer ${token}` } })
+      if (metaRes.status === 404) throw new ConnectorContentError('not_found', `File ${fileId} not found`)
+      if (metaRes.status === 403) throw new ConnectorContentError('forbidden', `No access to file ${fileId}`)
+      if (!metaRes.ok) throw new Error(`Failed to fetch metadata for ${fileId}: ${metaRes.status}`)
+      const meta = await metaRes.json()
+
+      const contentRes = await fetch(`${base}/items/${fileId}/versions/${encodeURIComponent(versionId)}/content`, { headers: { Authorization: `Bearer ${token}` } })
+      if (contentRes.status === 404) throw new ConnectorContentError('not_found', `Version ${versionId} of ${fileId} not found`)
+      if (contentRes.status === 403) throw new ConnectorContentError('forbidden', `No access to file ${fileId}`)
+      if (!contentRes.ok) throw new Error(`Failed to download version ${versionId} of ${fileId}: ${contentRes.status}`)
+
+      const buffer = Buffer.from(await contentRes.arrayBuffer())
+      return {
+        stream: buffer,
+        mimeType: meta.file?.mimeType ?? 'application/octet-stream',
+        fileName: meta.name,
+        size: String(buffer.byteLength),
+      }
+    },
+
     async getPreviewableContent(connectionId, fileId, opts) {
       const [token, base] = await Promise.all([auth(connectionId), resolveOneDriveDriveBase(connectionId)])
       const metaRes = await fetch(`${base}/items/${fileId}?$select=id,name,file`, { headers: { Authorization: `Bearer ${token}` } })

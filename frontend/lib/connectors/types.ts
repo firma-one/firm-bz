@@ -312,6 +312,27 @@ export interface IConnectorContentAdapter {
    * Resolves silently as a no-op for providers without an equivalent concept.
    */
   setCopyRestricted(connectionId: string, fileId: string, restricted: boolean): Promise<void>
+  /**
+   * A file's versions, oldest first (the order Drive's revisions come in), for the Version
+   * history pane. Optional: Google's revisions are still read by googleDriveConnector directly.
+   */
+  listVersions?(connectionId: string, fileId: string): Promise<ConnectorFileVersion[]>
+  /** One earlier version's bytes, for downloading it from Version history. */
+  getVersionContent?(connectionId: string, fileId: string, versionId: string): Promise<{
+    stream: ReadableStream | Buffer
+    mimeType: string
+    fileName: string
+    size?: string
+  }>
+}
+
+/** A file version, in the shape the Version history pane reads (Drive's revision fields). */
+export interface ConnectorFileVersion {
+  id: string
+  mimeType: string
+  modifiedTime: string
+  size?: string
+  lastModifyingUser?: { displayName: string; photoLink?: string }
 }
 
 /**

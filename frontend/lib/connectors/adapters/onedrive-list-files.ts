@@ -20,6 +20,8 @@ export interface OneDriveListedFile {
   mimeType?: string
   size?: string
   modifiedTime?: string | null
+  /** When the file was created in the drive: the Details pane's Created. */
+  createdTime?: string
   webViewLink?: string | null
   owners?: { emailAddress?: string; displayName?: string }[]
   lastModifyingUser?: { emailAddress?: string; displayName?: string } | null
@@ -78,7 +80,7 @@ export async function listOneDriveFiles(
   const [token, base] = await Promise.all([auth(connectionId), resolveOneDriveDriveBase(connectionId)])
 
   const res = await fetch(
-    `${base}/items/${folderId}/children?$select=id,name,file,folder,size,lastModifiedDateTime,webUrl,createdBy,lastModifiedBy&$top=${limit}`,
+    `${base}/items/${folderId}/children?$select=id,name,file,folder,size,createdDateTime,lastModifiedDateTime,webUrl,createdBy,lastModifiedBy&$top=${limit}`,
     { headers: { Authorization: `Bearer ${token}` } }
   )
   if (res.status === 404) return []
@@ -96,6 +98,7 @@ export async function listOneDriveFiles(
     mimeType: f.file?.mimeType ?? (f.folder ? 'application/vnd.google-apps.folder' : undefined),
     size: f.size != null ? String(f.size) : undefined,
     modifiedTime: f.lastModifiedDateTime ?? null,
+    createdTime: f.createdDateTime ?? undefined,
     webViewLink: f.webUrl ?? null,
     owners: f.createdBy?.user ? [{ emailAddress: f.createdBy.user.email, displayName: f.createdBy.user.displayName }] : undefined,
     lastModifyingUser: f.lastModifiedBy?.user ? { emailAddress: f.lastModifiedBy.user.email, displayName: f.lastModifiedBy.user.displayName } : null,

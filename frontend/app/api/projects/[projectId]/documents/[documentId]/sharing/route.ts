@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { withoutAgentIds } from '@/lib/ai/agent-email'
 import { createClient } from '@/utils/supabase/server'
 import { prisma } from '@/lib/prisma'
-import { buildSettingsForDb, parseSettingsFromDb, type ShareBlock } from '@/lib/sharing-settings'
+import { assetSettingsOf, buildSettingsForDb, parseSettingsFromDb, settingsForBrowser, type ShareBlock } from '@/lib/sharing-settings'
 import { syncDocumentSharingUsers } from '@/lib/sync-document-sharing'
 import { getFileInfo } from '@/lib/file-utils'
 import { safeInngestSend } from '@/lib/inngest/client'
@@ -22,9 +22,11 @@ import { engagementPath } from '@/lib/navigation/firm-paths'
 function toJsonSafeSharing(doc: Record<string, unknown> | null): Record<string, unknown> | null {
   if (!doc) return null
   // connectorId never leaves the server: no caller uses it, and it names the firm's storage.
-  const { fileSize, connectorId: _connectorId, ...rest } = doc
+  // Nor do the document's notes, which are internal (lib/files/document-notes.ts).
+  const { fileSize, connectorId: _connectorId, settings, ...rest } = doc
   return {
     ...rest,
+    settings: settingsForBrowser(settings),
     fileSize: fileSize != null ? String(fileSize) : null,
   } as Record<string, unknown>
 }
@@ -285,10 +287,10 @@ export async function PUT(
       if (!doc) return NextResponse.json({ error: 'Document not found' }, { status: 404 })
       if (!doc.isFolder) return NextResponse.json({ error: 'Only a folder can be demoted from a deliverable' }, { status: 400 })
 
-      // Clear settings (removes share.createdAt, activity, etc.)
+      // Clear the sharing settings (share.createdAt, activity, etc.), keeping the document's own description and assignee
       await prisma.engagementDocument.update({
         where: { id: doc.id },
-        data: { settings: {}, updatedAt: new Date(), updatedBy: user.id },
+        data: { settings: assetSettingsOf(doc.settings) as object, updatedAt: new Date(), updatedBy: user.id },
       })
 
       // Revoke all GRANTED and INHERITED sharing rows for this folder
@@ -409,7 +411,7 @@ export async function PUT(
 
         await prisma.engagementDocument.update({
           where: { id: existing.id },
-          data: { settings: {}, slug: null, updatedAt: new Date() },
+          data: { settings: assetSettingsOf(existing.settings) as object, slug: null, updatedAt: new Date() },
         })
 
         // Revoke Drive permissions granted via regrant for any previously enabled personas
@@ -754,7 +756,7 @@ export async function DELETE(
 
     await prisma.engagementDocument.update({
       where: { id: existing.id },
-      data: { settings: {}, slug: null, updatedAt: new Date() },
+      data: { settings: assetSettingsOf(existing.settings) as object, slug: null, updatedAt: new Date() },
     })
 
     audit(AUDIT_EVENT.DOCUMENT_SHARE_DELETED)

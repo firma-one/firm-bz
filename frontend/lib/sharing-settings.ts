@@ -235,13 +235,24 @@ export function buildSettingsForDb(
     comments.unshift(updates.appendComment)
   }
 
+  // Everything this doesn't manage stays: the lock (private, finalized), the document's description,
+  // assignee and notes. Returning only the four blocks below erased them on every share or stage
+  // change (2026-10-28) — a private document's lock among them. The legacy flat share keys are the
+  // one exception: `share` above supersedes them.
+  const kept = Object.fromEntries(
+    Object.entries(existing ?? {}).filter(([key]) => !(LEGACY_FLAT_SHARE_KEYS as readonly string[]).includes(key))
+  )
   return {
+    ...kept,
     share,
     activity,
     comments,
     accessLog: parsed.accessLog || [],
   }
 }
+
+/** The pre-`share` shape's top-level keys, which buildSettingsForDb folds into `share`. */
+const LEGACY_FLAT_SHARE_KEYS = ['externalCollaborator', 'guest', 'guestOptions', 'publishedVersionId', 'publishedAt'] as const
 
 // ---------------------------------------------------------------------------
 // Document Lock (intake pending / finalize / private)
@@ -306,6 +317,30 @@ export function isDocumentPrivate(settings: unknown): boolean {
 /** Returns true when the document has any lock type (intake, finalize, or private). */
 export function isDocumentLocked(settings: unknown): boolean {
   return getLock(settings) !== null
+}
+
+/**
+ * A document's settings as any response may send them to the browser: without its notes, which are
+ * internal and read only through the notes routes (lib/files/document-notes.ts). Routes that return
+ * a raw document row pass its settings through this, whoever is asking.
+ */
+export function settingsForBrowser(settings: unknown): unknown {
+  if (!settings || typeof settings !== 'object' || !('notes' in settings)) return settings
+  const { notes: _notes, ...rest } = settings as Record<string, unknown>
+  return rest
+}
+
+/** Settings that describe the document itself, not how it is shared. */
+const ASSET_SETTING_KEYS = ['description', 'assigneeUserId', 'details', 'notes'] as const
+
+/**
+ * What removing a share or un-tagging a deliverable keeps: the document's description and assignee
+ * (and the asset details and notes planned in .claude/plans/engagement-assets-details.md). Those
+ * paths used to reset settings to {}, which erased them along with the sharing state.
+ */
+export function assetSettingsOf(settings: unknown): Record<string, unknown> {
+  const s = (settings && typeof settings === 'object' ? settings : {}) as Record<string, unknown>
+  return Object.fromEntries(ASSET_SETTING_KEYS.filter((k) => s[k] !== undefined).map((k) => [k, s[k]]))
 }
 
 /** Flatten for UI that still expects legacy keys (e.g. Shares list response). */

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { prisma } from '@/lib/prisma'
-import { buildSettingsForDb, parseSettingsFromDb, type ActivityStatus } from '@/lib/sharing-settings'
+import { buildSettingsForDb, parseSettingsFromDb, settingsForBrowser, type ActivityStatus } from '@/lib/sharing-settings'
 import { syncDocumentSharingUsers } from '@/lib/sync-document-sharing'
 import { EngagementRole, DocumentSharingPermissionStatus } from '@prisma/client'
 import { getFileInfo } from '@/lib/file-utils'
@@ -243,7 +243,8 @@ export async function PATCH(
         },
       },
     })
-    return NextResponse.json({ sharing: updated })
+    // External collaborators move stages too: the document's internal notes stay out of the reply.
+    return NextResponse.json({ sharing: updated ? { ...updated, settings: settingsForBrowser(updated.settings) } : updated })
   } catch (e) {
     console.error('PATCH sharing/activity error', e)
     return NextResponse.json({ error: 'Failed to update activity' }, { status: 500 })
