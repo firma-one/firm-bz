@@ -1,60 +1,67 @@
 "use client"
 
-import { useState, useEffect } from "react"
 import { Clock, AlertCircle, Download } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { DriveFile, DriveRevision } from "@/lib/types"
 import { formatFileSize } from "@/lib/utils"
-import { useAuth } from "@/lib/auth-context"
+import { useDownloadProgress } from "@/lib/download-progress-context"
 import { RelativeDateTime } from "@/components/ui/relative-date-time"
 import { UserAvatarWithTooltip } from "@/components/ui/user-avatar-with-tooltip"
+import { useDocumentVersions } from "@/components/files/use-document-versions"
 
 interface DocumentHistoryPaneProps {
     document: DriveFile
+    /** The engagement the document belongs to. Without it there is nothing to load. */
+    projectId?: string
+    /** Inside the Details pane, which names the file once above its tabs. */
+    hideName?: boolean
 }
 
-export function DocumentHistoryPane({ document }: DocumentHistoryPaneProps) {
-    const { session } = useAuth()
-    const [revisions, setRevisions] = useState<DriveRevision[]>([])
-    const [loading, setLoading] = useState(true)
-    const [error, setError] = useState<string | null>(null)
+export function DocumentHistoryPane({ document, projectId, hideName }: DocumentHistoryPaneProps) {
+    const { addTask, updateTask } = useDownloadProgress()
+    const versions = useDocumentVersions(document?.id, projectId)
+    const { revisions, loading, unsupported } = versions
+    const error = versions.error && 'Failed to load version history'
 
-    useEffect(() => {
-        load()
-    }, [document?.id, session?.access_token])
-
-    const load = async () => {
-        if (!session?.access_token || !document?.connectorId) {
-            setLoading(false)
-            return
-        }
-        setLoading(true)
-        setError(null)
+    // Through the engagement's own download route, which checks membership and takes the storage
+    // connection from the document. The sign-in cookie authenticates it, so no token rides in the URL.
+    // The current version is the file itself: Graph serves earlier versions only, and Drive's head
+    // revision is the same bytes, so it downloads as the file does.
+    const downloadVersion = async (rev: DriveRevision, isCurrent: boolean) => {
+        if (!projectId) return
+        const filename = rev.originalFilename || document.name
+        const taskId = addTask(filename)
         try {
             const res = await fetch(
-                `/api/documents/versions?fileId=${document.id}&connectorId=${document.connectorId}`,
-                { headers: { Authorization: `Bearer ${session.access_token}` } }
+                `/api/projects/${projectId}/documents/${encodeURIComponent(document.id)}/download-share${isCurrent ? '' : `?revisionId=${encodeURIComponent(rev.id)}`}`
             )
-            if (res.ok) {
-                const data = await res.json()
-                setRevisions(data.revisions || [])
-            } else {
-                setError('Failed to load version history')
+            if (!res.ok) {
+                updateTask(taskId, { status: 'error', error: res.status === 403 ? 'Download not permitted' : 'Download failed' })
+                return
             }
+            const blobUrl = URL.createObjectURL(await res.blob())
+            updateTask(taskId, { status: 'complete' })
+            const a = window.document.createElement('a')
+            a.href = blobUrl
+            a.download = filename
+            window.document.body.appendChild(a)
+            a.click()
+            window.document.body.removeChild(a)
+            setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000)
         } catch {
-            setError('Error loading versions')
-        } finally {
-            setLoading(false)
+            updateTask(taskId, { status: 'error', error: 'Download failed' })
         }
     }
 
     return (
         <div className="flex flex-col h-full min-h-0 p-4 min-w-0">
-            <div className="inline-flex max-w-full items-center gap-2 rounded-xl border border-slate-200 bg-surface-subtle px-3 py-2 mb-4">
-                <span className="truncate text-xs font-medium text-slate-700" title={document.name}>
-                    {document.name}
-                </span>
-            </div>
+            {!hideName && (
+                <div className="inline-flex max-w-full items-center gap-2 rounded-xl border border-slate-200 bg-surface-subtle px-3 py-2 mb-4">
+                    <span className="truncate text-xs font-medium text-slate-700" title={document.name}>
+                        {document.name}
+                    </span>
+                </div>
+            )}
 
             {loading ? (
                 <div className="space-y-3">
@@ -80,7 +87,9 @@ export function DocumentHistoryPane({ document }: DocumentHistoryPaneProps) {
                     <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center">
                         <Clock className="h-5 w-5 text-slate-400" />
                     </div>
-                    <p className="text-xs text-slate-500">No version history available.</p>
+                    <p className="text-xs text-slate-500">
+                        {unsupported ? "Version history isn't available for this storage yet." : 'No version history available.'}
+                    </p>
                 </div>
             ) : (
                 <div className="flex-1 overflow-y-auto min-h-0 space-y-3 pr-2">
@@ -101,23 +110,17 @@ export function DocumentHistoryPane({ document }: DocumentHistoryPaneProps) {
                                     <span className={`text-xs font-semibold ${isCurrent ? 'text-fg' : 'text-slate-700'}`}>
                                         {isCurrent ? 'Current Version' : `Version ${versionNumber}`}
                                     </span>
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-6 w-6 text-slate-400 hover:text-slate-600"
-                                        onClick={() => {
-                                            if (!session?.access_token) return
-                                            const url = `/api/documents/download?fileId=${document.id}&connectorId=${document.connectorId}&revisionId=${rev.id}&filename=${encodeURIComponent(rev.originalFilename || document.name)}&token=${session.access_token}`
-                                            const a = window.document.createElement('a')
-                                            a.href = url
-                                            a.download = rev.originalFilename || document.name
-                                            window.document.body.appendChild(a)
-                                            a.click()
-                                            window.document.body.removeChild(a)
-                                        }}
-                                    >
-                                        <Download className="h-4 w-4" />
-                                    </Button>
+                                    {projectId && (
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-6 w-6 text-slate-400 hover:text-slate-600"
+                                            aria-label="Download this version"
+                                            onClick={() => downloadVersion(rev, isCurrent)}
+                                        >
+                                            <Download className="h-4 w-4" />
+                                        </Button>
+                                    )}
                                 </div>
                                 <div className="flex items-center gap-2 mb-2">
                                     <RelativeDateTime

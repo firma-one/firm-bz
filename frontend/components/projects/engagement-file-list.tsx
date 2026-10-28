@@ -22,6 +22,7 @@ import { DeliverableIcon } from '@/components/ui/deliverable-icon'
 import { DocumentActionMenu } from '@/components/ui/document-action-menu'
 import { DocumentPreviewPanelContent } from '@/components/files/document-edit-sheet'
 import { DocumentPreviewPane } from '@/components/files/document-preview-pane'
+import { isAssetDetailsPaneContent } from '@/components/files/asset-details-pane'
 import { evictPreview } from '@/lib/preview-cache'
 import { DocumentDocCommentsPane } from '@/components/projects/document-doc-comments-pane'
 import { formatFileSize } from '@/lib/utils'
@@ -427,7 +428,7 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
         const isCommentsPane =
             Boolean(rightPane.content) &&
             (rightPane.title === 'Comment' || rightPane.title === 'Comments')
-        const isInfoPane = Boolean(rightPane.content) && rightPane.title === 'File information'
+        const isInfoPane = Boolean(rightPane.content) && (rightPane.title === 'File information' || isAssetDetailsPaneContent(rightPane.content))
         const isActivityPane = Boolean(rightPane.content) && rightPane.title === 'Activity Stream'
         const isVersionPane = Boolean(rightPane.content) && rightPane.title === 'Version History'
 

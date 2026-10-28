@@ -74,6 +74,7 @@ import {
     OWNER_COL_CLASS,
     STATUS_COL_CLASS,
 } from '@/components/projects/engagement-file-table-grid'
+import { DETAILS_PANE_TABS } from '@/components/files/details-pane-switch'
 import { cn, formatFileSize } from '@/lib/utils'
 import { initialsOf } from '@/lib/initials'
 import type { DemoFolder, DemoFile } from '@/lib/demo/static-demo-data'
@@ -124,13 +125,13 @@ function TableHeader({ label, icon }: { label: string; icon: React.ReactNode }) 
 }
 
 /** A ghost icon button with the app's hint; inert in the demo. */
-function QuickAction({ icon, label }: { icon: React.ReactNode; label: string }) {
+function QuickAction({ icon, label, className }: { icon: React.ReactNode; label: string; className?: string }) {
     return (
         <Hint label={`${label} (not in this demo)`}>
             <button
                 type="button"
                 onClick={(e) => e.stopPropagation()}
-                className="inline-flex h-7 w-7 items-center justify-center rounded-control text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg [&_svg]:h-4 [&_svg]:w-4"
+                className={cn('inline-flex h-7 w-7 items-center justify-center rounded-control text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg [&_svg]:h-4 [&_svg]:w-4', className)}
                 aria-label={label}
             >
                 {icon}
@@ -291,11 +292,15 @@ function RowActionMenu({ entry, name, docId, deliverableStatus, dueDate, onSetDu
                                 <DropdownMenuSeparator />
                                 <DemoMenuItem icon={<FolderLock />}>Make private</DemoMenuItem>
                             </DemoSubmenu>
-                            <DemoSubmenu icon={<Info />} label="Details">
-                                <DemoMenuItem icon={<Info />}>File information</DemoMenuItem>
-                                <DemoMenuItem icon={<Clock />}>Activity stream</DemoMenuItem>
-                                <DemoMenuItem icon={<Clock />}>Version history</DemoMenuItem>
-                            </DemoSubmenu>
+                            {DETAILS_PANE_TABS ? (
+                                <DemoMenuItem icon={<Info />}>Details</DemoMenuItem>
+                            ) : (
+                                <DemoSubmenu icon={<Info />} label="Details">
+                                    <DemoMenuItem icon={<Info />}>File information</DemoMenuItem>
+                                    <DemoMenuItem icon={<Clock />}>Activity stream</DemoMenuItem>
+                                    <DemoMenuItem icon={<Clock />}>Version history</DemoMenuItem>
+                                </DemoSubmenu>
+                            )}
                             <DemoSubmenu icon={<ExternalLink />} label="Drive actions">
                                 <DemoMenuItem icon={<ExternalLink />}>Open containing folder in Google Drive</DemoMenuItem>
                             </DemoSubmenu>
@@ -362,6 +367,8 @@ function EntryRow({
     const name = isFolder ? entry.folder.name.replace(/_+/g, ' ').trim() : entry.file.name
     const approved = deliverableStatus === 'approved'
     const empty = <span className="text-small text-fg-subtle">{tracked ? 'Not set' : '—'}</span>
+    // As in the app (and on the Board): tracked work with no stage yet is at To do.
+    const stage = status ?? (tracked ? 'to_do' : null)
 
     return (
         <div
@@ -423,8 +430,10 @@ function EntryRow({
                         !selected && !pinTools && 'max-w-0 overflow-hidden opacity-0 focus-within:max-w-none focus-within:opacity-100 group-hover:max-w-none group-hover:opacity-100 has-[[data-state=open]]:max-w-none has-[[data-state=open]]:opacity-100 [@media(hover:none)]:max-w-none [@media(hover:none)]:opacity-100',
                     )}
                 >
+                    {DETAILS_PANE_TABS && !isFolder && <QuickAction icon={<Info />} label="Details" />}
                     {!isFolder && <QuickAction icon={<ScanEye />} label="Preview" />}
-                    <QuickAction icon={<Link2 />} label="Copy link" />
+                    {/* As in the app: Copy link (also in the ⋮ menu) gives way at the table's narrowest */}
+                    <QuickAction icon={<Link2 />} label="Copy link" className={DETAILS_PANE_TABS ? 'hidden @[49rem]/file-table:inline-flex' : undefined} />
                     <RowActionMenu entry={entry} name={name} docId={docId} deliverableStatus={deliverableStatus} dueDate={dueDate} onSetDue={onSetDue} />
                 </div>
             </div>
@@ -433,13 +442,13 @@ function EntryRow({
                 {statusEditable ? (
                     <StatusProperty
                         kind="deliverable"
-                        value={status}
+                        value={stage}
                         placeholder={tracked ? 'Not set' : '—'}
                         // The tour's visitor is the engagement lead, so the lead's moves (as on the tour's Board).
-                        options={STAGES.filter((s) => s === status || getAllowedTransitions('eng_admin', status ?? 'to_do').includes(s))}
+                        options={STAGES.filter((s) => s === stage || getAllowedTransitions('eng_admin', stage ?? 'to_do').includes(s))}
                         onChange={(next) => onSetStatus(next as DeliverableStatus)}
                     />
-                ) : status ? <StatusPill kind="deliverable" status={status} /> : empty}
+                ) : stage ? <StatusPill kind="deliverable" status={stage} /> : empty}
             </div>
 
             <div className={`items-center ${DUE_DATE_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}>

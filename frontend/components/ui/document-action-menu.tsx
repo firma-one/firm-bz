@@ -15,6 +15,8 @@ import { DocumentPreviewPane } from "@/components/files/document-preview-pane"
 import { useRightPane } from "@/lib/right-pane-context"
 import { DocumentActivityPane } from "@/components/files/document-activity-pane"
 import { DocumentHistoryPane } from "@/components/files/document-history-pane"
+import { openAssetDetailsPane } from "@/components/files/asset-details-pane"
+import { DETAILS_PANE_TABS } from "@/components/files/details-pane-switch"
 import { DocumentDocCommentsPane } from "@/components/projects/document-doc-comments-pane"
 import { GoogleDriveIcon } from "@/components/ui/google-drive-icon"
 import { OneDriveIcon } from "@/components/ui/onedrive-icon"
@@ -149,6 +151,9 @@ interface DocumentActionMenuProps {
   onOpenActivityPane?: (documentId: string) => void
   /** Optional: notify parent when version pane is opened (e.g. to highlight row). */
   onOpenVersionPane?: (documentId: string) => void
+  /** Opens Details in place of the menu's own opener — the Files row passes what its cells may edit. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  onOpenDetails?: (doc: any) => void
   /** Engagement Lead only: Lock / Unlock version (files). Prefer explicit over showShareModal. */
   isEngagementLead?: boolean
   /** External user (EC or EV): hides Drive Actions and separator for all external users. */
@@ -206,6 +211,7 @@ export function DocumentActionMenu({
   onOpenInfoPane,
   onOpenActivityPane,
   onOpenVersionPane,
+  onOpenDetails,
   isEngagementLead,
   isExternalUser,
   isExternalViewer,
@@ -474,15 +480,11 @@ export function DocumentActionMenu({
           console.error('Share download error:', err)
         }
       } else {
-        // Files tab: generic download with explicit connector + Drive file ID (anchor, no progress needed)
-        const fileId = doc.externalId || doc.id
-        const downloadUrl = `/api/documents/download?fileId=${fileId}&connectorId=${doc.connectorId}&filename=${encodeURIComponent(filename)}&token=${session.access_token}`
-        const a = window.document.createElement('a')
-        a.href = downloadUrl
-        a.download = filename
-        window.document.body.appendChild(a)
-        a.click()
-        window.document.body.removeChild(a)
+        // A download is checked against the document's engagement, and every list that renders this
+        // menu passes one. The old firm-wide route (/api/documents/download) carried the sign-in
+        // token in the URL and checked only the legacy firm-to-storage link, so it is not called.
+        const taskId = addTask(filename)
+        updateTask(taskId, { status: 'error', error: 'Download unavailable here' })
       }
     } catch (error) {
       console.error('Download error:', error)
@@ -941,7 +943,9 @@ export function DocumentActionMenu({
                   </TooltipProvider>
                 ) : (
                   <DropdownMenuItem
-                    onClick={() => {
+                    // onSelect, as the menu's other items that open a dialog: the menu starts closing
+                    // before the secure-access dialog opens over it.
+                    onSelect={() => {
                       if (document.documentType === 'LINK' && document.externalUrl) {
                         window.open(document.externalUrl, '_blank', 'noopener,noreferrer')
                         return
@@ -1295,7 +1299,28 @@ export function DocumentActionMenu({
                   </DropdownMenuSub>
                 )}
 
-                {document.documentType !== 'LINK' && (
+                {DETAILS_PANE_TABS && document.documentType !== 'LINK' && (
+                  <DropdownMenuItem
+                    onClick={() => {
+                      // The Files row opens it with what its cells may edit; elsewhere Info reads only.
+                      if (onOpenDetails) { onOpenDetails(document); return }
+                      onOpenInfoPane?.(document.id)
+                      openAssetDetailsPane(rightPane, {
+                        document,
+                        projectId: document.projectId ?? projectId,
+                        orgSlug,
+                        isExternalUser: !!isExternalUser,
+                      })
+                    }}
+                    className="flex cursor-pointer items-center gap-2"
+                  >
+                    <Info className="h-3.5 w-3.5 text-fg-muted" />
+                    <span>Details</span>
+                  </DropdownMenuItem>
+                )}
+
+                {/* The Details submenu and its three panes — kept behind DETAILS_PANE_TABS until sign-off */}
+                {!DETAILS_PANE_TABS && document.documentType !== 'LINK' && (
                 <DropdownMenuSub>
                   <DropdownMenuSubTrigger className="flex cursor-pointer items-center gap-2">
                     <Info className="h-3.5 w-3.5 text-fg-muted" />
@@ -1391,6 +1416,8 @@ export function DocumentActionMenu({
                       <Info className="h-3.5 w-3.5 text-fg-muted" />
                       <span>File information</span>
                     </DropdownMenuItem>
+                    {/* Both read the file's versions, which the versions route gives internal roles only. */}
+                    {!isExternalUser && (
                     <DropdownMenuItem
                       onClick={() => {
                         onOpenActivityPane?.(document.id)
@@ -1398,7 +1425,7 @@ export function DocumentActionMenu({
                         rightPane.setHeaderIcon(<DocumentIcon mimeType={document.mimeType} className="h-3.5 w-3.5" />)
                         rightPane.setHeaderSubtitle('Last 30 days')
                         rightPane.setHeaderActions(null)
-                        rightPane.setContent(<DocumentActivityPane document={document} />)
+                        rightPane.setContent(<DocumentActivityPane document={document} projectId={document.projectId ?? projectId} />)
                         rightPane.setExpanded?.(false)
                       }}
                       className="flex cursor-pointer items-center gap-2"
@@ -1406,7 +1433,8 @@ export function DocumentActionMenu({
                       <Clock className="h-3.5 w-3.5 text-fg-muted" />
                       <span>Activity stream</span>
                     </DropdownMenuItem>
-                    {document.documentType !== 'LINK' && (
+                    )}
+                    {!isExternalUser && document.documentType !== 'LINK' && (
                     <DropdownMenuItem
                       onClick={() => {
                         onOpenVersionPane?.(document.id)
@@ -1414,7 +1442,7 @@ export function DocumentActionMenu({
                         rightPane.setHeaderIcon(<DocumentIcon mimeType={document.mimeType} className="h-3.5 w-3.5" />)
                         rightPane.setHeaderSubtitle('Full history')
                         rightPane.setHeaderActions(null)
-                        rightPane.setContent(<DocumentHistoryPane document={document} />)
+                        rightPane.setContent(<DocumentHistoryPane document={document} projectId={document.projectId ?? projectId} />)
                         rightPane.setExpanded?.(false)
                         onVersionHistory?.(document)
                       }}

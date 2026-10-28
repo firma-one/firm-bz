@@ -149,3 +149,8 @@ export function useShellData(): ShellDataValue {
     if (!ctx) throw new Error("useShellData must be used within ShellDataProvider")
     return ctx
 }
+
+/** The shell data, or null outside the app shell (onboarding, the /tour demo) — for chrome mounted in both. */
+export function useOptionalShellData(): ShellDataValue | null {
+    return useContext(ShellDataContext)
+}

@@ -16,19 +16,20 @@ import {
     FolderPlus,
     Upload,
     FolderInput,
+    Info,
 } from 'lucide-react'
 import { DocumentIcon } from '@/components/ui/document-icon'
 import { SharedFolderIcon } from '@/components/ui/folder-shared-icon'
 import { DeliverableIcon } from '@/components/ui/deliverable-icon'
 import { DocumentActionMenu } from '@/components/ui/document-action-menu'
+import { openAssetDetailsPane } from '@/components/files/asset-details-pane'
+import { DETAILS_PANE_TABS } from '@/components/files/details-pane-switch'
+import { useRightPane } from '@/lib/right-pane-context'
 import { ProfileBubbleWithPopup } from '@/components/ui/profile-bubble-popup'
 import { RelativeDateTime } from '@/components/ui/relative-date-time'
-import { DateProperty, StatusProperty } from '@/components/ui/property-cells'
-import { getAllowedTransitions, type EngagementRoleSlug } from '@/lib/deliverable-stage-roles'
-import { statusOf } from '@/lib/ui/status'
-import type { ActivityStatus } from '@/lib/sharing-settings'
+import type { EngagementRoleSlug } from '@/lib/deliverable-stage-roles'
+import { FileDueDateCell, FileStatusCell } from '@/components/projects/file-property-cells'
 import { Checkbox } from '@/components/ui/checkbox'
-import { StatusPill } from '@/components/ui/status-pill'
 import {
     Tooltip,
     TooltipContent,
@@ -211,6 +212,8 @@ export function EngagementFileRow({
     isInsideApprovedDeliverable = false,
     roleSlug = null,
 }: EngagementFileRowProps) {
+    // The row's ⋮ menu already reads the pane; the Details icon opens the same pane it does.
+    const rightPane = useRightPane()
     const isDeeplinkHighlight = file.id === highlightedFileId
     const isFolder = (file.mimeType ?? (file as { type?: string }).type) === 'application/vnd.google-apps.folder'
     const isIntakeRow = !!file.isPendingApproval
@@ -247,6 +250,24 @@ export function EngagementFileRow({
     const isIndexing = !isFolder && !!file.projectDocumentId && file.indexingStatus === 'PROCESSING'
     // Row tools appear on hover or keyboard focus, and stay while the row is in use.
     const toolsPinned = isActionMenuOpen || isSelected || isIndexing || file.id === activePreviewDocId || file.id === highlightedFileId
+    // Details, from the row icon and the ⋮ menu alike: Info edits what this row's own cells may.
+    const openDetails = () => {
+        onOpenInfoPane(file.id)
+        openAssetDetailsPane(rightPane, {
+            document: file,
+            projectId,
+            orgSlug,
+            isExternalUser: isEC || isGuest,
+            editing: {
+                statusRole: canEditStatus ? roleSlug : null,
+                tracked: isTracked,
+                canEditDue: canEditDueDate,
+                // Assignee and description, as on a deliverable: leads, until it's approved or finalized.
+                canManage: isProjectLead && !locked && !isIntakeRow && !isInsideApprovedDeliverable,
+                onSaved: onShareSaved,
+            },
+        })
+    }
 
     async function handleRemoveBookmark(e: React.MouseEvent) {
         e.stopPropagation()
@@ -505,7 +526,32 @@ export function EngagementFileRow({
                     "flex shrink-0 items-center justify-end transition-opacity duration-ui-fast",
                     !toolsPinned && "max-w-0 overflow-hidden opacity-0 focus-within:max-w-none focus-within:opacity-100 group-hover:max-w-none group-hover:opacity-100 [@media(hover:none)]:max-w-none [@media(hover:none)]:opacity-100"
                 )}>
-                    <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                    {/* Four icons, Details first: packed closer, and Copy link (also in the ⋮ menu) gives way
+                        when the table is at its narrowest. */}
+                    <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
+
+                        {DETAILS_PANE_TABS && !isFolder && file.documentType !== 'LINK' && (
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <button
+                                        type="button"
+                                        className={cn(
+                                            'h-7 w-7 rounded-md inline-flex items-center justify-center disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-fg-muted',
+                                            file.id === activeInfoDocId
+                                                ? 'text-fg-muted bg-surface-muted'
+                                                : 'text-fg-muted hover:text-fg-muted hover:bg-surface-hover'
+                                        )}
+                                        aria-label="Details"
+                                        aria-pressed={file.id === activeInfoDocId}
+                                        disabled={isIntakeRow}
+                                        onClick={openDetails}
+                                    >
+                                        <Info className="h-4 w-4" />
+                                    </button>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="text-xs">Details</TooltipContent>
+                            </Tooltip>
+                        )}
 
                         {!isFolder && file.documentType !== 'LINK' && (
                             <Tooltip>
@@ -530,12 +576,14 @@ export function EngagementFileRow({
                             </Tooltip>
                         )}
 
+
                         <Tooltip>
                             <TooltipTrigger asChild>
                                 <button
                                     type="button"
                                     className={cn(
                                         'h-7 w-7 rounded-md inline-flex items-center justify-center disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-fg-muted',
+                                        DETAILS_PANE_TABS && 'hidden @[49rem]/file-table:inline-flex',
                                         file.id === highlightedFileId
                                             ? 'text-fg-muted bg-surface-muted'
                                             : 'text-fg-muted hover:text-fg-muted hover:bg-surface-hover'
@@ -600,6 +648,7 @@ export function EngagementFileRow({
                             currentFolderType={currentFolderType}
                             onOpenCommentPane={(docId) => onOpenCommentPane(docId)}
                             onOpenInfoPane={(docId) => onOpenInfoPane(docId)}
+                            onOpenDetails={openDetails}
                             onOpenActivityPane={(docId) => onOpenActivityPane(docId)}
                             onOpenVersionPane={(docId) => onOpenVersionPane(docId)}
                             onRenameDocument={canEdit && !locked && !isIntakeRow ? (doc) => onOpenRename(doc as DriveFile) : undefined}
@@ -630,7 +679,8 @@ export function EngagementFileRow({
                     documentId={file.projectDocumentId ?? file.id}
                     fileName={file.name}
                     isFolder={isFolder}
-                    status={isFolder && !file.isDeliverable ? null : statusValue}
+                    // Tracked work with no stage yet is at To do, as the Board shows it.
+                    status={isTracked ? (statusValue ?? 'to_do') : isFolder && !file.isDeliverable ? null : statusValue}
                     roleSlug={canEditStatus ? roleSlug : null}
                     emptyLabel={emptyTrackedValue}
                     emptyClassName={isTracked ? 'text-fg-subtle' : 'text-[#45474c]/40'}
@@ -771,142 +821,5 @@ export function EngagementFileRow({
                 </div>
             )}
         </div>
-    )
-}
-
-const STAGES: ActivityStatus[] = ['to_do', 'in_progress', 'in_review', 'approved']
-
-/**
- * The Status cell. Read-only unless the viewer may move this row; then a picker offering only the
- * stages their role allows from here (getAllowedTransitions, as the Board and the server use). A
- * deliverable can't be approved while a document inside it isn't — the Board's rule, checked first.
- */
-function FileStatusCell({
-    projectId,
-    documentId,
-    fileName,
-    isFolder,
-    status,
-    roleSlug,
-    emptyLabel,
-    emptyClassName,
-    onSaved,
-    onAddToast,
-}: {
-    projectId: string
-    documentId: string
-    fileName: string
-    isFolder: boolean
-    status: ActivityStatus | null
-    /** null when the row can't be changed here. */
-    roleSlug: EngagementRoleSlug | null
-    emptyLabel: string
-    emptyClassName: string
-    onSaved: (next: ActivityStatus) => void
-    onAddToast: (toast: { type: string; title: string; message: string }) => void
-}) {
-    const [value, setValue] = React.useState<ActivityStatus | null>(status)
-    React.useEffect(() => { setValue(status) }, [status])
-    // A document with no stage yet is at "to do" as far as the rules go.
-    const allowed = roleSlug ? getAllowedTransitions(roleSlug, value ?? 'to_do') : []
-    if (allowed.length === 0) {
-        return value
-            ? <StatusPill kind="deliverable" status={value} />
-            : <span className={cn('text-[0.8125rem]', emptyClassName)}>{emptyLabel}</span>
-    }
-    return (
-        <StatusProperty
-            kind="deliverable"
-            value={value}
-            placeholder={emptyLabel}
-            options={STAGES.filter((s) => s === value || allowed.includes(s))}
-            onChange={async (next) => {
-                const stage = next as ActivityStatus
-                const { getSession } = await import('@/lib/supabase')
-                const session = await getSession()
-                const headers = { 'Content-Type': 'application/json', ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) }
-                if (stage === 'approved' && isFolder) {
-                    const res = await fetch(`/api/projects/${projectId}/documents/${encodeURIComponent(documentId)}/subtasks`, { headers })
-                    const data = await res.json().catch(() => ({}))
-                    const unapproved = ((data.subtasks ?? []) as { status: string | null }[]).filter((t) => t.status !== 'approved').length
-                    if (!res.ok || unapproved > 0) {
-                        onAddToast({
-                            type: 'error',
-                            title: 'Cannot approve yet',
-                            message: res.ok
-                                ? `${unapproved} document${unapproved > 1 ? 's' : ''} still need to be approved before this deliverable can be approved.`
-                                : 'Could not check the documents inside it. Please try again.',
-                        })
-                        return
-                    }
-                }
-                const res = await fetch(`/api/projects/${projectId}/documents/${encodeURIComponent(documentId)}/sharing/activity`, {
-                    method: 'PATCH',
-                    headers,
-                    body: JSON.stringify({ status: stage }),
-                })
-                if (!res.ok) {
-                    const err = await res.json().catch(() => ({}))
-                    onAddToast({ type: 'error', title: "Couldn't change the stage", message: err.error ?? 'Please try again.' })
-                    return
-                }
-                setValue(stage)
-                onSaved(stage)
-                onAddToast({
-                    type: 'success',
-                    title: stage === 'approved' ? 'Approved' : 'Stage updated',
-                    message: `${fileName} · ${statusOf('deliverable', stage).label}`,
-                })
-                window.dispatchEvent(new CustomEvent('pockett-notifications-updated'))
-            }}
-        />
-    )
-}
-
-/** Inline Due editor for one file or deliverable folder — the same endpoint the row menu's "Due" uses. */
-function FileDueDateCell({
-    projectId,
-    documentId,
-    dueDate,
-    placeholder,
-    onSaved,
-    onError,
-}: {
-    projectId: string
-    documentId: string
-    dueDate: string | null
-    /** What an empty cell reads: "Not set" for a deliverable or what's inside one, otherwise a dash. */
-    placeholder: string
-    onSaved: (next: string | null) => void
-    onError: (message: string) => void
-}) {
-    const [value, setValue] = React.useState<string | null>(dueDate)
-    React.useEffect(() => { setValue(dueDate) }, [dueDate])
-    return (
-        <DateProperty
-            value={value}
-            placeholder={placeholder}
-            highlightOverdue
-            allowTime
-            compact
-            chip
-            onChange={async (next) => {
-                const { getSession } = await import('@/lib/supabase')
-                const session = await getSession()
-                const res = await fetch(`/api/projects/${projectId}/documents/${encodeURIComponent(documentId)}/due-date`, {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json', ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) },
-                    body: JSON.stringify({ dueDate: next }),
-                })
-                if (!res.ok) {
-                    const err = await res.json().catch(() => ({}))
-                    onError(err.error ?? 'Failed to update due date')
-                    return
-                }
-                setValue(next)
-                onSaved(next)
-                window.dispatchEvent(new CustomEvent('pockett-notifications-updated'))
-            }}
-        />
     )
 }

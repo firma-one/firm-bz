@@ -4,6 +4,8 @@ import React, { useEffect, useRef, useState } from 'react'
 import { X, Expand, Minimize2, PanelRight, PanelRightOpen } from 'lucide-react'
 import { Hint } from '@/components/ui/tooltip'
 import Logo from '@/components/Logo'
+import { FirmMark } from '@/components/shell/workspace-switcher'
+import { useOptionalShellData } from '@/components/shell/shell-data-context'
 import { cn } from '@/lib/utils'
 import { useSidebar } from '@/lib/sidebar-context'
 import { useBranding } from '@/lib/use-branding'
@@ -42,6 +44,8 @@ interface LayoutRightPanelProps {
    * the panel in a margin): its own border and shadow.
    */
   frame?: 'card' | 'flush'
+  /** The firm the full-screen header names. In the app it comes from the shell, as the sidebar's does; /tour passes its demo firm. */
+  firm?: { name: string; logoUrl: string | null }
 }
 
 /** Header icon buttons, the same ghost buttons as the Brio pane's header. */
@@ -73,6 +77,12 @@ function PanelTitle({ icon, iconTooltip, title, subtitle }: { icon?: React.React
  */
 const PANE_SIZE_SWITCH = true
 
+/**
+ * The full-screen header names the firm with the sidebar's mark and name (2026-10-28). False brings
+ * back the large brand logo; kept until Deepak signs off. Onboarding, which has no firm yet, keeps it.
+ */
+const PANE_HEADER_FIRM_MARK = true
+
 /** Icon + tooltip for the cycle button — shows where clicking will take you next. */
 const CYCLE_META: Record<PaneSize, { icon: React.ReactNode; title: string; next: PaneSize }> = {
   small:  { icon: <PanelRightOpen className="h-4 w-4" />, title: 'Expand to medium',      next: 'medium' },
@@ -92,9 +102,13 @@ export function LayoutRightPanel({
   embedContent = false,
   dockedPosition,
   frame = 'card',
+  firm: firmProp,
 }: LayoutRightPanelProps) {
   const { isCollapsed, toggleSidebar } = useSidebar()
   const branding = useBranding()
+  const shell = useOptionalShellData()
+  const shellFirm = shell?.firms.find((f) => f.slug === shell.firmSlug)
+  const firm = firmProp ?? (shellFirm ? { name: shellFirm.name, logoUrl: shellFirm.logoUrl ?? null } : null)
   const { paneSize, setPaneSize } = useRightPane()
   const [panelEntered, setPanelEntered] = useState(false)
   const [overlayEntered, setOverlayEntered] = useState(false)
@@ -247,9 +261,18 @@ export function LayoutRightPanel({
           )}
           style={{ height: 52, transitionDuration: `${TRANSITION_MS}ms` }}
         >
-          <div className="flex min-w-0 items-center gap-3">
-            <Logo size="xl" branding={branding ?? undefined} />
-          </div>
+          {PANE_HEADER_FIRM_MARK && firm ? (
+            // The sidebar's own mark and name (components/shell/workspace-switcher.tsx), so full screen
+            // reads as the same app.
+            <div className="flex min-w-0 shrink-0 items-center gap-2 px-1 text-ui font-medium text-fg">
+              <FirmMark firm={firm} />
+              <span className="max-w-[200px] truncate">{firm.name}</span>
+            </div>
+          ) : (
+            <div className="flex min-w-0 items-center gap-3">
+              <Logo size="xl" branding={branding ?? undefined} />
+            </div>
+          )}
           <div className="mx-2 h-6 w-px shrink-0 bg-line" />
           <PanelTitle icon={icon} iconTooltip={iconTooltip} title={title} subtitle={subtitle} />
           {PANE_SIZE_SWITCH ? (

@@ -1,51 +1,22 @@
 "use client"
 
-import { useState, useEffect } from "react"
 import { Clock, AlertCircle } from "lucide-react"
-import { DriveFile, DriveRevision } from "@/lib/types"
-import { useAuth } from "@/lib/auth-context"
+import { DriveFile } from "@/lib/types"
 import { RelativeDateTime } from "@/components/ui/relative-date-time"
 import { UserAvatarWithTooltip } from "@/components/ui/user-avatar-with-tooltip"
 import { initialsOf } from '@/lib/initials'
+import { useDocumentVersions } from "@/components/files/use-document-versions"
 
 interface DocumentActivityPaneProps {
     document: DriveFile
+    /** The engagement the document belongs to. Without it there is nothing to load. */
+    projectId?: string
 }
 
-export function DocumentActivityPane({ document }: DocumentActivityPaneProps) {
-    const { session } = useAuth()
-    const [revisions, setRevisions] = useState<DriveRevision[]>([])
-    const [loading, setLoading] = useState(true)
-    const [error, setError] = useState<string | null>(null)
-
-    useEffect(() => {
-        load()
-    }, [document?.id, session?.access_token])
-
-    const load = async () => {
-        if (!session?.access_token || !document?.connectorId) {
-            setLoading(false)
-            return
-        }
-        setLoading(true)
-        setError(null)
-        try {
-            const res = await fetch(
-                `/api/documents/versions?fileId=${document.id}&connectorId=${document.connectorId}`,
-                { headers: { Authorization: `Bearer ${session.access_token}` } }
-            )
-            if (res.ok) {
-                const data = await res.json()
-                setRevisions(data.revisions || [])
-            } else {
-                setError('Failed to load activity')
-            }
-        } catch {
-            setError('Error loading activity')
-        } finally {
-            setLoading(false)
-        }
-    }
+export function DocumentActivityPane({ document, projectId }: DocumentActivityPaneProps) {
+    const versions = useDocumentVersions(document?.id, projectId)
+    const { revisions, loading, unsupported } = versions
+    const error = versions.error && 'Failed to load activity'
 
     const activity = (() => {
         const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
@@ -88,7 +59,9 @@ export function DocumentActivityPane({ document }: DocumentActivityPaneProps) {
                     <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center">
                         <Clock className="h-5 w-5 text-slate-400" />
                     </div>
-                    <p className="text-xs text-slate-500">No activity in the last 30 days.</p>
+                    <p className="text-xs text-slate-500">
+                        {unsupported ? "Activity isn't available for this storage yet." : 'No activity in the last 30 days.'}
+                    </p>
                 </div>
             ) : (
                 <div className="flex-1 overflow-y-auto min-h-0 space-y-3 pr-2">

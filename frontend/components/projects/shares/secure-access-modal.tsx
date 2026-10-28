@@ -9,10 +9,11 @@ import {
 import { Button } from '@/components/ui/button'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { Mail, AlertCircle, ExternalLink } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { DocumentIcon } from '@/components/ui/document-icon'
 import { DeliverableIcon } from '@/components/ui/deliverable-icon'
 import type { SecureOpenModalMode } from '@/lib/use-secure-open-document'
+import { releaseStrandedPointerLock } from '@/lib/ui/stranded-pointer-lock'
 
 interface SecureAccessModalProps {
     isOpen: boolean
@@ -74,6 +75,24 @@ export function SecureAccessModal({
     // (e.g. the proxy has no thumbnail for this file yet) — previously showed the browser's
     // broken-image icon instead.
     const [thumbnailFailed, setThumbnailFailed] = useState(false)
+
+    // This dialog opens on the same click as a new tab, which hides the page while the dialog (and
+    // the ⋮ menu it was opened from) close. Their hand-back of the page's clicks can be lost then,
+    // leaving everything unclickable — so once it's closed, and whenever the page is shown again,
+    // make sure nothing is left locked (lib/ui/stranded-pointer-lock.ts).
+    useEffect(() => {
+        if (isOpen) return
+        const release = () => { releaseStrandedPointerLock() }
+        const onVisible = () => { if (document.visibilityState === 'visible') release() }
+        const timer = setTimeout(release, 400)
+        document.addEventListener('visibilitychange', onVisible)
+        window.addEventListener('focus', release)
+        return () => {
+            clearTimeout(timer)
+            document.removeEventListener('visibilitychange', onVisible)
+            window.removeEventListener('focus', release)
+        }
+    }, [isOpen])
 
     const effectiveMode: SecureOpenModalMode = mode ?? (error ? 'error' : isLoading ? 'loading' : 'email')
     const isBusy = effectiveMode === 'loading' || effectiveMode === 'opening'
