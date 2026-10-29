@@ -231,6 +231,9 @@ export function createOneDriveContentAdapter(): IConnectorContentAdapter {
       return ((data.value ?? []) as GraphVersion[])
         .map((v) => ({
           id: v.id,
+          // Graph's version id is OneDrive's own label for it ("1.0", "2.0", as its Version history
+          // shows). Anything else (a personal OneDrive can answer "current") names no version.
+          ...(/^\d+(\.\d+)?$/.test(v.id) ? { label: v.id } : {}),
           mimeType: '',
           modifiedTime: v.lastModifiedDateTime,
           size: v.size != null ? String(v.size) : undefined,

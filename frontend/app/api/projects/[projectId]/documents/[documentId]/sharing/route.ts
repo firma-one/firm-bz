@@ -9,7 +9,10 @@ import { safeInngestSend } from '@/lib/inngest/client'
 import { resolveProjectContext } from '@/lib/resolve-project-context'
 import { canManageProject, canViewProject, getProjectPersona } from '@/lib/permission-helpers'
 import { withoutFirmOnlySettings } from '@/lib/files/blocked'
-import { resolveEngagementConnector } from '@/lib/connectors/resolve-client-connector'
+import { deliverableOf } from '@/lib/files/deliverable-of'
+import { writeNativeDescription } from '@/lib/files/native-description'
+import { SearchService } from '@/lib/services/search-service'
+import { resolveEngagementConnector, resolveEngagementConnectorId } from '@/lib/connectors/resolve-client-connector'
 import { getPermissionAdapter, getContentAdapter } from '@/lib/connectors/registry'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 import { assertFirmSubscriptionAccess } from '@/lib/billing/subscription-gate'
@@ -166,6 +169,14 @@ export async function PUT(
           updatedBy: user.id,
         },
       })
+      // After the save, not before it answers: its vector, so search by meaning finds it by what it's
+      // for, and the storage's own description field where there is one (lib/files/native-description.ts).
+      const description = body.description as string
+      Promise.resolve().then(async () => {
+        await SearchService.refreshEmbedding(doc.id).catch((e) => console.error('[description] vector refresh failed', e))
+        const connectorId = await resolveEngagementConnectorId(projectId, doc.connectorId)
+        if (connectorId) await writeNativeDescription(connectorId, doc.externalId, description)
+      })
       return NextResponse.json({ sharing: toJsonSafeSharing(updated as Record<string, unknown>) })
     }
 
@@ -176,6 +187,28 @@ export async function PUT(
       })
       if (!doc) return NextResponse.json({ error: 'Document not found' }, { status: 404 })
       if (!doc.isFolder) return NextResponse.json({ error: 'Cannot mark a file as a Deliverable' }, { status: 400 })
+      // Deliverables don't nest: a folder inside one, or one holding one, can't become one. The
+      // menu says so too; a folder made a moment ago may not be known to it yet.
+      const insideOf = await deliverableOf(projectId, doc.parentId)
+      if (insideOf) {
+        return NextResponse.json({ error: `It's inside ${insideOf.docId ? `${insideOf.docId} · ` : ''}${insideOf.name}, which is a deliverable already.` }, { status: 409 })
+      }
+      const nestedDeliverable = (await (prisma as any).$queryRawUnsafe(
+        `WITH RECURSIVE descendants AS (
+           SELECT id, "externalId", "isFolder", settings, 1 AS depth FROM platform.engagement_documents
+           WHERE "parentId" = $1 AND "engagementId" = $2::uuid
+           UNION ALL
+           SELECT ed.id, ed."externalId", ed."isFolder", ed.settings, d.depth + 1 FROM platform.engagement_documents ed
+           INNER JOIN descendants d ON ed."parentId" = d."externalId"
+           WHERE ed."engagementId" = $2::uuid AND d.depth < 50
+         )
+         SELECT id FROM descendants WHERE "isFolder" = true AND settings->'share'->>'createdAt' IS NOT NULL LIMIT 1`,
+        doc.externalId,
+        projectId,
+      )) as Array<{ id: string }>
+      if (nestedDeliverable.length > 0) {
+        return NextResponse.json({ error: 'A folder inside it is a deliverable already.' }, { status: 409 })
+      }
 
       const engagement = await prisma.engagement.findUnique({
         where: { id: projectId },

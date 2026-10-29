@@ -2,21 +2,27 @@
 
 import { AlertCircle, Clock, Download } from "lucide-react"
 import type { DriveFile, DriveRevision } from "@/lib/types"
-import { cn, formatFileSize } from "@/lib/utils"
+import { cn, formatFileSize, formatFullDate } from "@/lib/utils"
+import { Hint } from "@/components/ui/tooltip"
+import { versionName, type ApprovalRecord } from "@/lib/files/approvals"
 import { Tag } from "@/components/ui/tag"
 import { RelativeDateTime } from "@/components/ui/relative-date-time"
 import { useDownloadProgress } from "@/lib/download-progress-context"
 import { useDocumentVersions } from "@/components/files/use-document-versions"
 
 /**
- * The Details pane's Versions tab: a compact timeline, newest first — "v2 · Current", who saved it,
- * when, its size and how much it changed from the one before.
+ * The Details pane's Versions tab: a compact timeline, newest first — each version under the
+ * storage's own name for it, who saved it, when, its size and how much it changed from the one before.
+ *
+ * Named as the storage names it, never numbered here (2026-10-29): OneDrive's "Version 2.0", and on
+ * Google Drive, which names none, the time it was saved, as Drive's own version list shows. A number
+ * counted from the list would shift as the storage drops old versions, and stop matching the storage.
  */
 
 export interface VersionRow {
     id: string
-    /** 1 for the oldest; the provider lists oldest first. */
-    number: number
+    /** The storage's own label (OneDrive's "2.0"); null where it has none (Google Drive). */
+    label: string | null
     current: boolean
     at: string
     who: string | null
@@ -39,7 +45,7 @@ export function versionRows(revisions: DriveRevision[]): VersionRow[] {
             const previous = i > 0 ? sizeOf(revisions[i - 1]) : null
             return {
                 id: rev.id,
-                number: i + 1,
+                label: rev.label ?? null,
                 current: i === revisions.length - 1,
                 at: rev.modifiedTime,
                 who: rev.lastModifyingUser?.displayName ?? null,
@@ -51,13 +57,23 @@ export function versionRows(revisions: DriveRevision[]): VersionRow[] {
         .reverse()
 }
 
+/** What a version is called: "Version 2.0" on OneDrive; on Google Drive, the time it was saved (lib/files/approvals.ts). */
+export function versionTitle(row: Pick<VersionRow, 'label' | 'at'>): string {
+    return versionName(row)
+}
+
 /** "+4.7 KB" / "−1.2 KB"; nothing when the size didn't change. */
 export function formatDelta(delta: number | null): string | null {
     if (delta === null || delta === 0) return null
     return `${delta > 0 ? '+' : '−'}${formatFileSize(Math.abs(delta))}`
 }
 
-export function DocumentVersionsTimeline({ document, projectId }: { document: DriveFile; projectId: string }) {
+export function DocumentVersionsTimeline({ document, projectId, approvals = [] }: {
+    document: DriveFile
+    projectId: string
+    /** The document's approvals: a version approved is tagged so, a reopened one "Previously approved". */
+    approvals?: ApprovalRecord[]
+}) {
     const { addTask, updateTask } = useDownloadProgress()
     const { revisions, loading, error, unsupported } = useDocumentVersions(document?.id, projectId)
     const rows = versionRows(revisions)
@@ -120,6 +136,9 @@ export function DocumentVersionsTimeline({ document, projectId }: { document: Dr
         <ol className="ml-1.5 border-l border-line">
             {rows.map((row) => {
                 const delta = formatDelta(row.delta)
+                const title = versionTitle(row)
+                // The latest approval of this version, if any: standing, or reopened since.
+                const approval = [...approvals].reverse().find((a) => a.version.id === row.id)
                 return (
                     <li key={row.id} className="group relative pb-4 pl-5 last:pb-0">
                         <span
@@ -130,14 +149,22 @@ export function DocumentVersionsTimeline({ document, projectId }: { document: Dr
                             )}
                         />
                         <div className="flex items-center gap-2">
-                            <span className="text-xs font-medium tabular-nums text-fg">v{row.number}</span>
+                            <span className="text-xs font-medium tabular-nums text-fg">{title}</span>
                             {row.current && <Tag color="green">Current</Tag>}
+                            {approval && (
+                                <Hint label={`${approval.unlockedAt ? 'Approved, reopened since' : 'Approved'} · ${formatFullDate(approval.approvedAt)}`}>
+                                    <span className="inline-flex">
+                                        <Tag color={approval.unlockedAt ? 'gray' : 'green'}>{approval.unlockedAt ? 'Previously approved' : 'Approved'}</Tag>
+                                    </span>
+                                </Hint>
+                            )}
+                            {/* How long ago, beside a name; a Google version's name is already its time */}
                             <span className="ml-auto">
-                                <RelativeDateTime date={row.at} textClassName="text-caption text-fg-subtle" tooltipSide="left" />
+                                {row.label && <RelativeDateTime date={row.at} textClassName="text-caption text-fg-subtle" tooltipSide="left" />}
                             </span>
                             <button
                                 type="button"
-                                aria-label={`Download v${row.number}`}
+                                aria-label={`Download ${title}`}
                                 onClick={() => download(row)}
                                 className="rounded-control p-1 text-fg-subtle opacity-0 transition-opacity hover:bg-surface-hover hover:text-fg focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
                             >

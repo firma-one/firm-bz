@@ -247,7 +247,9 @@ export interface DriveFile {
     deleted?: boolean
   }>
   // Vector search metadata
-  matchType?: 'keyword' | 'name' | 'semantic'
+  matchType?: 'keyword' | 'name' | 'semantic' | 'description'
+  /** On a search result found only in its description: the description, shown as why it matched. */
+  description?: string
   score?: number
   metadata?: {
     summary?: string
@@ -281,6 +283,8 @@ export interface DriveFile {
 
 export interface DriveRevision {
   id: string
+  /** The storage's own name for the version, where it has one: OneDrive's "1.0", "2.0". Google Drive names none. */
+  label?: string
   mimeType: string
   modifiedTime: string
   keepForever?: boolean

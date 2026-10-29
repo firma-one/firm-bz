@@ -7,6 +7,7 @@ import { resolveProjectContext } from '@/lib/resolve-project-context'
 import { canViewProject, getProjectPersona } from '@/lib/permission-helpers'
 import { documentStage, isOnBoard, parseSettingsFromDb } from '@/lib/sharing-settings'
 import { blockedOf } from '@/lib/files/blocked'
+import { currentApproval } from '@/lib/files/approvals'
 import { resolveDisplayName } from '@/lib/auth/display-name'
 
 /**
@@ -167,6 +168,11 @@ export async function GET(
         assigneeUserId,
         status: documentStage(c.settings),
         blocked: isFirm ? blockedOf(c.settings) : null,
+        // The approval that stands, named on the client (a Google version's name is its saved time).
+        approval: (() => {
+          const a = currentApproval(c.settings)
+          return a ? { version: { label: a.version.label ?? null, savedAt: a.version.savedAt }, approvedAt: a.approvedAt } : null
+        })(),
         breadcrumb,
       }
     })

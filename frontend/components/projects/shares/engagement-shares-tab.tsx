@@ -622,19 +622,21 @@ function ShareCardContent({
           const total = share.subtaskCount ?? 0
           const approved = share.approvedSubtaskCount ?? 0
           const blocked = share.blockedDocuments ?? []
-          if (total === 0 && blocked.length === 0) return null
           const pct = total > 0 ? Math.round((approved / total) * 100) : 0
+          // Always there, so every card in a lane is the same height: with nothing on the Board yet it says so.
           return (
-            <div className="flex items-center gap-2 pt-0.5">
+            <div className="flex h-5 items-center gap-2 pt-0.5">
               {/* Documents the firm marked blocked, named on hover */}
               <BlockedCountChip documents={blocked} />
-              {total > 0 && (
+              {total > 0 ? (
                 <>
                   <div className="flex-1 h-1 rounded-full bg-surface-muted overflow-hidden">
                     <div className={cn('h-full rounded-full transition-all duration-ui-slow ease-ui-out', STAGE_BAR_CLASSES[stage as LaneStage])} style={{ width: `${pct}%` }} />
                   </div>
                   <span className="shrink-0 text-caption tabular-nums text-fg-subtle">{approved}/{total}</span>
                 </>
+              ) : (
+                <span className="text-caption text-fg-subtle">No documents on the Board yet</span>
               )}
             </div>
           )

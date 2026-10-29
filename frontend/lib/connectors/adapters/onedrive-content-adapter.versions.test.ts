@@ -32,8 +32,19 @@ describe('OneDrive content adapter — versions', () => {
         const versions = await createOneDriveContentAdapter().listVersions!('conn1', 'item1')
         expect(fetchMock.mock.calls[0][0]).toBe('https://graph.example/v1.0/me/drive/items/item1/versions')
         expect(versions.map((v) => v.id)).toEqual(['1.0', '2.0', '3.0'])
-        expect(versions[2]).toEqual({ id: '3.0', mimeType: '', modifiedTime: '2026-10-27T10:00:00Z', size: '300', lastModifyingUser: { displayName: 'Ana' } })
+        expect(versions[2]).toEqual({ id: '3.0', label: '3.0', mimeType: '', modifiedTime: '2026-10-27T10:00:00Z', size: '300', lastModifyingUser: { displayName: 'Ana' } })
         expect(versions[0].lastModifyingUser).toBeUndefined()
+    })
+
+    it("names each version with OneDrive's own label, and none where Graph gives no label", async () => {
+        fetchMock.mockResolvedValueOnce(json({
+            value: [
+                { id: 'current', lastModifiedDateTime: '2026-10-27T10:00:00Z' },
+                { id: '1.0', lastModifiedDateTime: '2026-10-01T10:00:00Z' },
+            ],
+        }))
+        const versions = await createOneDriveContentAdapter().listVersions!('conn1', 'item1')
+        expect(versions.map((v) => v.label)).toEqual(['1.0', undefined])
     })
 
     it('says a missing file is not found', async () => {

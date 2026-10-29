@@ -8,6 +8,7 @@ import { statusOf } from '@/lib/ui/status'
 import { ACTIVITY_STAGES, type ActivityStatus } from '@/lib/sharing-settings'
 import { Hint } from '@/components/ui/tooltip'
 import { useStageMove } from '@/components/files/use-stage-move'
+import { useDueDateSave } from '@/components/files/use-due-date-save'
 import { cn } from '@/lib/utils'
 
 /*
@@ -97,6 +98,7 @@ export function FileDueDateCell({
     onSaved,
     onError,
     asProperty = false,
+    onOthersChanged,
 }: {
     projectId: string
     documentId: string
@@ -107,10 +109,15 @@ export function FileDueDateCell({
     onError: (message: string) => void
     /** In a property list (the Details pane) rather than a table cell: full size, no chip. */
     asProperty?: boolean
+    /** A fix chosen in the due-date dialog moved another date too (its deliverable, its documents, the engagement). */
+    onOthersChanged?: () => void
 }) {
     const [value, setValue] = React.useState<string | null>(dueDate)
     React.useEffect(() => { setValue(dueDate) }, [dueDate])
+    // Due dates nest: a change that breaks that asks, with the fixes (lib/files/due-date-rule.ts).
+    const { save, dialog } = useDueDateSave()
     return (
+        <>
         <DateProperty
             value={value}
             placeholder={placeholder}
@@ -119,22 +126,18 @@ export function FileDueDateCell({
             compact={!asProperty}
             chip={!asProperty}
             onChange={async (next) => {
-                const { getSession } = await import('@/lib/supabase')
-                const session = await getSession()
-                const res = await fetch(`/api/projects/${projectId}/documents/${encodeURIComponent(documentId)}/due-date`, {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json', ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) },
-                    body: JSON.stringify({ dueDate: next }),
-                })
-                if (!res.ok) {
-                    const err = await res.json().catch(() => ({}))
-                    onError(err.error ?? 'Failed to update due date')
+                const result = await save(projectId, documentId, next)
+                if (!result.ok) {
+                    if (!result.cancelled) onError(result.error)
                     return
                 }
-                setValue(next)
-                onSaved(next)
+                setValue(result.dueDate)
+                onSaved(result.dueDate)
+                if (result.alsoChanged.length > 0 || result.engagementDueDate) onOthersChanged?.()
                 window.dispatchEvent(new CustomEvent('pockett-notifications-updated'))
             }}
         />
+        {dialog}
+        </>
     )
 }

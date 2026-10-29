@@ -357,7 +357,7 @@ export function isDocumentLocked(settings: unknown): boolean {
 }
 
 /** Settings that describe the document itself, not how it is shared. */
-const ASSET_SETTING_KEYS = ['description', 'assigneeUserId', 'details', 'blocked'] as const
+const ASSET_SETTING_KEYS = ['description', 'assigneeUserId', 'details', 'blocked', 'approvals'] as const
 
 /**
  * What removing a share or un-tagging a deliverable keeps: the document's description and assignee

@@ -38,9 +38,19 @@ export function blockedOf(settings: unknown): BlockedFlag | null {
     }
 }
 
-/** Settings as a client may see them: without what is the firm's own. */
+/**
+ * Settings as a client may see them: without what is the firm's own. That's the Blocked flag, and
+ * each approval's Archive copy (the approvals themselves stay: the client was party to them).
+ */
 export function withoutFirmOnlySettings<T>(settings: T): T {
-    if (!settings || typeof settings !== 'object' || !('blocked' in settings)) return settings
+    if (!settings || typeof settings !== 'object' || (!('blocked' in settings) && !('approvals' in settings))) return settings
     const { blocked: _blocked, ...rest } = settings as Record<string, unknown>
+    if (Array.isArray(rest.approvals)) {
+        rest.approvals = rest.approvals.map((r) => {
+            if (!r || typeof r !== 'object') return r
+            const { archived: _archived, ...record } = r as Record<string, unknown>
+            return record
+        })
+    }
     return rest as T
 }

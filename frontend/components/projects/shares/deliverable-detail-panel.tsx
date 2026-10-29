@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback, useRef } from 'react'
-import { cn } from '@/lib/utils'
+import { cn, formatFullDate } from '@/lib/utils'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/components/ui/toast'
@@ -13,7 +13,7 @@ import {
   Loader2,
   Folder, MoreVertical,
   Info, MessagesSquare, Settings as SettingsIcon,
-  UserPlus, ChevronDown, X, ScanEye, FolderOpen, Check, CircleDot, CalendarClock, UserRound, ListChecks,
+  UserPlus, ChevronDown, X, ScanEye, FolderOpen, Check, CircleDot, CalendarClock, UserRound, ListChecks, AlertTriangle,
 } from 'lucide-react'
 import {
   DropdownMenu,
@@ -34,9 +34,12 @@ import { DateProperty, PersonAvatar, PersonProperty, type PersonOption } from '@
 import { ACTIVITY_STAGES, isOnBoard, type ActivityStatus } from '@/lib/sharing-settings'
 import { getAllowedTransitions, type EngagementRoleSlug } from '@/lib/deliverable-stage-roles'
 import { useStageMove } from '@/components/files/use-stage-move'
+import { useDueDateSave } from '@/components/files/use-due-date-save'
+import { isLaterDay } from '@/lib/files/due-date-rule'
 import { Hint } from '@/components/ui/tooltip'
 import { BlockedTag } from '@/components/files/blocked-tag'
 import type { BlockedFlag } from '@/lib/files/blocked'
+import { versionName } from '@/lib/files/approvals'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -62,6 +65,8 @@ interface SubtaskRecord {
   status?: ActivityStatus | null
   /** The firm's Blocked flag (the subtasks route sends it to firm roles only). */
   blocked?: BlockedFlag | null
+  /** The approval that stands: which version was approved, and when. */
+  approval?: { version: { label: string | null; savedAt: string }; approvedAt: string } | null
   breadcrumb?: string[]
 }
 
@@ -144,6 +149,8 @@ function SubtaskRow({
   members = [],
   roleSlug,
   onDeliverableChanged,
+  onDeliverableDueChanged,
+  onDueDateChange,
 }: {
   subtask: SubtaskRecord
   projectId: string
@@ -152,6 +159,10 @@ function SubtaskRow({
   roleSlug?: EngagementRoleSlug
   /** The deliverable moved with this document. */
   onDeliverableChanged?: (status: ActivityStatus) => void
+  /** A due-date fix moved the deliverable's due date too. */
+  onDeliverableDueChanged?: (dueDate: string) => void
+  /** This document's due date as saved. */
+  onDueDateChange?: (id: string, dueDate: string | null) => void
   onRemoveSubtask?: (id: string) => void
   onAssigneeChange?: (id: string, userId: string | null, name: string | null, email: string | null, avatarUrl: string | null) => void
   onOpenDocument?: (subtask: SubtaskRecord) => void
@@ -167,6 +178,7 @@ function SubtaskRow({
 }) {
   const [saving, setSaving] = useState(false)
   const { move, dialog: stageDialog } = useStageMove()
+  const { save: saveDue, dialog: dueDialog } = useDueDateSave()
   const { addToast } = useToast()
   const approvalFeedback = useApprovalFeedback()
   const [subtaskDueDate, setSubtaskDueDate] = useState(subtask.dueDate ?? '')
@@ -180,21 +192,26 @@ function SubtaskRow({
   const showDetails = showExtras && expanded
 
   const handleSubtaskDueDateChange = useCallback(async (iso: string) => {
+    const previous = subtaskDueDate
     setSubtaskDueDate(iso)
     const val = iso ? iso.slice(0, 10) : ''
     setSavingSubtaskDue(true)
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session?.access_token) return
-      await fetch(`/api/projects/${projectId}/documents/${subtask.documentId}/due-date`, {
-        method: 'PATCH',
-        headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dueDate: val || null }),
-      })
+      // Due dates nest: a date after the deliverable's asks, with the fixes (lib/files/due-date-rule.ts).
+      const result = await saveDue(projectId, subtask.documentId, val || null)
+      if (!result.ok) {
+        setSubtaskDueDate(previous)
+        if (!result.cancelled) addToast({ type: 'error', title: "Couldn't set due date", message: result.error })
+        return
+      }
+      setSubtaskDueDate(result.dueDate ? result.dueDate.slice(0, 10) : '')
+      onDueDateChange?.(subtask.id, result.dueDate)
+      const movedDeliverable = result.alsoChanged[0]
+      if (movedDeliverable) onDeliverableDueChanged?.(movedDeliverable.dueDate)
     } finally {
       setSavingSubtaskDue(false)
     }
-  }, [projectId, subtask.documentId])
+  }, [projectId, subtask.id, subtask.documentId, subtaskDueDate, saveDue, addToast, onDeliverableDueChanged, onDueDateChange])
 
   const handleAssigneeSelect = useCallback(async (member: EngagementMember | null) => {
     const userId = member?.userId ?? null
@@ -322,8 +339,16 @@ function SubtaskRow({
               <TooltipContent side="top" className="text-xs">Open in Files</TooltipContent>
             </Tooltip>
           )}
-          {/* Stage badge */}
-          <StatusPill kind="deliverable" status={status} className={cn('shrink-0', approvalFeedback.isFresh(subtask.id) && FRESH_CHIP_CLASS)} />
+          {/* Stage badge; an approved one names the version approved */}
+          {subtask.approval ? (
+            <Hint label={`${versionName({ label: subtask.approval.version.label, at: subtask.approval.version.savedAt })} · approved ${formatFullDate(subtask.approval.approvedAt)}`}>
+              <span className="inline-flex shrink-0">
+                <StatusPill kind="deliverable" status={status} className={cn(approvalFeedback.isFresh(subtask.id) && FRESH_CHIP_CLASS)} />
+              </span>
+            </Hint>
+          ) : (
+            <StatusPill kind="deliverable" status={status} className={cn('shrink-0', approvalFeedback.isFresh(subtask.id) && FRESH_CHIP_CLASS)} />
+          )}
         </TooltipProvider>
         <div className="shrink-0">
           <DocumentActionMenu
@@ -492,6 +517,7 @@ function SubtaskRow({
         </div>
       )}
       {stageDialog}
+      {dueDialog}
     </div>
   )
 }
@@ -584,6 +610,7 @@ export function DeliverableDetailPanel({
   const [savingOptions, setSavingOptions] = useState(false)
   const [movingStatus, setMovingStatus] = useState(false)
   const { move: moveStage, dialog: stageDialog } = useStageMove()
+  const { save: saveDue, dialog: dueDialog } = useDueDateSave()
   /** Not started documents are off the Board; the list keeps them folded under one line. */
   const [showNotStarted, setShowNotStarted] = useState(false)
   const [members, setMembers] = useState<EngagementMember[]>([])
@@ -708,19 +735,22 @@ export function DeliverableDetailPanel({
     saveOptions(next)
   }
 
-  const handleDueDateChange = async (val: string, targetDocumentId: string, onUpdate?: (iso: string | null) => void) => {
+  /**
+   * The deliverable's own due date. Due dates nest (lib/files/due-date-rule.ts): a date before one of
+   * its documents', or after the engagement's, asks with the fixes. Returns the date saved, or
+   * undefined when it wasn't.
+   */
+  const handleDueDateChange = async (val: string): Promise<string | null | undefined> => {
     setSavingDueDate(true)
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session?.access_token) return
-      await fetch(`/api/projects/${projectId}/documents/${targetDocumentId}/due-date`, {
-        method: 'PATCH',
-        headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dueDate: val || null }),
-      })
-      onUpdate?.(val || null)
-    } catch {
-      addToast({ type: 'error', title: 'Error', message: 'Failed to save due date.' })
+      const result = await saveDue(projectId, documentId, val || null)
+      if (!result.ok) {
+        if (!result.cancelled) addToast({ type: 'error', title: "Couldn't set due date", message: result.error })
+        return undefined
+      }
+      // A fix moved its documents in: show them as they are now.
+      if (result.alsoChanged.length > 0) await loadDetails()
+      return result.dueDate
     } finally {
       setSavingDueDate(false)
     }
@@ -798,6 +828,11 @@ export function DeliverableDetailPanel({
   const boardSubtasks = subtasks.filter((t) => isOnBoard(t.status ?? 'not_started'))
   const notStartedSubtasks = subtasks.filter((t) => !isOnBoard(t.status ?? 'not_started'))
   const approvedSubtasks = boardSubtasks.filter((t) => t.status === 'approved').length
+  // Documents due after the deliverable (approved ones left out): what the due-date rule forbids,
+  // left over from before it.
+  const docsDueAfter = deliverableDueDate
+    ? subtasks.filter((t) => t.dueDate && t.status !== 'approved' && isLaterDay(t.dueDate, deliverableDueDate))
+    : []
   const isClient = isExternalViewer || isExternalCollaborator
   const canAddToBoard = !isClient && (roleSlug === 'eng_admin' || roleSlug === 'eng_member')
   const peopleOptions: PersonOption[] = members
@@ -829,10 +864,12 @@ export function DeliverableDetailPanel({
       members={members}
       roleSlug={roleSlug}
       onDeliverableChanged={(next) => { if (next !== status) followDocuments(next) }}
+      onDeliverableDueChanged={(due) => setDeliverableDueDate(due.slice(0, 10))}
       onOpenDocument={onOpenSubtaskDocument}
       onPreviewDocument={onPreviewSubtaskDocument}
       onStatusChange={(id, newStatus) => setSubtasks((prev) => prev.map((t) => t.id === id ? { ...t, status: newStatus } : t))}
       onRemoveSubtask={(id) => setSubtasks((prev) => prev.filter((t) => t.id !== id))}
+      onDueDateChange={(id, due) => setSubtasks((prev) => prev.map((t) => t.id === id ? { ...t, dueDate: due } : t))}
       onAssigneeChange={(id, userId, name, email, avatarUrl) =>
         setSubtasks((prev) => prev.map((t) => t.id === id ? { ...t, assigneeUserId: userId, assigneeName: name, assigneeEmail: email, assigneeAvatarUrl: avatarUrl } : t))
       }
@@ -887,13 +924,24 @@ export function DeliverableDetailPanel({
             disabled={isApproved}
             highlightOverdue={!isApproved}
             onChange={async (day) => {
+              const previous = deliverableDueDate
               setDeliverableDueDate(day ?? '')
-              await handleDueDateChange(day ?? '', documentId)
+              const saved = await handleDueDateChange(day ?? '')
+              setDeliverableDueDate(saved === undefined ? previous : saved ? saved.slice(0, 10) : '')
             }}
           />
           {/* Why the date is red: how late it is. */}
           {!isApproved && overdueDays > 0 && (
             <span className="text-small text-danger">· {overdueDays} day{overdueDays === 1 ? '' : 's'} overdue</span>
+          )}
+          {/* Dates from before the rule can still break it: say so rather than fix them silently. */}
+          {!isApproved && docsDueAfter.length > 0 && (
+            <Hint label={docsDueAfter.map((t) => `${t.docId ?? t.fileName} · due ${formatFullDate(t.dueDate!)}`).join(', ')}>
+              <span className="inline-flex items-center gap-1 text-small text-tag-yellow-fg">
+                <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
+                {docsDueAfter.length === 1 ? `${docsDueAfter[0].docId ?? docsDueAfter[0].fileName} is due after this` : `${docsDueAfter.length} documents are due after this`}
+              </span>
+            </Hint>
           )}
           {savingDueDate && <Loader2 className="h-3 w-3 animate-spin text-fg-subtle" />}
         </PropertyRow>
@@ -1119,6 +1167,7 @@ export function DeliverableDetailPanel({
 
       </div>
       {stageDialog}
+      {dueDialog}
     </div>
   )
 }

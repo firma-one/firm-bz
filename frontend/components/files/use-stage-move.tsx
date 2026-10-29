@@ -17,11 +17,13 @@ import type { ActivityStatus } from '@/lib/sharing-settings'
  */
 
 export interface StageConfirmation {
-    deliverable: { id: string; name: string }
+    deliverable: { id: string; docId?: string | null; name: string }
     from: ActivityStatus
     to: ActivityStatus
-    externalCollaborators: boolean
-    viewers: boolean
+    /** How many external contributors would newly see its documents. */
+    externalCollaborators: number
+    /** How many reviewers would newly see its documents. */
+    viewers: number
     approves: boolean
 }
 
@@ -70,8 +72,8 @@ export function useStageMove() {
             onOpenChange={(open) => { if (!open && !sending) { pending?.answer(false); setPending(null) } }}
             icon={confirmation?.approves ? <CheckCircle2 /> : <Eye />}
             iconVariant={confirmation?.approves ? 'primary' : 'amber'}
-            title={confirmation?.approves ? 'Approve the deliverable?' : 'Show the deliverable to the client?'}
-            subtitle={confirmation ? `${confirmation.deliverable.name} moves to ${statusOf('deliverable', confirmation.to).label}` : undefined}
+            title={confirmation?.approves ? 'Approve the deliverable?' : `Share its documents with ${whoSees(confirmation)}?`}
+            subtitle={confirmation ? `${deliverableLabel(confirmation)} moves to ${statusOf('deliverable', confirmation.to).label}` : undefined}
             description={confirmation ? <StageConfirmationText confirmation={confirmation} /> : ''}
             confirmLabel={confirmation?.approves ? 'Approve' : 'Move and share'}
             confirmVariant="primary"
@@ -86,16 +88,34 @@ export function useStageMove() {
 
 const sentence = (text: string) => text.charAt(0).toUpperCase() + text.slice(1)
 
+/**
+ * Who the move newly lets in. A client sees a deliverable's card on the Board from the moment it's
+ * promoted; what a forward move opens to them is its documents (and its folder in Files):
+ * In progress for external contributors, In review for reviewers.
+ */
+const whoSees = (confirmation: StageConfirmation | undefined): string => {
+    const count = (n: number | undefined, one: string, many: string) => (n ? `${n} ${n === 1 ? one : many}` : null)
+    return [
+        count(confirmation?.externalCollaborators, 'external contributor', 'external contributors'),
+        count(confirmation?.viewers, 'reviewer', 'reviewers'),
+    ].filter(Boolean).join(' and ') || 'the client'
+}
+
+/** The deliverable as the app names it everywhere: its Doc ID, then its name ("QSR-9 · Market report"). */
+const deliverableLabel = (confirmation: StageConfirmation) =>
+    confirmation.deliverable.docId ? `${confirmation.deliverable.docId} · ${confirmation.deliverable.name}` : confirmation.deliverable.name
+
 export function StageConfirmationText({ confirmation }: { confirmation: StageConfirmation }) {
-    const who = [confirmation.externalCollaborators && 'external contributors', confirmation.viewers && 'reviewers'].filter(Boolean) as string[]
+    const who = confirmation.externalCollaborators > 0 || confirmation.viewers > 0 ? whoSees(confirmation) : null
+    const one = confirmation.externalCollaborators + confirmation.viewers === 1
     return (
         <div className="space-y-2">
             <p>
                 A deliverable follows its documents, so this move takes{' '}
-                <span className="font-semibold text-fg">{confirmation.deliverable.name}</span> to{' '}
+                <span className="font-semibold text-fg">{deliverableLabel(confirmation)}</span> to{' '}
                 {statusOf('deliverable', confirmation.to).label}.
             </p>
-            {who.length > 0 && <p>{sentence(who.join(' and '))} will see it and its documents from then on.</p>}
+            {who && <p>{sentence(who)} already {one ? 'sees' : 'see'} the deliverable. From then on they&apos;ll see its documents too.</p>}
             {confirmation.approves && <p>Approving locks it: its documents can no longer change stage.</p>}
         </div>
     )

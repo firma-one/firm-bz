@@ -35,7 +35,9 @@ The rules, over the deliverable's To do+ documents (Not started ones are left ou
 - Nobody sets a deliverable's stage directly. The stage route refuses it, the order route only
   reorders within a lane, deliverable cards aren't draggable, and the pane shows the stage read-only.
 - **Confirmations:** a document move that would carry its deliverable forward into In progress
-  (external collaborators see it), In review (viewers see it) or Approved (locks it) asks first.
+  (external collaborators see its documents), In review (viewers see its documents) or Approved
+  (locks it) asks first. A client sees the deliverable's card on the Board from promotion on; what
+  these moves open to them is its documents, and its folder in Files.
   The route answers 409 with what would change, and the client resends with `confirm: true`.
 - One-time recompute (data migration): each unfinalized deliverable takes its derived stage where
   that is the same or earlier than its stored one, which needs no side effects. A deliverable

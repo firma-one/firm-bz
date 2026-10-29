@@ -87,6 +87,10 @@ function detailOf(eventType: string, m: Record<string, unknown>): string | undef
     if (eventType === 'DOCUMENT_STATUS_CHANGED' && m.newStatus) {
         parts.push(`${stageLabel(m.oldStatus)} → ${stageLabel(m.newStatus)}`)
     }
+    // Which version an approval, its lock or a reopening was about, as its storage names it.
+    if ((eventType === 'DOCUMENT_STATUS_CHANGED' || eventType === 'DOCUMENT_FINALIZED' || eventType === 'DOCUMENT_UNLOCKED') && typeof m.versionName === 'string') {
+        parts.push(m.versionName)
+    }
     // What it waits on, and why, in the person's words.
     if (eventType === 'DOCUMENT_BLOCKED' && typeof m.reason === 'string' && m.reason in BLOCKED_REASON_LABEL) {
         parts.push(BLOCKED_REASON_LABEL[m.reason as BlockedReason] + (typeof m.note === 'string' && m.note ? ` · ${m.note}` : ''))

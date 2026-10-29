@@ -35,11 +35,24 @@ export async function generateEmbedding(text: string): Promise<number[]> {
 }
 
 /**
- * Clean and combine file name and other metadata for better embedding.
+ * The model reads about 256 tokens (some 200 words); what's past that is ignored, so a long
+ * description is cut here rather than let it crowd the name out of what the model sees.
  */
-export function prepareTextForEmbedding(fileName: string, summary?: string | null): string {
+const MAX_DESCRIPTION_CHARS = 1000
+
+/**
+ * Clean and combine file name and other metadata for better embedding. The description is the one
+ * the firm wrote in Firma's Details pane (2026-10-29): their own words for what the file is, so a
+ * search by meaning can find it by what it's for, not just by what it's called.
+ */
+export function prepareTextForEmbedding(fileName: string, summary?: string | null, description?: string | null): string {
     const cleanName = fileName.trim()
-    if (!summary) return cleanName
-    // Append summary for richer vector representation
-    return `File: ${cleanName} | Summary: ${summary.trim()}`
+    const cleanDescription = description?.trim().slice(0, MAX_DESCRIPTION_CHARS)
+    if (!summary && !cleanDescription) return cleanName
+    // Append description and summary for richer vector representation
+    return [
+        `File: ${cleanName}`,
+        ...(cleanDescription ? [`Description: ${cleanDescription}`] : []),
+        ...(summary ? [`Summary: ${summary.trim()}`] : []),
+    ].join(' | ')
 }

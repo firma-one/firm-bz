@@ -26,6 +26,8 @@ export interface StageRow {
     settings: unknown
     createdBy: string | null
     isFolder: boolean
+    /** Its Doc ID ("QSR-9"), where loaded: what the move's confirmation names it by. */
+    docId?: string | null
 }
 
 export interface StageMoveContext {
@@ -56,7 +58,7 @@ export async function applyStageChange(
     row: StageRow,
     next: ActivityStatus,
     ctx: StageMoveContext,
-    opts: { orderIndex?: number; derived?: boolean } = {},
+    opts: { orderIndex?: number; derived?: boolean; auditMeta?: Record<string, unknown> } = {},
 ): Promise<{ oldStatus: ActivityStatus }> {
     const { projectId, firmId, clientId, actorUserId } = ctx
     const oldStatus = currentStageOf(row)
@@ -145,7 +147,7 @@ export async function applyStageChange(
         .document(row.id)
         .actor(actorUserId)
         // `derived`: a deliverable that moved because its documents did, not by anyone's hand.
-        .meta({ fileName: row.fileName, oldStatus, newStatus: next, ...(opts.derived ? { derived: true } : {}) })
+        .meta({ fileName: row.fileName, oldStatus, newStatus: next, ...(opts.derived ? { derived: true } : {}), ...(opts.auditMeta ?? {}) })
         .fireAndForget()
 
     // Event notifications — status changed / rejected, gated per-firm via Event Notifications grid

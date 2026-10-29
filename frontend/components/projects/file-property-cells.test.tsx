@@ -53,8 +53,8 @@ const pick = async (label: string) => {
 
 const CONFIRMATION = {
     needsConfirmation: {
-        deliverable: { id: 'D', name: 'Market report' }, from: 'to_do', to: 'in_progress',
-        externalCollaborators: true, viewers: false, approves: false,
+        deliverable: { id: 'D', docId: 'QSR-9', name: 'Market report' }, from: 'to_do', to: 'in_progress',
+        externalCollaborators: 1, viewers: 0, approves: false,
     },
 }
 
@@ -84,8 +84,12 @@ describe('FileStatusCell', () => {
         answer = (body) => (body.confirm ? { status: 200, json: { deliverable: { id: 'D', status: 'in_progress' } } } : { status: 409, json: CONFIRMATION })
         const { onSaved } = cell()
         await pick('In progress')
-        expect(await screen.findByText('Show the deliverable to the client?')).toBeTruthy()
-        expect(screen.getByText(/External contributors will see it/)).toBeTruthy()
+        // What the move opens to them is the documents: they see the deliverable's card already.
+        expect(await screen.findByText('Share its documents with 1 external contributor?')).toBeTruthy()
+        // Named by its Doc ID, as everywhere in the app
+        expect(screen.getByText('QSR-9 · Market report moves to In progress')).toBeTruthy()
+        expect(screen.getByText('QSR-9 · Market report')).toBeTruthy()
+        expect(screen.getByText(/1 external contributor already sees the deliverable\. From then on they.ll see its documents too/)).toBeTruthy()
         await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Move and share' })) })
         await waitFor(() => expect(onSaved).toHaveBeenCalledWith('in_progress'))
         expect(sent).toEqual([{ status: 'in_progress' }, { status: 'in_progress', confirm: true }])

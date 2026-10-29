@@ -13,6 +13,7 @@ import { DocumentEditPanelContent, DocumentPreviewPanelContent, getDocumentEditU
 import { DocumentPreviewPane } from "@/components/files/document-preview-pane"
 import { useRightPane } from "@/lib/right-pane-context"
 import { openAssetDetailsPane } from "@/components/files/asset-details-pane"
+import { useDueDateSave } from "@/components/files/use-due-date-save"
 import { DocumentDocCommentsPane } from "@/components/projects/document-doc-comments-pane"
 import { GoogleDriveIcon } from "@/components/ui/google-drive-icon"
 import { OneDriveIcon } from "@/components/ui/onedrive-icon"
@@ -224,6 +225,7 @@ export function DocumentActionMenu({
   const [existingDocReminders, setExistingDocReminders] = useState<Map<string, { reminderId: string; dateValue: string | null }>>(new Map())
   const [currentUserRole, setCurrentUserRole] = useState<string | null>(null)
   const { addToast } = useToast()
+  const { save: saveDue, dialog: dueDialog } = useDueDateSave()
   const rightPane = useRightPane()
   const { addTask, updateTask } = useDownloadProgress()
   const { user } = useAuth()
@@ -249,23 +251,15 @@ export function DocumentActionMenu({
         return
       }
 
-      const { getSession } = await import('@/lib/supabase')
-      const session = await getSession()
-      if (!session?.access_token) {
-        addToast({ type: 'error', title: 'Unauthorized', message: 'Please sign in again.' })
-        return
+      // Due dates nest: a change that breaks that asks, with the fixes (lib/files/due-date-rule.ts).
+      const result = await saveDue(projectId, documentIdForProjectApis, dateTime || null)
+      if (!result.ok) {
+        if (result.cancelled) return
+        throw new Error(result.error)
       }
-
-      const res = await fetch(`/api/projects/${projectId}/documents/${encodeURIComponent(documentIdForProjectApis)}/due-date`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-        body: JSON.stringify({ dueDate: dateTime || null }),
-      })
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        throw new Error(err.error ?? 'Failed to update due date')
-      }
+      dateTime = result.dueDate ?? ''
+      // A fix moved its deliverable or its documents too: the list shows them as they are now.
+      if (result.alsoChanged.length > 0 || result.engagementDueDate) onShareSaved?.()
 
       document.dueDate = dateTime || null
       setDueVersion((v) => v + 1)
@@ -356,7 +350,7 @@ export function DocumentActionMenu({
         const err = await res.json().catch(() => ({}))
         throw new Error(typeof err?.error === 'string' ? err.error : 'Failed to unlock')
       }
-      addToast({ type: 'success', title: 'Unlocked', message: 'Edit access restored where supported by Google Drive.' })
+      addToast({ type: 'success', title: 'Unlocked', message: 'Edit access restored. An approved document goes back to To do; its approval stays on record.' })
       onShareSaved?.()
     } catch (error) {
       addToast({
@@ -1476,6 +1470,7 @@ export function DocumentActionMenu({
         }}
       />
 
+      {dueDialog}
     </>
   )
 }

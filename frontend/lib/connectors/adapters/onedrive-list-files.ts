@@ -105,7 +105,8 @@ export async function listOneDriveFiles(
     connectorId: connectionId,
   }))
 
-  // Filter out staging folders (hidden from file listings), same convention as Google's.
+  // Filter out staging folders (hidden from file listings), same convention as Google's, and the
+  // Archive folders: approved copies are never listed (.claude/plans/document-approval-record.md).
   const connector = await prisma.connector.findUnique({ where: { id: connectionId } })
   const settings = (connector?.settings as any) || {}
   const stagingFolderIds = new Set<string>()
@@ -114,6 +115,7 @@ export async function listOneDriveFiles(
   if (orgSettings.projectFolderSettings) {
     Object.values(orgSettings.projectFolderSettings).forEach((ps: any) => {
       if (ps?.stagingFolderId) stagingFolderIds.add(ps.stagingFolderId)
+      if (ps?.archiveFolderId) stagingFolderIds.add(ps.archiveFolderId)
     })
   }
   files = files.filter((f) => !stagingFolderIds.has(f.id))

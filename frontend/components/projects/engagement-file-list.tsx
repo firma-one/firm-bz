@@ -580,6 +580,10 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
 
     // Core State
     const [currentFolderId, setCurrentFolderId] = useState<string | null>(null)
+    // The folder on screen is a deliverable or inside one, so everything listed in it is inside one,
+    // including what was just created or uploaded here: the share sets only learn of a new
+    // item on their next fetch, and until then its row lacked folder-plus, Status and Due.
+    const listingInsideDeliverable = !!currentFolderId && deliverableKindOf(currentFolderId) !== null
     const [breadcrumbs, setBreadcrumbs] = useState<BreadcrumbItem[]>([])
     // When the trail is wider than the pane, keep its end (the folder you're in) in view
     const breadcrumbStripRef = useRef<HTMLDivElement>(null)
@@ -1881,6 +1885,8 @@ const handleRefresh = async () => {
             setNewItemName('')
             isCreatingRef.current = false
             if (currentFolderId) fetchFiles(currentFolderId)
+            // The new item joins the share sets (a folder inside a deliverable, a document in one).
+            fetchSharedIds()
         } catch (err: any) {
             logger.error(err)
             isCreatingRef.current = false
@@ -3159,6 +3165,7 @@ const handleRefresh = async () => {
                                     viewAsPersonaSlug={viewAsPersonaSlug}
                                     canManage={canManage && !currentFolderIsApprovedDeliverable}
                                     isInsideApprovedDeliverable={currentFolderIsApprovedDeliverable}
+                                    inDeliverableFolder={listingInsideDeliverable}
                                     currentFolderType={currentFolderType}
                                     generalFolderId={generalFolderId}
                                     projectId={projectId}
@@ -3815,7 +3822,9 @@ const handleRefresh = async () => {
                     iconVariant="primary"
                     title="Return to Draft"
                     subtitle={unlockConfirmFile?.name}
-                    description="It will be unlocked for further edits. All collaborators will regain their prior access level based on their role and sharing settings."
+                    // An approved document goes back to To do, its deliverable with it; its approval stays on record
+                    // (.claude/plans/document-approval-record.md, section 4).
+                    description="It will be unlocked for further edits, and an approved document goes back to To do, taking its deliverable back with it. Its approval stays on record. All collaborators will regain their prior access level based on their role and sharing settings."
                     confirmLabel="Return to Draft"
                     confirmVariant="primary"
                     onCancel={() => setUnlockConfirmFile(null)}

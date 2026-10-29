@@ -175,11 +175,13 @@ export async function GET(
 
                 const scoredIndexedFiles = indexedMeta.map(f => {
                     const iRes = missingIndexedResults.find(r => r.externalId === f.id)
-                    // Prefer 'name' matchType for DB name hits; 'semantic' for pure vector hits
-                    const isNameMatch = dbNameResults.some(r => r.externalId === f.id)
+                    // Prefer 'name' matchType for DB name hits; 'description' when the words were
+                    // found only in the description the firm wrote; 'semantic' for pure vector hits
+                    const dbHit = dbNameResults.find(r => r.externalId === f.id)
                     return {
                         ...f,
-                        matchType: isNameMatch ? 'name' : 'semantic',
+                        matchType: dbHit ? (dbHit.matchedIn === 'description' ? 'description' : 'name') : 'semantic',
+                        ...(dbHit?.matchedIn === 'description' && dbHit.description ? { description: dbHit.description } : {}),
                         score: iRes?.score || 0,
                         updatedAt: iRes?.updatedAt,
                         metadata: {
@@ -194,7 +196,8 @@ export async function GET(
             }
         }
 
-        // Filter out any locked documents (intake, finalize, private) from all result sources.
+        // Filter out private documents and uploads awaiting review (intake) from all result sources.
+        // Finalized ones stay: every approved document is locked so, and it's finished work.
         // The indexed DB queries already exclude these via SQL, but Drive-direct results need
         // a post-filter since Drive has no knowledge of our lock state.
         if (finalFiles.length > 0) {
@@ -206,7 +209,7 @@ export async function GET(
                        AND "externalId" = ANY($2::text[])
                        AND (
                          (settings->>'locked') = 'private'
-                         OR (settings->'lock'->>'type') IS NOT NULL
+                         OR (settings->'lock'->>'type') IN ('private', 'intake')
                        )`,
                     projectId,
                     allExternalIds

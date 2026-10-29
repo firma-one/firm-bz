@@ -54,6 +54,42 @@ describe('assetDetailsTabs', () => {
 })
 
 describe('AssetDetailsPane — fields first, then the tabs', () => {
+    it('lists the decision record, newest first, reopened ones too', async () => {
+        fetchMock.mockImplementation(async (url: string) => {
+            if (url.endsWith('/sharing')) return new Response(JSON.stringify({ sharing: { settings: { approvals: [
+                { id: 'a1', version: { id: '1.0', label: '1.0', savedAt: 'x' }, archived: { fileId: 'c1', name: 'n' }, approvedAt: '2026-09-28T10:00:00Z', approvedBy: 'u-ana', unlockedAt: '2026-10-02T10:00:00Z', unlockedBy: 'u-ana' },
+                { id: 'a2', version: { id: '3.0', label: '3.0', savedAt: 'x' }, archived: { fileId: 'c2', name: 'n' }, approvedAt: '2026-10-28T10:00:00Z', approvedBy: 'u-ana' },
+            ] } } }))
+            if (url.endsWith('/members')) return new Response(JSON.stringify({ members: MEMBERS }))
+            return new Response('{}', { status: 404 })
+        })
+        render(<AssetDetailsPane document={FILE} projectId="p1" editing={LEAD} />)
+        await waitFor(() => expect(screen.getByText('Approvals')).toBeTruthy())
+        const versions = screen.getAllByText(/^Version \d/).map((e) => e.textContent)
+        expect(versions[0]).toMatch(/^Version 3\.0/)
+        expect(versions[1]).toMatch(/^Version 1\.0/)
+        expect(screen.getByText(/Approved Oct 28, 2026 by Ana Lead/)).toBeTruthy()
+        expect(screen.getByText(/reopened Oct 02, 2026 by Ana Lead/)).toBeTruthy()
+    })
+
+    // A file's settings can carry share.createdAt (any settings save writes it); the listing used to
+    // read that as a deliverable, and the pane then left the file's Status read-only, Blocked out.
+    it("lets a file's Status be set and offers Blocked, even flagged as a deliverable", () => {
+        render(<AssetDetailsPane document={{ ...FILE, isDeliverable: true }} projectId="p1" editing={{ ...LEAD, canBlock: true }} />)
+        expect(screen.getByRole('button', { name: /In review/ })).toBeTruthy()
+        expect(screen.getByRole('button', { name: 'Blocked' })).toBeTruthy()
+    })
+
+    it('warns when the work is underway with no due date', () => {
+        render(<AssetDetailsPane document={{ ...FILE, dueDate: null }} projectId="p1" editing={LEAD} />)
+        expect(screen.getByLabelText('In review with no due date')).toBeTruthy()
+    })
+
+    it("doesn't warn once there's a due date", () => {
+        render(<AssetDetailsPane document={{ ...FILE, dueDate: '2026-11-02' }} projectId="p1" editing={LEAD} />)
+        expect(screen.queryByLabelText('In review with no due date')).toBeNull()
+    })
+
     it('names the tabs, with Discussions as the engagement page calls them', () => {
         render(<AssetDetailsPane document={FILE} projectId="p1" editing={LEAD} />)
         expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Details', 'Versions', 'Activity', 'Discussions'])

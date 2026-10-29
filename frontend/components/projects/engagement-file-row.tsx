@@ -29,6 +29,8 @@ import { RelativeDateTime } from '@/components/ui/relative-date-time'
 import type { EngagementRoleSlug } from '@/lib/deliverable-stage-roles'
 import { FileDueDateCell, FileStatusCell } from '@/components/projects/file-property-cells'
 import { BlockedTag } from '@/components/files/blocked-tag'
+import { MissingDueWarning } from '@/components/files/missing-due-warning'
+import { needsDueDate } from '@/lib/ui/due-date'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
     Tooltip,
@@ -133,6 +135,8 @@ export interface EngagementFileRowProps {
     isMoveTarget?: boolean
     /** When true, the current folder is an approved deliverable — disable all write operations. */
     isInsideApprovedDeliverable?: boolean
+    /** The folder being listed is a deliverable or inside one, so this row is inside one too. */
+    inDeliverableFolder?: boolean
     /** The viewer's engagement role: decides which stages they may move a row to (as on the Board). */
     roleSlug?: EngagementRoleSlug | null
 }
@@ -202,6 +206,7 @@ export function EngagementFileRow({
     isUploadTarget = false,
     isMoveTarget = false,
     isInsideApprovedDeliverable = false,
+    inDeliverableFolder = false,
     roleSlug = null,
 }: EngagementFileRowProps) {
     // The row's ⋮ menu already reads the pane; the Details icon opens the same pane it does.
@@ -219,7 +224,7 @@ export function EngagementFileRow({
             : (sharedExternalIds.has(file.id) || ancestorFolderIds.has(file.id) || descendantIds.has(file.id))
     const directShared = isGuest ? sharedExternalIdsForGuest.has(file.id) : isEC ? sharedExternalIdsForEC.has(file.id) : sharedExternalIds.has(file.id)
     // True when a file/folder is visible only because an ancestor folder is shared — not directly shared itself
-    const isAncestorShared = !directShared && (isGuest ? descendantIdsForGuest.has(file.id) : isEC ? descendantIdsForEC.has(file.id) : descendantIds.has(file.id))
+    const isAncestorShared = !directShared && (inDeliverableFolder || (isGuest ? descendantIdsForGuest.has(file.id) : isEC ? descendantIdsForEC.has(file.id) : descendantIds.has(file.id)))
 
     const locked = file.lock?.type === 'finalize'
     const isFolderApproved = isFolder && file.isDeliverable && (file as any).deliverableStatus === 'approved'
@@ -231,12 +236,19 @@ export function EngagementFileRow({
     const hasStatus = !!file.isDeliverable && !!file.deliverableStatus
     // Tracked work: a deliverable, and the documents inside one. An empty Status or Due reads "Not set" there.
     // The folders inside a deliverable only organize it, so they have no Status or Due: a dash, as other rows.
-    const isInsideDeliverable = isInsideApprovedDeliverable
+    const isInsideDeliverable = isInsideApprovedDeliverable || inDeliverableFolder
         || (isGuest ? descendantIdsForGuest : isEC ? descendantIdsForEC : descendantIds).has(file.id)
     const isTracked = !!file.isDeliverable || (!isFolder && isInsideDeliverable)
     const emptyTrackedValue = isTracked ? 'Not set' : '—'
     // A row's own stage: the deliverable's, or a document's inside one.
     const statusValue = file.activityStatus ?? (file.isDeliverable ? file.deliverableStatus : null) ?? null
+    // The stage the Status column shows. Tracked work with no stage yet: a document is Not started, a deliverable at To do.
+    const shownStage = isTracked ? (statusValue ?? (isFolder ? 'to_do' : 'not_started')) : isFolder && !file.isDeliverable ? null : statusValue
+    // Underway (In progress, In review) with no due date: unplanned work, flagged in the Due column.
+    // The date as last saved here, so setting one clears the warning at once.
+    const [savedDue, setSavedDue] = React.useState<string | null>(file.dueDate ?? null)
+    React.useEffect(() => { setSavedDue(file.dueDate ?? null) }, [file.dueDate])
+    const missingDue = isTracked && needsDueDate(shownStage, savedDue)
     // Changeable in place on tracked rows, until the deliverable is approved; the role decides which moves.
     const canEditStatus = isTracked && !!roleSlug && !!file.projectDocumentId && !isIntakeRow && !isFolderApproved && !isInsideApprovedDeliverable
     const isIndexing = !isFolder && !!file.projectDocumentId && file.indexingStatus === 'PROCESSING'
@@ -445,8 +457,10 @@ export function EngagementFileRow({
                             </Tooltip>
                         )}
                         {/* Only a deliverable itself (until the Status column says it) and a pending upload carry this
-                            badge; rows inside a deliverable already show it in their icon and the breadcrumb */}
-                        {(isIntakeRow || directShared) ? (
+                            badge; rows inside a deliverable already show it in their icon and the breadcrumb. A
+                            deliverable is a folder: a file can be in the shared set too (its settings carry
+                            share.createdAt once saved), and isn't one. */}
+                        {(isIntakeRow || (directShared && isFolder)) ? (
                             <Tooltip>
                                 <TooltipTrigger asChild>
                                     <span className={`${hasStatus && !isIntakeRow ? '@[49rem]/file-table:hidden ' : ''}inline-flex items-center shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium border ${
@@ -676,8 +690,7 @@ export function EngagementFileRow({
                     documentId={file.projectDocumentId ?? file.id}
                     fileName={file.name}
                     isFolder={isFolder}
-                    // Tracked work with no stage yet: a document is Not started, a deliverable at To do.
-                    status={isTracked ? (statusValue ?? (isFolder ? 'to_do' : 'not_started')) : isFolder && !file.isDeliverable ? null : statusValue}
+                    status={shownStage}
                     roleSlug={canEditStatus ? roleSlug : null}
                     emptyLabel={emptyTrackedValue}
                     emptyClassName={isTracked ? 'text-fg-subtle' : 'text-[#45474c]/40'}
@@ -691,14 +704,16 @@ export function EngagementFileRow({
 
             {/* Due Column — leads edit it in place (Notion-style); everyone else sees the relative date.
                 Files and deliverable folders both have one. */}
-            <div className={cn('min-w-0 whitespace-nowrap', DUE_DATE_COL_CLASS, FILE_TABLE_COL_LINE_CLASS)} onClick={(e) => { if (canEditDueDate) e.stopPropagation() }}>
+            <div className={cn('min-w-0 items-center gap-1 whitespace-nowrap', DUE_DATE_COL_CLASS, FILE_TABLE_COL_LINE_CLASS)} onClick={(e) => { if (canEditDueDate) e.stopPropagation() }}>
                 {canEditDueDate ? (
                     <FileDueDateCell
                         projectId={projectId}
                         documentId={(file as { projectDocumentId?: string }).projectDocumentId || file.id}
                         dueDate={file.dueDate ?? null}
                         placeholder={emptyTrackedValue}
-                        onSaved={(next) => { file.dueDate = next ?? undefined }}
+                        onSaved={(next) => { file.dueDate = next ?? undefined; setSavedDue(next) }}
+                        // A fix moved its deliverable or its documents too: the list shows them as they are now.
+                        onOthersChanged={onShareSaved}
                         onError={(message) => onAddToast({ type: 'error', title: "Couldn't set due date", message })}
                     />
                 ) : (
@@ -740,6 +755,7 @@ export function EngagementFileRow({
                     )}
                     </>
                 )}
+                {missingDue && shownStage && <MissingDueWarning stage={shownStage} />}
             </div>
 
             {/* Created by: who added it — the member who added it in the app, not the connector account

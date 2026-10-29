@@ -329,6 +329,8 @@ export interface IConnectorContentAdapter {
 /** A file version, in the shape the Version history pane reads (Drive's revision fields). */
 export interface ConnectorFileVersion {
   id: string
+  /** The storage's own name for the version, where it has one: OneDrive's "1.0", "2.0". Google Drive names none. */
+  label?: string
   mimeType: string
   modifiedTime: string
   size?: string

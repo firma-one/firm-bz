@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { Search, Folder, Sparkles, X, Building2, Briefcase, Hash, FileText, ArrowUpRight, ArrowRight, RefreshCw, History, BrushCleaning, CalendarClock, Info, ChevronRight, FolderPlus } from 'lucide-react'
+import { Search, Folder, Sparkles, X, Building2, Briefcase, Hash, FileText, ArrowUpRight, ArrowRight, RefreshCw, History, BrushCleaning, CalendarClock, Info, ChevronRight, FolderPlus, AlignLeft } from 'lucide-react'
 import { DocumentIcon } from '@/components/ui/document-icon'
 import { Button } from '@/components/ui/button'
 import {
@@ -56,7 +56,9 @@ interface GlobalSearchResult {
   score: number
   metadata?: any
   isFolder?: boolean
-  matchType?: 'name' | 'semantic'
+  matchType?: 'name' | 'semantic' | 'description'
+  /** Set when the words were found only in the description written for it in Firma: shown as why. */
+  description?: string | null
   documentId?: string | null
   engagementId?: string | null
   clientName?: string | null
@@ -1213,7 +1215,7 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                       // A chip the ladder relaxed is still on screen but was NOT applied to these
                       // results, so it must not be cited as the reason a document matched.
                       const dateFilterApplied = Boolean(dateRangeChip) && !relaxedStages.includes('dateRange')
-                      const matchType = file.matchType === 'name' || file.matchType === 'semantic' ? file.matchType : 'semantic'
+                      const matchType = file.matchType === 'name' || file.matchType === 'semantic' || file.matchType === 'description' ? file.matchType : 'semantic'
                       const isOpening = openingExternalId === file.externalId
                       const breadcrumbParts = [
                         file.clientName ? { icon: Building2, label: file.clientName } : null,
@@ -1266,9 +1268,13 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                                 })}
                               </div>
                             )}
+                            {/* Why it matched, when the words were in its description rather than its name */}
+                            {matchType === 'description' && file.description && (
+                              <p className="mt-0.5 line-clamp-2 text-caption text-fg-muted">{file.description}</p>
+                            )}
                             <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
-                              <Tag color={matchType === 'semantic' ? 'purple' : 'gray'} icon={matchType === 'semantic' ? <Sparkles /> : <Hash />}>
-                                {matchType === 'semantic' ? 'Semantic match' : 'File match'}
+                              <Tag color={matchType === 'semantic' ? 'purple' : 'gray'} icon={matchType === 'semantic' ? <Sparkles /> : matchType === 'description' ? <AlignLeft /> : <Hash />}>
+                                {matchType === 'semantic' ? 'Semantic match' : matchType === 'description' ? 'Description match' : 'File match'}
                               </Tag>
                               {/* All three dates inline. A date filter matches on
                                   COALESCE(dueDate, createdAt) while the row's timestamp shows

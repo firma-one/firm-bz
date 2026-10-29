@@ -63,19 +63,20 @@ function BoardCard({ card, stage, open, onToggle }: { card: DemoDeliverable; sta
                         <span className="truncate text-caption text-fg-muted">{card.actor}</span>
                     </span>
                 </div>
-                {(onBoard.length > 0 || blocked.length > 0) && (
-                    <div className="flex items-center gap-2">
-                        <BlockedCountChip documents={blocked} />
-                        {onBoard.length > 0 && (
-                            <>
-                                <div className="h-1 flex-1 overflow-hidden rounded-full bg-surface-muted">
-                                    <div className={cn('h-full rounded-full', STAGE_BAR_CLASSES[stage])} style={{ width: `${Math.round((done / onBoard.length) * 100)}%` }} />
-                                </div>
-                                <span className="shrink-0 text-caption tabular-nums text-fg-subtle">{done}/{onBoard.length}</span>
-                            </>
-                        )}
-                    </div>
-                )}
+                {/* As on the app's card: always there, so the cards in a lane are one height */}
+                <div className="flex h-5 items-center gap-2">
+                    <BlockedCountChip documents={blocked} />
+                    {onBoard.length > 0 ? (
+                        <>
+                            <div className="h-1 flex-1 overflow-hidden rounded-full bg-surface-muted">
+                                <div className={cn('h-full rounded-full', STAGE_BAR_CLASSES[stage])} style={{ width: `${Math.round((done / onBoard.length) * 100)}%` }} />
+                            </div>
+                            <span className="shrink-0 text-caption tabular-nums text-fg-subtle">{done}/{onBoard.length}</span>
+                        </>
+                    ) : (
+                        <span className="text-caption text-fg-subtle">No documents on the Board yet</span>
+                    )}
+                </div>
             </div>
         </button>
     )

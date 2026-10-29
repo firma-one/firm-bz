@@ -3878,10 +3878,11 @@ export class GoogleDriveConnector {
     if (nameExclusionsList) q += ` and ${nameExclusionsList}`
     if (parentExclusionsList) q += ` and ${parentExclusionsList}`
 
-    // Fields to retrieve - include parents for folder checks, permissions for user filtering, appProperties for staging folder detection
+    // Fields to retrieve - include parents for folder checks, permissions for user filtering, appProperties for staging folder detection,
+    // description so a description written in Drive reaches Firma (lib/files/native-description.ts)
     const fields = effectiveUserEmail
-      ? 'files(id, name, mimeType, size, modifiedTime, webViewLink, iconLink, owners, lastModifyingUser, permissions, parents, appProperties)'
-      : 'files(id, name, mimeType, size, modifiedTime, webViewLink, iconLink, owners, lastModifyingUser, appProperties)'
+      ? 'files(id, name, mimeType, size, modifiedTime, webViewLink, iconLink, owners, lastModifyingUser, permissions, parents, appProperties, description)'
+      : 'files(id, name, mimeType, size, modifiedTime, webViewLink, iconLink, owners, lastModifyingUser, appProperties, description)'
 
     const params = new URLSearchParams({
       q,
@@ -3915,11 +3916,20 @@ export class GoogleDriveConnector {
     const settings = (connector.settings as any) || {}
     const stagingFolderIds = new Set<string>()
 
-    // Collect all staging folder IDs from project settings
-    if (settings.projectFolderSettings) {
-      Object.values(settings.projectFolderSettings).forEach((projectSettings: any) => {
-        if (projectSettings.stagingFolderId) {
+    // Collect all staging folder IDs from project settings, and the Archive folders: approved
+    // copies are never listed (.claude/plans/document-approval-record.md). Older connectors keep
+    // these at the root of settings, newer ones under organizations[firmId].
+    const projectSettingsSets = [
+      settings.projectFolderSettings,
+      ...Object.values(settings.organizations || {}).map((org: any) => org?.projectFolderSettings),
+    ].filter(Boolean)
+    for (const set of projectSettingsSets) {
+      Object.values(set).forEach((projectSettings: any) => {
+        if (projectSettings?.stagingFolderId) {
           stagingFolderIds.add(projectSettings.stagingFolderId)
+        }
+        if (projectSettings?.archiveFolderId) {
+          stagingFolderIds.add(projectSettings.archiveFolderId)
         }
       })
     }

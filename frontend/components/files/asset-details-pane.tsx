@@ -1,7 +1,7 @@
 "use client"
 
 import { isValidElement, useEffect, useRef, useState } from "react"
-import { Activity as ActivityIcon, Ban, CalendarClock, Check, CircleDot, FilePlus2, FilePen, FileType, History, Info, Loader2, MessagesSquare, UserRound } from "lucide-react"
+import { Activity as ActivityIcon, Ban, CalendarClock, Check, CheckCircle2, CircleDot, FilePlus2, FilePen, FileType, History, Info, Loader2, MessagesSquare, UserRound } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DocumentIcon } from "@/components/ui/document-icon"
 import { PropertyList, PropertyRow } from "@/components/ui/property-list"
@@ -11,6 +11,10 @@ import { useToast } from "@/components/ui/toast"
 import { DocumentDiscussionTab } from "@/components/files/document-discussion-tab"
 import { FileDueDateCell, FileStatusCell } from "@/components/projects/file-property-cells"
 import { BlockedProperty } from "@/components/files/blocked-property"
+import { MissingDueWarning } from "@/components/files/missing-due-warning"
+import { needsDueDate } from "@/lib/ui/due-date"
+import { approvalsOf, approvalVersionName, type ApprovalRecord } from "@/lib/files/approvals"
+import { Tag } from "@/components/ui/tag"
 import { DocumentVersionsTimeline } from "@/components/files/document-versions-timeline"
 import { DocumentActivityFeed } from "@/components/files/document-activity-feed"
 import { cn, formatFileSize, formatFullDate, formatSmartDateTime, getFileTypeLabel } from "@/lib/utils"
@@ -118,6 +122,10 @@ interface AssetRecord {
     setAssigneeId: (id: string | null) => void
     description: string
     setDescription: (value: string) => void
+    /** The decision record: what was approved, oldest first (lib/files/approvals.ts). */
+    approvals: ApprovalRecord[]
+    /** Reads the record again, e.g. after approving here. */
+    reload: () => void
 }
 
 function useAssetRecord(projectId: string | undefined, recordId: string | undefined): AssetRecord {
@@ -125,6 +133,8 @@ function useAssetRecord(projectId: string | undefined, recordId: string | undefi
     const [members, setMembers] = useState<Member[]>([])
     const [assigneeId, setAssigneeId] = useState<string | null>(null)
     const [description, setDescription] = useState('')
+    const [approvals, setApprovals] = useState<ApprovalRecord[]>([])
+    const [loads, setLoads] = useState(0)
 
     useEffect(() => {
         if (!canLoad) return
@@ -141,6 +151,7 @@ function useAssetRecord(projectId: string | undefined, recordId: string | undefi
                 if (cancelled) return
                 setAssigneeId(typeof settings.assigneeUserId === 'string' ? settings.assigneeUserId : null)
                 setDescription(typeof settings.description === 'string' ? settings.description : '')
+                setApprovals(approvalsOf(settings))
             }
             if (membersRes.ok) {
                 const data = await membersRes.json()
@@ -148,9 +159,9 @@ function useAssetRecord(projectId: string | undefined, recordId: string | undefi
             }
         })().catch(() => {})
         return () => { cancelled = true }
-    }, [canLoad, projectId, recordId])
+    }, [canLoad, projectId, recordId, loads])
 
-    return { canLoad, members, assigneeId, setAssigneeId, description, setDescription }
+    return { canLoad, members, assigneeId, setAssigneeId, description, setDescription, approvals, reload: () => setLoads((n) => n + 1) }
 }
 
 /** The shared fields at the top of the pane, as the Board's pane lists a deliverable's. */
@@ -164,9 +175,12 @@ function AssetFields({ document, projectId, recordId, editing, record }: { docum
     const canManage = !!editing?.canManage && record.canLoad
     const tracked = !!editing?.tracked
     const emptyLabel = tracked ? 'Not set' : '—'
-    const isFolderLike = !!document.isDeliverable || !!document.isFolder
+    // From the row's type, not isDeliverable: a folder (a deliverable's stage only reads) or a document.
+    const isFolderLike = document.mimeType === 'application/vnd.google-apps.folder' || !!document.isFolder
     // Tracked work with no stage yet, as the Files row shows it: a document is Not started, a deliverable at To do.
-    const stage: ActivityStatus | null = document.activityStatus ?? document.deliverableStatus ?? (tracked ? (document.isDeliverable ? 'to_do' : 'not_started') : null)
+    const stage: ActivityStatus | null = document.activityStatus ?? document.deliverableStatus ?? (tracked ? (isFolderLike ? 'to_do' : 'not_started') : null)
+    // The due date as it stands here (it can change in this pane), for the underway-with-no-date warning.
+    const [dueDate, setDueDate] = useState<string | null>(document.dueDate ?? null)
 
     const changeAssignee = async (next: PersonOption | null) => {
         const res = await fetch(`/api/projects/${projectId}/documents/${recordId}/assignee`, {
@@ -209,6 +223,8 @@ function AssetFields({ document, projectId, recordId, editing, record }: { docum
                         onSaved={(next) => {
                             document.activityStatus = next
                             editing?.onSaved?.()
+                            // Approving adds to the decision record: show it here.
+                            if (next === 'approved') record.reload()
                         }}
                         onAddToast={(t) => addToast({ ...t, type: t.type as Parameters<typeof addToast>[0]['type'] })}
                     />
@@ -251,8 +267,10 @@ function AssetFields({ document, projectId, recordId, editing, record }: { docum
                         asProperty
                         onSaved={(next) => {
                             document.dueDate = next ?? undefined
+                            setDueDate(next)
                             editing.onSaved?.()
                         }}
+                        onOthersChanged={editing.onSaved}
                         onError={(message) => addToast({ type: 'error', title: "Couldn't set due date", message })}
                     />
                 ) : (
@@ -260,6 +278,8 @@ function AssetFields({ document, projectId, recordId, editing, record }: { docum
                         {validDate(document.dueDate) ? formatFullDate(document.dueDate) : emptyLabel}
                     </span>
                 )}
+                {/* Underway with nothing to finish by */}
+                {tracked && stage && needsDueDate(stage, dueDate) && <MissingDueWarning stage={stage} className="ml-1" />}
             </PropertyRow>
             <PropertyRow label="Created" icon={<FilePlus2 />}>
                 <WhoWhen name={creator?.name} avatarUrl={creator?.avatarUrl} at={document.createdTime} />
@@ -343,7 +363,50 @@ function AssetDetailsSections({ projectId, recordId, editing, record }: { projec
                 )}
             </div>
 
+            {/* The decision record: every approval, newest first, reopened ones too */}
+            {record.approvals.length > 0 && (
+                <div className="px-4 py-4">
+                    <div className={FIELD_LABEL}>Approvals</div>
+                    <ApprovalList approvals={record.approvals} members={record.members} />
+                </div>
+            )}
+
         </div>
+    )
+}
+
+/**
+ * What was approved, newest first: the version as its storage names it, who approved it and when,
+ * and when it was reopened for further edits. The Archive copy isn't offered yet: a download
+ * option comes later (.claude/plans/document-approval-record.md).
+ */
+export function ApprovalList({ approvals, members }: { approvals: ApprovalRecord[]; members: Member[] }) {
+    const nameOf = (userId: string | undefined) => {
+        const m = userId ? members.find((x) => x.userId === userId) : undefined
+        return m?.name ?? m?.email ?? null
+    }
+    return (
+        <ol className="space-y-2">
+            {[...approvals].reverse().map((r) => {
+                const by = nameOf(r.approvedBy)
+                const reopenedBy = nameOf(r.unlockedBy)
+                return (
+                    <li key={r.id} className="flex items-start gap-2">
+                        <CheckCircle2 className={cn('mt-0.5 h-3.5 w-3.5 shrink-0', r.unlockedAt ? 'text-fg-subtle' : 'text-action')} aria-hidden />
+                        <div className="min-w-0">
+                            <p className="text-ui text-fg">
+                                {approvalVersionName(r)}
+                                {!r.unlockedAt && <Tag color="green" className="ml-2">Approved</Tag>}
+                            </p>
+                            <p className="text-caption text-fg-muted">
+                                Approved {formatFullDate(r.approvedAt)}{by ? ` by ${by}` : ''}
+                                {r.unlockedAt && <> · reopened {formatFullDate(r.unlockedAt)}{reopenedBy ? ` by ${reopenedBy}` : ''}</>}
+                            </p>
+                        </div>
+                    </li>
+                )
+            })}
+        </ol>
     )
 }
 
@@ -383,7 +446,7 @@ export function AssetDetailsPane({ document, projectId, orgSlug, isExternalUser 
 
                 {projectId && tabs.includes('versions') && (
                     <TabsContent value="versions" className="mt-0 min-h-0 flex-1 overflow-y-auto p-4">
-                        <DocumentVersionsTimeline document={document} projectId={projectId} />
+                        <DocumentVersionsTimeline document={document} projectId={projectId} approvals={record.approvals} />
                     </TabsContent>
                 )}
 

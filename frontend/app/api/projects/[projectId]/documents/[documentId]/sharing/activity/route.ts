@@ -17,6 +17,10 @@ import {
 } from '@/lib/files/deliverable-stage'
 import { deliverableOf } from '@/lib/files/deliverable-of'
 import { withoutFirmOnlySettings } from '@/lib/files/blocked'
+import { ApprovalStorageError, archiveApprovedVersion, recordApproval, type ApprovalInStorage } from '@/lib/files/approval-archive'
+import { approvalVersionName } from '@/lib/files/approvals'
+import { resolveEngagementConnectorId } from '@/lib/connectors/resolve-client-connector'
+import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 
 const isExternalRole = (role: string) => role === 'eng_ext_collaborator' || role === 'eng_viewer'
 
@@ -32,6 +36,10 @@ const isExternalRole = (role: string) => role === 'eng_ext_collaborator' || role
  *
  * On a deliverable itself, only a client's one action is taken, on its documents: an external
  * collaborator submits its In progress documents for review, a viewer sends its In review ones back.
+ *
+ * Approving a document locks it, copies the approved version into the engagement's Archive folder
+ * and records it (.claude/plans/document-approval-record.md); if storage can't be reached, the
+ * approval is refused (502, `approval_storage`) and nothing changes.
  */
 export async function PATCH(
   request: NextRequest,
@@ -127,7 +135,51 @@ export async function PATCH(
     if (needsConfirmation(move) && !confirmed)
       return NextResponse.json({ needsConfirmation: confirmationOf(move) }, { status: 409 })
 
-    await applyStageChange(existing, status, moveCtx, { orderIndex })
+    // Approving: lock it, archive the approved version, record it, or refuse with what to do.
+    let approval: ApprovalInStorage | null = null
+    if (status === 'approved') {
+      const [doc, engagement] = await Promise.all([
+        prisma.engagementDocument.findUnique({ where: { id: existing.id }, select: { externalId: true, fileName: true, settings: true, connectorId: true } }),
+        prisma.engagement.findUnique({ where: { id: projectId }, select: { slug: true, firmId: true } }),
+      ])
+      const connectorId = doc && engagement ? await resolveEngagementConnectorId(projectId, doc.connectorId) : null
+      if (!doc || !engagement || !connectorId)
+        return NextResponse.json({ error: 'No storage is connected to archive the approved version. Reconnect the storage and try again.', code: 'approval_storage' }, { status: 502 })
+      try {
+        approval = await archiveApprovedVersion({
+          connectorId,
+          engagement,
+          document: { externalId: doc.externalId, fileName: doc.fileName, settings: doc.settings },
+          deliverableName: deliverable?.fileName ?? null,
+          actorUserId: user.id,
+        })
+      } catch (e) {
+        if (e instanceof ApprovalStorageError) {
+          console.error('[approval] refused:', e.cause ?? e)
+          return NextResponse.json({ error: e.message, code: 'approval_storage' }, { status: 502 })
+        }
+        throw e
+      }
+    }
+
+    const approvalMeta = approval
+      ? { approvalId: approval.record.id, versionId: approval.record.version.id, versionName: approvalVersionName(approval.record), archivedName: approval.record.archived.name }
+      : undefined
+    await applyStageChange(existing, status, moveCtx, { orderIndex, auditMeta: approvalMeta })
+    if (approval) {
+      await recordApproval(existing.id, approval)
+      if (approval.lock) {
+        audit(AUDIT_EVENT.DOCUMENT_FINALIZED)
+          .scope(AUDIT_SCOPE.DOCUMENT)
+          .firm(ctx.firmId)
+          .client(ctx.clientId)
+          .engagement(projectId)
+          .document(existing.id)
+          .actor(user.id)
+          .meta({ fileName: existing.fileName, ...approvalMeta })
+          .fireAndForget()
+      }
+    }
     if (move) await applyDerivedMove(move, moveCtx)
 
     const updated = await prisma.engagementDocument.findUnique({ where: { id: existing.id } })

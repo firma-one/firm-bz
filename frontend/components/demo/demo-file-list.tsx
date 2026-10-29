@@ -6,6 +6,7 @@ import {
     Bookmark,
     Briefcase,
     Calendar,
+    CalendarClock,
     ChevronRight,
     CircleDot,
     Clock,
@@ -53,7 +54,7 @@ import { statusOf } from '@/lib/ui/status'
 import { DuePickerPanel } from '@/components/ui/due-picker'
 import { DeliverableIcon } from '@/components/ui/deliverable-icon'
 import { ModifiedStamp } from '@/components/ui/modified-stamp'
-import { formatDue, isPastDue, readDue } from '@/lib/ui/due-date'
+import { formatDue, isPastDue, needsDueDate, readDue } from '@/lib/ui/due-date'
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -81,6 +82,10 @@ import { DELIVERABLE_ACTORS, demoDocumentStages, demoFilesIn, type DeliverableSt
 import { ACTIVITY_STAGES, type ActivityStatus } from '@/lib/sharing-settings'
 import { deriveDeliverableStage } from '@/lib/deliverable-derivation'
 import { BlockedTag } from '@/components/files/blocked-tag'
+import { MissingDueWarning } from '@/components/files/missing-due-warning'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { conflictText } from '@/components/files/use-due-date-save'
+import { isLaterDay, type DueConflict } from '@/lib/files/due-date-rule'
 import type { BlockedFlag } from '@/lib/files/blocked'
 import { ENGAGEMENT_ROOT_LABEL } from '@/lib/files/engagement-root'
 import { foldBreadcrumbTrail } from '@/lib/files/breadcrumb-trail'
@@ -457,6 +462,8 @@ function EntryRow({
                 {!isFolder || deliverableStatus ? (
                     <DateProperty value={dueDate ?? null} onChange={onSetDue} placeholder={tracked ? 'Not set' : '—'} highlightOverdue allowTime={!isFolder} compact chip />
                 ) : empty}
+                {/* As in the app: underway with no due date */}
+                {tracked && stage && needsDueDate(stage, dueDate) && <MissingDueWarning stage={stage} className="ml-1" />}
             </div>
 
             <div className={`min-w-0 items-center gap-1.5 ${OWNER_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}>
@@ -547,6 +554,55 @@ export function DemoFileList({
     const canUpload = !!here && !deliverableApproved
     const isApproved = (folder: DemoFolder) => deliverableStage(folder) === 'approved'
     const shownName = (folder: DemoFolder) => folder.name.replace(/_+/g, ' ').trim()
+
+    // As in the app, due dates nest (lib/files/due-date-rule.ts): a document no later than its
+    // deliverable, approved work left out. A change that breaks that asks, with the two fixes.
+    const [dueAsk, setDueAsk] = useState<{ conflict: DueConflict; fix: () => void; keep: () => void } | null>(null)
+    const dueOf = (id: string): string | null => (id in dueOverrides ? dueOverrides[id] : deliverableDueByFolderId?.[id] ?? null)
+    const setDue = (entry: Entry, next: string | null) => {
+        const id = entryId(entry)
+        const apply = (changes: Record<string, string | null>) => setDueOverrides((prev) => ({ ...prev, ...changes }))
+        const deliverable = path[0]
+        if (next && entry.kind === 'file' && deliverable && documentStage(id) !== 'approved') {
+            const limit = dueOf(deliverable.id)
+            if (limit && isLaterDay(next, limit)) {
+                setDueAsk({
+                    conflict: {
+                        kind: 'after_deliverable',
+                        proposed: new Date(next).toISOString(),
+                        document: { id, docId: entry.file.docId, name: entry.file.name },
+                        deliverable: { id: deliverable.id, docId: deliverable.docId, name: shownName(deliverable), due: new Date(limit).toISOString() },
+                    },
+                    fix: () => apply({ [id]: next, [deliverable.id]: next }),
+                    keep: () => apply({ [id]: limit }),
+                })
+                return
+            }
+        }
+        if (next && entry.kind === 'folder' && deliverableStatusByFolderId?.[id]) {
+            const later = demoFilesIn(entry.folder).filter((f) => {
+                const due = dueOf(f.id)
+                return !!due && documentStage(f.id) !== 'approved' && isLaterDay(due, next)
+            })
+            if (later.length > 0) {
+                const latest = later.reduce((a, b) => (new Date(dueOf(b.id)!) > new Date(dueOf(a.id)!) ? b : a))
+                setDueAsk({
+                    conflict: {
+                        kind: 'before_documents',
+                        proposed: new Date(next).toISOString(),
+                        deliverable: { id, docId: entry.folder.docId, name: shownName(entry.folder) },
+                        latest: { id: latest.id, docId: latest.docId, name: latest.name, due: new Date(dueOf(latest.id)!).toISOString() },
+                        count: later.length,
+                    },
+                    fix: () => apply({ [id]: next, ...Object.fromEntries(later.map((f) => [f.id, next])) }),
+                    keep: () => apply({ [id]: dueOf(latest.id) }),
+                })
+                return
+            }
+        }
+        apply({ [id]: next })
+    }
+    const dueAskText = dueAsk ? conflictText(dueAsk.conflict) : null
     const addFiles = (list: FileList, into: DemoFolder) => {
         const prefix = into.docId.split('-')[0]
         const made: DemoFile[] = Array.from(list).map((file) => {
@@ -810,7 +866,7 @@ export function DemoFileList({
                                 onSetStatus={(next) => setStatus(entry, next)}
                                 blocked={entry.kind === 'file' ? documentStages[id]?.blocked : undefined}
                                 dueDate={id in dueOverrides ? dueOverrides[id] : entry.kind === 'folder' ? deliverableDueByFolderId?.[id] : null}
-                                onSetDue={(next) => setDueOverrides((prev) => ({ ...prev, [id]: next }))}
+                                onSetDue={(next) => setDue(entry, next)}
                                 tracked={(entry.kind === 'file' && insideDeliverable) || (entry.kind === 'folder' && !!deliverableStatusByFolderId?.[id])}
                                 inside={insideDeliverable}
                                 pinTools={index === 0}
@@ -848,6 +904,23 @@ export function DemoFileList({
                     />
                 </div>
             </div>
+            <ConfirmDialog
+                open={!!dueAsk}
+                onOpenChange={(open) => { if (!open) setDueAsk(null) }}
+                icon={<CalendarClock />}
+                iconVariant="amber"
+                title={dueAskText?.title ?? ''}
+                subtitle={dueAskText?.subtitle}
+                description={dueAskText?.body ?? ''}
+                confirmLabel={dueAskText?.fix}
+                cancelLabel={dueAskText?.alternative}
+                confirmVariant="primary"
+                onConfirm={() => { dueAsk?.fix(); setDueAsk(null) }}
+                onCancel={() => { dueAsk?.keep(); setDueAsk(null) }}
+                // Opened as the date picker closes: its focus hand-back mustn't cancel the question.
+                ignoreFocusOutside
+                wide
+            />
         </div>
     )
 }

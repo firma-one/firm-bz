@@ -139,4 +139,20 @@ describe('summary detail', () => {
     it('is empty for an empty tree, whatever the detail', () => {
         expect(buildFilesContext([], 'summary')).toBe('')
     })
+
+    // The description the firm wrote rides along with the name (2026-10-29).
+    it('carries each description beside its name, on one short line', () => {
+        const long = 'Pricing model for the Q3 renewal, with the fee schedule the client asked for. '.repeat(4)
+        const out = buildFilesContext([
+            folder('d1', 'Deliverables'),
+            { ...file('f1', 'Model.xlsx', 'd1', 'QSR-16'), description: 'Firmographics and\npersona data' },
+            { ...file('f2', 'Fees.xlsx', 'd1'), description: long },
+            file('f3', 'Notes.docx', 'd1'),
+        ])
+        expect(out).toContain('QSR-16 — Model.xlsx — "Firmographics and persona data"')
+        const feesLine = out.split('\n').find((l) => l.includes('Fees.xlsx'))!
+        expect(feesLine.length).toBeLessThan(200)
+        expect(feesLine.endsWith('…"')).toBe(true)
+        expect(out.split('\n').find((l) => l.includes('Notes.docx'))).toBe('  Notes.docx')
+    })
 })

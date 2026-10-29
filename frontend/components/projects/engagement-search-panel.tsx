@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect, useCallback, useRef, useState, useMemo } from 'react'
-import { Search, Folder, Sparkles, Clock, FileText, MoreVertical, Hash, CalendarClock } from 'lucide-react'
+import { Search, Folder, Sparkles, Clock, FileText, MoreVertical, Hash, CalendarClock, AlignLeft } from 'lucide-react'
 import { Textarea } from '@/components/ui/textarea'
 import { DocumentIcon } from '@/components/ui/document-icon'
 import { DocumentActionMenu } from '@/components/ui/document-action-menu'
@@ -46,11 +46,13 @@ const MATCH_TYPE_LABEL: Record<string, string> = {
   keyword: 'File match',
   name: 'File match',
   semantic: 'Semantic match',
+  description: 'Description match',
 }
 const MATCH_TYPE_TOOLTIP: Record<string, string> = {
   keyword: 'Matched by keyword search in file name or summary',
   name: 'Matched by file or folder name',
   semantic: 'Matched by meaning, using file name and summary',
+  description: 'Matched by words in the description written for it in Firma',
 }
 
 /** Doc Search's Time filter, on the result's last-modified date. */
@@ -265,7 +267,7 @@ export function EngagementSearchPanel({
    */
   const renderSearchResultCard = useCallback(
     (file: DriveFile, index: number) => {
-      const matchType = (file.matchType === 'keyword' || file.matchType === 'name' || file.matchType === 'semantic') ? file.matchType : 'keyword'
+      const matchType = (file.matchType === 'keyword' || file.matchType === 'name' || file.matchType === 'semantic' || file.matchType === 'description') ? file.matchType : 'keyword'
       const folder = isFolder(file)
       return (
         <div
@@ -329,11 +331,17 @@ export function EngagementSearchPanel({
                   </TooltipContent>
                 </Tooltip>
               )}
+              {/* Why it matched, when the words were in its description rather than its name */}
+              {matchType === 'description' && file.description && (
+                <p className="mt-0.5 line-clamp-2 text-caption text-fg-muted">
+                  <HighlightText text={file.description} highlight={searchQuery} />
+                </p>
+              )}
               <div className="mt-1.5 flex items-center justify-between gap-2">
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <span className="inline-flex cursor-default">
-                      <Tag color={matchType === 'semantic' ? 'purple' : 'gray'} icon={matchType === 'semantic' ? <Sparkles /> : <Hash />}>
+                      <Tag color={matchType === 'semantic' ? 'purple' : 'gray'} icon={matchType === 'semantic' ? <Sparkles /> : matchType === 'description' ? <AlignLeft /> : <Hash />}>
                         {MATCH_TYPE_LABEL[matchType]}
                       </Tag>
                     </span>

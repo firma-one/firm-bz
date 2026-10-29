@@ -17,6 +17,7 @@ export const STAGE_ROW_SELECT = {
     createdBy: true,
     isFolder: true,
     parentId: true,
+    docId: true,
 } as const
 
 export type StageRowWithParent = StageRow & { parentId: string | null }
@@ -48,10 +49,13 @@ export interface DerivedMove {
     deliverable: StageRow
     from: ActivityStatus
     to: ActivityStatus
-    /** External collaborators would see the deliverable for the first time. */
-    externalCollaborators: boolean
-    /** Viewers would see it for the first time. */
-    viewers: boolean
+    /**
+     * How many external collaborators would see its documents for the first time (its card they
+     * see from promotion on). The engagement's members in that role: none, and nobody gains access.
+     */
+    externalCollaborators: number
+    /** How many viewers (reviewers) would see its documents for the first time. */
+    viewers: number
     /** It would be approved, which locks it. */
     approves: boolean
 }
@@ -69,18 +73,26 @@ export async function derivedMove(
     const to = deriveDeliverableStage(documents.map((d) => changes.get(d.id) ?? documentStage(d.settings)))
     const from = currentStageOf(deliverable)
     if (to === from) return null
-    return { deliverable, from, to, ...accessWidenedBy(deliverable, to), approves: to === 'approved' }
+    // Who would actually gain access: the role is opened either way (a member added later gets it),
+    // but with nobody in the role there's nobody to ask about.
+    const widened = accessWidenedBy(deliverable, to)
+    const membersIn = (role: 'eng_ext_collaborator' | 'eng_viewer') => prisma.engagementMember.count({ where: { engagementId, role } })
+    const [externalCollaborators, viewers] = await Promise.all([
+        widened.externalCollaborators ? membersIn('eng_ext_collaborator') : 0,
+        widened.viewers ? membersIn('eng_viewer') : 0,
+    ])
+    return { deliverable, from, to, externalCollaborators, viewers, approves: to === 'approved' }
 }
 
-/** A move the person should agree to first: it shows the deliverable to clients, or approves it. */
+/** A move the person should agree to first: it shows the deliverable's documents to clients, or approves it. */
 export function needsConfirmation(move: DerivedMove | null): move is DerivedMove {
-    return !!move && (move.externalCollaborators || move.viewers || move.approves)
+    return !!move && (move.externalCollaborators > 0 || move.viewers > 0 || move.approves)
 }
 
 /** What the 409 tells the client, so it can ask in words. */
 export function confirmationOf(move: DerivedMove) {
     return {
-        deliverable: { id: move.deliverable.id, name: move.deliverable.fileName },
+        deliverable: { id: move.deliverable.id, docId: move.deliverable.docId ?? null, name: move.deliverable.fileName },
         from: move.from,
         to: move.to,
         externalCollaborators: move.externalCollaborators,
