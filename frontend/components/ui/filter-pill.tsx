@@ -23,21 +23,30 @@ export interface FilterPillProps extends Omit<React.ButtonHTMLAttributes<HTMLBut
     neutral?: boolean
     /** Makes the pill an on/off toggle (Files' "Deliverables"): filled while on, no menu chevron. */
     pressed?: boolean
+    /**
+     * In a narrow bar, just the icon (and the chosen value once set): the label shows only where the
+     * nearest `@container/filter-bar` is at least 34rem wide, and stays the button's name and its
+     * tooltip either way. For a bar in a side pane, which would otherwise wrap (the comment thread).
+     */
+    collapsible?: boolean
 }
 
 /** The pill itself. Use it as a DropdownMenuTrigger's child; it forwards the ref. */
 export const FilterPill = React.forwardRef<HTMLButtonElement, FilterPillProps>(function FilterPill(
-    { icon, label, value, onClear, relaxed = false, neutral = false, pressed, className, ...props },
+    { icon, label, value, onClear, relaxed = false, neutral = false, pressed, collapsible = false, className, ...props },
     ref
 ) {
     const isToggle = pressed !== undefined
     const isSet = !isToggle && value !== undefined && value !== null && value !== ""
     const filled = isToggle ? pressed : isSet && !neutral && !relaxed
+    // Collapsed, the label is read out but not drawn, until the bar has room for it.
+    const labelClass = collapsible ? "sr-only @[34rem]/filter-bar:not-sr-only" : undefined
     return (
         <button
             ref={ref}
             type="button"
             aria-pressed={isToggle ? pressed : undefined}
+            title={collapsible ? label : undefined}
             {...props}
             className={cn(
                 "inline-flex h-7 max-w-[18rem] items-center gap-1.5 rounded-full border px-2.5 text-small transition-colors outline-none focus-visible:ring-2 focus-visible:ring-action/30",
@@ -52,11 +61,11 @@ export const FilterPill = React.forwardRef<HTMLButtonElement, FilterPillProps>(f
             <span className={cn("flex shrink-0 items-center [&_svg]:h-3.5 [&_svg]:w-3.5", !filled && "text-fg-subtle")}>{icon}</span>
             {isSet ? (
                 <span className="flex min-w-0 items-baseline gap-1">
-                    <span className="shrink-0 opacity-75">{label}:</span>
+                    <span className={cn("shrink-0 opacity-75", labelClass)}>{label}:</span>
                     <span className={cn("truncate", !neutral && "font-medium", relaxed && "line-through")}>{value}</span>
                 </span>
             ) : (
-                <span>{label}</span>
+                <span className={labelClass}>{label}</span>
             )}
             {relaxed && <span className="shrink-0 text-caption">not applied</span>}
             {isSet && onClear ? (

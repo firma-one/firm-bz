@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { withoutAgentIds } from '@/lib/ai/agent-email'
 import { createClient } from '@/utils/supabase/server'
 import { prisma } from '@/lib/prisma'
-import { assetSettingsOf, buildSettingsForDb, parseSettingsFromDb, settingsForBrowser, type ShareBlock } from '@/lib/sharing-settings'
+import { assetSettingsOf, buildSettingsForDb, parseSettingsFromDb, type ShareBlock } from '@/lib/sharing-settings'
 import { syncDocumentSharingUsers } from '@/lib/sync-document-sharing'
 import { getFileInfo } from '@/lib/file-utils'
 import { safeInngestSend } from '@/lib/inngest/client'
 import { resolveProjectContext } from '@/lib/resolve-project-context'
-import { canManageProject, canViewProject } from '@/lib/permission-helpers'
+import { canManageProject, canViewProject, getProjectPersona } from '@/lib/permission-helpers'
+import { withoutFirmOnlySettings } from '@/lib/files/blocked'
 import { resolveEngagementConnector } from '@/lib/connectors/resolve-client-connector'
 import { getPermissionAdapter, getContentAdapter } from '@/lib/connectors/registry'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
@@ -22,11 +23,9 @@ import { engagementPath } from '@/lib/navigation/firm-paths'
 function toJsonSafeSharing(doc: Record<string, unknown> | null): Record<string, unknown> | null {
   if (!doc) return null
   // connectorId never leaves the server: no caller uses it, and it names the firm's storage.
-  // Nor do the document's notes, which are internal (lib/files/document-notes.ts).
-  const { fileSize, connectorId: _connectorId, settings, ...rest } = doc
+  const { fileSize, connectorId: _connectorId, ...rest } = doc
   return {
     ...rest,
-    settings: settingsForBrowser(settings),
     fileSize: fileSize != null ? String(fileSize) : null,
   } as Record<string, unknown>
 }
@@ -122,7 +121,11 @@ export async function GET(
         },
       },
     })
-    return NextResponse.json({ sharing: toJsonSafeSharing(doc as Record<string, unknown> | null) })
+    // A client isn't sent what is the firm's own (a document's Blocked flag).
+    const persona = await getProjectPersona(ctx.firmId, ctx.clientId, projectId)
+    const forClient = persona === 'eng_ext_collaborator' || persona === 'eng_viewer'
+    const visible = doc && forClient ? { ...doc, settings: withoutFirmOnlySettings(doc.settings) } : doc
+    return NextResponse.json({ sharing: toJsonSafeSharing(visible as Record<string, unknown> | null) })
   } catch (e) {
     console.error('GET sharing error', e)
     return NextResponse.json({ error: 'Failed to load sharing' }, { status: 500 })

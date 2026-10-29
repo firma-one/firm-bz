@@ -9,7 +9,8 @@ import { StatusPill } from '@/components/ui/status-pill'
 import { interactiveCardClass } from '@/components/ui/interactive-card'
 import { STAGE_BAR_CLASSES, STAGE_LANE_CLASSES, STATUS, type LaneStage } from '@/lib/ui/status'
 import { DemoEngagement } from '@/lib/demo/static-demo-data'
-import { DemoDeliverable, DeliverableStatus, getDemoDeliverables } from '@/lib/demo/demo-deliverables'
+import { DemoDeliverable, DeliverableStatus, demoDocumentStages, demoFilesIn, getDemoDeliverables } from '@/lib/demo/demo-deliverables'
+import { BlockedCountChip } from '@/components/files/blocked-tag'
 import { DemoDeliverablePane } from '@/components/demo/demo-deliverable-pane'
 import { prettyName } from '@/lib/demo/demo-summary'
 import { useRightPane } from '@/lib/right-pane-context'
@@ -26,7 +27,15 @@ const formatDue = (iso: string) =>
 function BoardCard({ card, stage, open, onToggle }: { card: DemoDeliverable; stage: LaneStage; open: boolean; onToggle: () => void }) {
     const initials = card.actor.split(' ').map((p) => p[0]).join('')
     const approved = card.status === 'approved'
-    const done = approved ? card.fileCount : Math.max(1, Math.floor(card.fileCount * 0.5))
+    // As on the app's card: progress over the documents on the Board, and the blocked ones named.
+    const files = demoFilesIn(card.folder)
+    const stages = demoDocumentStages(card.status, files)
+    const onBoard = files.filter((f) => stages[f.id]?.stage !== 'not_started')
+    const done = onBoard.filter((f) => stages[f.id]?.stage === 'approved').length
+    const blocked = files.flatMap((f) => {
+        const flag = stages[f.id]?.blocked
+        return flag ? [{ documentId: f.id, docId: f.docId, fileName: f.name, reason: flag.reason }] : []
+    })
     // As on the app's card: overdue is a red date, not a status.
     const overdue = !!card.dueDate && !approved && new Date(`${card.dueDate}T23:59:59`).getTime() < Date.now()
 
@@ -54,12 +63,17 @@ function BoardCard({ card, stage, open, onToggle }: { card: DemoDeliverable; sta
                         <span className="truncate text-caption text-fg-muted">{card.actor}</span>
                     </span>
                 </div>
-                {card.fileCount > 0 && (
+                {(onBoard.length > 0 || blocked.length > 0) && (
                     <div className="flex items-center gap-2">
-                        <div className="h-1 flex-1 overflow-hidden rounded-full bg-surface-muted">
-                            <div className={cn('h-full rounded-full', STAGE_BAR_CLASSES[stage])} style={{ width: `${Math.round((done / card.fileCount) * 100)}%` }} />
-                        </div>
-                        <span className="shrink-0 text-caption tabular-nums text-fg-subtle">{done}/{card.fileCount}</span>
+                        <BlockedCountChip documents={blocked} />
+                        {onBoard.length > 0 && (
+                            <>
+                                <div className="h-1 flex-1 overflow-hidden rounded-full bg-surface-muted">
+                                    <div className={cn('h-full rounded-full', STAGE_BAR_CLASSES[stage])} style={{ width: `${Math.round((done / onBoard.length) * 100)}%` }} />
+                                </div>
+                                <span className="shrink-0 text-caption tabular-nums text-fg-subtle">{done}/{onBoard.length}</span>
+                            </>
+                        )}
                     </div>
                 )}
             </div>

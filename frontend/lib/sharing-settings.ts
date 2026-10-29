@@ -3,7 +3,38 @@
  * Supports both legacy (flat) and new (nested share/activity/comments) shapes.
  */
 
-export type ActivityStatus = 'to_do' | 'in_progress' | 'in_review' | 'approved'
+/**
+ * A document's or deliverable's stage. Not started comes before the Board: a document starts there,
+ * and joins its deliverable's Board work at To do (.claude/plans/deliverable-stages-blocked.md).
+ */
+export type ActivityStatus = 'not_started' | 'to_do' | 'in_progress' | 'in_review' | 'approved'
+
+/** A stage on the Board: To do and beyond. */
+export type BoardStage = Exclude<ActivityStatus, 'not_started'>
+
+/** The stages on the Board, in order. */
+export const BOARD_STAGES: readonly BoardStage[] = ['to_do', 'in_progress', 'in_review', 'approved']
+
+/** Every stage, in order. */
+export const ACTIVITY_STAGES: readonly ActivityStatus[] = ['not_started', ...BOARD_STAGES]
+
+/** Whether a stage is on the Board: To do and beyond. */
+export function isOnBoard(stage: ActivityStatus | null | undefined): stage is BoardStage {
+  return !!stage && stage !== 'not_started'
+}
+
+/**
+ * A document's own stage, as stored, or Not started when none is: a document is on the Board only
+ * once someone puts it there. (parseSettingsFromDb's To do default stays for deliverables, which
+ * start on the Board.)
+ */
+export function documentStage(settings: unknown): ActivityStatus {
+  const raw = settings && typeof settings === 'object'
+    ? ((settings as Record<string, unknown>).activity as { status?: unknown } | undefined)?.status
+    : undefined
+  if (raw === 'done') return 'approved'
+  return typeof raw === 'string' && (ACTIVITY_STAGES as readonly string[]).includes(raw) ? (raw as ActivityStatus) : 'not_started'
+}
 
 export interface ShareGuestOptions {
   publish?: boolean
@@ -154,7 +185,7 @@ export function parseSettingsFromDb(settings: unknown): ProjectDocumentSharingSe
   // Backward compat: legacy 'done' stored in DB maps to 'approved'
   const normalizedStatus: ActivityStatus = rawStatus === 'done'
     ? 'approved'
-    : (['to_do', 'in_progress', 'in_review', 'approved'] as ActivityStatus[]).includes(rawStatus as ActivityStatus)
+    : (ACTIVITY_STAGES as readonly string[]).includes(rawStatus as string)
       ? (rawStatus as ActivityStatus)
       : 'to_do'
 
@@ -222,21 +253,27 @@ export function buildSettingsForDb(
   }
   if (updates.finalizedAt !== undefined) share.finalizedAt = updates.finalizedAt
 
-  const activity: ActivityBlock = updates.activity
+  // A stage is written only when this write is about the stage, or one was already stored. Writing
+  // To do by default put documents on the Board that nobody had put there (a share, an intake, a
+  // cached PDF all came through here).
+  const hadActivity = !!existing && typeof existing === 'object' && 'activity' in existing && !!existing.activity
+  const activity: ActivityBlock | undefined = updates.activity
     ? {
         status: updates.activity.status ?? parsed.activity!.status,
         updatedAt: updates.activity.updatedAt ?? now,
         orderIndex: updates.activity.orderIndex ?? parsed.activity!.orderIndex ?? 0,
       }
-    : { ...parsed.activity!, updatedAt: now }
+    : hadActivity
+      ? { ...parsed.activity!, updatedAt: now }
+      : undefined
 
   const comments = [...(parsed.comments || [])]
   if (updates.appendComment) {
     comments.unshift(updates.appendComment)
   }
 
-  // Everything this doesn't manage stays: the lock (private, finalized), the document's description,
-  // assignee and notes. Returning only the four blocks below erased them on every share or stage
+  // Everything this doesn't manage stays: the lock (private, finalized), the document's description
+  // and assignee. Returning only the four blocks below erased them on every share or stage
   // change (2026-10-28) — a private document's lock among them. The legacy flat share keys are the
   // one exception: `share` above supersedes them.
   const kept = Object.fromEntries(
@@ -245,7 +282,7 @@ export function buildSettingsForDb(
   return {
     ...kept,
     share,
-    activity,
+    ...(activity ? { activity } : {}),
     comments,
     accessLog: parsed.accessLog || [],
   }
@@ -319,23 +356,12 @@ export function isDocumentLocked(settings: unknown): boolean {
   return getLock(settings) !== null
 }
 
-/**
- * A document's settings as any response may send them to the browser: without its notes, which are
- * internal and read only through the notes routes (lib/files/document-notes.ts). Routes that return
- * a raw document row pass its settings through this, whoever is asking.
- */
-export function settingsForBrowser(settings: unknown): unknown {
-  if (!settings || typeof settings !== 'object' || !('notes' in settings)) return settings
-  const { notes: _notes, ...rest } = settings as Record<string, unknown>
-  return rest
-}
-
 /** Settings that describe the document itself, not how it is shared. */
-const ASSET_SETTING_KEYS = ['description', 'assigneeUserId', 'details', 'notes'] as const
+const ASSET_SETTING_KEYS = ['description', 'assigneeUserId', 'details', 'blocked'] as const
 
 /**
  * What removing a share or un-tagging a deliverable keeps: the document's description and assignee
- * (and the asset details and notes planned in .claude/plans/engagement-assets-details.md). Those
+ * (and the asset details planned in .claude/plans/engagement-assets-details.md). Those
  * paths used to reset settings to {}, which erased them along with the sharing state.
  */
 export function assetSettingsOf(settings: unknown): Record<string, unknown> {

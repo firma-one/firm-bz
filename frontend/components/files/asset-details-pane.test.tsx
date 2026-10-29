@@ -1,13 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 
-vi.mock('@/components/projects/document-doc-comments-pane', () => ({ DocumentDocCommentsPane: () => <div>discussion thread</div> }))
+vi.mock('@/components/files/document-discussion-tab', () => ({ DocumentDiscussionTab: () => <div>discussion thread</div> }))
 vi.mock('@/components/files/document-versions-timeline', () => ({ DocumentVersionsTimeline: () => <div>versions</div> }))
 vi.mock('@/components/files/document-activity-feed', () => ({ DocumentActivityFeed: () => <div>activity</div> }))
 vi.mock('@/components/ui/toast', () => ({ useToast: () => ({ addToast: vi.fn() }) }))
 vi.mock('@/lib/supabase', () => ({ getSession: async () => ({ access_token: 't' }) }))
-vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: { id: 'u-ana' } }) }))
-vi.mock('@/components/files/document-notes-section', () => ({ DocumentNotesSection: (p: { isLead: boolean }) => <div>notes section{p.isLead ? ' (lead)' : ''}</div> }))
 
 import { AssetDetailsPane, assetDetailsTabs, isAssetDetailsPaneContent, openAssetDetailsPane, type AssetDetailsEditing } from './asset-details-pane'
 
@@ -78,6 +76,16 @@ describe('AssetDetailsPane — fields first, then the tabs', () => {
         expect(fetchMock).toHaveBeenCalledWith(`/api/projects/p1/documents/${RECORD}/sharing`, expect.anything())
     })
 
+    it('says Saving… then Saved as the description saves on its own', async () => {
+        render(<AssetDetailsPane document={FILE} projectId="p1" editing={LEAD} />)
+        const box = await screen.findByPlaceholderText('What is this file for?') as HTMLTextAreaElement
+        await waitFor(() => expect(box.value).toBe('Sizing model for the Q2 plan'))
+        fireEvent.change(box, { target: { value: 'Sizing model, v2' } })
+        await waitFor(() => expect(screen.getByText('Saved')).toBeTruthy(), { timeout: 3000 })
+        const put = fetchMock.mock.calls.find(([, init]) => (init as RequestInit | undefined)?.method === 'PUT')!
+        expect(JSON.parse(String((put[1] as RequestInit).body))).toEqual({ description: 'Sizing model, v2' })
+    })
+
     it('reads only for someone who may not edit', async () => {
         render(<AssetDetailsPane document={FILE} projectId="p1" />)
         await waitFor(() => expect(screen.getByText('Sizing model for the Q2 plan')).toBeTruthy())
@@ -103,25 +111,14 @@ describe('AssetDetailsPane — fields first, then the tabs', () => {
         expect(screen.getByRole('tab', { name: 'Details' }).getAttribute('aria-selected')).toBe('true')
     })
 
-    it('shows the Notes to the firm, as a lead when the viewer leads the engagement', async () => {
-        render(<AssetDetailsPane document={FILE} projectId="p1" editing={LEAD} />)
-        await waitFor(() => expect(screen.getByText('notes section (lead)')).toBeTruthy())
-    })
-
-    it('never shows the Notes to an external user', async () => {
-        render(<AssetDetailsPane document={FILE} projectId="p1" isExternalUser />)
-        await waitFor(() => expect(screen.getByText('Spreadsheet')).toBeTruthy())
-        expect(screen.queryByText(/notes section/)).toBeNull()
-    })
-
-    it('reads To do for tracked work with no stage yet, as the Board does', () => {
+    it('reads Not started for a tracked document with no stage yet, as the Files row does', () => {
         render(<AssetDetailsPane document={{ ...FILE, activityStatus: null }} projectId="p1" editing={{ ...LEAD, statusRole: null }} />)
-        expect(screen.getByText('To do')).toBeTruthy()
+        expect(screen.getByText('Not started')).toBeTruthy()
     })
 
     it('reads a dash for a file outside a deliverable', () => {
         render(<AssetDetailsPane document={{ ...FILE, activityStatus: null }} projectId="p1" editing={{ ...LEAD, statusRole: null, tracked: false }} />)
-        expect(screen.queryByText('To do')).toBeNull()
+        expect(screen.queryByText('Not started')).toBeNull()
     })
 
     it('opens on Discussions when asked', () => {
@@ -169,9 +166,9 @@ describe('AssetDetailsPane — layout', () => {
         expect(status.compareDocumentPosition(tablist) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     })
 
-    it('puts Description and Notes in the Details tab', async () => {
+    it('puts the Description in the Details tab, with no separate notes: those are internal notes in the thread', () => {
         render(<AssetDetailsPane document={FILE} projectId="p1" editing={LEAD} />)
         expect(screen.getByText('Description')).toBeTruthy()
-        await waitFor(() => expect(screen.getByText('notes section (lead)')).toBeTruthy())
+        expect(screen.queryByText(/Only the firm's team sees these/)).toBeNull()
     })
 })

@@ -8,6 +8,7 @@ import { taggedDocumentsIn } from '@/lib/comments/tagged-documents'
 import { loadPeople } from '@/lib/files/file-creator'
 import { parseSettingsFromDb } from '@/lib/sharing-settings'
 import { formatDisplayName, mentionedNames } from '@/lib/comments/mentions'
+import { SHARED_COMMENTS, visibleCommentsWhere } from '@/lib/comments/internal-notes'
 
 /**
  * GET /api/projects/[projectId]/doc-comments
@@ -37,6 +38,8 @@ export async function GET(
   const member = await requireEngagementMember(projectId, user.id)
   if (!member) return NextResponse.json({ error: 'Only engagement members can see comments.' }, { status: 403 })
   const visible = await visibleDocumentIdsFor(projectId, member.role)
+  // A client never sees the firm's internal notes: not their text, counts, previews or unread dots.
+  const seeable = visibleCommentsWhere(member.role)
 
   // ── Mentions filter ───────────────────────────────────────────────────────
   if (request.nextUrl.searchParams.get('filter') === 'mentions') {
@@ -52,7 +55,7 @@ export async function GET(
     if (mentionedMessageIds.length === 0) return NextResponse.json({ mentions: [] })
 
     const messages = await prisma.docCommentMessage.findMany({
-      where: { id: { in: mentionedMessageIds }, engagementId: projectId },
+      where: { id: { in: mentionedMessageIds }, engagementId: projectId, ...seeable },
       select: { id: true, createdAt: true, content: true, authorUserId: true, projectDocumentId: true },
       orderBy: { createdAt: 'desc' },
     })
@@ -95,7 +98,7 @@ export async function GET(
   // Every document with comments, as far as this viewer may see.
   const counts = await prisma.docCommentMessage.groupBy({
     by: ['projectDocumentId'],
-    where: { engagementId: projectId },
+    where: { engagementId: projectId, ...seeable },
     _count: { _all: true },
   })
   const countByDocId = Object.fromEntries(counts.map((c) => [c.projectDocumentId, c._count._all]))
@@ -134,7 +137,7 @@ export async function GET(
   if (q) {
     const has = (text: string | null | undefined) => !!text && text.toLowerCase().includes(q)
     const messages = await prisma.docCommentMessage.findMany({
-      where: { engagementId: projectId, projectDocumentId: { in: threadDocs.map((d) => d.id) } },
+      where: { engagementId: projectId, projectDocumentId: { in: threadDocs.map((d) => d.id) }, ...seeable },
       select: { projectDocumentId: true, authorUserId: true, content: true },
     })
     const members = await loadPeople([...engagementMembers.map((m) => m.userId), ...messages.map((m) => m.authorUserId ?? '')])
@@ -151,21 +154,30 @@ export async function GET(
   if (docIds.length === 0) return NextResponse.json({ documents: [] })
 
   // Latest message per document (small N; acceptable to do one query per doc for now)
-  const latestByDocId: Record<string, { createdAt: string; preview: string; authorUserId: string | null; authorIsExternal: boolean }> = {}
+  const latestByDocId: Record<string, { createdAt: string; preview: string; authorUserId: string | null; authorIsExternal: boolean; isInternal: boolean }> = {}
   await Promise.all(
     docIds.map(async (docId) => {
-      const latest = await prisma.docCommentMessage.findFirst({
-        where: { engagementId: projectId, projectDocumentId: docId },
-        orderBy: { createdAt: 'desc' },
-        select: { createdAt: true, content: true, authorUserId: true },
-      })
+      const [latest, latestShared] = await Promise.all([
+        prisma.docCommentMessage.findFirst({
+          where: { engagementId: projectId, projectDocumentId: docId, ...seeable },
+          orderBy: { createdAt: 'desc' },
+          select: { createdAt: true, content: true, authorUserId: true, isInternal: true },
+        }),
+        prisma.docCommentMessage.findFirst({
+          where: { engagementId: projectId, projectDocumentId: docId, ...SHARED_COMMENTS },
+          orderBy: { createdAt: 'desc' },
+          select: { authorUserId: true },
+        }),
+      ])
       if (!latest) return
       latestByDocId[docId] = {
         createdAt: latest.createdAt.toISOString(),
         preview: latest.content.slice(0, 220),
         authorUserId: latest.authorUserId ?? null,
-        // True when the last message is from EC/EV — i.e. the firm hasn't replied yet.
-        authorIsExternal: latest.authorUserId ? externalUserIds.has(latest.authorUserId) : false,
+        // True when the last shared message is from EC/EV — the firm hasn't replied yet. An internal
+        // note after it is the firm talking among itself, not a reply.
+        authorIsExternal: latestShared?.authorUserId ? externalUserIds.has(latestShared.authorUserId) : false,
+        isInternal: latest.isInternal,
       }
     })
   )
@@ -182,7 +194,7 @@ export async function GET(
     }),
     prisma.docCommentMessage.groupBy({
       by: ['projectDocumentId'],
-      where: { engagementId: projectId, projectDocumentId: { in: docIds }, OR: [{ authorUserId: null }, { authorUserId: { not: user.id } }] },
+      where: { engagementId: projectId, projectDocumentId: { in: docIds }, ...seeable, OR: [{ authorUserId: null }, { authorUserId: { not: user.id } }] },
       _max: { createdAt: true },
     }),
   ])
@@ -220,6 +232,7 @@ export async function GET(
               preview: latest.preview,
               authorUserId: latest.authorUserId,
               authorIsExternal: latest.authorIsExternal,
+              isInternal: latest.isInternal,
               authorName: author?.name ?? null,
               authorEmail: author?.email ?? null,
             }

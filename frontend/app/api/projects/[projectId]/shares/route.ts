@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { createClient as createSupabaseAdmin } from '@supabase/supabase-js'
 import { prisma } from '@/lib/prisma'
-import { parseSettingsFromDb, flattenForLegacyUI } from '@/lib/sharing-settings'
+import { documentStage, isOnBoard, parseSettingsFromDb, flattenForLegacyUI } from '@/lib/sharing-settings'
+import { blockedOf, type BlockedReason } from '@/lib/files/blocked'
 import { resolveProjectContext } from '@/lib/resolve-project-context'
-import { canViewProject } from '@/lib/permission-helpers'
+import { canViewProject, getProjectPersona } from '@/lib/permission-helpers'
 import { resolveDisplayName } from '@/lib/auth/display-name'
 
 function getAvatarUrlFromUser(dbUser: { user_metadata?: Record<string, unknown>; identities?: Array<{ identity_data?: Record<string, unknown> }> } | null | undefined): string | null {
@@ -15,6 +16,9 @@ function getAvatarUrlFromUser(dbUser: { user_metadata?: Record<string, unknown>;
   const firstIdentity = dbUser.identities?.[0]?.identity_data
   return (firstIdentity?.avatar_url ?? firstIdentity?.picture) as string | undefined ?? null
 }
+
+/** A blocked document in a deliverable, for its Board card's "n blocked" chip (firm only). */
+interface BlockedDocument { documentId: string; docId: string | null; fileName: string; reason: BlockedReason }
 
 /**
  * GET /api/projects/[projectId]/shares
@@ -182,35 +186,42 @@ parentId: share.parentId ?? (indexMetadata.parents?.[0] ?? indexMetadata.parentI
       } catch { /* non-critical, skip */ }
     }
 
-    // Subtask counts per deliverable — one recursive CTE per folder (mirrors subtasks route logic)
+    // Subtask counts per deliverable — one recursive CTE per folder (mirrors subtasks route logic).
+    // Progress counts the documents on the Board (To do and beyond), as the deliverable's stage does
+    // (.claude/plans/deliverable-stages-blocked.md). Blocked documents are listed for the firm only.
+    const role = await getProjectPersona(ctx.firmId, ctx.clientId, ctx.projectId)
+    const isFirm = role === 'eng_admin' || role === 'eng_member'
     const deliverableFolders = sharesWithDetails
       .map((s: any) => ({ shareId: s.id, externalId: s.documentExternalId }))
       .filter((f: any) => !!f.externalId)
-    const subtaskCounts: Record<string, { total: number; approved: number }> = {}
+    const subtaskCounts: Record<string, { total: number; approved: number; blocked: BlockedDocument[] }> = {}
     await Promise.all(deliverableFolders.map(async ({ shareId, externalId }: { shareId: string; externalId: string }) => {
       try {
         const rows = await (prisma as any).$queryRawUnsafe(
           `WITH RECURSIVE descendants AS (
-             SELECT id, "externalId", "isFolder",
-                    settings->'activity'->>'status' AS "activityStatus"
+             SELECT id, "externalId", "isFolder", "fileName", "docId", settings
              FROM platform.engagement_documents
              WHERE "parentId" = $1 AND "engagementId" = $2::uuid
              UNION ALL
-             SELECT ed.id, ed."externalId", ed."isFolder",
-                    ed.settings->'activity'->>'status'
+             SELECT ed.id, ed."externalId", ed."isFolder", ed."fileName", ed."docId", ed.settings
              FROM platform.engagement_documents ed
              INNER JOIN descendants d ON ed."parentId" = d."externalId"
              WHERE ed."engagementId" = $2::uuid
            )
-           SELECT
-             COUNT(*) FILTER (WHERE "isFolder" = false) AS total,
-             COUNT(*) FILTER (WHERE "isFolder" = false AND "activityStatus" = 'approved') AS approved
-           FROM descendants`,
+           SELECT id, "fileName", "docId", settings FROM descendants WHERE "isFolder" = false`,
           externalId,
           projectId
-        ) as { total: bigint; approved: bigint }[]
-        if (rows.length > 0) {
-          subtaskCounts[shareId] = { total: Number(rows[0].total), approved: Number(rows[0].approved) }
+        ) as { id: string; fileName: string; docId: string | null; settings: unknown }[]
+        const onBoard = rows.filter((r) => isOnBoard(documentStage(r.settings)))
+        subtaskCounts[shareId] = {
+          total: onBoard.length,
+          approved: onBoard.filter((r) => documentStage(r.settings) === 'approved').length,
+          blocked: isFirm
+            ? rows.flatMap((r) => {
+                const flag = blockedOf(r.settings)
+                return flag ? [{ documentId: r.id, docId: r.docId ?? null, fileName: r.fileName, reason: flag.reason }] : []
+              })
+            : [],
         }
       } catch { /* non-critical */ }
     }))
@@ -220,6 +231,7 @@ parentId: share.parentId ?? (indexMetadata.parents?.[0] ?? indexMetadata.parentI
       parentName: (s.parentId && parentNames[s.parentId]) || null,
       subtaskCount: subtaskCounts[s.id]?.total ?? 0,
       approvedSubtaskCount: subtaskCounts[s.id]?.approved ?? 0,
+      blockedDocuments: subtaskCounts[s.id]?.blocked ?? [],
       createdByEmail: s.createdBy ? (userMap[s.createdBy]?.email ?? null) : null,
       createdByName: s.createdBy ? (userMap[s.createdBy]?.name ?? null) : null,
       createdByAvatarUrl: s.createdBy ? (userMap[s.createdBy]?.avatarUrl ?? null) : null,

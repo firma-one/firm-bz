@@ -23,12 +23,12 @@ import { SharedFolderIcon } from '@/components/ui/folder-shared-icon'
 import { DeliverableIcon } from '@/components/ui/deliverable-icon'
 import { DocumentActionMenu } from '@/components/ui/document-action-menu'
 import { openAssetDetailsPane } from '@/components/files/asset-details-pane'
-import { DETAILS_PANE_TABS } from '@/components/files/details-pane-switch'
 import { useRightPane } from '@/lib/right-pane-context'
 import { ProfileBubbleWithPopup } from '@/components/ui/profile-bubble-popup'
 import { RelativeDateTime } from '@/components/ui/relative-date-time'
 import type { EngagementRoleSlug } from '@/lib/deliverable-stage-roles'
 import { FileDueDateCell, FileStatusCell } from '@/components/projects/file-property-cells'
+import { BlockedTag } from '@/components/files/blocked-tag'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
     Tooltip,
@@ -58,8 +58,6 @@ export interface EngagementFileRowProps {
     // Active pane tracking
     activeCommentDocId: string | null
     activeInfoDocId: string | null
-    activeActivityDocId: string | null
-    activeVersionDocId: string | null
     activePreviewDocId: string | null
     // Highlight
     highlightedFileId: string | null
@@ -118,8 +116,6 @@ export interface EngagementFileRowProps {
     onOpenDocument: (doc: DriveFile) => void
     onOpenCommentPane: (docId: string) => void
     onOpenInfoPane: (docId: string) => void
-    onOpenActivityPane: (docId: string) => void
-    onOpenVersionPane: (docId: string) => void
     onOpenPreviewPane: (docId: string) => void
     onAddToast: (toast: { type: string; title: string; message: string }) => void
     /** Connector account email — passed to DocumentActionMenu for Google Drive authuser param. */
@@ -148,8 +144,6 @@ export function EngagementFileRow({
     onToggleSelect,
     activeCommentDocId,
     activeInfoDocId,
-    activeActivityDocId,
-    activeVersionDocId,
     activePreviewDocId,
     highlightedFileId,
     onClearHighlight,
@@ -199,8 +193,6 @@ export function EngagementFileRow({
     onOpenDocument,
     onOpenCommentPane,
     onOpenInfoPane,
-    onOpenActivityPane,
-    onOpenVersionPane,
     onOpenPreviewPane,
     onAddToast,
     connectorAccountEmail,
@@ -264,6 +256,9 @@ export function EngagementFileRow({
                 canEditDue: canEditDueDate,
                 // Assignee and description, as on a deliverable: leads, until it's approved or finalized.
                 canManage: isProjectLead && !locked && !isIntakeRow && !isInsideApprovedDeliverable,
+                // Blocked is the firm's own, on a document, until its deliverable is approved.
+                canBlock: !isEC && !isGuest && (roleSlug === 'eng_admin' || roleSlug === 'eng_member')
+                    && !isFolder && !!file.projectDocumentId && !locked && !isIntakeRow && !isInsideApprovedDeliverable,
                 onSaved: onShareSaved,
             },
         })
@@ -306,7 +301,7 @@ export function EngagementFileRow({
                 (isIntakeRow || file.lock?.type === 'finalize' || (file.isPrivate && !isFolder)) ? "hover:bg-surface-hover opacity-60" : !(isFolderApproved || isInsideApprovedDeliverable) && "hover:bg-surface-hover",
                 !isIntakeRow && isSelected && "bg-surface-selected hover:bg-surface-selected",
                 !isIntakeRow && isActionMenuOpen && "bg-surface-muted",
-                !isIntakeRow && (file.id === activeCommentDocId || file.id === activeInfoDocId || file.id === activeActivityDocId || file.id === activeVersionDocId || file.id === activePreviewDocId) && "bg-surface-muted",
+                !isIntakeRow && (file.id === activeCommentDocId || file.id === activeInfoDocId || file.id === activePreviewDocId) && "bg-surface-muted",
                 draggedItem?.id === file.id && "opacity-40 grayscale",
                 dragOverFolderId === file.id && !isMoveTarget && "bg-line ring-2 ring-inset ring-line z-[1]",
                 (isUploadTarget || isMoveTarget) && `${FILES_DROP_TARGET_ROW_CLASS} z-[1]`
@@ -386,7 +381,7 @@ export function EngagementFileRow({
                                             strokeWidth={2}
                                         />
                                     </div>
-                                ) : (file.id === activeCommentDocId || file.id === activeInfoDocId || file.id === activeActivityDocId || file.id === activeVersionDocId || file.id === activePreviewDocId) && !isFolder ? (
+                                ) : (file.id === activeCommentDocId || file.id === activeInfoDocId || file.id === activePreviewDocId) && !isFolder ? (
                                     <div className="flex w-full min-w-0 items-center gap-3">
                                         <span
                                             className={cn(
@@ -427,6 +422,10 @@ export function EngagementFileRow({
                         {isMoveTarget ? 'Move here' : 'Drop here'}
                     </span>
                 )}
+
+                {/* The firm's own flag (never sent to a client): in the Name cell, after the name, where the
+                    Status column's pill leaves it no room. What it waits on shows on hover. */}
+                {file.blocked && !isFolder && <BlockedTag blocked={file.blocked} />}
 
                 {/* Badges — hidden when hideBadges=true (e.g. medium pane) to prevent icon overflow */}
                 <div className={cn("flex shrink-0 items-center justify-end gap-1", hideBadges && "hidden")} onClick={(e) => e.stopPropagation()}>
@@ -530,7 +529,7 @@ export function EngagementFileRow({
                         when the table is at its narrowest. */}
                     <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
 
-                        {DETAILS_PANE_TABS && !isFolder && file.documentType !== 'LINK' && (
+                        {!isFolder && file.documentType !== 'LINK' && (
                             <Tooltip>
                                 <TooltipTrigger asChild>
                                     <button
@@ -583,7 +582,7 @@ export function EngagementFileRow({
                                     type="button"
                                     className={cn(
                                         'h-7 w-7 rounded-md inline-flex items-center justify-center disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-fg-muted',
-                                        DETAILS_PANE_TABS && 'hidden @[49rem]/file-table:inline-flex',
+                                        'hidden @[49rem]/file-table:inline-flex',
                                         file.id === highlightedFileId
                                             ? 'text-fg-muted bg-surface-muted'
                                             : 'text-fg-muted hover:text-fg-muted hover:bg-surface-hover'
@@ -649,8 +648,6 @@ export function EngagementFileRow({
                             onOpenCommentPane={(docId) => onOpenCommentPane(docId)}
                             onOpenInfoPane={(docId) => onOpenInfoPane(docId)}
                             onOpenDetails={openDetails}
-                            onOpenActivityPane={(docId) => onOpenActivityPane(docId)}
-                            onOpenVersionPane={(docId) => onOpenVersionPane(docId)}
                             onRenameDocument={canEdit && !locked && !isIntakeRow ? (doc) => onOpenRename(doc as DriveFile) : undefined}
                             onDuplicateDocument={canEdit && !locked && !isIntakeRow ? (doc) => onDuplicate(doc as DriveFile) : undefined}
                             onCopyDocument={generalFolderId && canEdit && !locked && !isIntakeRow ? (doc) => onOpenCopyMove(doc as DriveFile, 'copy') : undefined}
@@ -679,14 +676,13 @@ export function EngagementFileRow({
                     documentId={file.projectDocumentId ?? file.id}
                     fileName={file.name}
                     isFolder={isFolder}
-                    // Tracked work with no stage yet is at To do, as the Board shows it.
-                    status={isTracked ? (statusValue ?? 'to_do') : isFolder && !file.isDeliverable ? null : statusValue}
+                    // Tracked work with no stage yet: a document is Not started, a deliverable at To do.
+                    status={isTracked ? (statusValue ?? (isFolder ? 'to_do' : 'not_started')) : isFolder && !file.isDeliverable ? null : statusValue}
                     roleSlug={canEditStatus ? roleSlug : null}
                     emptyLabel={emptyTrackedValue}
                     emptyClassName={isTracked ? 'text-fg-subtle' : 'text-[#45474c]/40'}
                     onSaved={(next) => {
                         file.activityStatus = next
-                        if (file.isDeliverable) file.deliverableStatus = next
                         onShareSaved()
                     }}
                     onAddToast={onAddToast}

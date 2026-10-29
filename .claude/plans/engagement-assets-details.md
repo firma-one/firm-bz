@@ -230,10 +230,10 @@ Each phase can ship on its own. Phase 0 is small and fixes what you saw today.
   from the document row, so any id shape works. It returns `unsupported: true` for non-Google
   storage. Both panes load through `components/files/use-document-versions.ts` and show "isn't
   available for this storage yet". The menu hides Activity stream and Version history from
-  external users. The old `/api/documents/versions` and `/api/documents/activity` have no callers
-  and wait for sign-off to be deleted.
-- ~~Stop putting the access token in download URLs~~ **Done 2026-10-28** (§1.1 c). Still to do:
-  delete `app/api/documents/download/route.ts` once you sign off.
+  external users. The old `/api/documents/versions` and `/api/documents/activity` were deleted
+  on 2026-10-29 after sign-off.
+- ~~Stop putting the access token in download URLs~~ **Done 2026-10-28** (§1.1 c).
+  `app/api/documents/download/route.ts` was deleted on 2026-10-29 (access-gates row 10 closed).
 - The three `settings: {}` resets in `sharing/route.ts` clear only the sharing keys (§1.4 #1).
   This fixes today's loss of deliverable description and owner, and it must land before Phase 3.
 
@@ -260,19 +260,21 @@ Each phase can ship on its own. Phase 0 is small and fixes what you saw today.
   Outside the Files list, Info reads only. The description is visible to anyone who can view the
   file, clients included, as deliverable descriptions already are.
 - The share-removal and un-tag paths now keep description and assignee (`assetSettingsOf`).
-- **Notes** (built the same day): `settings.notes`, internal-only.
-  - Storage is `lib/files/document-notes.ts`: one-statement add, edit and delete, capped at 50 notes
-    of 1,000 characters each. Authors edit; authors and the engagement lead delete, and deleting
-    removes the text.
-  - Routes are `.../documents/[documentId]/notes` (GET, POST) and `.../notes/[noteId]` (PATCH,
-    DELETE), gated in `lib/files/document-notes-access.ts`: firm-role members only, and no writes once
-    the engagement is completed.
-  - `settingsForBrowser` leaves notes out of every raw settings response: the sharing route and the
-    stage route, which external collaborators call too.
-  - Audit events `DOCUMENT_NOTE_CREATED/CHANGED/DELETED` record ids and kind, never text. They show
-    in Activity and on the Audit page.
-  - UI: `components/files/document-notes-section.tsx`, under Description.
-  - Not yet read by Brio (Phase 4).
+- **Notes → internal notes in the deliverable's thread** (2026-10-29, Deepak's call). The separate
+  per-file Notes log (`settings.notes`, its routes and section) duplicated the comment thread, so it
+  was removed. Instead:
+  - `DocCommentMessage.isInternal` (migration `20261029120000_doc_comment_internal_notes`). The
+    composer has a **Reply / Internal note** switch for the firm's roles; internal notes are tinted
+    and marked "Internal".
+  - `lib/comments/internal-notes.ts` holds the rules every comment reader follows: a client never
+    sees one (thread, Discussions counts, previews, unread, mentions, reactions, reminders); one
+    never reminds a client; and "awaiting a reply" (Discussions, My Work, both insights) is decided
+    by shared comments only.
+  - Discussion stays at the deliverable level. A document's **Discussions** tab opens its
+    deliverable's thread (`GET .../documents/[documentId]/deliverable`), showing "About this file"
+    (comments that #-tag it) or the whole thread. A new comment starts with `#QSR-16 `. A file
+    outside any deliverable is discussed by tagging it in a deliverable's thread.
+  - Brio doesn't read comment text yet (Phase 4). When it does, internal notes go to firm users only.
 - **`buildSettingsForDb` kept only share/activity/comments/accessLog**, so every share or stage change
   erased the lock (Private, Finalized), description, assignee and notes. A private document's stage
   change made it visible to clients. It now keeps every key it doesn't manage, and drops only the
@@ -291,7 +293,6 @@ Each phase can ship on its own. Phase 0 is small and fixes what you saw today.
   - Activity: a small icon per kind of event on a thin rail, one line each, grouped by day (Today,
     Yesterday, the date). The same person doing the same thing in a row that day folds into one
     line: "opened this file 3 times".
-  - The old Version history pane keeps its cards behind the switch.
 - **Stuck page after ⋮ → Open:** the secure-access dialog opens on the same click as a new tab, and
   the page could be left with `pointer-events: none` on `<body>`, so everything became unclickable.
   Open now runs from `onSelect`, as the menu's other dialog-opening items do. The dialog also calls
@@ -310,9 +311,13 @@ Each phase can ship on its own. Phase 0 is small and fixes what you saw today.
   activity". Indexing events are left out.
 - **Row quick icons:** a Details icon after Preview. The gap tightened (`gap-1` → `gap-0.5`), and
   Copy link (also in ⋮) hides when the file table is under 49rem.
-- **Switch:** `DETAILS_PANE_TABS` in `components/files/details-pane-switch.ts`. False brings back
-  the Details submenu with its three panes, all still in place for sign-off.
-- **/tour:** `demo-file-list.tsx` menu and row icons match, read from the same switch.
+- **Old code deleted on 2026-10-29 after sign-off:** the `DETAILS_PANE_TABS` switch, the Details
+  submenu with its File information, Activity stream and Version history panes
+  (`document-activity-pane.tsx`, `document-history-pane.tsx`), the row and list props that
+  highlighted those panes, and `/api/documents/{versions,activity,download}`.
+- **/tour:** `demo-file-list.tsx` menu and row icons match.
+- **Save feedback:** Description autosaves and says "Saving…", then "Saved", by its label, or "Not
+  saved" with a toast.
 - **Still open:** "Mentioned in" (needs a `taggedDocIds text[]` column with a GIN index on
   `DocCommentMessage`, written when a comment is posted: a migration), deep links to a tab
   (`#doc-file:<id>&pane=versions`), and what external users may see in Activity (Q3).

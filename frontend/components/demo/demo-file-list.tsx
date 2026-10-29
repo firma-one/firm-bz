@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
     ArrowDownUp,
     Bookmark,
@@ -74,12 +74,16 @@ import {
     OWNER_COL_CLASS,
     STATUS_COL_CLASS,
 } from '@/components/projects/engagement-file-table-grid'
-import { DETAILS_PANE_TABS } from '@/components/files/details-pane-switch'
 import { cn, formatFileSize } from '@/lib/utils'
 import { initialsOf } from '@/lib/initials'
 import type { DemoFolder, DemoFile } from '@/lib/demo/static-demo-data'
-import { DELIVERABLE_ACTORS, type DeliverableStatus } from '@/lib/demo/demo-deliverables'
+import { DELIVERABLE_ACTORS, demoDocumentStages, demoFilesIn, type DeliverableStatus, type DemoDocumentStage } from '@/lib/demo/demo-deliverables'
+import { ACTIVITY_STAGES, type ActivityStatus } from '@/lib/sharing-settings'
+import { deriveDeliverableStage } from '@/lib/deliverable-derivation'
+import { BlockedTag } from '@/components/files/blocked-tag'
+import type { BlockedFlag } from '@/lib/files/blocked'
 import { ENGAGEMENT_ROOT_LABEL } from '@/lib/files/engagement-root'
+import { foldBreadcrumbTrail } from '@/lib/files/breadcrumb-trail'
 
 export const MIME_BY_TYPE: Record<string, string> = {
     pdf: 'application/pdf',
@@ -100,12 +104,7 @@ const OWNER = 'Alex Jordan'
 /** Who added each file, as the app's Created by column shows it: one of the team, the same on every visit. */
 const creatorOf = (id: string) => DELIVERABLE_ACTORS[Array.from(id).reduce((n, c) => n + c.charCodeAt(0), 0) % DELIVERABLE_ACTORS.length]
 const NOT_IN_DEMO = 'Not available in this demo'
-const STAGES: DeliverableStatus[] = ['to_do', 'in_progress', 'in_review', 'approved']
-
-/** Every file inside a folder, at any depth. */
-function filesIn(folder: DemoFolder): DemoFile[] {
-    return [...folder.files, ...folder.subfolders.flatMap(filesIn)]
-}
+const STAGES: readonly ActivityStatus[] = ACTIVITY_STAGES
 
 /** The toolbar's quiet icons, as engagement-file-list.tsx draws them: 28px, no border, a 14px glyph. */
 const TOOLBAR_ICON_CLASS =
@@ -292,15 +291,7 @@ function RowActionMenu({ entry, name, docId, deliverableStatus, dueDate, onSetDu
                                 <DropdownMenuSeparator />
                                 <DemoMenuItem icon={<FolderLock />}>Make private</DemoMenuItem>
                             </DemoSubmenu>
-                            {DETAILS_PANE_TABS ? (
-                                <DemoMenuItem icon={<Info />}>Details</DemoMenuItem>
-                            ) : (
-                                <DemoSubmenu icon={<Info />} label="Details">
-                                    <DemoMenuItem icon={<Info />}>File information</DemoMenuItem>
-                                    <DemoMenuItem icon={<Clock />}>Activity stream</DemoMenuItem>
-                                    <DemoMenuItem icon={<Clock />}>Version history</DemoMenuItem>
-                                </DemoSubmenu>
-                            )}
+                            <DemoMenuItem icon={<Info />}>Details</DemoMenuItem>
                             <DemoSubmenu icon={<ExternalLink />} label="Drive actions">
                                 <DemoMenuItem icon={<ExternalLink />}>Open containing folder in Google Drive</DemoMenuItem>
                             </DemoSubmenu>
@@ -334,6 +325,7 @@ function EntryRow({
     status,
     statusEditable,
     onSetStatus,
+    blocked,
     uploadTarget = false,
     onFileDragOver,
     onFileDrop,
@@ -351,11 +343,13 @@ function EntryRow({
     selected: boolean
     onToggleSelect: () => void
     onSetDue: (next: string | null) => void
-    /** The row's own stage: the deliverable's, or a document's inside one. */
-    status: DeliverableStatus | null
-    /** As in the app: changeable on tracked rows until their deliverable is approved. */
+    /** The row's own stage: the deliverable's (from its documents), or a document's inside one. */
+    status: ActivityStatus | null
+    /** As in the app: changeable on a deliverable's documents until it's approved; a deliverable's only reads. */
     statusEditable: boolean
-    onSetStatus: (next: DeliverableStatus) => void
+    onSetStatus: (next: ActivityStatus) => void
+    /** The firm's Blocked flag on a document. */
+    blocked?: BlockedFlag
     /** Files from the computer dragged over this folder row would land in it (the drop zone, as in the app). */
     uploadTarget?: boolean
     onFileDragOver?: (e: React.DragEvent) => void
@@ -367,8 +361,8 @@ function EntryRow({
     const name = isFolder ? entry.folder.name.replace(/_+/g, ' ').trim() : entry.file.name
     const approved = deliverableStatus === 'approved'
     const empty = <span className="text-small text-fg-subtle">{tracked ? 'Not set' : '—'}</span>
-    // As in the app (and on the Board): tracked work with no stage yet is at To do.
-    const stage = status ?? (tracked ? 'to_do' : null)
+    // As in the app: tracked work with no stage yet — a document is Not started, a deliverable at To do.
+    const stage = status ?? (tracked ? (isFolder ? 'to_do' : 'not_started') : null)
 
     return (
         <div
@@ -413,6 +407,8 @@ function EntryRow({
                         Drop here
                     </span>
                 )}
+                {/* As in the app: the firm's Blocked tag, after the name */}
+                {blocked && <BlockedTag blocked={blocked} />}
                 {/* The deliverable marker steps aside once the Status column has room to say it. */}
                 {deliverableStatus && (
                     <Hint label={approved ? 'Deliverable — approved' : 'Deliverable'}>
@@ -430,10 +426,10 @@ function EntryRow({
                         !selected && !pinTools && 'max-w-0 overflow-hidden opacity-0 focus-within:max-w-none focus-within:opacity-100 group-hover:max-w-none group-hover:opacity-100 has-[[data-state=open]]:max-w-none has-[[data-state=open]]:opacity-100 [@media(hover:none)]:max-w-none [@media(hover:none)]:opacity-100',
                     )}
                 >
-                    {DETAILS_PANE_TABS && !isFolder && <QuickAction icon={<Info />} label="Details" />}
+                    {!isFolder && <QuickAction icon={<Info />} label="Details" />}
                     {!isFolder && <QuickAction icon={<ScanEye />} label="Preview" />}
                     {/* As in the app: Copy link (also in the ⋮ menu) gives way at the table's narrowest */}
-                    <QuickAction icon={<Link2 />} label="Copy link" className={DETAILS_PANE_TABS ? 'hidden @[49rem]/file-table:inline-flex' : undefined} />
+                    <QuickAction icon={<Link2 />} label="Copy link" className="hidden @[49rem]/file-table:inline-flex" />
                     <RowActionMenu entry={entry} name={name} docId={docId} deliverableStatus={deliverableStatus} dueDate={dueDate} onSetDue={onSetDue} />
                 </div>
             </div>
@@ -445,10 +441,15 @@ function EntryRow({
                         value={stage}
                         placeholder={tracked ? 'Not set' : '—'}
                         // The tour's visitor is the engagement lead, so the lead's moves (as on the tour's Board).
-                        options={STAGES.filter((s) => s === stage || getAllowedTransitions('eng_admin', stage ?? 'to_do').includes(s))}
-                        onChange={(next) => onSetStatus(next as DeliverableStatus)}
+                        options={STAGES.filter((s) => s === stage || getAllowedTransitions('eng_admin', stage ?? 'not_started').includes(s))}
+                        onChange={(next) => onSetStatus(next as ActivityStatus)}
                     />
-                ) : stage ? <StatusPill kind="deliverable" status={stage} /> : empty}
+                ) : stage ? (
+                    // A deliverable's stage follows its documents, as in the app.
+                    deliverableStatus
+                        ? <Hint label="Follows its documents"><span className="inline-flex"><StatusPill kind="deliverable" status={stage} /></span></Hint>
+                        : <StatusPill kind="deliverable" status={stage} />
+                ) : empty}
             </div>
 
             <div className={`items-center ${DUE_DATE_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}>
@@ -502,7 +503,7 @@ export function DemoFileList({
     const [deliverablesOnly, setDeliverablesOnly] = useState(false)
     // Due dates and stages set on the tour, by row: the edits the demo keeps (until the page reloads).
     const [dueOverrides, setDueOverrides] = useState<Record<string, string | null>>({})
-    const [statusOverrides, setStatusOverrides] = useState<Record<string, DeliverableStatus>>({})
+    const [statusOverrides, setStatusOverrides] = useState<Record<string, ActivityStatus>>({})
     const { addToast } = useToast()
     // The drop zone, as in the app (components/projects/files-drop-zone.tsx): files dropped on the list, or
     // on a folder row, or picked with Browse, are added on screen only; the tour uploads nothing.
@@ -510,23 +511,33 @@ export function DemoFileList({
     const [drag, setDrag] = useState<{ count: number; target: DemoFolder | null } | null>(null)
     const browseRef = useRef<HTMLInputElement>(null)
     const addedCount = useRef(0)
-    const statusFor = (entry: Entry): DeliverableStatus | null => {
-        const id = entryId(entry)
-        return statusOverrides[id] ?? (entry.kind === 'folder' ? deliverableStatusByFolderId?.[id] ?? null : null)
+    // The deliverables' documents start at the tour's stages (the Board and its pane show the same),
+    // with the firm's Blocked flags.
+    const documentStages = useMemo(() => Object.assign({}, ...folders
+        .filter((f) => deliverableStatusByFolderId?.[f.id])
+        .map((f) => demoDocumentStages(deliverableStatusByFolderId![f.id], demoFilesIn(f)))) as Record<string, DemoDocumentStage>, [folders, deliverableStatusByFolderId])
+    const documentStage = (fileId: string): ActivityStatus | null => statusOverrides[fileId] ?? documentStages[fileId]?.stage ?? null
+    /** As in the app: a deliverable's stage is worked out from its documents' (lib/deliverable-derivation.ts). */
+    const deliverableStage = (folder: DemoFolder): DeliverableStatus | undefined => {
+        const given = deliverableStatusByFolderId?.[folder.id]
+        if (!given) return undefined
+        const files = demoFilesIn(folder)
+        return files.length === 0 ? given : deriveDeliverableStage(files.map((f) => documentStage(f.id) ?? 'not_started')) as DeliverableStatus
     }
-    const deliverableApproved = path.length > 0 && (statusOverrides[path[0].id] ?? deliverableStatusByFolderId?.[path[0].id]) === 'approved'
-    // As in the app (and the Board): a deliverable isn't approved while a document inside it isn't.
-    const setStatus = (entry: Entry, next: DeliverableStatus) => {
-        if (next === 'approved' && entry.kind === 'folder') {
-            const unapproved = filesIn(entry.folder).filter((f) => statusOverrides[f.id] !== 'approved').length
-            if (unapproved > 0) {
-                addToast({ type: 'error', title: 'Cannot approve yet', message: `${unapproved} document${unapproved > 1 ? 's' : ''} still need to be approved before this deliverable can be approved.` })
-                return
-            }
-        }
-        setStatusOverrides((prev) => ({ ...prev, [entryId(entry)]: next }))
-        const name = entry.kind === 'folder' ? entry.folder.name.replace(/_+/g, ' ').trim() : entry.file.name
-        addToast({ type: 'success', title: next === 'approved' ? 'Approved' : 'Stage updated', message: `${name} · ${statusOf('deliverable', next).label}` })
+    const statusFor = (entry: Entry): ActivityStatus | null =>
+        entry.kind === 'folder' ? deliverableStage(entry.folder) ?? null : documentStage(entry.file.id)
+    const deliverableApproved = path.length > 0 && deliverableStage(path[0]) === 'approved'
+    // A document's move; its deliverable follows, and the toast says so when it does.
+    const setStatus = (entry: Entry, next: ActivityStatus) => {
+        if (entry.kind !== 'file') return
+        const deliverable = path[0]
+        const before = deliverable ? deliverableStage(deliverable) : undefined
+        setStatusOverrides((prev) => ({ ...prev, [entry.file.id]: next }))
+        const after = deliverable && before
+            ? deriveDeliverableStage(demoFilesIn(deliverable).map((f) => (f.id === entry.file.id ? next : documentStage(f.id) ?? 'not_started')))
+            : undefined
+        const followed = after && after !== before ? ` · ${shownName(deliverable)} moves to ${statusOf('deliverable', after).label}` : ''
+        addToast({ type: 'success', title: next === 'approved' ? 'Approved' : 'Stage updated', message: `${entry.file.name} · ${statusOf('deliverable', next).label}${followed}` })
     }
 
     const here = path.length > 0 ? path[path.length - 1] : null
@@ -534,7 +545,7 @@ export function DemoFileList({
     const allFiles = here ? [...here.files, ...(added[here.id] ?? [])] : []
     // As in the app: no uploads at the engagement's top level, or into an approved deliverable.
     const canUpload = !!here && !deliverableApproved
-    const isApproved = (folder: DemoFolder) => (statusOverrides[folder.id] ?? deliverableStatusByFolderId?.[folder.id]) === 'approved'
+    const isApproved = (folder: DemoFolder) => deliverableStage(folder) === 'approved'
     const shownName = (folder: DemoFolder) => folder.name.replace(/_+/g, ' ').trim()
     const addFiles = (list: FileList, into: DemoFolder) => {
         const prefix = into.docId.split('-')[0]
@@ -637,7 +648,36 @@ export function DemoFileList({
                             <span className="whitespace-nowrap">{ENGAGEMENT_ROOT_LABEL}</span>
                             {path.length === 0 && countChip}
                         </button>
-                        {path.map((folder, i) => (
+                        {/* As in the app: a deep trail folds its upper folders into a "…" menu */}
+                        {foldBreadcrumbTrail(path).map((slot) => slot.kind === 'folded' ? (
+                            <div key="folded" className="flex shrink-0 items-center">
+                                <ChevronRight className="mx-0.5 h-3.5 w-3.5 shrink-0 text-fg-subtle" />
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <button
+                                            type="button"
+                                            className="flex items-center rounded-control px-2 py-1 text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg"
+                                            title={`${slot.entries.length} folders above`}
+                                            aria-label={`Show the ${slot.entries.length} folders above`}
+                                        >
+                                            <span className="text-fg-subtle">…</span>
+                                        </button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="start" className="min-w-[180px] max-w-[280px]">
+                                        {slot.entries.map(({ item: folder, index: i }) => (
+                                            <DropdownMenuItem key={folder.id} onClick={() => openFolder(path.slice(0, i + 1))} className="gap-1.5">
+                                                {insideDeliverable
+                                                    ? <DeliverableIcon inside={i > 0} className="h-3.5 w-3.5" />
+                                                    : <Folder className="h-3.5 w-3.5 shrink-0 text-fg-subtle" />}
+                                                <span className="truncate">{folder.name.replace(/_+/g, ' ').trim()}</span>
+                                            </DropdownMenuItem>
+                                        ))}
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                            </div>
+                        ) : (() => {
+                            const { item: folder, index: i } = slot
+                            return (
                             <div key={folder.id} className="flex min-w-0 items-center">
                                 <ChevronRight className="mx-0.5 h-3.5 w-3.5 shrink-0 text-fg-subtle" />
                                 <button
@@ -656,7 +696,8 @@ export function DemoFileList({
                                     {i === path.length - 1 && countChip}
                                 </button>
                             </div>
-                        ))}
+                            )
+                        })())}
                     </div>
                 </div>
 
@@ -668,6 +709,18 @@ export function DemoFileList({
                             <button type="button" className={SELECTION_ACTION_CLASS}>
                                 <Download className="h-3.5 w-3.5 text-fg-muted" />
                                 Download
+                            </button>
+                        </Hint>
+                        <Hint label={NOT_IN_DEMO}>
+                            <button type="button" className={SELECTION_ACTION_CLASS}>
+                                <FolderInput className="h-3.5 w-3.5 text-fg-muted" />
+                                Move
+                            </button>
+                        </Hint>
+                        <Hint label={NOT_IN_DEMO}>
+                            <button type="button" className={SELECTION_ACTION_CLASS}>
+                                <Copy className="h-3.5 w-3.5 text-fg-muted" />
+                                Copy
                             </button>
                         </Hint>
                         <Hint label={NOT_IN_DEMO}>
@@ -749,11 +802,13 @@ export function DemoFileList({
                                 key={id}
                                 entry={entry}
                                 onOpenFolder={entry.kind === 'folder' ? () => openFolder([...path, entry.folder]) : undefined}
-                                deliverableStatus={entry.kind === 'folder' ? (statusOverrides[id] ?? deliverableStatusByFolderId?.[id]) : undefined}
+                                deliverableStatus={entry.kind === 'folder' ? deliverableStage(entry.folder) : undefined}
                                 status={statusFor(entry)}
-                                // As in the app: the deliverable and its documents have a Status; the folders inside it only organize it
-                                statusEditable={(entry.kind === 'file' && insideDeliverable && !deliverableApproved) || (entry.kind === 'folder' && !!deliverableStatusByFolderId?.[id] && statusFor(entry) !== 'approved')}
+                                // As in the app: a deliverable's documents have a Status you change; the deliverable's follows them,
+                                // and the folders inside it only organize it
+                                statusEditable={entry.kind === 'file' && insideDeliverable && !deliverableApproved}
                                 onSetStatus={(next) => setStatus(entry, next)}
+                                blocked={entry.kind === 'file' ? documentStages[id]?.blocked : undefined}
                                 dueDate={id in dueOverrides ? dueOverrides[id] : entry.kind === 'folder' ? deliverableDueByFolderId?.[id] : null}
                                 onSetDue={(next) => setDueOverrides((prev) => ({ ...prev, [id]: next }))}
                                 tracked={(entry.kind === 'file' && insideDeliverable) || (entry.kind === 'folder' && !!deliverableStatusByFolderId?.[id])}

@@ -18,7 +18,7 @@ import {
   type DraggableAttributes,
 } from '@dnd-kit/core'
 import type { SyntheticListenerMap } from '@dnd-kit/core/dist/hooks/utilities'
-import { Share2, User, Lock, GripVertical, FolderOpen, Clock, Copy, Check, Search, MessagesSquare, Link2, ScanEye, X, RefreshCw, ChevronDown, ChevronLeft, ChevronRight, Filter, CheckCircle2, Trash2, BookOpenText, CalendarDays, AlertTriangle, CalendarClock } from 'lucide-react'
+import { Ban, Share2, User, Lock, GripVertical, FolderOpen, Clock, Copy, Check, Search, MessagesSquare, Link2, ScanEye, X, RefreshCw, ChevronDown, ChevronLeft, ChevronRight, Filter, CheckCircle2, Trash2, BookOpenText, CalendarDays, AlertTriangle, CalendarClock } from 'lucide-react'
 import { ProfileBubbleWithPopup } from '@/components/ui/profile-bubble-popup'
 import { DocumentBreadcrumb } from '@/components/ui/document-breadcrumb'
 import { DocumentIcon } from '@/components/ui/document-icon'
@@ -58,10 +58,12 @@ import { cn, formatFullDate } from '@/lib/utils'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { useProjectPersonaLabels } from '@/lib/hooks/use-project-persona-labels'
 import { useToast } from '@/components/ui/toast'
-import { getAllowedTransitions, type EngagementRoleSlug } from '@/lib/deliverable-stage-roles'
+import type { EngagementRoleSlug } from '@/lib/deliverable-stage-roles'
 import { initialsOf } from '@/lib/initials'
 
-type ActivityStatus = 'to_do' | 'in_progress' | 'in_review' | 'approved'
+import { BOARD_STAGES, type ActivityStatus, type BoardStage } from '@/lib/sharing-settings'
+import type { BlockedReason } from '@/lib/files/blocked'
+import { BlockedCountChip } from '@/components/files/blocked-tag'
 
 interface ShareRecord {
   id: string
@@ -108,6 +110,8 @@ parentId?: string | null
   dueDate?: string | null
   subtaskCount?: number
   approvedSubtaskCount?: number
+  /** Its documents the firm has marked blocked (the shares route sends them to firm roles only). */
+  blockedDocuments?: { documentId: string; docId: string | null; fileName: string; reason: BlockedReason }[]
   /** Used internally when grouping into lanes for stable sort order. */
   _orderIndex?: number
 }
@@ -141,9 +145,7 @@ interface EngagementSharesTabProps {
  * is a StatusPill header over its cards, tinted by its stage. Labels, icons and colors all come from
  * lib/ui/status.ts, so the Board reads the same as every other status in the app.
  */
-const LANES: { status: ActivityStatus; stage: LaneStage; label: string }[] = (
-  ['to_do', 'in_progress', 'in_review', 'approved'] as const
-).map((status) => ({ status, stage: laneStage(status), label: STATUS.deliverable[status].label }))
+const LANES: { status: BoardStage; stage: LaneStage; label: string }[] = BOARD_STAGES.map((status) => ({ status, stage: laneStage(status), label: STATUS.deliverable[status].label }))
 
 function laneStage(status: ActivityStatus): LaneStage {
   // Every deliverable stage is a lane stage (asserted in lib/ui/status.test.ts).
@@ -238,7 +240,8 @@ function DraggableCard({
   isSaving?: boolean
   onUntagAsDeliverable?: (doc: { id: string }) => void
 }) {
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id })
+  // Dragged only to reorder its lane, which is the firm's to arrange (a deliverable's stage follows its documents).
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id, disabled: !canManage })
   const { setNodeRef: setDropRef } = useDroppable({ id })
 
   const previewDoc = {
@@ -618,14 +621,21 @@ function ShareCardContent({
         {(() => {
           const total = share.subtaskCount ?? 0
           const approved = share.approvedSubtaskCount ?? 0
-          if (total === 0) return null
-          const pct = Math.round((approved / total) * 100)
+          const blocked = share.blockedDocuments ?? []
+          if (total === 0 && blocked.length === 0) return null
+          const pct = total > 0 ? Math.round((approved / total) * 100) : 0
           return (
             <div className="flex items-center gap-2 pt-0.5">
-              <div className="flex-1 h-1 rounded-full bg-surface-muted overflow-hidden">
-                <div className={cn('h-full rounded-full transition-all duration-ui-slow ease-ui-out', STAGE_BAR_CLASSES[stage as LaneStage])} style={{ width: `${pct}%` }} />
-              </div>
-              <span className="shrink-0 text-caption tabular-nums text-fg-subtle">{approved}/{total}</span>
+              {/* Documents the firm marked blocked, named on hover */}
+              <BlockedCountChip documents={blocked} />
+              {total > 0 && (
+                <>
+                  <div className="flex-1 h-1 rounded-full bg-surface-muted overflow-hidden">
+                    <div className={cn('h-full rounded-full transition-all duration-ui-slow ease-ui-out', STAGE_BAR_CLASSES[stage as LaneStage])} style={{ width: `${pct}%` }} />
+                  </div>
+                  <span className="shrink-0 text-caption tabular-nums text-fg-subtle">{approved}/{total}</span>
+                </>
+              )}
             </div>
           )
         })()}
@@ -634,14 +644,8 @@ function ShareCardContent({
   )
 }
 
-const STATUS_LABELS: Record<ActivityStatus, string> = {
-  to_do: 'To Do',
-  in_progress: 'In Progress',
-  in_review: 'In Review',
-  approved: 'Approved',
-}
-
 const STATUS_PILL_CLASS: Record<ActivityStatus, string> = {
+  not_started: 'bg-transparent text-fg-subtle',
   to_do: 'bg-[#ede9fe]/90 text-[#5b21b6]',
   in_progress: 'bg-[#eff2ff]/90 text-[#5A78FF]',
   in_review: 'bg-[#fff7ed]/90 text-[#c2410c]',
@@ -1521,6 +1525,8 @@ export function EngagementSharesTab({
   const [dropZoneReady, setDropZoneReady] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [filterOverdue, setFilterOverdue] = useState(false)
+  /** Only the deliverables with a blocked document. */
+  const [filterBlocked, setFilterBlocked] = useState(false)
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [intakeActionInProgress, setIntakeActionInProgress] = useState<string | null>(null)
@@ -1895,9 +1901,10 @@ export function EngagementSharesTab({
         const stage = s.activity?.status ?? 'to_do'
         if (stage === 'approved' || (stage as string) === 'done') return false
       }
+      if (filterBlocked && !(s.blockedDocuments?.length)) return false
       return true
     })
-  }, [shares, searchQuery, filterOverdue])
+  }, [shares, searchQuery, filterOverdue, filterBlocked])
 
   /**
    * Signals the columns cannot show. Each is already visible on the insights dashboard, but the
@@ -1915,12 +1922,14 @@ export function EngagementSharesTab({
     let missingDueDate = 0
     let overdue = 0
     let tracked = 0
+    let blocked = 0
 
     shares.forEach((s) => {
       if (restrictToSharedOnly && !s.activity?.status) return
       const stage = s.activity?.status ?? 'to_do'
       const isApproved = stage === 'approved' || (stage as string) === 'done'
       tracked += 1
+      if (s.blockedDocuments?.length) blocked += 1
 
       if (stage === 'in_review' && s.activity?.updatedAt) {
         if (now - new Date(s.activity.updatedAt).getTime() > 14 * DAY_MS) stalledInReview += 1
@@ -1933,7 +1942,7 @@ export function EngagementSharesTab({
       }
     })
 
-    return { stalledInReview, missingDueDate, overdue, tracked }
+    return { stalledInReview, missingDueDate, overdue, tracked, blocked }
   }, [shares, restrictToSharedOnly])
 
   const byLane = React.useMemo(() => {
@@ -1980,22 +1989,16 @@ export function EngagementSharesTab({
   }
 
   /** The lane a drop over `overId` (a lane, or a card in one) lands in. */
-  const laneOf = (overId: string): ActivityStatus | null => {
-    if ((['to_do', 'in_progress', 'in_review', 'approved'] as string[]).includes(overId)) return overId as ActivityStatus
+  const laneOf = (overId: string): BoardStage | null => {
+    if ((BOARD_STAGES as readonly string[]).includes(overId)) return overId as BoardStage
     const overShare = shares.find((s) => s.id === overId)
-    return overShare ? ((overShare.activity?.status ?? 'to_do') as ActivityStatus) : null
+    return overShare ? ((overShare.activity?.status ?? 'to_do') as BoardStage) : null
   }
 
-  /** Lanes the dragged card may move into: the same rules handleDragEnd enforces. */
-  const canDropInto = (shareId: string, lane: ActivityStatus) => {
-    const current = (shares.find((s) => s.id === shareId)?.activity?.status ?? 'to_do') as ActivityStatus
-    if (lane === current) return false
-    return roleSlug ? getAllowedTransitions(roleSlug, current).includes(lane) : false
-  }
-
-  const handleDragOver = (event: DragOverEvent) => {
-    const lane = event.over ? laneOf(String(event.over.id)) : null
-    setDropLane(lane && canDropInto(String(event.active.id), lane) ? lane : null)
+  // No lane is a drop target: a deliverable's stage follows its documents
+  // (.claude/plans/deliverable-stages-blocked.md), so a card is only dragged to reorder its own lane.
+  const handleDragOver = (_event: DragOverEvent) => {
+    setDropLane(null)
   }
 
   const handleDragEnd = (event: DragEndEvent) => {
@@ -2010,43 +2013,21 @@ export function EngagementSharesTab({
     if (overId === shareId) return
 
     const share = shares.find((s) => s.id === shareId)
-    const currentLane = (share?.activity?.status ?? 'to_do') as ActivityStatus
+    const currentLane = (share?.activity?.status ?? 'to_do') as BoardStage
 
     const targetLane = laneOf(overId)
     if (!targetLane) return
-    // Within a lane a card lands before the card it's dropped on. Into another lane it lands in the
-    // landing slot at the end, which is where the drop zone shows it going.
-    let insertIndex = laneOrder[targetLane].length
-    if (targetLane === currentLane && overId !== targetLane) {
-      const idx = laneOrder[targetLane].indexOf(overId)
-      if (idx >= 0) insertIndex = idx
-    }
-
-    // Check allowed transitions — single source of truth from deliverable-stage-roles.ts
-    const allowed = roleSlug ? getAllowedTransitions(roleSlug, currentLane) : []
-    if (targetLane === currentLane) {
-      // Same-lane reorder is always allowed if the user can see the lane
-    } else if (!allowed.includes(targetLane)) {
-      if (currentLane === 'approved') {
-        addToast({ type: 'error', title: 'Cannot move back', message: 'Approved deliverables cannot be moved.' })
-      } else {
-        addToast({ type: 'error', title: 'Move not allowed', message: 'You cannot move this deliverable to that stage.' })
-      }
+    // Only its own lane: a deliverable moves on when its documents do.
+    if (targetLane !== currentLane) {
+      addToast({ type: 'info', title: 'Moves with its documents', message: "A deliverable's stage follows its documents. Change theirs in its pane." })
       return
     }
-
-    if (targetLane === 'approved') {
-      const total = share?.subtaskCount ?? 0
-      const approved = share?.approvedSubtaskCount ?? 0
-      if (total > 0 && approved < total) {
-        const unapproved = total - approved
-        addToast({
-          type: 'error',
-          title: 'Cannot approve yet',
-          message: `${unapproved} document${unapproved > 1 ? 's' : ''} still need to be approved before this deliverable can be approved.`,
-        })
-        return
-      }
+    if (!canManage) return
+    // Within a lane a card lands before the card it's dropped on.
+    let insertIndex = laneOrder[targetLane].length
+    if (overId !== targetLane) {
+      const idx = laneOrder[targetLane].indexOf(overId)
+      if (idx >= 0) insertIndex = idx
     }
     const newToDo = laneOrder.to_do.filter((id) => id !== shareId)
     const newInProgress = laneOrder.in_progress.filter((id) => id !== shareId)
@@ -2065,9 +2046,8 @@ export function EngagementSharesTab({
     // Snapshot for rollback
     const previousShares = shares
 
-    // Optimistic update — reorder and update status immediately
+    // Optimistic update — the new order, at once
     const allFinal = [...finalToDo, ...finalInProgress, ...finalInReview, ...finalDone]
-    let updatedShare: ShareRecord | null = null
     setShares((prev) =>
       allFinal.map((id, idx) => {
         const s = prev.find((x) => x.id === id)!
@@ -2075,62 +2055,18 @@ export function EngagementSharesTab({
           finalToDo.includes(id) ? 'to_do' :
           finalInProgress.includes(id) ? 'in_progress' :
           finalInReview.includes(id) ? 'in_review' : 'approved'
-        const updated = {
+        return {
           ...s,
-          activity: { ...(s.activity ?? { updatedAt: new Date().toISOString() }), status: lane as ActivityStatus, orderIndex: idx },
+          activity: { ...(s.activity ?? { updatedAt: new Date().toISOString() }), status: lane as BoardStage, orderIndex: idx },
           _orderIndex: idx,
         }
-        if (id === shareId) updatedShare = updated
-        return updated
       })
     )
-
-    // If the dragged card is currently open in the detail panel, push the new status directly
-    if (shareId === openDeliverableId && targetLane !== currentLane) {
-      panelStatusSetterRef.current?.(targetLane)
-    }
 
     setSavingId(shareId)
     const rollback = () => setShares(previousShares)
     const onComplete = () => setSavingId(null)
-    // Approving is the one move that deserves more than the card landing: a toast, and the card's
-    // status icon fades in green (section 4, approval feedback).
-    const approvedNow = targetLane === 'approved' && currentLane !== 'approved'
-    const onApproved = () => {
-      if (approvedNow && share) approvalFeedback.confirm({ id: shareId, name: share.documentName })
-    }
-
-    if (canManage) {
-      // EL: full reorder via shares/order (handles orderIndex + EC/EV flag updates)
-      saveOrder(finalToDo, finalInProgress, finalInReview, finalDone, rollback, onComplete, onApproved)
-    } else {
-      // EM / EC / EV: single-deliverable status change via sharing/activity
-      const documentId = share?.documentId
-      if (!documentId) { rollback(); onComplete(); return }
-      ;(async () => {
-        try {
-          const { data: { session } } = await supabase.auth.getSession()
-          if (!session?.access_token) throw new Error('No session')
-          const res = await fetch(`/api/projects/${projectId}/documents/${encodeURIComponent(documentId)}/sharing/activity`, {
-            method: 'PATCH',
-            headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ status: targetLane }),
-          })
-          if (!res.ok) {
-            const err = await res.json().catch(() => ({}))
-            throw new Error(err.error ?? `Status ${res.status}`)
-          }
-          if (approvedNow) onApproved()
-          else addToast({ type: 'success', title: 'Stage updated', message: `Moved to ${STATUS_LABELS[targetLane]}.` })
-        } catch (e) {
-          logger.error('Failed to update deliverable status', e instanceof Error ? e : new Error(String(e)), 'ProjectShares', {})
-          rollback()
-          addToast({ type: 'error', title: 'Move failed', message: 'Could not update status. The board has been restored.' })
-        } finally {
-          onComplete()
-        }
-      })()
-    }
+    saveOrder(finalToDo, finalInProgress, finalInReview, finalDone, rollback, onComplete)
   }
 
   const detailShare = detailShareId ? shares.find((s) => s.id === detailShareId) : null
@@ -2192,6 +2128,27 @@ export function EngagementSharesTab({
               </span>
             )}
           </Button>
+
+          {/* Blocked toggle: deliverables with a document the firm marked blocked. Shown while
+              there are some, or while it's on (so it can be turned off). */}
+          {(boardStats.blocked > 0 || filterBlocked) && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setFilterBlocked((v) => !v)}
+              aria-pressed={filterBlocked}
+              className={cn("h-8 gap-1.5 text-xs rounded border-line text-fg-muted hover:bg-surface-hover hover:text-fg transition-colors", filterBlocked ? "bg-red-50 border-red-300 text-red-700 ring-1 ring-red-200 hover:bg-red-50 hover:text-red-700" : "bg-white")}
+            >
+              <Ban className="h-3 w-3 opacity-60" />
+              Blocked
+              <span className={cn(
+                'ml-0.5 rounded-sm px-1 py-px text-[10px] font-semibold tabular-nums',
+                filterBlocked ? 'bg-red-200/70 text-red-900' : 'bg-surface-muted text-fg-muted',
+              )}>
+                {boardStats.blocked}
+              </span>
+            </Button>
+          )}
 
           {/* Signals the columns cannot show. Rendered only when non-zero: a row of zeros is
               noise, and the absence of a warning is itself the information. */}

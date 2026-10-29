@@ -2,11 +2,12 @@
 
 import { useCallback, useEffect, useState } from "react"
 import {
-    AlertCircle, CircleDot, Clock, Download, Eye, FilePen, FilePlus2, FolderInput, History, Lock, LockOpen,
-    MessageSquare, RotateCcw, Share2, StickyNote, Trash2,
+    AlertCircle, Ban, CircleDot, Clock, Download, Eye, FilePen, FilePlus2, FolderInput, History, Lock, LockOpen,
+    MessageSquare, RotateCcw, Share2, Trash2,
 } from "lucide-react"
 import type { DriveRevision } from "@/lib/types"
 import type { ActivityStatus } from "@/lib/sharing-settings"
+import { BLOCKED_REASON_LABEL, type BlockedReason } from "@/lib/files/blocked"
 import { STATUS } from "@/lib/ui/status"
 import { RelativeDateTime } from "@/components/ui/relative-date-time"
 import { Button } from "@/components/ui/button"
@@ -35,12 +36,11 @@ const VERB: Record<string, string> = {
     DOCUMENT_FINALIZED: 'finalized this file',
     DOCUMENT_UNLOCKED: 'unlocked this file',
     DOCUMENT_STATUS_CHANGED: 'changed the stage',
+    DOCUMENT_BLOCKED: 'marked this file blocked',
+    DOCUMENT_UNBLOCKED: 'cleared the block',
     DOCUMENT_COMMENT_CREATED: 'commented',
     DOCUMENT_COMMENT_CHANGED: 'edited a comment',
     DOCUMENT_COMMENT_DELETED: 'deleted a comment',
-    DOCUMENT_NOTE_CREATED: 'added a note',
-    DOCUMENT_NOTE_CHANGED: 'edited a note',
-    DOCUMENT_NOTE_DELETED: 'deleted a note',
     DOCUMENT_SHARE_CREATED: 'shared this file',
     DOCUMENT_SHARE_CHANGED: 'changed how this file is shared',
     DOCUMENT_SHARE_DELETED: 'stopped sharing this file',
@@ -86,6 +86,10 @@ function detailOf(eventType: string, m: Record<string, unknown>): string | undef
     const parts: string[] = []
     if (eventType === 'DOCUMENT_STATUS_CHANGED' && m.newStatus) {
         parts.push(`${stageLabel(m.oldStatus)} → ${stageLabel(m.newStatus)}`)
+    }
+    // What it waits on, and why, in the person's words.
+    if (eventType === 'DOCUMENT_BLOCKED' && typeof m.reason === 'string' && m.reason in BLOCKED_REASON_LABEL) {
+        parts.push(BLOCKED_REASON_LABEL[m.reason as BlockedReason] + (typeof m.note === 'string' && m.note ? ` · ${m.note}` : ''))
     }
     // A rename: the old name is what a reader is checking.
     if (typeof m.previousName === 'string' && typeof m.fileName === 'string' && m.previousName !== m.fileName) {
@@ -194,8 +198,8 @@ function iconFor(type: string): React.ComponentType<{ className?: string }> {
     if (type === 'DOCUMENT_OPENED' || type === 'DOCUMENT_SHARE_VIEWED') return Eye
     if (type === 'DOCUMENT_DOWNLOADED' || type === 'DOCUMENT_SHARE_DOWNLOADED') return Download
     if (type === 'DOCUMENT_STATUS_CHANGED') return CircleDot
+    if (type === 'DOCUMENT_BLOCKED' || type === 'DOCUMENT_UNBLOCKED') return Ban
     if (type.startsWith('DOCUMENT_COMMENT_')) return MessageSquare
-    if (type.startsWith('DOCUMENT_NOTE_')) return StickyNote
     if (type.startsWith('DOCUMENT_SHARE_')) return Share2
     if (type === 'DOCUMENT_MOVED') return FolderInput
     if (type === 'DOCUMENT_CREATED') return FilePlus2

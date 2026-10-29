@@ -10,8 +10,9 @@ import { getContentAdapter } from '@/lib/connectors/registry'
 /**
  * GET /api/projects/[projectId]/documents/[documentId]/versions
  *
- * A document's version list, for the Version history and Activity stream panes. Replaces the
- * firm-wide /api/documents/versions, which only the member who connected the storage could use.
+ * A document's version list, for the Details pane's Versions and Activity tabs. It replaced the
+ * firm-wide /api/documents/versions (deleted 2026-10-29), which only the member who connected the
+ * storage could use.
  * The firm's stored token reads the provider for anyone the engagement lets see the document:
  * membership is the gate, and the storage connection comes from the document, not the caller.
  *

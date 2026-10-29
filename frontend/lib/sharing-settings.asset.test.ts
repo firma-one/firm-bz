@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { assetSettingsOf, buildSettingsForDb, settingsForBrowser } from './sharing-settings'
+import { assetSettingsOf, buildSettingsForDb } from './sharing-settings'
 
 // A document's own fields survive changes to how it is shared (2026-10-28).
 
@@ -22,17 +22,14 @@ describe('assetSettingsOf', () => {
 })
 
 describe('buildSettingsForDb', () => {
-    const notes = [{ id: 'n1', kind: 'note', body: 'x', authorUserId: 'u', createdAt: '2026-10-28' }]
-
-    it('keeps what it does not manage: the lock, description, assignee and notes', () => {
+    it('keeps what it does not manage: the lock, description and assignee', () => {
         const next = buildSettingsForDb(
-            { lock: { type: 'private' }, description: 'Sizing model', assigneeUserId: 'u-ana', notes },
+            { lock: { type: 'private' }, description: 'Sizing model', assigneeUserId: 'u-ana' },
             { activity: { status: 'in_progress' } },
         )
         expect(next.lock).toEqual({ type: 'private' })
         expect(next.description).toBe('Sizing model')
         expect(next.assigneeUserId).toBe('u-ana')
-        expect(next.notes).toEqual(notes)
         expect((next.activity as { status: string }).status).toBe('in_progress')
     })
 
@@ -42,17 +39,5 @@ describe('buildSettingsForDb', () => {
         expect(next).not.toHaveProperty('guestOptions')
         expect(next).not.toHaveProperty('externalCollaborator')
         expect((next.share as { guest: { enabled: boolean; options: { allowDownload: boolean } } }).guest).toMatchObject({ enabled: true, options: { allowDownload: true } })
-    })
-})
-
-describe('settingsForBrowser', () => {
-    it('leaves the notes out and everything else in', () => {
-        expect(settingsForBrowser({ description: 'd', notes: [{ id: 'n1' }] })).toEqual({ description: 'd' })
-    })
-
-    it('passes settings without notes through as they are', () => {
-        const s = { description: 'd' }
-        expect(settingsForBrowser(s)).toBe(s)
-        expect(settingsForBrowser(null)).toBeNull()
     })
 })

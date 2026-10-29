@@ -204,3 +204,14 @@ describe('getMyWork — reminders', () => {
         expect(work.dueSoon.map((d) => d.id)).toEqual(['reminder:soon'])
     })
 })
+
+describe('getMyWork — client comments awaiting a reply', () => {
+    it('counts the conversation with the client only: no internal notes, no resolved discussions', async () => {
+        prisma.engagement.findMany.mockResolvedValueOnce([eng('e1', 'eng_admin')])
+        await getMyWork(base)
+        const sql = prisma.$queryRaw.mock.calls.map((c: any[]) => (c[0] as string[]).join('?')).find((s) => s.includes(IS_COMMENTS))!
+        expect(sql).toContain('"isInternal" = false')
+        expect(sql).toContain('doc_comment_threads')
+        expect(sql).toContain('"resolvedAt" IS NULL')
+    })
+})

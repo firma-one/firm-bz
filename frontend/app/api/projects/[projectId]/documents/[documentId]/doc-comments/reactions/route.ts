@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { prisma } from '@/lib/prisma'
+import { visibleCommentsWhere } from '@/lib/comments/internal-notes'
 import { resolveProjectContext } from '@/lib/resolve-project-context'
 import { canViewProject } from '@/lib/permission-helpers'
 import { getProjectDocumentContext } from '@/lib/file-utils'
@@ -60,6 +61,8 @@ export async function POST(
         id: messageId,
         engagementId: projectId,
         projectDocumentId: docCtx.id,
+        // A client can't react to an internal note, nor learn one exists (lib/comments/internal-notes.ts).
+        ...visibleCommentsWhere(member.role),
       },
       select: { id: true, reactions: true },
     })

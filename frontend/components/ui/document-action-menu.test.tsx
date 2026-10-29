@@ -1,17 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 
-const { pane, sw } = vi.hoisted(() => ({
+const { pane } = vi.hoisted(() => ({
   pane: {
     setContent: vi.fn(), clearPane: vi.fn(), setTitle: vi.fn(), setHeaderIcon: vi.fn(),
     setHeaderSubtitle: vi.fn(), setHeaderActions: vi.fn(), setExpanded: vi.fn(),
   },
-  sw: { tabs: true },
 }))
 
 vi.mock('@/components/ui/toast', () => ({ useToast: () => ({ addToast: vi.fn() }) }))
 vi.mock('@/lib/right-pane-context', () => ({ useRightPane: () => pane }))
-vi.mock('@/components/files/details-pane-switch', () => ({ get DETAILS_PANE_TABS() { return sw.tabs } }))
 vi.mock('@/lib/download-progress-context', () => ({ useDownloadProgress: () => ({ addTask: vi.fn(), updateTask: vi.fn() }) }))
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: { id: 'me', email: 'me@firm.com' } }) }))
 
@@ -29,7 +27,6 @@ async function openMenu() {
 
 beforeEach(() => {
   Object.values(pane).forEach((fn) => fn.mockReset())
-  sw.tabs = true
 })
 
 describe('DocumentActionMenu — Details as one tabbed pane', () => {
@@ -49,35 +46,6 @@ describe('DocumentActionMenu — Details as one tabbed pane', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: /^Details$/ }))
     const node = pane.setContent.mock.calls[0][0] as { props: { isExternalUser: boolean } }
     expect(node.props.isExternalUser).toBe(true)
-  })
-})
-
-describe('DocumentActionMenu — the Details submenu behind the switch', () => {
-  beforeEach(() => { sw.tabs = false })
-
-  /** Opens Details and returns the names of what is in it. */
-  async function detailsItems() {
-    await openMenu()
-    const trigger = screen.getByRole('menuitem', { name: /Details/ })
-    trigger.focus()
-    fireEvent.keyDown(trigger, { key: 'ArrowRight' })
-    await screen.findByRole('menuitem', { name: /File information/ })
-    return screen.getAllByRole('menuitem').map((el) => el.textContent?.trim())
-  }
-
-  it('shows Activity stream and Version history to the firm on a file', async () => {
-    render(<DocumentActionMenu document={FILE} projectId="e1" />)
-    const items = await detailsItems()
-    expect(items).toContain('Activity stream')
-    expect(items).toContain('Version history')
-  })
-
-  it('leaves them out for an external user, whom the versions route refuses', async () => {
-    render(<DocumentActionMenu document={FILE} projectId="e1" isExternalUser />)
-    const items = await detailsItems()
-    expect(items).toContain('File information')
-    expect(items).not.toContain('Activity stream')
-    expect(items).not.toContain('Version history')
   })
 })
 

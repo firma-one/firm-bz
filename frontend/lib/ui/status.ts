@@ -90,7 +90,8 @@ export const STAGE_BAR_CLASSES: Record<LaneStage, string> = {
     done: 'bg-status-done-bar',
 }
 
-export type StatusEntry = { stage: StatusStage; label: string }
+/** `muted`: drawn outlined and faint — a status that is not yet part of the work (Not started). */
+export type StatusEntry = { stage: StatusStage; label: string; muted?: boolean }
 
 /** Each lifecycle and the enum its values come from. */
 export type StatusValues = {
@@ -106,6 +107,8 @@ export type StatusKind = keyof StatusValues
 
 export const STATUS: { [K in StatusKind]: Record<StatusValues[K], StatusEntry> } = {
     deliverable: {
+        // Before the Board: the same not-started hue as To do, outlined, so the two don't read alike.
+        not_started: { stage: 'not-started', label: 'Not started', muted: true },
         to_do: { stage: 'not-started', label: 'To do' },
         in_progress: { stage: 'underway', label: 'In progress' },
         in_review: { stage: 'waiting', label: 'In review' },

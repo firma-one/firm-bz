@@ -7,7 +7,8 @@ import { STAGES, STAGE_LABEL, STAGE_LANE_CLASSES, STATUS, statusOf, type StatusK
 // The enums each lifecycle is read from at runtime. ActivityStatus is a TypeScript union, not a
 // Prisma enum, so its values are listed here.
 const ENUM_VALUES: Record<StatusKind, string[]> = {
-    deliverable: ['to_do', 'in_progress', 'in_review', 'approved'],
+    // Not started: a document's stage before the Board (.claude/plans/deliverable-stages-blocked.md).
+    deliverable: ['not_started', 'to_do', 'in_progress', 'in_review', 'approved'],
     engagement: Object.values(EngagementStatus),
     client: Object.values(ClientStatus),
     invitation: Object.values(InvitationStatus),

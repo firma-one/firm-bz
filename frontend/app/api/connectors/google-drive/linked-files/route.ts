@@ -17,6 +17,7 @@ import { blockIfEngagementFileMutationForbidden } from '@/lib/engagement-access'
 import { resolveEngagementConnector } from '@/lib/connectors/resolve-client-connector'
 import { IndexingInterceptor } from '@/lib/services/indexing-interceptor'
 import { getLock, isDocumentPrivate, buildSettingsForDb } from '@/lib/sharing-settings'
+import { blockedOf } from '@/lib/files/blocked'
 import { byEmail, creatorOf, loadPeople } from '@/lib/files/file-creator'
 import { assertWithinDocumentCap } from '@/lib/billing/effective-billing-caps'
 import { getPermissionAdapter, getStorageAdapter, getContentAdapter } from '@/lib/connectors/registry'
@@ -527,6 +528,8 @@ export async function POST(request: NextRequest) {
                     deliverableStatus: s.share?.createdAt ? (s.activity?.status ?? null) : null,
                     // Every document's own stage: a deliverable's, or a document's inside one (the Files Status column).
                     activityStatus: s.activity?.status ?? null,
+                    // The firm's own: a client is never sent it.
+                    blocked: personaSlugToFilter ? null : blockedOf(row.settings),
                     isPendingApproval: intakeExternalIds.has(row.externalId),
                     pendingUploaderId: intakeUploaderByExternal.get(row.externalId) ?? null,
                 })}
@@ -601,6 +604,8 @@ export async function POST(request: NextRequest) {
                         const s = (r.settings as Record<string, any>) || {}
                         return [r.externalId, s.activity?.status ?? null]
                     }))
+                    // The firm's own: a client is never sent it.
+                    const blockedByExternal = new Map(personaSlugToFilter ? [] : enrichRows.map((r: any) => [r.externalId, blockedOf(r.settings)] as const))
 
                     // Who added each file (the Created by column): the people behind it, and email → engagement role
                     const elMembers = await prisma.engagementMember.findMany({
@@ -651,6 +656,7 @@ export async function POST(request: NextRequest) {
                         isDeliverable: isDeliverableByExternal.get(f.id) ?? false,
                         deliverableStatus: deliverableStatusByExternal.get(f.id) ?? null,
                         activityStatus: activityStatusByExternal.get(f.id) ?? null,
+                        blocked: blockedByExternal.get(f.id) ?? null,
                         isPendingApproval: pendingExternalIds.has(f.id),
                         pendingUploaderId: pendingUploaderByExternal.get(f.id) ?? null,
                         actorEmail: creator && !creator.viaDrive ? (creator.emailAddress ?? undefined) : f.actorEmail,

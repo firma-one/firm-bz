@@ -5,7 +5,9 @@ import { DateProperty, StatusProperty } from '@/components/ui/property-cells'
 import { StatusPill } from '@/components/ui/status-pill'
 import { getAllowedTransitions, type EngagementRoleSlug } from '@/lib/deliverable-stage-roles'
 import { statusOf } from '@/lib/ui/status'
-import type { ActivityStatus } from '@/lib/sharing-settings'
+import { ACTIVITY_STAGES, type ActivityStatus } from '@/lib/sharing-settings'
+import { Hint } from '@/components/ui/tooltip'
+import { useStageMove } from '@/components/files/use-stage-move'
 import { cn } from '@/lib/utils'
 
 /*
@@ -13,12 +15,11 @@ import { cn } from '@/lib/utils'
  * (components/files/asset-details-pane.tsx). Moved out of engagement-file-row.tsx so both use one.
  */
 
-const STAGES: ActivityStatus[] = ['to_do', 'in_progress', 'in_review', 'approved']
-
 /**
- * The Status cell. Read-only unless the viewer may move this row; then a picker offering only the
- * stages their role allows from here (getAllowedTransitions, as the Board and the server use). A
- * deliverable can't be approved while a document inside it isn't — the Board's rule, checked first.
+ * The Status cell. A deliverable's stage follows its documents, so it only ever reads (with why, on
+ * hover). A document's is read-only unless the viewer may move it; then a picker offering only the
+ * stages their role allows from here (getAllowedTransitions, as the server uses). A move that takes
+ * its deliverable to the client or approves it asks first (useStageMove).
  */
 export function FileStatusCell({
     projectId,
@@ -30,6 +31,7 @@ export function FileStatusCell({
     emptyLabel,
     emptyClassName,
     onSaved,
+    onDeliverableChanged,
     onAddToast,
 }: {
     projectId: string
@@ -42,63 +44,47 @@ export function FileStatusCell({
     emptyLabel: string
     emptyClassName: string
     onSaved: (next: ActivityStatus) => void
+    /** The document's deliverable moved with it. */
+    onDeliverableChanged?: (deliverable: { id: string; status: ActivityStatus }) => void
     onAddToast: (toast: { type: string; title: string; message: string }) => void
 }) {
     const [value, setValue] = React.useState<ActivityStatus | null>(status)
     React.useEffect(() => { setValue(status) }, [status])
-    // A document with no stage yet is at "to do" as far as the rules go.
-    const allowed = roleSlug ? getAllowedTransitions(roleSlug, value ?? 'to_do') : []
+    const { move, dialog } = useStageMove()
+    const allowed = roleSlug && !isFolder && value ? getAllowedTransitions(roleSlug, value) : []
     if (allowed.length === 0) {
-        return value
-            ? <StatusPill kind="deliverable" status={value} />
-            : <span className={cn('text-[0.8125rem]', emptyClassName)}>{emptyLabel}</span>
+        if (!value) return <span className={cn('text-[0.8125rem]', emptyClassName)}>{emptyLabel}</span>
+        return isFolder
+            ? <Hint label="Follows its documents"><span className="inline-flex"><StatusPill kind="deliverable" status={value} /></span></Hint>
+            : <StatusPill kind="deliverable" status={value} />
     }
     return (
-        <StatusProperty
-            kind="deliverable"
-            value={value}
-            placeholder={emptyLabel}
-            options={STAGES.filter((s) => s === value || allowed.includes(s))}
-            onChange={async (next) => {
-                const stage = next as ActivityStatus
-                const { getSession } = await import('@/lib/supabase')
-                const session = await getSession()
-                const headers = { 'Content-Type': 'application/json', ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) }
-                if (stage === 'approved' && isFolder) {
-                    const res = await fetch(`/api/projects/${projectId}/documents/${encodeURIComponent(documentId)}/subtasks`, { headers })
-                    const data = await res.json().catch(() => ({}))
-                    const unapproved = ((data.subtasks ?? []) as { status: string | null }[]).filter((t) => t.status !== 'approved').length
-                    if (!res.ok || unapproved > 0) {
-                        onAddToast({
-                            type: 'error',
-                            title: 'Cannot approve yet',
-                            message: res.ok
-                                ? `${unapproved} document${unapproved > 1 ? 's' : ''} still need to be approved before this deliverable can be approved.`
-                                : 'Could not check the documents inside it. Please try again.',
-                        })
+        <>
+            <StatusProperty
+                kind="deliverable"
+                value={value}
+                placeholder={emptyLabel}
+                options={ACTIVITY_STAGES.filter((s) => s === value || allowed.includes(s))}
+                onChange={async (next) => {
+                    const stage = next as ActivityStatus
+                    const result = await move(projectId, documentId, stage)
+                    if (!result.ok) {
+                        if (!result.cancelled) onAddToast({ type: 'error', title: "Couldn't change the stage", message: result.error })
                         return
                     }
-                }
-                const res = await fetch(`/api/projects/${projectId}/documents/${encodeURIComponent(documentId)}/sharing/activity`, {
-                    method: 'PATCH',
-                    headers,
-                    body: JSON.stringify({ status: stage }),
-                })
-                if (!res.ok) {
-                    const err = await res.json().catch(() => ({}))
-                    onAddToast({ type: 'error', title: "Couldn't change the stage", message: err.error ?? 'Please try again.' })
-                    return
-                }
-                setValue(stage)
-                onSaved(stage)
-                onAddToast({
-                    type: 'success',
-                    title: stage === 'approved' ? 'Approved' : 'Stage updated',
-                    message: `${fileName} · ${statusOf('deliverable', stage).label}`,
-                })
-                window.dispatchEvent(new CustomEvent('pockett-notifications-updated'))
-            }}
-        />
+                    setValue(stage)
+                    onSaved(stage)
+                    if (result.deliverable) onDeliverableChanged?.(result.deliverable)
+                    onAddToast({
+                        type: 'success',
+                        title: stage === 'approved' ? 'Approved' : 'Stage updated',
+                        message: `${fileName} · ${statusOf('deliverable', stage).label}`,
+                    })
+                    window.dispatchEvent(new CustomEvent('pockett-notifications-updated'))
+                }}
+            />
+            {dialog}
+        </>
     )
 }
 

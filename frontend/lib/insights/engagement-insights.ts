@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import { SHARED_COMMENTS } from '@/lib/comments/internal-notes'
 import { assessOrganization } from '@/lib/ai/files-agent/assess'
 import { googleDriveConnector } from '@/lib/google-drive-connector'
 import { overdueDeliverablesPenalty, planningGapCount } from './health-penalties'
@@ -541,7 +542,9 @@ export async function computeEngagementInsights(
         },
       }),
       prisma.docCommentMessage.findMany({
-        where: { engagementId: projectId },
+        // The conversation with the client: internal notes are neither a reply nor something a
+        // client sees in these counts (lib/comments/internal-notes.ts).
+        where: { engagementId: projectId, ...SHARED_COMMENTS },
         select: {
           id: true,
           projectDocumentId: true,

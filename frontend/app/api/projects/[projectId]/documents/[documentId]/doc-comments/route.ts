@@ -7,6 +7,7 @@ import { canViewProject } from '@/lib/permission-helpers'
 import { getProjectDocumentContext } from '@/lib/file-utils'
 import { createClient as createSupabaseAdmin } from '@supabase/supabase-js'
 import { requireEngagementMember, externalMemberCanAccessDocument, isExternalEngagementRole, visibleDocumentIdsFor } from '@/lib/engagement-access'
+import { canBeRemindedOfInternalNote, canWriteInternalNote, visibleCommentsWhere } from '@/lib/comments/internal-notes'
 import { taggedDocumentsIn } from '@/lib/comments/tagged-documents'
 import { markDiscussionRead, reopenDiscussion } from '@/lib/comments/discussions'
 import { loadAnchorForCaps, effectiveCommentHistoryDays } from '@/lib/billing/effective-billing-caps'
@@ -71,6 +72,8 @@ export async function GET(
       where: {
         projectDocumentId: docCtx.id,
         engagementId: projectId,
+        // A client never sees the firm's internal notes (lib/comments/internal-notes.ts).
+        ...visibleCommentsWhere(member.role),
       },
       orderBy: { createdAt: limit ? 'desc' : 'asc' },
       ...(limit ? { take: limit } : {}),
@@ -80,6 +83,7 @@ export async function GET(
         authorUserId: true,
         content: true,
         reactions: true,
+        isInternal: true,
       },
     })
     const messages = limit ? latest.reverse() : latest
@@ -175,6 +179,16 @@ export async function POST(
 
     const isReminder = body.isReminder === true
     const recipientId = typeof body.recipientId === 'string' ? body.recipientId : null
+    const isInternal = body.internal === true
+    if (isInternal && !canWriteInternalNote(member.role)) {
+      return NextResponse.json({ error: "Only the firm's team can write internal notes" }, { status: 403 })
+    }
+    if (isInternal && isReminder && recipientId) {
+      const recipient = await prisma.engagementMember.findFirst({ where: { engagementId: projectId, userId: recipientId }, select: { role: true } })
+      if (!canBeRemindedOfInternalNote(recipient?.role)) {
+        return NextResponse.json({ error: 'An internal note cannot remind a client' }, { status: 400 })
+      }
+    }
 
     const settings = isReminder && recipientId
       ? { reminder: { recipientId } }
@@ -189,6 +203,7 @@ export async function POST(
         authorUserId: user.id,
         content,
         settings,
+        isInternal,
         createdBy: user.id,
         updatedBy: user.id,
       },
@@ -198,6 +213,7 @@ export async function POST(
         authorUserId: true,
         content: true,
         reactions: true,
+        isInternal: true,
         settings: true,
       },
     })
@@ -205,9 +221,13 @@ export async function POST(
     // Fire-and-forget rolling purge — do not await, never block the caller
     void purgeStaleDocComments(ctx.orgId)
 
-    // A new comment reopens a resolved discussion, and the author has read it.
+    // A new reply reopens a resolved discussion, and the author has read it. An internal note doesn't
+    // reopen it: the client would see it come back with nothing new to read (lib/comments/internal-notes.ts).
     try {
-      await Promise.all([reopenDiscussion(docCtx.id), markDiscussionRead(user.id, docCtx.id, projectId)])
+      await Promise.all([
+        ...(isInternal ? [] : [reopenDiscussion(docCtx.id)]),
+        markDiscussionRead(user.id, docCtx.id, projectId),
+      ])
     } catch (e) {
       console.error('doc-comments: discussion state not updated', { message: e instanceof Error ? e.message : String(e) })
     }
@@ -367,10 +387,14 @@ export async function PATCH(
         id: messageId,
         projectDocumentId: docCtx.id,
         engagementId: projectId,
+        ...visibleCommentsWhere(member.role),
       },
-      select: { id: true, content: true },
+      select: { id: true, content: true, isInternal: true },
     })
     if (!message) return NextResponse.json({ error: 'Comment not found' }, { status: 404 })
+    if (message.isInternal && !canBeRemindedOfInternalNote(recipientMember.role)) {
+      return NextResponse.json({ error: 'An internal note cannot remind a client' }, { status: 400 })
+    }
 
     try {
       const { upsertFollowUpReminder } = await import('@/lib/reminders/reminder-service')

@@ -4,8 +4,7 @@ import { useState, useCallback, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { DateProperty } from "@/components/ui/property-cells"
 import { DocumentIcon } from "@/components/ui/document-icon"
-import { UserAvatarWithTooltip } from "@/components/ui/user-avatar-with-tooltip"
-import { cn, formatFileSize, formatSmartDateTime } from "@/lib/utils"
+import { cn, formatFileSize } from "@/lib/utils"
 import { DuePickerPanel } from "@/components/ui/due-picker"
 import { DeliverableIcon } from "@/components/ui/deliverable-icon"
 import { ModifiedStamp } from "@/components/ui/modified-stamp"
@@ -13,10 +12,7 @@ import { formatDue, isPastDue, readDue } from "@/lib/ui/due-date"
 import { DocumentEditPanelContent, DocumentPreviewPanelContent, getDocumentEditUrl } from "@/components/files/document-edit-sheet"
 import { DocumentPreviewPane } from "@/components/files/document-preview-pane"
 import { useRightPane } from "@/lib/right-pane-context"
-import { DocumentActivityPane } from "@/components/files/document-activity-pane"
-import { DocumentHistoryPane } from "@/components/files/document-history-pane"
 import { openAssetDetailsPane } from "@/components/files/asset-details-pane"
-import { DETAILS_PANE_TABS } from "@/components/files/details-pane-switch"
 import { DocumentDocCommentsPane } from "@/components/projects/document-doc-comments-pane"
 import { GoogleDriveIcon } from "@/components/ui/google-drive-icon"
 import { OneDriveIcon } from "@/components/ui/onedrive-icon"
@@ -32,7 +28,6 @@ import {
   FolderInput,
   CopyPlus,
   Briefcase,
-  Clock,
   Trash2,
   Calendar,
   CalendarClock,
@@ -47,8 +42,6 @@ import {
   Link2,
   Lock,
   Unlock,
-  ChevronRight,
-  Folder,
   CheckCircle2,
   XCircle,
   Loader2,
@@ -110,7 +103,6 @@ interface DocumentActionMenuProps {
   onMoveDocument?: (doc: any) => void
   /** Copy to a different engagement (EL only). Opens cross-engagement picker. */
   onCrossEngagementCopy?: (doc: any) => void
-  onVersionHistory?: (doc: any) => void
   onDeleteDocument?: (doc: any) => void
   /** When set, Share opens the custom share modal instead of OS share. Only show Share item when true (Project Lead). */
   showShareModal?: boolean
@@ -147,10 +139,6 @@ interface DocumentActionMenuProps {
   onOpenCommentPane?: (documentId: string) => void
   /** Optional: notify parent when info pane is opened (e.g. to highlight row). */
   onOpenInfoPane?: (documentId: string) => void
-  /** Optional: notify parent when activity pane is opened (e.g. to highlight row). */
-  onOpenActivityPane?: (documentId: string) => void
-  /** Optional: notify parent when version pane is opened (e.g. to highlight row). */
-  onOpenVersionPane?: (documentId: string) => void
   /** Opens Details in place of the menu's own opener — the Files row passes what its cells may edit. */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onOpenDetails?: (doc: any) => void
@@ -190,7 +178,6 @@ export function DocumentActionMenu({
   onCopyDocument,
   onMoveDocument,
   onCrossEngagementCopy,
-  onVersionHistory,
   onDeleteDocument,
   showShareModal = false,
   isAncestorShared = false,
@@ -209,8 +196,6 @@ export function DocumentActionMenu({
   triggerIcon,
   onOpenCommentPane,
   onOpenInfoPane,
-  onOpenActivityPane,
-  onOpenVersionPane,
   onOpenDetails,
   isEngagementLead,
   isExternalUser,
@@ -1299,7 +1284,7 @@ export function DocumentActionMenu({
                   </DropdownMenuSub>
                 )}
 
-                {DETAILS_PANE_TABS && document.documentType !== 'LINK' && (
+                {document.documentType !== 'LINK' && (
                   <DropdownMenuItem
                     onClick={() => {
                       // The Files row opens it with what its cells may edit; elsewhere Info reads only.
@@ -1317,143 +1302,6 @@ export function DocumentActionMenu({
                     <Info className="h-3.5 w-3.5 text-fg-muted" />
                     <span>Details</span>
                   </DropdownMenuItem>
-                )}
-
-                {/* The Details submenu and its three panes — kept behind DETAILS_PANE_TABS until sign-off */}
-                {!DETAILS_PANE_TABS && document.documentType !== 'LINK' && (
-                <DropdownMenuSub>
-                  <DropdownMenuSubTrigger className="flex cursor-pointer items-center gap-2">
-                    <Info className="h-3.5 w-3.5 text-fg-muted" />
-                    <span>Details</span>
-                  </DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent className="w-max min-w-48 max-w-72">
-                    <DropdownMenuItem
-                      onClick={() => {
-                        onOpenInfoPane?.(document.id)
-                        rightPane.setTitle('File information')
-                        rightPane.setHeaderIcon(<DocumentIcon mimeType={document.mimeType} className="h-3.5 w-3.5" />)
-                        rightPane.setHeaderSubtitle('')
-                        rightPane.setHeaderActions(null)
-                        rightPane.setContent(
-                          <div className="flex flex-col h-full min-h-0 p-4 min-w-0">
-                            {document.parentName && (
-                              <div className="flex items-center gap-1 text-caption text-fg-subtle mb-2">
-                                <Folder className="h-3 w-3" />
-                                <span>{document.parentName}</span>
-                                <ChevronRight className="h-3 w-3" />
-                                <span className="text-fg-muted font-medium truncate max-w-[180px]">{document.name}</span>
-                              </div>
-                            )}
-                            <div className="mb-4 inline-flex max-w-full items-center gap-2 rounded-card border border-line bg-surface-subtle px-3 py-2">
-                              <span className="truncate text-xs font-medium text-fg-muted" title={document.name}>{document.name}</span>
-                            </div>
-                            <div className="space-y-3 rounded-card border border-line bg-surface px-3 py-3">
-                              <div className="flex justify-between items-center">
-                                <span className="text-xs text-fg-muted">File type</span>
-                                <span className="text-xs">{getDisplayType(document)}</span>
-                              </div>
-                              {(document.mimeType ?? '').trim() !== '' && (
-                                <div className="flex justify-between items-center">
-                                  <span className="text-xs text-fg-muted">Mime type</span>
-                                  <span className="font-mono text-caption truncate max-w-[240px] text-right" title={document.mimeType ?? ''}>{document.mimeType}</span>
-                                </div>
-                              )}
-                              {document.size != null && typeof document.size === 'number' && (
-                                <div className="flex justify-between items-center">
-                                  <span className="text-xs text-fg-muted">Size</span>
-                                  <span className="text-xs">{formatFileSize(document.size)}</span>
-                                </div>
-                              )}
-                              {document.modifiedTime && !Number.isNaN(new Date(document.modifiedTime).getTime()) && (
-                                <div className="flex justify-between items-center">
-                                  <span className="text-xs text-fg-muted">Modified</span>
-                                  <span className="text-xs">{formatSmartDateTime(document.modifiedTime)}</span>
-                                </div>
-                              )}
-                              {document.createdTime && !Number.isNaN(new Date(document.createdTime).getTime()) && (
-                                <div className="flex justify-between items-center">
-                                  <span className="text-xs text-fg-muted">Created</span>
-                                  <span className="text-xs">{formatSmartDateTime(document.createdTime)}</span>
-                                </div>
-                              )}
-                              {/* Who added it, as the Files Created by column says (lib/files/file-creator.ts) */}
-                              {document.creator?.displayName ? (
-                                <div className="flex justify-between items-center">
-                                  <span className="text-xs text-fg-muted">Created by</span>
-                                  <UserAvatarWithTooltip
-                                    displayName={document.creator.displayName}
-                                    photoLink={document.creator.photoLink ?? undefined}
-                                    email={document.creator.emailAddress ?? undefined}
-                                    avatarSize="md"
-                                    showEmail={true}
-                                    showRole={false}
-                                  />
-                                </div>
-                              ) : (document.owners?.[0]?.displayName || document.lastModifyingUser?.displayName) && (
-                                <div className="flex justify-between items-center">
-                                  <span className="text-xs text-fg-muted">Owner</span>
-                                  {document.owners?.[0] ? (
-                                    <UserAvatarWithTooltip
-                                      displayName={document.owners[0].displayName}
-                                      photoLink={document.owners[0].photoLink}
-                                      email={document.owners[0].emailAddress}
-                                      avatarSize="md"
-                                      showEmail={true}
-                                      showRole={false}
-                                    />
-                                  ) : (
-                                    <span className="text-xs">{document.lastModifyingUser?.displayName || '—'}</span>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        )
-                        rightPane.setExpanded?.(false)
-                      }}
-                      className="flex cursor-pointer items-center gap-2"
-                    >
-                      <Info className="h-3.5 w-3.5 text-fg-muted" />
-                      <span>File information</span>
-                    </DropdownMenuItem>
-                    {/* Both read the file's versions, which the versions route gives internal roles only. */}
-                    {!isExternalUser && (
-                    <DropdownMenuItem
-                      onClick={() => {
-                        onOpenActivityPane?.(document.id)
-                        rightPane.setTitle('Activity stream')
-                        rightPane.setHeaderIcon(<DocumentIcon mimeType={document.mimeType} className="h-3.5 w-3.5" />)
-                        rightPane.setHeaderSubtitle('Last 30 days')
-                        rightPane.setHeaderActions(null)
-                        rightPane.setContent(<DocumentActivityPane document={document} projectId={document.projectId ?? projectId} />)
-                        rightPane.setExpanded?.(false)
-                      }}
-                      className="flex cursor-pointer items-center gap-2"
-                    >
-                      <Clock className="h-3.5 w-3.5 text-fg-muted" />
-                      <span>Activity stream</span>
-                    </DropdownMenuItem>
-                    )}
-                    {!isExternalUser && document.documentType !== 'LINK' && (
-                    <DropdownMenuItem
-                      onClick={() => {
-                        onOpenVersionPane?.(document.id)
-                        rightPane.setTitle('Version history')
-                        rightPane.setHeaderIcon(<DocumentIcon mimeType={document.mimeType} className="h-3.5 w-3.5" />)
-                        rightPane.setHeaderSubtitle('Full history')
-                        rightPane.setHeaderActions(null)
-                        rightPane.setContent(<DocumentHistoryPane document={document} projectId={document.projectId ?? projectId} />)
-                        rightPane.setExpanded?.(false)
-                        onVersionHistory?.(document)
-                      }}
-                      className="flex cursor-pointer items-center gap-2"
-                    >
-                      <Clock className="h-3.5 w-3.5 text-fg-muted" />
-                      <span>Version history</span>
-                    </DropdownMenuItem>
-                    )}
-                  </DropdownMenuSubContent>
-                </DropdownMenuSub>
                 )}
                 {!isExternalUser && document.documentType !== 'LINK' && (
                 <>

@@ -1,19 +1,18 @@
 "use client"
 
 import { isValidElement, useEffect, useRef, useState } from "react"
-import { Activity as ActivityIcon, CalendarClock, CircleDot, FilePlus2, FilePen, FileType, History, Info, Loader2, MessagesSquare, UserRound } from "lucide-react"
+import { Activity as ActivityIcon, Ban, CalendarClock, Check, CircleDot, FilePlus2, FilePen, FileType, History, Info, Loader2, MessagesSquare, UserRound } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DocumentIcon } from "@/components/ui/document-icon"
 import { PropertyList, PropertyRow } from "@/components/ui/property-list"
 import { PersonAvatar, PersonProperty, type PersonOption } from "@/components/ui/property-cells"
 import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/components/ui/toast"
-import { DocumentDocCommentsPane } from "@/components/projects/document-doc-comments-pane"
+import { DocumentDiscussionTab } from "@/components/files/document-discussion-tab"
 import { FileDueDateCell, FileStatusCell } from "@/components/projects/file-property-cells"
+import { BlockedProperty } from "@/components/files/blocked-property"
 import { DocumentVersionsTimeline } from "@/components/files/document-versions-timeline"
 import { DocumentActivityFeed } from "@/components/files/document-activity-feed"
-import { DocumentNotesSection } from "@/components/files/document-notes-section"
-import { useAuth } from "@/lib/auth-context"
 import { cn, formatFileSize, formatFullDate, formatSmartDateTime, getFileTypeLabel } from "@/lib/utils"
 import type { useRightPane } from "@/lib/right-pane-context"
 import type { EngagementRoleSlug } from "@/lib/deliverable-stage-roles"
@@ -22,10 +21,9 @@ import type { ActivityStatus } from "@/lib/sharing-settings"
 /**
  * A document's Details in one right pane, laid out as the Board's pane lays out a deliverable
  * (components/projects/shares/deliverable-detail-panel.tsx): the shared fields first — Status,
- * Assignee, Due, Created, Modified, Type — then tabs for Details (description and notes), Versions,
- * Activity and Discussions (.claude/plans/engagement-assets-details.md, Phase 2). Opened from the
- * document menu's Details item and from the row's Details icon; replaces the three separate panes
- * behind DETAILS_PANE_TABS.
+ * Assignee, Due, Created, Modified, Type — then tabs for Details (the description), Versions,
+ * Activity and Discussions (the deliverable's thread, about this file) (.claude/plans/engagement-assets-details.md, Phase 2). Opened from the
+ * document menu's Details item and from the row's Details icon.
  */
 
 export type AssetDetailsTab = 'details' | 'versions' | 'activity' | 'discussions'
@@ -64,6 +62,8 @@ export interface AssetDetailsEditing {
     canEditDue: boolean
     /** Engagement leads: the assignee and description routes allow them only. */
     canManage: boolean
+    /** The firm's own roles, on a document: they mark it blocked or clear it. */
+    canBlock?: boolean
     /** After any change here, so the Files row shows it too. */
     onSaved?: () => void
 }
@@ -164,8 +164,9 @@ function AssetFields({ document, projectId, recordId, editing, record }: { docum
     const canManage = !!editing?.canManage && record.canLoad
     const tracked = !!editing?.tracked
     const emptyLabel = tracked ? 'Not set' : '—'
-    // Tracked work with no stage yet is at To do, as the Board and the Files row show it.
-    const stage: ActivityStatus | null = document.activityStatus ?? document.deliverableStatus ?? (tracked ? 'to_do' : null)
+    const isFolderLike = !!document.isDeliverable || !!document.isFolder
+    // Tracked work with no stage yet, as the Files row shows it: a document is Not started, a deliverable at To do.
+    const stage: ActivityStatus | null = document.activityStatus ?? document.deliverableStatus ?? (tracked ? (document.isDeliverable ? 'to_do' : 'not_started') : null)
 
     const changeAssignee = async (next: PersonOption | null) => {
         const res = await fetch(`/api/projects/${projectId}/documents/${recordId}/assignee`, {
@@ -199,7 +200,8 @@ function AssetFields({ document, projectId, recordId, editing, record }: { docum
                         projectId={projectId}
                         documentId={recordId}
                         fileName={document.name}
-                        isFolder={false}
+                        // A deliverable's stage follows its documents: shown, never set.
+                        isFolder={isFolderLike}
                         status={stage}
                         roleSlug={editing?.statusRole ?? null}
                         emptyLabel={emptyLabel}
@@ -214,6 +216,22 @@ function AssetFields({ document, projectId, recordId, editing, record }: { docum
                     <span className="px-1.5 text-fg-subtle">{emptyLabel}</span>
                 )}
             </PropertyRow>
+            {/* The firm's own: shown when it may be set here, or is set (a client is never sent it) */}
+            {!isFolderLike && recordId && projectId && (editing?.canBlock || document.blocked) && (
+                <PropertyRow label="Blocked" icon={<Ban />}>
+                    <BlockedProperty
+                        projectId={projectId}
+                        documentId={recordId}
+                        value={document.blocked ?? null}
+                        canEdit={!!editing?.canBlock && record.canLoad}
+                        onSaved={(next) => {
+                            document.blocked = next
+                            editing?.onSaved?.()
+                        }}
+                        onError={(message) => addToast({ type: 'error', title: "Couldn't change the block", message })}
+                    />
+                </PropertyRow>
+            )}
             <PropertyRow label="Assignee" icon={<UserRound />}>
                 <PersonProperty
                     value={assignee ? personOf(assignee) : null}
@@ -263,22 +281,27 @@ function AssetFields({ document, projectId, recordId, editing, record }: { docum
 /** The Board pane's section label (deliverable-detail-panel.tsx FIELD_LABEL). */
 const FIELD_LABEL = 'mb-1.5 flex items-center gap-1.5 text-small font-medium text-fg-muted'
 
-/** The Details tab: the description, then the firm's notes, as sections like the Board pane's. */
-function AssetDetailsSections({ projectId, recordId, editing, record, showNotes }: { projectId?: string; recordId?: string; editing?: AssetDetailsEditing; record: AssetRecord; showNotes: boolean }) {
+/** The Details tab: the description, as the Board pane's section. The firm's internal notes are in the deliverable's thread. */
+function AssetDetailsSections({ projectId, recordId, editing, record }: { projectId?: string; recordId?: string; editing?: AssetDetailsEditing; record: AssetRecord }) {
     const { addToast } = useToast()
-    const { user } = useAuth()
-    const { members, description, setDescription } = record
+    const { description, setDescription } = record
     const canManage = !!editing?.canManage && record.canLoad
-    const [savingDescription, setSavingDescription] = useState(false)
+    // Saved as you type, so the label says where that stands: saving, then saved for a moment.
+    const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle')
     const descriptionTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-    useEffect(() => () => { if (descriptionTimer.current) clearTimeout(descriptionTimer.current) }, [])
+    const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+    useEffect(() => () => {
+        if (descriptionTimer.current) clearTimeout(descriptionTimer.current)
+        if (savedTimer.current) clearTimeout(savedTimer.current)
+    }, [])
 
-    // Saved as you type, a moment after you stop — the Board pane's description works the same way.
+    // A moment after you stop typing — the Board pane's description works the same way.
     const changeDescription = (value: string) => {
         setDescription(value)
         if (descriptionTimer.current) clearTimeout(descriptionTimer.current)
+        if (savedTimer.current) clearTimeout(savedTimer.current)
         descriptionTimer.current = setTimeout(async () => {
-            setSavingDescription(true)
+            setSaveState('saving')
             try {
                 const res = await fetch(`/api/projects/${projectId}/documents/${recordId}/sharing`, {
                     method: 'PUT',
@@ -286,10 +309,11 @@ function AssetDetailsSections({ projectId, recordId, editing, record, showNotes 
                     body: JSON.stringify({ description: value }),
                 })
                 if (!res.ok) throw new Error(String(res.status))
+                setSaveState('saved')
+                savedTimer.current = setTimeout(() => setSaveState('idle'), 2000)
             } catch {
+                setSaveState('failed')
                 addToast({ type: 'error', title: "Couldn't save the description", message: 'Please try again.' })
-            } finally {
-                setSavingDescription(false)
             }
         }, 800)
     }
@@ -299,7 +323,11 @@ function AssetDetailsSections({ projectId, recordId, editing, record, showNotes 
             <div className="px-4 py-4">
                 <div className={FIELD_LABEL}>
                     Description
-                    {savingDescription && <Loader2 className="h-2.5 w-2.5 animate-spin text-fg-subtle" />}
+                    <span role="status" aria-live="polite" className="inline-flex items-center gap-1 text-caption font-normal">
+                        {saveState === 'saving' && <><Loader2 className="h-2.5 w-2.5 animate-spin text-fg-subtle" /><span className="text-fg-subtle">Saving…</span></>}
+                        {saveState === 'saved' && <><Check className="h-3 w-3 text-action" /><span className="text-fg-subtle">Saved</span></>}
+                        {saveState === 'failed' && <span className="text-danger">Not saved</span>}
+                    </span>
                 </div>
                 {canManage ? (
                     <Textarea
@@ -315,17 +343,6 @@ function AssetDetailsSections({ projectId, recordId, editing, record, showNotes 
                 )}
             </div>
 
-            {showNotes && record.canLoad && projectId && recordId && (
-                <div className="px-4 py-4">
-                    <DocumentNotesSection
-                        projectId={projectId}
-                        documentId={recordId}
-                        members={members}
-                        currentUserId={user?.id}
-                        isLead={members.some((m) => m.userId === user?.id && m.role === 'eng_admin')}
-                    />
-                </div>
-            )}
         </div>
     )
 }
@@ -337,7 +354,7 @@ export function AssetDetailsPane({ document, projectId, orgSlug, isExternalUser 
     // Comments, settings and audit events are keyed by the document's own row; the versions route takes either id.
     const recordId: string | undefined = document.projectDocumentId || document.id
     const record = useAssetRecord(projectId, recordId)
-    // External users read the fields; they never edit here, and never see the notes.
+    // External users read the fields; they never edit here.
     const viewerEditing = isExternalUser ? undefined : editing
 
     return (
@@ -361,7 +378,7 @@ export function AssetDetailsPane({ document, projectId, orgSlug, isExternalUser 
                 </TabsList>
 
                 <TabsContent value="details" className="mt-0 min-h-0 flex-1 overflow-y-auto">
-                    <AssetDetailsSections projectId={projectId} recordId={recordId} editing={viewerEditing} record={record} showNotes={!isExternalUser} />
+                    <AssetDetailsSections projectId={projectId} recordId={recordId} editing={viewerEditing} record={record} />
                 </TabsContent>
 
                 {projectId && tabs.includes('versions') && (
@@ -383,12 +400,13 @@ export function AssetDetailsPane({ document, projectId, orgSlug, isExternalUser 
 
                 {projectId && recordId && tabs.includes('discussions') && (
                     <TabsContent value="discussions" className="mt-0 min-h-0 flex-1 overflow-hidden">
-                        <DocumentDocCommentsPane
-                            engagementId={projectId}
+                        {/* The deliverable's thread, about this file: discussion happens on deliverables. */}
+                        <DocumentDiscussionTab
+                            projectId={projectId}
                             documentId={recordId}
-                            documentName={document.name}
-                            documentMimeType={document.mimeType}
+                            docId={document.docId}
                             orgSlug={orgSlug}
+                            isExternalUser={isExternalUser}
                         />
                     </TabsContent>
                 )}

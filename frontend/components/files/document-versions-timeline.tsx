@@ -10,8 +10,7 @@ import { useDocumentVersions } from "@/components/files/use-document-versions"
 
 /**
  * The Details pane's Versions tab: a compact timeline, newest first — "v2 · Current", who saved it,
- * when, its size and how much it changed from the one before. Replaces the one-card-per-version
- * layout of the old Version history pane (document-history-pane.tsx, kept behind DETAILS_PANE_TABS).
+ * when, its size and how much it changed from the one before.
  */
 
 export interface VersionRow {
