@@ -49,7 +49,7 @@ import { StatusPill } from '@/components/ui/status-pill'
 import { DateProperty, StatusProperty } from '@/components/ui/property-cells'
 import { useToast } from '@/components/ui/toast'
 import { FILES_DROP_TARGET_ROW_CLASS, FILES_DROP_ZONE_ACTIVE_CLASS, FilesDropPill, FilesDropRow } from '@/components/projects/files-drop-zone'
-import { getAllowedTransitions } from '@/lib/deliverable-stage-roles'
+import { STAGE_ORDER, STAGE_ROLE_MAP, getAllowedTransitions } from '@/lib/deliverable-stage-roles'
 import { statusOf } from '@/lib/ui/status'
 import { DuePickerPanel } from '@/components/ui/due-picker'
 import { DeliverableIcon } from '@/components/ui/deliverable-icon'
@@ -85,10 +85,13 @@ import { BlockedTag } from '@/components/files/blocked-tag'
 import { MissingDueWarning } from '@/components/files/missing-due-warning'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { conflictText } from '@/components/files/use-due-date-save'
+import { StageConfirmDialog, type StageConfirmation } from '@/components/files/use-stage-move'
 import { isLaterDay, type DueConflict } from '@/lib/files/due-date-rule'
 import type { BlockedFlag } from '@/lib/files/blocked'
 import { ENGAGEMENT_ROOT_LABEL } from '@/lib/files/engagement-root'
 import { foldBreadcrumbTrail } from '@/lib/files/breadcrumb-trail'
+import { useRightPane } from '@/lib/right-pane-context'
+import { DemoAssetDetailsPane } from '@/components/demo/demo-asset-details-pane'
 
 export const MIME_BY_TYPE: Record<string, string> = {
     pdf: 'application/pdf',
@@ -109,6 +112,8 @@ const OWNER = 'Alex Jordan'
 /** Who added each file, as the app's Created by column shows it: one of the team, the same on every visit. */
 const creatorOf = (id: string) => DELIVERABLE_ACTORS[Array.from(id).reduce((n, c) => n + c.charCodeAt(0), 0) % DELIVERABLE_ACTORS.length]
 const NOT_IN_DEMO = 'Not available in this demo'
+/** The tour engagement's clients, as its Members tab lists them: one reviewer (Morgan Ellis), no external contributors. */
+const TOUR_CLIENTS = { externalCollaborators: 0, viewers: 1 }
 const STAGES: readonly ActivityStatus[] = ACTIVITY_STAGES
 
 /** The toolbar's quiet icons, as engagement-file-list.tsx draws them: 28px, no border, a 14px glyph. */
@@ -128,13 +133,16 @@ function TableHeader({ label, icon }: { label: string; icon: React.ReactNode }) 
     )
 }
 
-/** A ghost icon button with the app's hint; inert in the demo. */
-function QuickAction({ icon, label, className }: { icon: React.ReactNode; label: string; className?: string }) {
+/** A ghost icon button with the app's hint; inert in the demo unless it's given something to do. */
+function QuickAction({ icon, label, className, onClick }: { icon: React.ReactNode; label: string; className?: string; onClick?: () => void }) {
     return (
-        <Hint label={`${label} (not in this demo)`}>
+        <Hint label={onClick ? label : `${label} (not in this demo)`}>
             <button
                 type="button"
-                onClick={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                    e.stopPropagation()
+                    onClick?.()
+                }}
                 className={cn('inline-flex h-7 w-7 items-center justify-center rounded-control text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg [&_svg]:h-4 [&_svg]:w-4', className)}
                 aria-label={label}
             >
@@ -153,10 +161,10 @@ const TYPE_LABEL: Record<string, string> = {
     slide: 'Presentation', pptx: 'Presentation', jpg: 'Image', jpeg: 'Image', png: 'Image', zip: 'Archive',
 }
 
-/** A menu row that does nothing in the demo; the menu stays open so the whole menu can be read. */
-function DemoMenuItem({ icon, children, danger = false, accent = false }: { icon: React.ReactNode; children: React.ReactNode; danger?: boolean; accent?: boolean }) {
+/** A menu row that does nothing in the demo, so the menu stays open to be read; one given onSelect works and closes it. */
+function DemoMenuItem({ icon, children, danger = false, accent = false, onSelect }: { icon: React.ReactNode; children: React.ReactNode; danger?: boolean; accent?: boolean; onSelect?: () => void }) {
     return (
-        <DropdownMenuItem onSelect={(e) => e.preventDefault()} className={cn('flex cursor-pointer items-center gap-2', danger && 'text-danger focus:text-danger', accent && 'text-primary focus:text-primary')}>
+        <DropdownMenuItem onSelect={(e) => (onSelect ? onSelect() : e.preventDefault())} className={cn('flex cursor-pointer items-center gap-2', danger && 'text-danger focus:text-danger', accent && 'text-primary focus:text-primary')}>
             <span className={cn('flex shrink-0', danger ? 'text-danger' : accent ? 'text-primary' : 'text-fg-muted')}>{icon}</span>
             {children}
         </DropdownMenuItem>
@@ -180,14 +188,18 @@ function DemoSubmenu({ icon, label, children }: { icon: React.ReactNode; label: 
  * the same compact header and the same items, grouped the same way, for a file or a folder. Every
  * action is inert.
  */
-function RowActionMenu({ entry, name, docId, deliverableStatus, dueDate, onSetDue }: {
+function RowActionMenu({ entry, name, docId, deliverableStatus, dueDate, onSetDue, inside = false, onOpenDetails }: {
     entry: Entry
     name: string
     docId?: string | null
     deliverableStatus?: DeliverableStatus
     dueDate?: string | null
-    /** Due is the one action that works on the tour: it sets the row's Due cell. */
+    /** Due works on the tour: it sets the row's Due cell. */
     onSetDue: (next: string | null) => void
+    /** Inside a deliverable: deliverables don't nest, so Promote is off, as in the app. */
+    inside?: boolean
+    /** Details works too: it opens the Details pane. */
+    onOpenDetails?: () => void
 }) {
     const [open, setOpen] = useState(false)
     const isFolder = entry.kind === 'folder'
@@ -243,9 +255,18 @@ function RowActionMenu({ entry, name, docId, deliverableStatus, dueDate, onSetDu
                     {isFolder ? (
                         <>
                             <DemoMenuItem icon={<Link2 />}>Copy link</DemoMenuItem>
-                            {deliverableStatus
-                                ? <DemoMenuItem icon={<FolderMinus />} danger>Demote Deliverable to Folder</DemoMenuItem>
-                                : <DemoMenuItem icon={<FolderPlus />} accent>Promote Folder to Deliverable</DemoMenuItem>}
+                            {deliverableStatus ? (
+                                <DemoMenuItem icon={<FolderMinus />} danger>Demote Deliverable to Folder</DemoMenuItem>
+                            ) : inside ? (
+                                <Hint label="An ancestor folder is already a deliverable" side="right">
+                                    <DropdownMenuItem aria-disabled="true" onSelect={(e) => e.preventDefault()} className="flex cursor-not-allowed items-center gap-2 opacity-50">
+                                        <span className="flex shrink-0 text-fg-subtle"><FolderPlus /></span>
+                                        Promote Folder to Deliverable
+                                    </DropdownMenuItem>
+                                </Hint>
+                            ) : (
+                                <DemoMenuItem icon={<FolderPlus />} accent>Promote Folder to Deliverable</DemoMenuItem>
+                            )}
                             <DemoSubmenu icon={<FolderOpen />} label="Organize">
                                 <DemoMenuItem icon={<Edit3 />}>Rename</DemoMenuItem>
                                 <DemoMenuItem icon={<FolderInput />}>Move to…</DemoMenuItem>
@@ -296,7 +317,7 @@ function RowActionMenu({ entry, name, docId, deliverableStatus, dueDate, onSetDu
                                 <DropdownMenuSeparator />
                                 <DemoMenuItem icon={<FolderLock />}>Make private</DemoMenuItem>
                             </DemoSubmenu>
-                            <DemoMenuItem icon={<Info />}>Details</DemoMenuItem>
+                            <DemoMenuItem icon={<Info />} onSelect={onOpenDetails}>Details</DemoMenuItem>
                             <DemoSubmenu icon={<ExternalLink />} label="Drive actions">
                                 <DemoMenuItem icon={<ExternalLink />}>Open containing folder in Google Drive</DemoMenuItem>
                             </DemoSubmenu>
@@ -304,7 +325,7 @@ function RowActionMenu({ entry, name, docId, deliverableStatus, dueDate, onSetDu
                     )}
                     <DropdownMenuSeparator />
                     <DemoMenuItem icon={<Trash2 />} danger>Move to trash</DemoMenuItem>
-                    <p className="px-2 pb-1 pt-1.5 text-caption text-fg-subtle">Due works here; the other actions aren&apos;t available in this demo.</p>
+                    <p className="px-2 pb-1 pt-1.5 text-caption text-fg-subtle">{isFolder ? "These actions aren't available in this demo." : "Due and Details work here; the other actions aren't available in this demo."}</p>
                 </div>
             </DropdownMenuContent>
         </DropdownMenu>
@@ -331,6 +352,7 @@ function EntryRow({
     statusEditable,
     onSetStatus,
     blocked,
+    onOpenDetails,
     uploadTarget = false,
     onFileDragOver,
     onFileDrop,
@@ -355,6 +377,8 @@ function EntryRow({
     onSetStatus: (next: ActivityStatus) => void
     /** The firm's Blocked flag on a document. */
     blocked?: BlockedFlag
+    /** Opens the file's Details pane. */
+    onOpenDetails?: () => void
     /** Files from the computer dragged over this folder row would land in it (the drop zone, as in the app). */
     uploadTarget?: boolean
     onFileDragOver?: (e: React.DragEvent) => void
@@ -431,11 +455,11 @@ function EntryRow({
                         !selected && !pinTools && 'max-w-0 overflow-hidden opacity-0 focus-within:max-w-none focus-within:opacity-100 group-hover:max-w-none group-hover:opacity-100 has-[[data-state=open]]:max-w-none has-[[data-state=open]]:opacity-100 [@media(hover:none)]:max-w-none [@media(hover:none)]:opacity-100',
                     )}
                 >
-                    {!isFolder && <QuickAction icon={<Info />} label="Details" />}
+                    {!isFolder && <QuickAction icon={<Info />} label="Details" onClick={onOpenDetails} />}
                     {!isFolder && <QuickAction icon={<ScanEye />} label="Preview" />}
                     {/* As in the app: Copy link (also in the ⋮ menu) gives way at the table's narrowest */}
                     <QuickAction icon={<Link2 />} label="Copy link" className="hidden @[49rem]/file-table:inline-flex" />
-                    <RowActionMenu entry={entry} name={name} docId={docId} deliverableStatus={deliverableStatus} dueDate={dueDate} onSetDue={onSetDue} />
+                    <RowActionMenu entry={entry} name={name} docId={docId} deliverableStatus={deliverableStatus} dueDate={dueDate} onSetDue={onSetDue} inside={inside} onOpenDetails={onOpenDetails} />
                 </div>
             </div>
 
@@ -534,17 +558,53 @@ export function DemoFileList({
     const statusFor = (entry: Entry): ActivityStatus | null =>
         entry.kind === 'folder' ? deliverableStage(entry.folder) ?? null : documentStage(entry.file.id)
     const deliverableApproved = path.length > 0 && deliverableStage(path[0]) === 'approved'
+    // The firm's Blocked flags and the approvals recorded on the tour, by document.
+    const [blockedOverrides, setBlockedOverrides] = useState<Record<string, BlockedFlag | null>>({})
+    const blockedOf = (fileId: string): BlockedFlag | null => (fileId in blockedOverrides ? blockedOverrides[fileId] : documentStages[fileId]?.blocked ?? null)
+    const [approvedAt, setApprovedAt] = useState<Record<string, string>>({})
+    /** As in the app, approving records the version approved; the tour's seeded approvals date from the file's last save. */
+    const approvedAtOf = (file: DemoFile): string | null => (documentStage(file.id) === 'approved' ? approvedAt[file.id] ?? file.modifiedTime : null)
+    // As in the app (use-stage-move.tsx): a move that would show the deliverable's documents to clients, or approve it, asks first.
+    const [stageAsk, setStageAsk] = useState<{ confirmation: StageConfirmation; commit: () => void } | null>(null)
+    // As in the app, a deliverable's sharing only ever widens: a role its furthest stage opened keeps its access
+    // when the deliverable falls back. Each one's furthest stage on the tour.
+    const [furthest, setFurthest] = useState<Record<string, ActivityStatus>>({})
     // A document's move; its deliverable follows, and the toast says so when it does.
     const setStatus = (entry: Entry, next: ActivityStatus) => {
         if (entry.kind !== 'file') return
+        const file = entry.file
         const deliverable = path[0]
         const before = deliverable ? deliverableStage(deliverable) : undefined
-        setStatusOverrides((prev) => ({ ...prev, [entry.file.id]: next }))
         const after = deliverable && before
-            ? deriveDeliverableStage(demoFilesIn(deliverable).map((f) => (f.id === entry.file.id ? next : documentStage(f.id) ?? 'not_started')))
+            ? deriveDeliverableStage(demoFilesIn(deliverable).map((f) => (f.id === file.id ? next : documentStage(f.id) ?? 'not_started')))
             : undefined
-        const followed = after && after !== before ? ` · ${shownName(deliverable)} moves to ${statusOf('deliverable', after).label}` : ''
-        addToast({ type: 'success', title: next === 'approved' ? 'Approved' : 'Stage updated', message: `${entry.file.name} · ${statusOf('deliverable', next).label}${followed}` })
+        // The furthest it has been: where the tour started it, or further.
+        const started = deliverable ? furthest[deliverable.id] ?? deliverableStatusByFolderId?.[deliverable.id] : undefined
+        const peak = before && started ? (STAGE_ORDER[started] > STAGE_ORDER[before] ? started : before) : before
+        const commit = () => {
+            setStatusOverrides((prev) => ({ ...prev, [file.id]: next }))
+            if (deliverable && peak && after && STAGE_ORDER[after] > STAGE_ORDER[peak]) setFurthest((prev) => ({ ...prev, [deliverable.id]: after }))
+            if (next === 'approved') setApprovedAt((prev) => ({ ...prev, [file.id]: new Date().toISOString() }))
+            const followed = after && after !== before ? ` · ${shownName(deliverable)} moves to ${statusOf('deliverable', after).label}` : ''
+            addToast({ type: 'success', title: next === 'approved' ? 'Approved' : 'Stage updated', message: `${file.name} · ${statusOf('deliverable', next).label}${followed}` })
+        }
+        if (deliverable && before && peak && after && after !== before) {
+            // Who'd see its documents for the first time: the roles the new stage opens that no earlier one did, as the app counts them.
+            const opens = (key: 'ecEnabled' | 'evEnabled') => STAGE_ROLE_MAP[after][key] && !STAGE_ROLE_MAP[peak][key]
+            const confirmation: StageConfirmation = {
+                deliverable: { id: deliverable.id, docId: deliverable.docId, name: shownName(deliverable) },
+                from: before,
+                to: after,
+                externalCollaborators: opens('ecEnabled') ? TOUR_CLIENTS.externalCollaborators : 0,
+                viewers: opens('evEnabled') ? TOUR_CLIENTS.viewers : 0,
+                approves: after === 'approved',
+            }
+            if (confirmation.externalCollaborators > 0 || confirmation.viewers > 0 || confirmation.approves) {
+                setStageAsk({ confirmation, commit })
+                return
+            }
+        }
+        commit()
     }
 
     const here = path.length > 0 ? path[path.length - 1] : null
@@ -675,6 +735,60 @@ export function DemoFileList({
         setSelected(new Set())
         setPath(next)
     }
+
+    // Details opens in the docked right pane, as in the app: the file's ID as the title, its name below.
+    // The pane is set again when the file's stage or due date changes here, so it never shows a stale one.
+    const rightPane = useRightPane()
+    const [detailsFor, setDetailsFor] = useState<{ file: DemoFile; deliverable: DemoFolder | null } | null>(null)
+    const paneRef = useRef(rightPane)
+    paneRef.current = rightPane
+    const detailsStage = detailsFor ? documentStage(detailsFor.file.id) : null
+    const detailsDue = detailsFor ? dueOf(detailsFor.file.id) : null
+    useEffect(() => {
+        if (!detailsFor) return
+        const { file, deliverable } = detailsFor
+        const pane = paneRef.current
+        const creator = creatorOf(file.id)
+        const stage = deliverable ? detailsStage ?? 'not_started' : null
+        pane.setTitle(file.docId)
+        pane.setHeaderSubtitle(file.name)
+        pane.setHeaderIcon(<DocumentIcon mimeType={MIME_BY_TYPE[file.type] ?? 'application/octet-stream'} className="h-4 w-4" />)
+        pane.setIconTooltip(TYPE_LABEL[file.type] ?? 'File')
+        pane.setHeaderActions(null)
+        pane.setPaneSize('medium')
+        pane.setContent(
+            <DemoAssetDetailsPane
+                key={file.id}
+                file={file}
+                creator={creator}
+                assignee={stage && stage !== 'not_started' ? creator : null}
+                stage={stage}
+                dueDate={detailsDue}
+                blocked={deliverable ? blockedOf(file.id) : null}
+                canBlock={!!deliverable}
+                deliverable={deliverable ? {
+                    docId: deliverable.docId,
+                    name: shownName(deliverable),
+                    documents: demoFilesIn(deliverable).map((f) => ({ id: f.id, docId: f.docId, name: f.name, mimeType: MIME_BY_TYPE[f.type] ?? 'application/octet-stream' })),
+                } : null}
+                approvedAt={deliverable ? approvedAtOf(file) : null}
+                onSetBlocked={(next) => setBlockedOverrides((prev) => ({ ...prev, [file.id]: next }))}
+            />,
+        )
+        // Only the file, its stage and its due date re-set the pane; a Blocked change comes from the pane itself.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [detailsFor, detailsStage, detailsDue])
+    // Closed from the pane's own ×.
+    useEffect(() => {
+        if (!rightPane.content) setDetailsFor(null)
+    }, [rightPane.content])
+    // Leaving Files takes its pane with it.
+    const detailsOpen = useRef(false)
+    detailsOpen.current = !!detailsFor
+    useEffect(() => () => {
+        if (detailsOpen.current) paneRef.current.clearPane()
+    }, [])
+    const openDetails = (file: DemoFile) => setDetailsFor({ file, deliverable: insideDeliverable ? path[0] : null })
 
     // Esc clears a selection, as in the app.
     useEffect(() => {
@@ -864,7 +978,8 @@ export function DemoFileList({
                                 // and the folders inside it only organize it
                                 statusEditable={entry.kind === 'file' && insideDeliverable && !deliverableApproved}
                                 onSetStatus={(next) => setStatus(entry, next)}
-                                blocked={entry.kind === 'file' ? documentStages[id]?.blocked : undefined}
+                                blocked={entry.kind === 'file' && insideDeliverable ? blockedOf(id) ?? undefined : undefined}
+                                onOpenDetails={entry.kind === 'file' ? () => openDetails(entry.file) : undefined}
                                 dueDate={id in dueOverrides ? dueOverrides[id] : entry.kind === 'folder' ? deliverableDueByFolderId?.[id] : null}
                                 onSetDue={(next) => setDue(entry, next)}
                                 tracked={(entry.kind === 'file' && insideDeliverable) || (entry.kind === 'folder' && !!deliverableStatusByFolderId?.[id])}
@@ -904,6 +1019,12 @@ export function DemoFileList({
                     />
                 </div>
             </div>
+            <StageConfirmDialog
+                confirmation={stageAsk?.confirmation ?? null}
+                onOpenChange={(open) => { if (!open) setStageAsk(null) }}
+                onCancel={() => setStageAsk(null)}
+                onConfirm={() => { stageAsk?.commit(); setStageAsk(null) }}
+            />
             <ConfirmDialog
                 open={!!dueAsk}
                 onOpenChange={(open) => { if (!open) setDueAsk(null) }}

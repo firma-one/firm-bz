@@ -65,25 +65,47 @@ export function useStageMove() {
         return { ok: true, deliverable: data?.deliverable ?? null }
     }, [])
 
-    const confirmation = pending?.confirmation
     const dialog = (
-        <ConfirmDialog
-            open={!!pending}
-            onOpenChange={(open) => { if (!open && !sending) { pending?.answer(false); setPending(null) } }}
-            icon={confirmation?.approves ? <CheckCircle2 /> : <Eye />}
-            iconVariant={confirmation?.approves ? 'primary' : 'amber'}
-            title={confirmation?.approves ? 'Approve the deliverable?' : `Share its documents with ${whoSees(confirmation)}?`}
-            subtitle={confirmation ? `${deliverableLabel(confirmation)} moves to ${statusOf('deliverable', confirmation.to).label}` : undefined}
-            description={confirmation ? <StageConfirmationText confirmation={confirmation} /> : ''}
-            confirmLabel={confirmation?.approves ? 'Approve' : 'Move and share'}
-            confirmVariant="primary"
+        <StageConfirmDialog
+            confirmation={pending?.confirmation ?? null}
             loading={sending}
+            onOpenChange={(open) => { if (!open && !sending) { pending?.answer(false); setPending(null) } }}
             onCancel={() => { pending?.answer(false); setPending(null) }}
             onConfirm={() => pending?.answer(true)}
         />
     )
 
     return { move, dialog }
+}
+
+/** The question itself, shared with /tour's Files (components/demo/demo-file-list.tsx). */
+export function StageConfirmDialog({ confirmation, loading, onOpenChange, onCancel, onConfirm }: {
+    confirmation: StageConfirmation | null
+    loading?: boolean
+    onOpenChange: (open: boolean) => void
+    onCancel: () => void
+    onConfirm: () => void
+}) {
+    // The last question asked, so its words stay while the dialog fades out after an answer.
+    const shownRef = React.useRef(confirmation)
+    if (confirmation) shownRef.current = confirmation
+    const shown = confirmation ?? shownRef.current
+    return (
+        <ConfirmDialog
+            open={!!confirmation}
+            onOpenChange={onOpenChange}
+            icon={shown?.approves ? <CheckCircle2 /> : <Eye />}
+            iconVariant={shown?.approves ? 'primary' : 'amber'}
+            title={shown?.approves ? 'Approve the deliverable?' : `Share its documents with ${whoSees(shown ?? undefined)}?`}
+            subtitle={shown ? `${deliverableLabel(shown)} moves to ${statusOf('deliverable', shown.to).label}` : undefined}
+            description={shown ? <StageConfirmationText confirmation={shown} /> : ''}
+            confirmLabel={shown?.approves ? 'Approve' : 'Move and share'}
+            confirmVariant="primary"
+            loading={loading}
+            onCancel={onCancel}
+            onConfirm={onConfirm}
+        />
+    )
 }
 
 const sentence = (text: string) => text.charAt(0).toUpperCase() + text.slice(1)

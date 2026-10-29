@@ -175,5 +175,7 @@ Departures from the plan above:
 - A **private** document (already locked as private) is approved and archived but keeps its private
   lock rather than taking the finalize lock.
 - The Board shows no approval detail; its cards are deliverables, and the deliverable pane has it.
-- /tour has no Versions or Details pane to mirror.
+- **/tour** (`components/demo/demo-asset-details-pane.tsx`): Files' Details opens the pane, with
+  versions named by date, an approved document's Approvals and Approved tag, and approving through
+  the tour's Status asks first, as the app does. Nothing is archived on the tour.
 - Not verified against a live Drive or OneDrive: covered by tests with the storage calls mocked.

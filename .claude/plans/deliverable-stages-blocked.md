@@ -87,7 +87,10 @@ The rules, over the deliverable's To do+ documents (Not started ones are left ou
 - **Migration** `20261029140000_derive_deliverable_stages` (data only): moves open deliverables back
   to their derived stage where that is earlier. Previewed read-only on local data: no change.
 - **/tour:** `lib/demo/demo-deliverables.ts` lays out document stages its deliverables derive from
-  (tested), with one Not started and one blocked document; Files, Board and pane read them.
+  (tested), with one Not started and one blocked document; Files, Board and pane read them. The
+  tour's Details pane sets Blocked (with its note), the Board has the Overdue and Blocked toggles, a
+  folder inside a deliverable can't be promoted, and a move that shares or approves asks first
+  (`StageConfirmDialog`, shared with the app, counting the tour's one reviewer).
 
 Not done: a client still sees a deliverable's To do documents through its INHERITED sharing rows
 once the deliverable is shared, as before this change.

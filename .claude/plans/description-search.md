@@ -33,4 +33,5 @@ policy (document *content* stays unindexed: `INDEX_DOCUMENT_TEXT` is still off).
 - Existing descriptions get their vector the next time they're saved or the file is re-indexed;
   there's no backfill job.
 - OneDrive personal: no read-back (its listing doesn't carry the field).
-- /tour's Doc Search has no descriptions to search.
+- **/tour:** a few sample files carry a description (`lib/demo/demo-firm-data.json`): Doc Search
+  shows them as Description matches, ranked after name matches, and the Details pane opens with them.

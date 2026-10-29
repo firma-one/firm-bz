@@ -2,13 +2,14 @@
 
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { formatDistanceToNowStrict } from 'date-fns'
-import { AtSign, Hash, Send, Smile } from 'lucide-react'
+import { AtSign, Eye, Hash, Lock, MessagesSquare, Send, Smile } from 'lucide-react'
 import { PersonAvatar } from '@/components/ui/property-cells'
 import { DocumentIcon } from '@/components/ui/document-icon'
 import { Hint } from '@/components/ui/tooltip'
 import { CommentText } from '@/components/comments/comment-text'
 import { REACTIONS, ReactionMark, type ReactionKey } from '@/components/comments/reactions'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { FilterMenuLabel, FilterMenuRow, FilterPill, summarizePicks } from '@/components/ui/filter-pill'
 import { cn } from '@/lib/utils'
 import { caretOffset } from '@/lib/ui/caret-offset'
 import {
@@ -17,7 +18,9 @@ import {
 
 /*
  * The tour's deliverable comments: the app's composer (document-doc-comments-pane.tsx) over sample
- * comments, with @ to mention a teammate and # to tag one of the deliverable's documents. Posting adds
+ * comments, with @ to mention a teammate and # to tag one of the deliverable's documents. As in the
+ * app, the firm can post an internal note (only its team sees it), filter the thread by who sees
+ * what, and, opened from one of the documents, see the comments about that file first. Posting adds
  * to the thread on screen only; nothing is sent.
  */
 
@@ -25,7 +28,7 @@ export type DemoTaggableDocument = { id: string; docId: string; name: string; mi
 
 type Person = { name: string; role: string }
 /** `reactions`: how many teammates reacted with each, before the visitor. */
-export type DemoComment = { id: string; author: string; at: string; content: string; reactions?: Partial<Record<ReactionKey, number>> }
+export type DemoComment = { id: string; author: string; at: string; content: string; reactions?: Partial<Record<ReactionKey, number>>; internal?: boolean }
 type Comment = DemoComment
 
 const ME = 'Demo User'
@@ -54,8 +57,21 @@ function sampleThread(docs: DemoTaggableDocument[], now: Date): Comment[] {
                 ? `Checked, they hold up. #${second.docId} still needs the latest numbers; I'll move this to review once it does.`
                 : 'Checked, they hold up. Moving this to review.',
         },
+        {
+            id: 's3', author: 'Jordan Lee', at: ago(2), internal: true,
+            content: first
+                ? `Between us: the pricing in #${first.docId} waits for partner sign-off before the client sees it.`
+                : 'Between us: the pricing waits for partner sign-off before the client sees it.',
+        },
     ]
 }
+
+/** Who sees a comment: everyone on the engagement, or the firm's team only (an internal note). */
+type Visibility = 'reply' | 'internal'
+const VISIBILITY_LABEL: Record<Visibility, string> = { reply: 'Replies', internal: 'Internal notes' }
+const visibilityOf = (c: Comment): Visibility => (c.internal ? 'internal' : 'reply')
+/** The client's roles: never offered for a mention in an internal note, which they can't see. */
+const CLIENT_ROLES = new Set(['eng_ext_collaborator', 'eng_viewer'])
 
 // The text box and the chip layer behind it share this box exactly, so each chip sits under its text.
 const COMPOSER_TEXT = 'max-h-48 w-full overflow-y-auto whitespace-pre-wrap break-words px-3 pb-1 pt-2.5 text-ui leading-relaxed [scrollbar-gutter:stable]'
@@ -64,8 +80,23 @@ const COMPOSER_TEXT = 'max-h-48 w-full overflow-y-auto whitespace-pre-wrap break
  * `thread` starts the pane on a given discussion (the tour's Discussions page passes the row's) instead
  * of the sample; `onPost` hears each comment posted, so that page's row can follow.
  */
-export function DemoDeliverableComments({ documents, thread, onPost }: { documents: DemoTaggableDocument[]; thread?: DemoComment[]; onPost?: (comment: DemoComment) => void }) {
+export function DemoDeliverableComments({ documents, thread, onPost, focusDocId, initialDraft = '' }: {
+    documents: DemoTaggableDocument[]
+    thread?: DemoComment[]
+    onPost?: (comment: DemoComment) => void
+    /** Opened from one of the deliverable's documents (its Discussions tab): its comments first. */
+    focusDocId?: string
+    /** What a new comment starts with: that document's tag. */
+    initialDraft?: string
+}) {
     const [comments, setComments] = useState<Comment[]>(() => thread ?? sampleThread(documents, new Date()))
+    // The visitor is the firm's lead, so the Reply / Internal note choice is theirs, as in the app.
+    const [internalMode, setInternalMode] = useState(false)
+    const [visibility, setVisibility] = useState<Visibility[]>([])
+    const [scope, setScope] = useState<'file' | 'all'>(focusDocId ? 'file' : 'all')
+    const aboutFile = useMemo(() => (focusDocId ? comments.filter((c) => c.content.includes(`#${focusDocId}`)) : comments), [comments, focusDocId])
+    const inScope = scope === 'file' ? aboutFile : comments
+    const shown = visibility.length ? inScope.filter((c) => visibility.includes(visibilityOf(c))) : inScope
     /** The visitor's own reactions, by comment: shown as theirs, on top of the sample counts. */
     const [mine, setMine] = useState<Record<string, ReactionKey[]>>({})
     const react = (commentId: string, key: ReactionKey) =>
@@ -73,7 +104,7 @@ export function DemoDeliverableComments({ documents, thread, onPost }: { documen
             const keys = prev[commentId] ?? []
             return { ...prev, [commentId]: keys.includes(key) ? keys.filter((k) => k !== key) : [...keys, key] }
         })
-    const [text, setText] = useState('')
+    const [text, setText] = useState(initialDraft)
     const [picked, setPicked] = useState<string[]>([])
     const [mention, setMention] = useState<{ start: number; query: string; left: number } | null>(null)
     const [tag, setTag] = useState<{ start: number; query: string; left: number } | null>(null)
@@ -108,8 +139,10 @@ export function DemoDeliverableComments({ documents, thread, onPost }: { documen
     const people = useMemo(() => {
         if (!mention) return []
         const q = mention.query.toLowerCase()
-        return TEAM.filter((p) => !q || p.name.toLowerCase().split(/\s+/).some((w) => w.startsWith(q)) || p.name.toLowerCase().startsWith(q)).slice(0, 8)
-    }, [mention])
+        return TEAM
+            .filter((p) => !internalMode || !CLIENT_ROLES.has(p.role))
+            .filter((p) => !q || p.name.toLowerCase().split(/\s+/).some((w) => w.startsWith(q)) || p.name.toLowerCase().startsWith(q)).slice(0, 8)
+    }, [mention, internalMode])
 
     const docs = useMemo(() => {
         if (!tag) return []
@@ -155,10 +188,11 @@ export function DemoDeliverableComments({ documents, thread, onPost }: { documen
     const send = () => {
         const content = text.trim()
         if (!content) return
-        const posted = { id: `c-${Date.now()}`, author: ME, at: new Date().toISOString(), content }
+        const posted: Comment = { id: `c-${Date.now()}`, author: ME, at: new Date().toISOString(), content, ...(internalMode ? { internal: true } : {}) }
         setComments((prev) => [...prev, posted])
         onPost?.(posted)
-        setText('')
+        // About a file, the next comment starts with its tag again.
+        setText(initialDraft)
         setPicked([])
         setMention(null)
         setTag(null)
@@ -199,18 +233,68 @@ export function DemoDeliverableComments({ documents, thread, onPost }: { documen
 
     return (
         <div className="flex min-h-0 flex-1 flex-col gap-3 p-4">
+            {/* As in the app: the file's comments or the whole thread, and who sees what */}
+            <div className="@container/filter-bar flex shrink-0 flex-nowrap items-center gap-2">
+                {focusDocId && (
+                    <div role="radiogroup" aria-label="Which comments" className="inline-flex shrink-0 rounded-control border border-line p-0.5 text-caption">
+                        {([['file', `About this file · ${aboutFile.length}`], ['all', `Whole thread · ${comments.length}`]] as const).map(([value, label]) => (
+                            <button
+                                key={value}
+                                type="button"
+                                role="radio"
+                                aria-checked={scope === value}
+                                onClick={() => setScope(value)}
+                                className={cn('rounded-[4px] px-2 py-0.5 transition-colors', scope === value ? 'bg-surface-muted text-fg' : 'text-fg-muted hover:text-fg')}
+                            >
+                                {label}
+                            </button>
+                        ))}
+                    </div>
+                )}
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <FilterPill icon={<Eye />} label="Visibility" collapsible value={visibility.length ? summarizePicks(visibility.map((v) => VISIBILITY_LABEL[v])) : undefined} onClear={() => setVisibility([])} />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className="w-[200px] p-1">
+                        <FilterMenuLabel>Who sees it</FilterMenuLabel>
+                        {(['reply', 'internal'] as const).map((v) => (
+                            <FilterMenuRow
+                                key={v}
+                                multi
+                                icon={v === 'internal' ? <Lock /> : <MessagesSquare />}
+                                selected={visibility.includes(v)}
+                                onSelect={() => setVisibility((l) => (l.includes(v) ? l.filter((x) => x !== v) : [...l, v]))}
+                            >
+                                {VISIBILITY_LABEL[v]}
+                                <span className="ml-1.5 text-caption tabular-nums text-fg-subtle">{inScope.filter((c) => visibilityOf(c) === v).length}</span>
+                            </FilterMenuRow>
+                        ))}
+                    </DropdownMenuContent>
+                </DropdownMenu>
+                {visibility.length > 0 && <span className="ml-auto shrink-0 text-caption tabular-nums text-fg-subtle">{shown.length} of {inScope.length} comments</span>}
+            </div>
             <ol className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
-                {comments.map((c) => {
+                {shown.length === 0 && (
+                    <p className="text-small text-fg-subtle">{scope === 'file' ? 'No comments about this file yet.' : 'No comments match.'}</p>
+                )}
+                {shown.map((c) => {
                     const myKeys = mine[c.id] ?? []
                     const count = (key: ReactionKey) => (c.reactions?.[key] ?? 0) + (myKeys.includes(key) ? 1 : 0)
                     const reacted = REACTIONS.filter((r) => count(r.key) > 0)
                     return (
-                    <li key={c.id} className="group relative grid grid-cols-[24px_minmax(0,1fr)] gap-x-2.5">
+                    <li key={c.id} className={cn('group relative grid grid-cols-[24px_minmax(0,1fr)] gap-x-2.5', c.internal && '-mx-2 rounded-control bg-tag-yellow-bg px-2 py-2')}>
                         <PersonAvatar person={{ name: c.author, avatarUrl: null }} size={24} />
                         <div className="min-w-0">
                             <div className="flex items-center gap-1.5 text-small">
                                 <span className="font-medium text-fg">{c.author === ME ? 'You' : c.author}</span>
                                 <span className="text-fg-subtle" suppressHydrationWarning>{Date.now() - Date.parse(c.at) < 60_000 ? 'just now' : formatDistanceToNowStrict(new Date(c.at), { addSuffix: true })}</span>
+                                {c.internal && (
+                                    <Hint label="Only the firm's team sees this">
+                                        <span className="inline-flex items-center gap-1 text-caption font-medium text-tag-yellow-fg">
+                                            <Lock className="h-2.5 w-2.5" /> Internal
+                                        </span>
+                                    </Hint>
+                                )}
                             </div>
                             <p className="mt-0.5 whitespace-pre-wrap break-words text-ui leading-relaxed text-fg">{render(c.content)}</p>
                             {/* Reactions, as the app draws them (components/comments/reactions.tsx) */}
@@ -264,13 +348,37 @@ export function DemoDeliverableComments({ documents, thread, onPost }: { documen
             </ol>
 
             <form
-                className="shrink-0"
+                className="flex shrink-0 flex-col gap-2"
                 onSubmit={(e) => {
                     e.preventDefault()
                     send()
                 }}
             >
-                <div ref={composerRef} className="relative rounded-control border border-line-strong bg-surface focus-within:border-action/60 focus-within:ring-2 focus-within:ring-action/20">
+                {/* Who sees it: everyone on the engagement, or the firm's team only */}
+                <div role="radiogroup" aria-label="Who sees this comment" className="inline-flex self-start rounded-control border border-line p-0.5 text-caption">
+                    <button
+                        type="button"
+                        role="radio"
+                        aria-checked={!internalMode}
+                        onClick={() => setInternalMode(false)}
+                        className={cn('rounded-[4px] px-2 py-0.5 transition-colors', !internalMode ? 'bg-surface-muted text-fg' : 'text-fg-muted hover:text-fg')}
+                    >
+                        Reply
+                    </button>
+                    <button
+                        type="button"
+                        role="radio"
+                        aria-checked={internalMode}
+                        onClick={() => setInternalMode(true)}
+                        className={cn('inline-flex items-center gap-1 rounded-[4px] px-2 py-0.5 transition-colors', internalMode ? 'bg-tag-yellow-bg text-tag-yellow-fg' : 'text-fg-muted hover:text-fg')}
+                    >
+                        <Lock className="h-3 w-3" /> Internal note
+                    </button>
+                </div>
+                <div ref={composerRef} className={cn(
+                    'relative rounded-control border border-line-strong bg-surface focus-within:border-action/60 focus-within:ring-2 focus-within:ring-action/20',
+                    internalMode && 'border-tag-yellow-fg/40 bg-tag-yellow-bg focus-within:border-tag-yellow-fg/60 focus-within:ring-tag-yellow-fg/20',
+                )}>
                     <div ref={backdropRef} aria-hidden className={cn(COMPOSER_TEXT, 'pointer-events-none absolute inset-x-0 top-0 overflow-hidden text-transparent')}>
                         {backdrop}
                         {text.endsWith('\n') && '​'}
@@ -279,8 +387,8 @@ export function DemoDeliverableComments({ documents, thread, onPost }: { documen
                         ref={textareaRef}
                         value={text}
                         rows={1}
-                        aria-label="Comment"
-                        placeholder="Leave a comment… @ to mention, # to tag a document"
+                        aria-label={internalMode ? 'Internal note' : 'Comment'}
+                        placeholder={internalMode ? "Internal note — only the firm's team sees this…" : 'Leave a comment… @ to mention, # to tag a document'}
                         onScroll={(e) => { if (backdropRef.current) backdropRef.current.scrollTop = e.currentTarget.scrollTop }}
                         onChange={(e) => {
                             setText(e.target.value)

@@ -26,12 +26,12 @@
               { "name": "Discovery Workshop Notes.md", "type": "md" },
               { "name": "Competitive Landscape Analysis.pdf", "type": "pdf" },
               { "name": "TAM SAM SOM Model.xlsx", "type": "xlsx" },
-              { "name": "Customer Interview Summary.docx", "type": "docx" }
+              { "name": "Customer Interview Summary.docx", "type": "docx", "description": "Twelve buyer interviews on how they pick a robotics vendor; the evidence behind the positioning." }
             ]},
             "02__GTM_Strategy_&_Messaging_Playbook": { "name": "02__GTM_Strategy_&_Messaging_Playbook", "files": [
               { "name": "GTM Strategy Deck.pptx", "type": "pptx" },
-              { "name": "Messaging Framework.docx", "type": "docx" },
-              { "name": "Channel Mix Plan.xlsx", "type": "xlsx" }
+              { "name": "Messaging Framework.docx", "type": "docx", "description": "Positioning and value propositions for the go-to-market launch, one page per buyer persona." },
+              { "name": "Channel Mix Plan.xlsx", "type": "xlsx", "description": "Go-to-market channel budget by quarter, and the reach each channel buys." }
             ]},
             "03__Regulatory_&_Legal_Sign-Off_Pack": { "name": "03__Regulatory_&_Legal_Sign-Off_Pack", "files": [
               { "name": "Claims Substantiation Review.pdf", "type": "pdf" },
@@ -144,7 +144,7 @@
               { "name": "Vendor Contracts Summary.xlsx", "type": "xlsx" }
             ]},
             "01__GTM_Plan_&_Launch_Readiness_Kit": { "name": "01__GTM_Plan_&_Launch_Readiness_Kit", "files": [
-              { "name": "GTM Plan.pdf", "type": "pdf" },
+              { "name": "GTM Plan.pdf", "type": "pdf", "description": "Go-to-market strategy for the card launch: audiences, positioning, pricing and the launch timeline." },
               { "name": "Launch Timeline & RACI.xlsx", "type": "xlsx" },
               { "name": "Risk & Contingency Plan.docx", "type": "docx" }
             ]},
