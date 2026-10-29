@@ -61,9 +61,11 @@ export function useEngagementFileOps({
     const [trashConfirming, setTrashConfirming] = useState(false)
     const trashDialogOpenTime = useRef<number>(0)
 
-    // Copy/Move state
+    // Copy/Move state: what the picker acts on — one item from its row menu, or the selection bar's selection
     const [copyMoveModalOpen, setCopyMoveModalOpen] = useState(false)
-    const [copyMoveTarget, setCopyMoveTarget] = useState<DriveFile | null>(null)
+    const [copyMoveTargets, setCopyMoveTargets] = useState<DriveFile[]>([])
+    const copyMoveTarget = copyMoveTargets[0] ?? null
+    const setCopyMoveTarget = useCallback((doc: DriveFile | null) => setCopyMoveTargets(doc ? [doc] : []), [])
     const [copyMoveAction, setCopyMoveAction] = useState<'copy' | 'move'>('copy')
     const [copyMoveKeepBoth, setCopyMoveKeepBoth] = useState(true)
     const [currentPath, setCurrentPath] = useState<{ id: string; name: string }[]>([])
@@ -337,14 +339,21 @@ export function useEngagementFileOps({
     }, [fetchFolderChildrenResult, lookAheadFolders, addToast])
 
     const handleCopyMoveToFolder = useCallback(async (destinationFolderId: string, sourceFileOverride?: DriveFile, actionOverride?: 'copy' | 'move') => {
-        const target = sourceFileOverride || copyMoveTarget
+        const targets = sourceFileOverride ? [sourceFileOverride] : copyMoveTargets
         const action = actionOverride || copyMoveAction
 
-        if (!target || !sessionRef.current?.access_token) return
+        const accessToken = sessionRef.current?.access_token
+        if (!targets.length || !accessToken) return
+
+        // Moving into the folder they're already in would change nothing, yet drop them from this list
+        if (action === 'move' && destinationFolderId === currentFolderIdRef.current) {
+            addToast({ type: 'info', title: 'Already here', message: targets.length === 1 ? `${targets[0].name} is already in this folder` : `These ${targets.length} items are already in this folder` })
+            return
+        }
 
         if (action === 'copy') {
             try {
-                const gateRes = await fetch(`/api/billing/document-gate?projectId=${encodeURIComponent(projectId)}&count=1`)
+                const gateRes = await fetch(`/api/billing/document-gate?projectId=${encodeURIComponent(projectId)}&count=${targets.length}`)
                 if (gateRes.ok) {
                     const gate = await gateRes.json()
                     if (!gate.allowed) {
@@ -356,40 +365,64 @@ export function useEngagementFileOps({
         }
 
         setCopyMoveSubmittingFolderId(destinationFolderId)
-        startProcessing(target.id)
-        try {
-            const res = await fetch('/api/connectors/google-drive/linked-files', {
-                method: 'POST',
-                credentials: 'include',
-                headers: {
-                    Authorization: `Bearer ${sessionRef.current.access_token}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    action: action,
-                    projectId,
-                    fileId: target.id,
-                    destinationFolderId,
-                    keepBoth: copyMoveKeepBoth
+        targets.forEach((t) => startProcessing(t.id))
+        const failed: { name: string; error: string }[] = []
+        const copyOrMove = async (target: DriveFile) => {
+            try {
+                const res = await fetch('/api/connectors/google-drive/linked-files', {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: {
+                        Authorization: `Bearer ${accessToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        action: action,
+                        projectId,
+                        fileId: target.id,
+                        destinationFolderId,
+                        keepBoth: copyMoveKeepBoth
+                    })
                 })
-            })
-            if (!res.ok) {
-                const err = await res.json()
-                throw new Error(err.error || 'Failed to ' + action)
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}))
+                    throw new Error(err.error || 'Failed to ' + action)
+                }
+                if (action === 'move') onItemRemoved?.(target.id)
+            } catch (e: any) {
+                failed.push({ name: target.name, error: e?.message || 'Something went wrong' })
+            } finally {
+                stopProcessing(target.id)
             }
-            addToast({ type: 'success', title: action === 'copy' ? 'Copied' : 'Moved', message: `${target.name} ${action === 'copy' ? 'copied' : 'moved'} successfully` })
-            setCopyMoveModalOpen(false)
-            setCopyMoveTarget(null)
-            if (action === 'move') onItemRemoved?.(target.id)
-            const currentFolderId = currentFolderIdRef.current
-            if (currentFolderId) fetchFiles(currentFolderId, true)
-        } catch (e: any) {
-            addToast({ type: 'error', title: 'Error', message: e?.message || 'Something went wrong' })
-        } finally {
-            setCopyMoveSubmittingFolderId(null)
-            stopProcessing(target.id)
         }
-    }, [copyMoveTarget, copyMoveAction, copyMoveKeepBoth, projectId, currentFolderIdRef, fetchFiles, addToast, startProcessing, stopProcessing, onItemRemoved])
+        // Three at a time: each one is a call to the storage provider
+        const queue = [...targets]
+        const work = async (): Promise<void> => {
+            const next = queue.shift()
+            if (!next) return
+            await copyOrMove(next)
+            return work()
+        }
+        await Promise.all(Array.from({ length: Math.min(3, targets.length) }, work))
+        setCopyMoveSubmittingFolderId(null)
+
+        const done = targets.length - failed.length
+        const title = action === 'copy' ? 'Copied' : 'Moved'
+        const verb = action === 'copy' ? 'copied' : 'moved'
+        if (failed.length === 0) {
+            addToast({ type: 'success', title, message: targets.length === 1 ? `${targets[0].name} ${verb} successfully` : `${targets.length} items ${verb}` })
+        } else if (targets.length === 1) {
+            addToast({ type: 'error', title: 'Error', message: failed[0].error })
+        } else {
+            addToast({ type: 'error', title: `${done} of ${targets.length} ${verb}`, message: `Couldn’t ${action} ${failed.map((f) => f.name).join(', ')}: ${failed[0].error}` })
+        }
+        // Nothing went: the picker stays open to try again or pick another folder
+        if (done === 0) return
+        setCopyMoveModalOpen(false)
+        setCopyMoveTargets([])
+        const currentFolderId = currentFolderIdRef.current
+        if (currentFolderId) fetchFiles(currentFolderId, true)
+    }, [copyMoveTargets, copyMoveAction, copyMoveKeepBoth, projectId, currentFolderIdRef, fetchFiles, addToast, startProcessing, stopProcessing, onItemRemoved])
 
     const handleMoveTree = useCallback(async (doc: DriveFile, targetRoot: 'general' | 'confidential' | 'staging') => {
         if (!sessionRef.current?.access_token) return
@@ -616,8 +649,9 @@ export function useEngagementFileOps({
         }
     }, [projectId, currentFolderIdRef, fetchFiles, addToast, startProcessing, stopProcessing])
 
-    const openCopyMoveModal = useCallback((doc: DriveFile, action: 'copy' | 'move') => {
-        setCopyMoveTarget(doc)
+    /** Opens the Move/Copy picker for one item (its row menu) or several (the selection bar). */
+    const openCopyMoveModal = useCallback((doc: DriveFile | DriveFile[], action: 'copy' | 'move') => {
+        setCopyMoveTargets(Array.isArray(doc) ? doc : [doc])
         setCopyMoveAction(action)
         setCopyMoveKeepBoth(true)
         setEmptyFolderIds(new Set())
@@ -760,6 +794,7 @@ export function useEngagementFileOps({
         setCopyMoveModalOpen,
         copyMoveTarget,
         setCopyMoveTarget,
+        copyMoveTargets,
         copyMoveAction,
         setCopyMoveAction,
         copyMoveKeepBoth,

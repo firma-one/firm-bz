@@ -127,3 +127,114 @@ describe('Move/Copy picker — look-ahead', () => {
         expect(result.current.subfolderIds.has('B')).toBe(false)
     })
 })
+
+describe('Move/Copy to folder — one item or the selection', () => {
+    const file = (id: string, name: string) => ({ id, name, mimeType: 'image/png', connectorId: 'conn' }) as any
+    const A = file('a', 'a.png'), B = file('b', 'b.png'), C = file('c', 'c.png')
+    let gateUrls: string[] = []
+
+    function stubDrive(failIds: string[] = []) {
+        gateUrls = []
+        vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+            if (url.startsWith('/api/billing/document-gate')) {
+                gateUrls.push(url)
+                return { ok: true, json: async () => ({ allowed: true }) } as Response
+            }
+            const body = JSON.parse(init!.body as string)
+            requests.push(body)
+            if (body.action === 'list') return { ok: true, json: async () => ({ files: [] }) } as Response
+            if (failIds.includes(body.fileId)) return { ok: false, json: async () => ({ error: 'Drive said no' }) } as Response
+            return { ok: true, json: async () => ({ success: true }) } as Response
+        }))
+    }
+
+    function setupWithRemoval() {
+        const onItemRemoved = vi.fn()
+        const fetchFiles = vi.fn(async () => {})
+        const { result } = renderHook(() => useEngagementFileOps({
+            sessionRef: { current: { access_token: 't' } },
+            projectId: 'e1',
+            currentFolderIdRef: { current: 'folder-1' },
+            currentFolderType: 'general',
+            generalFolderId: 'folder-1',
+            confidentialFolderId: null,
+            stagingFolderId: null,
+            fetchFiles,
+            fetchSharedIds: vi.fn(),
+            startProcessing: vi.fn(),
+            stopProcessing: vi.fn(),
+            setFiles: vi.fn(),
+            onItemRemoved,
+        }))
+        return { result, onItemRemoved, fetchFiles }
+    }
+
+    const moves = () => requests.filter((r: any) => r.action === 'move' || r.action === 'copy')
+
+    beforeEach(() => { vi.useRealTimers() })
+
+    it('a moved file leaves the list, and the list refreshes', async () => {
+        stubDrive()
+        const { result, onItemRemoved, fetchFiles } = setupWithRemoval()
+        act(() => { result.current.openCopyMoveModal(A, 'move') })
+        await act(async () => { await result.current.handleCopyMoveToFolder('dest') })
+        expect(onItemRemoved).toHaveBeenCalledWith('a')
+        expect(addToast).toHaveBeenLastCalledWith(expect.objectContaining({ type: 'success', title: 'Moved', message: 'a.png moved successfully' }))
+        expect(result.current.copyMoveModalOpen).toBe(false)
+        expect(fetchFiles).toHaveBeenLastCalledWith('folder-1', true)
+    })
+
+    it('moves every selected item to the picked folder, in one toast', async () => {
+        stubDrive()
+        const { result, onItemRemoved } = setupWithRemoval()
+        act(() => { result.current.openCopyMoveModal([A, B, C], 'move') })
+        expect(result.current.copyMoveTargets.map((t) => t.id)).toEqual(['a', 'b', 'c'])
+        await act(async () => { await result.current.handleCopyMoveToFolder('dest') })
+        expect(moves().map((r: any) => [r.fileId, r.destinationFolderId])).toEqual([['a', 'dest'], ['b', 'dest'], ['c', 'dest']])
+        expect(onItemRemoved.mock.calls.map((c) => c[0]).sort()).toEqual(['a', 'b', 'c'])
+        expect(addToast).toHaveBeenCalledTimes(1)
+        expect(addToast).toHaveBeenLastCalledWith(expect.objectContaining({ type: 'success', message: '3 items moved' }))
+        expect(result.current.copyMoveTargets).toEqual([])
+    })
+
+    it('names what could not be moved, and keeps the rest moved', async () => {
+        stubDrive(['b'])
+        const { result, onItemRemoved } = setupWithRemoval()
+        act(() => { result.current.openCopyMoveModal([A, B, C], 'move') })
+        await act(async () => { await result.current.handleCopyMoveToFolder('dest') })
+        expect(onItemRemoved.mock.calls.map((c) => c[0]).sort()).toEqual(['a', 'c'])
+        expect(addToast).toHaveBeenLastCalledWith(expect.objectContaining({ type: 'error', title: '2 of 3 moved', message: 'Couldn’t move b.png: Drive said no' }))
+        expect(result.current.copyMoveModalOpen).toBe(false)
+    })
+
+    it('keeps the picker open when nothing could be moved', async () => {
+        stubDrive(['a'])
+        const { result, onItemRemoved } = setupWithRemoval()
+        act(() => { result.current.openCopyMoveModal(A, 'move') })
+        await act(async () => { await result.current.handleCopyMoveToFolder('dest') })
+        expect(onItemRemoved).not.toHaveBeenCalled()
+        expect(addToast).toHaveBeenLastCalledWith(expect.objectContaining({ type: 'error', message: 'Drive said no' }))
+        expect(result.current.copyMoveModalOpen).toBe(true)
+    })
+
+    it('does nothing to items moved into the folder they are already in', async () => {
+        stubDrive()
+        const { result, onItemRemoved } = setupWithRemoval()
+        act(() => { result.current.openCopyMoveModal([A, B], 'move') })
+        await act(async () => { await result.current.handleCopyMoveToFolder('folder-1') })
+        expect(moves()).toEqual([])
+        expect(onItemRemoved).not.toHaveBeenCalled()
+        expect(addToast).toHaveBeenLastCalledWith(expect.objectContaining({ type: 'info', title: 'Already here' }))
+    })
+
+    it('checks the plan limit for every file a bulk copy adds, and leaves the copies\' sources listed', async () => {
+        stubDrive()
+        const { result, onItemRemoved } = setupWithRemoval()
+        act(() => { result.current.openCopyMoveModal([A, B], 'copy') })
+        await act(async () => { await result.current.handleCopyMoveToFolder('folder-1') })
+        expect(gateUrls).toEqual(['/api/billing/document-gate?projectId=e1&count=2'])
+        expect(moves().map((r: any) => [r.action, r.fileId])).toEqual([['copy', 'a'], ['copy', 'b']])
+        expect(onItemRemoved).not.toHaveBeenCalled()
+        expect(addToast).toHaveBeenLastCalledWith(expect.objectContaining({ type: 'success', title: 'Copied', message: '2 items copied' }))
+    })
+})
