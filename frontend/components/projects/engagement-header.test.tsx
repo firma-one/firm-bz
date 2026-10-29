@@ -63,4 +63,16 @@ describe('EngagementHeader', () => {
         render(<EngagementHeader {...props} status="COMPLETED" showPeople={false} />)
         expect(screen.queryByRole('button', { name: /Completed/ })).toBeNull()
     })
+
+    it("links the open tab's guided-tour chapter in a new tab, and nothing without one", () => {
+        const { unmount } = render(<EngagementHeader {...props} guide="board" />)
+        const link = screen.getByRole('link', { name: 'How this works' })
+        expect(link.getAttribute('href')).toBe('/tour?guide=board')
+        expect(link.getAttribute('target')).toBe('_blank')
+        expect(link.getAttribute('rel')).toContain('noopener')
+        unmount()
+        // Client roles (and the tour itself) pass no chapter.
+        render(<EngagementHeader {...props} guide={null} />)
+        expect(screen.queryByRole('link', { name: 'How this works' })).toBeNull()
+    })
 })

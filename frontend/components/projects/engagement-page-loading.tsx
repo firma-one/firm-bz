@@ -7,7 +7,7 @@ import { StatusPill } from '@/components/ui/status-pill'
 import { LoadingAnnouncement, ShimmerBar, ShimmerBlock } from '@/components/ui/shimmer'
 import { useShellData } from '@/components/shell/shell-data-context'
 import { EngagementHeader } from './engagement-header'
-import { EngagementTabsList, engagementChromeKey, readEngagementChrome } from './engagement-tabs'
+import { EngagementTabsList, engagementChromeKey, engagementTabGuide, readEngagementChrome } from './engagement-tabs'
 import { HorizontalScroll } from '@/components/ui/horizontal-scroll'
 
 const TABS = new Set(['analytics', 'files', 'board', 'shares', 'comments', 'wiki', 'audit', 'members', 'settings', 'sources'])
@@ -80,6 +80,7 @@ export function EngagementPageLoading() {
                         fetchPeople={false}
                         membersHref={`/d/${groupSlug}/f/${firmSlug}/c/${clientSlug}/e/${engagementSlug}/members`}
                         personaDisplayName={snapshot.personaDisplayName}
+                        guide={snapshot.tourLinks ? engagementTabGuide(targetTab ?? 'files') : null}
                     />
                 ) : (
                     <header className="flex flex-col gap-2 pb-3" aria-hidden>

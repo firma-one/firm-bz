@@ -23,6 +23,9 @@ import { CalendarView } from '@/components/calendar/calendar-view'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { useAuth } from '@/lib/auth-context'
 import { LandingArrival } from '@/components/app/landing-arrival'
+import { HowThisWorksLink } from '@/components/ui/how-this-works-link'
+import { useOptionalShellData } from '@/components/shell/shell-data-context'
+import type { TourNodeId } from '@/lib/demo/tour-chapters'
 
 interface FirmClientsViewProps {
     clients: ClientSummary[]
@@ -44,13 +47,15 @@ const VIEW_MODE_KEY = 'fm-clients-view'
 
 /**
  * The title for each firm view. Doc Search and Members carry their own headings (search
- * history toggle, invite button), so they are left out here.
+ * history toggle, invite button), so they are left out here. `guide` is the guided tour's section
+ * for the view, linked beside the title (.claude/plans/tour-chapters.md); Settings has none, as the
+ * tour only says where it is.
  */
-const VIEW_TITLES: Record<string, { title: string; icon: ReactNode; lock?: string }> = {
-    analytics: { title: 'Overview', icon: <BarChart3 />, lock: FIRM_ADMINS_ONLY },
-    clients: { title: 'Clients', icon: <ClientIcon /> },
-    calendar: { title: 'Calendar', icon: <CalendarDays /> },
-    audit: { title: 'Audit', icon: <ClipboardList />, lock: FIRM_ADMINS_ONLY },
+const VIEW_TITLES: Record<string, { title: string; icon: ReactNode; lock?: string; guide?: TourNodeId }> = {
+    analytics: { title: 'Overview', icon: <BarChart3 />, lock: FIRM_ADMINS_ONLY, guide: 'firm-overview' },
+    clients: { title: 'Clients', icon: <ClientIcon />, guide: 'all-clients' },
+    calendar: { title: 'Calendar', icon: <CalendarDays />, guide: 'calendar' },
+    audit: { title: 'Audit', icon: <ClipboardList />, lock: FIRM_ADMINS_ONLY, guide: 'firm-audit' },
     settings: { title: 'Settings', icon: <Settings />, lock: FIRM_ADMINS_ONLY },
 }
 
@@ -59,6 +64,8 @@ export function FirmClientsView({ clients, groupSlug, orgSlug, orgId, firmSandbo
     const pathname = usePathname()
     const searchParams = useSearchParams()
     const { user } = useAuth()
+    // The tour shows the firm's view, so its links stay off for client-only users.
+    const isExternalOnly = useOptionalShellData()?.data?.isExternalOnly ?? false
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('list')
     const [orgName, setOrgName] = useState<string | null>(null)
     const [isPendingRefresh, startRefresh] = useTransition()
@@ -176,6 +183,7 @@ export function FirmClientsView({ clients, groupSlug, orgSlug, orgId, firmSandbo
         <PageHeading
             className="pb-4 print:hidden"
             icon={view.icon}
+            titleAside={view.guide && !isExternalOnly ? <HowThisWorksLink guide={view.guide} /> : undefined}
             title={
                 <span className="flex min-w-0 items-center gap-2">
                     <span className="truncate">{view.title}</span>

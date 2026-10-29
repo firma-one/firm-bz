@@ -11,15 +11,18 @@ export interface PageHeadingProps extends Omit<React.HTMLAttributes<HTMLElement>
     /** Emoji, logo or icon shown before the title. */
     icon?: React.ReactNode
     actions?: React.ReactNode
+    /** Quiet extras beside the title, such as the page's "How this works" link. */
+    titleAside?: React.ReactNode
 }
 
-export function PageHeading({ title, description, icon, actions, className, children, ...props }: PageHeadingProps) {
+export function PageHeading({ title, description, icon, actions, titleAside, className, children, ...props }: PageHeadingProps) {
     return (
         <header className={cn("flex flex-col gap-1 pb-6", className)} {...props}>
             <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
                 <div className="flex min-w-0 items-center gap-3">
                     {icon && <span className="flex shrink-0 items-center text-fg-muted [&_svg]:h-7 [&_svg]:w-7">{icon}</span>}
                     <h1 className="min-w-0 truncate text-h1 text-fg">{title}</h1>
+                    {titleAside}
                 </div>
                 {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
             </div>

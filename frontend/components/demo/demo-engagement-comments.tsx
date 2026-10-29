@@ -195,21 +195,23 @@ export function DemoEngagementComments({ engagement }: { engagement: DemoEngagem
 
     return (
         <div className="flex flex-col gap-3">
-            <CommentsToolbar
-                view={view}
-                onView={setView}
-                counts={{
-                    all: now === null ? null : rowsInView(found, 'all').length,
-                    awaiting: now === null ? null : rowsInView(found, 'awaiting').length,
-                    mentions: null,
-                    resolved: now === null ? null : rowsInView(found, 'resolved').length,
-                }}
-                query={query}
-                onQuery={setQuery}
-            />
+            <div data-demo-tour="discussions-views">
+                <CommentsToolbar
+                    view={view}
+                    onView={setView}
+                    counts={{
+                        all: now === null ? null : rowsInView(found, 'all').length,
+                        awaiting: now === null ? null : rowsInView(found, 'awaiting').length,
+                        mentions: null,
+                        resolved: now === null ? null : rowsInView(found, 'resolved').length,
+                    }}
+                    query={query}
+                    onQuery={setQuery}
+                />
+            </div>
 
             {view !== 'mentions' && (
-                <div className="overflow-hidden border-t border-line">
+                <div className="overflow-hidden border-t border-line" data-demo-tour="discussions-threads">
                     {now !== null && rows.length === 0 ? (
                         <EmptyDiscussions view={view} query={query} />
                     ) : (

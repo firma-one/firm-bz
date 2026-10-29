@@ -78,7 +78,7 @@ export function DemoClientDetail({ client }: { client: DemoClient }) {
                             </TabsTrigger>
                         </span>
                         <Hint label={NOT_IN_DEMO} side="bottom">
-                            <span className="inline-flex">
+                            <span className="inline-flex" data-demo-tour="client-contacts-tab">
                                 <TabsTrigger value="contacts" disabled className="relative gap-1.5">
                                     <Contact className="h-4 w-4" />
                                     Contacts

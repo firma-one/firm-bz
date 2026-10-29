@@ -20,7 +20,7 @@ import { EngagementCommentsTab } from './engagement-comments-tab'
 import { EngagementWikiTab } from './wiki/engagement-wiki-tab'
 import type { LwCrmEngagementStatus } from '@/lib/actions/project'
 import { EngagementHeader } from './engagement-header'
-import { EngagementTabsList, engagementChromeKey, rememberEngagementChrome, type EngagementTabsConfig } from './engagement-tabs'
+import { EngagementTabsList, engagementChromeKey, engagementTabGuide, rememberEngagementChrome, type EngagementTabsConfig } from './engagement-tabs'
 import { HorizontalScroll } from '@/components/ui/horizontal-scroll'
 
 export interface ProjectPathSegments {
@@ -200,6 +200,7 @@ export function EngagementWorkspace({
             dueDate: engagementDueDate,
             showPeople: Boolean(canViewInternalTabs),
             personaDisplayName: projectPersonaDisplayName,
+            tourLinks: !isExternalPersona,
             tabs: tabsConfig,
         })
     })
@@ -238,6 +239,8 @@ export function EngagementWorkspace({
                 showPeople={canViewInternalTabs}
                 membersHref={`${base}/members`}
                 personaDisplayName={projectPersonaDisplayName}
+                // The tour shows the firm's view, so client roles (and "view as" one) get no link.
+                guide={isExternalPersona ? null : engagementTabGuide(currentTab)}
             />
 
             <Tabs value={currentTab} onValueChange={handleTabChange} className="flex-1 flex flex-col min-h-0">

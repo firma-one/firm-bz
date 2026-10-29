@@ -215,7 +215,9 @@ export function HomeView({
             ) : (
                 <>
                     {/* First, always: what is waiting on you. The order never changes with the day's state. */}
-                    <NeedsYouSection items={work.needsYou} label={label} />
+                    <div data-demo-tour="home-needs-you">
+                        <NeedsYouSection items={work.needsYou} label={label} />
+                    </div>
 
                     <ContinueSection recents={recents} label={label} />
 

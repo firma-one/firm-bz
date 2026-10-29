@@ -3,7 +3,7 @@
 import { Fragment, type ReactNode } from 'react'
 import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
-import { BarChart3, Briefcase, Building2, CalendarDays, ChevronRight, ClipboardList, Folder, Home, Inbox, LayoutGrid, LifeBuoy, Menu, MessagesSquare, Search, Users } from 'lucide-react'
+import { BarChart3, Briefcase, Building2, CalendarDays, ChevronRight, ClipboardList, Folder, Home, Inbox, LayoutGrid, LifeBuoy, Menu, MessagesSquare, Search, Settings, Users } from 'lucide-react'
 import { WindowGlyph } from '@/components/ui/window-glyph'
 import { ClientIcon } from '@/components/ui/client-icon'
 import { cn } from '@/lib/utils'
@@ -22,6 +22,7 @@ const FIRM_VIEWS: Record<string, Crumb> = {
     'doc-search': { label: 'Doc Search', icon: <Search /> },
     members: { label: 'Members', icon: <Users /> },
     audit: { label: 'Audit', icon: <ClipboardList /> },
+    settings: { label: 'Settings', icon: <Settings /> },
 }
 
 const ENGAGEMENT_TABS: Record<string, Crumb> = {
@@ -31,6 +32,7 @@ const ENGAGEMENT_TABS: Record<string, Crumb> = {
     comments: { label: 'Discussions', icon: <MessagesSquare /> },
     audit: { label: 'Audit', icon: <ClipboardList /> },
     members: { label: 'Members', icon: <Users /> },
+    settings: { label: 'Settings', icon: <Settings /> },
 }
 
 function useDemoCrumbs(): Crumb[] {

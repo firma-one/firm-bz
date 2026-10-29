@@ -118,7 +118,7 @@ export function DemoDeliverablePane({ deliverable, onClose, embedded = false }: 
             </div>
 
             {/* Tab bar */}
-            <div className="flex border-b border-[#e5e7eb] shrink-0">
+            <div className="flex border-b border-[#e5e7eb] shrink-0" data-demo-tour="deliverable-tabs">
                 {TABS.map((tab) => (
                     <Tooltip key={tab.id}>
                         <TooltipTrigger asChild>
@@ -156,7 +156,7 @@ export function DemoDeliverablePane({ deliverable, onClose, embedded = false }: 
             {/* Details */}
             {activeTab === 'details' && <div className="flex-1 min-h-0 overflow-y-auto">
                 <div className="divide-y divide-[#e5e7eb]">
-                    <div className="px-4 py-4">
+                    <div className="px-4 py-4" data-demo-tour="deliverable-documents">
                         <div className="flex items-center gap-3 mb-3">
                             <label className="font-mono text-[9px] font-bold uppercase tracking-widest text-[#45474c] shrink-0">
                                 Documents{onBoard.length > 0 ? ` · ${onBoard.length}` : ''}

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import {
     ArrowDownUp,
     Bookmark,
@@ -463,7 +464,7 @@ function EntryRow({
                 </div>
             </div>
 
-            <div className={`min-w-0 items-center ${STATUS_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}>
+            <div className={`min-w-0 items-center ${STATUS_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`} data-demo-tour={statusEditable ? 'files-stage' : undefined}>
                 {statusEditable ? (
                     <StatusProperty
                         kind="deliverable"
@@ -481,7 +482,7 @@ function EntryRow({
                 ) : empty}
             </div>
 
-            <div className={`items-center ${DUE_DATE_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}>
+            <div className={`items-center ${DUE_DATE_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`} data-demo-tour={tracked && !isFolder ? 'files-due' : undefined}>
                 {/* As in the app: files and deliverable folders take a Due; other folders have none */}
                 {!isFolder || deliverableStatus ? (
                     <DateProperty value={dueDate ?? null} onChange={onSetDue} placeholder={tracked ? 'Not set' : '—'} highlightOverdue allowTime={!isFolder} compact chip />
@@ -789,6 +790,31 @@ export function DemoFileList({
         if (detailsOpen.current) paneRef.current.clearPane()
     }, [])
     const openDetails = (file: DemoFile) => setDetailsFor({ file, deliverable: insideDeliverable ? path[0] : null })
+
+    // The guided tour opens a top-level folder (?folder=) and a file's Details (&details=) by URL
+    // (.claude/plans/tour-chapters.md). Only a change to them moves the list: browsing by hand leaves
+    // the URL alone, and when one goes away (the tour steps back), the list goes back with it.
+    const searchParams = useSearchParams()
+    const folderParam = searchParams.get('folder')
+    const detailsParam = searchParams.get('details')
+    useEffect(() => {
+        const folder = folderParam ? folders.find((f) => f.id === folderParam) : undefined
+        openFolder(folder ? [folder] : [])
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [folderParam])
+    const detailsFromUrl = useRef(false)
+    useEffect(() => {
+        const folder = folderParam ? folders.find((f) => f.id === folderParam) : undefined
+        const file = detailsParam && folder ? demoFilesIn(folder).find((f) => f.id === detailsParam) : undefined
+        if (file && folder) {
+            detailsFromUrl.current = true
+            setDetailsFor({ file, deliverable: deliverableStatusByFolderId?.[folder.id] ? folder : null })
+        } else if (detailsFromUrl.current) {
+            detailsFromUrl.current = false
+            paneRef.current.clearPane()
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [detailsParam, folderParam])
 
     // Esc clears a selection, as in the app.
     useEffect(() => {

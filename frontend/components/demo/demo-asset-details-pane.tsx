@@ -99,7 +99,7 @@ export function DemoAssetDetailsPane({ file, creator, assignee, stage, dueDate, 
                         </span>
                     </PropertyRow>
                     {canBlock && (
-                        <PropertyRow label="Blocked" icon={<Ban />}>
+                        <PropertyRow label="Blocked" icon={<Ban />} data-demo-tour="details-blocked">
                             <div className="flex min-w-0 flex-1 flex-col gap-1">
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
@@ -160,7 +160,7 @@ export function DemoAssetDetailsPane({ file, creator, assignee, stage, dueDate, 
             </div>
 
             <Tabs defaultValue="details" className="flex min-h-0 flex-1 flex-col">
-                <TabsList className="flex w-full shrink-0 gap-4 px-4">
+                <TabsList className="flex w-full shrink-0 gap-4 px-4" data-demo-tour="details-tabs">
                     {([['details', 'Details', Info], ['versions', 'Versions', History], ['activity', 'Activity', ActivityIcon], ['discussions', 'Discussions', MessagesSquare]] as const).map(([value, label, Icon]) => (
                         <TabsTrigger key={value} value={value} className="gap-1.5">
                             <Icon className="h-3.5 w-3.5" />

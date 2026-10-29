@@ -18,6 +18,7 @@ import { DemoEngagementComments } from '@/components/demo/demo-engagement-commen
 import { DemoEngagementAudit } from '@/components/demo/demo-engagement-audit'
 import { DemoEngagementMembers } from '@/components/demo/demo-engagement-members'
 import { DemoBrioChat } from '@/components/demo/demo-brio-chat'
+import { DemoEngagementSettings } from '@/components/demo/demo-engagement-settings'
 import { filesChat, overviewChat, overviewFacts } from '@/lib/demo/demo-brio'
 
 interface DemoEngagementWorkspaceProps {
@@ -25,11 +26,11 @@ interface DemoEngagementWorkspaceProps {
     engagement: DemoEngagement
 }
 
-const VALID_TABS = new Set(['analytics', 'files', 'board', 'comments', 'audit', 'members'])
+const VALID_TABS = new Set(['analytics', 'files', 'board', 'comments', 'audit', 'members', 'settings'])
 
 /** Static counterpart to engagement-workspace.tsx: the app's engagement header and tab row over the
  * selected engagement's sample data. Overview, Files, Board, Discussions, Audit and Members are static
- * pages; Settings is left out, as for a viewer who can't manage the engagement. */
+ * pages; Settings shows as for the engagement's lead, its form over the sample engagement. */
 export function DemoEngagementWorkspace({ client, engagement }: DemoEngagementWorkspaceProps) {
     const router = useRouter()
     const pathname = usePathname()
@@ -49,6 +50,7 @@ export function DemoEngagementWorkspace({ client, engagement }: DemoEngagementWo
     }
 
     const deliverableCount = getDemoDeliverables(engagement).length
+    const description = `${engagement.contractType ?? 'Client'} engagement · ${countFilesInEngagement(engagement)} files across ${engagement.folders.length} folders`
     const kickoff = (() => {
         if (!engagement.dueDate) return null
         const d = new Date(engagement.dueDate)
@@ -67,7 +69,7 @@ export function DemoEngagementWorkspace({ client, engagement }: DemoEngagementWo
                 clientName={client.name}
                 clientHref={`/tour/${client.slug}`}
                 name={engagement.name}
-                description={`${engagement.contractType ?? 'Client'} engagement · ${countFilesInEngagement(engagement)} files across ${engagement.folders.length} folders`}
+                description={description}
                 status="ACTIVE"
                 kickoffDate={kickoff}
                 dueDate={engagement.dueDate ?? null}
@@ -87,7 +89,7 @@ export function DemoEngagementWorkspace({ client, engagement }: DemoEngagementWo
                             memberCount={4}
                             canViewInternalTabs={true}
                             canManage={true}
-                            canViewSettings={false}
+                            canViewSettings={true}
                         />
                     </HorizontalScroll>
                     {currentTab === 'files' && (
@@ -122,6 +124,9 @@ export function DemoEngagementWorkspace({ client, engagement }: DemoEngagementWo
                     </TabsContent>
                     <TabsContent value="members" className="m-0">
                         <DemoEngagementMembers />
+                    </TabsContent>
+                    <TabsContent value="settings" className="m-0">
+                        <DemoEngagementSettings engagement={engagement} description={description} kickoff={kickoff} />
                     </TabsContent>
                 </div>
             </Tabs>

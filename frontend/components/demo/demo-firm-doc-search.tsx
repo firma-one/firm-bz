@@ -153,7 +153,7 @@ export function DemoFirmDocSearch({ firm }: { firm: DemoFirm }) {
                 </button>
             </div>
 
-            <div className="flex flex-wrap items-center gap-1.5 pt-3">
+            <div className="flex flex-wrap items-center gap-1.5 pt-3" data-demo-tour="doc-search-filters">
                 {STAGES.map(({ stage, label, icon }) => {
                     const reason = disabledReason(stage)
                     const value = filters[stage]

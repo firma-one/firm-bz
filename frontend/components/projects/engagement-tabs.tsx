@@ -7,6 +7,7 @@ import { AccessLock } from '@/components/ui/access-lock'
 import { GoogleDriveIcon } from '@/components/ui/google-drive-icon'
 import { OneDriveIcon } from '@/components/ui/onedrive-icon'
 import type { LwCrmEngagementStatus } from '@/lib/actions/project'
+import type { TourNodeId } from '@/lib/demo/tour-chapters'
 
 /** Thin indeterminate bar under a tab while its route loads. */
 export function PendingBar() {
@@ -121,7 +122,24 @@ export type EngagementChromeSnapshot = {
     dueDate: string | null
     showPeople: boolean
     personaDisplayName?: string | null
+    /** Whether the header links the guided tour: not for client roles (engagementTabGuide). */
+    tourLinks: boolean
     tabs: EngagementTabsConfig
+}
+
+/** The guided tour's section for an engagement tab, linked beside the page title
+ * (.claude/plans/tour-chapters.md). Settings has none: the tour only says where it is. */
+const TAB_GUIDES: Record<string, TourNodeId> = {
+    analytics: 'engagement-overview',
+    files: 'files',
+    board: 'board',
+    comments: 'discussions',
+    members: 'engagement-members',
+    audit: 'engagement-audit',
+}
+
+export function engagementTabGuide(tab: string): TourNodeId | null {
+    return TAB_GUIDES[tab] ?? null
 }
 
 /**

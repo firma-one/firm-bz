@@ -1,289 +1,120 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import { Joyride, EVENTS, STATUS, type EventData, type Controls, type TooltipRenderProps } from 'react-joyride'
-import { X } from 'lucide-react'
+import { Pause, Play, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Brio } from '@/components/ui/brio'
-import { DEMO_FIRM } from '@/lib/demo/static-demo-data'
+import { Hint } from '@/components/ui/tooltip'
 import { useDemoTour } from '@/lib/demo/demo-tour-context'
+import { GUIDE_PARAM, autoplayDuration, tourNode, type TourNodeId } from '@/lib/demo/tour-chapters'
+import { tourSteps } from '@/components/demo/demo-tour-steps'
+import { TourNodeTitle } from '@/components/demo/demo-tour-labels'
 
 const JoyrideAny = Joyride as any
 
-const firstClient = DEMO_FIRM.clients[0]
-const firstEngagement = firstClient?.engagements[0]
-
-const firm = '/tour'
-const client = firstClient ? `/tour/${firstClient.slug}` : firm
-const eng = firstClient && firstEngagement ? `/tour/${firstClient.slug}/${firstEngagement.slug}` : client
-
-interface TourStep {
-    target: string
-    title: React.ReactNode
-    content: React.ReactNode
-    route: string
-    placement?: 'top' | 'bottom' | 'left' | 'right'
-    disableBeacon?: boolean
-    /** Disable Popper's auto-flip for this step — use when the "natural" side is known to be
-     * cramped (e.g. dense page content sitting right below the target) and flipping would just
-     * trade one collision for another. */
-    disableFlip?: boolean
-    /** Skip Joyride's scroll-into-view for this step — use when the target is already visible
-     * without scrolling; letting Joyride "center" it anyway can drag the whole page (tab strip
-     * included) uncomfortably close to the topbar on short pages, squeezing the tooltip. */
-    skipScroll?: boolean
+/** What the step card needs beyond Joyride's own step: its node, where it sits in it, and its own autoplay time if it has one. */
+interface StepCardData {
+    node: TourNodeId
+    indexInNode: number
+    nodeSize: number
+    wholeTour: boolean
+    duration?: number
 }
 
-/** The guided tour's steps, over the public tour's New UI shell: firm views are sidebar items
- * (?tab= on /tour), and Home and the Inbox stand for recents, reminders and bookmarks. Settings
- * pages and View As don't exist in this static copy, so they have no steps. */
-const STEPS: TourStep[] = [
-    {
-        target: '[data-demo-tour="command-palette"]',
-        title: 'Command palette',
-        content: <p>Press ⌘K (or Ctrl K) to instantly jump anywhere — clients, engagements, settings, reminders, and more.</p>,
-        route: firm,
-        placement: 'right',
-        disableBeacon: true,
-    },
-    {
-        target: '[data-demo-tour="firm-overview-tab"]',
-        title: 'Firm overview',
-        content: <p>Overview shows business insights — revenue pipeline, engagement health, and what needs attention across all clients.</p>,
-        route: `${firm}?tab=analytics`,
-        placement: 'right',
-        skipScroll: true,
-    },
-    {
-        target: '[data-demo-tour="firm-brief"]',
-        title: "Today's brief",
-        content: <p><Brio />, Firma&apos;s AI assistant, writes a daily brief from your firm&apos;s own data: where things stand, what needs attention and what&apos;s worth watching.</p>,
-        route: `${firm}?tab=analytics`,
-        placement: 'bottom',
-        skipScroll: true,
-    },
-    {
-        target: '[data-demo-tour="firm-calendar-tab"]',
-        title: 'Calendar',
-        content: <p>See deadlines and events across every client and engagement in your firm in one calendar — switch between Month, Week, Day, and Agenda views.</p>,
-        route: `${firm}?tab=calendar`,
-        placement: 'right',
-        skipScroll: true,
-    },
-    {
-        target: '[data-demo-tour="firm-doc-search-tab"]',
-        title: 'Doc search',
-        content: <p>Search every document across your firm by filename or topic — powered by AI semantic search, with filters for file type, client, and engagement.</p>,
-        route: `${firm}?tab=doc-search`,
-        placement: 'right',
-        skipScroll: true,
-    },
-    {
-        target: '[data-demo-tour="firm-members-tab"]',
-        title: 'Firm members',
-        content: <p>As the firm owner, you&apos;re an administrator by default. Invite more administrators here if you&apos;d like help managing the firm. Per-engagement access and roles are set separately in each engagement&apos;s Members tab.</p>,
-        route: `${firm}?tab=members`,
-        placement: 'right',
-        skipScroll: true,
-    },
-    {
-        target: '[data-demo-tour="firm-audit-tab"]',
-        title: 'Firm audit log',
-        content: <p>A complete activity log across all clients and engagements in your firm — searchable and exportable.</p>,
-        route: `${firm}?tab=audit`,
-        placement: 'right',
-        skipScroll: true,
-    },
-    {
-        target: '[data-demo-tour="firm-clients-tab"]',
-        title: 'Clients',
-        content: <p>Every client workspace for your firm lives here — each with its own branding, contacts, and engagements.</p>,
-        route: `${firm}?tab=clients`,
-        placement: 'right',
-        skipScroll: true,
-    },
-    {
-        target: '[data-demo-tour="firm-add-client-btn"]',
-        title: 'Add a client',
-        content: <p>Create a new client workspace. Each client can have its own branding, contacts, and multiple engagements.</p>,
-        route: `${firm}?tab=clients`,
-        placement: 'bottom',
-        skipScroll: true,
-    },
-    ...(firstClient ? [
-        {
-            target: '[data-demo-tour="client-engagements-tab"]',
-            title: 'Engagements',
-            content: <p>Every engagement for this client lives here — each one is its own client-billable project with its own files, shares, and team.</p>,
-            route: client,
-            placement: 'bottom' as const,
-            skipScroll: true,
-        },
-        {
-            target: '[data-demo-tour="engagement-add-btn"]',
-            title: 'Add an engagement',
-            content: <p>Engagements are client-billable projects — e.g. SEO retainers, paid media campaigns, content sprints, brand audits, or social strategy. Run them as a <strong>Retainer</strong>, <strong>T&amp;M</strong>, or <strong>Fixed Price</strong> engagement. Each has its own files, shares, and team.</p>,
-            route: client,
-            placement: 'bottom' as const,
-            skipScroll: true,
-        },
-    ] : []),
-    ...(firstEngagement ? [
-        {
-            target: '[data-demo-tour="engagement-header"]',
-            title: 'Engagement',
-            content: <p>The engagement header shows the project name, status, and key metadata. Everything for this engagement lives here.</p>,
-            route: `${eng}?tab=analytics`,
-            placement: 'bottom' as const,
-            skipScroll: true,
-        },
-        {
-            target: '[data-demo-tour="engagement-overview-tab"]',
-            title: 'Engagement overview',
-            content: <p>The Overview tab surfaces engagement-level insights — progress, activity, and key metrics at a glance.</p>,
-            route: `${eng}?tab=analytics`,
-            placement: 'bottom' as const,
-            skipScroll: true,
-        },
-        {
-            target: '[data-demo-tour="ask-brio"]',
-            title: <>Ask <Brio /></>,
-            content: <p>Ask <Brio /> about this engagement: what&apos;s due, what&apos;s waiting on the client, where things stand. Prompt hints get you started, and <Brio noIcon /> is on the Files tab too.</p>,
-            route: `${eng}?tab=analytics`,
-            placement: 'top' as const,
-            skipScroll: true,
-        },
-        {
-            target: '[data-demo-tour="engagement-files-tab"]',
-            title: 'Files',
-            content: <p>The Files tab is the default view — browse folders, upload documents, and manage the full file hierarchy for this engagement.</p>,
-            route: `${eng}?tab=files`,
-            placement: 'bottom' as const,
-            skipScroll: true,
-        },
-        {
-            target: '[data-demo-tour="engagement-upload-btn"]',
-            title: 'Upload files and create folders',
-            content: <p>Upload files from your computer, create new folders, or import from Google Drive — think strategy decks, SOPs, campaign reports, client onboarding docs, or quarterly reviews. You can also drag and drop directly.</p>,
-            route: `${eng}?tab=files`,
-            placement: 'bottom' as const,
-            skipScroll: true,
-        },
-        {
-            target: '[data-demo-tour="document-action-trigger"]',
-            title: 'Document actions',
-            content: <p>Hover a row for its quick actions, or click ⋯ on any file to open, download, comment on, bookmark, set a due date, rename or move it, and more.</p>,
-            route: `${eng}?tab=files`,
-            placement: 'left' as const,
-        },
-        {
-            target: '[data-demo-tour="engagement-board-tab"]',
-            title: 'Deliverables board',
-            content: (
-                <div className="space-y-2">
-                    <p>The Board tracks shared documents as deliverables through a Kanban-style workflow.</p>
-                    <ul className="space-y-1.5">
-                        <li><strong>Four stages</strong> — To Do, In Progress, In Review, and Approved.</li>
-                        <li><strong>Drag to advance</strong> — move cards one stage at a time; approved deliverables are locked.</li>
-                        <li><strong>Subtask detail</strong> — click any card to see assigned documents, due dates, and assignees.</li>
-                    </ul>
-                </div>
-            ),
-            route: `${eng}?tab=board`,
-            placement: 'bottom' as const,
-            skipScroll: true,
-        },
-        {
-            target: '[data-demo-tour="engagement-comments-tab"]',
-            title: 'Discussions',
-            content: <p>Every deliverable’s discussion in one place: see what’s new and who’s waiting on a reply, answer without leaving the page, and resolve what’s settled.</p>,
-            route: `${eng}?tab=comments`,
-            placement: 'bottom' as const,
-            skipScroll: true,
-        },
-        {
-            target: '[data-demo-tour="engagement-audit-tab"]',
-            title: 'Engagement audit',
-            content: <p>A full activity log for this engagement — who uploaded, shared, commented, or changed settings and when.</p>,
-            route: `${eng}?tab=audit`,
-            placement: 'bottom' as const,
-            skipScroll: true,
-        },
-        {
-            target: '[data-demo-tour="engagement-members-tab"]',
-            title: 'Engagement members',
-            content: <p>Manage who has access to this engagement and their role — Lead, Collaborator or Viewer.</p>,
-            route: `${eng}?tab=members`,
-            placement: 'bottom' as const,
-            skipScroll: true,
-        },
-    ] : []),
-    {
-        target: '[data-demo-tour="firm-switcher"]',
-        title: 'Firm switcher',
-        content: <p>Switch between firms or create a new one. Each firm is an independent workspace with its own clients, engagements and documents.</p>,
-        route: firm,
-        placement: 'right',
-    },
-    {
-        target: '[data-demo-tour="sidebar-home"]',
-        title: 'Home',
-        content: <p>Home picks up where you left off: recent pages, this week&apos;s agenda, what needs you, your engagements and your bookmarks.</p>,
-        route: `${firm}/home`,
-        placement: 'right',
-    },
-    {
-        target: '[data-demo-tour="sidebar-inbox"]',
-        title: 'Inbox',
-        content: <p>Reminders from due dates, follow-ups, review requests and @mentions land here with your notifications, so nothing slips through the cracks.</p>,
-        route: `${firm}/inbox`,
-        placement: 'right',
-    },
-    {
-        target: '[data-demo-tour="profile-menu"]',
-        title: 'Profile menu',
-        content: (
-            <div className="space-y-2">
-                <p>Your profile, billing, plan usage and sign-out live here.</p>
-                <p>So does <strong>Support</strong>: raise a request, track its status and get answers without leaving the app. Requests are tied to your firm, so our team has the context from the start.</p>
-            </div>
-        ),
-        route: firm,
-        placement: 'right',
-    },
-    {
-        target: '[data-demo-tour="support-requests"]',
-        title: 'Support',
-        content: (
-            <div className="space-y-2">
-                <p>Every request your firm has raised with the Firma team, with whose turn it is. <strong>Last update</strong> reads darker when Firma has replied.</p>
-                <p>Open one to see the whole conversation and reply; <strong>New request</strong> opens beside the list, with room to drop screenshots.</p>
-            </div>
-        ),
-        route: `${firm}/support`,
-        placement: 'bottom',
-        skipScroll: true,
-    },
-]
+/**
+ * Autoplay's clock for one step: runs while autoplay is on, not paused, not hovered and the page is
+ * in view, and moves on once the step's time is up. The time is the step's own, or worked out from
+ * how much the card says (autoplayDuration). Starts again on every step.
+ */
+function useAutoplay({ index, on, held, duration, read, next }: { index: number; on: boolean; held: boolean; duration?: number; read: () => string; next: () => void }) {
+    const [elapsed, setElapsed] = useState(0)
+    const [total, setTotal] = useState(duration ?? 8000)
+    const advanced = useRef(false)
+
+    useLayoutEffect(() => {
+        setElapsed(0)
+        advanced.current = false
+        setTotal(duration ?? autoplayDuration(read()))
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [index])
+
+    const running = on && !held
+    useEffect(() => {
+        if (!running) return
+        let last = performance.now()
+        const timer = setInterval(() => {
+            const now = performance.now()
+            // A hidden page doesn't count: the visitor would come back to a step they never saw.
+            if (!document.hidden) setElapsed((e) => e + (now - last))
+            last = now
+        }, 100)
+        return () => clearInterval(timer)
+    }, [running, index])
+
+    useEffect(() => {
+        if (!on || advanced.current || elapsed < total) return
+        advanced.current = true
+        next()
+    }, [on, elapsed, total, next])
+
+    return Math.min(1, elapsed / total)
+}
 
 /**
- * The tour's step card, in the app's design system: a popover-style card with the step title, its
- * copy in muted text, a step counter and Skip on the left, Back and Next on the right. Joyride
- * portals it to the body, outside the demo shell.
+ * The tour's step card, in the app's design system: a popover-style card with the step's place in
+ * the outline above its title (Engagements › Files › Details), its copy in muted text, its place in
+ * that section and Skip on the left, Back and Next on the right. Joyride portals it to the body,
+ * outside the demo shell.
+ *
+ * In Autoplay it moves on by itself: a line along its foot fills as the step's time runs, Pause holds
+ * it, and so does pointing at the card to read it.
  *
  * Joyride's button props carry a `title`, which would show the browser's native tooltip; it is
  * dropped in favor of the visible labels.
  */
-function TourTooltip({ backProps, closeProps, primaryProps, skipProps, step, index, size, isLastStep, tooltipProps }: TooltipRenderProps) {
+function TourTooltip({ backProps, closeProps, primaryProps, skipProps, step, index, isLastStep, tooltipProps, controls }: TooltipRenderProps) {
+    const { mode, paused, setPaused } = useDemoTour()
     const { title: _back, ...back } = backProps
     const { title: _close, ...close } = closeProps
     const { title: _next, ...next } = primaryProps
     const { title: _skip, ...skip } = skipProps
+    const card = step.data as StepCardData
+    const node = tourNode(card.node)
+    const crumbs = [...node.ancestors.map((a) => a.id), node.id]
+    // The section's own title already says it when the step's title is the same.
+    if (step.title === node.title) crumbs.pop()
+
+    const cardRef = useRef<HTMLDivElement>(null)
+    const [hovered, setHovered] = useState(false)
+    const autoplay = mode === 'autoplay'
+    const advance = useCallback(() => controls.next(), [controls])
+    const progress = useAutoplay({
+        index,
+        on: autoplay,
+        held: paused || hovered,
+        duration: card.duration,
+        read: () => cardRef.current?.innerText ?? '',
+        next: advance,
+    })
+
     return (
-        <div {...tooltipProps} className="w-[300px] max-w-[calc(100vw-2rem)] rounded-card bg-surface p-4 text-left shadow-popover">
+        <div
+            {...tooltipProps}
+            ref={cardRef}
+            onMouseEnter={() => setHovered(true)}
+            onMouseLeave={() => setHovered(false)}
+            className="relative w-[300px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-card bg-surface p-4 text-left shadow-popover"
+        >
             <div className="flex items-start gap-2">
-                <h3 className="min-w-0 flex-1 text-ui font-semibold text-fg">{step.title as React.ReactNode}</h3>
+                <div className="min-w-0 flex-1">
+                    {crumbs.length > 0 && (
+                        <p className="mb-0.5 truncate text-caption text-fg-subtle">
+                            {crumbs.map((id, i) => <span key={id}>{i > 0 && ' › '}<TourNodeTitle id={id} /></span>)}
+                        </p>
+                    )}
+                    <h3 className="text-ui font-semibold text-fg">{step.title as React.ReactNode}</h3>
+                </div>
                 <button
                     {...close}
                     type="button"
@@ -296,16 +127,47 @@ function TourTooltip({ backProps, closeProps, primaryProps, skipProps, step, ind
                 {step.content as React.ReactNode}
             </div>
             <div className="mt-4 flex items-center gap-3">
-                <span className="text-caption tabular-nums text-fg-subtle">{index + 1} of {size}</span>
+                {card.nodeSize > 1 && <span className="text-caption tabular-nums text-fg-subtle">{card.indexInNode + 1} of {card.nodeSize}</span>}
                 <button {...skip} type="button" className="text-caption text-fg-subtle underline-offset-2 transition-colors hover:text-fg-muted hover:underline">
-                    Skip tour
+                    {card.wholeTour ? 'Skip tour' : 'Skip'}
                 </button>
                 <div className="ml-auto flex items-center gap-1.5">
+                    {autoplay && (
+                        <Hint label={paused ? 'Play' : 'Pause'} side="bottom">
+                            <button
+                                type="button"
+                                onClick={() => setPaused(!paused)}
+                                aria-label={paused ? 'Play' : 'Pause'}
+                                className="flex h-7 w-7 items-center justify-center rounded-control text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg"
+                            >
+                                {paused ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
+                            </button>
+                        </Hint>
+                    )}
                     {index > 0 && <Button {...back} type="button" variant="ghost" size="sm">Back</Button>}
                     <Button {...next} type="button" size="sm">{isLastStep ? 'Finish' : 'Next'}</Button>
                 </div>
             </div>
+            {/* Autoplay's clock: fills as the step's time runs */}
+            {autoplay && (
+                <div className="absolute inset-x-0 bottom-0 h-0.5 bg-surface-muted" aria-hidden>
+                    <div className="h-full bg-action transition-[width] duration-100 ease-linear" style={{ width: `${progress * 100}%` }} />
+                </div>
+            )}
         </div>
+    )
+}
+
+/** Explore: a short pulse around the part the outline took the visitor to, so they see where it is. */
+function flash(target: string) {
+    const el = document.querySelector<HTMLElement>(target)
+    el?.animate?.(
+        [
+            { outline: '2px solid hsl(var(--ui-action) / 0)', outlineOffset: '8px' },
+            { outline: '2px solid hsl(var(--ui-action) / 0.9)', outlineOffset: '3px' },
+            { outline: '2px solid hsl(var(--ui-action) / 0)', outlineOffset: '3px' },
+        ],
+        { duration: 1400, iterations: 2, easing: 'ease-out' },
     )
 }
 
@@ -313,13 +175,15 @@ function sleep(ms: number) {
     return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-/** The guided tour: steps through STEPS, driving router navigation across the tour's pages and
- * tabs as it advances, with the step card in the app's design system (TourTooltip). */
+/** The guided tour (.claude/plans/tour-chapters.md): steps through one chapter or section, or every
+ * one for the whole tour, driving router navigation across the tour's pages and tabs as it advances,
+ * with the step card in the app's design system (TourTooltip). */
 export function DemoTour() {
     const router = useRouter()
     const pathname = usePathname()
     const searchParams = useSearchParams()
-    const { run, stepIndex, setStepIndex, setRun, endTour, saveProgress } = useDemoTour()
+    const { mode, run, stepIndex, scope, launch, setStepIndex, setRun, endTour, saveProgress, markNodeDone } = useDemoTour()
+    const steps = useMemo(() => tourSteps(scope), [scope])
     const pathnameRef = useRef(pathname)
     const searchParamsRef = useRef(searchParams)
     const retryCountRef = useRef(0)
@@ -336,33 +200,46 @@ export function DemoTour() {
     }
 
     const navigateForStep = async (index: number) => {
-        const step = STEPS[index]
+        const step = steps[index]
         if (!step) return
         const [targetPath, targetQuery] = step.route.split('?')
         const samePath = targetPath === pathnameRef.current
+        // A deep link (?guide=) is replaced, so Back doesn't land on it and start the chapter again.
+        const go = searchParamsRef.current.has(GUIDE_PARAM) ? router.replace : router.push
         if (!samePath) {
-            router.push(step.route, { scroll: false })
-            await sleep(500)
+            go(step.route, { scroll: false })
+            await sleep(500 + (step.settle ?? 0))
         } else if ((targetQuery ?? '') !== searchParamsRef.current.toString()) {
-            router.push(step.route, { scroll: false })
-            await sleep(350)
+            go(step.route, { scroll: false })
+            await sleep(350 + (step.settle ?? 0))
         }
+        // The tour brings the target into view itself, at once and only as far as needed: Joyride's own
+        // animated scroll could leave a step waiting with no card, mid-run.
+        if (!step.skipScroll) document.querySelector(step.target)?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
         setStepIndex(index)
     }
 
+    // A run starts (or resumes) on its step's page: navigate there first, then show the step.
     useEffect(() => {
-        if (run && STEPS[stepIndex]) {
-            void navigateForStep(stepIndex)
-        }
+        if (!launch) return
+        clearRetry()
+        retryCountRef.current = 0
+        // Explore shows no step card: it takes the visitor to the part's page and points it out.
+        void navigateForStep(stepIndex).then(() => {
+            if (mode === 'explore') flash(steps[stepIndex].target)
+            else setRun(true)
+        })
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [])
+    }, [launch])
 
     const handleJoyrideEvent = (data: EventData, _controls: Controls) => {
         const { status, type, index } = data
 
         if (type === EVENTS.TARGET_NOT_FOUND) {
-            const isLastStep = index >= STEPS.length - 1
+            const isLastStep = index >= steps.length - 1
             if (!isLastStep && retryCountRef.current >= 20) {
+                // Skipped so the run goes on; lib/demo/tour-chapters.test.ts catches a target that's gone for good.
+                if (process.env.NODE_ENV === 'development') console.warn(`Guided tour: skipped a step, its target never appeared: ${steps[index]?.target}`)
                 clearRetry()
                 retryCountRef.current = 0
                 void navigateForStep(index + 1)
@@ -393,7 +270,10 @@ export function DemoTour() {
                 return
             }
             const nextIndex = action === 'prev' ? Math.max(0, index - 1) : index + 1
-            if (nextIndex >= STEPS.length) {
+            // Past a section's last step, forward: that section is done.
+            const step = steps[index]
+            if (action !== 'prev' && step && step.indexInNode === step.nodeSize - 1) markNodeDone(step.node)
+            if (nextIndex >= steps.length) {
                 endTour(true)
                 return
             }
@@ -411,15 +291,19 @@ export function DemoTour() {
 
     return (
         <JoyrideAny
+            // A fresh Joyride per run: a chapter's steps replace the last run's.
+            key={launch}
             run={run}
             stepIndex={stepIndex}
-            steps={STEPS.map((s) => ({
+            steps={steps.map((s) => ({
                 target: s.target,
                 title: s.title,
                 content: s.content,
                 placement: s.placement,
                 disableBeacon: s.disableBeacon,
-                skipScroll: s.skipScroll,
+                // navigateForStep scrolls instead.
+                skipScroll: true,
+                data: { node: s.node, indexInNode: s.indexInNode, nodeSize: s.nodeSize, wholeTour: !scope, duration: s.duration } satisfies StepCardData,
                 // The tour must never abort from an accidental click-outside or Escape press — only the
                 // tooltip's own close (X) button should end it. disableOverlayClose is a legacy v2 prop with
                 // no effect in v3; overlayClickAction/dismissKeyAction are the real per-step gates.
@@ -428,7 +312,6 @@ export function DemoTour() {
                 ...(s.disableFlip ? { floatingOptions: { flipOptions: false } } : {}),
             }))}
             continuous
-            scrollToFirstStep
             onEvent={handleJoyrideEvent}
             tooltipComponent={TourTooltip}
             options={{
