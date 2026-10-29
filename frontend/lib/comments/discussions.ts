@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { visibleCommentsWhere } from '@/lib/comments/internal-notes'
 import type { EngagementRole } from '@prisma/client'
 import { createClient } from '@/utils/supabase/server'
 import { prisma } from '@/lib/prisma'
@@ -70,7 +71,8 @@ export async function reopenDiscussion(projectDocumentId: string): Promise<void>
  * shared with them.
  */
 export async function countOpenDiscussions(engagementId: string, persona: string | null | undefined): Promise<number> {
-    const threads = await prisma.docCommentMessage.groupBy({ by: ['projectDocumentId'], where: { engagementId } })
+    // A client counts only threads with a comment they can see, never one of internal notes alone.
+    const threads = await prisma.docCommentMessage.groupBy({ by: ['projectDocumentId'], where: { engagementId, ...visibleCommentsWhere(persona) } })
     if (threads.length === 0) return 0
     const ids = threads.map((t) => t.projectDocumentId)
     const [visible, resolved, docs] = await Promise.all([

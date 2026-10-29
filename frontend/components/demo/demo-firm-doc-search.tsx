@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useMemo, useState } from 'react'
-import { ArrowUpRight, Briefcase, Building2, CalendarClock, FileText, Folder, Hash, Search, Sparkles, X, FolderPlus } from 'lucide-react'
+import { AlignLeft, ArrowUpRight, Briefcase, Building2, CalendarClock, FileText, Folder, Hash, Search, Sparkles, X, FolderPlus } from 'lucide-react'
 import { ClientIcon } from '@/components/ui/client-icon'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { FilterMenuLabel, FilterMenuRow, FilterPill } from '@/components/ui/filter-pill'
@@ -52,8 +52,18 @@ function collectFiles(folder: DemoFolder, clientName: string, engagementName: st
     return [...own, ...folder.subfolders.flatMap((sub) => collectFiles(sub, clientName, engagementName))]
 }
 
-/** The sample query names a strategy, so files with it in the name are a file match; the rest are topical. */
-const matchTypeFor = (fileName: string): 'name' | 'semantic' => (fileName.toLowerCase().includes('strategy') ? 'name' : 'semantic')
+/**
+ * The sample query names a strategy, so files with it in the name are a file match; files whose
+ * description (written in the Details pane) speaks of go-to-market or positioning are a description
+ * match, as in the app; the rest are topical.
+ */
+const matchTypeFor = (file: DemoFile): 'name' | 'description' | 'semantic' => {
+    if (file.name.toLowerCase().includes('strategy')) return 'name'
+    const description = file.description?.toLowerCase() ?? ''
+    return description.includes('go-to-market') || description.includes('positioning') ? 'description' : 'semantic'
+}
+
+const MATCH_RANK = { name: 0, description: 1, semantic: 2 } as const
 
 type Stage = 'client' | 'engagement' | 'deliverable' | 'type' | 'time'
 const STAGES: { stage: Stage; label: string; icon: React.ReactNode }[] = [
@@ -104,7 +114,8 @@ export function DemoFirmDocSearch({ firm }: { firm: DemoFirm }) {
                 if (opt && now - new Date(row.file.modifiedTime).getTime() > opt.days * 86400000) return false
             }
             return true
-        })
+        // As in the app's ranking: a name match first, then a description match (scored a little below one), then by meaning.
+        }).sort((a, b) => MATCH_RANK[matchTypeFor(a.file)] - MATCH_RANK[matchTypeFor(b.file)])
     }, [allRows, filters])
 
     const set = (stage: Stage, value: string | undefined) =>
@@ -177,7 +188,7 @@ export function DemoFirmDocSearch({ firm }: { firm: DemoFirm }) {
                 {rows.length > 0 ? (
                     <div className="flex flex-col divide-y divide-line border-y border-line">
                         {rows.map((row) => {
-                            const matchType = matchTypeFor(row.file.name)
+                            const matchType = matchTypeFor(row.file)
                             const crumbs = [
                                 { icon: Building2, label: row.clientName },
                                 { icon: Briefcase, label: row.engagementName },
@@ -207,9 +218,13 @@ export function DemoFirmDocSearch({ firm }: { firm: DemoFirm }) {
                                                 )
                                             })}
                                         </div>
+                                        {/* As in the app: why it matched, when the words were in its description rather than its name */}
+                                        {matchType === 'description' && row.file.description && (
+                                            <p className="mt-0.5 line-clamp-2 text-caption text-fg-muted">{row.file.description}</p>
+                                        )}
                                         <div className="mt-1.5">
-                                            <Tag color={matchType === 'semantic' ? 'purple' : 'gray'} icon={matchType === 'semantic' ? <Sparkles /> : <Hash />}>
-                                                {matchType === 'semantic' ? 'Semantic match' : 'File match'}
+                                            <Tag color={matchType === 'semantic' ? 'purple' : 'gray'} icon={matchType === 'semantic' ? <Sparkles /> : matchType === 'description' ? <AlignLeft /> : <Hash />}>
+                                                {matchType === 'semantic' ? 'Semantic match' : matchType === 'description' ? 'Description match' : 'File match'}
                                             </Tag>
                                         </div>
                                     </div>

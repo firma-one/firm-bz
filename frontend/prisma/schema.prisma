@@ -705,6 +705,7 @@ model EngagementDocument {
 
   @@unique([engagementId, firmId, externalId])
   @@index([firmId, clientId, engagementId])
+  @@index([firmId, parentId])
   @@index([embedding])
   @@map("engagement_documents")
   @@schema("platform")
@@ -880,6 +881,9 @@ model DocCommentMessage {
   content           String
   reactions         Json     @default("{}")
   settings          Json     @default("{}")
+  /// An internal note: the firm's own, never shown to external collaborators or viewers, never
+  /// notifying them, and not a reply to the client (lib/comments/internal-notes.ts).
+  isInternal        Boolean  @default(false)
 
   firm              Firm           @relation(fields: [firmId], references: [id], onDelete: Cascade)
   client            Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)

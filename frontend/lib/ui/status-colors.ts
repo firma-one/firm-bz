@@ -39,6 +39,7 @@ export const TAG_DOT_CLASSES: Record<TagColor, string> = {
 type StatusStyle = { color: TagColor; label: string }
 
 export const DELIVERABLE_STATUS: Record<ActivityStatus, StatusStyle> = {
+    not_started: { color: 'gray', label: 'Not started' },
     to_do: { color: 'gray', label: 'To do' },
     in_progress: { color: 'blue', label: 'In progress' },
     in_review: { color: 'yellow', label: 'In review' },

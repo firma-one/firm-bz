@@ -1,25 +1,45 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { prisma } from '@/lib/prisma'
-import { buildSettingsForDb, parseSettingsFromDb, type ActivityStatus } from '@/lib/sharing-settings'
-import { syncDocumentSharingUsers } from '@/lib/sync-document-sharing'
-import { EngagementRole, DocumentSharingPermissionStatus } from '@prisma/client'
+import { ACTIVITY_STAGES, documentStage, isOnBoard, parseSettingsFromDb, type ActivityStatus } from '@/lib/sharing-settings'
 import { getFileInfo } from '@/lib/file-utils'
 import { getProjectPersona } from '@/lib/permission-helpers'
-import { STAGE_ROLE_MAP, getAllowedTransitions, type EngagementRoleSlug } from '@/lib/deliverable-stage-roles'
+import { getAllowedTransitions, type EngagementRoleSlug } from '@/lib/deliverable-stage-roles'
+import { applyStageChange, currentStageOf, type StageMoveContext } from '@/lib/files/apply-stage-change'
+import {
+  STAGE_ROW_SELECT,
+  applyDerivedMove,
+  confirmationOf,
+  deliverableDocuments,
+  derivedMove,
+  needsConfirmation,
+  type StageRowWithParent,
+} from '@/lib/files/deliverable-stage'
+import { deliverableOf } from '@/lib/files/deliverable-of'
+import { withoutFirmOnlySettings } from '@/lib/files/blocked'
+import { ApprovalStorageError, archiveApprovedVersion, recordApproval, type ApprovalInStorage } from '@/lib/files/approval-archive'
+import { approvalVersionName } from '@/lib/files/approvals'
+import { resolveEngagementConnectorId } from '@/lib/connectors/resolve-client-connector'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
-import { getFirmReminderConfig } from '@/lib/firm-reminder-config'
-import { createEventNotifications, sendEventEmailToUser, buildAbsoluteUrl } from '@/lib/notify-event'
-import { resolveEntity } from '@/lib/reminders/entity-registry'
-import { renderDocumentStatusChangedEmail } from '@/lib/email-templates/document-status-changed'
 
-const VALID_STATUSES: ActivityStatus[] = ['to_do', 'in_progress', 'in_review', 'approved']
-const STAGE_ORDER: Record<ActivityStatus, number> = { to_do: 0, in_progress: 1, in_review: 2, approved: 3 }
+const isExternalRole = (role: string) => role === 'eng_ext_collaborator' || role === 'eng_viewer'
 
 /**
  * PATCH /api/projects/[projectId]/documents/[documentId]/sharing/activity
- * Update activity status (to_do | in_progress | in_review | approved). Lane transitions control EC/EV access.
- * RBAC: User must have project:can_view_internal to update activity.
+ * Move a document to another stage (not_started | to_do | in_progress | in_review | approved). Its
+ * deliverable then follows (.claude/plans/deliverable-stages-blocked.md, section 2): nobody sets a
+ * deliverable's stage, it is worked out from its documents' stages, with the side effects a manual
+ * move had (client access on forward moves, Approved finalizes).
+ *
+ * A move that would show the deliverable to clients for the first time, or approve it, answers 409
+ * with `needsConfirmation` until it is resent with `confirm: true`.
+ *
+ * On a deliverable itself, only a client's one action is taken, on its documents: an external
+ * collaborator submits its In progress documents for review, a viewer sends its In review ones back.
+ *
+ * Approving a document locks it, copies the approved version into the engagement's Archive folder
+ * and records it (.claude/plans/document-approval-record.md); if storage can't be reached, the
+ * approval is refused (502, `approval_storage`) and nothing changes.
  */
 export async function PATCH(
   request: NextRequest,
@@ -40,10 +60,11 @@ export async function PATCH(
       return NextResponse.json({ error: 'File not found in this project' }, { status: 404 })
 
     const body = await request.json().catch(() => ({}))
-    const status: ActivityStatus | undefined = VALID_STATUSES.includes(body.status) ? (body.status as ActivityStatus) : undefined
+    const status: ActivityStatus | undefined = ACTIVITY_STAGES.includes(body.status) ? (body.status as ActivityStatus) : undefined
     if (!status)
       return NextResponse.json({ error: 'Invalid or missing status' }, { status: 400 })
     const orderIndex = typeof body.orderIndex === 'number' && body.orderIndex >= 0 ? body.orderIndex : undefined
+    const confirmed = body.confirm === true
 
     const existing = await prisma.engagementDocument.findUnique({
       where: {
@@ -53,6 +74,7 @@ export async function PATCH(
           externalId: fileInfo.externalId,
         },
       },
+      select: STAGE_ROW_SELECT,
     })
     if (!existing)
       return NextResponse.json({ error: 'Share record not found' }, { status: 404 })
@@ -61,189 +83,110 @@ export async function PATCH(
     if (parsed.share?.finalizedAt)
       return NextResponse.json({ error: 'Share is finalized and cannot be updated' }, { status: 403 })
 
-    const role = await getProjectPersona(ctx.firmId, ctx.clientId, ctx.projectId)
-    const currentStatus = (parsed.activity?.status ?? 'to_do') as ActivityStatus
+    const role = (await getProjectPersona(ctx.firmId, ctx.clientId, ctx.projectId)) as EngagementRoleSlug
+    const moveCtx: StageMoveContext = { projectId, firmId: ctx.firmId, clientId: ctx.clientId ?? null, actorUserId: user.id }
+    const isDeliverable = existing.isFolder && !!parsed.share?.createdAt
+
+    // ── The deliverable itself: its stage is never set; a client's action moves its documents ──
+    if (isDeliverable) {
+      if (!isExternalRole(role)) {
+        return NextResponse.json(
+          { error: "A deliverable's stage follows its documents. Move its documents instead.", code: 'derived_stage' },
+          { status: 400 },
+        )
+      }
+      const documents = (await deliverableDocuments(projectId, existing.externalId))
+        .filter((d) => isOnBoard(documentStage(d.settings)) && !parseSettingsFromDb(d.settings).share?.finalizedAt)
+        .filter((d) => getAllowedTransitions(role, documentStage(d.settings)).includes(status))
+      if (documents.length === 0)
+        return NextResponse.json({ error: 'This move is not permitted for your role.' }, { status: 403 })
+
+      const changes = new Map(documents.map((d) => [d.id, status] as const))
+      const move = await derivedMove(projectId, existing, changes)
+      if (needsConfirmation(move) && !confirmed)
+        return NextResponse.json({ needsConfirmation: confirmationOf(move) }, { status: 409 })
+
+      for (const doc of documents) await applyStageChange(doc, status, moveCtx)
+      if (move) await applyDerivedMove(move, moveCtx)
+      return NextResponse.json({ moved: documents.length, deliverable: { id: existing.id, status: move?.to ?? currentStageOf(existing) } })
+    }
+
+    // ── A document ──
+    const deliverableRef = await deliverableOf(projectId, existing.parentId)
+    const deliverable: StageRowWithParent | null = deliverableRef
+      ? await prisma.engagementDocument.findUnique({ where: { id: deliverableRef.id }, select: STAGE_ROW_SELECT })
+      : null
+    // An approved deliverable is locked, its documents with it.
+    if (deliverable && parseSettingsFromDb(deliverable.settings).share?.finalizedAt)
+      return NextResponse.json({ error: 'The deliverable is approved and its documents can no longer move.' }, { status: 403 })
 
     // Gate on allowed transitions — single source of truth from deliverable-stage-roles.ts:
     //   EL  (eng_admin):            any ±1 move, including approve
     //   EM  (eng_member):           any ±1 move except approve
     //   EC  (eng_ext_collaborator): in_progress → in_review only (submit for review)
     //   EV  (eng_viewer):           in_review → in_progress only (request changes / push back)
-    const allowed = getAllowedTransitions(role as EngagementRoleSlug, currentStatus)
+    const currentStatus = documentStage(existing.settings)
+    const allowed = getAllowedTransitions(role, currentStatus)
     if (!allowed.includes(status)) {
       return NextResponse.json({ error: 'This move is not permitted for your role.' }, { status: 403 })
     }
 
-    const oldStatus = parsed.activity?.status
-    const stageConfig = STAGE_ROLE_MAP[status]
-    const now = new Date().toISOString()
-    const isForwardMove = oldStatus ? STAGE_ORDER[status] > STAGE_ORDER[oldStatus] : true
+    const move = deliverable ? await derivedMove(projectId, deliverable, new Map([[existing.id, status]])) : null
+    if (needsConfirmation(move) && !confirmed)
+      return NextResponse.json({ needsConfirmation: confirmationOf(move) }, { status: 409 })
 
-    // Only update EC/EV enabled flags on forward moves — once granted, access is never
-    // revoked by a backward lane move. Use "Untag as Deliverable" to fully revoke.
-    const shareUpdate: Record<string, unknown> = {}
-    if (isForwardMove && stageConfig.ecEnabled && !parsed.share?.externalCollaborator?.enabled) {
-      shareUpdate.externalCollaborator = { enabled: true }
-    }
-    if (isForwardMove && stageConfig.evEnabled && !parsed.share?.guest?.enabled) {
-      shareUpdate.guest = { enabled: true }
-    }
-    // Set finalizedAt when moving to approved
-    const finalizedAt = status === 'approved' ? now : (status !== oldStatus ? null : undefined)
-
-    const settings = buildSettingsForDb(existing.settings as Record<string, unknown>, {
-      activity: { status, updatedAt: now, orderIndex },
-      ...(Object.keys(shareUpdate).length > 0 ? { share: shareUpdate as any } : {}),
-      ...(finalizedAt !== undefined ? { finalizedAt } : {}),
-    })
-
-    await prisma.engagementDocument.update({
-      where: { id: existing.id },
-      data: { settings, updatedAt: new Date() },
-    })
-
-    // Sync EC/EV sharing rows for the folder and all descendants on forward moves
-    if (Object.keys(shareUpdate).length > 0) {
-      Promise.resolve().then(async () => {
-        try {
-          // Folder itself — syncDocumentSharingUsers reads the folder's own settings correctly
-          await syncDocumentSharingUsers(existing.id, user.id)
-
-          // Descendants have empty settings so syncDocumentSharingUsers would no-op on them.
-          // Instead, directly insert rows for the newly-enabled roles based on the folder's flags.
-          const newlyEnabledRoles: EngagementRole[] = []
-          if (shareUpdate.externalCollaborator) newlyEnabledRoles.push(EngagementRole.eng_ext_collaborator)
-          if (shareUpdate.guest) newlyEnabledRoles.push(EngagementRole.eng_viewer)
-
-          console.log('[activity] shareUpdate:', JSON.stringify(shareUpdate))
-          console.log('[activity] newlyEnabledRoles:', newlyEnabledRoles)
-
-          if (newlyEnabledRoles.length === 0) return
-
-          const members = await prisma.engagementMember.findMany({
-            where: { engagementId: projectId, role: { in: newlyEnabledRoles } },
-          })
-          console.log('[activity] members found:', members.length, members.map(m => ({ userId: m.userId, role: m.role })))
-          if (members.length === 0) return
-
-          const descendants = (await (prisma as any).$queryRawUnsafe(
-            `WITH RECURSIVE descendants AS (
-               SELECT id, "externalId" FROM platform.engagement_documents
-               WHERE "parentId" = $1 AND "engagementId" = $2::uuid
-               UNION ALL
-               SELECT ed.id, ed."externalId" FROM platform.engagement_documents ed
-               INNER JOIN descendants d ON ed."parentId" = d."externalId"
-               WHERE ed."engagementId" = $2::uuid
-             )
-             SELECT id FROM descendants`,
-            existing.externalId,
-            projectId
-          )) as Array<{ id: string }>
-
-          console.log('[activity] descendants found:', descendants.length, 'for externalId:', existing.externalId)
-
-          for (const child of descendants) {
-            for (const member of members) {
-              await prisma.engagementDocumentSharingUser.upsert({
-                where: { projectDocumentId_userId: { projectDocumentId: child.id, userId: member.userId } },
-                update: { sharingPermissionStatus: DocumentSharingPermissionStatus.INHERITED, updatedBy: user.id },
-                create: {
-                  projectDocumentId: child.id,
-                  engagementId: projectId,
-                  userId: member.userId,
-                  sharingPermissionStatus: DocumentSharingPermissionStatus.INHERITED,
-                  createdBy: user.id,
-                  updatedBy: user.id,
-                },
-              })
-            }
-          }
-          console.log('[activity] descendant upserts complete')
-        } catch (err) {
-          console.error('[activity] descendant sync error:', err)
-        }
-      })
-    }
-
-    audit(AUDIT_EVENT.DOCUMENT_STATUS_CHANGED)
-      .scope(AUDIT_SCOPE.DOCUMENT)
-      .firm(fileInfo.organizationId)
-      .client(ctx.clientId)
-      .engagement(projectId)
-      .document(existing.id)
-      .actor(user.id)
-      .meta({ fileName: existing.fileName, oldStatus: oldStatus ?? null, newStatus: status })
-      .fireAndForget()
-
-    // Event notifications — status changed / rejected, gated per-firm via Event Notifications grid
-    Promise.resolve().then(async () => {
+    // Approving: lock it, archive the approved version, record it, or refuse with what to do.
+    let approval: ApprovalInStorage | null = null
+    if (status === 'approved') {
+      const [doc, engagement] = await Promise.all([
+        prisma.engagementDocument.findUnique({ where: { id: existing.id }, select: { externalId: true, fileName: true, settings: true, connectorId: true } }),
+        prisma.engagement.findUnique({ where: { id: projectId }, select: { slug: true, firmId: true } }),
+      ])
+      const connectorId = doc && engagement ? await resolveEngagementConnectorId(projectId, doc.connectorId) : null
+      if (!doc || !engagement || !connectorId)
+        return NextResponse.json({ error: 'No storage is connected to archive the approved version. Reconnect the storage and try again.', code: 'approval_storage' }, { status: 502 })
       try {
-        const isRejection = oldStatus === 'in_review' && status === 'in_progress'
-        const config = await getFirmReminderConfig(fileInfo.organizationId)
-        const eventCfg = isRejection ? config.events.documentRejected : config.events.statusChanged
-        if (!eventCfg.inApp && !eventCfg.email) return
-
-        const recipientIds = new Set<string>()
-        if (isRejection) {
-          if (existing.createdBy) recipientIds.add(existing.createdBy)
-        } else {
-          const staff = await prisma.engagementMember.findMany({
-            where: { engagementId: projectId, role: { in: ['eng_admin', 'eng_member'] } },
-            select: { userId: true },
-          })
-          staff.forEach((m) => recipientIds.add(m.userId))
-        }
-        recipientIds.delete(user.id) // don't notify the actor of their own change
-        if (recipientIds.size === 0) return
-
-        const entityCtx = await resolveEntity('platform.engagements.shares', projectId)
-        const ctaUrl = buildAbsoluteUrl(entityCtx?.ctaUrl ?? null)
-        const notifType = isRejection ? 'DOCUMENT_REJECTED' : 'DOCUMENT_STATUS_CHANGED'
-        const title = isRejection
-          ? `Changes requested: "${existing.fileName}"`
-          : `Status changed to ${status}: "${existing.fileName}"`
-
-        if (eventCfg.inApp) {
-          await createEventNotifications(Array.from(recipientIds).map((userId) => ({
-            firmId: fileInfo.organizationId,
-            clientId: ctx.clientId,
-            engagementId: projectId,
-            documentId: existing.id,
-            userId,
-            type: notifType,
-            title,
-            ctaUrl: entityCtx?.ctaUrl ?? null,
-            metadata: { fileName: existing.fileName, oldStatus: oldStatus ?? null, newStatus: status },
-            dedupeKey: `doc:${existing.id}:${notifType}:${status}`,
-          })))
-        }
-        if (eventCfg.email) {
-          await Promise.all(Array.from(recipientIds).map((userId) => sendEventEmailToUser(userId, () =>
-            renderDocumentStatusChangedEmail({
-              fileName: existing.fileName,
-              engagementName: entityCtx?.name ?? '',
-              oldStatus: oldStatus ?? null,
-              newStatus: status,
-              isRejection,
-              ctaUrl,
-            })
-          )))
-        }
+        approval = await archiveApprovedVersion({
+          connectorId,
+          engagement,
+          document: { externalId: doc.externalId, fileName: doc.fileName, settings: doc.settings },
+          deliverableName: deliverable?.fileName ?? null,
+          actorUserId: user.id,
+        })
       } catch (e) {
-        console.error('[activity] event notification error:', e)
+        if (e instanceof ApprovalStorageError) {
+          console.error('[approval] refused:', e.cause ?? e)
+          return NextResponse.json({ error: e.message, code: 'approval_storage' }, { status: 502 })
+        }
+        throw e
       }
-    })
+    }
 
-    const updated = await prisma.engagementDocument.findUnique({
-      where: {
-        engagementId_firmId_externalId: {
-          engagementId: projectId,
-          firmId: fileInfo.organizationId,
-          externalId: fileInfo.externalId,
-        },
-      },
+    const approvalMeta = approval
+      ? { approvalId: approval.record.id, versionId: approval.record.version.id, versionName: approvalVersionName(approval.record), archivedName: approval.record.archived.name }
+      : undefined
+    await applyStageChange(existing, status, moveCtx, { orderIndex, auditMeta: approvalMeta })
+    if (approval) {
+      await recordApproval(existing.id, approval)
+      if (approval.lock) {
+        audit(AUDIT_EVENT.DOCUMENT_FINALIZED)
+          .scope(AUDIT_SCOPE.DOCUMENT)
+          .firm(ctx.firmId)
+          .client(ctx.clientId)
+          .engagement(projectId)
+          .document(existing.id)
+          .actor(user.id)
+          .meta({ fileName: existing.fileName, ...approvalMeta })
+          .fireAndForget()
+      }
+    }
+    if (move) await applyDerivedMove(move, moveCtx)
+
+    const updated = await prisma.engagementDocument.findUnique({ where: { id: existing.id } })
+    return NextResponse.json({
+      sharing: updated && isExternalRole(role) ? { ...updated, settings: withoutFirmOnlySettings(updated.settings) } : updated,
+      deliverable: deliverable ? { id: deliverable.id, status: move?.to ?? currentStageOf(deliverable) } : null,
     })
-    return NextResponse.json({ sharing: updated })
   } catch (e) {
     console.error('PATCH sharing/activity error', e)
     return NextResponse.json({ error: 'Failed to update activity' }, { status: 500 })

@@ -219,7 +219,8 @@ export async function getMyWork(params: {
                 ORDER BY last."eventAt" DESC
                 LIMIT ${LIST_LIMIT}`,
             // Client comments no one on the team has answered: documents whose latest comment is an
-            // external member's (EC/EV), on engagements the caller leads. A team reply clears it.
+            // external member's (EC/EV), on engagements the caller leads. A team reply clears it, and so
+            // does resolving the discussion (the Discussions page's Awaiting reply rule).
             leadIds.length
                 ? prisma.$queryRaw<{ id: string; engagementId: string; projectDocumentId: string; fileName: string; createdAt: Date }[]>`
                       SELECT latest.id, latest."engagementId", latest."projectDocumentId", latest."fileName", latest."createdAt"
@@ -231,9 +232,13 @@ export async function getMyWork(params: {
                           LEFT JOIN platform.engagement_members em
                             ON em."engagementId" = m."engagementId" AND em."userId" = m."authorUserId"
                           WHERE m."engagementId" = ANY(${leadIds}::uuid[])
+                            -- An internal note is the firm talking among itself, not a reply to the client.
+                            AND m."isInternal" = false
                           ORDER BY m."projectDocumentId", m."createdAt" DESC
                       ) latest
+                      LEFT JOIN platform.doc_comment_threads t ON t."projectDocumentId" = latest."projectDocumentId"
                       WHERE latest.role IN ('eng_ext_collaborator', 'eng_viewer')
+                        AND t."resolvedAt" IS NULL
                       ORDER BY latest."createdAt" DESC
                       LIMIT ${LIST_LIMIT}`
                 : [],

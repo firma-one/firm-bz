@@ -53,6 +53,28 @@ describe('CopyMoveDialog', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
         expect(base.onCancel).toHaveBeenCalled()
     })
+
+    it('a deliverable and the folders inside one wear folder-plus, in the list and the path', () => {
+        const kinds: Record<string, 'deliverable' | 'inside'> = { f1: 'deliverable', f3: 'inside', d2: 'inside' }
+        render(
+            <CopyMoveDialog
+                {...base}
+                path={[{ id: 'gen', name: 'General' }, { id: 'd2', name: 'Drafts' }]}
+                deliverableKindOf={(id) => kinds[id] ?? null}
+            />
+        )
+        const mark = (name: string) => (screen.getByText(name).closest('button') as HTMLElement).querySelector('[role="img"]')?.getAttribute('aria-label') ?? null
+        expect(mark('Reports')).toBe('Deliverable')
+        expect(mark('Pending')).toBe('Inside a deliverable')
+        expect(mark('Empty')).toBeNull()
+        expect(mark('Drafts')).toBe('Inside a deliverable')
+    })
+
+    it('names how many items go when there are several', () => {
+        render(<CopyMoveDialog {...base} targetCount={3} />)
+        expect(screen.getByRole('dialog', { name: 'Move 3 items to folder' })).toBeTruthy()
+        expect(screen.getByText('3 items')).toBeTruthy()
+    })
 })
 
 describe('CopyToEngagementDialog', () => {

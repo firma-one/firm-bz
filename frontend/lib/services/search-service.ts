@@ -1,5 +1,6 @@
 import { prisma } from '../prisma'
 import { generateEmbedding, prepareTextForEmbedding } from '../embeddings'
+import { descriptionOf } from '../files/description'
 import { generateSummary } from '../summarization'
 import { extractSnippet } from '../snippet'
 import { logger } from '../logger'
@@ -7,6 +8,25 @@ import { assignDocId } from '../doc-id'
 import type { IConnectorContentAdapter } from '../connectors/types'
 
 const MAX_INDEXABLE_TEXT_SIZE_BYTES = 15 * 1024 * 1024
+
+/**
+ * Whether indexing reads document text to build a content-based embedding.
+ *
+ * Off. Searching inside a document is delegated to the storage provider, whose own full-text
+ * index covers the whole file rather than the leading extract this path produced
+ * (IConnectorPermissionAdapter.searchFiles — `fullText contains` on Drive, /search(q=) on
+ * Graph), and that path already runs first in the engagement search route.
+ *
+ * With it off, indexFile stores names, parentage, mime types and provider metadata, and embeds
+ * the file name alone: no document text is read, stored or vectorized. That is what lets the
+ * privacy policy say we do not store the contents of your files, so turning this back on is a
+ * change to what we have published, not just a change to search relevance.
+ *
+ * A constant and not an env var deliberately — a published claim should not be able to stop
+ * being true because of a value set in an environment. The extraction path below is kept intact
+ * so this stays a one-line decision.
+ */
+const INDEX_DOCUMENT_TEXT: boolean = false
 
 /**
  * Extract plain text from a OneDrive file's raw bytes for embeddings/summarization —
@@ -61,6 +81,13 @@ async function extractOneDriveFileText(
     }
 }
 
+/*
+ * What search leaves out: private documents (the firm's own, hidden from clients) and uploads still
+ * awaiting review (intake). A finalized document — every approved one is locked so — is finished
+ * work, the thing people most often look for, so it stays in (2026-10-29; it was left out before,
+ * with every other lock, which hid each document the moment it was approved).
+ */
+
 export interface VectorSearchResult {
     externalId: string
     fileName: string
@@ -68,8 +95,15 @@ export interface VectorSearchResult {
     updatedAt: Date
     metadata?: any
     isFolder?: boolean
-    /** Optional — only set by searchGlobal's branches (name/semantic), unused by existing methods. */
-    matchType?: 'name' | 'semantic'
+    /** Optional — only set by searchGlobal's branches (name/semantic/description), unused by existing methods. */
+    matchType?: 'name' | 'semantic' | 'description'
+    /**
+     * Where a keyword match was found: the file's name, or only its description (the text the firm
+     * wrote in Firma's Details pane, searchable since 2026-10-29). Set by the name and term searches.
+     */
+    matchedIn?: 'name' | 'description'
+    /** The document's description, when the match was found there: what the result shows as why. */
+    description?: string | null
     /** Optional — only set by searchGlobal's branches, used to resolve breadcrumb (parent folder, client, engagement) in the route layer. */
     parentId?: string | null
     clientId?: string | null
@@ -186,7 +220,7 @@ export class SearchService {
                         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                         'application/pdf',
                     ]
-                const isSummarizable = !!meta.mimeType && summarizableMimes.includes(meta.mimeType)
+                const isSummarizable = INDEX_DOCUMENT_TEXT && !!meta.mimeType && summarizableMimes.includes(meta.mimeType)
 
                 if (isSummarizable && connectorId) {
                     const text = onOneDrive
@@ -206,7 +240,14 @@ export class SearchService {
                 }
             }
 
-            const embeddingText = prepareTextForEmbedding(params.fileName, summary)
+            // The description the firm wrote counts toward the meaning, as the name does.
+            const existingRow = params.projectId
+                ? await prisma.engagementDocument.findFirst({
+                    where: { engagementId: params.projectId, firmId: params.organizationId, externalId: params.externalId },
+                    select: { settings: true },
+                })
+                : null
+            const embeddingText = prepareTextForEmbedding(params.fileName, summary, descriptionOf(existingRow?.settings))
             const embedding = await generateEmbedding(embeddingText)
             const embeddingSql = `[${embedding.join(',')}]`
 
@@ -320,6 +361,25 @@ export class SearchService {
         }
     }
 
+    /**
+     * Rebuilds one document's vector from what Firma already holds (its name, its description, any
+     * stored summary), without reading the file. Called when its description changes.
+     */
+    static async refreshEmbedding(documentId: string): Promise<void> {
+        const row = await prisma.engagementDocument.findUnique({
+            where: { id: documentId },
+            select: { fileName: true, settings: true, metadata: true },
+        })
+        if (!row) return
+        const summary = ((row.metadata as Record<string, unknown> | null)?.summary as string | undefined) ?? null
+        const embedding = await generateEmbedding(prepareTextForEmbedding(row.fileName, summary, descriptionOf(row.settings)))
+        await prisma.$executeRawUnsafe(
+            `UPDATE platform.engagement_documents SET embedding = $1::vector WHERE id = $2::uuid`,
+            `[${embedding.join(',')}]`,
+            documentId,
+        )
+    }
+
     static async indexBatch(params: {
         organizationId: string
         clientId?: string
@@ -395,7 +455,7 @@ export class SearchService {
         FROM platform.engagement_documents
         WHERE ${scopeFilter}
           AND (settings->>'locked') IS DISTINCT FROM 'private'
-          AND (settings->'lock'->>'type') IS NULL
+          AND COALESCE(settings->'lock'->>'type', '') NOT IN ('private', 'intake')
         ORDER BY embedding <=> $1::vector
         LIMIT $${queryParams.length}
       `, ...queryParams)
@@ -460,23 +520,28 @@ export class SearchService {
           "fileName",
           "updatedAt",
           "metadata",
-          "isFolder"
+          "isFolder",
+          ("fileName" ILIKE $2) AS "nameMatched",
+          settings->>'description' AS description
         FROM platform.engagement_documents
         WHERE ${scopeFilter}
-          AND "fileName" ILIKE $2
+          AND ("fileName" ILIKE $2 OR settings->>'description' ILIKE $2)
           AND (settings->>'locked') IS DISTINCT FROM 'private'
-          AND (settings->'lock'->>'type') IS NULL
-        ORDER BY "updatedAt" DESC
+          AND COALESCE(settings->'lock'->>'type', '') NOT IN ('private', 'intake')
+        ORDER BY "nameMatched" DESC, "updatedAt" DESC
         LIMIT $${queryParams.length}
       `, ...queryParams)
 
+            // A name match outranks one found only in the description.
             return results.map(r => ({
                 externalId: r.externalId,
                 fileName: r.fileName,
                 updatedAt: new Date(r.updatedAt),
-                score: 0.92,
+                score: r.nameMatched ? 0.92 : 0.85,
                 metadata: r.metadata,
-                isFolder: Boolean(r.isFolder)
+                isFolder: Boolean(r.isFolder),
+                matchedIn: r.nameMatched ? 'name' as const : 'description' as const,
+                ...(r.nameMatched ? {} : { description: r.description as string | null }),
             }))
         } catch (error) {
             logger.error('Filename search failed in platform schema:', error as Error)
@@ -509,10 +574,13 @@ export class SearchService {
                 queryParams.push(params.clientId)
             }
 
-            const ilikeConditions = params.terms
+            const placeholders = params.terms
                 .filter(t => t.length > 0)
-                .map((_, i) => `"fileName" ILIKE $${queryParams.length + i + 1}`)
-            if (ilikeConditions.length === 0) return []
+                .map((_, i) => `$${queryParams.length + i + 1}`)
+            if (placeholders.length === 0) return []
+            const nameConditions = placeholders.map(p => `"fileName" ILIKE ${p}`)
+            // The description the firm wrote counts too, a word at a time.
+            const ilikeConditions = placeholders.map(p => `("fileName" ILIKE ${p} OR settings->>'description' ILIKE ${p})`)
             params.terms.forEach(t => queryParams.push(`%${t}%`))
             queryParams.push(limit)
 
@@ -522,12 +590,14 @@ export class SearchService {
           "fileName",
           "updatedAt",
           "metadata",
-          "isFolder"
+          "isFolder",
+          (${nameConditions.join(' OR ')}) AS "nameMatched",
+          settings->>'description' AS description
         FROM platform.engagement_documents
         WHERE ${scopeFilter}
           AND (${ilikeConditions.join(' OR ')})
           AND (settings->>'locked') IS DISTINCT FROM 'private'
-          AND (settings->'lock'->>'type') IS NULL
+          AND COALESCE(settings->'lock'->>'type', '') NOT IN ('private', 'intake')
         ORDER BY "updatedAt" DESC
         LIMIT $${queryParams.length}
       `, ...queryParams)
@@ -536,9 +606,11 @@ export class SearchService {
                 externalId: r.externalId,
                 fileName: r.fileName,
                 updatedAt: new Date(r.updatedAt),
-                score: 0.92,
+                score: r.nameMatched ? 0.92 : 0.85,
                 metadata: r.metadata,
-                isFolder: Boolean(r.isFolder)
+                isFolder: Boolean(r.isFolder),
+                matchedIn: r.nameMatched ? 'name' as const : 'description' as const,
+                ...(r.nameMatched ? {} : { description: r.description as string | null }),
             }))
         } catch (error) {
             logger.error('Filename terms search failed in platform schema:', error as Error)
@@ -804,11 +876,11 @@ export class SearchService {
         }
         for (const r of filenameResults) {
             noteBranch(r.externalId, 'filename')
-            if (!byId.has(r.externalId)) byId.set(r.externalId, { ...r, matchType: 'name' })
+            if (!byId.has(r.externalId)) byId.set(r.externalId, { ...r, matchType: r.matchedIn === 'description' ? 'description' : 'name' })
         }
         for (const r of termResults) {
             noteBranch(r.externalId, 'terms')
-            if (!byId.has(r.externalId)) byId.set(r.externalId, { ...r, matchType: 'name' })
+            if (!byId.has(r.externalId)) byId.set(r.externalId, { ...r, matchType: r.matchedIn === 'description' ? 'description' : 'name' })
         }
         const merged = Array.from(byId.values())
 
@@ -904,7 +976,7 @@ export class SearchService {
         WHERE d."firmId" = ${firmIdParam}::uuid
           ${scopeFilter}
           AND (d.settings->>'locked') IS DISTINCT FROM 'private'
-          AND (d.settings->'lock'->>'type') IS NULL
+          AND COALESCE(d.settings->'lock'->>'type', '') NOT IN ('private', 'intake')
         ORDER BY d.embedding <=> ${embeddingParam}::vector
         LIMIT ${limitParam}
       `, ...queryParams)
@@ -954,24 +1026,27 @@ export class SearchService {
 
             const results = await prisma.$queryRawUnsafe<any[]>(`
         SELECT d."externalId", d."fileName", d."updatedAt", d."metadata", d."isFolder",
-          d."parentId", d."clientId", d."engagementId", d."dueDate", d."createdAt", d."docId", d."createdBy", d."updatedBy"
+          d."parentId", d."clientId", d."engagementId", d."dueDate", d."createdAt", d."docId", d."createdBy", d."updatedBy",
+          (d."fileName" ILIKE ${namePattern}) AS "nameMatched", d.settings->>'description' AS description
         FROM platform.engagement_documents d
         WHERE d."firmId" = ${firmIdParam}::uuid
           ${scopeFilter}
-          AND d."fileName" ILIKE ${namePattern}
+          AND (d."fileName" ILIKE ${namePattern} OR d.settings->>'description' ILIKE ${namePattern})
           AND (d.settings->>'locked') IS DISTINCT FROM 'private'
-          AND (d.settings->'lock'->>'type') IS NULL
+          AND COALESCE(d.settings->'lock'->>'type', '') NOT IN ('private', 'intake')
         ORDER BY d."updatedAt" DESC
         LIMIT ${limitParam}
       `, ...queryParams)
 
             return results.map(r => ({
                 externalId: r.externalId, fileName: r.fileName, updatedAt: new Date(r.updatedAt),
-                score: 0.92, metadata: r.metadata, isFolder: Boolean(r.isFolder),
+                score: r.nameMatched ? 0.92 : 0.85, metadata: r.metadata, isFolder: Boolean(r.isFolder),
                 parentId: r.parentId, clientId: r.clientId, engagementId: r.engagementId,
                 dueDate: r.dueDate ? new Date(r.dueDate) : null,
                 createdAt: r.createdAt ? new Date(r.createdAt) : null,
                 docId: r.docId, createdBy: r.createdBy, updatedBy: r.updatedBy,
+                matchedIn: r.nameMatched ? 'name' as const : 'description' as const,
+                ...(r.nameMatched ? {} : { description: r.description as string | null }),
             }))
         } catch (error) {
             logger.error('Global filename search failed:', error as Error)
@@ -1018,7 +1093,7 @@ export class SearchService {
           ${scopeFilter}
           AND d."docId" ILIKE ${docIdPattern}
           AND (d.settings->>'locked') IS DISTINCT FROM 'private'
-          AND (d.settings->'lock'->>'type') IS NULL
+          AND COALESCE(d.settings->'lock'->>'type', '') NOT IN ('private', 'intake')
         ORDER BY d."updatedAt" DESC
         LIMIT ${limitParam}
       `, ...queryParams)
@@ -1062,17 +1137,20 @@ export class SearchService {
             const scopeFilter = SearchService.buildGlobalScopeFilter({ ...params, push })
             const limitParam = push(params.limit)
 
-            const ilikeConditions = termParams.map(p => `d."fileName" ILIKE ${p}`)
+            const nameConditions = termParams.map(p => `d."fileName" ILIKE ${p}`)
+            // The description the firm wrote counts too, a word at a time.
+            const ilikeConditions = termParams.map(p => `(d."fileName" ILIKE ${p} OR d.settings->>'description' ILIKE ${p})`)
 
             const results = await prisma.$queryRawUnsafe<any[]>(`
         SELECT d."externalId", d."fileName", d."updatedAt", d."metadata", d."isFolder",
-          d."parentId", d."clientId", d."engagementId", d."dueDate", d."createdAt", d."docId", d."createdBy", d."updatedBy"
+          d."parentId", d."clientId", d."engagementId", d."dueDate", d."createdAt", d."docId", d."createdBy", d."updatedBy",
+          (${nameConditions.join(' OR ')}) AS "nameMatched", d.settings->>'description' AS description
         FROM platform.engagement_documents d
         WHERE d."firmId" = ${firmIdParam}::uuid
           ${scopeFilter}
           AND (${ilikeConditions.join(' OR ')})
           AND (d.settings->>'locked') IS DISTINCT FROM 'private'
-          AND (d.settings->'lock'->>'type') IS NULL
+          AND COALESCE(d.settings->'lock'->>'type', '') NOT IN ('private', 'intake')
         ORDER BY d."updatedAt" DESC
         LIMIT ${limitParam}
       `, ...queryParams)
@@ -1083,16 +1161,20 @@ export class SearchService {
             // presenting with the same confidence as a strong multi-term match.
             const lowerTerms = params.terms.map(t => t.toLowerCase())
             return results.map(r => {
-                const lowerName = (r.fileName as string).toLowerCase()
-                const matchedCount = lowerTerms.filter(t => lowerName.includes(t)).length
+                // Terms found in the name or the description both count; a match found only in the
+                // description ranks a little below the same match in a name.
+                const lowerText = `${r.fileName as string} ${(r.description as string | null) ?? ''}`.toLowerCase()
+                const matchedCount = lowerTerms.filter(t => lowerText.includes(t)).length
                 const matchFraction = matchedCount / lowerTerms.length
                 return {
                     externalId: r.externalId, fileName: r.fileName, updatedAt: new Date(r.updatedAt),
-                    score: 0.5 + matchFraction * 0.42, metadata: r.metadata, isFolder: Boolean(r.isFolder),
+                    score: 0.5 + matchFraction * (r.nameMatched ? 0.42 : 0.35), metadata: r.metadata, isFolder: Boolean(r.isFolder),
                     parentId: r.parentId, clientId: r.clientId, engagementId: r.engagementId,
                     dueDate: r.dueDate ? new Date(r.dueDate) : null,
                     createdAt: r.createdAt ? new Date(r.createdAt) : null,
                     docId: r.docId, createdBy: r.createdBy, updatedBy: r.updatedBy,
+                    matchedIn: r.nameMatched ? 'name' as const : 'description' as const,
+                    ...(r.nameMatched ? {} : { description: r.description as string | null }),
                 }
             })
         } catch (error) {
@@ -1130,7 +1212,7 @@ export class SearchService {
         WHERE d."firmId" = ${firmIdParam}::uuid
           ${scopeFilter}
           AND (d.settings->>'locked') IS DISTINCT FROM 'private'
-          AND (d.settings->'lock'->>'type') IS NULL
+          AND COALESCE(d.settings->'lock'->>'type', '') NOT IN ('private', 'intake')
         ORDER BY d."updatedAt" DESC
         LIMIT ${limitParam}
       `, ...queryParams)

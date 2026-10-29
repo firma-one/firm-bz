@@ -13,6 +13,7 @@ import { applyNewUi, clearNewUi } from '@/lib/ui-shell'
 import { DemoSidebar } from '@/components/demo/demo-sidebar'
 import { DemoHeaderBar } from '@/components/demo/demo-header-bar'
 import { demoInboxCount } from '@/lib/demo/demo-personal-data'
+import { DEMO_FIRM } from '@/lib/demo/static-demo-data'
 
 /**
  * Static counterpart to AppShellV2 (components/shell/app-shell-v2.tsx): the same frame — a 240px
@@ -53,6 +54,7 @@ function DemoRightPane() {
                 >
                     <LayoutRightPanel
                         title={title || 'Document'}
+                        firm={{ name: DEMO_FIRM.name, logoUrl: null }}
                         icon={headerIcon}
                         iconTooltip={iconTooltip || undefined}
                         subtitle={headerSubtitle || undefined}

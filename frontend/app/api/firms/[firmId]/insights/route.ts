@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { SHARED_COMMENTS } from '@/lib/comments/internal-notes'
 import { prisma } from '@/lib/prisma'
 import { createClient } from '@/utils/supabase/server'
 import { userSettingsPlus } from '@/lib/user-settings-plus'
@@ -425,7 +426,8 @@ export async function GET(
     if (engagementIdList.length > 0) {
       const [firmMessages, externalMembers, resolvedThreads] = await Promise.all([
         prisma.docCommentMessage.findMany({
-          where: { engagementId: { in: engagementIdList } },
+          // An internal note is not a reply to the client (lib/comments/internal-notes.ts).
+          where: { engagementId: { in: engagementIdList }, ...SHARED_COMMENTS },
           select: { projectDocumentId: true, authorUserId: true, content: true, createdAt: true, engagementId: true },
           orderBy: { createdAt: 'asc' },
           take: 2000,

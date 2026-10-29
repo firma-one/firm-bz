@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { CalendarDays } from 'lucide-react'
+import { Ban, CalendarDays, Clock } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { DeliverableIcon } from '@/components/ui/deliverable-icon'
 import { cn } from '@/lib/utils'
 import { StatusIcon } from '@/components/ui/status-icon'
@@ -9,7 +10,8 @@ import { StatusPill } from '@/components/ui/status-pill'
 import { interactiveCardClass } from '@/components/ui/interactive-card'
 import { STAGE_BAR_CLASSES, STAGE_LANE_CLASSES, STATUS, type LaneStage } from '@/lib/ui/status'
 import { DemoEngagement } from '@/lib/demo/static-demo-data'
-import { DemoDeliverable, DeliverableStatus, getDemoDeliverables } from '@/lib/demo/demo-deliverables'
+import { DemoDeliverable, DeliverableStatus, demoDocumentStages, demoFilesIn, getDemoDeliverables } from '@/lib/demo/demo-deliverables'
+import { BlockedCountChip } from '@/components/files/blocked-tag'
 import { DemoDeliverablePane } from '@/components/demo/demo-deliverable-pane'
 import { prettyName } from '@/lib/demo/demo-summary'
 import { useRightPane } from '@/lib/right-pane-context'
@@ -23,12 +25,50 @@ const LANES: { status: BoardStatus; stage: LaneStage }[] = (['to_do', 'in_progre
 const formatDue = (iso: string) =>
     new Date(`${iso}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 
+/** Its documents the firm marked blocked, as the app's shares route sends them to firm roles. */
+const blockedDocumentsOf = (card: DemoDeliverable) => {
+    const files = demoFilesIn(card.folder)
+    const stages = demoDocumentStages(card.status, files)
+    return files.flatMap((f) => {
+        const flag = stages[f.id]?.blocked
+        return flag ? [{ documentId: f.id, docId: f.docId, fileName: f.name, reason: flag.reason }] : []
+    })
+}
+
+/** As on the app's card: overdue is a red date, not a status, and approved work is never overdue. */
+const isOverdue = (card: DemoDeliverable) =>
+    !!card.dueDate && card.status !== 'approved' && new Date(`${card.dueDate}T23:59:59`).getTime() < Date.now()
+
+/** The app's Board toolbar toggle (engagement-shares-tab.tsx): outlined, red while on, with its count. */
+function FilterToggle({ icon, label, count, on, onClick }: { icon: React.ReactNode; label: string; count: number; on: boolean; onClick: () => void }) {
+    return (
+        <Button
+            variant="outline"
+            size="sm"
+            onClick={onClick}
+            aria-pressed={on}
+            className={cn('h-8 gap-1.5 rounded border-line text-xs text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg [&_svg]:h-3 [&_svg]:w-3 [&_svg]:opacity-60', on ? 'border-red-300 bg-red-50 text-red-700 ring-1 ring-red-200 hover:bg-red-50 hover:text-red-700' : 'bg-white')}
+        >
+            {icon}
+            {label}
+            {count > 0 && (
+                <span className={cn('ml-0.5 rounded-sm px-1 py-px text-[10px] font-semibold tabular-nums', on ? 'bg-red-200/70 text-red-900' : 'bg-surface-muted text-fg-muted')}>
+                    {count}
+                </span>
+            )}
+        </Button>
+    )
+}
+
 function BoardCard({ card, stage, open, onToggle }: { card: DemoDeliverable; stage: LaneStage; open: boolean; onToggle: () => void }) {
     const initials = card.actor.split(' ').map((p) => p[0]).join('')
-    const approved = card.status === 'approved'
-    const done = approved ? card.fileCount : Math.max(1, Math.floor(card.fileCount * 0.5))
-    // As on the app's card: overdue is a red date, not a status.
-    const overdue = !!card.dueDate && !approved && new Date(`${card.dueDate}T23:59:59`).getTime() < Date.now()
+    // As on the app's card: progress over the documents on the Board, and the blocked ones named.
+    const files = demoFilesIn(card.folder)
+    const stages = demoDocumentStages(card.status, files)
+    const onBoard = files.filter((f) => stages[f.id]?.stage !== 'not_started')
+    const done = onBoard.filter((f) => stages[f.id]?.stage === 'approved').length
+    const blocked = blockedDocumentsOf(card)
+    const overdue = isOverdue(card)
 
     return (
         <button
@@ -54,14 +94,20 @@ function BoardCard({ card, stage, open, onToggle }: { card: DemoDeliverable; sta
                         <span className="truncate text-caption text-fg-muted">{card.actor}</span>
                     </span>
                 </div>
-                {card.fileCount > 0 && (
-                    <div className="flex items-center gap-2">
-                        <div className="h-1 flex-1 overflow-hidden rounded-full bg-surface-muted">
-                            <div className={cn('h-full rounded-full', STAGE_BAR_CLASSES[stage])} style={{ width: `${Math.round((done / card.fileCount) * 100)}%` }} />
-                        </div>
-                        <span className="shrink-0 text-caption tabular-nums text-fg-subtle">{done}/{card.fileCount}</span>
-                    </div>
-                )}
+                {/* As on the app's card: always there, so the cards in a lane are one height */}
+                <div className="flex h-5 items-center gap-2">
+                    <BlockedCountChip documents={blocked} />
+                    {onBoard.length > 0 ? (
+                        <>
+                            <div className="h-1 flex-1 overflow-hidden rounded-full bg-surface-muted">
+                                <div className={cn('h-full rounded-full', STAGE_BAR_CLASSES[stage])} style={{ width: `${Math.round((done / onBoard.length) * 100)}%` }} />
+                            </div>
+                            <span className="shrink-0 text-caption tabular-nums text-fg-subtle">{done}/{onBoard.length}</span>
+                        </>
+                    ) : (
+                        <span className="text-caption text-fg-subtle">No documents on the Board yet</span>
+                    )}
+                </div>
             </div>
         </button>
     )
@@ -110,35 +156,49 @@ export function DemoEngagementBoard({ engagement }: { engagement: DemoEngagement
         if (openIdRef.current) clearPaneRef.current()
     }, [])
 
-    const cards = getDemoDeliverables(engagement)
-    const total = cards.length
+    // As on the app's Board: Overdue, and Blocked (deliverables with a document the firm marked blocked;
+    // shown while there are some, or while it's on, so it can be turned off).
+    const [filterOverdue, setFilterOverdue] = useState(false)
+    const [filterBlocked, setFilterBlocked] = useState(false)
+    const allCards = getDemoDeliverables(engagement)
+    const overdueCount = allCards.filter(isOverdue).length
+    const blockedCount = allCards.filter((c) => blockedDocumentsOf(c).length > 0).length
+    const cards = allCards.filter((c) => (!filterOverdue || isOverdue(c)) && (!filterBlocked || blockedDocumentsOf(c).length > 0))
     const byLane: Record<BoardStatus, DemoDeliverable[]> = { to_do: [], in_progress: [], in_review: [], approved: [] }
     cards.forEach((c) => byLane[c.status].push(c))
 
     return (
-        <div className="subtle-scrollbar overflow-x-auto pb-1">
-            <div className="grid min-h-[360px] items-start gap-3" style={{ gridTemplateColumns: 'repeat(4, minmax(240px, 1fr))' }}>
-                {LANES.map((lane) => {
-                    const laneCards = byLane[lane.status]
-                    return (
-                        <div key={lane.status} className={cn('flex flex-col gap-2 rounded-lg p-2', STAGE_LANE_CLASSES[lane.stage].rest)}>
-                            <div className="flex h-7 items-center gap-2 px-1">
-                                <StatusPill kind="deliverable" status={lane.status} />
-                                <span className="text-small tabular-nums text-fg-subtle">{laneCards.length}</span>
+        <div className="flex flex-col">
+            <div className="flex shrink-0 items-center gap-2 pb-2.5 pt-1">
+                <FilterToggle icon={<Clock />} label="Overdue" count={overdueCount} on={filterOverdue} onClick={() => setFilterOverdue((v) => !v)} />
+                {(blockedCount > 0 || filterBlocked) && (
+                    <FilterToggle icon={<Ban />} label="Blocked" count={blockedCount} on={filterBlocked} onClick={() => setFilterBlocked((v) => !v)} />
+                )}
+            </div>
+            <div className="subtle-scrollbar overflow-x-auto pb-1">
+                <div className="grid min-h-[360px] items-start gap-3" style={{ gridTemplateColumns: 'repeat(4, minmax(240px, 1fr))' }}>
+                    {LANES.map((lane) => {
+                        const laneCards = byLane[lane.status]
+                        return (
+                            <div key={lane.status} className={cn('flex flex-col gap-2 rounded-lg p-2', STAGE_LANE_CLASSES[lane.stage].rest)}>
+                                <div className="flex h-7 items-center gap-2 px-1">
+                                    <StatusPill kind="deliverable" status={lane.status} />
+                                    <span className="text-small tabular-nums text-fg-subtle">{laneCards.length}</span>
+                                </div>
+                                {laneCards.map((c) => (
+                                    <BoardCard
+                                        key={c.folder.id}
+                                        card={c}
+                                        stage={lane.stage}
+                                        open={selected === c.folder.id}
+                                        onToggle={() => (selected === c.folder.id ? closeCard() : openCard(c))}
+                                    />
+                                ))}
+                                {laneCards.length === 0 && <p className="px-1 pb-1 text-small text-fg-subtle">{filterOverdue || filterBlocked ? 'No matches' : 'No deliverables'}</p>}
                             </div>
-                            {laneCards.map((c) => (
-                                <BoardCard
-                                    key={c.folder.id}
-                                    card={c}
-                                    stage={lane.stage}
-                                    open={selected === c.folder.id}
-                                    onToggle={() => (selected === c.folder.id ? closeCard() : openCard(c))}
-                                />
-                            ))}
-                            {laneCards.length === 0 && <p className="px-1 pb-1 text-small text-fg-subtle">No deliverables</p>}
-                        </div>
-                    )
-                })}
+                        )
+                    })}
+                </div>
             </div>
         </div>
     )

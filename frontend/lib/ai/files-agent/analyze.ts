@@ -32,6 +32,8 @@ export interface FileNode {
     mimeType?: string | null
     /** Deliverable due date, when one is set. Carried for the chat context, not the detectors. */
     dueDate?: Date | string | null
+    /** The description the firm wrote for it in the Details pane. Carried for the chat context, not the detectors. */
+    description?: string | null
 }
 
 export type FindingKind =

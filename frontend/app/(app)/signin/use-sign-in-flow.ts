@@ -9,6 +9,14 @@ import { checkEmailExists, sendOTPWithTurnstile } from '@/app/actions/send-otp'
 import { sendEvent, ANALYTICS_EVENTS } from '@/lib/analytics'
 import { resolvePostAuthTarget, AUTO_RESOLVE_TARGET } from '@/lib/auth/post-auth-target'
 
+/**
+ * The address last *successfully* signed in with on this browser, used to prefill the field.
+ *
+ * In localStorage, so it outlives the tab — that is the whole point. Written only once a code has
+ * verified, never on a keystroke: a prefill of "deepa" is worse than an empty box, because it has
+ * to be noticed and corrected every time. Only the address is kept, never the session, so signing
+ * in still takes a fresh code.
+ */
 export const SIGNIN_EMAIL_KEY = 'fm_signin_email'
 
 export type SignInStep = 'email' | 'otp-verify'
@@ -16,9 +24,17 @@ export type SignInStep = 'email' | 'otp-verify'
 function getStoredEmail(): string {
   if (typeof window === 'undefined') return ''
   try {
-    return sessionStorage.getItem(SIGNIN_EMAIL_KEY) || ''
+    return localStorage.getItem(SIGNIN_EMAIL_KEY) || ''
   } catch {
     return ''
+  }
+}
+
+function rememberEmail(value: string): void {
+  try {
+    localStorage.setItem(SIGNIN_EMAIL_KEY, value)
+  } catch {
+    /* ignore — private windows and blocked site data both throw */
   }
 }
 
@@ -40,6 +56,8 @@ export function useSignInFlow() {
   const [emailVerified, setEmailVerified] = useState(false)
   const [turnstileAction, setTurnstileAction] = useState<'check' | 'send'>('check')
   const [stepTransition, setStepTransition] = useState<'idle' | 'exiting' | 'entering'>('idle')
+  /** True while the field holds a remembered address the viewer has not touched. */
+  const [prefilledFromMemory, setPrefilledFromMemory] = useState(false)
 
   useEffect(() => {
     const id = setTimeout(() => setMounted(true), 50)
@@ -69,12 +87,8 @@ export function useSignInFlow() {
     const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''))
     const emailParam = hashParams.get('email') ?? params.get('email')
     if (emailParam) {
+      // Not stored: nobody has signed in with this address yet, it just came off the link.
       setEmail(emailParam)
-      try {
-        sessionStorage.setItem(SIGNIN_EMAIL_KEY, emailParam)
-      } catch {
-        /* ignore */
-      }
       // Consumed — drop it from the address bar so it is not left to be copied or shared onward.
       if (hashParams.has('email')) {
         hashParams.delete('email')
@@ -83,19 +97,18 @@ export function useSignInFlow() {
       }
       return
     }
-    const stored = getStoredEmail()
-    if (stored) setEmail(stored)
+    const remembered = getStoredEmail()
+    if (remembered) {
+      setEmail(remembered)
+      setPrefilledFromMemory(true)
+    }
   }, [])
 
   useEffect(() => {
     if (!email) return
     setNoAccountMessage('')
     setEmailVerified(false)
-    try {
-      sessionStorage.setItem(SIGNIN_EMAIL_KEY, email)
-    } catch {
-      /* ignore */
-    }
+    setPrefilledFromMemory((was) => (was && email === getStoredEmail() ? was : false))
   }, [email])
 
   const animateToStep = useCallback((nextStep: SignInStep) => {
@@ -253,6 +266,8 @@ export function useSignInFlow() {
         data: { session },
       } = await supabase.auth.getSession()
       if (session) {
+        // Signed in for real, so this address is worth prefilling next time.
+        rememberEmail(email)
         sendEvent({
           action: ANALYTICS_EVENTS.LOGIN,
           category: 'User',
@@ -276,6 +291,22 @@ export function useSignInFlow() {
     },
     [email, otpCode],
   )
+
+  /**
+   * Forgets the remembered address and empties the field.
+   *
+   * The prefill is a convenience on a shared browser as much as a private one, so there has to be
+   * a way to drop it without digging through site data.
+   */
+  const clearRememberedEmail = useCallback(() => {
+    try {
+      localStorage.removeItem(SIGNIN_EMAIL_KEY)
+    } catch {
+      /* ignore */
+    }
+    setEmail('')
+    setPrefilledFromMemory(false)
+  }, [])
 
   const stepContentClass =
     stepTransition === 'exiting'
@@ -303,6 +334,8 @@ export function useSignInFlow() {
     showTurnstile,
     setShowTurnstile,
     mounted,
+    prefilledFromMemory,
+    clearRememberedEmail,
     stepContentClass,
     animateToStep,
     sendOTPWithToken,

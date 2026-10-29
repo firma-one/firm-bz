@@ -10,6 +10,7 @@ import { Hint } from '@/components/ui/tooltip'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { ClientIcon } from '@/components/ui/client-icon'
 import { DocumentIcon } from '@/components/ui/document-icon'
+import { DeliverableIcon } from '@/components/ui/deliverable-icon'
 import { CreateDialogFooter, CreateDialogHeader } from '@/components/ui/create-dialog'
 import { cn } from '@/lib/utils'
 import type { DriveFile } from '@/lib/types'
@@ -117,6 +118,8 @@ export interface CopyMoveDialogProps {
     targetName?: string
     /** Picks the chip's icon. */
     targetMimeType?: string
+    /** How many items go: more than one (the selection bar's Move/Copy) names the count instead of the item. */
+    targetCount?: number
     keepBoth: boolean
     onKeepBothChange: (keepBoth: boolean) => void
     /** From the root (General, Confidential or Staging) down to the folder being shown. */
@@ -132,21 +135,36 @@ export interface CopyMoveDialogProps {
     onOpenFolder: (folder: DriveFile) => void
     onSubmit: (folderId: string) => void
     onCancel: () => void
+    /** Which folders are deliverables or inside one, so they wear folder-plus as their rows do. A lookup: called per row. */
+    deliverableKindOf?: (folderId: string) => DeliverableKind
+}
+
+/** A deliverable folder, a folder inside one, or neither. */
+export type DeliverableKind = 'deliverable' | 'inside' | null
+
+/** A picker folder's mark: folder-plus for a deliverable, a shade lighter inside one, else the plain folder. */
+function PickerFolderIcon({ kind, className }: { kind: DeliverableKind; className: string }) {
+    return kind
+        ? <DeliverableIcon inside={kind === 'inside'} className={className} />
+        : <Folder className={cn(className, 'shrink-0 text-fg-muted')} aria-hidden />
 }
 
 /** Move/Copy to folder: browse the root's folders and move or copy into one, or into the root itself. */
 export function CopyMoveDialog({
-    open, onOpenChange, action, targetName, targetMimeType, keepBoth, onKeepBothChange, path, onPathClick, loading, folders,
-    emptyFolderIds, subfolderIds, checkingFolderId, submittingFolderId, onOpenFolder, onSubmit, onCancel,
+    open, onOpenChange, action, targetName, targetMimeType, targetCount = 1, keepBoth, onKeepBothChange, path, onPathClick, loading, folders,
+    emptyFolderIds, subfolderIds, checkingFolderId, submittingFolderId, onOpenFolder, onSubmit, onCancel, deliverableKindOf,
 }: CopyMoveDialogProps) {
     const verb = action === 'copy' ? 'Copy' : 'Move'
     const root = path[0]
+    const what = targetCount > 1
+        ? <><span className="font-medium text-fg">{targetCount} items</span> will</>
+        : <><FileChip name={targetName} mimeType={targetMimeType} /> will</>
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className={PANEL_CLASS}>
                 <DividedHeader
-                    title={`${verb} to folder`}
-                    description={<><FileChip name={targetName} mimeType={targetMimeType} /> will be {action === 'copy' ? 'copied' : 'moved'} to the folder you pick.</>}
+                    title={targetCount > 1 ? `${verb} ${targetCount} items to folder` : `${verb} to folder`}
+                    description={<>{what} be {action === 'copy' ? 'copied' : 'moved'} to the folder you pick.</>}
                 />
 
                 <div className="space-y-4 px-5 pb-5 pt-4">
@@ -180,7 +198,7 @@ export function CopyMoveDialog({
                                                 {/* The root is the engagement's own top folder: the breadcrumb's Briefcase and label */}
                                                 {i === 0
                                                     ? <Briefcase className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
-                                                    : <Folder className="h-3.5 w-3.5 shrink-0 text-fg-muted" aria-hidden />}
+                                                    : <PickerFolderIcon kind={deliverableKindOf?.(seg.id) ?? null} className="h-3.5 w-3.5" />}
                                                 <span className="truncate">{seg.name}</span>
                                             </button>
                                         </div>
@@ -225,7 +243,7 @@ export function CopyMoveDialog({
                                                     hasSubfolders && !isChecking ? 'cursor-pointer' : 'cursor-default'
                                                 )}
                                             >
-                                                <Folder className="h-4 w-4 shrink-0 text-fg-muted" aria-hidden />
+                                                <PickerFolderIcon kind={f.isDeliverable ? 'deliverable' : deliverableKindOf?.(f.id) ?? null} className="h-4 w-4" />
                                                 <span className="truncate">{f.name}</span>
                                                 <span className="flex h-4 w-4 shrink-0 items-center justify-center">
                                                     {/* The arrow waits for the look-ahead: one that showed and then vanished read as "has subfolders" for a moment. */}

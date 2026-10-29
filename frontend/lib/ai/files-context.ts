@@ -1,6 +1,7 @@
 import 'server-only'
 import { prisma } from '@/lib/prisma'
 import type { FileNode } from './files-agent/analyze'
+import { descriptionOf } from '@/lib/files/description'
 
 /**
  * The engagement's file tree, as prose the chat can answer from.
@@ -16,9 +17,11 @@ import type { FileNode } from './files-agent/analyze'
  *
  * ## What it still excludes
  *
- * Names and structure only. No document CONTENT, no comment bodies, no member emails — the
- * boundary moves by one step, not away. A file name is a label the firm chose and already shows
- * its client; a document's contents are the client's own material.
+ * Names, structure and descriptions only. No document CONTENT, no comment bodies, no member
+ * emails — the boundary moves by one step, not away. A file name is a label the firm chose and
+ * already shows its client, and so is the description the firm wrote for it in the Details pane
+ * (2026-10-29): what the file is for, in the firm's words. A document's contents are the client's
+ * own material.
  *
  * Shares `FileNode` with the agent so the two halves of the panel cannot describe different trees.
  */
@@ -38,7 +41,7 @@ export async function loadEngagementFiles(engagementId: string): Promise<FileNod
         where: { engagementId, status: { not: 'ARCHIVED' } },
         select: {
             externalId: true, fileName: true, isFolder: true,
-            parentId: true, docId: true, mimeType: true, dueDate: true,
+            parentId: true, docId: true, mimeType: true, dueDate: true, settings: true,
         },
         orderBy: [{ isFolder: 'desc' }, { fileName: 'asc' }],
     })
@@ -50,7 +53,20 @@ export async function loadEngagementFiles(engagementId: string): Promise<FileNod
         docId: d.docId,
         mimeType: d.mimeType,
         dueDate: d.dueDate,
+        description: descriptionOf(d.settings),
     }))
+}
+
+/**
+ * A description as one line beside its name: what the file is for, which is what a question like
+ * "where's the pricing deck" turns on. Cut short, so a long one can't crowd the tree out.
+ */
+const MAX_DESCRIPTION_IN_CONTEXT = 160
+function describedAs(node: FileNode): string {
+    if (!node.description) return ''
+    const oneLine = node.description.replace(/\s+/g, ' ').trim()
+    const cut = oneLine.length > MAX_DESCRIPTION_IN_CONTEXT ? `${oneLine.slice(0, MAX_DESCRIPTION_IN_CONTEXT - 1)}…` : oneLine
+    return ` — "${cut}"`
 }
 
 /** Renders a node's path by walking `parentId`, which holds the parent's `externalId`. */
@@ -113,7 +129,7 @@ export function buildFilesContext(nodes: FileNode[], detail: FilesContextDetail 
             const due = f.dueDate
                 ? `due ${new Date(f.dueDate).toISOString().slice(0, 10)}`
                 : 'NO DUE DATE'
-            lines.push(`  ${f.docId} — ${f.fileName} (${due})`)
+            lines.push(`  ${f.docId} — ${f.fileName} (${due})${describedAs(f)}`)
         }
     }
 
@@ -142,7 +158,7 @@ export function buildFilesContext(nodes: FileNode[], detail: FilesContextDetail 
             // the commonest questions about a file tree, and splitting it across two sections
             // would make the model correlate two lists.
             const due = f.dueDate ? ` (due ${new Date(f.dueDate).toISOString().slice(0, 10)})` : ''
-            lines.push(`  ${f.docId ? `${f.docId} — ` : ''}${f.fileName}${due}`)
+            lines.push(`  ${f.docId ? `${f.docId} — ` : ''}${f.fileName}${due}${describedAs(f)}`)
         }
     }
 

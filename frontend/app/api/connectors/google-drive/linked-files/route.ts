@@ -17,6 +17,10 @@ import { blockIfEngagementFileMutationForbidden } from '@/lib/engagement-access'
 import { resolveEngagementConnector } from '@/lib/connectors/resolve-client-connector'
 import { IndexingInterceptor } from '@/lib/services/indexing-interceptor'
 import { getLock, isDocumentPrivate, buildSettingsForDb } from '@/lib/sharing-settings'
+import { blockedOf } from '@/lib/files/blocked'
+import { descriptionOf } from '@/lib/files/description'
+import { reconcileNativeDescriptions } from '@/lib/files/native-description'
+import { SearchService } from '@/lib/services/search-service'
 import { byEmail, creatorOf, loadPeople } from '@/lib/files/file-creator'
 import { assertWithinDocumentCap } from '@/lib/billing/effective-billing-caps'
 import { getPermissionAdapter, getStorageAdapter, getContentAdapter } from '@/lib/connectors/registry'
@@ -523,10 +527,14 @@ export async function POST(request: NextRequest) {
                     dueDate: row.dueDate ? (row.dueDate as Date).toISOString() : null,
                     docId: (row as any).docId ?? null,
                     lock: getLock(row.settings),
-                    isDeliverable: !!(s.share?.createdAt),
-                    deliverableStatus: s.share?.createdAt ? (s.activity?.status ?? null) : null,
+                    // A deliverable is a folder tagged as one: a file's share.createdAt (buildSettingsForDb
+                    // writes it on any settings save) doesn't make it one.
+                    isDeliverable: row.isFolder && !!(s.share?.createdAt),
+                    deliverableStatus: row.isFolder && s.share?.createdAt ? (s.activity?.status ?? null) : null,
                     // Every document's own stage: a deliverable's, or a document's inside one (the Files Status column).
                     activityStatus: s.activity?.status ?? null,
+                    // The firm's own: a client is never sent it.
+                    blocked: personaSlugToFilter ? null : blockedOf(row.settings),
                     isPendingApproval: intakeExternalIds.has(row.externalId),
                     pendingUploaderId: intakeUploaderByExternal.get(row.externalId) ?? null,
                 })}
@@ -562,7 +570,7 @@ export async function POST(request: NextRequest) {
                         driveIds.length > 0
                             ? prisma.engagementDocument.findMany({
                                 where: { engagementId: bodyEngagementId, externalId: { in: driveIds } },
-                                select: { id: true, externalId: true, settings: true, status: true, dueDate: true, docId: true, createdBy: true },
+                                select: { id: true, externalId: true, isFolder: true, settings: true, status: true, dueDate: true, docId: true, createdBy: true },
                             })
                             : [],
                         // All PENDING intake folders in this folder (shadow rows for EL/internal)
@@ -589,18 +597,21 @@ export async function POST(request: NextRequest) {
                         const guestEnabled = share?.guest?.enabled === true || s.guest === true
                         return [r.externalId, ecEnabled || guestEnabled]
                     }))
+                    // A deliverable is a folder tagged as one, never a file whose settings carry share.createdAt
                     const isDeliverableByExternal = new Map<string, boolean>(enrichRows.map((r: any) => {
                         const s = (r.settings as Record<string, any>) || {}
-                        return [r.externalId, !!(s.share?.createdAt)]
+                        return [r.externalId, !!r.isFolder && !!(s.share?.createdAt)]
                     }))
                     const deliverableStatusByExternal = new Map<string, string | null>(enrichRows.map((r: any) => {
                         const s = (r.settings as Record<string, any>) || {}
-                        return [r.externalId, s.share?.createdAt ? (s.activity?.status ?? null) : null]
+                        return [r.externalId, r.isFolder && s.share?.createdAt ? (s.activity?.status ?? null) : null]
                     }))
                     const activityStatusByExternal = new Map<string, string | null>(enrichRows.map((r: any) => {
                         const s = (r.settings as Record<string, any>) || {}
                         return [r.externalId, s.activity?.status ?? null]
                     }))
+                    // The firm's own: a client is never sent it.
+                    const blockedByExternal = new Map(personaSlugToFilter ? [] : enrichRows.map((r: any) => [r.externalId, blockedOf(r.settings)] as const))
 
                     // Who added each file (the Created by column): the people behind it, and email → engagement role
                     const elMembers = await prisma.engagementMember.findMany({
@@ -631,6 +642,25 @@ export async function POST(request: NextRequest) {
                         intakePendingRows.map((r: any) => [r.externalId, r.sharingUsers?.[0]?.userId ?? null]).filter(([, v]: [string, string | null]) => v)
                     )
 
+                    // A description written in Drive reaches Firma, and one written in Firma reaches
+                    // Drive (lib/files/native-description.ts). Google only: its listing carries the
+                    // field (asked for in listFiles); OneDrive's personal-only field isn't listed.
+                    if (!isOneDrive(connector)) {
+                        const enrichByExternal = new Map<string, any>(enrichRows.map((r: any) => [r.externalId, r]))
+                        const toReconcile = files.flatMap((f: any) => {
+                            const row = enrichByExternal.get(f.id)
+                            if (!row) return []
+                            const firma = descriptionOf(row.settings)
+                            const native = typeof f.description === 'string' && f.description.trim() ? f.description.trim() : null
+                            return native !== firma ? [{ id: row.id as string, externalId: f.id as string, firma, native }] : []
+                        })
+                        if (toReconcile.length > 0) {
+                            Promise.resolve()
+                                .then(() => reconcileNativeDescriptions(connector.id, toReconcile, (id) => SearchService.refreshEmbedding(id)))
+                                .catch((e) => logger.error('[description] reconcile failed', e as Error))
+                        }
+                    }
+
                     files = files.map((f: any) => {
                         // Who added it: its member (an intake's uploader, for rows from before intake recorded one), else its Drive owner
                         const creator = creatorOf(
@@ -651,6 +681,7 @@ export async function POST(request: NextRequest) {
                         isDeliverable: isDeliverableByExternal.get(f.id) ?? false,
                         deliverableStatus: deliverableStatusByExternal.get(f.id) ?? null,
                         activityStatus: activityStatusByExternal.get(f.id) ?? null,
+                        blocked: blockedByExternal.get(f.id) ?? null,
                         isPendingApproval: pendingExternalIds.has(f.id),
                         pendingUploaderId: pendingUploaderByExternal.get(f.id) ?? null,
                         actorEmail: creator && !creator.viaDrive ? (creator.emailAddress ?? undefined) : f.actorEmail,

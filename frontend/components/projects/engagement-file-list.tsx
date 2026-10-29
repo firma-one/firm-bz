@@ -22,6 +22,7 @@ import { DeliverableIcon } from '@/components/ui/deliverable-icon'
 import { DocumentActionMenu } from '@/components/ui/document-action-menu'
 import { DocumentPreviewPanelContent } from '@/components/files/document-edit-sheet'
 import { DocumentPreviewPane } from '@/components/files/document-preview-pane'
+import { isAssetDetailsPaneContent } from '@/components/files/asset-details-pane'
 import { evictPreview } from '@/lib/preview-cache'
 import { DocumentDocCommentsPane } from '@/components/projects/document-doc-comments-pane'
 import { formatFileSize } from '@/lib/utils'
@@ -74,8 +75,9 @@ import { SecureAccessModal } from '@/components/projects/shares/secure-access-mo
 import { ProfileBubbleWithPopup } from '@/components/ui/profile-bubble-popup'
 import { EngagementFileRow } from '@/components/projects/engagement-file-row'
 import { FilesDropPill, FilesDropRow, FILES_DROP_ZONE_ACTIVE_CLASS } from '@/components/projects/files-drop-zone'
-import { CopyMoveDialog, CopyToEngagementDialog, RenameDialog, UploadConflictDialog } from '@/components/projects/file-organize-dialogs'
+import { CopyMoveDialog, CopyToEngagementDialog, RenameDialog, UploadConflictDialog, type DeliverableKind } from '@/components/projects/file-organize-dialogs'
 import { ENGAGEMENT_ROOT_LABEL } from '@/lib/files/engagement-root'
+import { foldBreadcrumbTrail, type TrailSlot } from '@/lib/files/breadcrumb-trail'
 import {
     FILE_TABLE_GRID_COLS_CLASS,
     FILE_TABLE_CONTAINER_CLASS,
@@ -343,8 +345,6 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
     const rightPane = useRightPane()
     const [activeCommentDocId, setActiveCommentDocId] = useState<string | null>(null)
     const [activeInfoDocId, setActiveInfoDocId] = useState<string | null>(null)
-    const [activeActivityDocId, setActiveActivityDocId] = useState<string | null>(null)
-    const [activeVersionDocId, setActiveVersionDocId] = useState<string | null>(null)
     const [activePreviewDocId, setActivePreviewDocId] = useState<string | null>(null)
     /** Mints a fresh key per preview mount. A ref, not state: the value is never rendered,
      *  and a state updater is not a safe place to do this — React may run it during the
@@ -392,6 +392,15 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
     const [descendantIdsForGuest, setDescendantIdsForGuest] = useState<Set<string>>(new Set())
     const [sharedByMeExternalIds, setSharedByMeExternalIds] = useState<Set<string>>(new Set())
     const [bookmarkIdByDocumentId, setBookmarkIdByDocumentId] = useState<Map<string, string>>(new Map())
+    // Whether a folder is a deliverable or inside one, from the share state already loaded: the
+    // breadcrumb's and the Move/Copy picker's folder-plus, as the rows wear it. A lookup, no fetch.
+    const deliverableKindOf = useCallback((id: string): DeliverableKind =>
+        sharedExternalIds.has(id) || sharedExternalIdsForEC.has(id) || sharedExternalIdsForGuest.has(id)
+            ? 'deliverable'
+            : descendantIds.has(id) || descendantIdsForEC.has(id) || descendantIdsForGuest.has(id)
+                ? 'inside'
+                : null,
+    [sharedExternalIds, sharedExternalIdsForEC, sharedExternalIdsForGuest, descendantIds, descendantIdsForEC, descendantIdsForGuest])
 
     useEffect(() => {
         sessionRef.current = session
@@ -427,14 +436,10 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
         const isCommentsPane =
             Boolean(rightPane.content) &&
             (rightPane.title === 'Comment' || rightPane.title === 'Comments')
-        const isInfoPane = Boolean(rightPane.content) && rightPane.title === 'File information'
-        const isActivityPane = Boolean(rightPane.content) && rightPane.title === 'Activity Stream'
-        const isVersionPane = Boolean(rightPane.content) && rightPane.title === 'Version History'
+        const isInfoPane = isAssetDetailsPaneContent(rightPane.content)
 
         if (!isCommentsPane) setActiveCommentDocId(null)
         if (!isInfoPane) setActiveInfoDocId(null)
-        if (!isActivityPane) setActiveActivityDocId(null)
-        if (!isVersionPane) setActiveVersionDocId(null)
         if (!rightPane.content) setActivePreviewDocId(null)
     }, [rightPane.content, rightPane.title])
 
@@ -575,7 +580,17 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
 
     // Core State
     const [currentFolderId, setCurrentFolderId] = useState<string | null>(null)
+    // The folder on screen is a deliverable or inside one, so everything listed in it is inside one,
+    // including what was just created or uploaded here: the share sets only learn of a new
+    // item on their next fetch, and until then its row lacked folder-plus, Status and Due.
+    const listingInsideDeliverable = !!currentFolderId && deliverableKindOf(currentFolderId) !== null
     const [breadcrumbs, setBreadcrumbs] = useState<BreadcrumbItem[]>([])
+    // When the trail is wider than the pane, keep its end (the folder you're in) in view
+    const breadcrumbStripRef = useRef<HTMLDivElement>(null)
+    useLayoutEffect(() => {
+        const strip = breadcrumbStripRef.current
+        if (strip) strip.scrollLeft = strip.scrollWidth
+    }, [breadcrumbs])
 
     // Close preview when the user navigates to a different folder (up via breadcrumb or down into a subfolder).
     // Skip on mount (isMountedRef is false until after first render).
@@ -1385,6 +1400,10 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
         }
     }
 
+    // Items just moved out of a folder, for a minute: the provider's folder listing can still return
+    // them for a few seconds after the move, and the refresh that follows put the moved row back.
+    const movedAwayRef = useRef(new Map<string, { folderId: string; until: number }>())
+
     const fetchFiles = useCallback(async (folderId: string, silent = false) => {
         if (!sessionRef.current?.access_token) return
         if (!silent) setLoading(true)
@@ -1410,7 +1429,13 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
                 throw new Error(data.error || 'Failed to fetch files')
             }
             const data = await res.json()
-            const loadedFiles = data.files || []
+            const now = Date.now()
+            const loadedFiles = ((data.files || []) as DriveFile[]).filter((f) => {
+                const away = movedAwayRef.current.get(f.id)
+                if (!away) return true
+                if (away.until < now) { movedAwayRef.current.delete(f.id); return true }
+                return away.folderId !== folderId
+            })
             setFiles(loadedFiles)
             refreshFileCount(loadedFiles)
         } catch (err: any) {
@@ -1433,6 +1458,14 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
     useEffect(() => {
         currentFolderIdRef.current = currentFolderId
     }, [currentFolderId])
+
+    // A moved item leaves this folder's list at once, and stays out of it while the provider catches up
+    const handleItemMovedAway = useCallback((fileId: string) => {
+        const folderId = currentFolderIdRef.current
+        if (folderId) movedAwayRef.current.set(fileId, { folderId, until: Date.now() + 60_000 })
+        setFiles(prev => prev.filter(f => f.id !== fileId))
+        deselectFile(fileId)
+    }, [deselectFile])
 
     // Upload hook
     const {
@@ -1476,6 +1509,7 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
         trashConfirming,
         copyMoveModalOpen, setCopyMoveModalOpen,
         copyMoveTarget, setCopyMoveTarget,
+        copyMoveTargets,
         copyMoveAction, setCopyMoveAction,
         copyMoveKeepBoth, setCopyMoveKeepBoth,
         currentPath, setCurrentPath,
@@ -1528,7 +1562,7 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
         startProcessing,
         stopProcessing,
         setFiles,
-        onItemRemoved: deselectFile,
+        onItemRemoved: handleItemMovedAway,
         storageBinName,
         // OneDrive can't take an item back out of its recycle bin through Graph (personal drives only).
         canUndoTrash: !isOneDriveClient,
@@ -1597,6 +1631,29 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
         setPendingBulkTrashIds(new Set(selectedFileIds))
         setBulkTrashConfirmOpen(true)
     }, [selectedFileIds, files, currentFolderIsApprovedDeliverable, addToast])
+
+    // Move/Copy for the selection, in the row menu's picker. What a row's menu wouldn't move or copy blocks it here too.
+    const handleBulkCopyMoveClick = useCallback((action: 'copy' | 'move') => {
+        const selected = files.filter(f => selectedFileIds.has(f.id))
+        if (!selected.length) return
+        if (action === 'move' && currentFolderIsApprovedDeliverable) {
+            addToast({ type: 'error', title: 'Cannot move', message: 'Items in an approved deliverable stay where they are.', duration: 6000 })
+            return
+        }
+        const fixed = selected.filter(f => f.lock?.type === 'finalize' || f.isPendingApproval || f.documentType === 'LINK')
+        // A folder can't be copied in the storage provider, only the files in it
+        const folders = action === 'copy' ? selected.filter(f => f.mimeType === 'application/vnd.google-apps.folder') : []
+        const blocked = [...fixed, ...folders]
+        if (blocked.length) {
+            const why = folders.length && !fixed.length
+                ? 'Folders can’t be copied, only files.'
+                : `Finalized files, uploads awaiting approval and links can’t be ${action === 'copy' ? 'copied' : 'moved'}.`
+            const which = blocked.length === 1 ? `“${blocked[0].name}”` : `those ${blocked.length} items`
+            addToast({ type: 'error', title: action === 'copy' ? 'Cannot copy' : 'Cannot move', message: `${why} Deselect ${which} to ${action} the rest.`, duration: 6000 })
+            return
+        }
+        openCopyMoveModal(selected, action)
+    }, [files, selectedFileIds, currentFolderIsApprovedDeliverable, addToast, openCopyMoveModal])
 
     const handleBulkTrashConfirmed = useCallback(async () => {
         if (!pendingBulkTrashIds.size || !sessionRef.current?.access_token) return
@@ -1828,6 +1885,8 @@ const handleRefresh = async () => {
             setNewItemName('')
             isCreatingRef.current = false
             if (currentFolderId) fetchFiles(currentFolderId)
+            // The new item joins the share sets (a folder inside a deliverable, a document in one).
+            fetchSharedIds()
         } catch (err: any) {
             logger.error(err)
             isCreatingRef.current = false
@@ -2250,18 +2309,18 @@ const handleRefresh = async () => {
             {/* Two rows: where you are and how many, then the filters with the quiet icons at the end.
                 While files are selected, the selection bar takes the second row. */}
             <div className="flex shrink-0 flex-col gap-2 pt-1 pb-2 z-20">
-                {/* Breadcrumbs: root always visible (as dropdown when canManage); truncate middle */}
+                {/* Breadcrumbs: root always visible (as dropdown when canManage); a deep trail folds its middle into a "…" menu */}
                 <div className="flex min-w-0 items-center gap-2 text-xs font-medium text-fg-muted">
-                    <div className="subtle-scrollbar flex min-w-0 items-center overflow-x-auto whitespace-nowrap">
+                    <div ref={breadcrumbStripRef} className="subtle-scrollbar flex min-w-0 items-center overflow-x-auto whitespace-nowrap">
                         {(() => {
                             const ROOT_INDEX = 0
                             // A crumb that is a deliverable, or inside one, wears folder-plus, as its row does
-                            const crumbFolderIcon = (id: string) =>
-                                sharedExternalIds.has(id) || sharedExternalIdsForEC.has(id) || sharedExternalIdsForGuest.has(id)
-                                    ? <DeliverableIcon className="mr-1.5 h-3.5 w-3.5" />
-                                    : descendantIds.has(id) || descendantIdsForEC.has(id) || descendantIdsForGuest.has(id)
-                                        ? <DeliverableIcon inside className="mr-1.5 h-3.5 w-3.5" />
-                                        : <Folder className="h-3.5 w-3.5 mr-1.5 text-fg-subtle flex-shrink-0" />
+                            const crumbFolderIcon = (id: string) => {
+                                const kind = deliverableKindOf(id)
+                                return kind
+                                    ? <DeliverableIcon inside={kind === 'inside'} className="mr-1.5 h-3.5 w-3.5" />
+                                    : <Folder className="h-3.5 w-3.5 mr-1.5 text-fg-subtle flex-shrink-0" />
+                            }
                             // How many are here, on the crumb for here; "2 of 5" while a filter or search narrows them
                             const countChip = (index: number) =>
                                 index === breadcrumbs.length - 1 && !loading && files.length > 0 ? (
@@ -2272,20 +2331,11 @@ const handleRefresh = async () => {
                                         {sortedFiles.length === files.length ? files.length : `${sortedFiles.length} of ${files.length}`}
                                     </span>
                                 ) : null
-                            const showAll = breadcrumbs.length <= 4
-                            const displayItems: { item: BreadcrumbItem; index: number; isEllipsis: boolean; isRoot: boolean }[] = showAll
-                                ? breadcrumbs.map((item, index) => ({ item, index, isEllipsis: false, isRoot: index === ROOT_INDEX }))
-                                : (() => {
-                                    const root = { item: breadcrumbs[ROOT_INDEX], index: ROOT_INDEX, isEllipsis: false, isRoot: true }
-                                    if (breadcrumbs.length === 5) {
-                                        return [root, { item: breadcrumbs[4], index: 4, isEllipsis: false, isRoot: false }]
-                                    }
-                                    const lastTwo = [
-                                        { item: breadcrumbs[breadcrumbs.length - 2], index: breadcrumbs.length - 2, isEllipsis: breadcrumbs[breadcrumbs.length - 2].clickable === false, isRoot: false },
-                                        { item: breadcrumbs[breadcrumbs.length - 1], index: breadcrumbs.length - 1, isEllipsis: false, isRoot: false }
-                                    ]
-                                    return [root, ...lastTwo]
-                                })()
+                            // The root, then every folder below it; a deep trail folds its upper folders into a "…" menu
+                            const displaySlots: TrailSlot<BreadcrumbItem>[] = breadcrumbs.length === 0 ? [] : [
+                                { kind: 'crumb', item: breadcrumbs[ROOT_INDEX], index: ROOT_INDEX },
+                                ...foldBreadcrumbTrail(breadcrumbs.slice(ROOT_INDEX + 1), ROOT_INDEX + 1),
+                            ]
                             const rootOptions: { type: 'general' | 'confidential' | 'staging'; label: string }[] = [
                                 ...(generalFolderId ? [{ type: 'general' as const, label: 'General' }] : []),
                             ]
@@ -2293,7 +2343,34 @@ const handleRefresh = async () => {
                             const currentRootLabel = currentFolderType === 'general' ? 'General' : currentFolderType === 'confidential' ? 'Confidential' : 'Staging'
                             return (
                                 <>
-                                    {displayItems.map(({ item, index, isEllipsis, isRoot }, i) => (
+                                    {displaySlots.map((slot, i) => slot.kind === 'folded' ? (
+                                        <div key={`breadcrumb-${i}`} className="flex items-center flex-shrink-0">
+                                            <ChevronRight className="h-3.5 w-3.5 mx-1 text-fg-subtle flex-shrink-0" />
+                                            <DropdownMenu>
+                                                <DropdownMenuTrigger asChild>
+                                                    <button
+                                                        type="button"
+                                                        className="flex items-center hover:bg-surface-hover px-2 py-1 rounded transition-colors text-fg-muted hover:text-fg"
+                                                        title={`${slot.entries.length} folders above`}
+                                                        aria-label={`Show the ${slot.entries.length} folders above`}
+                                                    >
+                                                        <span className="text-fg-subtle">…</span>
+                                                    </button>
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuContent align="start" className="min-w-[180px] max-w-[280px]">
+                                                    {slot.entries.map(({ item, index }) => (
+                                                        <DropdownMenuItem key={item.id} onClick={() => handleBreadcrumbClick(index, item.id)} title={item.name}>
+                                                            {crumbFolderIcon(item.id)}
+                                                            <span className="truncate min-w-0">{item.name}</span>
+                                                        </DropdownMenuItem>
+                                                    ))}
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
+                                        </div>
+                                    ) : (() => {
+                                        const { item, index } = slot
+                                        const isRoot = index === ROOT_INDEX
+                                        return (
                                         <div key={`breadcrumb-${i}`} className="flex items-center flex-shrink-0">
                                             {i > 0 && <ChevronRight className="h-3.5 w-3.5 mx-1 text-fg-subtle flex-shrink-0" />}
                                             {isRoot && showRootDropdown ? (
@@ -2345,15 +2422,6 @@ const handleRefresh = async () => {
                                                     <span className="ml-1.5 whitespace-nowrap">{ENGAGEMENT_ROOT_LABEL}</span>
                                                     {countChip(index)}
                                                 </button>
-                                            ) : isEllipsis ? (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => item.clickable !== false ? handleBreadcrumbClick(index, item.id) : handleBreadcrumbClick(ROOT_INDEX, breadcrumbs[ROOT_INDEX].id)}
-                                                    className="flex items-center hover:bg-surface-hover px-2 py-1 rounded transition-colors text-fg-muted hover:text-fg"
-                                                    title={`Go up to ${item.clickable !== false ? item.name : 'root'}`}
-                                                >
-                                                    <span className="text-fg-subtle">…</span>
-                                                </button>
                                             ) : item.clickable === false ? (
                                                 <div className="flex items-center px-2 py-1 text-fg-muted cursor-default">
                                                     {index === 0 && <Building2 className="h-3.5 w-3.5 mr-1.5 text-fg-subtle flex-shrink-0" />}
@@ -2393,7 +2461,8 @@ const handleRefresh = async () => {
                                                 </button>
                                             )}
                                         </div>
-                                    ))}
+                                        )
+                                    })())}
                                 </>
                             )
                         })()}
@@ -2411,6 +2480,18 @@ const handleRefresh = async () => {
                                     <Download className="h-3.5 w-3.5 text-fg-muted" />
                                     Download
                                 </button>
+                                {generalFolderId && canEdit && (
+                                    <>
+                                        <button type="button" onClick={() => handleBulkCopyMoveClick('move')} className={SELECTION_ACTION_CLASS}>
+                                            <FolderInput className="h-3.5 w-3.5 text-fg-muted" />
+                                            Move
+                                        </button>
+                                        <button type="button" onClick={() => handleBulkCopyMoveClick('copy')} className={SELECTION_ACTION_CLASS}>
+                                            <Copy className="h-3.5 w-3.5 text-fg-muted" />
+                                            Copy
+                                        </button>
+                                    </>
+                                )}
                                 <button type="button" onClick={handleBulkTrashClick} className={cn(SELECTION_ACTION_CLASS, "text-danger hover:text-danger")}>
                                     <Trash2 className="h-3.5 w-3.5" />
                                     Move to trash
@@ -3065,8 +3146,6 @@ const handleRefresh = async () => {
                                     })}
                                     activeCommentDocId={activeCommentDocId}
                                     activeInfoDocId={activeInfoDocId}
-                                    activeActivityDocId={activeActivityDocId}
-                                    activeVersionDocId={activeVersionDocId}
                                     activePreviewDocId={activePreviewDocId}
                                     highlightedFileId={highlightedFileId}
                                     onClearHighlight={() => setHighlightedFileId(null)}
@@ -3086,6 +3165,7 @@ const handleRefresh = async () => {
                                     viewAsPersonaSlug={viewAsPersonaSlug}
                                     canManage={canManage && !currentFolderIsApprovedDeliverable}
                                     isInsideApprovedDeliverable={currentFolderIsApprovedDeliverable}
+                                    inDeliverableFolder={listingInsideDeliverable}
                                     currentFolderType={currentFolderType}
                                     generalFolderId={generalFolderId}
                                     projectId={projectId}
@@ -3131,8 +3211,6 @@ const handleRefresh = async () => {
                                     }}
                                     onOpenCommentPane={(docId) => setActiveCommentDocId(docId)}
                                     onOpenInfoPane={(docId) => setActiveInfoDocId(docId)}
-                                    onOpenActivityPane={(docId) => setActiveActivityDocId(docId)}
-                                    onOpenVersionPane={(docId) => setActiveVersionDocId(docId)}
                                     onOpenPreviewPane={(docId) => openPreviewForFile(docId, file)}
                                     onAddToast={(toast) => addToast(toast as any)}
                                     connectorAccountEmail={connectorAccountEmail}
@@ -3164,12 +3242,15 @@ const handleRefresh = async () => {
                             action={copyMoveAction}
                             targetName={copyMoveTarget?.name}
                             targetMimeType={copyMoveTarget?.mimeType}
+                            targetCount={copyMoveTargets.length}
                             keepBoth={copyMoveKeepBoth}
                             onKeepBothChange={setCopyMoveKeepBoth}
                             path={currentPath}
                             onPathClick={handleCopyMoveBreadcrumbClick}
                             loading={loadingDestinations}
-                            folders={destinationFolders}
+                            // A folder being moved can't be its own destination
+                            folders={destinationFolders.filter(f => !copyMoveTargets.some(t => t.id === f.id))}
+                            deliverableKindOf={deliverableKindOf}
                             emptyFolderIds={emptyFolderIds}
                             subfolderIds={subfolderIds}
                             checkingFolderId={checkingFolderId}
@@ -3741,7 +3822,9 @@ const handleRefresh = async () => {
                     iconVariant="primary"
                     title="Return to Draft"
                     subtitle={unlockConfirmFile?.name}
-                    description="It will be unlocked for further edits. All collaborators will regain their prior access level based on their role and sharing settings."
+                    // An approved document goes back to To do, its deliverable with it; its approval stays on record
+                    // (.claude/plans/document-approval-record.md, section 4).
+                    description="It will be unlocked for further edits, and an approved document goes back to To do, taking its deliverable back with it. Its approval stays on record. All collaborators will regain their prior access level based on their role and sharing settings."
                     confirmLabel="Return to Draft"
                     confirmVariant="primary"
                     onCancel={() => setUnlockConfirmFile(null)}

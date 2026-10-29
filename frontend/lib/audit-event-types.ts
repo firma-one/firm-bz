@@ -18,6 +18,7 @@ export const AUDIT_EVENT_TYPES = [
   'DOCUMENT_CREATED', 'DOCUMENT_CHANGED', 'DOCUMENT_DELETED', 'DOCUMENT_RESTORED', 'DOCUMENT_MOVED',
   'DOCUMENT_VERSIONED', 'DOCUMENT_OPENED', 'DOCUMENT_DOWNLOADED', 'DOCUMENT_INDEXED',
   'DOCUMENT_FINALIZED', 'DOCUMENT_UNLOCKED', 'DOCUMENT_STATUS_CHANGED',
+  'DOCUMENT_BLOCKED', 'DOCUMENT_UNBLOCKED',
   'DOCUMENT_COMMENT_CREATED', 'DOCUMENT_COMMENT_CHANGED', 'DOCUMENT_COMMENT_DELETED',
   // Document sharing
   'DOCUMENT_SHARE_CREATED', 'DOCUMENT_SHARE_CHANGED', 'DOCUMENT_SHARE_DELETED',
@@ -31,6 +32,9 @@ export const AUDIT_EVENT_TYPES = [
 ] as const
 
 export type AuditEventType = typeof AUDIT_EVENT_TYPES[number]
+
+/** Events about what is the firm's own (a document's Blocked flag): never shown to a client. */
+export const FIRM_ONLY_AUDIT_EVENTS: readonly AuditEventType[] = ['DOCUMENT_BLOCKED', 'DOCUMENT_UNBLOCKED']
 
 export function isValidAuditEventType(value: string): value is AuditEventType {
   return (AUDIT_EVENT_TYPES as readonly string[]).includes(value)

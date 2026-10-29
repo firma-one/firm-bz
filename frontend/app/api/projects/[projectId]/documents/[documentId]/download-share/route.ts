@@ -8,6 +8,10 @@ import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 import { applyDiagonalWatermark } from '@/lib/watermark-pdf'
 import { resolveEngagementConnectorId } from '@/lib/connectors/resolve-client-connector'
 import { getContentAdapter, getPermissionAdapter } from '@/lib/connectors/registry'
+import { googleDriveConnector } from '@/lib/google-drive-connector'
+
+/** A provider version id (Drive's revision ids; Graph's "3.0", and personal OneDrive's "!" ids). It goes into the provider's URL path, so nothing else gets through. */
+const REVISION_ID = /^[A-Za-z0-9_.!-]+$/
 
 /**
  * GET /api/projects/[projectId]/documents/[documentId]/download-share
@@ -16,6 +20,7 @@ import { getContentAdapter, getPermissionAdapter } from '@/lib/connectors/regist
  * to serve based on sharing settings (PDF copy vs original) and streams it.
  * Download access is controlled by the allowDownload flag per persona.
  * connectorId is resolved server-side from the firm — never trusted from the client.
+ * `?revisionId=` serves an earlier version instead (internal roles, Google only for now).
  */
 export async function GET(
   request: NextRequest,
@@ -69,6 +74,44 @@ export async function GET(
 
     const connectorId = await resolveEngagementConnectorId(projectId, document.connectorId)
     if (!connectorId) return NextResponse.json({ error: 'No active storage connector' }, { status: 500 })
+
+    // An earlier version, from the Version history pane. Internal roles only: a client may download
+    // what was shared with them, and an earlier version never was. Google's revisions, and Graph's
+    // versions for OneDrive and SharePoint (.claude/plans/engagement-assets-details.md, Phase 1).
+    const revisionId = request.nextUrl.searchParams.get('revisionId')
+    if (revisionId) {
+      if (isGuest || isEC) return NextResponse.json({ error: 'Download not permitted' }, { status: 403 })
+      if (!REVISION_ID.test(revisionId)) return NextResponse.json({ error: 'Invalid version' }, { status: 400 })
+      const connector = await prisma.connector.findUnique({ where: { id: connectorId }, select: { type: true } })
+      let version: { stream: ReadableStream | Buffer; mimeType?: string; size?: string; name?: string }
+      if (connector?.type === 'GOOGLE_DRIVE') {
+        version = await googleDriveConnector.downloadFile(connectorId, fileInfo.externalId, revisionId)
+      } else {
+        const versionAdapter = await getContentAdapter(connectorId)
+        if (!versionAdapter?.getVersionContent) {
+          return NextResponse.json({ error: 'Downloading an earlier version is not available for this storage yet' }, { status: 400 })
+        }
+        const v = await versionAdapter.getVersionContent(connectorId, fileInfo.externalId, revisionId)
+        version = { stream: v.stream, mimeType: v.mimeType, size: v.size, name: v.fileName }
+      }
+      const { stream, mimeType, size, name } = version
+      const filename = name || document.fileName || 'document'
+      const encodedFilename = encodeURIComponent(filename).replace(/['()]/g, escape).replace(/\*/g, '%2A')
+      const headers = new Headers()
+      headers.set('Content-Type', mimeType || 'application/octet-stream')
+      headers.set('Content-Disposition', `attachment; filename="${filename.replace(/"/g, '')}"; filename*=UTF-8''${encodedFilename}`)
+      if (size && size !== '0') headers.set('Content-Length', size)
+      audit(AUDIT_EVENT.DOCUMENT_DOWNLOADED)
+        .scope(AUDIT_SCOPE.DOCUMENT)
+        .firm(fileInfo.organizationId)
+        .client(document.clientId ?? undefined)
+        .engagement(projectId)
+        .document(document.id)
+        .actor(user.id)
+        .meta({ fileName: document.fileName, fileId: fileInfo.externalId, filename, revisionId, usedPdf: false })
+        .fireAndForget()
+      return new NextResponse(Buffer.isBuffer(stream) ? new Uint8Array(stream) : stream, { status: 200, headers })
+    }
 
     const contentAdapter = await getContentAdapter(connectorId)
     const permissionAdapter = await getPermissionAdapter(connectorId)

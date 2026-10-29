@@ -18,6 +18,8 @@ import { engagementPath, clientPath } from '@/lib/navigation/firm-paths'
 import { buildAbsoluteUrl, sendEventEmailToUser } from '@/lib/notify-event'
 import { ctaButton, emailHeading, emailText, escHtml, renderEmail } from '@/lib/email-templates/base'
 import { formatFullDate } from '@/lib/utils'
+import { deliverableDueAfter } from '@/lib/files/due-date-check'
+import { dueLabel } from '@/lib/files/due-date-rule'
 
 const supabaseAdmin = createSupabaseAdmin(
     (process.env.NEXT_PUBLIC_SUPABASE_URL || "http://127.0.0.1:54321"),
@@ -447,6 +449,15 @@ export async function updateEngagement(
     const parsedDue = data.dueDate === undefined ? undefined : (data.dueDate ? new Date(data.dueDate) : null)
     const parsedFollowUp = data.followUpDate === undefined ? undefined : (data.followUpDate ? new Date(data.followUpDate) : null)
     const parsedRate = parseRateOrValue(data.rateOrValue)
+
+    // A deliverable can't be due after its engagement (.claude/plans/due-date-rule.md): the
+    // engagement's date can't move before one of them.
+    if (parsedDue) {
+        const later = await deliverableDueAfter(projectId, parsedDue)
+        if (later) {
+            throw new Error(`${dueLabel(later)} is due ${formatFullDate(later.due)}, after that. Set the engagement's due date on or after it, or move that deliverable first.`)
+        }
+    }
 
     const existingSettings = (project as any).settings as Record<string, unknown> ?? {}
     await prisma.engagement.update({

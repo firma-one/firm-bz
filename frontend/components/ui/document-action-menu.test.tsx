@@ -1,8 +1,15 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 
+const { pane } = vi.hoisted(() => ({
+  pane: {
+    setContent: vi.fn(), clearPane: vi.fn(), setTitle: vi.fn(), setHeaderIcon: vi.fn(),
+    setHeaderSubtitle: vi.fn(), setHeaderActions: vi.fn(), setExpanded: vi.fn(),
+  },
+}))
+
 vi.mock('@/components/ui/toast', () => ({ useToast: () => ({ addToast: vi.fn() }) }))
-vi.mock('@/lib/right-pane-context', () => ({ useRightPane: () => ({ setContent: vi.fn(), clearPane: vi.fn() }) }))
+vi.mock('@/lib/right-pane-context', () => ({ useRightPane: () => pane }))
 vi.mock('@/lib/download-progress-context', () => ({ useDownloadProgress: () => ({ addTask: vi.fn(), updateTask: vi.fn() }) }))
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: { id: 'me', email: 'me@firm.com' } }) }))
 
@@ -17,6 +24,30 @@ async function openMenu() {
   fireEvent.keyDown(trigger, { key: 'Enter' })
   return screen.findByRole('menu')
 }
+
+beforeEach(() => {
+  Object.values(pane).forEach((fn) => fn.mockReset())
+})
+
+describe('DocumentActionMenu — Details as one tabbed pane', () => {
+  it('is a single item, not a submenu, and opens the Details pane', async () => {
+    render(<DocumentActionMenu document={FILE} projectId="e1" />)
+    await openMenu()
+    expect(screen.queryByRole('menuitem', { name: /File information/ })).toBeNull()
+    fireEvent.click(screen.getByRole('menuitem', { name: /^Details$/ }))
+    // Titled as the Board's pane: the doc ID, else the name.
+    expect(pane.setTitle).toHaveBeenCalledWith('podcast-ep04.jpg')
+    expect(pane.setContent).toHaveBeenCalledTimes(1)
+  })
+
+  it('opens it for an external user too, whose tabs leave out Versions and Activity', async () => {
+    render(<DocumentActionMenu document={FILE} projectId="e1" isExternalUser />)
+    await openMenu()
+    fireEvent.click(screen.getByRole('menuitem', { name: /^Details$/ }))
+    const node = pane.setContent.mock.calls[0][0] as { props: { isExternalUser: boolean } }
+    expect(node.props.isExternalUser).toBe(true)
+  })
+})
 
 describe('DocumentActionMenu — items that open a dialog', () => {
   it('Move to trash closes the menu, so it cannot cover the confirmation', async () => {

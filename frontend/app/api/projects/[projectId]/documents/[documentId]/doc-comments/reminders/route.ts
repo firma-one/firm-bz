@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { prisma } from '@/lib/prisma'
+import { visibleCommentsWhere } from '@/lib/comments/internal-notes'
 import { resolveProjectContext } from '@/lib/resolve-project-context'
 import { canViewProject } from '@/lib/permission-helpers'
 import { getProjectDocumentContext } from '@/lib/file-utils'
@@ -31,9 +32,12 @@ export async function GET(
     const docCtx = await getProjectDocumentContext(projectId, documentIdParam)
     if (!docCtx) return NextResponse.json({ error: 'Document not found' }, { status: 404 })
 
-    // Verify the message belongs to this document
+    // Verify the message belongs to this document, and that this viewer may see it: who is reminded
+    // of an internal note is the firm's business (lib/comments/internal-notes.ts).
+    const viewer = await prisma.engagementMember.findFirst({ where: { engagementId: projectId, userId: user.id }, select: { role: true } })
+    if (!viewer) return NextResponse.json({ error: 'Comment not found' }, { status: 404 })
     const message = await prisma.docCommentMessage.findFirst({
-      where: { id: messageId, projectDocumentId: docCtx.id, engagementId: projectId },
+      where: { id: messageId, projectDocumentId: docCtx.id, engagementId: projectId, ...visibleCommentsWhere(viewer.role) },
       select: { id: true },
     })
     if (!message) return NextResponse.json({ error: 'Comment not found' }, { status: 404 })

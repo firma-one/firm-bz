@@ -152,3 +152,12 @@ function withYear(m: number, d: number, year: string | undefined, today: Date): 
     if (!thisYear) return null
     return thisYear < today ? valid(today.getFullYear() + 1, m, d) : thisYear
 }
+
+/**
+ * Work underway with nothing to finish by: a document or deliverable In progress or In review with
+ * no due date. Worth a warning, since that's unplanned work (2026-10-29). Approved work needs none,
+ * and work not started yet hasn't committed to one.
+ */
+export function needsDueDate(stage: string | null | undefined, dueDate: string | null | undefined): boolean {
+    return (stage === 'in_progress' || stage === 'in_review') && !dueDate
+}

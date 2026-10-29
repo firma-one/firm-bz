@@ -266,10 +266,11 @@ function ToastItem({ toast, onRemove, onAct, paused }: { toast: Toast, onRemove:
       <div className={cn('flex h-7 w-7 shrink-0 items-center justify-center rounded-control', cfg.chip)}>
         {cfg.icon}
       </div>
+      {/* break-words: a long file name has no spaces to wrap at, and would run out of the toast */}
       <div className="min-w-0 flex-1 pt-0.5">
-        <p className="text-ui font-medium text-fg">{toast.title}</p>
+        <p className="break-words text-ui font-medium text-fg">{toast.title}</p>
         {toast.message && (
-          <p className="mt-0.5 text-small text-fg-muted">{toast.message}</p>
+          <p className="mt-0.5 break-words text-small text-fg-muted">{toast.message}</p>
         )}
       </div>
       {toast.action && (

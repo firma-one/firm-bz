@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback, useRef } from 'react'
-import { cn } from '@/lib/utils'
+import { cn, formatFullDate } from '@/lib/utils'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/components/ui/toast'
@@ -10,16 +10,10 @@ import { DocumentDocCommentsPane } from '@/components/projects/document-doc-comm
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { useRightPane } from '@/lib/right-pane-context'
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-} from '@/components/ui/select'
-import {
   Loader2,
   Folder, MoreVertical,
   Info, MessagesSquare, Settings as SettingsIcon,
-  UserPlus, ChevronDown, X, ScanEye, FolderOpen, Check, CircleDot, CalendarClock, UserRound, ListChecks,
+  UserPlus, ChevronDown, X, ScanEye, FolderOpen, Check, CircleDot, CalendarClock, UserRound, ListChecks, AlertTriangle,
 } from 'lucide-react'
 import {
   DropdownMenu,
@@ -37,8 +31,15 @@ import { FRESH_CHIP_CLASS, useApprovalFeedback } from '@/lib/ui/use-approval-fee
 import { STAGE_BAR_CLASSES, STATUS, type LaneStage } from '@/lib/ui/status'
 import { PropertyList, PropertyRow } from '@/components/ui/property-list'
 import { DateProperty, PersonAvatar, PersonProperty, type PersonOption } from '@/components/ui/property-cells'
-import type { ActivityStatus } from '@/lib/sharing-settings'
+import { ACTIVITY_STAGES, isOnBoard, type ActivityStatus } from '@/lib/sharing-settings'
 import { getAllowedTransitions, type EngagementRoleSlug } from '@/lib/deliverable-stage-roles'
+import { useStageMove } from '@/components/files/use-stage-move'
+import { useDueDateSave } from '@/components/files/use-due-date-save'
+import { isLaterDay } from '@/lib/files/due-date-rule'
+import { Hint } from '@/components/ui/tooltip'
+import { BlockedTag } from '@/components/files/blocked-tag'
+import type { BlockedFlag } from '@/lib/files/blocked'
+import { versionName } from '@/lib/files/approvals'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -62,6 +63,10 @@ interface SubtaskRecord {
   assigneeEmail: string | null
   assigneeAvatarUrl?: string | null
   status?: ActivityStatus | null
+  /** The firm's Blocked flag (the subtasks route sends it to firm roles only). */
+  blocked?: BlockedFlag | null
+  /** The approval that stands: which version was approved, and when. */
+  approval?: { version: { label: string | null; savedAt: string }; approvedAt: string } | null
   breadcrumb?: string[]
 }
 
@@ -109,6 +114,7 @@ type Tab = 'details' | 'delivery' | 'comments'
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const STAGE_LABELS: Record<ActivityStatus, string> = {
+  not_started: 'Not Started',
   to_do: 'To Do',
   in_progress: 'In Progress',
   in_review: 'In Review',
@@ -141,10 +147,22 @@ function SubtaskRow({
   onToggleExpand,
   isDeliverableApproved = false,
   members = [],
+  roleSlug,
+  onDeliverableChanged,
+  onDeliverableDueChanged,
+  onDueDateChange,
 }: {
   subtask: SubtaskRecord
   projectId: string
   onStatusChange: (id: string, newStatus: ActivityStatus) => void
+  /** The viewer's role: which moves the Status menu offers. */
+  roleSlug?: EngagementRoleSlug
+  /** The deliverable moved with this document. */
+  onDeliverableChanged?: (status: ActivityStatus) => void
+  /** A due-date fix moved the deliverable's due date too. */
+  onDeliverableDueChanged?: (dueDate: string) => void
+  /** This document's due date as saved. */
+  onDueDateChange?: (id: string, dueDate: string | null) => void
   onRemoveSubtask?: (id: string) => void
   onAssigneeChange?: (id: string, userId: string | null, name: string | null, email: string | null, avatarUrl: string | null) => void
   onOpenDocument?: (subtask: SubtaskRecord) => void
@@ -159,33 +177,41 @@ function SubtaskRow({
   members?: EngagementMember[]
 }) {
   const [saving, setSaving] = useState(false)
+  const { move, dialog: stageDialog } = useStageMove()
+  const { save: saveDue, dialog: dueDialog } = useDueDateSave()
   const { addToast } = useToast()
   const approvalFeedback = useApprovalFeedback()
   const [subtaskDueDate, setSubtaskDueDate] = useState(subtask.dueDate ?? '')
   const [savingSubtaskDue, setSavingSubtaskDue] = useState(false)
   const [savingAssignee, setSavingAssignee] = useState(false)
-  const status = (subtask.status ?? 'to_do') as ActivityStatus
+  const status = (subtask.status ?? 'not_started') as ActivityStatus
+  const allowedMoves = roleSlug ? getAllowedTransitions(roleSlug, status) : []
 
   const expanded = isExpanded ?? false
   // Rows 2+3 visible when expanded
   const showDetails = showExtras && expanded
 
   const handleSubtaskDueDateChange = useCallback(async (iso: string) => {
+    const previous = subtaskDueDate
     setSubtaskDueDate(iso)
     const val = iso ? iso.slice(0, 10) : ''
     setSavingSubtaskDue(true)
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session?.access_token) return
-      await fetch(`/api/projects/${projectId}/documents/${subtask.documentId}/due-date`, {
-        method: 'PATCH',
-        headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dueDate: val || null }),
-      })
+      // Due dates nest: a date after the deliverable's asks, with the fixes (lib/files/due-date-rule.ts).
+      const result = await saveDue(projectId, subtask.documentId, val || null)
+      if (!result.ok) {
+        setSubtaskDueDate(previous)
+        if (!result.cancelled) addToast({ type: 'error', title: "Couldn't set due date", message: result.error })
+        return
+      }
+      setSubtaskDueDate(result.dueDate ? result.dueDate.slice(0, 10) : '')
+      onDueDateChange?.(subtask.id, result.dueDate)
+      const movedDeliverable = result.alsoChanged[0]
+      if (movedDeliverable) onDeliverableDueChanged?.(movedDeliverable.dueDate)
     } finally {
       setSavingSubtaskDue(false)
     }
-  }, [projectId, subtask.documentId])
+  }, [projectId, subtask.id, subtask.documentId, subtaskDueDate, saveDue, addToast, onDeliverableDueChanged, onDueDateChange])
 
   const handleAssigneeSelect = useCallback(async (member: EngagementMember | null) => {
     const userId = member?.userId ?? null
@@ -210,25 +236,20 @@ function SubtaskRow({
     onStatusChange(subtask.id, s)
     setSaving(true)
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session?.access_token) return
-      const res = await fetch(`/api/projects/${projectId}/documents/${subtask.documentId}/sharing/activity`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-        body: JSON.stringify({ status: s }),
-      })
-      if (!res.ok) {
-        // The change was shown optimistically; put it back and say so instead of failing silently.
+      const result = await move(projectId, subtask.documentId, s)
+      if (!result.ok) {
+        // The change was shown optimistically; put it back, and say so unless the move was called off.
         onStatusChange(subtask.id, previous)
-        addToast({ type: 'error', title: 'Failed to update status', message: 'Please try again.' })
+        if (!result.cancelled) addToast({ type: 'error', title: 'Failed to update status', message: result.error })
         return
       }
+      if (result.deliverable) onDeliverableChanged?.(result.deliverable.status)
       // Approving a document gets the same feedback as approving a deliverable (none before).
       if (s === 'approved') approvalFeedback.confirm({ id: subtask.id, name: subtask.fileName })
     } finally {
       setSaving(false)
     }
-  }, [subtask.id, subtask.documentId, subtask.fileName, projectId, status, onStatusChange, addToast, approvalFeedback])
+  }, [subtask.id, subtask.documentId, subtask.fileName, projectId, status, onStatusChange, onDeliverableChanged, addToast, approvalFeedback, move])
 
   const handleTrash = useCallback(async () => {
     try {
@@ -272,6 +293,7 @@ function SubtaskRow({
           <span className="min-w-0 flex-1 truncate text-ui text-fg">{subtask.fileName}</span>
         )}
         {!showExtras && <span className="flex-1 min-w-0" />}
+        {subtask.blocked && <BlockedTag blocked={subtask.blocked} />}
         {/* Expand toggle */}
         {showExtras && (
           <button
@@ -317,8 +339,16 @@ function SubtaskRow({
               <TooltipContent side="top" className="text-xs">Open in Files</TooltipContent>
             </Tooltip>
           )}
-          {/* Stage badge */}
-          <StatusPill kind="deliverable" status={status} className={cn('shrink-0', approvalFeedback.isFresh(subtask.id) && FRESH_CHIP_CLASS)} />
+          {/* Stage badge; an approved one names the version approved */}
+          {subtask.approval ? (
+            <Hint label={`${versionName({ label: subtask.approval.version.label, at: subtask.approval.version.savedAt })} · approved ${formatFullDate(subtask.approval.approvedAt)}`}>
+              <span className="inline-flex shrink-0">
+                <StatusPill kind="deliverable" status={status} className={cn(approvalFeedback.isFresh(subtask.id) && FRESH_CHIP_CLASS)} />
+              </span>
+            </Hint>
+          ) : (
+            <StatusPill kind="deliverable" status={status} className={cn('shrink-0', approvalFeedback.isFresh(subtask.id) && FRESH_CHIP_CLASS)} />
+          )}
         </TooltipProvider>
         <div className="shrink-0">
           <DocumentActionMenu
@@ -364,7 +394,7 @@ function SubtaskRow({
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
-                    disabled={saving || disabled}
+                    disabled={saving || disabled || allowedMoves.length === 0}
                     aria-label="Document status"
                     className={cn(CHIP, disabled && 'pointer-events-none')}
                   >
@@ -373,9 +403,9 @@ function SubtaskRow({
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" className="w-48">
-                  {(Object.keys(STAGE_LABELS) as ActivityStatus[]).map((s, i) => {
-                    const currentIdx = (Object.keys(STAGE_LABELS) as ActivityStatus[]).indexOf(status)
-                    const isDisabled = Math.abs(i - currentIdx) > 1
+                  {ACTIVITY_STAGES.map((s) => {
+                    // The moves the viewer's role may make from here (the rules the server enforces).
+                    const isDisabled = s !== status && !allowedMoves.includes(s)
                     return (
                       <DropdownMenuItem
                         key={s}
@@ -486,6 +516,8 @@ function SubtaskRow({
         </div>
         </div>
       )}
+      {stageDialog}
+      {dueDialog}
     </div>
   )
 }
@@ -565,9 +597,11 @@ export function DeliverableDetailPanel({
   const subtasksLoadedRef = useRef(false)
 
   // Notify parent of progress changes after subtasks state settles — must be outside render.
+  // Progress counts the documents on the Board (To do and beyond), as the deliverable's stage does.
   useEffect(() => {
     if (!subtasksLoadedRef.current) return
-    onSubtaskStatusChange?.(subtasks.length, subtasks.filter((t) => t.status === 'approved').length)
+    const onBoard = subtasks.filter((t) => isOnBoard(t.status ?? 'not_started'))
+    onSubtaskStatusChange?.(onBoard.length, onBoard.filter((t) => t.status === 'approved').length)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [subtasks])
 
@@ -575,6 +609,10 @@ export function DeliverableDetailPanel({
   const [loadingSubtasks, setLoadingSubtasks] = useState(false)
   const [savingOptions, setSavingOptions] = useState(false)
   const [movingStatus, setMovingStatus] = useState(false)
+  const { move: moveStage, dialog: stageDialog } = useStageMove()
+  const { save: saveDue, dialog: dueDialog } = useDueDateSave()
+  /** Not started documents are off the Board; the list keeps them folded under one line. */
+  const [showNotStarted, setShowNotStarted] = useState(false)
   const [members, setMembers] = useState<EngagementMember[]>([])
   /** The deliverable's owner, shown as Lead (its assigneeUserId, like its documents'). */
   const [ownerUserId, setOwnerUserId] = useState<string | null>(null)
@@ -697,19 +735,22 @@ export function DeliverableDetailPanel({
     saveOptions(next)
   }
 
-  const handleDueDateChange = async (val: string, targetDocumentId: string, onUpdate?: (iso: string | null) => void) => {
+  /**
+   * The deliverable's own due date. Due dates nest (lib/files/due-date-rule.ts): a date before one of
+   * its documents', or after the engagement's, asks with the fixes. Returns the date saved, or
+   * undefined when it wasn't.
+   */
+  const handleDueDateChange = async (val: string): Promise<string | null | undefined> => {
     setSavingDueDate(true)
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session?.access_token) return
-      await fetch(`/api/projects/${projectId}/documents/${targetDocumentId}/due-date`, {
-        method: 'PATCH',
-        headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dueDate: val || null }),
-      })
-      onUpdate?.(val || null)
-    } catch {
-      addToast({ type: 'error', title: 'Error', message: 'Failed to save due date.' })
+      const result = await saveDue(projectId, documentId, val || null)
+      if (!result.ok) {
+        if (!result.cancelled) addToast({ type: 'error', title: "Couldn't set due date", message: result.error })
+        return undefined
+      }
+      // A fix moved its documents in: show them as they are now.
+      if (result.alsoChanged.length > 0) await loadDetails()
+      return result.dueDate
     } finally {
       setSavingDueDate(false)
     }
@@ -736,42 +777,44 @@ export function DeliverableDetailPanel({
     }, 800)
   }
 
-  const handleMoveToNext = async (next: ActivityStatus) => {
-    if (next === status) return
-    if (next === 'approved' && subtasks.length > 0) {
-      const unapproved = subtasks.filter((s) => s.status !== 'approved').length
-      if (unapproved > 0) {
-        addToast({
-          type: 'error',
-          title: 'Cannot approve yet',
-          message: `${unapproved} document${unapproved > 1 ? 's' : ''} still need to be approved before this deliverable can be approved.`,
-          duration: 5000,
-        } as any)
-        return
-      }
-    }
+  /** The deliverable moved because one of its documents did: show it here and on the Board card. */
+  const followDocuments = useCallback((next: ActivityStatus) => {
+    setStatus(next)
+    onStatusChange?.(next)
+    if (next === 'approved') approvalFeedback.confirm({ id: documentId, name: fileName })
+  }, [onStatusChange, approvalFeedback, documentId, fileName])
+
+  /**
+   * A client's one action on the deliverable, taken on its documents (the stage route moves them):
+   * an external contributor submits the In progress ones for review, a reviewer sends the In review
+   * ones back.
+   */
+  const handleClientAction = async (next: ActivityStatus) => {
     setMovingStatus(true)
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session?.access_token) return
-      const res = await fetch(`/api/projects/${projectId}/documents/${documentId}/sharing/activity`, {
-        method: 'PATCH',
-        headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: next }),
-      })
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        addToast({ type: 'error', title: 'Failed to update stage', message: err.error ?? 'Please try again.' })
+      const result = await moveStage(projectId, documentId, next)
+      if (!result.ok) {
+        if (!result.cancelled) addToast({ type: 'error', title: 'Failed to update stage', message: result.error })
         return
       }
-      setStatus(next)
-      onStatusChange?.(next)
-      // Approval gets its own feedback: "Approved · {name}" and the pill fading in green.
-      if (next === 'approved') approvalFeedback.confirm({ id: documentId, name: fileName })
-      else addToast({ type: 'success', title: 'Stage updated', message: `Moved to ${STAGE_LABELS[next]}.` })
+      if (result.deliverable && result.deliverable.status !== status) followDocuments(result.deliverable.status)
+      addToast({ type: 'success', title: 'Stage updated', message: `Documents moved to ${STAGE_LABELS[next]}.` })
+      await loadDetails()
     } finally {
       setMovingStatus(false)
     }
+  }
+
+  /** "Add to Board": a Not started document joins the deliverable's work at To do. */
+  const addToBoard = async (subtask: SubtaskRecord) => {
+    setSubtasks((prev) => prev.map((t) => t.id === subtask.id ? { ...t, status: 'to_do' } : t))
+    const result = await moveStage(projectId, subtask.documentId, 'to_do')
+    if (!result.ok) {
+      setSubtasks((prev) => prev.map((t) => t.id === subtask.id ? { ...t, status: 'not_started' } : t))
+      if (!result.cancelled) addToast({ type: 'error', title: "Couldn't add it to the Board", message: result.error })
+      return
+    }
+    if (result.deliverable && result.deliverable.status !== status) followDocuments(result.deliverable.status)
   }
 
   const isApproved = status === 'approved'
@@ -781,7 +824,17 @@ export function DeliverableDetailPanel({
     const today = new Date(); today.setHours(0, 0, 0, 0)
     return Math.max(0, Math.round((today.getTime() - due.getTime()) / 86400000))
   })()
-  const approvedSubtasks = subtasks.filter((t) => t.status === 'approved').length
+  // The deliverable's work is its documents on the Board; Not started ones wait under their own line.
+  const boardSubtasks = subtasks.filter((t) => isOnBoard(t.status ?? 'not_started'))
+  const notStartedSubtasks = subtasks.filter((t) => !isOnBoard(t.status ?? 'not_started'))
+  const approvedSubtasks = boardSubtasks.filter((t) => t.status === 'approved').length
+  // Documents due after the deliverable (approved ones left out): what the due-date rule forbids,
+  // left over from before it.
+  const docsDueAfter = deliverableDueDate
+    ? subtasks.filter((t) => t.dueDate && t.status !== 'approved' && isLaterDay(t.dueDate, deliverableDueDate))
+    : []
+  const isClient = isExternalViewer || isExternalCollaborator
+  const canAddToBoard = !isClient && (roleSlug === 'eng_admin' || roleSlug === 'eng_member')
   const peopleOptions: PersonOption[] = members
     .filter((m) => !m.isAgent && (m.role === 'eng_admin' || m.role === 'eng_member'))
     .map((m) => ({ id: m.userId, name: m.name ?? m.email ?? 'Member', email: m.email, avatarUrl: m.avatarUrl }))
@@ -796,6 +849,33 @@ export function DeliverableDetailPanel({
   // Derive allowed transitions from the role — same rules used by the API route.
   const allowedTransitions = roleSlug ? getAllowedTransitions(roleSlug, status) : []
 
+  const renderSubtask = (s: SubtaskRecord) => (
+    <SubtaskRow
+      key={s.id}
+      subtask={s}
+      projectId={projectId}
+      disabled={isApproved}
+      deeplinkBase={deeplinkBase}
+      showExtras={showExtras}
+      isMedium={paneSize === 'medium'}
+      isExpanded={expandedSubtaskId === s.id}
+      onToggleExpand={() => setExpandedSubtaskId((prev) => prev === s.id ? null : s.id)}
+      isDeliverableApproved={isApproved}
+      members={members}
+      roleSlug={roleSlug}
+      onDeliverableChanged={(next) => { if (next !== status) followDocuments(next) }}
+      onDeliverableDueChanged={(due) => setDeliverableDueDate(due.slice(0, 10))}
+      onOpenDocument={onOpenSubtaskDocument}
+      onPreviewDocument={onPreviewSubtaskDocument}
+      onStatusChange={(id, newStatus) => setSubtasks((prev) => prev.map((t) => t.id === id ? { ...t, status: newStatus } : t))}
+      onRemoveSubtask={(id) => setSubtasks((prev) => prev.filter((t) => t.id !== id))}
+      onDueDateChange={(id, due) => setSubtasks((prev) => prev.map((t) => t.id === id ? { ...t, dueDate: due } : t))}
+      onAssigneeChange={(id, userId, name, email, avatarUrl) =>
+        setSubtasks((prev) => prev.map((t) => t.id === id ? { ...t, assigneeUserId: userId, assigneeName: name, assigneeEmail: email, assigneeAvatarUrl: avatarUrl } : t))
+      }
+    />
+  )
+
   const TABS: { id: Tab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
     { id: 'details', label: 'Details', icon: Info },
     { id: 'comments', label: 'Comments', icon: MessagesSquare },
@@ -809,69 +889,31 @@ export function DeliverableDetailPanel({
       <div className="shrink-0 px-4 py-2">
        <PropertyList>
         <PropertyRow label="Status" icon={<CircleDot />}>
-        {canManage && status !== 'approved' ? (
-          <Select value={status} onValueChange={(v) => handleMoveToNext(v as ActivityStatus)} disabled={movingStatus}>
-            {/* The pill is the control: no separate chevron after it (hover shows it is one). */}
-            <SelectTrigger aria-label="Deliverable status" className="h-7 w-auto gap-1.5 border-transparent bg-transparent px-1.5 shadow-none hover:bg-surface-hover focus:ring-0 data-[state=open]:bg-surface-hover [&>svg:last-of-type]:hidden">
-              {/* In a div: SelectTrigger clamps its direct <span> children (`[&>span]:line-clamp-1`),
-                  which breaks the pill's flex row — label pushed up, status dot gone. */}
-              <div className="flex items-center">
-                <StatusPill kind="deliverable" status={status} />
-              </div>
-              {movingStatus && <Loader2 className="h-3 w-3 shrink-0 animate-spin text-fg-subtle" />}
-            </SelectTrigger>
-            <SelectContent className="min-w-[200px]">
-              {(['to_do', 'in_progress', 'in_review', 'approved'] as ActivityStatus[]).map((s, i) => {
-                const currentIdx = ['to_do', 'in_progress', 'in_review', 'approved'].indexOf(status)
-                const unapprovedCount = subtasks.filter((t) => t.status !== 'approved').length
-                const approvalBlocked = s === 'approved' && subtasks.length > 0 && unapprovedCount > 0
-                const isDisabled = Math.abs(i - currentIdx) > 1 || approvalBlocked
-                return (
-                  <SelectItem
-                    key={s}
-                    value={s}
-                    disabled={isDisabled}
-                    endAdornment={approvalBlocked ? (
-                      <span className="whitespace-nowrap text-caption text-fg-subtle">
-                        {unapprovedCount} of {subtasks.length} pending
-                      </span>
-                    ) : undefined}
-                  >
-                    <span className={cn('flex items-center', isDisabled && !approvalBlocked && 'opacity-40')}>
-                      <StatusPill kind="deliverable" status={s} />
-                    </span>
-                  </SelectItem>
-                )
-              })}
-            </SelectContent>
-          </Select>
-        ) : (
-          <>
+          {/* Never set here: it follows the documents below (.claude/plans/deliverable-stages-blocked.md). */}
+          <Hint label="Follows its documents">
             <span className="inline-flex h-7 items-center px-1.5">
               <StatusPill kind="deliverable" status={status} className={cn(approvalFeedback.isFresh(documentId) && FRESH_CHIP_CLASS)} />
             </span>
-            {/* Single-option action button for restricted roles (EC, EV, EM) */}
-            {allowedTransitions.length === 1 && (() => {
-              const target = allowedTransitions[0]
-              const isForward = ['to_do', 'in_progress', 'in_review', 'approved'].indexOf(target) >
-                                ['to_do', 'in_progress', 'in_review', 'approved'].indexOf(status)
-              const label = isForward ? 'Submit for review' : 'Request changes'
-              return (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={isForward ? 'default' : 'outline'}
-                  onClick={() => handleMoveToNext(target)}
-                  disabled={movingStatus}
-                  className="ml-1"
-                >
-                  {movingStatus && <Loader2 className="h-3 w-3 shrink-0 animate-spin" />}
-                  {label}
-                </Button>
-              )
-            })()}
-          </>
-        )}
+          </Hint>
+          {/* A client's single action, taken on the documents they can act on */}
+          {isClient && allowedTransitions.length === 1 && (() => {
+            const target = allowedTransitions[0]
+            const isForward = ACTIVITY_STAGES.indexOf(target) > ACTIVITY_STAGES.indexOf(status)
+            const label = isForward ? 'Submit for review' : 'Request changes'
+            return (
+              <Button
+                type="button"
+                size="sm"
+                variant={isForward ? 'default' : 'outline'}
+                onClick={() => handleClientAction(target)}
+                disabled={movingStatus}
+                className="ml-1"
+              >
+                {movingStatus && <Loader2 className="h-3 w-3 shrink-0 animate-spin" />}
+                {label}
+              </Button>
+            )
+          })()}
           {savingOptions && <Loader2 className="ml-1 h-3 w-3 animate-spin text-fg-subtle" />}
         </PropertyRow>
         <PropertyRow label="Due" icon={<CalendarClock />}>
@@ -882,13 +924,24 @@ export function DeliverableDetailPanel({
             disabled={isApproved}
             highlightOverdue={!isApproved}
             onChange={async (day) => {
+              const previous = deliverableDueDate
               setDeliverableDueDate(day ?? '')
-              await handleDueDateChange(day ?? '', documentId)
+              const saved = await handleDueDateChange(day ?? '')
+              setDeliverableDueDate(saved === undefined ? previous : saved ? saved.slice(0, 10) : '')
             }}
           />
           {/* Why the date is red: how late it is. */}
           {!isApproved && overdueDays > 0 && (
             <span className="text-small text-danger">· {overdueDays} day{overdueDays === 1 ? '' : 's'} overdue</span>
+          )}
+          {/* Dates from before the rule can still break it: say so rather than fix them silently. */}
+          {!isApproved && docsDueAfter.length > 0 && (
+            <Hint label={docsDueAfter.map((t) => `${t.docId ?? t.fileName} · due ${formatFullDate(t.dueDate!)}`).join(', ')}>
+              <span className="inline-flex items-center gap-1 text-small text-tag-yellow-fg">
+                <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
+                {docsDueAfter.length === 1 ? `${docsDueAfter[0].docId ?? docsDueAfter[0].fileName} is due after this` : `${docsDueAfter.length} documents are due after this`}
+              </span>
+            </Hint>
           )}
           {savingDueDate && <Loader2 className="h-3 w-3 animate-spin text-fg-subtle" />}
         </PropertyRow>
@@ -902,15 +955,17 @@ export function DeliverableDetailPanel({
           />
         </PropertyRow>
         <PropertyRow label="Progress" icon={<ListChecks />}>
-          {subtasks.length > 0 ? (
+          {boardSubtasks.length > 0 ? (
             <span className="inline-flex h-7 items-center gap-2 px-1.5">
               <span className="h-1.5 w-20 overflow-hidden rounded-full bg-surface-muted">
-                <span className={cn('block h-full rounded-full', STAGE_BAR_CLASSES[laneStageOf(status)])} style={{ width: `${Math.round((approvedSubtasks / subtasks.length) * 100)}%` }} />
+                <span className={cn('block h-full rounded-full', STAGE_BAR_CLASSES[laneStageOf(status)])} style={{ width: `${Math.round((approvedSubtasks / boardSubtasks.length) * 100)}%` }} />
               </span>
-              <span className="text-small tabular-nums text-fg-muted">{approvedSubtasks} of {subtasks.length} documents approved</span>
+              <span className="text-small tabular-nums text-fg-muted">{approvedSubtasks} of {boardSubtasks.length} documents approved</span>
             </span>
           ) : (
-            <span className="inline-flex h-7 items-center px-1.5 text-small text-fg-subtle">{loadingSubtasks ? 'Loading…' : 'No documents yet'}</span>
+            <span className="inline-flex h-7 items-center px-1.5 text-small text-fg-subtle">
+              {loadingSubtasks ? 'Loading…' : subtasks.length > 0 ? 'No documents on the Board yet' : 'No documents yet'}
+            </span>
           )}
         </PropertyRow>
        </PropertyList>
@@ -967,8 +1022,8 @@ export function DeliverableDetailPanel({
             {/* Files / Subtasks */}
             <div className="px-4 py-4">
               {(() => {
-                const approvedCount = subtasks.filter((s) => s.status === 'approved').length
-                const total = subtasks.length
+                const approvedCount = boardSubtasks.filter((s) => s.status === 'approved').length
+                const total = boardSubtasks.length
                 const pct = total > 0 ? Math.round((approvedCount / total) * 100) : 0
                 return (
                   <div className="flex items-center gap-3 mb-3">
@@ -998,30 +1053,43 @@ export function DeliverableDetailPanel({
               ) : subtasks.length === 0 ? (
                 <p className="py-1 text-small text-fg-subtle">No files in this deliverable yet.</p>
               ) : (
-                <div className="-mx-4 mt-1 divide-y divide-line border-y border-line">
-                  {subtasks.map((s) => (
-                    <SubtaskRow
-                      key={s.id}
-                      subtask={s}
-                      projectId={projectId}
-                      disabled={isApproved}
-                      deeplinkBase={deeplinkBase}
-                      showExtras={showExtras}
-                      isMedium={paneSize === 'medium'}
-                      isExpanded={expandedSubtaskId === s.id}
-                      onToggleExpand={() => setExpandedSubtaskId((prev) => prev === s.id ? null : s.id)}
-                      isDeliverableApproved={isApproved}
-                      members={members}
-                      onOpenDocument={onOpenSubtaskDocument}
-                      onPreviewDocument={onPreviewSubtaskDocument}
-                      onStatusChange={(id, newStatus) => setSubtasks((prev) => prev.map((t) => t.id === id ? { ...t, status: newStatus } : t))}
-                      onRemoveSubtask={(id) => setSubtasks((prev) => prev.filter((t) => t.id !== id))}
-                      onAssigneeChange={(id, userId, name, email, avatarUrl) =>
-                        setSubtasks((prev) => prev.map((t) => t.id === id ? { ...t, assigneeUserId: userId, assigneeName: name, assigneeEmail: email, assigneeAvatarUrl: avatarUrl } : t))
-                      }
-                    />
-                  ))}
-                </div>
+                <>
+                  {boardSubtasks.length === 0 ? (
+                    <p className="py-1 text-small text-fg-subtle">None of its documents is on the Board yet.</p>
+                  ) : (
+                    <div className="-mx-4 mt-1 divide-y divide-line border-y border-line">
+                      {boardSubtasks.map((s) => renderSubtask(s))}
+                    </div>
+                  )}
+                  {/* Not started: off the Board, folded under one line, each a click from joining it */}
+                  {notStartedSubtasks.length > 0 && (
+                    <div className="mt-3">
+                      <button
+                        type="button"
+                        onClick={() => setShowNotStarted((v) => !v)}
+                        aria-expanded={showNotStarted}
+                        className="inline-flex h-7 items-center gap-1.5 rounded-control px-1.5 -mx-1.5 text-small text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg-muted"
+                      >
+                        <ChevronDown className={cn('h-3.5 w-3.5 transition-transform duration-200', !showNotStarted && '-rotate-90')} />
+                        {notStartedSubtasks.length} not on the Board
+                      </button>
+                      {showNotStarted && (
+                        <div className="-mx-4 mt-1 divide-y divide-line border-y border-line">
+                          {notStartedSubtasks.map((s) => (
+                            <div key={s.id} className="flex items-center">
+                              <div className="min-w-0 flex-1">{renderSubtask(s)}</div>
+                              {canAddToBoard && !isApproved && (
+                                <Button type="button" size="sm" variant="outline" className="mr-4 shrink-0" onClick={() => addToBoard(s)}>
+                                  Add to Board
+                                </Button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
               )}
             </div>
 
@@ -1098,6 +1166,8 @@ export function DeliverableDetailPanel({
         )}
 
       </div>
+      {stageDialog}
+      {dueDialog}
     </div>
   )
 }

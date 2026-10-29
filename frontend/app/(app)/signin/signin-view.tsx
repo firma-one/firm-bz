@@ -57,6 +57,8 @@ export function SigninView({ microsoftSignInEnabled = false }: { microsoftSignIn
     setShowTurnstile,
     stepContentClass,
     animateToStep,
+    prefilledFromMemory,
+    clearRememberedEmail,
     handleEmailSubmit,
     handleVerifyOTP,
     handleInitiateCheck,
@@ -100,6 +102,17 @@ export function SigninView({ microsoftSignInEnabled = false }: { microsoftSignIn
               endAdornment={<AuthFieldCheck on={emailVerified} />}
             />
           </div>
+
+          {prefilledFromMemory && (
+            // The address is remembered from the last sign-in on this browser, nothing more —
+            // the session itself is not kept, so a code is still required. The filled-in field
+            // says that much, so all it needs is a way out.
+            <p className="mk-auth-switch">
+              <button type="button" className="mk-auth-text-btn" onClick={clearRememberedEmail}>
+                Use a different email
+              </button>
+            </p>
+          )}
 
           {noAccountMessage && (
             <AuthNote>

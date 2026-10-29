@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { resolveProjectContext } from '@/lib/resolve-project-context'
-import { canViewProject } from '@/lib/permission-helpers'
+import { canViewProject, getProjectPersona } from '@/lib/permission-helpers'
 import { createClient as createSupabaseAdmin } from '@supabase/supabase-js'
 import { Prisma } from '@prisma/client'
-import { isValidAuditEventType } from '@/lib/audit-event-types'
+import { FIRM_ONLY_AUDIT_EVENTS, isValidAuditEventType } from '@/lib/audit-event-types'
 import { withResolvedFileNames } from '@/lib/audit/file-names'
 import { resolveDisplayName } from '@/lib/auth/display-name'
 
@@ -49,6 +49,11 @@ export async function GET(
     const whereAny = where as any
     if (validEventTypes.length === 1) whereAny.eventType = validEventTypes[0]
     if (validEventTypes.length > 1) whereAny.eventType = { in: validEventTypes }
+    // What is the firm's own (a document's Blocked flag) stays out of a client's view of the trail.
+    const persona = await getProjectPersona(ctx.firmId, ctx.clientId, ctx.projectId)
+    if (persona === 'eng_ext_collaborator' || persona === 'eng_viewer') {
+      where.AND = [{ eventType: { notIn: [...FIRM_ONLY_AUDIT_EVENTS] } }]
+    }
     if (clientKeyword) where.client = { is: { name: { contains: clientKeyword, mode: 'insensitive' } } }
     if (projectKeyword) where.engagement = { is: { name: { contains: projectKeyword, mode: 'insensitive' } } }
     if (fromDate || toDate) {

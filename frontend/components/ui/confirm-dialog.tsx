@@ -30,6 +30,13 @@ export interface ConfirmDialogProps {
   loading?: boolean
   /** When true, only the cancel button is shown (use for warning-only dialogs) */
   hideConfirm?: boolean
+  /**
+   * Stay open when focus moves outside it. For a dialog opened from a picker that is closing: the
+   * picker hands focus back to its trigger, which would otherwise read as a click outside and cancel.
+   */
+  ignoreFocusOutside?: boolean
+  /** A little wider, for button labels that carry dates. */
+  wide?: boolean
 }
 
 /** Icon tile tint per variant: Notion tag colors for warnings, neutral for everything else. */
@@ -61,10 +68,12 @@ export function ConfirmDialog({
   onConfirm,
   loading = false,
   hideConfirm = false,
+  ignoreFocusOutside = false,
+  wide = false,
 }: ConfirmDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="gap-0 p-0 sm:max-w-sm">
+      <DialogContent className={cn('gap-0 p-0', wide ? 'sm:max-w-md' : 'sm:max-w-sm')} onFocusOutside={ignoreFocusOutside ? (e) => e.preventDefault() : undefined}>
         <div className="flex items-start gap-3 border-b border-line px-5 pb-4 pt-5 pr-10">
           <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-control [&_svg]:h-4 [&_svg]:w-4 ${ICON_TILE[iconVariant]}`}>
             {icon}

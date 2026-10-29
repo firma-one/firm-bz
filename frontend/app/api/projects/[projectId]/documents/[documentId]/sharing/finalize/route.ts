@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { prisma } from '@/lib/prisma'
 import { getFileInfo } from '@/lib/file-utils'
-import { getPermissionAdapter } from '@/lib/connectors/registry'
+import { lockFileInStorage, StorageNotSupportedError, type DowngradedPermission } from '@/lib/files/storage-lock'
 import { requireEngagementMember, isEngagementLeadRole } from '@/lib/engagement-access'
 import { isDocumentFinalized } from '@/lib/sharing-settings'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
@@ -64,30 +64,15 @@ export async function PATCH(
       return NextResponse.json({ error: 'No active storage connection' }, { status: 500 })
     }
 
-    const permissionAdapter = await getPermissionAdapter(connectorId)
-    if (!permissionAdapter) {
-      return NextResponse.json({ error: 'Connector type not supported' }, { status: 500 })
+    // The file itself: editors become viewers, the content read-only (lib/files/storage-lock.ts,
+    // which approving a document uses too).
+    let downgraded: DowngradedPermission[]
+    try {
+      downgraded = await lockFileInStorage(connectorId, fileInfo.externalId)
+    } catch (e) {
+      if (e instanceof StorageNotSupportedError) return NextResponse.json({ error: e.message }, { status: 500 })
+      throw e
     }
-
-    const downgraded: Array<{ permissionId: string; previousRole: string }> = []
-    const perms = await permissionAdapter.listFilePermissions(connectorId, fileInfo.externalId)
-    const elevRoles = new Set(['editor', 'commenter'])
-
-    for (const p of perms) {
-      if (!p.id || !p.email) continue
-      if (!elevRoles.has(p.role)) continue
-
-      const prev = p.role
-      const ok = await permissionAdapter.patchFilePermissionRole(
-        connectorId,
-        fileInfo.externalId,
-        p.id,
-        'viewer'
-      )
-      if (ok) downgraded.push({ permissionId: p.id, previousRole: prev })
-    }
-
-    await permissionAdapter.setFileContentReadOnly(connectorId, fileInfo.externalId, true)
 
     const now = new Date().toISOString()
     const prevSettings = (existing.settings as Record<string, unknown>) || {}

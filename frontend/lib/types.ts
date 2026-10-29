@@ -247,7 +247,9 @@ export interface DriveFile {
     deleted?: boolean
   }>
   // Vector search metadata
-  matchType?: 'keyword' | 'name' | 'semantic'
+  matchType?: 'keyword' | 'name' | 'semantic' | 'description'
+  /** On a search result found only in its description: the description, shown as why it matched. */
+  description?: string
   score?: number
   metadata?: {
     summary?: string
@@ -266,9 +268,11 @@ export interface DriveFile {
   /** True when the folder is tagged as a Deliverable (settings.share.createdAt is set). */
   isDeliverable?: boolean
   /** Activity status of this deliverable folder (only set when isDeliverable=true). */
-  deliverableStatus?: 'to_do' | 'in_progress' | 'in_review' | 'approved' | null
+  deliverableStatus?: import('@/lib/sharing-settings').ActivityStatus | null
   /** This document's own stage, deliverable or not — a document inside a deliverable has one too. */
-  activityStatus?: 'to_do' | 'in_progress' | 'in_review' | 'approved' | null
+  activityStatus?: import('@/lib/sharing-settings').ActivityStatus | null
+  /** What this document waits on, when the firm has marked it blocked (never sent to a client). */
+  blocked?: import('@/lib/files/blocked').BlockedFlag | null
   /** Jira-style short ID (e.g. "VDK-43") assigned to this document. */
   docId?: string | null
   /** 'LINK' for a non-connector-backed external URL row created via "New Link"; absent/'FILE' otherwise. */
@@ -279,6 +283,8 @@ export interface DriveFile {
 
 export interface DriveRevision {
   id: string
+  /** The storage's own name for the version, where it has one: OneDrive's "1.0", "2.0". Google Drive names none. */
+  label?: string
   mimeType: string
   modifiedTime: string
   keepForever?: boolean

@@ -1,4 +1,6 @@
-import { DemoEngagement, DemoFolder, countFilesInFolder } from './static-demo-data'
+import { DemoEngagement, DemoFile, DemoFolder, countFilesInFolder } from './static-demo-data'
+import type { ActivityStatus } from '@/lib/sharing-settings'
+import type { BlockedFlag } from '@/lib/files/blocked'
 
 export type DeliverableStatus = 'to_do' | 'in_progress' | 'in_review' | 'approved'
 
@@ -54,4 +56,41 @@ export function getDeliverableDueMap(engagement: DemoEngagement): Record<string,
     const map: Record<string, string | null> = {}
     for (const d of getDemoDeliverables(engagement)) map[d.folder.id] = d.dueDate
     return map
+}
+
+/** A document's stage on the tour, and the firm's Blocked flag where it has one. */
+export interface DemoDocumentStage {
+    stage: ActivityStatus
+    blocked?: BlockedFlag
+}
+
+/** Every document in a folder, nested folders' too, in the order the deliverable pane lists them. */
+export function demoFilesIn(folder: DemoFolder): DemoFile[] {
+    return [...folder.files, ...folder.subfolders.flatMap((sub) => demoFilesIn(sub))]
+}
+
+/**
+ * The stages of a deliverable's documents, laid out so the deliverable's own stage is the one the
+ * app would work out from them (lib/deliverable-derivation.ts): all Approved, all In review, all To
+ * do, or, for In progress, one In progress beside an Approved one and the rest To do. A deliverable
+ * of three or more documents that isn't approved keeps its last one Not started (off the Board),
+ * and an In progress one has a document waiting on the client, so the tour shows both.
+ */
+export function demoDocumentStages(status: DeliverableStatus, files: DemoFile[]): Record<string, DemoDocumentStage> {
+    const offBoard = status !== 'approved' && files.length >= 3 ? 1 : 0
+    return Object.fromEntries(files.map((file, i): [string, DemoDocumentStage] => {
+        if (i >= files.length - offBoard) return [file.id, { stage: 'not_started' }]
+        if (status !== 'in_progress') return [file.id, { stage: status }]
+        if (i === 0) return [file.id, { stage: 'in_progress' }]
+        if (i === 1) return [file.id, { stage: 'approved' }]
+        return [file.id, {
+            stage: 'to_do',
+            ...(i === 2 ? { blocked: { reason: 'client', note: 'Waiting on their Q3 sales export', at: '', by: '' } } : {}),
+        }]
+    }))
+}
+
+/** Every deliverable document's stage in the engagement, by file id (the Files list and the Board agree). */
+export function getDemoDocumentStages(engagement: DemoEngagement): Record<string, DemoDocumentStage> {
+    return Object.assign({}, ...getDemoDeliverables(engagement).map((d) => demoDocumentStages(d.status, demoFilesIn(d.folder))))
 }

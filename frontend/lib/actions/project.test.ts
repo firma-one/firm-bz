@@ -6,7 +6,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
  * columns the table doesn't have, and the surrounding try swallowed both.
  */
 
-const { prisma, notify } = vi.hoisted(() => ({
+const { prisma, notify, dueRule } = vi.hoisted(() => ({
+    dueRule: { later: null as null | { id: string; docId: string | null; name: string; due: string } },
     prisma: {
         engagement: { findFirst: vi.fn(), update: vi.fn(async () => ({})) },
         engagementMember: { findMany: vi.fn() },
@@ -36,6 +37,7 @@ vi.mock('@/lib/inngest/client', () => ({ safeInngestSend: vi.fn() }))
 vi.mock('@/lib/logger', () => ({ logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() } }))
 vi.mock('@/lib/audit', () => ({ audit: () => chain, AUDIT_EVENT: {}, AUDIT_SCOPE: {} }))
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
+vi.mock('@/lib/files/due-date-check', () => ({ deliverableDueAfter: async () => dueRule.later }))
 
 import { updateEngagement } from './project'
 
@@ -52,6 +54,17 @@ beforeEach(() => {
         return { id: 'eng-1', firmId: 'firm-1', clientId: 'client-1' }
     })
     prisma.engagementMember.findMany.mockResolvedValue([{ userId: 'u-member' }, { userId: 'u-client' }])
+    dueRule.later = null
+})
+
+// A deliverable can't be due after its engagement (.claude/plans/due-date-rule.md).
+describe('updateEngagement and its deliverables', () => {
+    it("refuses a due date before one of its deliverables, naming it", async () => {
+        dueRule.later = { id: 'D', docId: 'QSR-9', name: 'Market report', due: '2026-12-20T00:00:00.000Z' }
+        await expect(updateEngagement('eng-1', { dueDate: '2026-11-30T12:00:00Z' }, 'acme', 'contoso'))
+            .rejects.toThrow("QSR-9 · Market report is due Dec 20, 2026, after that. Set the engagement's due date on or after it, or move that deliverable first.")
+        expect(prisma.engagement.update).not.toHaveBeenCalled()
+    })
 })
 
 describe('updateEngagement due-date notification', () => {

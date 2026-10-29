@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
-import { AtSign, Search, ArrowUpRight, MessagesSquare, Reply, CheckCircle2, RotateCcw } from 'lucide-react'
+import { AtSign, Search, ArrowUpRight, MessagesSquare, Reply, CheckCircle2, RotateCcw, Lock } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { RelativeDateTime } from '@/components/ui/relative-date-time'
@@ -47,6 +47,8 @@ export type DocRow = {
     authorName: string | null
     authorEmail: string | null
     authorIsExternal?: boolean
+    /** The firm's internal note; a client's list never includes one (lib/comments/internal-notes.ts). */
+    isInternal?: boolean
   } | null
   /** Resolved discussions leave All and Awaiting reply, for the Resolved view. */
   resolved?: { at: string; byName: string | null } | null
@@ -158,7 +160,7 @@ type MentionRow = {
   authorUserId?: string | null
 }
 
-export type ThreadMessage = { id: string; createdAt: string; authorUserId: string | null; authorEmail: string | null; authorName?: string | null; content: string }
+export type ThreadMessage = { id: string; createdAt: string; authorUserId: string | null; authorEmail: string | null; authorName?: string | null; content: string; isInternal?: boolean }
 export type Thread = { status: 'loading' | 'error' | 'ready'; messages: ThreadMessage[] }
 type Member = { userId: string; email: string; name: string; avatarUrl: string | null; role: string }
 
@@ -698,6 +700,9 @@ export function ThreadRow({
               {author && <span className="font-medium text-fg-muted">{author.name}</span>}
               {author && <span aria-hidden>·</span>}
               <RelativeDateTime date={preview.createdAt} iconClassName="hidden" />
+              {r.latest?.isInternal && (
+                <span className="inline-flex items-center gap-0.5 font-medium text-tag-yellow-fg"><span aria-hidden>·</span><Lock className="h-2.5 w-2.5" /> Internal</span>
+              )}
               {r.resolved && (
                 <>
                   <span aria-hidden>·</span>
@@ -749,6 +754,9 @@ export function ThreadRow({
                           <div className="flex items-center gap-1.5 text-xs">
                             <span className="font-medium text-fg">{who?.name ?? 'Unknown'}</span>
                             <RelativeDateTime date={m.createdAt} iconClassName="hidden" className="text-[10px] text-fg-subtle" />
+                            {m.isInternal && (
+                              <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-tag-yellow-fg"><Lock className="h-2.5 w-2.5" /> Internal</span>
+                            )}
                             {i === shown.length - 1 && (
                               <span className="text-[10px] text-fg-subtle">· Latest</span>
                             )}

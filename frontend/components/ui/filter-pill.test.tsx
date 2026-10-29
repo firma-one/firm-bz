@@ -34,3 +34,26 @@ describe('summarizePicks', () => {
         expect(summarizePicks(['Folders', 'Documents', 'Images'])).toBe('Folders +2')
     })
 })
+
+describe('FilterPill collapsible', () => {
+    it('keeps the label as the name and tooltip, drawing it only where the bar has room', () => {
+        render(<FilterPill icon={<span />} label="Visibility" collapsible />)
+        const pill = screen.getByRole('button', { name: /Visibility/ })
+        expect(pill.getAttribute('title')).toBe('Visibility')
+        const label = screen.getByText('Visibility')
+        expect(label.className).toContain('sr-only')
+        expect(label.className).toContain('@[34rem]/filter-bar:not-sr-only')
+    })
+
+    it('shows the chosen value, collapsing only the "Label:" before it', () => {
+        render(<FilterPill icon={<span />} label="Visibility" value="Internal notes" collapsible onClear={() => {}} />)
+        expect(screen.getByText('Internal notes').className).not.toContain('sr-only')
+        expect(screen.getByText('Visibility:').className).toContain('sr-only')
+    })
+
+    it('is drawn in full when not collapsible', () => {
+        render(<FilterPill icon={<span />} label="People" />)
+        expect(screen.getByText('People').className).not.toContain('sr-only')
+        expect(screen.getByRole('button').getAttribute('title')).toBeNull()
+    })
+})

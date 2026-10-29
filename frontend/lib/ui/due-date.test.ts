@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatDue, isPastDue, parseDueInput, quickPicks, readDue, relativeDay, writeDue } from './due-date'
+import { formatDue, isPastDue, needsDueDate, parseDueInput, quickPicks, readDue, relativeDay, writeDue } from './due-date'
 
 // Thu Oct 22, 2026, 10:00 local
 const NOW = new Date(2026, 9, 22, 10, 0)
@@ -93,5 +93,20 @@ describe('parseDueInput', () => {
 
     it.each(['', 'soon', 'feb 30', 'march', '13/40', 'x'])('rejects %s', (input) => {
         expect(parseDueInput(input, NOW)).toBeNull()
+    })
+})
+
+describe('needsDueDate', () => {
+    it('flags work underway with no due date', () => {
+        expect(needsDueDate('in_progress', null)).toBe(true)
+        expect(needsDueDate('in_review', undefined)).toBe(true)
+    })
+
+    it('leaves alone work with a date, finished work, and work not started', () => {
+        expect(needsDueDate('in_progress', '2026-11-02')).toBe(false)
+        expect(needsDueDate('approved', null)).toBe(false)
+        expect(needsDueDate('to_do', null)).toBe(false)
+        expect(needsDueDate('not_started', null)).toBe(false)
+        expect(needsDueDate(null, null)).toBe(false)
     })
 })

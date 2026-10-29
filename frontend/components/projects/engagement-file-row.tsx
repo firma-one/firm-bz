@@ -16,19 +16,22 @@ import {
     FolderPlus,
     Upload,
     FolderInput,
+    Info,
 } from 'lucide-react'
 import { DocumentIcon } from '@/components/ui/document-icon'
 import { SharedFolderIcon } from '@/components/ui/folder-shared-icon'
 import { DeliverableIcon } from '@/components/ui/deliverable-icon'
 import { DocumentActionMenu } from '@/components/ui/document-action-menu'
+import { openAssetDetailsPane } from '@/components/files/asset-details-pane'
+import { useRightPane } from '@/lib/right-pane-context'
 import { ProfileBubbleWithPopup } from '@/components/ui/profile-bubble-popup'
 import { RelativeDateTime } from '@/components/ui/relative-date-time'
-import { DateProperty, StatusProperty } from '@/components/ui/property-cells'
-import { getAllowedTransitions, type EngagementRoleSlug } from '@/lib/deliverable-stage-roles'
-import { statusOf } from '@/lib/ui/status'
-import type { ActivityStatus } from '@/lib/sharing-settings'
+import type { EngagementRoleSlug } from '@/lib/deliverable-stage-roles'
+import { FileDueDateCell, FileStatusCell } from '@/components/projects/file-property-cells'
+import { BlockedTag } from '@/components/files/blocked-tag'
+import { MissingDueWarning } from '@/components/files/missing-due-warning'
+import { needsDueDate } from '@/lib/ui/due-date'
 import { Checkbox } from '@/components/ui/checkbox'
-import { StatusPill } from '@/components/ui/status-pill'
 import {
     Tooltip,
     TooltipContent,
@@ -57,8 +60,6 @@ export interface EngagementFileRowProps {
     // Active pane tracking
     activeCommentDocId: string | null
     activeInfoDocId: string | null
-    activeActivityDocId: string | null
-    activeVersionDocId: string | null
     activePreviewDocId: string | null
     // Highlight
     highlightedFileId: string | null
@@ -117,8 +118,6 @@ export interface EngagementFileRowProps {
     onOpenDocument: (doc: DriveFile) => void
     onOpenCommentPane: (docId: string) => void
     onOpenInfoPane: (docId: string) => void
-    onOpenActivityPane: (docId: string) => void
-    onOpenVersionPane: (docId: string) => void
     onOpenPreviewPane: (docId: string) => void
     onAddToast: (toast: { type: string; title: string; message: string }) => void
     /** Connector account email — passed to DocumentActionMenu for Google Drive authuser param. */
@@ -136,6 +135,8 @@ export interface EngagementFileRowProps {
     isMoveTarget?: boolean
     /** When true, the current folder is an approved deliverable — disable all write operations. */
     isInsideApprovedDeliverable?: boolean
+    /** The folder being listed is a deliverable or inside one, so this row is inside one too. */
+    inDeliverableFolder?: boolean
     /** The viewer's engagement role: decides which stages they may move a row to (as on the Board). */
     roleSlug?: EngagementRoleSlug | null
 }
@@ -147,8 +148,6 @@ export function EngagementFileRow({
     onToggleSelect,
     activeCommentDocId,
     activeInfoDocId,
-    activeActivityDocId,
-    activeVersionDocId,
     activePreviewDocId,
     highlightedFileId,
     onClearHighlight,
@@ -198,8 +197,6 @@ export function EngagementFileRow({
     onOpenDocument,
     onOpenCommentPane,
     onOpenInfoPane,
-    onOpenActivityPane,
-    onOpenVersionPane,
     onOpenPreviewPane,
     onAddToast,
     connectorAccountEmail,
@@ -209,8 +206,11 @@ export function EngagementFileRow({
     isUploadTarget = false,
     isMoveTarget = false,
     isInsideApprovedDeliverable = false,
+    inDeliverableFolder = false,
     roleSlug = null,
 }: EngagementFileRowProps) {
+    // The row's ⋮ menu already reads the pane; the Details icon opens the same pane it does.
+    const rightPane = useRightPane()
     const isDeeplinkHighlight = file.id === highlightedFileId
     const isFolder = (file.mimeType ?? (file as { type?: string }).type) === 'application/vnd.google-apps.folder'
     const isIntakeRow = !!file.isPendingApproval
@@ -224,7 +224,7 @@ export function EngagementFileRow({
             : (sharedExternalIds.has(file.id) || ancestorFolderIds.has(file.id) || descendantIds.has(file.id))
     const directShared = isGuest ? sharedExternalIdsForGuest.has(file.id) : isEC ? sharedExternalIdsForEC.has(file.id) : sharedExternalIds.has(file.id)
     // True when a file/folder is visible only because an ancestor folder is shared — not directly shared itself
-    const isAncestorShared = !directShared && (isGuest ? descendantIdsForGuest.has(file.id) : isEC ? descendantIdsForEC.has(file.id) : descendantIds.has(file.id))
+    const isAncestorShared = !directShared && (inDeliverableFolder || (isGuest ? descendantIdsForGuest.has(file.id) : isEC ? descendantIdsForEC.has(file.id) : descendantIds.has(file.id)))
 
     const locked = file.lock?.type === 'finalize'
     const isFolderApproved = isFolder && file.isDeliverable && (file as any).deliverableStatus === 'approved'
@@ -236,17 +236,45 @@ export function EngagementFileRow({
     const hasStatus = !!file.isDeliverable && !!file.deliverableStatus
     // Tracked work: a deliverable, and the documents inside one. An empty Status or Due reads "Not set" there.
     // The folders inside a deliverable only organize it, so they have no Status or Due: a dash, as other rows.
-    const isInsideDeliverable = isInsideApprovedDeliverable
+    const isInsideDeliverable = isInsideApprovedDeliverable || inDeliverableFolder
         || (isGuest ? descendantIdsForGuest : isEC ? descendantIdsForEC : descendantIds).has(file.id)
     const isTracked = !!file.isDeliverable || (!isFolder && isInsideDeliverable)
     const emptyTrackedValue = isTracked ? 'Not set' : '—'
     // A row's own stage: the deliverable's, or a document's inside one.
     const statusValue = file.activityStatus ?? (file.isDeliverable ? file.deliverableStatus : null) ?? null
+    // The stage the Status column shows. Tracked work with no stage yet: a document is Not started, a deliverable at To do.
+    const shownStage = isTracked ? (statusValue ?? (isFolder ? 'to_do' : 'not_started')) : isFolder && !file.isDeliverable ? null : statusValue
+    // Underway (In progress, In review) with no due date: unplanned work, flagged in the Due column.
+    // The date as last saved here, so setting one clears the warning at once.
+    const [savedDue, setSavedDue] = React.useState<string | null>(file.dueDate ?? null)
+    React.useEffect(() => { setSavedDue(file.dueDate ?? null) }, [file.dueDate])
+    const missingDue = isTracked && needsDueDate(shownStage, savedDue)
     // Changeable in place on tracked rows, until the deliverable is approved; the role decides which moves.
     const canEditStatus = isTracked && !!roleSlug && !!file.projectDocumentId && !isIntakeRow && !isFolderApproved && !isInsideApprovedDeliverable
     const isIndexing = !isFolder && !!file.projectDocumentId && file.indexingStatus === 'PROCESSING'
     // Row tools appear on hover or keyboard focus, and stay while the row is in use.
     const toolsPinned = isActionMenuOpen || isSelected || isIndexing || file.id === activePreviewDocId || file.id === highlightedFileId
+    // Details, from the row icon and the ⋮ menu alike: Info edits what this row's own cells may.
+    const openDetails = () => {
+        onOpenInfoPane(file.id)
+        openAssetDetailsPane(rightPane, {
+            document: file,
+            projectId,
+            orgSlug,
+            isExternalUser: isEC || isGuest,
+            editing: {
+                statusRole: canEditStatus ? roleSlug : null,
+                tracked: isTracked,
+                canEditDue: canEditDueDate,
+                // Assignee and description, as on a deliverable: leads, until it's approved or finalized.
+                canManage: isProjectLead && !locked && !isIntakeRow && !isInsideApprovedDeliverable,
+                // Blocked is the firm's own, on a document, until its deliverable is approved.
+                canBlock: !isEC && !isGuest && (roleSlug === 'eng_admin' || roleSlug === 'eng_member')
+                    && !isFolder && !!file.projectDocumentId && !locked && !isIntakeRow && !isInsideApprovedDeliverable,
+                onSaved: onShareSaved,
+            },
+        })
+    }
 
     async function handleRemoveBookmark(e: React.MouseEvent) {
         e.stopPropagation()
@@ -285,7 +313,7 @@ export function EngagementFileRow({
                 (isIntakeRow || file.lock?.type === 'finalize' || (file.isPrivate && !isFolder)) ? "hover:bg-surface-hover opacity-60" : !(isFolderApproved || isInsideApprovedDeliverable) && "hover:bg-surface-hover",
                 !isIntakeRow && isSelected && "bg-surface-selected hover:bg-surface-selected",
                 !isIntakeRow && isActionMenuOpen && "bg-surface-muted",
-                !isIntakeRow && (file.id === activeCommentDocId || file.id === activeInfoDocId || file.id === activeActivityDocId || file.id === activeVersionDocId || file.id === activePreviewDocId) && "bg-surface-muted",
+                !isIntakeRow && (file.id === activeCommentDocId || file.id === activeInfoDocId || file.id === activePreviewDocId) && "bg-surface-muted",
                 draggedItem?.id === file.id && "opacity-40 grayscale",
                 dragOverFolderId === file.id && !isMoveTarget && "bg-line ring-2 ring-inset ring-line z-[1]",
                 (isUploadTarget || isMoveTarget) && `${FILES_DROP_TARGET_ROW_CLASS} z-[1]`
@@ -365,7 +393,7 @@ export function EngagementFileRow({
                                             strokeWidth={2}
                                         />
                                     </div>
-                                ) : (file.id === activeCommentDocId || file.id === activeInfoDocId || file.id === activeActivityDocId || file.id === activeVersionDocId || file.id === activePreviewDocId) && !isFolder ? (
+                                ) : (file.id === activeCommentDocId || file.id === activeInfoDocId || file.id === activePreviewDocId) && !isFolder ? (
                                     <div className="flex w-full min-w-0 items-center gap-3">
                                         <span
                                             className={cn(
@@ -407,6 +435,10 @@ export function EngagementFileRow({
                     </span>
                 )}
 
+                {/* The firm's own flag (never sent to a client): in the Name cell, after the name, where the
+                    Status column's pill leaves it no room. What it waits on shows on hover. */}
+                {file.blocked && !isFolder && <BlockedTag blocked={file.blocked} />}
+
                 {/* Badges — hidden when hideBadges=true (e.g. medium pane) to prevent icon overflow */}
                 <div className={cn("flex shrink-0 items-center justify-end gap-1", hideBadges && "hidden")} onClick={(e) => e.stopPropagation()}>
                         {bookmarkId && (
@@ -425,8 +457,10 @@ export function EngagementFileRow({
                             </Tooltip>
                         )}
                         {/* Only a deliverable itself (until the Status column says it) and a pending upload carry this
-                            badge; rows inside a deliverable already show it in their icon and the breadcrumb */}
-                        {(isIntakeRow || directShared) ? (
+                            badge; rows inside a deliverable already show it in their icon and the breadcrumb. A
+                            deliverable is a folder: a file can be in the shared set too (its settings carry
+                            share.createdAt once saved), and isn't one. */}
+                        {(isIntakeRow || (directShared && isFolder)) ? (
                             <Tooltip>
                                 <TooltipTrigger asChild>
                                     <span className={`${hasStatus && !isIntakeRow ? '@[49rem]/file-table:hidden ' : ''}inline-flex items-center shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium border ${
@@ -505,7 +539,32 @@ export function EngagementFileRow({
                     "flex shrink-0 items-center justify-end transition-opacity duration-ui-fast",
                     !toolsPinned && "max-w-0 overflow-hidden opacity-0 focus-within:max-w-none focus-within:opacity-100 group-hover:max-w-none group-hover:opacity-100 [@media(hover:none)]:max-w-none [@media(hover:none)]:opacity-100"
                 )}>
-                    <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                    {/* Four icons, Details first: packed closer, and Copy link (also in the ⋮ menu) gives way
+                        when the table is at its narrowest. */}
+                    <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
+
+                        {!isFolder && file.documentType !== 'LINK' && (
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <button
+                                        type="button"
+                                        className={cn(
+                                            'h-7 w-7 rounded-md inline-flex items-center justify-center disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-fg-muted',
+                                            file.id === activeInfoDocId
+                                                ? 'text-fg-muted bg-surface-muted'
+                                                : 'text-fg-muted hover:text-fg-muted hover:bg-surface-hover'
+                                        )}
+                                        aria-label="Details"
+                                        aria-pressed={file.id === activeInfoDocId}
+                                        disabled={isIntakeRow}
+                                        onClick={openDetails}
+                                    >
+                                        <Info className="h-4 w-4" />
+                                    </button>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="text-xs">Details</TooltipContent>
+                            </Tooltip>
+                        )}
 
                         {!isFolder && file.documentType !== 'LINK' && (
                             <Tooltip>
@@ -530,12 +589,14 @@ export function EngagementFileRow({
                             </Tooltip>
                         )}
 
+
                         <Tooltip>
                             <TooltipTrigger asChild>
                                 <button
                                     type="button"
                                     className={cn(
                                         'h-7 w-7 rounded-md inline-flex items-center justify-center disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-fg-muted',
+                                        'hidden @[49rem]/file-table:inline-flex',
                                         file.id === highlightedFileId
                                             ? 'text-fg-muted bg-surface-muted'
                                             : 'text-fg-muted hover:text-fg-muted hover:bg-surface-hover'
@@ -600,8 +661,7 @@ export function EngagementFileRow({
                             currentFolderType={currentFolderType}
                             onOpenCommentPane={(docId) => onOpenCommentPane(docId)}
                             onOpenInfoPane={(docId) => onOpenInfoPane(docId)}
-                            onOpenActivityPane={(docId) => onOpenActivityPane(docId)}
-                            onOpenVersionPane={(docId) => onOpenVersionPane(docId)}
+                            onOpenDetails={openDetails}
                             onRenameDocument={canEdit && !locked && !isIntakeRow ? (doc) => onOpenRename(doc as DriveFile) : undefined}
                             onDuplicateDocument={canEdit && !locked && !isIntakeRow ? (doc) => onDuplicate(doc as DriveFile) : undefined}
                             onCopyDocument={generalFolderId && canEdit && !locked && !isIntakeRow ? (doc) => onOpenCopyMove(doc as DriveFile, 'copy') : undefined}
@@ -630,13 +690,12 @@ export function EngagementFileRow({
                     documentId={file.projectDocumentId ?? file.id}
                     fileName={file.name}
                     isFolder={isFolder}
-                    status={isFolder && !file.isDeliverable ? null : statusValue}
+                    status={shownStage}
                     roleSlug={canEditStatus ? roleSlug : null}
                     emptyLabel={emptyTrackedValue}
                     emptyClassName={isTracked ? 'text-fg-subtle' : 'text-[#45474c]/40'}
                     onSaved={(next) => {
                         file.activityStatus = next
-                        if (file.isDeliverable) file.deliverableStatus = next
                         onShareSaved()
                     }}
                     onAddToast={onAddToast}
@@ -645,14 +704,16 @@ export function EngagementFileRow({
 
             {/* Due Column — leads edit it in place (Notion-style); everyone else sees the relative date.
                 Files and deliverable folders both have one. */}
-            <div className={cn('min-w-0 whitespace-nowrap', DUE_DATE_COL_CLASS, FILE_TABLE_COL_LINE_CLASS)} onClick={(e) => { if (canEditDueDate) e.stopPropagation() }}>
+            <div className={cn('min-w-0 items-center gap-1 whitespace-nowrap', DUE_DATE_COL_CLASS, FILE_TABLE_COL_LINE_CLASS)} onClick={(e) => { if (canEditDueDate) e.stopPropagation() }}>
                 {canEditDueDate ? (
                     <FileDueDateCell
                         projectId={projectId}
                         documentId={(file as { projectDocumentId?: string }).projectDocumentId || file.id}
                         dueDate={file.dueDate ?? null}
                         placeholder={emptyTrackedValue}
-                        onSaved={(next) => { file.dueDate = next ?? undefined }}
+                        onSaved={(next) => { file.dueDate = next ?? undefined; setSavedDue(next) }}
+                        // A fix moved its deliverable or its documents too: the list shows them as they are now.
+                        onOthersChanged={onShareSaved}
                         onError={(message) => onAddToast({ type: 'error', title: "Couldn't set due date", message })}
                     />
                 ) : (
@@ -694,6 +755,7 @@ export function EngagementFileRow({
                     )}
                     </>
                 )}
+                {missingDue && shownStage && <MissingDueWarning stage={shownStage} />}
             </div>
 
             {/* Created by: who added it — the member who added it in the app, not the connector account
@@ -771,142 +833,5 @@ export function EngagementFileRow({
                 </div>
             )}
         </div>
-    )
-}
-
-const STAGES: ActivityStatus[] = ['to_do', 'in_progress', 'in_review', 'approved']
-
-/**
- * The Status cell. Read-only unless the viewer may move this row; then a picker offering only the
- * stages their role allows from here (getAllowedTransitions, as the Board and the server use). A
- * deliverable can't be approved while a document inside it isn't — the Board's rule, checked first.
- */
-function FileStatusCell({
-    projectId,
-    documentId,
-    fileName,
-    isFolder,
-    status,
-    roleSlug,
-    emptyLabel,
-    emptyClassName,
-    onSaved,
-    onAddToast,
-}: {
-    projectId: string
-    documentId: string
-    fileName: string
-    isFolder: boolean
-    status: ActivityStatus | null
-    /** null when the row can't be changed here. */
-    roleSlug: EngagementRoleSlug | null
-    emptyLabel: string
-    emptyClassName: string
-    onSaved: (next: ActivityStatus) => void
-    onAddToast: (toast: { type: string; title: string; message: string }) => void
-}) {
-    const [value, setValue] = React.useState<ActivityStatus | null>(status)
-    React.useEffect(() => { setValue(status) }, [status])
-    // A document with no stage yet is at "to do" as far as the rules go.
-    const allowed = roleSlug ? getAllowedTransitions(roleSlug, value ?? 'to_do') : []
-    if (allowed.length === 0) {
-        return value
-            ? <StatusPill kind="deliverable" status={value} />
-            : <span className={cn('text-[0.8125rem]', emptyClassName)}>{emptyLabel}</span>
-    }
-    return (
-        <StatusProperty
-            kind="deliverable"
-            value={value}
-            placeholder={emptyLabel}
-            options={STAGES.filter((s) => s === value || allowed.includes(s))}
-            onChange={async (next) => {
-                const stage = next as ActivityStatus
-                const { getSession } = await import('@/lib/supabase')
-                const session = await getSession()
-                const headers = { 'Content-Type': 'application/json', ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) }
-                if (stage === 'approved' && isFolder) {
-                    const res = await fetch(`/api/projects/${projectId}/documents/${encodeURIComponent(documentId)}/subtasks`, { headers })
-                    const data = await res.json().catch(() => ({}))
-                    const unapproved = ((data.subtasks ?? []) as { status: string | null }[]).filter((t) => t.status !== 'approved').length
-                    if (!res.ok || unapproved > 0) {
-                        onAddToast({
-                            type: 'error',
-                            title: 'Cannot approve yet',
-                            message: res.ok
-                                ? `${unapproved} document${unapproved > 1 ? 's' : ''} still need to be approved before this deliverable can be approved.`
-                                : 'Could not check the documents inside it. Please try again.',
-                        })
-                        return
-                    }
-                }
-                const res = await fetch(`/api/projects/${projectId}/documents/${encodeURIComponent(documentId)}/sharing/activity`, {
-                    method: 'PATCH',
-                    headers,
-                    body: JSON.stringify({ status: stage }),
-                })
-                if (!res.ok) {
-                    const err = await res.json().catch(() => ({}))
-                    onAddToast({ type: 'error', title: "Couldn't change the stage", message: err.error ?? 'Please try again.' })
-                    return
-                }
-                setValue(stage)
-                onSaved(stage)
-                onAddToast({
-                    type: 'success',
-                    title: stage === 'approved' ? 'Approved' : 'Stage updated',
-                    message: `${fileName} · ${statusOf('deliverable', stage).label}`,
-                })
-                window.dispatchEvent(new CustomEvent('pockett-notifications-updated'))
-            }}
-        />
-    )
-}
-
-/** Inline Due editor for one file or deliverable folder — the same endpoint the row menu's "Due" uses. */
-function FileDueDateCell({
-    projectId,
-    documentId,
-    dueDate,
-    placeholder,
-    onSaved,
-    onError,
-}: {
-    projectId: string
-    documentId: string
-    dueDate: string | null
-    /** What an empty cell reads: "Not set" for a deliverable or what's inside one, otherwise a dash. */
-    placeholder: string
-    onSaved: (next: string | null) => void
-    onError: (message: string) => void
-}) {
-    const [value, setValue] = React.useState<string | null>(dueDate)
-    React.useEffect(() => { setValue(dueDate) }, [dueDate])
-    return (
-        <DateProperty
-            value={value}
-            placeholder={placeholder}
-            highlightOverdue
-            allowTime
-            compact
-            chip
-            onChange={async (next) => {
-                const { getSession } = await import('@/lib/supabase')
-                const session = await getSession()
-                const res = await fetch(`/api/projects/${projectId}/documents/${encodeURIComponent(documentId)}/due-date`, {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json', ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) },
-                    body: JSON.stringify({ dueDate: next }),
-                })
-                if (!res.ok) {
-                    const err = await res.json().catch(() => ({}))
-                    onError(err.error ?? 'Failed to update due date')
-                    return
-                }
-                setValue(next)
-                onSaved(next)
-                window.dispatchEvent(new CustomEvent('pockett-notifications-updated'))
-            }}
-        />
     )
 }

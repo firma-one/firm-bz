@@ -4,8 +4,7 @@ import { useState, useCallback, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { DateProperty } from "@/components/ui/property-cells"
 import { DocumentIcon } from "@/components/ui/document-icon"
-import { UserAvatarWithTooltip } from "@/components/ui/user-avatar-with-tooltip"
-import { cn, formatFileSize, formatSmartDateTime } from "@/lib/utils"
+import { cn, formatFileSize } from "@/lib/utils"
 import { DuePickerPanel } from "@/components/ui/due-picker"
 import { DeliverableIcon } from "@/components/ui/deliverable-icon"
 import { ModifiedStamp } from "@/components/ui/modified-stamp"
@@ -13,8 +12,8 @@ import { formatDue, isPastDue, readDue } from "@/lib/ui/due-date"
 import { DocumentEditPanelContent, DocumentPreviewPanelContent, getDocumentEditUrl } from "@/components/files/document-edit-sheet"
 import { DocumentPreviewPane } from "@/components/files/document-preview-pane"
 import { useRightPane } from "@/lib/right-pane-context"
-import { DocumentActivityPane } from "@/components/files/document-activity-pane"
-import { DocumentHistoryPane } from "@/components/files/document-history-pane"
+import { openAssetDetailsPane } from "@/components/files/asset-details-pane"
+import { useDueDateSave } from "@/components/files/use-due-date-save"
 import { DocumentDocCommentsPane } from "@/components/projects/document-doc-comments-pane"
 import { GoogleDriveIcon } from "@/components/ui/google-drive-icon"
 import { OneDriveIcon } from "@/components/ui/onedrive-icon"
@@ -30,7 +29,6 @@ import {
   FolderInput,
   CopyPlus,
   Briefcase,
-  Clock,
   Trash2,
   Calendar,
   CalendarClock,
@@ -45,8 +43,6 @@ import {
   Link2,
   Lock,
   Unlock,
-  ChevronRight,
-  Folder,
   CheckCircle2,
   XCircle,
   Loader2,
@@ -108,7 +104,6 @@ interface DocumentActionMenuProps {
   onMoveDocument?: (doc: any) => void
   /** Copy to a different engagement (EL only). Opens cross-engagement picker. */
   onCrossEngagementCopy?: (doc: any) => void
-  onVersionHistory?: (doc: any) => void
   onDeleteDocument?: (doc: any) => void
   /** When set, Share opens the custom share modal instead of OS share. Only show Share item when true (Project Lead). */
   showShareModal?: boolean
@@ -145,10 +140,9 @@ interface DocumentActionMenuProps {
   onOpenCommentPane?: (documentId: string) => void
   /** Optional: notify parent when info pane is opened (e.g. to highlight row). */
   onOpenInfoPane?: (documentId: string) => void
-  /** Optional: notify parent when activity pane is opened (e.g. to highlight row). */
-  onOpenActivityPane?: (documentId: string) => void
-  /** Optional: notify parent when version pane is opened (e.g. to highlight row). */
-  onOpenVersionPane?: (documentId: string) => void
+  /** Opens Details in place of the menu's own opener — the Files row passes what its cells may edit. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  onOpenDetails?: (doc: any) => void
   /** Engagement Lead only: Lock / Unlock version (files). Prefer explicit over showShareModal. */
   isEngagementLead?: boolean
   /** External user (EC or EV): hides Drive Actions and separator for all external users. */
@@ -185,7 +179,6 @@ export function DocumentActionMenu({
   onCopyDocument,
   onMoveDocument,
   onCrossEngagementCopy,
-  onVersionHistory,
   onDeleteDocument,
   showShareModal = false,
   isAncestorShared = false,
@@ -204,8 +197,7 @@ export function DocumentActionMenu({
   triggerIcon,
   onOpenCommentPane,
   onOpenInfoPane,
-  onOpenActivityPane,
-  onOpenVersionPane,
+  onOpenDetails,
   isEngagementLead,
   isExternalUser,
   isExternalViewer,
@@ -233,6 +225,7 @@ export function DocumentActionMenu({
   const [existingDocReminders, setExistingDocReminders] = useState<Map<string, { reminderId: string; dateValue: string | null }>>(new Map())
   const [currentUserRole, setCurrentUserRole] = useState<string | null>(null)
   const { addToast } = useToast()
+  const { save: saveDue, dialog: dueDialog } = useDueDateSave()
   const rightPane = useRightPane()
   const { addTask, updateTask } = useDownloadProgress()
   const { user } = useAuth()
@@ -258,23 +251,15 @@ export function DocumentActionMenu({
         return
       }
 
-      const { getSession } = await import('@/lib/supabase')
-      const session = await getSession()
-      if (!session?.access_token) {
-        addToast({ type: 'error', title: 'Unauthorized', message: 'Please sign in again.' })
-        return
+      // Due dates nest: a change that breaks that asks, with the fixes (lib/files/due-date-rule.ts).
+      const result = await saveDue(projectId, documentIdForProjectApis, dateTime || null)
+      if (!result.ok) {
+        if (result.cancelled) return
+        throw new Error(result.error)
       }
-
-      const res = await fetch(`/api/projects/${projectId}/documents/${encodeURIComponent(documentIdForProjectApis)}/due-date`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-        body: JSON.stringify({ dueDate: dateTime || null }),
-      })
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        throw new Error(err.error ?? 'Failed to update due date')
-      }
+      dateTime = result.dueDate ?? ''
+      // A fix moved its deliverable or its documents too: the list shows them as they are now.
+      if (result.alsoChanged.length > 0 || result.engagementDueDate) onShareSaved?.()
 
       document.dueDate = dateTime || null
       setDueVersion((v) => v + 1)
@@ -365,7 +350,7 @@ export function DocumentActionMenu({
         const err = await res.json().catch(() => ({}))
         throw new Error(typeof err?.error === 'string' ? err.error : 'Failed to unlock')
       }
-      addToast({ type: 'success', title: 'Unlocked', message: 'Edit access restored where supported by Google Drive.' })
+      addToast({ type: 'success', title: 'Unlocked', message: 'Edit access restored. An approved document goes back to To do; its approval stays on record.' })
       onShareSaved?.()
     } catch (error) {
       addToast({
@@ -474,15 +459,11 @@ export function DocumentActionMenu({
           console.error('Share download error:', err)
         }
       } else {
-        // Files tab: generic download with explicit connector + Drive file ID (anchor, no progress needed)
-        const fileId = doc.externalId || doc.id
-        const downloadUrl = `/api/documents/download?fileId=${fileId}&connectorId=${doc.connectorId}&filename=${encodeURIComponent(filename)}&token=${session.access_token}`
-        const a = window.document.createElement('a')
-        a.href = downloadUrl
-        a.download = filename
-        window.document.body.appendChild(a)
-        a.click()
-        window.document.body.removeChild(a)
+        // A download is checked against the document's engagement, and every list that renders this
+        // menu passes one. The old firm-wide route (/api/documents/download) carried the sign-in
+        // token in the URL and checked only the legacy firm-to-storage link, so it is not called.
+        const taskId = addTask(filename)
+        updateTask(taskId, { status: 'error', error: 'Download unavailable here' })
       }
     } catch (error) {
       console.error('Download error:', error)
@@ -941,7 +922,9 @@ export function DocumentActionMenu({
                   </TooltipProvider>
                 ) : (
                   <DropdownMenuItem
-                    onClick={() => {
+                    // onSelect, as the menu's other items that open a dialog: the menu starts closing
+                    // before the secure-access dialog opens over it.
+                    onSelect={() => {
                       if (document.documentType === 'LINK' && document.externalUrl) {
                         window.open(document.externalUrl, '_blank', 'noopener,noreferrer')
                         return
@@ -1296,136 +1279,23 @@ export function DocumentActionMenu({
                 )}
 
                 {document.documentType !== 'LINK' && (
-                <DropdownMenuSub>
-                  <DropdownMenuSubTrigger className="flex cursor-pointer items-center gap-2">
+                  <DropdownMenuItem
+                    onClick={() => {
+                      // The Files row opens it with what its cells may edit; elsewhere Info reads only.
+                      if (onOpenDetails) { onOpenDetails(document); return }
+                      onOpenInfoPane?.(document.id)
+                      openAssetDetailsPane(rightPane, {
+                        document,
+                        projectId: document.projectId ?? projectId,
+                        orgSlug,
+                        isExternalUser: !!isExternalUser,
+                      })
+                    }}
+                    className="flex cursor-pointer items-center gap-2"
+                  >
                     <Info className="h-3.5 w-3.5 text-fg-muted" />
                     <span>Details</span>
-                  </DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent className="w-max min-w-48 max-w-72">
-                    <DropdownMenuItem
-                      onClick={() => {
-                        onOpenInfoPane?.(document.id)
-                        rightPane.setTitle('File information')
-                        rightPane.setHeaderIcon(<DocumentIcon mimeType={document.mimeType} className="h-3.5 w-3.5" />)
-                        rightPane.setHeaderSubtitle('')
-                        rightPane.setHeaderActions(null)
-                        rightPane.setContent(
-                          <div className="flex flex-col h-full min-h-0 p-4 min-w-0">
-                            {document.parentName && (
-                              <div className="flex items-center gap-1 text-caption text-fg-subtle mb-2">
-                                <Folder className="h-3 w-3" />
-                                <span>{document.parentName}</span>
-                                <ChevronRight className="h-3 w-3" />
-                                <span className="text-fg-muted font-medium truncate max-w-[180px]">{document.name}</span>
-                              </div>
-                            )}
-                            <div className="mb-4 inline-flex max-w-full items-center gap-2 rounded-card border border-line bg-surface-subtle px-3 py-2">
-                              <span className="truncate text-xs font-medium text-fg-muted" title={document.name}>{document.name}</span>
-                            </div>
-                            <div className="space-y-3 rounded-card border border-line bg-surface px-3 py-3">
-                              <div className="flex justify-between items-center">
-                                <span className="text-xs text-fg-muted">File type</span>
-                                <span className="text-xs">{getDisplayType(document)}</span>
-                              </div>
-                              {(document.mimeType ?? '').trim() !== '' && (
-                                <div className="flex justify-between items-center">
-                                  <span className="text-xs text-fg-muted">Mime type</span>
-                                  <span className="font-mono text-caption truncate max-w-[240px] text-right" title={document.mimeType ?? ''}>{document.mimeType}</span>
-                                </div>
-                              )}
-                              {document.size != null && typeof document.size === 'number' && (
-                                <div className="flex justify-between items-center">
-                                  <span className="text-xs text-fg-muted">Size</span>
-                                  <span className="text-xs">{formatFileSize(document.size)}</span>
-                                </div>
-                              )}
-                              {document.modifiedTime && !Number.isNaN(new Date(document.modifiedTime).getTime()) && (
-                                <div className="flex justify-between items-center">
-                                  <span className="text-xs text-fg-muted">Modified</span>
-                                  <span className="text-xs">{formatSmartDateTime(document.modifiedTime)}</span>
-                                </div>
-                              )}
-                              {document.createdTime && !Number.isNaN(new Date(document.createdTime).getTime()) && (
-                                <div className="flex justify-between items-center">
-                                  <span className="text-xs text-fg-muted">Created</span>
-                                  <span className="text-xs">{formatSmartDateTime(document.createdTime)}</span>
-                                </div>
-                              )}
-                              {/* Who added it, as the Files Created by column says (lib/files/file-creator.ts) */}
-                              {document.creator?.displayName ? (
-                                <div className="flex justify-between items-center">
-                                  <span className="text-xs text-fg-muted">Created by</span>
-                                  <UserAvatarWithTooltip
-                                    displayName={document.creator.displayName}
-                                    photoLink={document.creator.photoLink ?? undefined}
-                                    email={document.creator.emailAddress ?? undefined}
-                                    avatarSize="md"
-                                    showEmail={true}
-                                    showRole={false}
-                                  />
-                                </div>
-                              ) : (document.owners?.[0]?.displayName || document.lastModifyingUser?.displayName) && (
-                                <div className="flex justify-between items-center">
-                                  <span className="text-xs text-fg-muted">Owner</span>
-                                  {document.owners?.[0] ? (
-                                    <UserAvatarWithTooltip
-                                      displayName={document.owners[0].displayName}
-                                      photoLink={document.owners[0].photoLink}
-                                      email={document.owners[0].emailAddress}
-                                      avatarSize="md"
-                                      showEmail={true}
-                                      showRole={false}
-                                    />
-                                  ) : (
-                                    <span className="text-xs">{document.lastModifyingUser?.displayName || '—'}</span>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        )
-                        rightPane.setExpanded?.(false)
-                      }}
-                      className="flex cursor-pointer items-center gap-2"
-                    >
-                      <Info className="h-3.5 w-3.5 text-fg-muted" />
-                      <span>File information</span>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => {
-                        onOpenActivityPane?.(document.id)
-                        rightPane.setTitle('Activity stream')
-                        rightPane.setHeaderIcon(<DocumentIcon mimeType={document.mimeType} className="h-3.5 w-3.5" />)
-                        rightPane.setHeaderSubtitle('Last 30 days')
-                        rightPane.setHeaderActions(null)
-                        rightPane.setContent(<DocumentActivityPane document={document} />)
-                        rightPane.setExpanded?.(false)
-                      }}
-                      className="flex cursor-pointer items-center gap-2"
-                    >
-                      <Clock className="h-3.5 w-3.5 text-fg-muted" />
-                      <span>Activity stream</span>
-                    </DropdownMenuItem>
-                    {document.documentType !== 'LINK' && (
-                    <DropdownMenuItem
-                      onClick={() => {
-                        onOpenVersionPane?.(document.id)
-                        rightPane.setTitle('Version history')
-                        rightPane.setHeaderIcon(<DocumentIcon mimeType={document.mimeType} className="h-3.5 w-3.5" />)
-                        rightPane.setHeaderSubtitle('Full history')
-                        rightPane.setHeaderActions(null)
-                        rightPane.setContent(<DocumentHistoryPane document={document} />)
-                        rightPane.setExpanded?.(false)
-                        onVersionHistory?.(document)
-                      }}
-                      className="flex cursor-pointer items-center gap-2"
-                    >
-                      <Clock className="h-3.5 w-3.5 text-fg-muted" />
-                      <span>Version history</span>
-                    </DropdownMenuItem>
-                    )}
-                  </DropdownMenuSubContent>
-                </DropdownMenuSub>
+                  </DropdownMenuItem>
                 )}
                 {!isExternalUser && document.documentType !== 'LINK' && (
                 <>
@@ -1600,6 +1470,7 @@ export function DocumentActionMenu({
         }}
       />
 
+      {dueDialog}
     </>
   )
 }

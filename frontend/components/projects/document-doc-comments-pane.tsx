@@ -2,7 +2,7 @@
 
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { ArrowUpDown, AtSign, BellRing, CalendarClock, Check, Hash, Link2, Loader2, MessagesSquare, Send, Smile, Trash2, UserCheck, Users, X } from 'lucide-react'
+import { ArrowUpDown, AtSign, BellRing, CalendarClock, Check, Eye, Hash, Link2, Loader2, Lock, MessagesSquare, Send, Smile, Trash2, UserCheck, Users, X } from 'lucide-react'
 import { cn, formatDateTimeWithTZ, formatRelativeTime } from '@/lib/utils'
 import { useRightPane } from '@/lib/right-pane-context'
 import { useAuth } from '@/lib/auth-context'
@@ -24,11 +24,12 @@ import { DateTimePicker } from '@/components/ui/date-time-picker'
 import { SetupReminderModal } from '@/components/ui/setup-reminder-modal'
 import { FilterMenuLabel, FilterMenuRow, FilterPill, summarizePicks } from '@/components/ui/filter-pill'
 import { PersonAvatar } from '@/components/ui/property-cells'
-import { ENGAGEMENT_ROLE_LABEL, findMentionQuery, findTagQuery, formatDisplayName, insertMention, insertTag, mentionedNames, splitDocTags, splitMentions } from '@/lib/comments/mentions'
+import { ENGAGEMENT_ROLE_LABEL, findMentionQuery, findTagQuery, formatDisplayName, insertMention, insertTag, mentionedNames, splitDocTags, splitMentions, taggedDocIds } from '@/lib/comments/mentions'
 import { CommentText } from '@/components/comments/comment-text'
 import { REACTIONS, ReactionMark, type ReactionKey } from '@/components/comments/reactions'
 import { DocumentIcon } from '@/components/ui/document-icon'
 import { caretOffset } from '@/lib/ui/caret-offset'
+import { canBeRemindedOfInternalNote, canWriteInternalNote } from '@/lib/comments/internal-notes'
 
 /*
  * Comments on a document or deliverable (.claude/plans/board-pane-comments-redesign.md). Shared
@@ -64,6 +65,10 @@ export interface DocumentDocCommentsPaneProps {
   onChange?: () => void
   /** Opens a tagged document (its preview) from a chip in the thread. */
   onOpenDocument?: (doc: TaggableDocument) => void
+  /** What a new comment starts with — a document's tag ("#QSR-16 ") when the thread is opened from it. */
+  initialDraft?: string
+  /** A document of the thread to focus on: "About this file" shows only the comments tagging it. */
+  focusDocId?: string
 }
 
 type CommentMessage = {
@@ -73,6 +78,8 @@ type CommentMessage = {
   authorEmail?: string | null
   content: string
   reactions?: Record<string, { count: number; users: string[] }>
+  /** The firm's own note: never sent to a client (lib/comments/internal-notes.ts). */
+  isInternal?: boolean
 }
 
 type Member = { userId: string; email: string; name: string; role: string; avatarUrl?: string | null; isAgent?: boolean }
@@ -80,6 +87,11 @@ type Member = { userId: string; email: string; name: string; role: string; avata
 
 /** Filters and sorting appear once a thread is longer than this, or when a filter is on. */
 const TOOLBAR_AFTER = 3
+
+/** Who a comment is for: everyone on the engagement (a reply), or the firm only (an internal note). */
+type CommentVisibility = 'reply' | 'internal'
+const VISIBILITY_LABEL: Record<CommentVisibility, string> = { reply: 'Replies', internal: 'Internal notes' }
+const visibilityOf = (m: { isInternal?: boolean }): CommentVisibility => (m.isInternal ? 'internal' : 'reply')
 
 type DatePreset = 'any' | '7d' | '30d'
 const DATE_PRESETS: { value: DatePreset; label: string; days: number | null }[] = [
@@ -102,16 +114,20 @@ function nextMondayNineAm(): string {
 }
 const shortDateTime = (iso: string) => new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
 
-export function DocumentDocCommentsPane({ engagementId, documentId, documentName, documentMimeType, taggableDocuments, onOpenDocument, onChange }: DocumentDocCommentsPaneProps) {
+export function DocumentDocCommentsPane({ engagementId, documentId, documentName, documentMimeType, taggableDocuments, onOpenDocument, onChange, initialDraft, focusDocId }: DocumentDocCommentsPaneProps) {
   const rightPane = useRightPane()
   const { user } = useAuth()
   const myEmail = user?.email ?? ''
   const [messages, setMessages] = useState<CommentMessage[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [newContent, setNewContent] = useState('')
+  const [newContent, setNewContent] = useState(initialDraft ?? '')
+  // Opened from a document: its comments first, the whole deliverable thread a click away.
+  const [focusOnly, setFocusOnly] = useState(!!focusDocId)
   const [submitting, setSubmitting] = useState(false)
   const [firmMembers, setFirmMembers] = useState<Member[]>([])
+  // Writing an internal note (the firm's own, never sent to a client) rather than a reply.
+  const [internalMode, setInternalMode] = useState(false)
   const [reminderModal, setReminderModal] = useState<{ messageId: string; content: string } | null>(null)
   // Map of userId → { reminderId, dateValue } for already-set reminders on this comment
   const [existingReminders, setExistingReminders] = useState<Map<string, { reminderId: string; dateValue: string | null }>>(new Map())
@@ -151,9 +167,11 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
   const bottomSentinelRef = useRef<HTMLDivElement>(null)
 
   const [statusKeysFilter, setStatusKeysFilter] = useState<ReactionKey[]>([])
+  // Replies (what the client sees) or the firm's internal notes; offered to the firm only.
+  const [visibilityFilter, setVisibilityFilter] = useState<CommentVisibility[]>([])
   const [commentorEmailsFilter, setCommentorEmailsFilter] = useState<string[]>([])
   const [datePreset, setDatePreset] = useState<DatePreset>('any')
-  const filtersActive = statusKeysFilter.length > 0 || commentorEmailsFilter.length > 0 || datePreset !== 'any' || mentionsFilterActive
+  const filtersActive = statusKeysFilter.length > 0 || commentorEmailsFilter.length > 0 || datePreset !== 'any' || mentionsFilterActive || visibilityFilter.length > 0
 
   // View: user preference (global, stored in localStorage)
   const COMMENTS_PREFS_KEY = 'fm_comments_view_prefs_v1'
@@ -197,6 +215,8 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
 
   const memberById = useMemo(() => new Map(firmMembers.map((m) => [m.userId, m])), [firmMembers])
   const memberByEmail = useMemo(() => new Map(firmMembers.map((m) => [m.email.toLowerCase(), m])), [firmMembers])
+  // Only the firm's own people write internal notes; a client's composer has no such choice.
+  const canNote = canWriteInternalNote(firmMembers.find((m) => m.userId === user?.id)?.role)
   const displayNameOf = useCallback((m: Member) => formatDisplayName(m.name, m.email), [])
   /** Every name a mention can be written with, for finding mentions in comments. */
   const knownNames = useMemo(() => firmMembers.flatMap((m) => [displayNameOf(m), m.name]).filter(Boolean), [firmMembers, displayNameOf])
@@ -265,7 +285,14 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
   }, [loading, messages.length])
 
   // Keyboard friendly: focus composer on open
-  useEffect(() => { textareaRef.current?.focus() }, [engagementId, documentId])
+  useEffect(() => {
+    const el = textareaRef.current
+    if (!el) return
+    el.focus()
+    // After a starting tag, so typing carries on from it.
+    if (initialDraft) el.setSelectionRange(el.value.length, el.value.length)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [engagementId, documentId])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -311,7 +338,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
   const mentionCandidates = useMemo(() => {
     if (!mentionQuery) return []
     const q = mentionQuery.query.toLowerCase()
-    const people = firmMembers.filter((m) => m.userId !== user?.id && !m.isAgent)
+    const people = firmMembers.filter((m) => m.userId !== user?.id && !m.isAgent && (!internalMode || canBeRemindedOfInternalNote(m.role)))
     const rank = (m: Member) => {
       const name = displayNameOf(m).toLowerCase()
       if (!q) return 0
@@ -326,7 +353,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
       .sort((a, b) => a.r - b.r || displayNameOf(a.m).localeCompare(displayNameOf(b.m)))
       .slice(0, 8)
       .map((x) => x.m)
-  }, [mentionQuery, firmMembers, user?.id, displayNameOf])
+  }, [mentionQuery, firmMembers, user?.id, displayNameOf, internalMode])
 
   const pickMention = (member: Member) => {
     const el = textareaRef.current
@@ -442,13 +469,15 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
     e?.preventDefault()
     const content = newContent.trim()
     if (!content || submitting) return
-    const recipients = currentMentions
+    const recipients = internalMode
+      ? currentMentions.filter(({ userId }) => canBeRemindedOfInternalNote(memberById.get(userId)?.role))
+      : currentMentions
     setSubmitting(true)
     try {
       const res = await fetch(`/api/projects/${engagementId}/documents/${documentId}/doc-comments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content }),
+        body: JSON.stringify(internalMode ? { content, internal: true } : { content }),
       })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
@@ -457,7 +486,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
       const data = await res.json()
       const newMsg = data.message
       setMessages((prev) => [...prev, newMsg])
-      setNewContent('')
+      setNewContent(initialDraft ?? '')
       setMentionQuery(null)
       setTagQuery(null)
 
@@ -532,13 +561,17 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
     const preset = DATE_PRESETS.find((p) => p.value === datePreset)
     const since = preset?.days ? Date.now() - preset.days * 86400000 : null
     return messages.filter((m) => {
+      if (focusOnly && focusDocId && !taggedDocIds(m.content).includes(focusDocId)) return false
       if (mentionsFilterActive && !myMentionedMessageIds.has(m.id)) return false
       if (commentorEmailsFilter.length > 0 && (!m.authorEmail || !commentorEmailsFilter.includes(m.authorEmail))) return false
       if (statusKeysFilter.length > 0 && !statusKeysFilter.some((k) => (m.reactions?.[k]?.count ?? 0) > 0)) return false
+      if (visibilityFilter.length > 0 && !visibilityFilter.includes(visibilityOf(m))) return false
       if (since !== null && new Date(m.createdAt).getTime() < since) return false
       return true
     })
-  }, [messages, mentionsFilterActive, myMentionedMessageIds, commentorEmailsFilter, statusKeysFilter, datePreset])
+  }, [messages, mentionsFilterActive, myMentionedMessageIds, commentorEmailsFilter, statusKeysFilter, datePreset, focusOnly, focusDocId, visibilityFilter])
+
+  const aboutCount = useMemo(() => (focusDocId ? messages.filter((m) => taggedDocIds(m.content).includes(focusDocId)).length : 0), [messages, focusDocId])
 
   const displayMessages = useMemo(() => (sortOrder === 'latestFirst' ? [...filteredMessages].reverse() : filteredMessages), [filteredMessages, sortOrder])
 
@@ -730,13 +763,15 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
   // ── Pieces ─────────────────────────────────────────────────────────────────
 
   const toolbar = (messages.length > TOOLBAR_AFTER || filtersActive) && (
-    <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-line pb-2">
-      <span className="mr-auto text-small tabular-nums text-fg-muted">
+    // One line at any pane width: in a narrow pane the pills show their icons (and chosen values),
+    // with their names back once there's room (FilterPill collapsible).
+    <div className="@container/filter-bar flex shrink-0 flex-nowrap items-center gap-1.5 border-b border-line pb-2 [&>*]:min-w-0">
+      <span className="mr-auto shrink-0 whitespace-nowrap text-small tabular-nums text-fg-muted">
         {filtersActive ? `${filteredMessages.length} of ${messages.length}` : messages.length} comment{messages.length === 1 ? '' : 's'}
       </span>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <FilterPill icon={<Users />} label="People" value={commentorEmailsFilter.length ? summarizePicks(commentorEmailsFilter.map((e) => formatDisplayName(memberByEmail.get(e.toLowerCase())?.name ?? '', e))) : undefined} onClear={() => setCommentorEmailsFilter([])} />
+          <FilterPill icon={<Users />} label="People" collapsible value={commentorEmailsFilter.length ? summarizePicks(commentorEmailsFilter.map((e) => formatDisplayName(memberByEmail.get(e.toLowerCase())?.name ?? '', e))) : undefined} onClear={() => setCommentorEmailsFilter([])} />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-[240px] p-1">
           <FilterMenuLabel>Commented by</FilterMenuLabel>
@@ -747,9 +782,31 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
           ))}
         </DropdownMenuContent>
       </DropdownMenu>
+      {canNote && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <FilterPill icon={<Eye />} label="Visibility" collapsible value={visibilityFilter.length ? summarizePicks(visibilityFilter.map((v) => VISIBILITY_LABEL[v])) : undefined} onClear={() => setVisibilityFilter([])} />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-[200px] p-1">
+            <FilterMenuLabel>Who sees it</FilterMenuLabel>
+            {(['reply', 'internal'] as const).map((v) => (
+              <FilterMenuRow
+                key={v}
+                multi
+                icon={v === 'internal' ? <Lock /> : <MessagesSquare />}
+                selected={visibilityFilter.includes(v)}
+                onSelect={() => setVisibilityFilter((l) => (l.includes(v) ? l.filter((x) => x !== v) : [...l, v]))}
+              >
+                {VISIBILITY_LABEL[v]}
+                <span className="ml-1.5 text-caption tabular-nums text-fg-subtle">{messages.filter((m) => visibilityOf(m) === v).length}</span>
+              </FilterMenuRow>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <FilterPill icon={<Smile />} label="Reaction" value={statusKeysFilter.length ? summarizePicks(statusKeysFilter.map((k) => REACTIONS.find((r) => r.key === k)?.label ?? k)) : undefined} onClear={() => setStatusKeysFilter([])} />
+          <FilterPill icon={<Smile />} label="Reaction" collapsible value={statusKeysFilter.length ? summarizePicks(statusKeysFilter.map((k) => REACTIONS.find((r) => r.key === k)?.label ?? k)) : undefined} onClear={() => setStatusKeysFilter([])} />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-[200px] p-1">
           <FilterMenuLabel>Has reaction</FilterMenuLabel>
@@ -762,7 +819,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
       </DropdownMenu>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <FilterPill icon={<CalendarClock />} label="Date" value={datePreset !== 'any' ? DATE_PRESETS.find((p) => p.value === datePreset)?.label : undefined} onClear={() => setDatePreset('any')} />
+          <FilterPill icon={<CalendarClock />} label="Date" collapsible value={datePreset !== 'any' ? DATE_PRESETS.find((p) => p.value === datePreset)?.label : undefined} onClear={() => setDatePreset('any')} />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-[180px] p-1">
           <FilterMenuLabel>Posted</FilterMenuLabel>
@@ -772,7 +829,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
         </DropdownMenuContent>
       </DropdownMenu>
       {myMentionedMessageIds.size > 0 && (
-        <FilterPill icon={<UserCheck />} label="Mentions me" value={mentionsFilterActive ? 'On' : undefined} onClick={() => setMentionsFilterActive((v) => !v)} onClear={() => setMentionsFilterActive(false)} />
+        <FilterPill icon={<UserCheck />} label="Mentions me" collapsible value={mentionsFilterActive ? 'On' : undefined} onClick={() => setMentionsFilterActive((v) => !v)} onClear={() => setMentionsFilterActive(false)} />
       )}
       <DropdownMenu>
         <Hint label="Sort">
@@ -806,6 +863,30 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
   )
   const Composer = (
     <form onSubmit={handleSubmit} className="flex shrink-0 flex-col gap-1.5">
+      {/* Who sees it: everyone on the engagement, or the firm's team only. Stays as chosen, so a
+          run of internal notes doesn't slip into a reply. */}
+      {canNote && (
+        <div role="radiogroup" aria-label="Who sees this comment" className="inline-flex self-start rounded-control border border-line p-0.5 text-caption">
+          <button
+            type="button"
+            role="radio"
+            aria-checked={!internalMode}
+            onClick={() => setInternalMode(false)}
+            className={cn('rounded-[4px] px-2 py-0.5 transition-colors', !internalMode ? 'bg-surface-muted text-fg' : 'text-fg-muted hover:text-fg')}
+          >
+            Reply
+          </button>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={internalMode}
+            onClick={() => setInternalMode(true)}
+            className={cn('inline-flex items-center gap-1 rounded-[4px] px-2 py-0.5 transition-colors', internalMode ? 'bg-tag-yellow-bg text-tag-yellow-fg' : 'text-fg-muted hover:text-fg')}
+          >
+            <Lock className="h-3 w-3" /> Internal note
+          </button>
+        </div>
+      )}
       {/* The reminder, as a chip, before it is sent. */}
       {remindAt && currentMentions.length > 0 && (
         <div className="flex">
@@ -822,6 +903,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
         ref={composerRef}
         className={cn(
           'relative rounded-control border border-line-strong bg-surface focus-within:border-action/60 focus-within:ring-2 focus-within:ring-action/20',
+          internalMode && 'border-tag-yellow-fg/40 bg-tag-yellow-bg focus-within:border-tag-yellow-fg/60 focus-within:ring-tag-yellow-fg/20',
           submitting && 'opacity-60',
         )}
       >
@@ -846,8 +928,8 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
           rows={1}
           onScroll={(e) => { if (backdropRef.current) backdropRef.current.scrollTop = e.currentTarget.scrollTop }}
           disabled={submitting}
-          placeholder="Leave a comment…"
-          aria-label="Comment"
+          placeholder={internalMode ? "Internal note — only the firm's team sees this…" : 'Leave a comment…'}
+          aria-label={internalMode ? 'Internal note' : 'Comment'}
           onChange={(e) => {
             setNewContent(e.target.value)
             syncQueries(e.target.value, e.target.selectionStart ?? e.target.value.length)
@@ -1028,6 +1110,16 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
     <div className="flex h-full min-h-0 min-w-0 flex-col gap-3 p-4">
       <TooltipProvider>
         {error && <div className="shrink-0 rounded-card bg-tag-red-bg px-3 py-2 text-small text-tag-red-fg">{error}</div>}
+        {focusDocId && (
+          <div role="radiogroup" aria-label="Which comments" className="inline-flex shrink-0 self-start rounded-control border border-line p-0.5 text-caption">
+            <button type="button" role="radio" aria-checked={focusOnly} onClick={() => setFocusOnly(true)} className={cn('rounded-[4px] px-2 py-0.5 transition-colors', focusOnly ? 'bg-surface-muted text-fg' : 'text-fg-muted hover:text-fg')}>
+              About this file · {aboutCount}
+            </button>
+            <button type="button" role="radio" aria-checked={!focusOnly} onClick={() => setFocusOnly(false)} className={cn('rounded-[4px] px-2 py-0.5 transition-colors', !focusOnly ? 'bg-surface-muted text-fg' : 'text-fg-muted hover:text-fg')}>
+              Whole thread · {messages.length}
+            </button>
+          </div>
+        )}
         {toolbar}
 
         {sortOrder === 'latestFirst' ? Composer : null}
@@ -1042,7 +1134,9 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
           ) : visibleMessages.length === 0 ? (
             <div className="flex flex-col items-center justify-center gap-2 py-10 text-small text-fg-muted">
               <MessagesSquare className="h-6 w-6 text-fg-subtle" />
-              {messages.length === 0 ? 'No comments yet. Start the conversation below.' : 'No comments match these filters.'}
+              {messages.length === 0 ? 'No comments yet. Start the conversation below.'
+                : focusOnly && aboutCount === 0 ? 'Nothing about this file yet. A comment below is tagged with it.'
+                : 'No comments match these filters.'}
             </div>
           ) : (
             <div className="flex flex-col">
@@ -1062,6 +1156,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
                     id={`comment-${msg.id}`}
                     className={cn(
                       'group relative flex gap-2.5 rounded-control px-2 py-2.5 transition-colors hover:bg-surface-hover',
+                      msg.isInternal && 'bg-tag-yellow-bg hover:bg-tag-yellow-bg',
                       focusedCommentId === msg.id && 'bg-surface-selected',
                       mentionedMe && 'shadow-[inset_2px_0_0_hsl(var(--ui-action))]',
                     )}
@@ -1075,6 +1170,13 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
                         <Hint label={formatDateTimeWithTZ(msg.createdAt)}>
                           <span className="shrink-0 cursor-default text-caption text-fg-subtle">{formatRelativeTime(msg.createdAt)}</span>
                         </Hint>
+                        {msg.isInternal && (
+                          <Hint label="Only the firm's team sees this">
+                            <span className="inline-flex shrink-0 items-center gap-1 self-center text-caption font-medium text-tag-yellow-fg">
+                              <Lock className="h-2.5 w-2.5" /> Internal
+                            </span>
+                          </Hint>
+                        )}
                         {/* The reminder is state, not an action: it stays visible. */}
                         {reminderDates.has(msg.id) && (() => {
                           const due = reminderDates.get(msg.id)!

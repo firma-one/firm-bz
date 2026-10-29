@@ -1,4 +1,4 @@
-import type { ActivityStatus } from '@/lib/sharing-settings'
+import { ACTIVITY_STAGES, type ActivityStatus } from '@/lib/sharing-settings'
 
 export type EngagementRoleSlug = 'eng_admin' | 'eng_member' | 'eng_ext_collaborator' | 'eng_viewer'
 
@@ -9,6 +9,12 @@ interface StageRoleConfig {
 }
 
 export const STAGE_ROLE_MAP: Record<ActivityStatus, StageRoleConfig> = {
+  // Before the Board: the firm's own, as To do is.
+  not_started: {
+    showTo: ['eng_admin', 'eng_member'],
+    ecEnabled: false,
+    evEnabled: false,
+  },
   to_do: {
     showTo: ['eng_admin', 'eng_member'],
     ecEnabled: false,
@@ -41,7 +47,7 @@ export function canApproveDeliverable(role: EngagementRoleSlug): boolean {
   return role === 'eng_admin'
 }
 
-const STAGE_ORDER: Record<ActivityStatus, number> = { to_do: 0, in_progress: 1, in_review: 2, approved: 3 }
+export const STAGE_ORDER: Record<ActivityStatus, number> = { not_started: 0, to_do: 1, in_progress: 2, in_review: 3, approved: 4 }
 
 /**
  * Returns the set of target statuses a role may move a deliverable to from `currentStatus`.
@@ -51,7 +57,7 @@ export function getAllowedTransitions(role: EngagementRoleSlug, currentStatus: A
   if (currentStatus === 'approved') return [] // nothing can move back from approved
 
   const currentIdx = STAGE_ORDER[currentStatus]
-  const allStatuses: ActivityStatus[] = ['to_do', 'in_progress', 'in_review', 'approved']
+  const allStatuses = ACTIVITY_STAGES
 
   return allStatuses.filter((target) => {
     if (target === currentStatus) return false

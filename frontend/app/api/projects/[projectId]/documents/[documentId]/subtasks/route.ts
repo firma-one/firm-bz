@@ -4,8 +4,10 @@ import { createAdminClient } from '@/utils/supabase/admin'
 import { prisma } from '@/lib/prisma'
 import { getFileInfo } from '@/lib/file-utils'
 import { resolveProjectContext } from '@/lib/resolve-project-context'
-import { canViewProject } from '@/lib/permission-helpers'
-import { parseSettingsFromDb } from '@/lib/sharing-settings'
+import { canViewProject, getProjectPersona } from '@/lib/permission-helpers'
+import { documentStage, isOnBoard, parseSettingsFromDb } from '@/lib/sharing-settings'
+import { blockedOf } from '@/lib/files/blocked'
+import { currentApproval } from '@/lib/files/approvals'
 import { resolveDisplayName } from '@/lib/auth/display-name'
 
 /**
@@ -146,8 +148,13 @@ export async function GET(
       return crumbs
     }
 
-    const subtasksRaw = children.map((c) => {
-      const parsed = parseSettingsFromDb(c.settings)
+    // A client sees neither the documents not yet on the Board nor what the firm flags as blocked:
+    // both are the firm's own (.claude/plans/deliverable-stages-blocked.md). Decided by the caller's
+    // real role, not the persona it asks for.
+    const role = await getProjectPersona(ctx.firmId, ctx.clientId, ctx.projectId)
+    const isFirm = role === 'eng_admin' || role === 'eng_member'
+
+    const subtasksRaw = children.filter((c) => isFirm || isOnBoard(documentStage(c.settings))).map((c) => {
       const assigneeUserId = (c.settings as any)?.assigneeUserId ?? null
       const breadcrumb = buildBreadcrumb(c.parentId ?? null)
       return {
@@ -159,7 +166,13 @@ export async function GET(
         docId: c.docId ?? null,
         dueDate: c.dueDate?.toISOString() ?? null,
         assigneeUserId,
-        status: parsed.activity?.status ?? null,
+        status: documentStage(c.settings),
+        blocked: isFirm ? blockedOf(c.settings) : null,
+        // The approval that stands, named on the client (a Google version's name is its saved time).
+        approval: (() => {
+          const a = currentApproval(c.settings)
+          return a ? { version: { label: a.version.label ?? null, savedAt: a.version.savedAt }, approvedAt: a.approvedAt } : null
+        })(),
         breadcrumb,
       }
     })

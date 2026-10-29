@@ -2,15 +2,19 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { prisma } from '@/lib/prisma'
 import { getFileInfo } from '@/lib/file-utils'
-import { getPermissionAdapter } from '@/lib/connectors/registry'
-import type { ConnectorRole } from '@/lib/connectors/types'
+import { unlockFileInStorage } from '@/lib/files/storage-lock'
+import { approvalsOf, approvalVersionName, currentApproval } from '@/lib/files/approvals'
+import { applyStageChange } from '@/lib/files/apply-stage-change'
+import { STAGE_ROW_SELECT, applyDerivedMove, derivedMove } from '@/lib/files/deliverable-stage'
+import { deliverableOf } from '@/lib/files/deliverable-of'
 import { requireEngagementMember, isEngagementLeadRole } from '@/lib/engagement-access'
-import { getLock } from '@/lib/sharing-settings'
+import { documentStage, getLock } from '@/lib/sharing-settings'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 
 /**
  * PATCH /api/projects/[projectId]/documents/[documentId]/sharing/unlock
- * Restore Drive roles recorded at lock time (Engagement Lead only).
+ * Restore Drive roles recorded at lock time (Engagement Lead only). An approved document goes back
+ * to To do with its approval kept and marked reopened (.claude/plans/document-approval-record.md).
  */
 export async function PATCH(
   _request: NextRequest,
@@ -62,37 +66,21 @@ export async function PATCH(
       return NextResponse.json({ error: 'No active storage connection' }, { status: 500 })
     }
 
-    const permissionAdapter = await getPermissionAdapter(connectorId)
-    if (permissionAdapter) {
-      // previousRole may be stored as either Google-native strings (writer/reader/...) from
-      // older locks, or the provider-agnostic ConnectorRole vocabulary (editor/viewer/commenter)
-      // from locks created after the registry migration — normalize both.
-      const toConnectorRole = (r: string): ConnectorRole | null => {
-        if (r === 'writer' || r === 'fileOrganizer' || r === 'organizer' || r === 'editor') return 'editor'
-        if (r === 'commenter') return 'commenter'
-        if (r === 'reader' || r === 'viewer') return 'viewer'
-        return null
-      }
-      for (const row of (lockData.downgraded ?? [])) {
-        const role = toConnectorRole(row.previousRole)
-        if (role) {
-          await permissionAdapter.patchFilePermissionRole(
-            connectorId,
-            fileInfo.externalId,
-            row.permissionId,
-            role
-          )
-        }
-      }
-
-      await permissionAdapter.setFileContentReadOnly(connectorId, fileInfo.externalId, false)
-    }
+    // The file itself: the roles recorded at lock time come back, the content is editable again.
+    await unlockFileInStorage(connectorId, fileInfo.externalId, lockData.downgraded ?? [])
 
     const prevSettings = (existing.settings as Record<string, unknown>) || {}
     const share = (prevSettings.share as Record<string, unknown> | undefined) || {}
+    // The approval that stood is reopened, not removed: the decision record keeps it, with when
+    // and by whom it was reopened (.claude/plans/document-approval-record.md, section 4).
+    const reopened = currentApproval(existing.settings)
+    const now = new Date().toISOString()
     const nextSettings: Record<string, unknown> = {
       ...prevSettings,
       share: { ...share, finalizedAt: null },
+      ...(reopened ? {
+        approvals: approvalsOf(existing.settings).map((r) => (r.id === reopened.id ? { ...r, unlockedAt: now, unlockedBy: user.id } : r)),
+      } : {}),
     }
     delete nextSettings.lock
 
@@ -101,6 +89,24 @@ export async function PATCH(
       data: { settings: nextSettings as object, updatedAt: new Date() },
     })
 
+    // An approved document goes back to To do for the next phase (Deepak, 2026-10-29), and its
+    // deliverable follows. Unlock is its own action, so the move skips the one-step rule; a
+    // backward move takes no client access away. A document only finalized (no approval) keeps
+    // its stage.
+    if (documentStage(existing.settings) === 'approved') {
+      const row = await prisma.engagementDocument.findUnique({ where: { id: existing.id }, select: STAGE_ROW_SELECT })
+      if (row) {
+        const moveCtx = { projectId, firmId: fileInfo.organizationId, clientId: existing.clientId ?? null, actorUserId: user.id }
+        const deliverableRef = await deliverableOf(projectId, row.parentId)
+        const deliverable = deliverableRef
+          ? await prisma.engagementDocument.findUnique({ where: { id: deliverableRef.id }, select: STAGE_ROW_SELECT })
+          : null
+        const move = deliverable ? await derivedMove(projectId, deliverable, new Map([[row.id, 'to_do' as const]])) : null
+        await applyStageChange(row, 'to_do', moveCtx, { auditMeta: { reopened: true, ...(reopened ? { approvalId: reopened.id, versionName: approvalVersionName(reopened) } : {}) } })
+        if (move) await applyDerivedMove(move, moveCtx)
+      }
+    }
+
     audit(AUDIT_EVENT.DOCUMENT_UNLOCKED)
       .scope(AUDIT_SCOPE.DOCUMENT)
       .firm(fileInfo.organizationId)
@@ -108,7 +114,7 @@ export async function PATCH(
       .engagement(projectId)
       .document(existing.id)
       .actor(user.id)
-      .meta({ fileName: existing.fileName })
+      .meta({ fileName: existing.fileName, ...(reopened ? { approvalId: reopened.id, versionName: approvalVersionName(reopened) } : {}) })
       .fireAndForget()
 
     return NextResponse.json({ ok: true })

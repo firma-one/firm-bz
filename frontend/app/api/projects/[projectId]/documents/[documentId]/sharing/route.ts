@@ -2,13 +2,17 @@ import { NextRequest, NextResponse } from 'next/server'
 import { withoutAgentIds } from '@/lib/ai/agent-email'
 import { createClient } from '@/utils/supabase/server'
 import { prisma } from '@/lib/prisma'
-import { buildSettingsForDb, parseSettingsFromDb, type ShareBlock } from '@/lib/sharing-settings'
+import { assetSettingsOf, buildSettingsForDb, parseSettingsFromDb, type ShareBlock } from '@/lib/sharing-settings'
 import { syncDocumentSharingUsers } from '@/lib/sync-document-sharing'
 import { getFileInfo } from '@/lib/file-utils'
 import { safeInngestSend } from '@/lib/inngest/client'
 import { resolveProjectContext } from '@/lib/resolve-project-context'
-import { canManageProject, canViewProject } from '@/lib/permission-helpers'
-import { resolveEngagementConnector } from '@/lib/connectors/resolve-client-connector'
+import { canManageProject, canViewProject, getProjectPersona } from '@/lib/permission-helpers'
+import { withoutFirmOnlySettings } from '@/lib/files/blocked'
+import { deliverableOf } from '@/lib/files/deliverable-of'
+import { writeNativeDescription } from '@/lib/files/native-description'
+import { SearchService } from '@/lib/services/search-service'
+import { resolveEngagementConnector, resolveEngagementConnectorId } from '@/lib/connectors/resolve-client-connector'
 import { getPermissionAdapter, getContentAdapter } from '@/lib/connectors/registry'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 import { assertFirmSubscriptionAccess } from '@/lib/billing/subscription-gate'
@@ -120,7 +124,11 @@ export async function GET(
         },
       },
     })
-    return NextResponse.json({ sharing: toJsonSafeSharing(doc as Record<string, unknown> | null) })
+    // A client isn't sent what is the firm's own (a document's Blocked flag).
+    const persona = await getProjectPersona(ctx.firmId, ctx.clientId, projectId)
+    const forClient = persona === 'eng_ext_collaborator' || persona === 'eng_viewer'
+    const visible = doc && forClient ? { ...doc, settings: withoutFirmOnlySettings(doc.settings) } : doc
+    return NextResponse.json({ sharing: toJsonSafeSharing(visible as Record<string, unknown> | null) })
   } catch (e) {
     console.error('GET sharing error', e)
     return NextResponse.json({ error: 'Failed to load sharing' }, { status: 500 })
@@ -161,6 +169,14 @@ export async function PUT(
           updatedBy: user.id,
         },
       })
+      // After the save, not before it answers: its vector, so search by meaning finds it by what it's
+      // for, and the storage's own description field where there is one (lib/files/native-description.ts).
+      const description = body.description as string
+      Promise.resolve().then(async () => {
+        await SearchService.refreshEmbedding(doc.id).catch((e) => console.error('[description] vector refresh failed', e))
+        const connectorId = await resolveEngagementConnectorId(projectId, doc.connectorId)
+        if (connectorId) await writeNativeDescription(connectorId, doc.externalId, description)
+      })
       return NextResponse.json({ sharing: toJsonSafeSharing(updated as Record<string, unknown>) })
     }
 
@@ -171,6 +187,28 @@ export async function PUT(
       })
       if (!doc) return NextResponse.json({ error: 'Document not found' }, { status: 404 })
       if (!doc.isFolder) return NextResponse.json({ error: 'Cannot mark a file as a Deliverable' }, { status: 400 })
+      // Deliverables don't nest: a folder inside one, or one holding one, can't become one. The
+      // menu says so too; a folder made a moment ago may not be known to it yet.
+      const insideOf = await deliverableOf(projectId, doc.parentId)
+      if (insideOf) {
+        return NextResponse.json({ error: `It's inside ${insideOf.docId ? `${insideOf.docId} · ` : ''}${insideOf.name}, which is a deliverable already.` }, { status: 409 })
+      }
+      const nestedDeliverable = (await (prisma as any).$queryRawUnsafe(
+        `WITH RECURSIVE descendants AS (
+           SELECT id, "externalId", "isFolder", settings, 1 AS depth FROM platform.engagement_documents
+           WHERE "parentId" = $1 AND "engagementId" = $2::uuid
+           UNION ALL
+           SELECT ed.id, ed."externalId", ed."isFolder", ed.settings, d.depth + 1 FROM platform.engagement_documents ed
+           INNER JOIN descendants d ON ed."parentId" = d."externalId"
+           WHERE ed."engagementId" = $2::uuid AND d.depth < 50
+         )
+         SELECT id FROM descendants WHERE "isFolder" = true AND settings->'share'->>'createdAt' IS NOT NULL LIMIT 1`,
+        doc.externalId,
+        projectId,
+      )) as Array<{ id: string }>
+      if (nestedDeliverable.length > 0) {
+        return NextResponse.json({ error: 'A folder inside it is a deliverable already.' }, { status: 409 })
+      }
 
       const engagement = await prisma.engagement.findUnique({
         where: { id: projectId },
@@ -285,10 +323,10 @@ export async function PUT(
       if (!doc) return NextResponse.json({ error: 'Document not found' }, { status: 404 })
       if (!doc.isFolder) return NextResponse.json({ error: 'Only a folder can be demoted from a deliverable' }, { status: 400 })
 
-      // Clear settings (removes share.createdAt, activity, etc.)
+      // Clear the sharing settings (share.createdAt, activity, etc.), keeping the document's own description and assignee
       await prisma.engagementDocument.update({
         where: { id: doc.id },
-        data: { settings: {}, updatedAt: new Date(), updatedBy: user.id },
+        data: { settings: assetSettingsOf(doc.settings) as object, updatedAt: new Date(), updatedBy: user.id },
       })
 
       // Revoke all GRANTED and INHERITED sharing rows for this folder
@@ -409,7 +447,7 @@ export async function PUT(
 
         await prisma.engagementDocument.update({
           where: { id: existing.id },
-          data: { settings: {}, slug: null, updatedAt: new Date() },
+          data: { settings: assetSettingsOf(existing.settings) as object, slug: null, updatedAt: new Date() },
         })
 
         // Revoke Drive permissions granted via regrant for any previously enabled personas
@@ -754,7 +792,7 @@ export async function DELETE(
 
     await prisma.engagementDocument.update({
       where: { id: existing.id },
-      data: { settings: {}, slug: null, updatedAt: new Date() },
+      data: { settings: assetSettingsOf(existing.settings) as object, slug: null, updatedAt: new Date() },
     })
 
     audit(AUDIT_EVENT.DOCUMENT_SHARE_DELETED)
