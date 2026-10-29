@@ -21,10 +21,24 @@ export type PlatformMaintenanceConfig = {
 
 const CONFIG_KEY = 'platform_maintenance'
 
-export async function getPlatformMaintenanceConfig(): Promise<PlatformMaintenanceConfig | null> {
-  const row = await prisma.platformConfig.findUnique({ where: { key: CONFIG_KEY } })
-  if (!row) return null
-  const raw = row.value as unknown as Partial<PlatformMaintenanceConfig>
+/**
+ * In-process cache for the platform maintenance config.
+ *
+ * This row is read on every `/d/*` navigation (proxy.ts's middleware check), plus a 60s client
+ * poll from every open tab (usePlatformMaintenanceStatus) — all funneling into one `findUnique`
+ * on a single-row table. None of that traffic needs sub-10-second freshness, so a short TTL
+ * cache (mirroring the agentIdCache pattern in lib/prisma.ts) collapses a burst of concurrent
+ * reads into one query instead of one-per-request. This is what was exhausting the connection
+ * pool (connection_limit=1) during the 2026-10-29 09:35 Files-page timeout incident.
+ *
+ * `setPlatformMaintenanceConfig` writes through this cache so an admin toggling maintenance, or
+ * the Inngest grace-period job activating it, sees its own write immediately — only other,
+ * unrelated readers can see a value up to CONFIG_CACHE_TTL_MS stale.
+ */
+const CONFIG_CACHE_TTL_MS = 10_000
+let configCache: { value: PlatformMaintenanceConfig | null; loadedAt: number } | null = null
+
+function toConfig(raw: Partial<PlatformMaintenanceConfig>): PlatformMaintenanceConfig {
   return {
     active: raw.active ?? false,
     gracePeriod: raw.gracePeriod ?? false,
@@ -38,12 +52,24 @@ export async function getPlatformMaintenanceConfig(): Promise<PlatformMaintenanc
   }
 }
 
+export async function getPlatformMaintenanceConfig(): Promise<PlatformMaintenanceConfig | null> {
+  if (configCache && Date.now() - configCache.loadedAt < CONFIG_CACHE_TTL_MS) {
+    return configCache.value
+  }
+
+  const row = await prisma.platformConfig.findUnique({ where: { key: CONFIG_KEY } })
+  const value = row ? toConfig(row.value as unknown as Partial<PlatformMaintenanceConfig>) : null
+  configCache = { value, loadedAt: Date.now() }
+  return value
+}
+
 export async function setPlatformMaintenanceConfig(config: PlatformMaintenanceConfig): Promise<void> {
   await prisma.platformConfig.upsert({
     where: { key: CONFIG_KEY },
     create: { key: CONFIG_KEY, value: config as never },
     update: { value: config as never },
   })
+  configCache = { value: config, loadedAt: Date.now() }
 }
 
 export async function isPlatformMaintenanceActive(): Promise<boolean> {

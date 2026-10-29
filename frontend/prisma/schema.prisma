@@ -705,6 +705,7 @@ model EngagementDocument {
 
   @@unique([engagementId, firmId, externalId])
   @@index([firmId, clientId, engagementId])
+  @@index([firmId, parentId])
   @@index([embedding])
   @@map("engagement_documents")
   @@schema("platform")
