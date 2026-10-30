@@ -76,7 +76,7 @@ How a run plays, picked on the tour panel's start and switchable mid-run from it
   worked out from how much the card says (`autoplayDuration`: about 300 words a minute plus a beat,
   within 5–15 s) or set on the step (`duration`). A line along the card's foot fills as it runs.
   Pause holds it, and so does pointing at the card or the page being hidden. Next and Back still work.
-  The whole tour plays through; a chapter or section stops on its end card.
+  The whole tour plays through; a chapter or section stops on the panel's ending.
 - **Step by step** ("guided"): waits for Next, as before.
 - **Explore** ("unguided"): no step cards and no dimmed page. The tour panel is the tour: a click
   takes the visitor to that part's page and pulses an outline around where it is. Switching back to
@@ -92,7 +92,7 @@ mode (Autoplay at first).
   URL so Back doesn't land on the deep link. An unknown id is ignored.
 - `tourGuideHref(id)` is `/tour?guide=<id>`; the first step carries its own route.
 
-## Runs, the step card and the end card
+## Runs, the step card and the ending
 
 - A run is one node with everything under it, or the whole tour.
 - Starting a run (a node, the whole tour, Resume, or a jump from the tour panel) navigates to the
@@ -103,8 +103,8 @@ mode (Autoplay at first).
   little longer (`settle`), or the card points at where the target was mid-animation.
 - The step card shows where the step sits ("Engagements › Files › Details") above its title, and
   counts within that section.
-- **A chapter or section ends** on an end card: "Next: <what follows in the outline>", Done, and
-  "All chapters". **The whole tour** runs straight through and ends on the outro modal.
+- **A chapter or section ends** on the panel's ending: "Next: <what follows in the outline>", Done,
+  and "All chapters". **The whole tour** runs straight through and ends on "That's the tour".
 
 ## The tour panel
 
@@ -124,6 +124,10 @@ mode switch unclear, and the pane's side-to-side jumps disconcerting).
   mode as a pill that opens the three to switch mid-run (Pause beside it in Autoplay), and the
   outline: chapters, the current one open to its sections, where the run is, what's been seen, a
   click to anywhere. It folds to one line and closes the tour (progress saved).
+- **Ending** (2026-10-30): the same corner and glass, the page undimmed. The whole tour ends on
+  "That's the tour": Replay (back to the start), Done, Sign up. A chapter or section ends on "That's
+  Files · Up next: Engagements › Board": All chapters, Done, Next. These replace the centered end
+  modals, which broke the one-panel model. Focus goes to the primary button; Escape is Done.
 - **It keeps to its corner.** When the current step's target would sit under the open panel, it folds
   to its head in place and opens again on a step that leaves room. A target in the very corner (Ask
   Brio) moves the folded head just past it along the bottom edge, where the step card, which opens
@@ -135,7 +139,7 @@ mode switch unclear, and the pane's side-to-side jumps disconcerting).
 
 ### Frosted glass
 
-The panel, the step cards and the end cards are frosted (`TOUR_GLASS_CLASS`: 80% white over a blur
+The panel and the step cards are frosted (`TOUR_GLASS_CLASS`: 80% white over a blur
 and saturation of the page, a faint edge); the start's backdrop blurs the page softly instead of a
 flat dim. Joyride's own overlay stays a plain dim, so the context around each highlighted spot stays
 readable. Tour chrome only: the app's own surfaces stay solid. "Product tour" replaces "Guided tour"

@@ -101,9 +101,9 @@ interface DemoTourContextValue {
     launch: number
     showIntroModal: boolean
     showOutroModal: boolean
-    /** The chapter or section just finished, while its end card is open. */
+    /** The chapter or section just finished, while the panel shows its ending. */
     finishedNode: TourNodeId | null
-    /** True once the visitor has finished the whole tour at least once — drives the topbar Sign Up CTA after the outro modal is dismissed. */
+    /** True once the visitor has finished the whole tour at least once — drives the topbar Sign Up CTA once the panel's ending is dismissed. */
     hasCompletedTour: boolean
     completedNodes: TourNodeId[]
     /** Non-null when there's a saved mid-run position the visitor can resume, persisted in localStorage. */
@@ -231,7 +231,7 @@ export function DemoTourProvider({ children }: { children: ReactNode }) {
         setCompletedNodes(next)
     }
 
-    /** Completed: a chapter or section ends on its end card, the whole tour on the outro modal. */
+    /** Completed: the panel shows the ending, of a chapter or section, or of the whole tour. */
     const endTour = (completed?: boolean) => {
         setRun(false)
         setActive(false)

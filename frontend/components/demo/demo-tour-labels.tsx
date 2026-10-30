@@ -66,7 +66,7 @@ export const TOUR_MODE_LABELS: Record<TourMode, { label: string; icon: ReactNode
 }
 
 /** The tour's frosted glass: a mostly opaque white over a blur of the page, with a faint edge, so
- * text on it reads whatever is behind. For the tour panel, the step cards and the end cards; the
+ * text on it reads whatever is behind. For the tour panel and the step cards; the
  * app's own surfaces stay solid. */
 export const TOUR_GLASS_CLASS = 'border border-white/70 bg-white/90 shadow-popover ring-1 ring-black/[0.06] backdrop-blur-xl backdrop-saturate-150'
 

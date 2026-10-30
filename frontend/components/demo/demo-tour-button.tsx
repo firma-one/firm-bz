@@ -5,12 +5,12 @@ import { useDemoTour } from '@/lib/demo/demo-tour-context'
 import { Hint } from '@/components/ui/tooltip'
 
 /** A quiet floating button in the bottom-right corner
- * that replays the tour, hidden while the tour panel is open (to start, running, or exploring). */
+ * that replays the tour, hidden while the tour panel is open (to start, running, exploring, or ending). */
 export function DemoTourButton() {
-    const { restartTour, run, active, showIntroModal } = useDemoTour()
+    const { restartTour, run, active, showIntroModal, showOutroModal, finishedNode } = useDemoTour()
 
     // The tour panel sits in the same corner.
-    if (run || active || showIntroModal) return null
+    if (run || active || showIntroModal || showOutroModal || finishedNode) return null
 
     return (
         // Hidden while a pane is docked on the right (demoPaneOpen): it would sit on the pane's buttons.

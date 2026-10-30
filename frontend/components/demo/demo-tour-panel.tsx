@@ -1,14 +1,15 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import Link from 'next/link'
 import * as DialogPrimitive from '@radix-ui/react-dialog'
-import { Check, ChevronDown, ChevronRight, History, MapPinned, Pause, Play, X } from 'lucide-react'
+import { ArrowRight, Check, ChevronDown, ChevronRight, History, MapPinned, Pause, Play, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { useDemoTour } from '@/lib/demo/demo-tour-context'
-import { TOUR_MODES, TOUR_NODES, TOUR_OUTLINE, tourNode, tourSubtree, type PlacedTourNode, type TourMode, type TourNodeId } from '@/lib/demo/tour-chapters'
+import { TOUR_MODES, TOUR_NODES, TOUR_OUTLINE, nextTourNode, tourNode, tourSubtree, type PlacedTourNode, type TourMode, type TourNodeId } from '@/lib/demo/tour-chapters'
 import { isNodeSeen, tourSteps } from '@/components/demo/demo-tour-steps'
 import { TOUR_GLASS_CLASS, TOUR_MODE_LABELS, TOUR_NODE_ICONS, TourNodePlace, TourNodeTitle } from '@/components/demo/demo-tour-labels'
 
@@ -24,13 +25,15 @@ const ICON_BUTTON_CLASS =
  * The product tour's one panel (.claude/plans/tour-chapters.md), always in the bottom-right corner
  * and frosted over the page. Before a run it is the start: how the tour plays, Resume, and every
  * chapter and section a click away. During a run it is the outline: where the run is, what's been
- * seen, the mode, and a click to anywhere. Same corner, same rows, same marks in both.
+ * seen, the mode, and a click to anywhere. After a run it is the ending: what's next, Done, and
+ * Sign up or on to the next part. Same corner, same glass, throughout.
  */
 export function DemoTourPanel() {
     return (
         <>
             <TourStart />
             <TourRunning />
+            <TourFinished />
         </>
     )
 }
@@ -479,6 +482,83 @@ function TourRunning() {
                     </ul>
                 </nav>
             </Collapse>
+        </aside>
+    )
+}
+
+/**
+ * After a run, in the same corner and the same glass, with the page left undimmed to explore. The
+ * whole tour ends on "That's the tour": Replay (back to the start), Done, Sign up. A chapter or
+ * section ends on "That's Files": All chapters, Done, and on to what follows in the outline.
+ */
+function TourFinished() {
+    const { showOutroModal, finishedNode, endTour, closeNodeEnd, restartTour, startNode } = useDemoTour()
+    const open = showOutroModal || finishedNode !== null
+    const finished = finishedNode ? tourNode(finishedNode) : null
+    const next = finishedNode ? nextTourNode(finishedNode) : null
+    const done = () => (finishedNode ? closeNodeEnd() : endTour(false))
+    const primaryRef = useRef<HTMLElement>(null)
+
+    // The next move is a keypress away, and Escape is Done, as the modal they replace had it. Focus
+    // waits a beat: the run's teardown (Joyride, a menu the tour held open) hands focus back first.
+    useEffect(() => {
+        if (!open) return
+        const focus = setTimeout(() => primaryRef.current?.focus({ preventScroll: true }), 120)
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === 'Escape' && !e.defaultPrevented) done()
+        }
+        window.addEventListener('keydown', onKey)
+        return () => {
+            clearTimeout(focus)
+            window.removeEventListener('keydown', onKey)
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [open, finishedNode])
+
+    if (!open) return null
+
+    return (
+        <aside
+            aria-label="Product tour"
+            className={cn(TOUR_GLASS_CLASS, 'fixed bottom-4 right-4 z-[10051] flex w-72 max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-card text-fg animate-in fade-in slide-in-from-bottom-2 duration-300')}
+        >
+            <PanelHead
+                title={<p className="truncate text-ui font-semibold text-fg">That&apos;s {finished ? <TourNodeTitle id={finished.id} /> : 'the tour'}</p>}
+                caption={finished && finished.ancestors.length > 0 ? <>Product tour · <TourNodePlace id={finished.ancestors[finished.ancestors.length - 1].id} /></> : 'Product tour'}
+            />
+            <p className="px-3.5 text-small leading-relaxed text-fg-muted">
+                {finished
+                    ? next
+                        ? <>Up next: <span className="text-fg"><TourNodePlace id={next.id} /></span>.</>
+                        : 'That was the last part of the tour. The sample data is yours to explore; nothing here is saved.'
+                    : 'The sample data is yours to explore; nothing here is saved. Replay any time from the map icon at the top.'}
+            </p>
+            <div className="mt-3 flex items-center gap-1.5 border-t border-black/[0.06] px-3.5 py-2.5">
+                <Button variant="ghost" size="sm" onClick={restartTour} className="shrink-0">
+                    {finished ? 'All chapters' : <><Play className="h-3.5 w-3.5" />Replay</>}
+                </Button>
+                <div className="ml-auto flex min-w-0 items-center gap-1.5">
+                    <Button variant="outline" size="sm" onClick={done} className="shrink-0">Done</Button>
+                    {finished ? (
+                        next && (
+                            <Button ref={primaryRef as React.Ref<HTMLButtonElement>} size="sm" className="min-w-0" onClick={() => startNode(next.id)}>
+                                <span className="truncate">Next: <TourNodeTitle id={next.id} /></span>
+                                <ArrowRight className="h-3.5 w-3.5 shrink-0" />
+                            </Button>
+                        )
+                    ) : (
+                        <Link
+                            ref={primaryRef as React.Ref<HTMLAnchorElement>}
+                            href="/signup"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={buttonVariants({ size: 'sm', className: 'shrink-0' })}
+                        >
+                            Sign up
+                        </Link>
+                    )}
+                </div>
+            </div>
         </aside>
     )
 }

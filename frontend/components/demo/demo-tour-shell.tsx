@@ -6,13 +6,11 @@ import { useDemoTour, hasOptedOutOfTour } from '@/lib/demo/demo-tour-context'
 import { GUIDE_PARAM, MODE_PARAM, parseGuideParam, parseModeParam } from '@/lib/demo/tour-chapters'
 import { COOKIE_CONSENT_UPDATED_EVENT, FM_COOKIE_CONSENT_KEY } from '@/lib/cookie-consent-storage'
 import { DemoTour } from '@/components/demo/demo-tour'
-import { DemoTourOutroModal } from '@/components/demo/demo-tour-outro-modal'
-import { DemoTourChapterEndModal } from '@/components/demo/demo-tour-chapter-end-modal'
 import { DemoTourButton } from '@/components/demo/demo-tour-button'
 import { DemoTourPanel } from '@/components/demo/demo-tour-panel'
 
 /** Auto-opens the tour panel's start ~800ms after every visit to /tour (not just the first), and
- * renders the tour overlay, its panel, the end cards and the floating restart button. On a first
+ * renders the tour overlay, its panel (start, outline and ending) and the floating restart button. On a first
  * visit it waits for the cookie banner to be answered: both sit at the foot of the page. Auto-opening
  * is skipped if the visitor opted out with "Don't show again" (see demo-tour-context.tsx), and when
  * the visit is a deep link: ?guide=<chapter or section> on any /tour route starts it instead, opt-out
@@ -68,8 +66,6 @@ export function DemoTourShell() {
         <>
             <DemoTour />
             <DemoTourPanel />
-            <DemoTourOutroModal />
-            <DemoTourChapterEndModal />
             <DemoTourButton />
         </>
     )
