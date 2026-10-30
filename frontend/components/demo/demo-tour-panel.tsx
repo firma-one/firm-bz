@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import * as DialogPrimitive from '@radix-ui/react-dialog'
-import { Check, ChevronDown, ChevronRight, ChevronUp, History, MapPinned, Pause, Play, X } from 'lucide-react'
+import { Check, ChevronDown, ChevronRight, History, MapPinned, Pause, Play, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -293,6 +293,25 @@ function ModeRow() {
 }
 
 /**
+ * Folds its content away by height, smoothly: a grid row easing between the content's own height
+ * and none, with a fade, so there's no fixed height to guess. Folded content stays mounted, out of
+ * the tab order; `data-collapse` lets the panel measure itself open or folded, mid-fold too.
+ */
+function Collapse({ open, children }: { open: boolean; children: ReactNode }) {
+    return (
+        <div
+            data-collapse
+            className={cn(
+                'grid transition-[grid-template-rows,opacity] duration-300 ease-out motion-reduce:transition-none',
+                open ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0',
+            )}
+        >
+            <div className="min-h-0 overflow-hidden" inert={!open}>{children}</div>
+        </div>
+    )
+}
+
+/**
  * During a run (or while exploring): the outline, frosted, in the bottom-right corner above the
  * tour's dimmed overlay and below the step card. It lists the chapters, opens the current one to its
  * sections (and the current section to its own), marks where the run is and what's been seen, and
@@ -316,21 +335,31 @@ function TourRunning() {
     const [autoFolded, setAutoFolded] = useState(false)
     const folded = userFolded || autoFolded
     const paneRef = useRef<HTMLElement>(null)
+    const navRef = useRef<HTMLElement>(null)
     const activeRef = useRef<HTMLButtonElement>(null)
     // How far the folded head moves from its corner, to clear a target in the corner itself.
     const [nudge, setNudge] = useState({ right: 0, bottom: 0 })
-    // How tall the panel stands open and folded, so either can be judged from the other.
-    const openHeight = useRef(360)
-    const foldedHeight = useRef(60)
 
-    useLayoutEffect(() => {
-        if (!paneRef.current) return
-        if (folded) foldedHeight.current = paneRef.current.offsetHeight
-        else openHeight.current = paneRef.current.offsetHeight
-    })
+    /** How tall the panel stands open and folded, worked out from what's on screen, mid-fold or not. */
+    const heights = () => {
+        const pane = paneRef.current
+        if (!pane) return { open: 360, folded: 60 }
+        const regions = Array.from(pane.querySelectorAll<HTMLElement>('[data-collapse]'))
+        const showing = regions.reduce((n, r) => n + r.offsetHeight, 0)
+        const whole = regions.reduce((n, r) => n + (r.firstElementChild as HTMLElement).scrollHeight, 0)
+        const foldedHeight = pane.offsetHeight - showing
+        return { open: foldedHeight + whole, folded: foldedHeight }
+    }
 
+    // The current part in view in the outline, scrolling the outline's own list and nothing else.
     useEffect(() => {
-        activeRef.current?.scrollIntoView({ block: 'nearest' })
+        const nav = navRef.current
+        const row = activeRef.current
+        if (!nav || !row || folded) return
+        const n = nav.getBoundingClientRect()
+        const r = row.getBoundingClientRect()
+        if (r.top < n.top) nav.scrollTop -= n.top - r.top
+        else if (r.bottom > n.bottom) nav.scrollTop += r.bottom - n.bottom
     }, [current?.node, folded])
 
     // Out of the way of the step without moving: once its target has settled, fold if it would sit under the open panel.
@@ -339,15 +368,17 @@ function TourRunning() {
         const timer = setTimeout(() => {
             const target = document.querySelector(current.target)?.getBoundingClientRect()
             if (!target) return
+            const { open, folded: foldedHeight } = heights()
             const inColumn = target.right > window.innerWidth - EDGE - RUNNING_WIDTH
-            const fold = inColumn && target.bottom > window.innerHeight - EDGE - openHeight.current
-            const underHead = fold && target.bottom > window.innerHeight - EDGE - foldedHeight.current
+            const fold = inColumn && target.bottom > window.innerHeight - EDGE - open
+            const underHead = fold && target.bottom > window.innerHeight - EDGE - foldedHeight
             setAutoFolded(fold)
             if (!underHead) setNudge({ right: 0, bottom: 0 })
             else if (target.left - 8 - RUNNING_WIDTH >= EDGE) setNudge({ right: window.innerWidth - EDGE - target.left + 8, bottom: 0 })
             else setNudge({ right: 0, bottom: window.innerHeight - EDGE - target.top + 8 })
         }, (current.settle ?? 0) + 500)
         return () => clearTimeout(timer)
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [run, exploring, current])
 
     if (!active) return null
@@ -386,7 +417,7 @@ function TourRunning() {
             ref={paneRef}
             aria-label="Product tour outline"
             // Above the tour's overlay (Joyride's zIndex, 10050), below its step card (10150).
-            className={cn(TOUR_GLASS_CLASS, 'fixed z-[10051] hidden w-64 flex-col overflow-hidden rounded-card text-fg transition-[right,bottom] animate-in fade-in slide-in-from-bottom-2 duration-200 lg:flex')}
+            className={cn(TOUR_GLASS_CLASS, 'fixed z-[10051] hidden w-64 flex-col overflow-hidden rounded-card text-fg transition-[right,bottom] duration-300 ease-out animate-in fade-in slide-in-from-bottom-2 motion-reduce:transition-none lg:flex')}
             style={{ right: EDGE + nudge.right, bottom: EDGE + nudge.bottom }}
         >
             <PanelHead
@@ -400,21 +431,23 @@ function TourRunning() {
                 }
             >
                 <button type="button" onClick={toggleFold} className={ICON_BUTTON_CLASS} aria-label={folded ? 'Show the outline' : 'Fold the outline'} aria-expanded={!folded}>
-                    {folded ? <ChevronUp /> : <ChevronDown />}
+                    <ChevronDown className={cn('transition-transform duration-300 ease-out', folded && 'rotate-180')} />
                 </button>
                 <button type="button" onClick={close} className={ICON_BUTTON_CLASS} aria-label="Close the tour; resume it from the map icon">
                     <X />
                 </button>
             </PanelHead>
 
-            {!folded && <ModeRow />}
+            <Collapse open={!folded}>
+                <ModeRow />
+            </Collapse>
 
             <div className={cn('h-0.5 shrink-0 bg-black/[0.06]', exploring && 'invisible')}>
                 <div className="h-full bg-action transition-[width] duration-300" style={{ width: `${((stepIndex + 1) / Math.max(steps.length, 1)) * 100}%` }} />
             </div>
 
-            {!folded && (
-                <nav className="subtle-scrollbar max-h-[min(24rem,calc(100vh-12rem))] overflow-y-auto p-1.5">
+            <Collapse open={!folded}>
+                <nav ref={navRef} className="subtle-scrollbar max-h-[min(24rem,calc(100vh-12rem))] overflow-y-auto p-1.5">
                     <ul className="flex flex-col gap-px">
                         {shown.map((node) => {
                             const here = node.id === current?.node
@@ -445,7 +478,7 @@ function TourRunning() {
                         })}
                     </ul>
                 </nav>
-            )}
+            </Collapse>
         </aside>
     )
 }
