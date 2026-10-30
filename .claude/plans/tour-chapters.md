@@ -133,6 +133,11 @@ mode switch unclear, and the pane's side-to-side jumps disconcerting).
   "That's the tour": Replay (back to the start), Done, Sign up. A chapter or section ends on "That's
   Files · Up next: Engagements › Board": All chapters, Done, Next. These replace the centered end
   modals, which broke the one-panel model. Focus goes to the primary button; Escape is Done.
+  The outline and the ending are one aside (2026-10-30, after Deepak found the swap abrupt): at the
+  end of a run the outline folds away as the ending opens in its place, the head's words fade
+  across and the panel eases from 256px to 288px. Next folds the ending back into the next run's
+  outline, its copy held still while it goes. Next reads just "Next →": "Up next" above it names
+  where, and "Next: Billing" truncated at the panel's width.
 - **It keeps to its corner.** When the current step's target would sit under the open panel, it folds
   to its head in place and opens again on a step that leaves room. A target in the very corner (Ask
   Brio) moves the folded head just past it along the bottom edge, where the step card, which opens

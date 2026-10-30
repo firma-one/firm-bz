@@ -27,14 +27,14 @@ const ICON_BUTTON_CLASS =
  * and frosted over the page. Before a run it is the start: how the tour plays, Resume, and every
  * chapter and section a click away. During a run it is the outline: where the run is, what's been
  * seen, the mode, and a click to anywhere. After a run it is the ending: what's next, Done, and
- * Sign up or on to the next part. Same corner, same glass, throughout.
+ * Sign up or on to the next part. Same corner, same glass, throughout; the outline and the ending
+ * are the same aside, so one folds into the other.
  */
 export function DemoTourPanel() {
     return (
         <>
             <TourStart />
-            <TourRunning />
-            <TourFinished />
+            <TourCorner />
         </>
     )
 }
@@ -98,6 +98,14 @@ function ProgressRing({ done, total, playing = false, className }: { done: numbe
     )
 }
 
+/** A part's ring away from where the run is: a check when it's been seen, partly filled when some of
+ * it has, else empty. The same in the start and the outline. */
+function SeenMark({ id, completed, className }: { id: TourNodeId; completed: TourNodeId[]; className?: string }) {
+    if (isNodeSeen(id, completed)) return <RoundCheck on small label="Seen" className={className} />
+    const { done, total } = seenSteps(id, completed)
+    return done > 0 ? <ProgressRing done={done} total={total} className={className} /> : <RoundCheck on={false} ring small className={className} />
+}
+
 /** The three modes as radio cards: each says what happens; the chosen one tinted and bordered, with a
  * round check where the others show an empty ring. */
 function ModeCards({ value, onChange }: { value: TourMode; onChange: (mode: TourMode) => void }) {
@@ -133,12 +141,11 @@ function ChapterTree({ open, onToggle }: { open: Set<TourNodeId>; onToggle: (id:
     const { completedNodes, startNode } = useDemoTour()
     // Seen; else how much of it has been, a ring that gives way to a play mark on hover: a row starts that part.
     const mark = (id: TourNodeId) => {
-        if (isNodeSeen(id, completedNodes)) return <RoundCheck on small label="Seen" />
-        const { done, total } = seenSteps(id, completedNodes)
+        if (isNodeSeen(id, completedNodes)) return <SeenMark id={id} completed={completedNodes} />
         return (
             <span className="relative flex h-3.5 w-3.5 shrink-0 items-center justify-center">
                 <span className="flex transition-opacity group-hover/row:opacity-0">
-                    {done > 0 ? <ProgressRing done={done} total={total} /> : <RoundCheck on={false} ring small />}
+                    <SeenMark id={id} completed={completedNodes} />
                 </span>
                 <Play className="absolute h-3 w-3 text-fg-subtle opacity-0 transition-opacity group-hover/row:opacity-100" aria-hidden />
             </span>
@@ -346,12 +353,13 @@ function ModeRow() {
 /**
  * Folds its content away by height, smoothly: a grid row easing between the content's own height
  * and none, with a fade, so there's no fixed height to guess. Folded content stays mounted, out of
- * the tab order; `data-collapse` lets the panel measure itself open or folded, mid-fold too.
+ * the tab order. `name` marks the region (`data-collapse`), so the panel can measure its outline open
+ * or folded, mid-fold too.
  */
-function Collapse({ open, children }: { open: boolean; children: ReactNode }) {
+function Collapse({ open, name, children }: { open: boolean; name?: string; children: ReactNode }) {
     return (
         <div
-            data-collapse
+            data-collapse={name ?? ''}
             className={cn(
                 'grid transition-[grid-template-rows,opacity] duration-300 ease-out motion-reduce:transition-none',
                 open ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0',
@@ -363,22 +371,43 @@ function Collapse({ open, children }: { open: boolean; children: ReactNode }) {
 }
 
 /**
- * During a run (or while exploring): the outline, frosted, in the bottom-right corner above the
- * tour's dimmed overlay and below the step card. It lists the chapters, opens the current one to its
- * sections (and the current section to its own), marks where the run is and what's been seen, and
- * goes anywhere on a click: within the run, or as a new run of that part.
+ * The panel during a run and after it: one aside in the bottom-right corner, frosted, above the
+ * tour's dimmed overlay (Joyride's zIndex, 10050) and below its step card (10150). At the end of a
+ * run the outline folds away and the ending opens in its place, and Next folds the ending back into
+ * the next run's outline: the panel changes in place, never one panel giving way to another.
+ *
+ * During a run (or while exploring) it is the outline. It lists the chapters, opens the current one
+ * to its sections (and the current section to its own), marks where the run is and what's been seen,
+ * and goes anywhere on a click: within the run, or as a new run of that part.
  *
  * It keeps to its corner. When the current step's target would sit under it, it folds to its
  * one-line head in place, and opens again on a step that leaves room. A target in the very corner
  * (Ask Brio) moves the folded head just past it along the bottom edge, where the step card, which
- * opens above the target, doesn't land; or just above it, when there's no room beside it. Hidden below 1024px, where the step card's
- * "Engagements › Files" says where the visitor is.
+ * opens above the target, doesn't land; or just above it, when there's no room beside it. The
+ * outline is hidden below 1024px, where the step card's "Engagements › Files" says where the visitor is.
+ *
+ * After a run the page is left undimmed to explore. The whole tour ends on "That's the tour": Replay
+ * (back to the start), Done, Sign up. A chapter or section ends on "That's Files": All chapters,
+ * Done, and on to what follows in the outline.
  */
-function TourRunning() {
-    const { mode, active, run, scope, stepIndex, completedNodes, jumpToStep, startNode, endTour, saveProgress } = useDemoTour()
+function TourCorner() {
+    const {
+        mode, active, run, scope, stepIndex, completedNodes, showOutroModal, finishedNode,
+        jumpToStep, startNode, endTour, closeNodeEnd, restartTour, saveProgress,
+    } = useDemoTour()
+    const ending = !active && (showOutroModal || finishedNode !== null)
+    // What the ending is about, kept while it folds away on Next, so its copy doesn't change mid-fold.
+    const [endedNode, setEndedNode] = useState<TourNodeId | null>(null)
+    if (ending && endedNode !== finishedNode) setEndedNode(finishedNode)
+    const finished = endedNode ? tourNode(endedNode) : null
+    const next = endedNode ? nextTourNode(endedNode) : null
+    const done = () => (finishedNode ? closeNodeEnd() : endTour(false))
+    const primaryRef = useRef<HTMLElement>(null)
+
     const exploring = mode === 'explore'
     // In Autoplay the current step counts as its time runs; otherwise once it's on screen.
     const playing = mode === 'autoplay'
+    // The run's scope and step outlast it, so the outline folds away still showing where it ended.
     const steps = useMemo(() => tourSteps(scope), [scope])
     const current = steps[stepIndex]
     const currentNode = current ? tourNode(current.node) : null
@@ -393,11 +422,11 @@ function TourRunning() {
     // How far the folded head moves from its corner, to clear a target in the corner itself.
     const [nudge, setNudge] = useState({ right: 0, bottom: 0 })
 
-    /** How tall the panel stands open and folded, worked out from what's on screen, mid-fold or not. */
+    /** How tall the panel stands with its outline open and folded, worked out from what's on screen, mid-fold or not. */
     const heights = () => {
         const pane = paneRef.current
         if (!pane) return { open: 360, folded: 60 }
-        const regions = Array.from(pane.querySelectorAll<HTMLElement>('[data-collapse]'))
+        const regions = Array.from(pane.querySelectorAll<HTMLElement>('[data-collapse="outline"]'))
         const showing = regions.reduce((n, r) => n + r.offsetHeight, 0)
         const whole = regions.reduce((n, r) => n + (r.firstElementChild as HTMLElement).scrollHeight, 0)
         const foldedHeight = pane.offsetHeight - showing
@@ -434,10 +463,27 @@ function TourRunning() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [run, exploring, current])
 
-    if (!active) return null
+    // The ending's next move is a keypress away, and Escape is Done, as the modal it replaced had it.
+    // Focus waits a beat: the run's teardown (Joyride, a menu the tour held open) hands focus back first.
+    useEffect(() => {
+        if (!ending) return
+        const focus = setTimeout(() => primaryRef.current?.focus({ preventScroll: true }), 120)
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === 'Escape' && !e.defaultPrevented) done()
+        }
+        window.addEventListener('keydown', onKey)
+        return () => {
+            clearTimeout(focus)
+            window.removeEventListener('keydown', onKey)
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [ending, finishedNode])
+
+    if (!active && !ending) return null
 
     // Chapters always; a chapter's sections while the run is in it; a section's own while the run is in that section.
     const shown = TOUR_NODES.filter((n) => n.depth === 0 || trail.has(n.ancestors[n.ancestors.length - 1].id))
+    const outlineOpen = !ending && !folded
 
     const go = (node: PlacedTourNode) => {
         const ids = new Set(tourSubtree(node.id).map((n) => n.id))
@@ -468,38 +514,56 @@ function TourRunning() {
     return (
         <aside
             ref={paneRef}
-            aria-label="Product tour outline"
-            // Above the tour's overlay (Joyride's zIndex, 10050), below its step card (10150).
-            className={cn(TOUR_GLASS_CLASS, 'fixed z-[10051] hidden w-64 flex-col overflow-hidden rounded-card text-fg transition-[right,bottom] duration-300 ease-out animate-in fade-in slide-in-from-bottom-2 motion-reduce:transition-none lg:flex')}
-            style={{ right: EDGE + nudge.right, bottom: EDGE + nudge.bottom }}
+            aria-label={ending ? 'Product tour' : 'Product tour outline'}
+            className={cn(
+                TOUR_GLASS_CLASS,
+                'fixed z-[10051] flex-col overflow-hidden rounded-card text-fg transition-[right,bottom,width] duration-300 ease-out animate-in fade-in slide-in-from-bottom-2 motion-reduce:transition-none',
+                ending ? 'flex w-72 max-w-[calc(100vw-2rem)]' : 'hidden w-64 lg:flex',
+            )}
+            style={{ right: EDGE + (ending ? 0 : nudge.right), bottom: EDGE + (ending ? 0 : nudge.bottom) }}
         >
+            {/* The head's words fade across when the outline turns into the ending, and back */}
             <PanelHead
-                title={<p className="truncate text-ui font-semibold text-fg">Product tour</p>}
+                title={
+                    <p key={ending ? 'ending' : 'outline'} className="truncate text-ui font-semibold text-fg animate-in fade-in duration-300">
+                        {ending ? <>That&apos;s {finished ? <TourNodeTitle id={finished.id} /> : 'the tour'}</> : 'Product tour'}
+                    </p>
+                }
                 caption={
-                    folded && currentNode
-                        ? <TourNodePlace id={currentNode.id} />
-                        : exploring
-                            ? <>Exploring · {scope ? <TourNodeTitle id={scope} /> : 'the whole tour'}</>
-                            : <>{stepIndex + 1} of {steps.length} · {scope ? <TourNodeTitle id={scope} /> : 'The whole tour'}</>
+                    <span key={ending ? 'ending' : 'outline'} className="animate-in fade-in duration-300">
+                        {ending
+                            ? finished && finished.ancestors.length > 0 ? <>Product tour · <TourNodePlace id={finished.ancestors[finished.ancestors.length - 1].id} /></> : 'Product tour'
+                            : folded && currentNode
+                                ? <TourNodePlace id={currentNode.id} />
+                                : exploring
+                                    ? <>Exploring · {scope ? <TourNodeTitle id={scope} /> : 'the whole tour'}</>
+                                    : <>{stepIndex + 1} of {steps.length} · {scope ? <TourNodeTitle id={scope} /> : 'The whole tour'}</>}
+                    </span>
                 }
             >
-                <button type="button" onClick={toggleFold} className={ICON_BUTTON_CLASS} aria-label={folded ? 'Show the outline' : 'Fold the outline'} aria-expanded={!folded}>
-                    <ChevronDown className={cn('transition-transform duration-300 ease-out', folded && 'rotate-180')} />
-                </button>
-                <button type="button" onClick={close} className={ICON_BUTTON_CLASS} aria-label="Close the tour; resume it from the map icon">
-                    <X />
-                </button>
+                {!ending && (
+                    <>
+                        <button type="button" onClick={toggleFold} className={ICON_BUTTON_CLASS} aria-label={folded ? 'Show the outline' : 'Fold the outline'} aria-expanded={!folded}>
+                            <ChevronDown className={cn('transition-transform duration-300 ease-out', folded && 'rotate-180')} />
+                        </button>
+                        <button type="button" onClick={close} className={ICON_BUTTON_CLASS} aria-label="Close the tour; resume it from the map icon">
+                            <X />
+                        </button>
+                    </>
+                )}
             </PanelHead>
 
-            <Collapse open={!folded}>
+            <Collapse name="outline" open={outlineOpen}>
                 <ModeRow />
             </Collapse>
 
-            <div className={cn('h-0.5 shrink-0 bg-black/[0.06]', exploring && 'invisible')}>
-                <div className="h-full bg-action transition-[width] duration-300" style={{ width: `${((stepIndex + 1) / Math.max(steps.length, 1)) * 100}%` }} />
-            </div>
+            <Collapse open={!ending}>
+                <div className={cn('h-0.5 bg-black/[0.06]', exploring && 'invisible')}>
+                    <div className="h-full bg-action transition-[width] duration-300" style={{ width: `${((stepIndex + 1) / Math.max(steps.length, 1)) * 100}%` }} />
+                </div>
+            </Collapse>
 
-            <Collapse open={!folded}>
+            <Collapse name="outline" open={outlineOpen}>
                 <nav ref={navRef} className="subtle-scrollbar max-h-[min(24rem,calc(100vh-12rem))] overflow-y-auto p-1.5">
                     <ul className="flex flex-col gap-px">
                         {shown.map((node) => {
@@ -524,11 +588,11 @@ function TourRunning() {
                                             {TOUR_NODE_ICONS[node.id]}
                                         </span>
                                         <span className="min-w-0 flex-1"><TourNodeTitle id={node.id} /></span>
-                                        {/* Where the run is, a ring filling as it goes; elsewhere seen or not */}
-                                        {current && trail.has(node.id) ? (
+                                        {/* Where the run is, a ring filling as it goes; elsewhere, and once it's over, seen or not */}
+                                        {active && current && trail.has(node.id) ? (
                                             <ProgressRing {...seenSteps(node.id, completedNodes, current, !playing)} playing={playing} className="mt-[0.2em]" />
                                         ) : (
-                                            <RoundCheck on={isNodeSeen(node.id, completedNodes)} ring small label="Seen" className="mt-[0.2em]" />
+                                            <SeenMark id={node.id} completed={completedNodes} className="mt-[0.2em]" />
                                         )}
                                     </button>
                                 </li>
@@ -537,83 +601,43 @@ function TourRunning() {
                     </ul>
                 </nav>
             </Collapse>
-        </aside>
-    )
-}
 
-/**
- * After a run, in the same corner and the same glass, with the page left undimmed to explore. The
- * whole tour ends on "That's the tour": Replay (back to the start), Done, Sign up. A chapter or
- * section ends on "That's Files": All chapters, Done, and on to what follows in the outline.
- */
-function TourFinished() {
-    const { showOutroModal, finishedNode, endTour, closeNodeEnd, restartTour, startNode } = useDemoTour()
-    const open = showOutroModal || finishedNode !== null
-    const finished = finishedNode ? tourNode(finishedNode) : null
-    const next = finishedNode ? nextTourNode(finishedNode) : null
-    const done = () => (finishedNode ? closeNodeEnd() : endTour(false))
-    const primaryRef = useRef<HTMLElement>(null)
-
-    // The next move is a keypress away, and Escape is Done, as the modal they replace had it. Focus
-    // waits a beat: the run's teardown (Joyride, a menu the tour held open) hands focus back first.
-    useEffect(() => {
-        if (!open) return
-        const focus = setTimeout(() => primaryRef.current?.focus({ preventScroll: true }), 120)
-        const onKey = (e: KeyboardEvent) => {
-            if (e.key === 'Escape' && !e.defaultPrevented) done()
-        }
-        window.addEventListener('keydown', onKey)
-        return () => {
-            clearTimeout(focus)
-            window.removeEventListener('keydown', onKey)
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [open, finishedNode])
-
-    if (!open) return null
-
-    return (
-        <aside
-            aria-label="Product tour"
-            className={cn(TOUR_GLASS_CLASS, 'fixed bottom-4 right-4 z-[10051] flex w-72 max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-card text-fg animate-in fade-in slide-in-from-bottom-2 duration-300')}
-        >
-            <PanelHead
-                title={<p className="truncate text-ui font-semibold text-fg">That&apos;s {finished ? <TourNodeTitle id={finished.id} /> : 'the tour'}</p>}
-                caption={finished && finished.ancestors.length > 0 ? <>Product tour · <TourNodePlace id={finished.ancestors[finished.ancestors.length - 1].id} /></> : 'Product tour'}
-            />
-            <p className="px-3.5 text-small leading-relaxed text-fg-muted">
-                {finished
-                    ? next
-                        ? <>Up next: <span className="text-fg"><TourNodePlace id={next.id} /></span>.</>
-                        : 'That was the last part of the tour. The sample data is yours to explore; nothing here is saved.'
-                    : 'The sample data is yours to explore; nothing here is saved. Replay any time from the map icon at the top.'}
-            </p>
-            <div className="mt-3 flex items-center gap-1.5 border-t border-black/[0.06] px-3.5 py-2.5">
-                <Button variant="ghost" size="sm" onClick={restartTour} className="shrink-0">
-                    {finished ? 'All chapters' : <><Play className="h-3.5 w-3.5" />Replay</>}
-                </Button>
-                <div className="ml-auto flex min-w-0 items-center gap-1.5">
-                    <Button variant="outline" size="sm" onClick={done} className="shrink-0">Done</Button>
-                    {finished ? (
-                        next && (
-                            <Button ref={primaryRef as React.Ref<HTMLButtonElement>} size="sm" className="min-w-0" onClick={() => startNode(next.id)}>
-                                <span className="truncate">Next: <TourNodeTitle id={next.id} /></span>
-                                <ArrowRight className="h-3.5 w-3.5 shrink-0" />
-                            </Button>
-                        )
-                    ) : (
-                        <Link
-                            ref={primaryRef as React.Ref<HTMLAnchorElement>}
-                            href="/signup"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className={buttonVariants({ size: 'sm', className: 'shrink-0' })}
-                        >
-                            Sign up
-                        </Link>
-                    )}
+            <Collapse open={ending}>
+                <p className="px-3.5 text-small leading-relaxed text-fg-muted">
+                    {finished
+                        ? next
+                            ? <>Up next: <span className="text-fg"><TourNodePlace id={next.id} /></span>.</>
+                            : 'That was the last part of the tour. The sample data is yours to explore; nothing here is saved.'
+                        : 'The sample data is yours to explore; nothing here is saved. Replay any time from the map icon at the top.'}
+                </p>
+                <div className="mt-3 flex items-center gap-1.5 border-t border-black/[0.06] px-3.5 py-2.5">
+                    <Button variant="ghost" size="sm" onClick={restartTour} className="shrink-0">
+                        {finished ? 'All chapters' : <><Play className="h-3.5 w-3.5" />Replay</>}
+                    </Button>
+                    <div className="ml-auto flex min-w-0 items-center gap-1.5">
+                        <Button variant="outline" size="sm" onClick={done} className="shrink-0">Done</Button>
+                        {finished ? (
+                            next && (
+                                // "Up next: Engagements › Board" above says where; the button stays short enough not to truncate.
+                                <Button ref={primaryRef as React.Ref<HTMLButtonElement>} size="sm" className="shrink-0" onClick={() => startNode(next.id)} aria-label={`Next: ${next.title}`}>
+                                    Next
+                                    <ArrowRight className="h-3.5 w-3.5" />
+                                </Button>
+                            )
+                        ) : (
+                            <Link
+                                ref={primaryRef as React.Ref<HTMLAnchorElement>}
+                                href="/signup"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className={buttonVariants({ size: 'sm', className: 'shrink-0' })}
+                            >
+                                Sign up
+                            </Link>
+                        )}
+                    </div>
                 </div>
-            </div>
+            </Collapse>
         </aside>
     )
 }
