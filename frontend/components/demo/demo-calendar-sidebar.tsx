@@ -36,7 +36,7 @@ export function DemoCalendarSidebar({
 
     return (
         <TooltipProvider delayDuration={300}>
-            <div className="w-64 shrink-0 border-r border-[#e5e7eb] pr-4">
+            <div className="w-64 shrink-0 border-r border-[#e5e7eb] pr-4" data-demo-tour="calendar-engagements">
                 <div className="flex items-center justify-between mb-3">
                     <span className="text-xs font-semibold uppercase tracking-wide text-[#45474c]">Calendars</span>
                     <div className="flex items-center gap-2 text-[11px]">

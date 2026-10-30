@@ -12,6 +12,8 @@ import { Hint } from "@/components/ui/tooltip"
 import { HeaderProp as Prop } from "@/components/ui/header-prop"
 import { useToast } from "@/components/ui/toast"
 import { clientPath } from "@/lib/navigation/firm-paths"
+import { HowThisWorksLink } from "@/components/ui/how-this-works-link"
+import type { TourNodeId } from "@/lib/demo/tour-chapters"
 
 /**
  * Engagement page header (.claude/plans/ui-ux-overhaul.md, Phase 6) — Linear project-page style:
@@ -46,6 +48,7 @@ export function EngagementHeader({
     personaDisplayName,
     fetchPeople = true,
     clientHref,
+    guide,
 }: {
     projectId: string
     groupSlug: string
@@ -67,6 +70,8 @@ export function EngagementHeader({
     fetchPeople?: boolean
     /** Where the Client property links; defaults to the client's firm page. The public demo passes its own. */
     clientHref?: string
+    /** The guided tour's section for the open tab, linked beside the title. Left out for client roles and on the tour itself. */
+    guide?: TourNodeId | null
 }) {
     const router = useRouter()
     const { addToast } = useToast()
@@ -115,6 +120,7 @@ export function EngagementHeader({
                     <Hint label={name || "Engagement"} side="bottom">
                         <h1 className="min-w-0 truncate text-h1 text-fg">{name || "Engagement"}</h1>
                     </Hint>
+                    {guide && <HowThisWorksLink guide={guide} />}
                 </div>
                 {personaDisplayName && (
                     <Hint label="Your role on this engagement">

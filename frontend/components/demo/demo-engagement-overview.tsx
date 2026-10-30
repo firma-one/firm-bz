@@ -159,7 +159,7 @@ export function DemoEngagementOverview({ engagement }: { engagement: DemoEngagem
 
     return (
         <div className="flex min-w-0 flex-col gap-10 pb-6">
-            <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-4" data-demo-tour="engagement-action-center">
                 <div className="flex items-center gap-2 border-b border-line pb-2">
                     <Inbox className="h-4 w-4 shrink-0 text-fg-subtle" />
                     <h2 className="truncate text-h3 text-fg">Action Center</h2>
@@ -203,7 +203,7 @@ export function DemoEngagementOverview({ engagement }: { engagement: DemoEngagem
                                     />
                                 }
                             />
-                            <div className="border-t border-line pt-6">
+                            <div className="border-t border-line pt-6" data-demo-tour="engagement-progress">
                                 <DeliverablesTimeline deliverables={m.deliverables} startDate={m.kickoff} dueDate={engagement.dueDate ?? null} nowMs={nowMs} />
                             </div>
                         </>

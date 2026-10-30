@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
 import {
@@ -14,6 +15,7 @@ import {
     Inbox,
     Info,
     LifeBuoy,
+    LogOut,
     ScrollText,
     Search,
     Settings,
@@ -43,9 +45,9 @@ import { StatusIcon } from '@/components/ui/status-icon'
 import { statusOf } from '@/lib/ui/status'
 import { cn } from '@/lib/utils'
 import { DEMO_FIRM } from '@/lib/demo/static-demo-data'
+import { useDemoTour } from '@/lib/demo/demo-tour-context'
 
 const ADMIN_ONLY = 'Firm admins only — hidden from other members'
-const NOT_IN_DEMO = 'Not available in this demo'
 
 /** The firm view a tour URL shows: `?tab=` on /tour, All clients when there is none. */
 export function demoFirmView(pathname: string, tab: string | null): string | null {
@@ -137,38 +139,40 @@ export function DemoSidebar({ inboxCount, onCollapse }: {
             </div>
 
             <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-2 pb-4">
-                <SidebarSection id="demo_engagements" title="Your engagements">
-                    {DEMO_FIRM.clients.map((client) => (
-                        <ClientGroup
-                            key={client.slug}
-                            name={client.name}
-                            storageId={`demo_${client.slug}`}
-                            defaultOpen={true}
-                        >
-                            {client.engagements.map((e) => {
-                                const href = `/tour/${client.slug}/${e.slug}`
-                                return (
-                                    <SidebarItem
-                                        key={e.slug}
-                                        href={href}
-                                        className="pl-6"
-                                        icon={<StatusIcon stage={active.stage} label={active.label} />}
-                                        label={e.name}
-                                        active={pathname.startsWith(href)}
-                                    />
-                                )
-                            })}
-                        </ClientGroup>
-                    ))}
-                    <div data-demo-tour="firm-clients-tab">
-                        <SidebarItem
-                            href="/tour?tab=clients"
-                            icon={<ClientIcon />}
-                            label="All clients"
-                            active={view === 'clients' || (pathname.startsWith('/tour/') && pathname.split('/').length === 3 && !['/tour/home', '/tour/inbox', '/tour/support'].includes(pathname))}
-                        />
-                    </div>
-                </SidebarSection>
+                <div data-demo-tour="sidebar-engagements">
+                    <SidebarSection id="demo_engagements" title="Your engagements">
+                        {DEMO_FIRM.clients.map((client) => (
+                            <ClientGroup
+                                key={client.slug}
+                                name={client.name}
+                                storageId={`demo_${client.slug}`}
+                                defaultOpen={true}
+                            >
+                                {client.engagements.map((e) => {
+                                    const href = `/tour/${client.slug}/${e.slug}`
+                                    return (
+                                        <SidebarItem
+                                            key={e.slug}
+                                            href={href}
+                                            className="pl-6"
+                                            icon={<StatusIcon stage={active.stage} label={active.label} />}
+                                            label={e.name}
+                                            active={pathname.startsWith(href)}
+                                        />
+                                    )
+                                })}
+                            </ClientGroup>
+                        ))}
+                        <div data-demo-tour="firm-clients-tab">
+                            <SidebarItem
+                                href="/tour?tab=clients"
+                                icon={<ClientIcon />}
+                                label="All clients"
+                                active={view === 'clients' || (pathname.startsWith('/tour/') && pathname.split('/').length === 3 && !['/tour/home', '/tour/inbox', '/tour/support'].includes(pathname))}
+                            />
+                        </div>
+                    </SidebarSection>
+                </div>
 
                 <SidebarSection id="demo_firm" title="Firm">
                     <div data-demo-tour="firm-overview-tab">
@@ -186,9 +190,9 @@ export function DemoSidebar({ inboxCount, onCollapse }: {
                     <div data-demo-tour="firm-audit-tab">
                         <SidebarItem href="/tour?tab=audit" icon={<ClipboardList />} label="Audit" active={view === 'audit'} trailing={<AccessLock label={ADMIN_ONLY} side="right" />} />
                     </div>
-                    <Hint label={NOT_IN_DEMO} side="right">
-                        <span className="block"><SidebarItem icon={<Settings />} label="Settings" onClick={() => {}} className="cursor-default opacity-60" trailing={<AccessLock label={ADMIN_ONLY} side="right" />} /></span>
-                    </Hint>
+                    <div data-demo-tour="firm-settings-item">
+                        <SidebarItem href="/tour?tab=settings" icon={<Settings />} label="Settings" active={view === 'settings'} trailing={<AccessLock label={ADMIN_ONLY} side="right" />} />
+                    </div>
                 </SidebarSection>
             </div>
 
@@ -199,10 +203,20 @@ export function DemoSidebar({ inboxCount, onCollapse }: {
     )
 }
 
-/** Static counterpart to the sidebar's ProfileMenu: the same entries, inert where they need an account. */
+/**
+ * Static counterpart to the sidebar's ProfileMenu: the same entries, inert where they need an account.
+ * The guided tour holds it open with ?menu=profile to point at Profile, Billing and Support
+ * (.claude/plans/tour-chapters.md). Held that way it isn't modal, so the step card stays clickable,
+ * and it doesn't close on a click or focus outside: the step card taking focus would close it under
+ * the step that points at it.
+ */
 function DemoProfileMenu() {
+    const { active } = useDemoTour()
+    const asked = useSearchParams()?.get('menu') === 'profile'
+    const heldByTour = active && asked
+    const [open, setOpen] = useState(false)
     return (
-        <DropdownMenu>
+        <DropdownMenu open={heldByTour || open} onOpenChange={setOpen} modal={!heldByTour}>
             <DropdownMenuTrigger asChild>
                 <button
                     type="button"
@@ -212,15 +226,15 @@ function DemoProfileMenu() {
                     <span className="min-w-0 flex-1 truncate">Demo User</span>
                 </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent side="top" align="start" className="w-60">
+            <DropdownMenuContent side="top" align="start" className="w-60" data-demo-tour="profile-menu-items">
                 <DropdownMenuLabel className="truncate font-normal">demo@firma.bz</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem disabled className="gap-2"><UserCircle className="h-4 w-4 text-fg-muted" />Profile</DropdownMenuItem>
-                <DropdownMenuItem disabled className="gap-2">
+                <DropdownMenuItem disabled className="gap-2" data-demo-tour="profile-menu-billing">
                     <CreditCard className="h-4 w-4 text-fg-muted" />Billing<AccessLock label={ADMIN_ONLY} side="right" className="ml-auto" />
                 </DropdownMenuItem>
                 {/* As in the app: Support is for firm admins, which the demo user is; it opens the tour's copy */}
-                <DropdownMenuItem asChild className="gap-2">
+                <DropdownMenuItem asChild className="gap-2" data-demo-tour="profile-menu-support">
                     <Link href="/tour/support">
                         <LifeBuoy className="h-4 w-4 text-fg-muted" />Support<AccessLock label={ADMIN_ONLY} side="right" className="ml-auto" />
                     </Link>
@@ -254,11 +268,8 @@ function DemoProfileMenu() {
                     </DropdownMenuSubContent>
                 </DropdownMenuSub>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem asChild className="gap-2">
-                    <Link href="/signup" target="_blank" rel="noopener noreferrer">
-                        <UserPlus className="h-4 w-4 text-fg-muted" />Sign up
-                    </Link>
-                </DropdownMenuItem>
+                {/* As in the app; there's no account to sign out of here, so it's inert like Profile */}
+                <DropdownMenuItem disabled className="gap-2 text-danger"><LogOut className="h-4 w-4" />Sign out</DropdownMenuItem>
             </DropdownMenuContent>
         </DropdownMenu>
     )

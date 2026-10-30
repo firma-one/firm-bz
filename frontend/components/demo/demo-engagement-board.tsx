@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { Ban, CalendarDays, Clock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { DeliverableIcon } from '@/components/ui/deliverable-icon'
@@ -75,6 +76,8 @@ function BoardCard({ card, stage, open, onToggle }: { card: DemoDeliverable; sta
             type="button"
             onClick={onToggle}
             className={cn(interactiveCardClass(), 'relative w-full overflow-hidden', open && 'ring-1 ring-fg-subtle')}
+            // The guided tour's card: one in progress, with documents at different stages.
+            data-demo-tour={card.status === 'in_progress' ? 'board-card' : undefined}
         >
             <div className="border-b border-line px-3 pb-2 pt-2.5">
                 <div className="mb-0.5 flex items-center gap-1.5">
@@ -156,6 +159,22 @@ export function DemoEngagementBoard({ engagement }: { engagement: DemoEngagement
         if (openIdRef.current) clearPaneRef.current()
     }, [])
 
+    // The guided tour opens a card by URL (?deliverable=, .claude/plans/tour-chapters.md); when the
+    // parameter goes away (the tour steps back), the card it opened closes.
+    const deliverableParam = useSearchParams().get('deliverable')
+    const openedFromUrl = useRef(false)
+    useEffect(() => {
+        const card = deliverableParam ? getDemoDeliverables(engagement).find((c) => c.folder.id === deliverableParam) : undefined
+        if (card) {
+            openedFromUrl.current = true
+            openCard(card)
+        } else if (openedFromUrl.current) {
+            openedFromUrl.current = false
+            closeCard()
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [deliverableParam])
+
     // As on the app's Board: Overdue, and Blocked (deliverables with a document the firm marked blocked;
     // shown while there are some, or while it's on, so it can be turned off).
     const [filterOverdue, setFilterOverdue] = useState(false)
@@ -169,7 +188,7 @@ export function DemoEngagementBoard({ engagement }: { engagement: DemoEngagement
 
     return (
         <div className="flex flex-col">
-            <div className="flex shrink-0 items-center gap-2 pb-2.5 pt-1">
+            <div className="flex shrink-0 items-center gap-2 pb-2.5 pt-1" data-demo-tour="board-filters">
                 <FilterToggle icon={<Clock />} label="Overdue" count={overdueCount} on={filterOverdue} onClick={() => setFilterOverdue((v) => !v)} />
                 {(blockedCount > 0 || filterBlocked) && (
                     <FilterToggle icon={<Ban />} label="Blocked" count={blockedCount} on={filterBlocked} onClick={() => setFilterBlocked((v) => !v)} />
@@ -180,7 +199,11 @@ export function DemoEngagementBoard({ engagement }: { engagement: DemoEngagement
                     {LANES.map((lane) => {
                         const laneCards = byLane[lane.status]
                         return (
-                            <div key={lane.status} className={cn('flex flex-col gap-2 rounded-lg p-2', STAGE_LANE_CLASSES[lane.stage].rest)}>
+                            <div
+                                key={lane.status}
+                                className={cn('flex flex-col gap-2 rounded-lg p-2', STAGE_LANE_CLASSES[lane.stage].rest)}
+                                data-demo-tour={lane.status === 'approved' ? 'board-lane-approved' : undefined}
+                            >
                                 <div className="flex h-7 items-center gap-2 px-1">
                                     <StatusPill kind="deliverable" status={lane.status} />
                                     <span className="text-small tabular-nums text-fg-subtle">{laneCards.length}</span>

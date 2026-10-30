@@ -1,12 +1,33 @@
 'use client'
 
-import { createContext, useContext, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { DEFAULT_TOUR_MODE, isTourNodeId, parseModeParam, type TourMode, type TourNodeId } from '@/lib/demo/tour-chapters'
 
 const TOUR_KEY = 'fm_demo_tour'
 const NEVER_SHOW_KEY = 'fm_demo_tour_never_show'
+const MODE_KEY = 'fm_demo_tour_mode'
 
+/** The mode the visitor last picked, or Autoplay. */
+function loadMode(): TourMode {
+    if (typeof window === 'undefined') return DEFAULT_TOUR_MODE
+    try {
+        return parseModeParam(window.localStorage.getItem(MODE_KEY)) ?? DEFAULT_TOUR_MODE
+    } catch {
+        return DEFAULT_TOUR_MODE
+    }
+}
+
+/** Where an unfinished run stopped: its scope (a chapter or section; null for the whole tour) and its step in that run. */
+export interface TourResume {
+    scope: TourNodeId | null
+    step: number
+}
+
+/** What's kept in localStorage. An older `stepIndex` field indexed the flat tour before chapters and is ignored. */
 interface TourState {
-    stepIndex?: number
+    resume?: TourResume
+    /** The chapters and sections whose own steps were all seen, in any kind of run. */
+    completed?: TourNodeId[]
 }
 
 export function hasOptedOutOfTour(): boolean {
@@ -33,7 +54,15 @@ function readTourState(): TourState {
         const raw = window.localStorage.getItem(TOUR_KEY)
         if (!raw) return {}
         const parsed = JSON.parse(raw)
-        return typeof parsed === 'object' && parsed !== null ? parsed : {}
+        if (typeof parsed !== 'object' || parsed === null) return {}
+        const { resume, completed } = parsed as Record<string, unknown>
+        const state: TourState = {}
+        if (resume && typeof resume === 'object') {
+            const { scope, step } = resume as Record<string, unknown>
+            if ((scope === null || isTourNodeId(scope)) && typeof step === 'number') state.resume = { scope, step }
+        }
+        if (Array.isArray(completed)) state.completed = completed.filter(isTourNodeId)
+        return state
     } catch {
         return {}
     }
@@ -42,63 +71,100 @@ function readTourState(): TourState {
 function writeTourState(patch: Partial<TourState>): void {
     if (typeof window === 'undefined') return
     try {
-        const current = readTourState()
-        window.localStorage.setItem(TOUR_KEY, JSON.stringify({ ...current, ...patch }))
+        window.localStorage.setItem(TOUR_KEY, JSON.stringify({ ...readTourState(), ...patch }))
     } catch {
         /* ignore */
     }
 }
 
-function saveTourProgress(stepIndex: number): void {
-    writeTourState({ stepIndex })
-}
-
-function loadTourProgress(): number | null {
-    const { stepIndex } = readTourState()
-    return typeof stepIndex === 'number' && stepIndex > 0 ? stepIndex : null
-}
-
-function clearTourProgress(): void {
-    writeTourState({ stepIndex: undefined })
+/** A saved position worth offering: past the first step of its run. */
+function loadResume(): TourResume | null {
+    const { resume } = readTourState()
+    return resume && resume.step > 0 ? resume : null
 }
 
 interface DemoTourContextValue {
+    /** Autoplay, Step by step or Explore (lib/demo/tour-chapters.ts). */
+    mode: TourMode
+    /** Switches mode, mid-run too: into Explore the step card goes; out of it, the run shows from where the visitor is. */
+    setMode: (mode: TourMode) => void
+    /** Autoplay held on the current step. */
+    paused: boolean
+    setPaused: (paused: boolean) => void
     run: boolean
     stepIndex: number
+    /** The run's chapter or section, or null for the whole tour. */
+    scope: TourNodeId | null
+    /** True from a run's start to its end, including while it navigates between steps, and while exploring: the outline pane shows. */
+    active: boolean
+    /** Bumped each time a run starts, resumes or jumps: the tour navigates to the step's page, then runs. */
+    launch: number
     showIntroModal: boolean
     showOutroModal: boolean
-    /** True once the visitor has finished the tour at least once — drives the topbar Sign Up CTA after the outro modal is dismissed. */
+    /** The chapter or section just finished, while the panel shows its ending. */
+    finishedNode: TourNodeId | null
+    /** True once the visitor has finished the whole tour at least once — drives the topbar Sign Up CTA once the panel's ending is dismissed. */
     hasCompletedTour: boolean
-    /** Non-null when there's a saved mid-tour position the visitor can resume, persisted in localStorage. */
-    resumableStepIndex: number | null
+    completedNodes: TourNodeId[]
+    /** Non-null when there's a saved mid-run position the visitor can resume, persisted in localStorage. */
+    resumable: TourResume | null
     openIntroModal: () => void
     closeIntroModal: (neverShowAgain?: boolean) => void
+    /** The whole tour, from its first step, with nothing marked seen. */
     startTour: () => void
-    /** Resume from the saved step index. */
+    /** One chapter or section, from its first step; in a mode of its own when a deep link names one. */
+    startNode: (id: TourNodeId, mode?: TourMode) => void
+    /** The same run, from another of its steps (the outline pane). */
+    jumpToStep: (step: number) => void
+    /** Resume from the saved position. */
     resumeTour: () => void
     restartTour: () => void
+    /** Replay from the end of the whole tour: the start again, with nothing marked seen, so the panel's rings fill afresh on the second pass. */
+    replayTour: () => void
     endTour: (completed?: boolean) => void
+    closeNodeEnd: () => void
+    markNodeDone: (id: TourNodeId) => void
     setStepIndex: (i: number) => void
     setRun: (v: boolean) => void
-    /** Persist the current step so the tour can be resumed if abandoned mid-way. */
+    /** Persist the current step so the run can be resumed if abandoned mid-way. */
     saveProgress: (stepIndex: number) => void
 }
 
 const DemoTourContext = createContext<DemoTourContextValue | null>(null)
 
-/** The guided tour's state — local React state, with mid-tour progress persisted to
- * localStorage so a visitor who navigates away or closes the tour can resume from the intro modal
- * next time. */
+/** The guided tour's state (.claude/plans/tour-chapters.md) — local React state, with an unfinished
+ * run's position and the finished chapters and sections persisted to localStorage, so a visitor who
+ * navigates away or closes the tour can resume from the intro modal next time. */
 export function DemoTourProvider({ children }: { children: ReactNode }) {
+    const [mode, setModeState] = useState<TourMode>(DEFAULT_TOUR_MODE)
+    const [paused, setPaused] = useState(false)
     const [run, setRun] = useState(false)
     const [stepIndex, setStepIndex] = useState(0)
+    const [scope, setScope] = useState<TourNodeId | null>(null)
+    const [active, setActive] = useState(false)
+    const [launch, setLaunch] = useState(0)
     const [showIntroModal, setShowIntroModal] = useState(false)
     const [showOutroModal, setShowOutroModal] = useState(false)
+    const [finishedNode, setFinishedNode] = useState<TourNodeId | null>(null)
     const [hasCompletedTour, setHasCompletedTour] = useState(false)
-    const [resumableStepIndex, setResumableStepIndex] = useState<number | null>(null)
+    const [completedNodes, setCompletedNodes] = useState<TourNodeId[]>([])
+    const [resumable, setResumable] = useState<TourResume | null>(null)
+
+    // The saved mode after mount, so the server and the visitor's first render agree.
+    useEffect(() => setModeState(loadMode()), [])
+
+    const saveMode = (next: TourMode) => {
+        setModeState(next)
+        try {
+            window.localStorage.setItem(MODE_KEY, next)
+        } catch {
+            /* ignore */
+        }
+    }
 
     const openIntroModal = () => {
-        setResumableStepIndex(loadTourProgress())
+        setResumable(loadResume())
+        setCompletedNodes(readTourState().completed ?? [])
         setShowIntroModal(true)
     }
     const closeIntroModal = (neverShowAgain?: boolean) => {
@@ -106,45 +172,106 @@ export function DemoTourProvider({ children }: { children: ReactNode }) {
         setShowIntroModal(false)
     }
 
-    const startTour = () => {
+    /** Starts a run; the tour (demo-tour.tsx) takes it to the step's page before it shows. */
+    const begin = (next: TourNodeId | null, step: number) => {
+        setRun(false)
         setShowIntroModal(false)
-        setStepIndex(0)
-        clearTourProgress()
-        setResumableStepIndex(null)
-        setRun(true)
+        setShowOutroModal(false)
+        setFinishedNode(null)
+        setCompletedNodes(readTourState().completed ?? [])
+        setScope(next)
+        setStepIndex(step)
+        setActive(true)
+        setPaused(false)
+        setLaunch((n) => n + 1)
     }
 
+    const setMode = (next: TourMode) => {
+        if (next === mode) return
+        saveMode(next)
+        setPaused(false)
+        if (!active) return
+        // Into Explore the step card goes; out of it, the run shows again where the visitor is.
+        if (next === 'explore') setRun(false)
+        else if (mode === 'explore') begin(scope, stepIndex)
+    }
+
+    // The whole tour from its first step is a fresh pass, however it's started: nothing marked seen,
+    // so the panel's rings fill again as it goes. Resume and a single chapter keep what's been seen.
+    const startTour = () => {
+        writeTourState({ resume: undefined, completed: [] })
+        setResumable(null)
+        begin(null, 0)
+    }
+
+    const startNode = (id: TourNodeId, linkMode?: TourMode) => {
+        if (linkMode) saveMode(linkMode)
+        writeTourState({ resume: undefined })
+        setResumable(null)
+        begin(id, 0)
+    }
+
+    const jumpToStep = (step: number) => begin(scope, step)
+
     const resumeTour = () => {
-        if (resumableStepIndex === null) return
-        setShowIntroModal(false)
-        setStepIndex(resumableStepIndex)
-        setResumableStepIndex(null)
-        setRun(true)
+        if (resumable === null) return
+        setResumable(null)
+        begin(resumable.scope, resumable.step)
     }
 
     const restartTour = () => {
         setRun(false)
+        setActive(false)
         setShowOutroModal(false)
+        setFinishedNode(null)
         openIntroModal()
     }
 
+    // "All chapters" and coming back keep what's been seen, to show what's left; Replay starts over,
+    // its start panel already clear before the whole tour plays again.
+    const replayTour = () => {
+        writeTourState({ completed: [] })
+        setCompletedNodes([])
+        restartTour()
+    }
+
+    const markNodeDone = (id: TourNodeId) => {
+        const done = readTourState().completed ?? []
+        if (done.includes(id)) return
+        const next = [...done, id]
+        writeTourState({ completed: next })
+        setCompletedNodes(next)
+    }
+
+    /** Completed: the panel shows the ending, of a chapter or section, or of the whole tour. */
     const endTour = (completed?: boolean) => {
         setRun(false)
-        setShowOutroModal(!!completed)
-        if (completed) {
+        setActive(false)
+        if (!completed) {
+            setShowOutroModal(false)
+            setFinishedNode(null)
+            return
+        }
+        writeTourState({ resume: undefined })
+        setResumable(null)
+        if (scope) {
+            setFinishedNode(scope)
+        } else {
             setHasCompletedTour(true)
-            clearTourProgress()
-            setResumableStepIndex(null)
+            setShowOutroModal(true)
         }
     }
 
-    const saveProgress = (i: number) => saveTourProgress(i)
+    const closeNodeEnd = () => setFinishedNode(null)
+
+    const saveProgress = (i: number) => writeTourState({ resume: { scope, step: i } })
 
     return (
         <DemoTourContext.Provider
             value={{
-                run, stepIndex, showIntroModal, showOutroModal, hasCompletedTour, resumableStepIndex,
-                openIntroModal, closeIntroModal, startTour, resumeTour, restartTour, endTour, setStepIndex, setRun, saveProgress,
+                mode, setMode, paused, setPaused, run, stepIndex, scope, active, launch, showIntroModal, showOutroModal, finishedNode, hasCompletedTour, completedNodes, resumable,
+                openIntroModal, closeIntroModal, startTour, startNode, jumpToStep, resumeTour, restartTour, replayTour, endTour, closeNodeEnd, markNodeDone,
+                setStepIndex, setRun, saveProgress,
             }}
         >
             {children}

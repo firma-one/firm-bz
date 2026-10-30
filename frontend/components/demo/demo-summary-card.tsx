@@ -167,7 +167,7 @@ export function DemoSummaryCard({ input, today }: { input: DemoSummaryInput; tod
 
     return (
         <>
-            <div className="flex flex-col overflow-hidden rounded-card border border-line bg-surface">
+            <div className="flex flex-col overflow-hidden rounded-card border border-line bg-surface" data-demo-tour="engagement-ai-summary">
                 <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-line px-4 pb-2 pt-3">
                     <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
                         <span className="text-small font-medium text-fg-muted">Engagement Summary</span>

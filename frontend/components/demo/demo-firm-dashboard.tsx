@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { BarChart3, CalendarDays, ClipboardList, Plus, Printer, Search, UserPlus, Users } from 'lucide-react'
+import { BarChart3, CalendarDays, ClipboardList, Plus, Printer, Search, Settings, UserPlus, Users } from 'lucide-react'
 import { ClientIcon } from '@/components/ui/client-icon'
 import { PageHeading } from '@/components/ui/page-heading'
 import { AccessLock } from '@/components/ui/access-lock'
@@ -17,6 +17,7 @@ import { DemoFirmDocSearch } from '@/components/demo/demo-firm-doc-search'
 import { DEMO_MEMBERS, DemoFirmMembers } from '@/components/demo/demo-firm-members'
 import { DemoFirmAudit } from '@/components/demo/demo-firm-audit'
 import { DemoCalendarView } from '@/components/demo/demo-calendar-view'
+import { DemoFirmSettings } from '@/components/demo/demo-firm-settings'
 
 const ADMIN_ONLY = 'Firm admins only — hidden from other members'
 const NOT_IN_DEMO = 'Not available in this demo'
@@ -28,6 +29,7 @@ const VIEWS: Record<string, { title: string; icon: ReactNode; lock?: boolean; de
     'doc-search': { title: 'Doc Search', icon: <Search />, description: 'Search documents across every client and engagement you have access to.' },
     members: { title: 'Members', icon: <Users />, lock: true, description: "Firm administrators manage the firm's settings, members and every client." },
     audit: { title: 'Audit', icon: <ClipboardList />, lock: true },
+    settings: { title: 'Settings', icon: <Settings />, lock: true },
 }
 
 /** A disabled action with the "not in this demo" hint. Hint needs a ref-taking child, so a span. */
@@ -103,18 +105,21 @@ export function DemoFirmDashboard({ firm }: { firm: DemoFirm }) {
 
             {view === 'analytics' && <DemoFirmOverview firm={firm} />}
             {view === 'clients' && (
-                <ClientList
-                    clients={toClientSummaries(firm)}
-                    groupSlug=""
-                    orgSlug=""
-                    viewMode={viewMode}
-                    hrefFor={(c) => `/tour/${c.slug}`}
-                />
+                <div data-demo-tour="client-list">
+                    <ClientList
+                        clients={toClientSummaries(firm)}
+                        groupSlug=""
+                        orgSlug=""
+                        viewMode={viewMode}
+                        hrefFor={(c) => `/tour/${c.slug}`}
+                    />
+                </div>
             )}
             {view === 'calendar' && <DemoCalendarView firm={firm} />}
             {view === 'doc-search' && <DemoFirmDocSearch firm={firm} />}
             {view === 'members' && <DemoFirmMembers />}
             {view === 'audit' && <DemoFirmAudit firm={firm} />}
+            {view === 'settings' && <DemoFirmSettings firm={firm} />}
         </div>
     )
 }

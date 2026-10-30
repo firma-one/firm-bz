@@ -25,6 +25,8 @@ import { Tag } from '@/components/ui/tag'
 import { Hint } from '@/components/ui/tooltip'
 import { FilterMenuLabel, FilterMenuRow, FilterMenuSearch, FilterPill, summarizePicks } from '@/components/ui/filter-pill'
 import { RelativeDateTime } from '@/components/ui/relative-date-time'
+import { HowThisWorksLink } from '@/components/ui/how-this-works-link'
+import { useOptionalShellData } from '@/components/shell/shell-data-context'
 import { resolvePeriod } from '@/lib/search/period'
 import { fetchWithTimeout, AI_TIMEOUT_MS } from '@/lib/ai/fetch-timeout'
 import {
@@ -288,6 +290,7 @@ function removeSearchHistoryEntry(firmId: string, entryId: string) {
 export function GlobalSearchView({ firmId }: { firmId: string }) {
   const { session } = useAuth()
   const accessToken = session?.access_token
+  const isExternalOnly = useOptionalShellData()?.data?.isExternalOnly ?? false
 
   const [searchQuery, setSearchQuery] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
@@ -826,6 +829,8 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
             className="pb-0"
             icon={<Search />}
             title="Doc Search"
+            // The tour shows the firm's view, so its link stays off for client-only users.
+            titleAside={isExternalOnly ? undefined : <HowThisWorksLink guide="doc-search" />}
             description={
               ASK_MODE_ENABLED
                 ? <>Search documents across every client and engagement you have access to. Narrow with filters, or switch to Ask <Brio /> and describe what you need.</>

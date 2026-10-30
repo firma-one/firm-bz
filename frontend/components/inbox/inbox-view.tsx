@@ -529,7 +529,7 @@ export function InboxView({
                 <UnavailableFirmsNote firms={unavailable} />
             </PageHeading>
 
-            <div className="mb-3 flex items-center gap-0.5" role="tablist" aria-label="Show">
+            <div className="mb-3 flex items-center gap-0.5" role="tablist" aria-label="Show" data-demo-tour="inbox-views">
                 {([
                     ["needs", "Needs you", lists.needsYou.length],
                     ["updates", "Updates", unreadNotes],
