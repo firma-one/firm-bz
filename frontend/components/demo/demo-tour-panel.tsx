@@ -35,7 +35,8 @@ export function DemoTourPanel() {
     )
 }
 
-/** The three modes as cards: each says what happens, the chosen one tinted, bordered and checked. */
+/** The three modes as radio cards: each says what happens; the chosen one tinted and bordered, with a
+ * round check where the others show an empty ring. */
 function ModeCards({ value, onChange }: { value: TourMode; onChange: (mode: TourMode) => void }) {
     return (
         <div role="radiogroup" aria-label="How the tour plays" className="grid grid-cols-3 gap-1.5">
@@ -53,7 +54,16 @@ function ModeCards({ value, onChange }: { value: TourMode; onChange: (mode: Tour
                             selected ? 'border-action bg-action/10' : 'border-line bg-white/60 hover:border-line-strong',
                         )}
                     >
-                        {selected && <Check className="absolute right-2 top-2 h-3.5 w-3.5 text-action" aria-hidden />}
+                        {/* A radio's round mark: filled and checked on the chosen card, an empty ring on the others */}
+                        <span
+                            className={cn(
+                                'absolute right-2 top-2 flex h-4 w-4 items-center justify-center rounded-full border transition-colors',
+                                selected ? 'border-action bg-action text-action-fg' : 'border-line-strong bg-white',
+                            )}
+                            aria-hidden
+                        >
+                            {selected && <Check className="h-2.5 w-2.5" strokeWidth={3} />}
+                        </span>
                         <span className={cn('flex [&_svg]:h-4 [&_svg]:w-4', selected ? 'text-action' : 'text-fg-muted')} aria-hidden>{TOUR_MODE_LABELS[mode].icon}</span>
                         <span className={cn('text-small font-medium', selected ? 'text-action' : 'text-fg')}>{TOUR_MODE_LABELS[mode].label}</span>
                         <span className="text-caption leading-snug text-fg-muted">{TOUR_MODE_LABELS[mode].short}</span>
