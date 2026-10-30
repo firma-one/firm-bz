@@ -9,7 +9,8 @@ import { Hint } from '@/components/ui/tooltip'
 import { useDemoTour } from '@/lib/demo/demo-tour-context'
 import { GUIDE_PARAM, autoplayDuration, tourNode, type TourNodeId } from '@/lib/demo/tour-chapters'
 import { tourSteps } from '@/components/demo/demo-tour-steps'
-import { TourNodeTitle } from '@/components/demo/demo-tour-labels'
+import { TOUR_GLASS_CLASS, TourNodeTitle } from '@/components/demo/demo-tour-labels'
+import { cn } from '@/lib/utils'
 
 const JoyrideAny = Joyride as any
 
@@ -104,7 +105,7 @@ function TourTooltip({ backProps, closeProps, primaryProps, skipProps, step, ind
             ref={cardRef}
             onMouseEnter={() => setHovered(true)}
             onMouseLeave={() => setHovered(false)}
-            className="relative w-[300px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-card bg-surface p-4 text-left shadow-popover"
+            className={cn(TOUR_GLASS_CLASS, 'relative w-[300px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-card p-4 text-left')}
         >
             <div className="flex items-start gap-2">
                 <div className="min-w-0 flex-1">
@@ -239,7 +240,7 @@ export function DemoTour() {
             const isLastStep = index >= steps.length - 1
             if (!isLastStep && retryCountRef.current >= 20) {
                 // Skipped so the run goes on; lib/demo/tour-chapters.test.ts catches a target that's gone for good.
-                if (process.env.NODE_ENV === 'development') console.warn(`Guided tour: skipped a step, its target never appeared: ${steps[index]?.target}`)
+                if (process.env.NODE_ENV === 'development') console.warn(`Product tour: skipped a step, its target never appeared: ${steps[index]?.target}`)
                 clearRetry()
                 retryCountRef.current = 0
                 void navigateForStep(index + 1)

@@ -69,7 +69,7 @@ goes away (the tour steps back), the view goes back with it.
 
 ## Modes
 
-How a run plays, picked in the chapter picker and switchable mid-run from the outline pane
+How a run plays, picked on the tour panel's start and switchable mid-run from its mode pill
 (`TOUR_MODES`, remembered in localStorage `fm_demo_tour_mode`):
 
 - **Autoplay** (the default; Deepak's "driverless"): each step moves on by itself after its own time,
@@ -78,7 +78,7 @@ How a run plays, picked in the chapter picker and switchable mid-run from the ou
   Pause holds it, and so does pointing at the card or the page being hidden. Next and Back still work.
   The whole tour plays through; a chapter or section stops on its end card.
 - **Step by step** ("guided"): waits for Next, as before.
-- **Explore** ("unguided"): no step cards and no dimmed page. The outline pane is the tour: a click
+- **Explore** ("unguided"): no step cards and no dimmed page. The tour panel is the tour: a click
   takes the visitor to that part's page and pulses an outline around where it is. Switching back to
   Autoplay or Step by step shows the card where the visitor is.
 
@@ -87,7 +87,7 @@ mode (Autoplay at first).
 
 ## Deep links
 
-- `?guide=<nodeId>` on any `/tour` route starts that chapter or section: no intro modal, even for
+- `?guide=<nodeId>` on any `/tour` route starts that chapter or section: no start panel, even for
   visitors who chose "Don't show this again". The tour navigates to its first step, replacing the
   URL so Back doesn't land on the deep link. An unknown id is ignored.
 - `tourGuideHref(id)` is `/tour?guide=<id>`; the first step carries its own route.
@@ -95,7 +95,7 @@ mode (Autoplay at first).
 ## Runs, the step card and the end card
 
 - A run is one node with everything under it, or the whole tour.
-- Starting a run (a node, the whole tour, Resume, or a jump from the outline pane) navigates to the
+- Starting a run (a node, the whole tour, Resume, or a jump from the tour panel) navigates to the
   step's page first, then runs Joyride, keyed per run.
 - The tour scrolls each target into view itself (`scrollIntoView`, nearest) and Joyride never
   scrolls: Joyride's own animated scroll left steps waiting with no card mid-run.
@@ -106,27 +106,40 @@ mode (Autoplay at first).
 - **A chapter or section ends** on an end card: "Next: <what follows in the outline>", Done, and
   "All chapters". **The whole tour** runs straight through and ends on the outro modal.
 
-## The outline pane
+## The tour panel
 
-`demo-tour-outline.tsx`: a pane that floats in a bottom corner while a run is on (or while
-exploring), above the tour's dimmed overlay. Under its header, the mode switch: the current mode by
-name, the others as icons. It lists the chapters with the icon of their page in the app, opens the current one
-to its sections (and the current section to its own), marks where the run is and what's been seen,
-and goes anywhere on a click: within the run, or as a new run of that part. It shows the step count,
-folds to one line, and closes the tour (progress saved).
+`demo-tour-panel.tsx`: one panel, the product tour's start and its outline, always in the
+bottom-right corner (2026-10-30, after Deepak found the modal plus a separate pane confusing, the
+mode switch unclear, and the pane's side-to-side jumps disconcerting).
 
-It floats rather than docks: docked, it took 240px from the page, and the Files table dropped its
-Status and Due columns at laptop widths, breaking those steps. It moves to the other corner when the
-current target would sit under it. Hidden below 1024px, where the step card's breadcrumb says where
-the visitor is.
+- **Start** (first visit, the map icons, coming back): "Product tour", a line on the sample data, the
+  three modes as cards (icon, name, "Plays itself" / "You click Next" / "You click around"; the
+  chosen one tinted, bordered and checked), a Resume row when a run was left partway ("You stopped
+  at Engagements › Files"), and the chapters: each row plays that chapter, a chevron opens its
+  sections, each of which plays on its own. "Don't show again", Skip, and the primary button, which
+  follows the mode ("Play the whole tour", "Take the whole tour", "Start exploring"). It is a
+  dialog (focus kept, Escape closes), and the page behind is softly blurred until the visitor
+  picks. On a first visit it waits for the cookie banner to be answered: both sit at the page's foot.
+- **Running** (a run, or exploring): the same corner and rows. "Product tour" with the step count, the
+  mode as a pill that opens the three to switch mid-run (Pause beside it in Autoplay), and the
+  outline: chapters, the current one open to its sections, where the run is, what's been seen, a
+  click to anywhere. It folds to one line and closes the tour (progress saved).
+- **It keeps to its corner.** When the current step's target would sit under the open panel, it folds
+  to its head in place and opens again on a step that leaves room. A target in the very corner (Ask
+  Brio) moves the folded head just past it along the bottom edge, where the step card, which opens
+  above the target, doesn't land; or just above it when there's no room beside it.
+- It floats rather than docks: docked, it took 240px from the page, and the Files table dropped its
+  Status and Due columns at laptop widths, breaking those steps. It sits above Joyride's dimmed
+  overlay (z 10050) and below its step card (z 10150). Hidden below 1024px, where the step card's
+  breadcrumb says where the visitor is.
 
-## The picker
+### Frosted glass
 
-The intro modal opens with the mode switch (Autoplay selected at first) and a line on what the mode
-does, then lists the chapters with their icons; a chapter's sections are links under it, so any part
-starts with one click, in the chosen mode. The primary button follows the mode: "Play the whole
-tour", "Take the whole tour" or "Start exploring". With unfinished
-progress it offers Resume beside "Take the whole tour".
+The panel, the step cards and the end cards are frosted (`TOUR_GLASS_CLASS`: 80% white over a blur
+and saturation of the page, a faint edge); the start's backdrop blurs the page softly instead of a
+flat dim. Joyride's own overlay stays a plain dim, so the context around each highlighted spot stays
+readable. Tour chrome only: the app's own surfaces stay solid. "Product tour" replaces "Guided tour"
+wherever the tour names itself, since not every mode is guided.
 
 ## Progress
 

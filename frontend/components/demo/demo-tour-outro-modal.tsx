@@ -5,6 +5,8 @@ import { Check, MapPinned, Play } from 'lucide-react'
 import { useDemoTour } from '@/lib/demo/demo-tour-context'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { Button, buttonVariants } from '@/components/ui/button'
+import { TOUR_GLASS_CLASS } from '@/components/demo/demo-tour-labels'
+import { cn } from '@/lib/utils'
 
 /** The modal shown when the guided tour ends. Built on the app's Dialog, so it portals out of the
  * tour's shell and uses the app's design tokens. */
@@ -14,11 +16,11 @@ export function DemoTourOutroModal() {
 
     return (
         <Dialog open={showOutroModal} onOpenChange={(open) => { if (!open) close() }}>
-            <DialogContent className="max-w-sm gap-0 p-0">
+            <DialogContent className={cn(TOUR_GLASS_CLASS, 'max-w-sm gap-0 p-0')}>
                 <div className="px-5 pt-5">
                     <p className="flex items-center gap-1.5 text-caption text-fg-subtle">
                         <MapPinned className="h-3.5 w-3.5" />
-                        Guided tour
+                        Product tour
                     </p>
                     <DialogTitle className="mt-2">That&apos;s the tour</DialogTitle>
                     <DialogDescription className="mt-1.5 leading-relaxed">

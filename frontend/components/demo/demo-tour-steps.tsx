@@ -579,13 +579,3 @@ export function tourSteps(scope: TourNodeId | null): TourRunStep[] {
 export function isNodeSeen(id: TourNodeId, completed: TourNodeId[]): boolean {
     return tourSubtree(id).every((n) => NODE_STEPS[n.id].length === 0 || completed.includes(n.id))
 }
-
-/** The chapters without sections, each in a line, for the chapter picker. */
-export const CHAPTER_SUMMARIES: Partial<Record<TourNodeId, React.ReactNode>> = {
-    search: 'Jump anywhere from the keyboard',
-    home: 'Where you left off, and what needs you',
-    inbox: 'Reminders, review requests, @mentions and notifications',
-    profile: 'Your profile, Billing and Support',
-    support: 'Ask the Firma team, and follow your requests',
-    billing: 'Your plan and your payments',
-}

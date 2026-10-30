@@ -8,13 +8,13 @@ import { useDemoTour } from '@/lib/demo/demo-tour-context'
 export function DemoTourTopbarButton() {
     const { run, restartTour } = useDemoTour()
     return (
-        <Hint label={run ? 'Tour in progress' : 'Start the guided tour'} side="bottom">
+        <Hint label={run ? 'Tour in progress' : 'Start the product tour'} side="bottom">
             <button
                 type="button"
                 onClick={() => { if (!run) restartTour() }}
                 disabled={run}
                 className="flex h-7 w-7 items-center justify-center rounded-control text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg disabled:cursor-not-allowed disabled:opacity-40"
-                aria-label="Start the guided tour"
+                aria-label="Start the product tour"
             >
                 <MapPinned className="h-4 w-4" />
             </button>
