@@ -69,7 +69,7 @@ function seenSteps(id: TourNodeId, completed: TourNodeId[], current?: TourRunSte
 }
 
 /**
- * Between the empty ring and the round check: a ring that fills with the share of a part's steps seen.
+ * Between the dashed ring and the round check: a ring that fills with the share of a part's steps seen.
  * With `playing` (Autoplay) the current step adds its clock, so the ring fills as the step's time runs
  * and stops when it's held; past the part's last step the check takes over.
  */
@@ -99,11 +99,24 @@ function ProgressRing({ done, total, playing = false, className }: { done: numbe
 }
 
 /** A part's ring away from where the run is: a check when it's been seen, partly filled when some of
- * it has, else empty. The same in the start and the outline. */
+ * it has, else a dashed ring, not started. The same in the start and the outline. */
 function SeenMark({ id, completed, className }: { id: TourNodeId; completed: TourNodeId[]; className?: string }) {
     if (isNodeSeen(id, completed)) return <RoundCheck on small label="Seen" className={className} />
     const { done, total } = seenSteps(id, completed)
-    return done > 0 ? <ProgressRing done={done} total={total} className={className} /> : <RoundCheck on={false} ring small className={className} />
+    return done > 0 ? <ProgressRing done={done} total={total} className={className} /> : <PendingRing className={className} />
+}
+
+/** Not started: a dashed ring, the size of the progress ring and the check, so a row's mark doesn't
+ * shift as it goes from one to the next. Solid empty rings stay the radios' (the modes). */
+function PendingRing({ className }: { className?: string }) {
+    const r = 5.75
+    // Ten dashes, ten gaps, evenly round the ring.
+    const dash = (2 * Math.PI * r) / 20
+    return (
+        <svg viewBox="0 0 14 14" className={cn('h-3.5 w-3.5 shrink-0 -rotate-90', className)} aria-hidden>
+            <circle cx="7" cy="7" r={r} fill="none" strokeWidth="1.5" strokeDasharray={`${dash} ${dash}`} className="stroke-fg-subtle" />
+        </svg>
+    )
 }
 
 /** The three modes as radio cards: each says what happens; the chosen one tinted and bordered, with a
