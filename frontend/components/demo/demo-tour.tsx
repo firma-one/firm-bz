@@ -9,7 +9,7 @@ import { Hint } from '@/components/ui/tooltip'
 import { useDemoTour } from '@/lib/demo/demo-tour-context'
 import { GUIDE_PARAM, autoplayDuration, tourNode, type TourNodeId } from '@/lib/demo/tour-chapters'
 import { tourSteps } from '@/components/demo/demo-tour-steps'
-import { TOUR_GLASS_CLASS, TourNodeTitle } from '@/components/demo/demo-tour-labels'
+import { TOUR_CARD_GLASS_CLASS, TourNodeTitle } from '@/components/demo/demo-tour-labels'
 import { cn } from '@/lib/utils'
 
 const JoyrideAny = Joyride as any
@@ -105,7 +105,7 @@ function TourTooltip({ backProps, closeProps, primaryProps, skipProps, step, ind
             ref={cardRef}
             onMouseEnter={() => setHovered(true)}
             onMouseLeave={() => setHovered(false)}
-            className={cn(TOUR_GLASS_CLASS, 'relative w-[300px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-card p-4 text-left')}
+            className={cn(TOUR_CARD_GLASS_CLASS, 'relative w-[300px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-card p-4 text-left')}
         >
             <div className="flex items-start gap-2">
                 <div className="min-w-0 flex-1">

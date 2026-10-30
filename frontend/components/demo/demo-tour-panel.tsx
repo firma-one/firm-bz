@@ -35,6 +35,27 @@ export function DemoTourPanel() {
     )
 }
 
+/**
+ * The panel's one check: a filled circle with a white tick. As a radio's mark (the modes) an empty
+ * ring stands in when it's off; as a seen mark (the chapters) nothing does.
+ */
+function RoundCheck({ on, ring = false, small = false, label, className }: { on: boolean; ring?: boolean; small?: boolean; label?: string; className?: string }) {
+    if (!on && !ring) return null
+    return (
+        <span
+            className={cn(
+                'flex shrink-0 items-center justify-center rounded-full border transition-colors',
+                small ? 'h-3.5 w-3.5' : 'h-4 w-4',
+                on ? 'border-action bg-action text-action-fg' : 'border-line-strong bg-white',
+                className,
+            )}
+            {...(label && on ? { role: 'img', 'aria-label': label } : { 'aria-hidden': true })}
+        >
+            {on && <Check className={small ? 'h-2 w-2' : 'h-2.5 w-2.5'} strokeWidth={3} />}
+        </span>
+    )
+}
+
 /** The three modes as radio cards: each says what happens; the chosen one tinted and bordered, with a
  * round check where the others show an empty ring. */
 function ModeCards({ value, onChange }: { value: TourMode; onChange: (mode: TourMode) => void }) {
@@ -54,16 +75,7 @@ function ModeCards({ value, onChange }: { value: TourMode; onChange: (mode: Tour
                             selected ? 'border-action bg-action/10' : 'border-line bg-white/60 hover:border-line-strong',
                         )}
                     >
-                        {/* A radio's round mark: filled and checked on the chosen card, an empty ring on the others */}
-                        <span
-                            className={cn(
-                                'absolute right-2 top-2 flex h-4 w-4 items-center justify-center rounded-full border transition-colors',
-                                selected ? 'border-action bg-action text-action-fg' : 'border-line-strong bg-white',
-                            )}
-                            aria-hidden
-                        >
-                            {selected && <Check className="h-2.5 w-2.5" strokeWidth={3} />}
-                        </span>
+                        <RoundCheck on={selected} ring className="absolute right-2 top-2" />
                         <span className={cn('flex [&_svg]:h-4 [&_svg]:w-4', selected ? 'text-action' : 'text-fg-muted')} aria-hidden>{TOUR_MODE_LABELS[mode].icon}</span>
                         <span className={cn('text-small font-medium', selected ? 'text-action' : 'text-fg')}>{TOUR_MODE_LABELS[mode].label}</span>
                         <span className="text-caption leading-snug text-fg-muted">{TOUR_MODE_LABELS[mode].short}</span>
@@ -79,7 +91,7 @@ function ChapterTree({ open, onToggle }: { open: Set<TourNodeId>; onToggle: (id:
     const { completedNodes, startNode } = useDemoTour()
     // Seen, or a play mark on hover: a row starts that part.
     const mark = (id: TourNodeId) => isNodeSeen(id, completedNodes)
-        ? <Check className="h-3.5 w-3.5 shrink-0 text-action" aria-label="Seen" />
+        ? <RoundCheck on small label="Seen" />
         : <Play className="h-3 w-3 shrink-0 text-fg-subtle opacity-0 transition-opacity group-hover/row:opacity-100" aria-hidden />
 
     return (
@@ -266,7 +278,7 @@ function ModeRow() {
                                 <span className="block text-small font-medium text-fg">{TOUR_MODE_LABELS[m].label}</span>
                                 <span className="block text-caption text-fg-muted">{TOUR_MODE_LABELS[m].short}</span>
                             </span>
-                            {m === mode && <Check className="mt-0.5 h-3.5 w-3.5 text-action" aria-label="Current" />}
+                            <RoundCheck on={m === mode} ring label="Current" className="mt-0.5" />
                         </DropdownMenuItem>
                     ))}
                 </DropdownMenuContent>
@@ -426,7 +438,7 @@ function TourRunning() {
                                             {TOUR_NODE_ICONS[node.id]}
                                         </span>
                                         <span className="min-w-0 flex-1"><TourNodeTitle id={node.id} /></span>
-                                        {isNodeSeen(node.id, completedNodes) && <Check className="mt-[0.2em] h-3.5 w-3.5 shrink-0 text-action" aria-label="Seen" />}
+                                        <RoundCheck on={isNodeSeen(node.id, completedNodes)} small label="Seen" className="mt-[0.2em]" />
                                     </button>
                                 </li>
                             )
