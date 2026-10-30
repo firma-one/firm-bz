@@ -10,8 +10,9 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { useDemoTour } from '@/lib/demo/demo-tour-context'
 import { TOUR_MODES, TOUR_NODES, TOUR_OUTLINE, nextTourNode, tourNode, tourSubtree, type PlacedTourNode, type TourMode, type TourNodeId } from '@/lib/demo/tour-chapters'
-import { isNodeSeen, tourSteps } from '@/components/demo/demo-tour-steps'
+import { isNodeSeen, tourSteps, type TourRunStep } from '@/components/demo/demo-tour-steps'
 import { TOUR_GLASS_CLASS, TOUR_MODE_LABELS, TOUR_NODE_ICONS, TourNodePlace, TourNodeTitle } from '@/components/demo/demo-tour-labels'
+import { useStepProgress } from '@/lib/demo/tour-clock'
 
 /** The panel's distance from the window's bottom-right corner, in both states. */
 const EDGE = 16
@@ -39,8 +40,8 @@ export function DemoTourPanel() {
 }
 
 /**
- * The panel's one check: a filled circle with a white tick. As a radio's mark (the modes) an empty
- * ring stands in when it's off; as a seen mark (the chapters) nothing does.
+ * The panel's one check: a filled circle with a white tick, and an empty ring in its place when it's
+ * off (with `ring`): a radio's mark for the modes, a seen mark for the chapters.
  */
 function RoundCheck({ on, ring = false, small = false, label, className }: { on: boolean; ring?: boolean; small?: boolean; label?: string; className?: string }) {
     if (!on && !ring) return null
@@ -56,6 +57,44 @@ function RoundCheck({ on, ring = false, small = false, label, className }: { on:
         >
             {on && <Check className={small ? 'h-2 w-2' : 'h-2.5 w-2.5'} strokeWidth={3} />}
         </span>
+    )
+}
+
+/** Of a chapter's or section's steps, how many have been seen: every step of each section seen to its
+ * end, and of the section the run is in, those before the current step (and the current one with `orCurrent`). */
+function seenSteps(id: TourNodeId, completed: TourNodeId[], current?: TourRunStep, orCurrent = false) {
+    const steps = tourSteps(id)
+    const done = steps.filter((s) => (s.node === current?.node ? s.indexInNode < current.indexInNode + (orCurrent ? 1 : 0) : completed.includes(s.node))).length
+    return { done, total: steps.length }
+}
+
+/**
+ * Between the empty ring and the round check: a ring that fills with the share of a part's steps seen.
+ * With `playing` (Autoplay) the current step adds its clock, so the ring fills as the step's time runs
+ * and stops when it's held; past the part's last step the check takes over.
+ */
+function ProgressRing({ done, total, playing = false, className }: { done: number; total: number; playing?: boolean; className?: string }) {
+    const clock = useStepProgress()
+    const fraction = Math.min(1, (done + (playing ? clock : 0)) / Math.max(total, 1))
+    const r = 5.75
+    const length = 2 * Math.PI * r
+    return (
+        <svg viewBox="0 0 14 14" className={cn('h-3.5 w-3.5 shrink-0 -rotate-90', className)} aria-hidden>
+            <circle cx="7" cy="7" r={r} fill="white" strokeWidth="1.5" className="stroke-action/25" />
+            {fraction > 0 && (
+                <circle
+                    cx="7"
+                    cy="7"
+                    r={r}
+                    fill="none"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeDasharray={length}
+                    strokeDashoffset={length * (1 - fraction)}
+                    className={cn('stroke-action transition-[stroke-dashoffset] ease-linear motion-reduce:transition-none', playing ? 'duration-100' : 'duration-300')}
+                />
+            )}
+        </svg>
     )
 }
 
@@ -92,10 +131,19 @@ function ModeCards({ value, onChange }: { value: TourMode; onChange: (mode: Tour
 /** The chapters, each a click from playing; a chevron opens a chapter's sections, each a click from playing too. */
 function ChapterTree({ open, onToggle }: { open: Set<TourNodeId>; onToggle: (id: TourNodeId) => void }) {
     const { completedNodes, startNode } = useDemoTour()
-    // Seen, or a play mark on hover: a row starts that part.
-    const mark = (id: TourNodeId) => isNodeSeen(id, completedNodes)
-        ? <RoundCheck on small label="Seen" />
-        : <Play className="h-3 w-3 shrink-0 text-fg-subtle opacity-0 transition-opacity group-hover/row:opacity-100" aria-hidden />
+    // Seen; else how much of it has been, a ring that gives way to a play mark on hover: a row starts that part.
+    const mark = (id: TourNodeId) => {
+        if (isNodeSeen(id, completedNodes)) return <RoundCheck on small label="Seen" />
+        const { done, total } = seenSteps(id, completedNodes)
+        return (
+            <span className="relative flex h-3.5 w-3.5 shrink-0 items-center justify-center">
+                <span className="flex transition-opacity group-hover/row:opacity-0">
+                    {done > 0 ? <ProgressRing done={done} total={total} /> : <RoundCheck on={false} ring small />}
+                </span>
+                <Play className="absolute h-3 w-3 text-fg-subtle opacity-0 transition-opacity group-hover/row:opacity-100" aria-hidden />
+            </span>
+        )
+    }
 
     return (
         <ul className="flex flex-col gap-px">
@@ -329,6 +377,8 @@ function Collapse({ open, children }: { open: boolean; children: ReactNode }) {
 function TourRunning() {
     const { mode, active, run, scope, stepIndex, completedNodes, jumpToStep, startNode, endTour, saveProgress } = useDemoTour()
     const exploring = mode === 'explore'
+    // In Autoplay the current step counts as its time runs; otherwise once it's on screen.
+    const playing = mode === 'autoplay'
     const steps = useMemo(() => tourSteps(scope), [scope])
     const current = steps[stepIndex]
     const currentNode = current ? tourNode(current.node) : null
@@ -474,7 +524,12 @@ function TourRunning() {
                                             {TOUR_NODE_ICONS[node.id]}
                                         </span>
                                         <span className="min-w-0 flex-1"><TourNodeTitle id={node.id} /></span>
-                                        <RoundCheck on={isNodeSeen(node.id, completedNodes)} small label="Seen" className="mt-[0.2em]" />
+                                        {/* Where the run is, a ring filling as it goes; elsewhere seen or not */}
+                                        {current && trail.has(node.id) ? (
+                                            <ProgressRing {...seenSteps(node.id, completedNodes, current, !playing)} playing={playing} className="mt-[0.2em]" />
+                                        ) : (
+                                            <RoundCheck on={isNodeSeen(node.id, completedNodes)} ring small label="Seen" className="mt-[0.2em]" />
+                                        )}
                                     </button>
                                 </li>
                             )

@@ -9,6 +9,7 @@ import { Hint } from '@/components/ui/tooltip'
 import { useDemoTour } from '@/lib/demo/demo-tour-context'
 import { GUIDE_PARAM, autoplayDuration, tourNode, type TourNodeId } from '@/lib/demo/tour-chapters'
 import { tourSteps } from '@/components/demo/demo-tour-steps'
+import { setStepProgress } from '@/lib/demo/tour-clock'
 import { TOUR_CARD_GLASS_CLASS, TourNodeTitle } from '@/components/demo/demo-tour-labels'
 import { cn } from '@/lib/utils'
 
@@ -59,7 +60,12 @@ function useAutoplay({ index, on, held, duration, read, next }: { index: number;
         next()
     }, [on, elapsed, total, next])
 
-    return Math.min(1, elapsed / total)
+    const progress = Math.min(1, elapsed / total)
+    // Shared with the tour panel, whose ring for the current section fills with it.
+    useEffect(() => setStepProgress(on ? progress : 0), [on, progress])
+    useEffect(() => () => setStepProgress(0), [])
+
+    return progress
 }
 
 /**
@@ -68,8 +74,10 @@ function useAutoplay({ index, on, held, duration, read, next }: { index: number;
  * that section and Skip on the left, Back and Next on the right. Joyride portals it to the body,
  * outside the demo shell.
  *
- * In Autoplay it moves on by itself: a line along its foot fills as the step's time runs, Pause holds
- * it, and so does pointing at the card to read it.
+ * In Autoplay it moves on by itself: a bar at its top fills as the step's time runs (only this step's
+ * time; where the visitor is in the tour stays in the tour panel). Pause holds it, and so does
+ * pointing at the card to read it; held, the bar greys, and a pause says so at the bar's end and
+ * offers Play.
  *
  * Joyride's button props carry a `title`, which would show the browser's native tooltip; it is
  * dropped in favor of the visible labels.
@@ -90,10 +98,11 @@ function TourTooltip({ backProps, closeProps, primaryProps, skipProps, step, ind
     const [hovered, setHovered] = useState(false)
     const autoplay = mode === 'autoplay'
     const advance = useCallback(() => controls.next(), [controls])
+    const held = paused || hovered
     const progress = useAutoplay({
         index,
         on: autoplay,
-        held: paused || hovered,
+        held,
         duration: card.duration,
         read: () => cardRef.current?.innerText ?? '',
         next: advance,
@@ -107,6 +116,16 @@ function TourTooltip({ backProps, closeProps, primaryProps, skipProps, step, ind
             onMouseLeave={() => setHovered(false)}
             className={cn(TOUR_CARD_GLASS_CLASS, 'relative w-[300px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-card p-4 text-left')}
         >
+            {/* Autoplay's clock: this step's time, filling; grey while held, and "Paused" where it stopped.
+                The row is the label's height either way, so pausing doesn't move the card's copy. */}
+            {autoplay && (
+                <div className="mb-2 flex h-3 items-center gap-2">
+                    <div className="h-[3px] flex-1 overflow-hidden rounded-full bg-black/[0.06]" role="progressbar" aria-label="Time on this step" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress * 100)}>
+                        <div className={cn('h-full rounded-full transition-[width,background-color] duration-100 ease-linear', held ? 'bg-black/20' : 'bg-action')} style={{ width: `${progress * 100}%` }} />
+                    </div>
+                    {paused && <span className="text-caption leading-none text-fg-subtle">Paused</span>}
+                </div>
+            )}
             <div className="flex items-start gap-2">
                 <div className="min-w-0 flex-1">
                     {crumbs.length > 0 && (
@@ -128,7 +147,7 @@ function TourTooltip({ backProps, closeProps, primaryProps, skipProps, step, ind
                 {step.content as React.ReactNode}
             </div>
             <div className="mt-4 flex items-center gap-3">
-                {card.nodeSize > 1 && <span className="text-caption tabular-nums text-fg-subtle">{card.indexInNode + 1} of {card.nodeSize}</span>}
+                {card.nodeSize > 1 && <span className="whitespace-nowrap text-caption tabular-nums text-fg-subtle">{card.indexInNode + 1} of {card.nodeSize}</span>}
                 <button {...skip} type="button" className="text-caption text-fg-subtle underline-offset-2 transition-colors hover:text-fg-muted hover:underline">
                     {card.wholeTour ? 'Skip tour' : 'Skip'}
                 </button>
@@ -141,7 +160,7 @@ function TourTooltip({ backProps, closeProps, primaryProps, skipProps, step, ind
                                 aria-label={paused ? 'Play' : 'Pause'}
                                 className="flex h-7 w-7 items-center justify-center rounded-control text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg"
                             >
-                                {paused ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
+                                {paused ? <Play className="h-3.5 w-3.5 text-action" /> : <Pause className="h-3.5 w-3.5" />}
                             </button>
                         </Hint>
                     )}
@@ -149,12 +168,6 @@ function TourTooltip({ backProps, closeProps, primaryProps, skipProps, step, ind
                     <Button {...next} type="button" size="sm">{isLastStep ? 'Finish' : 'Next'}</Button>
                 </div>
             </div>
-            {/* Autoplay's clock: fills as the step's time runs */}
-            {autoplay && (
-                <div className="absolute inset-x-0 bottom-0 h-0.5 bg-surface-muted" aria-hidden>
-                    <div className="h-full bg-action transition-[width] duration-100 ease-linear" style={{ width: `${progress * 100}%` }} />
-                </div>
-            )}
         </div>
     )
 }

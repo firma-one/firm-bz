@@ -103,6 +103,11 @@ mode (Autoplay at first).
   little longer (`settle`), or the card points at where the target was mid-animation.
 - The step card shows where the step sits ("Engagements › Files › Details") above its title, and
   counts within that section.
+- **Autoplay's clock** (2026-10-30): one inset bar at the top of the step card, for this step's time
+  only; where the visitor is in the tour stays in the panel, since a bar for 50-plus steps says
+  little. Pausing, or pointing at the card to read it, holds the clock and greys the bar. A pause
+  also says "Paused" at the bar's end and turns Pause into Play. ("Paused" was meant to sit beside
+  the step count, but on a whole-tour run the footer has no room: "Skip tour", Play, Back and Next.)
 - **A chapter or section ends** on the panel's ending: "Next: <what follows in the outline>", Done,
   and "All chapters". **The whole tour** runs straight through and ends on "That's the tour".
 
@@ -139,8 +144,8 @@ mode switch unclear, and the pane's side-to-side jumps disconcerting).
 
 ### Frosted glass
 
-The panel and the step cards are frosted (`TOUR_GLASS_CLASS`: 80% white over a blur
-and saturation of the page, a faint edge); the start's backdrop blurs the page softly instead of a
+The panel and the step cards are frosted (`TOUR_GLASS_CLASS`: 90% white over a blur
+and saturation of the page, a faint edge; the step cards 97%, so their copy reads cleanly); the start's backdrop blurs the page softly instead of a
 flat dim. Joyride's own overlay stays a plain dim, so the context around each highlighted spot stays
 readable. Tour chrome only: the app's own surfaces stay solid. "Product tour" replaces "Guided tour"
 wherever the tour names itself, since not every mode is guided.
@@ -150,6 +155,18 @@ wherever the tour names itself, since not every mode is guided.
 localStorage `fm_demo_tour`: `resume: { scope, step }` (scope null for the whole tour) and
 `completed: string[]`, the nodes whose own steps were all seen. A node shows as seen when every part
 of it with steps is. Older `stepIndex` progress is ignored. `fm_demo_tour_never_show` is unchanged.
+
+**Rings** (2026-10-30): every row in the panel ends in a status ring, for a part and everything
+under it.
+- An empty ring: not started.
+- A filling ring: the share of its steps seen. For the section the run is in, and the chapter
+  around it, the ring fills as the run goes. In Autoplay it follows the step's clock
+  (`lib/demo/tour-clock.ts`, kept outside React state so only the rings re-render, not the tour).
+  Otherwise it moves a step at a time as each step comes on screen.
+- A round check: seen.
+
+The start panel shows the same rings, so a partly seen chapter's ring is partly filled; on hover, a
+row's ring gives way to a play mark.
 
 ## Real-app entry points (new UI only)
 
