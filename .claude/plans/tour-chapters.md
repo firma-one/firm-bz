@@ -173,9 +173,11 @@ under it.
 The start panel shows the same rings, so a partly seen chapter's ring is partly filled; on hover, a
 row's ring gives way to a play mark.
 
-**Replay clears them** (2026-10-30): Replay at the end of the whole tour empties `completed`, so a
-second pass fills the rings afresh rather than showing every row checked. "All chapters" after a
-chapter, the map icons and coming back to /tour keep them, to show what's left.
+**The whole tour from the start clears them** (2026-10-30): playing the whole tour from its first
+step empties `completed`, however it's started (the start panel's primary button, after a refresh
+or a map icon), so a second pass fills the rings afresh rather than showing every row checked.
+Replay at the end of the whole tour clears them as it opens the start panel. Resume, a single
+chapter or section, "All chapters" and coming back to /tour keep them, to show what's left.
 
 ## Real-app entry points (new UI only)
 

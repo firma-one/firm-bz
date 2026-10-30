@@ -110,7 +110,7 @@ interface DemoTourContextValue {
     resumable: TourResume | null
     openIntroModal: () => void
     closeIntroModal: (neverShowAgain?: boolean) => void
-    /** The whole tour, from its first step. */
+    /** The whole tour, from its first step, with nothing marked seen. */
     startTour: () => void
     /** One chapter or section, from its first step; in a mode of its own when a deep link names one. */
     startNode: (id: TourNodeId, mode?: TourMode) => void
@@ -196,8 +196,10 @@ export function DemoTourProvider({ children }: { children: ReactNode }) {
         else if (mode === 'explore') begin(scope, stepIndex)
     }
 
+    // The whole tour from its first step is a fresh pass, however it's started: nothing marked seen,
+    // so the panel's rings fill again as it goes. Resume and a single chapter keep what's been seen.
     const startTour = () => {
-        writeTourState({ resume: undefined })
+        writeTourState({ resume: undefined, completed: [] })
         setResumable(null)
         begin(null, 0)
     }
@@ -225,7 +227,8 @@ export function DemoTourProvider({ children }: { children: ReactNode }) {
         openIntroModal()
     }
 
-    // "All chapters" and coming back keep what's been seen, to show what's left; Replay starts over.
+    // "All chapters" and coming back keep what's been seen, to show what's left; Replay starts over,
+    // its start panel already clear before the whole tour plays again.
     const replayTour = () => {
         writeTourState({ completed: [] })
         setCompletedNodes([])
