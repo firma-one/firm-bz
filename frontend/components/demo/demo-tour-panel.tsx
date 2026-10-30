@@ -393,7 +393,7 @@ function Collapse({ open, name, children }: { open: boolean; name?: string; chil
 function TourCorner() {
     const {
         mode, active, run, scope, stepIndex, completedNodes, showOutroModal, finishedNode,
-        jumpToStep, startNode, endTour, closeNodeEnd, restartTour, saveProgress,
+        jumpToStep, startNode, endTour, closeNodeEnd, restartTour, replayTour, saveProgress,
     } = useDemoTour()
     const ending = !active && (showOutroModal || finishedNode !== null)
     // What the ending is about, kept while it folds away on Next, so its copy doesn't change mid-fold.
@@ -611,7 +611,8 @@ function TourCorner() {
                         : 'The sample data is yours to explore; nothing here is saved. Replay any time from the map icon at the top.'}
                 </p>
                 <div className="mt-3 flex items-center gap-1.5 border-t border-black/[0.06] px-3.5 py-2.5">
-                    <Button variant="ghost" size="sm" onClick={restartTour} className="shrink-0">
+                    {/* All chapters keeps the checks, to show what's left; Replay clears them for a fresh pass */}
+                    <Button variant="ghost" size="sm" onClick={finished ? restartTour : replayTour} className="shrink-0">
                         {finished ? 'All chapters' : <><Play className="h-3.5 w-3.5" />Replay</>}
                     </Button>
                     <div className="ml-auto flex min-w-0 items-center gap-1.5">

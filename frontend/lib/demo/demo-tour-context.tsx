@@ -119,6 +119,8 @@ interface DemoTourContextValue {
     /** Resume from the saved position. */
     resumeTour: () => void
     restartTour: () => void
+    /** Replay from the end of the whole tour: the start again, with nothing marked seen, so the panel's rings fill afresh on the second pass. */
+    replayTour: () => void
     endTour: (completed?: boolean) => void
     closeNodeEnd: () => void
     markNodeDone: (id: TourNodeId) => void
@@ -223,6 +225,13 @@ export function DemoTourProvider({ children }: { children: ReactNode }) {
         openIntroModal()
     }
 
+    // "All chapters" and coming back keep what's been seen, to show what's left; Replay starts over.
+    const replayTour = () => {
+        writeTourState({ completed: [] })
+        setCompletedNodes([])
+        restartTour()
+    }
+
     const markNodeDone = (id: TourNodeId) => {
         const done = readTourState().completed ?? []
         if (done.includes(id)) return
@@ -258,7 +267,7 @@ export function DemoTourProvider({ children }: { children: ReactNode }) {
         <DemoTourContext.Provider
             value={{
                 mode, setMode, paused, setPaused, run, stepIndex, scope, active, launch, showIntroModal, showOutroModal, finishedNode, hasCompletedTour, completedNodes, resumable,
-                openIntroModal, closeIntroModal, startTour, startNode, jumpToStep, resumeTour, restartTour, endTour, closeNodeEnd, markNodeDone,
+                openIntroModal, closeIntroModal, startTour, startNode, jumpToStep, resumeTour, restartTour, replayTour, endTour, closeNodeEnd, markNodeDone,
                 setStepIndex, setRun, saveProgress,
             }}
         >

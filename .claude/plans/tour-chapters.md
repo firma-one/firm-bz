@@ -173,6 +173,10 @@ under it.
 The start panel shows the same rings, so a partly seen chapter's ring is partly filled; on hover, a
 row's ring gives way to a play mark.
 
+**Replay clears them** (2026-10-30): Replay at the end of the whole tour empties `completed`, so a
+second pass fills the rings afresh rather than showing every row checked. "All chapters" after a
+chapter, the map icons and coming back to /tour keep them, to show what's left.
+
 ## Real-app entry points (new UI only)
 
 "How this works" beside the page title (`components/ui/how-this-works-link.tsx`, `PageHeading`'s
