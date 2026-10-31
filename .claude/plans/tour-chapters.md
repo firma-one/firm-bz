@@ -23,10 +23,15 @@ chapter, section or sub-section can be run on its own or linked; the whole tour 
 `lib/demo/tour-chapters.ts` holds the tree (`TOUR_OUTLINE`, flattened in order as `TOUR_NODES`); the
 steps live in `components/demo/demo-tour-steps.tsx` (`NODE_STEPS`, one list per node).
 
+The sidebar's top is Home, Inbox, then Search (2026-10-31, in the app and here alike): Home is
+where the app opens and Inbox the daily triage, while Search opens the quick-jump palette rather
+than a page, and ⌘K is for power users. The tour follows it, so the whole tour opens on Home, and
+the Search card sits on the Inbox page, where the run already is.
+
 ```
-Search (⌘K)
 Home
 Inbox
+Search (⌘K)
 Profile
 Firm
   Switch firms · Overview and daily brief · Doc Search · Calendar · Members · Audit · Settings

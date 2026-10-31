@@ -6,9 +6,9 @@
  */
 
 export const TOUR_NODE_IDS = [
-    'search',
     'home',
     'inbox',
+    'search',
     'profile',
     'firm',
     'firm-switcher',
@@ -48,11 +48,12 @@ export interface TourNode {
     children?: TourNode[]
 }
 
-/** The chapters, in the order the whole tour runs them; TOUR_NODE_IDS lists the same nodes in the same order. */
+/** The chapters, in the order the whole tour runs them; TOUR_NODE_IDS lists the same nodes in the same order.
+ * The first three follow the sidebar from the top: Home, Inbox, then Search. */
 export const TOUR_OUTLINE: TourNode[] = [
-    { id: 'search', title: 'Search (⌘K)' },
     { id: 'home', title: 'Home' },
     { id: 'inbox', title: 'Inbox' },
+    { id: 'search', title: 'Search (⌘K)' },
     { id: 'profile', title: 'Profile' },
     {
         id: 'firm',

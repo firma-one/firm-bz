@@ -64,17 +64,6 @@ export interface TourRunStep extends TourStep {
  * this static copy, so their steps show where they live. Every target must exist as a
  * data-demo-tour attribute (lib/demo/tour-chapters.test.ts checks). */
 export const NODE_STEPS: Record<TourNodeId, TourStep[]> = {
-    search: [
-        {
-            target: '[data-demo-tour="command-palette"]',
-            title: 'Search (⌘K)',
-            content: <p>Press ⌘K (or Ctrl K) anywhere to jump to a client, an engagement, a document or a setting, or to run a command. Typing G and then a letter goes straight to a page: G D opens Doc Search. Search is inert in this demo.</p>,
-            spoken: 'Search. Press Command K, or Control K, anywhere to jump to a client, an engagement, a document or a setting, or to run a command. Typing G and then a letter goes straight to a page: G, then D, opens Doc Search. Search is inert in this demo.',
-            route: `${firm}/home`,
-            placement: 'right',
-            disableBeacon: true,
-        },
-    ],
     home: [
         {
             target: '[data-demo-tour="sidebar-home"]',
@@ -107,6 +96,18 @@ export const NODE_STEPS: Record<TourNodeId, TourStep[]> = {
             route: `${firm}/inbox`,
             placement: 'bottom',
             skipScroll: true,
+        },
+    ],
+    // After Home and Inbox, as in the sidebar; on the Inbox page, where the run already is.
+    search: [
+        {
+            target: '[data-demo-tour="command-palette"]',
+            title: 'Search (⌘K)',
+            content: <p>Press ⌘K (or Ctrl K) anywhere to jump to a client, an engagement, a document or a setting, or to run a command. Typing G and then a letter goes straight to a page: G D opens Doc Search. Search is inert in this demo.</p>,
+            spoken: 'Search. Press Command K, or Control K, anywhere to jump to a client, an engagement, a document or a setting, or to run a command. Typing G and then a letter goes straight to a page: G, then D, opens Doc Search. Search is inert in this demo.',
+            route: `${firm}/inbox`,
+            placement: 'right',
+            disableBeacon: true,
         },
     ],
     profile: [
