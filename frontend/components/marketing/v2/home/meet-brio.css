@@ -587,8 +587,24 @@
 .mk-hear-brio {
   margin-top: 28px;
 }
+.mk-hear-brio-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
 .mk-hear-brio-btn {
   gap: 8px;
+}
+/* "Take the tour", in as Brio invites the visitor. */
+.mk-hear-brio-tour {
+  animation: mk-hear-brio-in 400ms ease-out both;
+}
+@keyframes mk-hear-brio-in {
+  from {
+    opacity: 0;
+    transform: translateX(-6px);
+  }
 }
 .mk-hear-brio-wave {
   display: inline-flex;
@@ -644,5 +660,8 @@
   .mk-hear-brio-wave > span,
   .mk-hear-brio-caption {
     transition: none;
+  }
+  .mk-hear-brio-tour {
+    animation: none;
   }
 }

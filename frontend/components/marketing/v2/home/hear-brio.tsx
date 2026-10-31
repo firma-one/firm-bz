@@ -4,7 +4,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pause, Play, RotateCcw } from 'lucide-react';
 import type { SpokenWord } from '@/lib/demo/tour-read-along';
 import { useStreamingReveal } from '@/lib/demo/use-streaming-reveal';
-import { HEAR_BRIO_CLIP, HEAR_BRIO_LINE } from './hear-brio-line';
+import { PillLink } from '../primitives';
+import { HEAR_BRIO_CLIP, HEAR_BRIO_LINE, HEAR_BRIO_TOUR, inviteAt } from './hear-brio-line';
 
 type State = 'idle' | 'loading' | 'playing' | 'paused' | 'ended';
 
@@ -27,10 +28,15 @@ const REST = 0.25;
  * saved with the clip, so it goes quiet in the pauses), and the line opens below, each word coming
  * up as it's said. Pause holds both; at the end it offers to play again. Visitors who'd rather not
  * see motion get a still wave.
+ *
+ * Brio ends by inviting the visitor to the tour, and "Take the tour" appears beside the player as it
+ * says so; it opens the tour with Read aloud on, so Brio carries on showing them around.
  */
 export function HearBrio() {
   const [state, setState] = useState<State>('idle');
   const [timings, setTimings] = useState<Timings | null>(null);
+  // "Take the tour", from the moment Brio invites the visitor; it stays once shown.
+  const [invited, setInvited] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const barsRef = useRef<HTMLSpanElement>(null);
   const captionRef = useRef<HTMLParagraphElement>(null);
@@ -101,6 +107,22 @@ export function HearBrio() {
     return () => clearInterval(timer);
   }, [state, timings]);
 
+  // The invitation: watched apart from the wave, so it comes for reduced motion too; at the end,
+  // whenever the word times didn't arrive.
+  useEffect(() => {
+    if (invited) return;
+    if (state === 'ended') {
+      setInvited(true);
+      return;
+    }
+    const at = timings ? inviteAt(timings.words) : null;
+    if (state !== 'playing' || at === null) return;
+    const timer = setInterval(() => {
+      if ((audioRef.current?.currentTime ?? 0) >= at) setInvited(true);
+    }, 100);
+    return () => clearInterval(timer);
+  }, [state, timings, invited]);
+
   // The line streaming in as Brio says it; whole once it's over.
   useStreamingReveal({
     container: captionRef,
@@ -116,22 +138,29 @@ export function HearBrio() {
 
   return (
     <div className="mk-hear-brio">
-      <button
-        type="button"
-        onClick={toggle}
-        onPointerEnter={prefetch}
-        onFocus={prefetch}
-        className="mk-btn mk-btn--ghost-dark mk-btn--sm mk-hear-brio-btn"
-        aria-label={state === 'idle' ? 'Hear Brio introduce itself' : label}
-      >
-        <Icon size={15} strokeWidth={2.4} aria-hidden style={{ color: 'var(--mk-electric)' }} />
-        <span>{label}</span>
-        <span ref={barsRef} className="mk-hear-brio-wave" aria-hidden>
-          {BARS.map((_, k) => (
-            <span key={k} />
-          ))}
-        </span>
-      </button>
+      <div className="mk-hear-brio-row">
+        <button
+          type="button"
+          onClick={toggle}
+          onPointerEnter={prefetch}
+          onFocus={prefetch}
+          className="mk-btn mk-btn--ghost-dark mk-btn--sm mk-hear-brio-btn"
+          aria-label={state === 'idle' ? 'Hear Brio introduce itself' : label}
+        >
+          <Icon size={15} strokeWidth={2.4} aria-hidden style={{ color: 'var(--mk-electric)' }} />
+          <span>{label}</span>
+          <span ref={barsRef} className="mk-hear-brio-wave" aria-hidden>
+            {BARS.map((_, k) => (
+              <span key={k} />
+            ))}
+          </span>
+        </button>
+        {invited && (
+          <PillLink href={HEAR_BRIO_TOUR} size="sm" className="mk-hear-brio-tour">
+            Take the tour
+          </PillLink>
+        )}
+      </div>
       <div className={`mk-hear-brio-caption${open ? ' is-open' : ''}`} inert={!open}>
         <div>
           <p ref={captionRef}>{HEAR_BRIO_LINE}</p>

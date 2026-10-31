@@ -1,7 +1,7 @@
 'use client'
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
-import { DEFAULT_TOUR_MODE, isTourNodeId, parseModeParam, type TourMode, type TourNodeId } from '@/lib/demo/tour-chapters'
+import { DEFAULT_TOUR_MODE, NARRATION_PARAM, isTourNodeId, parseModeParam, type TourMode, type TourNodeId } from '@/lib/demo/tour-chapters'
 import { NARRATION_STORAGE_KEY } from '@/lib/demo/tour-narration'
 
 const TOUR_KEY = 'fm_demo_tour'
@@ -156,13 +156,19 @@ export function DemoTourProvider({ children }: { children: ReactNode }) {
     const [narration, setNarrationState] = useState(false)
 
     // The saved mode and narration after mount, so the server and the visitor's first render agree.
+    // A link that asks for narration (Hear Brio's "Take the tour") turns it on, and it's remembered.
     useEffect(() => {
         setModeState(loadMode())
+        if (new URLSearchParams(window.location.search).get(NARRATION_PARAM) === 'on') {
+            setNarration(true)
+            return
+        }
         try {
             setNarrationState(window.localStorage.getItem(NARRATION_STORAGE_KEY) === 'on')
         } catch {
             /* storage blocked: narration stays off */
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
 
     const setNarration = (on: boolean) => {

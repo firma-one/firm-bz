@@ -264,15 +264,22 @@ repeats every few seconds.
 - **The line** (`components/marketing/v2/home/hear-brio-line.ts`), kept to the section's "How Brio
   is kept in its lane": *Hi, I'm Brio, your executive assistant for client delivery, built into
   firmä. I keep track of every deliverable, due date and status, and draft the briefs and client
-  updates, so you can focus on the decisions, your client relationships, and growing your firm. I
-  never read what's inside your documents. I never change a thing without your go-ahead. And nothing
-  reaches a client until someone on your team publishes it.* Worded with Deepak: what Brio does,
-  then why it matters to the firm, then its three promises. The caption shows "firmä"; Brio says
-  "Firma", which is "FUR-muh" (Kokoro's own reading, confirmed).
+  updates, so you can focus on the decisions, your client relationships, and growing your firm. And
+  you stay in charge: I never read what's inside your documents, every change waits for your
+  go-ahead, and nothing reaches a client until your team publishes it. Want to see me at work? Take
+  the product tour, and I'll show you around.* Worded with Deepak: what Brio does, why it matters to
+  the firm, its promises as the firm staying in charge, then an invitation, so it ends on the next
+  step rather than on what Brio won't do (the first version ended on three "nevers" and stopped
+  abruptly). The caption shows "firmä"; Brio says "Firma", which is "FUR-muh" (Kokoro's own reading,
+  confirmed), and "read" in the present tense (pinned).
 - **The control** (`hear-brio.tsx`): Hear Brio, then Pause, Resume and Hear again. While Brio
   speaks, a five-bar wave follows the voice, quiet in its pauses, and the line opens below the pill,
   each word coming up as it's said (the tour's streaming reveal, `lib/demo/use-streaming-reveal.ts`,
   in white over the dark band: `::highlight(brio-unspoken)`). Reduced motion: a still wave.
+- **The invitation:** "Take the tour" appears beside the pill as Brio says "Take the product tour"
+  (its time from the clip's word times, `inviteAt`), and stays. It opens `/tour?narration=on`: the
+  visitor has just chosen to listen, so the tour starts with Read aloud on (`NARRATION_PARAM`,
+  read by the tour's state and remembered), and Brio carries on showing them around.
 - **The clip** is one of the generator's `lines` (`export-text.mjs`), made in the same voice with
   the same pronunciation pins: `frontend/public/marketing/hear-brio.m4a`, and `hear-brio.json` with
   its text hash, length, word times and how loud the voice is 20 times a second (for the wave, so
