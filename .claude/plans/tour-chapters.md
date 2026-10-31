@@ -163,7 +163,7 @@ of it with steps is. Older `stepIndex` progress is ignored. `fm_demo_tour_never_
 
 **Rings** (2026-10-30): every row in the panel ends in a status ring, for a part and everything
 under it.
-- An empty ring: not started.
+- A dashed ring: not started (as Claude Code marks a pending step; solid empty rings stay the mode radios').
 - A filling ring: the share of its steps seen. For the section the run is in, and the chapter
   around it, the ring fills as the run goes. In Autoplay it follows the step's clock
   (`lib/demo/tour-clock.ts`, kept outside React state so only the rings re-render, not the tour).
