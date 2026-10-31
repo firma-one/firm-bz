@@ -287,7 +287,7 @@ function TourStart() {
                         <div className="mt-2.5">
                             <ModeCards value={mode} onChange={setMode} />
                         </div>
-                        {/* Off until turned on; Explore has no step cards to read */}
+                        {/* On unless turned off; Explore has no step cards to read */}
                         {mode !== 'explore' && (
                             <label className="mt-2.5 flex w-fit cursor-pointer select-none items-center gap-2 text-small text-fg-muted">
                                 <Switch checked={narration} onCheckedChange={setNarration} />

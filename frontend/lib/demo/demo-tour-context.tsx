@@ -92,7 +92,7 @@ interface DemoTourContextValue {
     /** Autoplay held on the current step. */
     paused: boolean
     setPaused: (paused: boolean) => void
-    /** The step cards read aloud in Brio's voice (lib/demo/tour-narration.ts): off until the visitor turns it on, then remembered. */
+    /** The step cards read aloud in Brio's voice (lib/demo/tour-narration.ts): on until the visitor turns it off, then remembered. */
     narration: boolean
     setNarration: (on: boolean) => void
     run: boolean
@@ -156,18 +156,21 @@ export function DemoTourProvider({ children }: { children: ReactNode }) {
     const [narration, setNarrationState] = useState(false)
 
     // The saved mode and narration after mount, so the server and the visitor's first render agree.
-    // A link that asks for narration (Hear Brio's "Take the tour") turns it on, and it's remembered.
+    // Narration is on unless the visitor turned it off. A link that asks for it (Hear Brio's "Take
+    // the tour") turns it back on, and it's remembered.
     useEffect(() => {
         setModeState(loadMode())
         if (new URLSearchParams(window.location.search).get(NARRATION_PARAM) === 'on') {
             setNarration(true)
             return
         }
+        let on = true
         try {
-            setNarrationState(window.localStorage.getItem(NARRATION_STORAGE_KEY) === 'on')
+            on = window.localStorage.getItem(NARRATION_STORAGE_KEY) !== 'off'
         } catch {
-            /* storage blocked: narration stays off */
+            /* storage blocked: narration stays on */
         }
+        setNarrationState(on)
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
 

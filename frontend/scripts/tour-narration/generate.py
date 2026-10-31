@@ -4,10 +4,10 @@ Makes the /tour step cards' narration clips in Brio's voice, with Kokoro (Apache
 Brio's voice is an even blend of two of Kokoro's stock US English male voices, am_michael and
 am_fenrir ('am_michael,am_fenrir': Kokoro averages the two). It's set once, as NARRATION_VOICE in
 lib/demo/tour-narration.ts, and comes here with the text; see .claude/plans/tour-chapters.md,
-Brio's voice.
+Brio's voice. So do the pauses Brio leaves at punctuation (NARRATION_PAUSES, beside it).
 
 Reads what every card says aloud from the steps themselves (export-text.mjs), remakes only the clips
-whose text or voice changed, removes clips no step uses, and writes public/tour/narration/
+whose text, voice or pauses changed, removes clips no step uses, and writes public/tour/narration/
 manifest.json with each clip's text hash and length. Beside each clip, <key>.json holds when each
 word is spoken ([word, start, end] in seconds), for the step card to reveal its words as they're read. lib/demo/tour-narration.test.ts fails until
 this has been run after a card's copy changes. See .claude/plans/tour-chapters.md, Narration.
@@ -69,17 +69,37 @@ def encode(audio: np.ndarray, target: Path) -> None:
 
 _pipeline = None
 
+# Which of the pauses (NarrationPauses, lib/demo/tour-narration.ts) each punctuation mark gets; a
+# token holding more than one mark (such as "?)") gets the strongest.
+MARKS = (("sentence", ".!?"), ("clause", ":;—–"), ("comma", ",()"))
+# How far either side of a mark's own stretch to look for the quiet to put its pause in, in seconds:
+# Kokoro's stretch for a comma can be shorter than the sound before it, so its middle can still be voiced.
+REACH = 0.04
+FADE = RATE // 200  # 5 ms
 
-def speak(text: str, voice: str, pause: float = 0.0) -> tuple[np.ndarray, list]:
+
+def quietest(audio: np.ndarray, start: float, end: float) -> int:
+    """The quietest 5 ms of the audio between two times (seconds), as a sample: where a pause can go in
+    without cutting into a sound."""
+    a, b = max(0, int(start * RATE)), min(len(audio), int(end * RATE))
+    if b - a <= FADE:
+        return (a + b) // 2
+    energy = np.convolve(np.square(audio[a:b]), np.ones(FADE), "valid")
+    return a + int(np.argmin(energy)) + FADE // 2
+
+
+def speak(text: str, voice: str, pauses: dict | None = None) -> tuple[np.ndarray, list]:
     """The text in the voice, and when each word in it is spoken: [word, start, end] in seconds.
 
-    With a pause, that much more silence goes after each sentence that has another after it, on top
-    of Kokoro's own, for a little more breathing room. It's added to the spoken whole, in the quiet
-    after each full stop: spoken a sentence at a time instead, Kokoro slowed every sentence down by
-    about a third."""
+    With pauses, more silence goes in at each punctuation mark that has more words after it, on top
+    of Kokoro's own, for a little more breathing room: `sentence` seconds after a full stop, `clause`
+    at a colon, semicolon or dash, `comma` at a comma or bracket. It's added to the spoken whole, in
+    the quietest moment at each mark: spoken a sentence at a time instead, Kokoro slowed every
+    sentence down by about a third."""
     global _pipeline
     _pipeline = _pipeline or KPipeline(lang_code="a", repo_id="hexgrad/Kokoro-82M")
-    chunks, words, stops, offset = [], [], [], 0.0
+    pauses = pauses or {}
+    chunks, words, marks, offset = [], [], [], 0.0
     for result in _pipeline(text, voice=voice, speed=1.0):
         # Each chunk's word times start from the chunk; the words carry on from the ones before.
         for token in result.tokens or []:
@@ -87,24 +107,33 @@ def speak(text: str, voice: str, pause: float = 0.0) -> tuple[np.ndarray, list]:
                 continue
             if any(char.isalnum() for char in token.text):
                 words.append([token.text, round(offset + token.start_ts, 2), round(offset + token.end_ts, 2)])
-            elif token.text in (".", "!", "?"):
-                # The middle of a full stop's own stretch, which is silence.
-                stops.append(offset + (token.start_ts + token.end_ts) / 2)
+                continue
+            kind = next((kind for kind, chars in MARKS if any(char in token.text for char in chars)), None)
+            if pauses.get(kind):
+                # Where to look for the quiet, how long a pause the mark gets, and how many words come before it.
+                start, end = offset + token.start_ts - REACH, offset + token.end_ts + REACH
+                marks.append((start, end, pauses[kind], len(words)))
         chunks.append(np.asarray(result.audio))
         offset += len(result.audio) / RATE
     audio = np.concatenate(chunks)
-    stops = [stop for stop in stops if words and stop < words[-1][1]]
-    if not pause or not stops:
+    marks = [mark for mark in marks if mark[3] < len(words)]  # none after the last word
+    if not marks:
         return audio, words
-    silence = np.zeros(int(pause * RATE), dtype=audio.dtype)
-    pieces, at = [], 0
-    for stop in stops:
-        cut = int(stop * RATE)
-        pieces += [audio[at:cut], silence]
-        at = cut
-    pieces.append(audio[at:])
-    for word in words:
-        later = pause * sum(1 for stop in stops if stop < word[1])
+    cuts = np.maximum.accumulate([quietest(audio, start, end) for start, end, _, _ in marks])
+    edges = [0, *cuts, len(audio)]
+    pieces = []
+    for k in range(len(edges) - 1):
+        # Faded in and out where it meets a pause, so no cut clicks.
+        piece = audio[edges[k]:edges[k + 1]].copy()
+        n = min(FADE, len(piece) // 2)
+        if k > 0:
+            piece[:n] *= np.linspace(0.0, 1.0, n, dtype=audio.dtype)
+        pieces.append(piece)
+        if k < len(marks):
+            piece[len(piece) - n:] *= np.linspace(1.0, 0.0, n, dtype=audio.dtype)
+            pieces.append(np.zeros(int(marks[k][2] * RATE), dtype=audio.dtype))
+    for i, word in enumerate(words):
+        later = sum(pause for _, _, pause, before in marks if before <= i)
         word[1], word[2] = round(word[1] + later, 2), round(word[2] + later, 2)
     return np.concatenate(pieces), words
 
@@ -142,7 +171,7 @@ def main() -> None:
         if not args.force and previous and previous["hash"] == digest and target.exists() and timings.exists():
             clips[key] = previous
             continue
-        audio, words = speak(text, voice)
+        audio, words = speak(text, voice, clip.get("pauses"))
         encode(audio, target)
         timings.write_text(json.dumps({"words": words}, ensure_ascii=False, separators=(",", ":")) + "\n")
         clips[key] = {"hash": digest, "seconds": round(len(audio) / RATE, 2)}
@@ -157,7 +186,7 @@ def main() -> None:
         if not args.force and previous.get("hash") == line["hash"] and target.exists():
             continue
         target.parent.mkdir(parents=True, exist_ok=True)
-        audio, words = speak(line["text"], voice, line.get("pause", 0))
+        audio, words = speak(line["text"], voice, line.get("pauses"))
         encode(audio, target)
         seconds = round(len(audio) / RATE, 2)
         timings.write_text(json.dumps(

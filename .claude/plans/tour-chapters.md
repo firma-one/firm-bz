@@ -217,9 +217,12 @@ the same Brio line in nine voices: Kokoro's `af_heart` (US female, its best rate
 
 ### How it plays
 
-- **Off by default**, a speaker toggle on the start panel and on the step card, remembered in
-  localStorage `fm_demo_tour_narration`. Unexpected sound on a website annoys people and clashes
-  with screen readers; starting the tour is a click, which lets the browser play audio.
+- **On by default** (2026-10-31, Deepak's call; it started out off), with a speaker toggle on the
+  start panel and on the step card to turn it off, remembered in localStorage
+  `fm_demo_tour_narration`. Brio's voice is part of the tour's draw, and nothing plays until the
+  visitor starts the tour: that's a click, so the browser lets it play and it's never a surprise on
+  landing. It was off at first because unexpected sound annoys people and clashes with screen
+  readers; the toggle sits right on the start panel for anyone who'd rather read.
 - **Autopilot:** the step's clock follows its clip: it waits for the clip to start, runs while it
   plays, and moves on a beat after it ends. Pointing at the card no longer holds a step while it's
   read aloud (it can't be read along mid-sentence); Pause pauses the voice too.
@@ -236,7 +239,10 @@ the same Brio line in nine voices: Kokoro's `af_heart` (US female, its best rate
 
 **What's read:** the card's title, then its copy, as a screen reader would hear them (Brio's
 "AI" subscript is hidden from them, so it's "Brio"), or the step's `spoken` text where the card
-doesn't read well aloud ("⌘K" becomes "Command K"). Kokoro guesses a heteronym's sense from its
+doesn't read well aloud ("⌘K" becomes "Command K"). When the copy opens with the word the title
+ends on ("Home", then "Home picks up where you left off…"), only the copy is read, so Brio doesn't
+say the word twice in a row at the start of a card; the title still comes up as Brio starts
+(`copyOpensWithTitle`). Kokoro guesses a heteronym's sense from its
 sentence, so `PRONOUNCE` in `tour-narration-text.ts` pins words this tour always means one way
 ("lives" the verb, which came out as the plural of "life" on the Clients card).
 
@@ -246,8 +252,18 @@ known so Autopilot can follow it. `frontend/public/tour/narration/<node>-<n>.m4a
 evened to one loudness), `<node>-<n>.json` beside each with when each word is spoken (Kokoro's own
 word timings), and `manifest.json` with each clip's text hash and length.
 `frontend/scripts/tour-narration/generate.py` makes them: it reads every card's spoken text from
-the steps (`export-text.mjs`, through jiti), remakes only clips whose text or voice changed, and
-removes clips no step uses. The card lines its own words up with the spoken ones letter by letter
+the steps (`export-text.mjs`, through jiti), remakes only clips whose text, voice or pauses changed,
+and removes clips no step uses.
+
+**Pauses** (2026-10-31): on its own, Kokoro runs a card's sentences, lists and clauses together
+(about 0.14s after a full stop, 0.11s at a colon, 0.07s at a comma or dash). Brio leaves more, by
+how strong the mark is: a quarter of a second more between sentences, 0.15s at a colon, semicolon
+or dash, 0.1s at a comma or bracket (`NARRATION_PAUSES`, beside the voice in `tour-narration.ts`).
+The generator adds the silence to the whole, spoken card, at the quietest moment around each mark
+(Kokoro's own stretch for a comma can be shorter than the sound before it, so its middle can still
+be voiced), each cut faded over 5 ms so none clicks, and moves the word timings to match, so the
+streaming reveal and Autopilot's clock follow it. Spoken a sentence
+at a time instead, Kokoro slowed every sentence down by about a third. The card lines its own words up with the spoken ones letter by letter
 (`lib/demo/tour-read-along.ts`), so "client-billable" or "e.g." can't throw it, and a word read in
 other words ("⌘K") comes up with its neighbors. `lib/demo/tour-narration.test.ts` fails when a
 card's text changes without its clip being remade, a clip or its timings are missing, or a word
@@ -273,9 +289,8 @@ repeats every few seconds.
   abruptly). The invitation is a statement: Kokoro reads questions flat, and "Want to see me at
   work?" fell where it should have risen (picked from five recorded endings). The caption shows
   "firmä"; Brio says "Firma", which is "FUR-muh" (Kokoro's own reading, confirmed), and "read" in the
-  present tense (pinned). A quarter of a second more between sentences (`HEAR_BRIO_PAUSE`): the
-  generator adds it in the quiet after each full stop of the whole, spoken line, since speaking a
-  sentence at a time made Kokoro slow every sentence down by about a third.
+  present tense (pinned). A quarter of a second more between sentences, the tour's own pause
+  (`NARRATION_PAUSES.sentence`, see Clips); not yet the tour's beats at commas and colons.
 - **The control** (`hear-brio.tsx`): Hear Brio, then Pause, Resume and Hear again. While Brio
   speaks, a five-bar wave follows the voice, quiet in its pauses, and the line opens below the pill,
   each word coming up as it's said (the tour's streaming reveal, `lib/demo/use-streaming-reveal.ts`,

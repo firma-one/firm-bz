@@ -18,9 +18,6 @@ import { NARRATION_PARAM } from '@/lib/demo/tour-chapters'
 export const HEAR_BRIO_LINE =
     'Hi, I’m Brio, your executive assistant for client delivery, built into firmä. I keep track of every deliverable, due date and status, and draft the briefs and client updates, so you can focus on the decisions, your client relationships, and growing your firm. And you stay in charge: I never read what’s inside your documents, every change waits for your go-ahead, and nothing reaches a client until your team publishes it. Come and see me at work: take the product tour, and I’ll show you around.'
 
-/** A little more breathing room between Brio's sentences than Kokoro gives on its own, in seconds. */
-export const HEAR_BRIO_PAUSE = 0.25
-
 /** The line as Brio says it: the brand as "Firma" (said "FUR-muh") and plain apostrophes, for Kokoro. */
 export const HEAR_BRIO_SPOKEN = HEAR_BRIO_LINE.replace(/firmä/g, 'Firma').replace(/’/g, "'")
 
