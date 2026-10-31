@@ -184,6 +184,36 @@ or a map icon), so a second pass fills the rings afresh rather than showing ever
 Replay at the end of the whole tour clears them as it opens the start panel. Resume, a single
 chapter or section, "All chapters" and coming back to /tour keep them, to show what's left.
 
+## Narration
+
+Each step card can be read aloud (2026-10-31), in **Brio's voice**: a blend of Kokoro's
+`am_michael` and `am_fenrir` voices, so it's a voice of Brio's own rather than a stock one, and
+the tour's narrator is Brio. Picked over Kokoro's `af_heart` from samples; one voice for the whole
+tour, though a section could take another (the generator's `VOICE`).
+
+- **Off by default**, a speaker toggle on the start panel and on the step card, remembered in
+  localStorage `fm_demo_tour_narration`. Unexpected sound on a website annoys people and clashes
+  with screen readers; starting the tour is a click, which lets the browser play audio.
+- **Autopilot:** the step's clock follows its clip: it waits for the clip to start, runs while it
+  plays, and moves on a beat after it ends. Pointing at the card no longer holds a step while it's
+  read aloud (it can't be read along mid-sentence); Pause pauses the voice too.
+- **Guided:** the card is read when it opens; Next or Back cuts it off.
+- **Explore:** no cards, so nothing is read.
+- A browser that won't play the clip falls back to the silent timer.
+
+**What's read:** the card's title, then its copy, as a screen reader would hear them (Brio's
+"AI" subscript is hidden from them, so it's "Brio"), or the step's `spoken` text where the card
+doesn't read well aloud ("⌘K" becomes "Command K").
+
+**Clips** are made ahead with [Kokoro](https://github.com/hexgrad/kokoro) (Apache-2.0, free, runs
+locally), not in the browser or a paid service: one voice for everyone, and each clip's length
+known so Autopilot can follow it. `frontend/public/tour/narration/<node>-<n>.m4a` (AAC 64 kbps,
+evened to one loudness), and `manifest.json` beside them with each clip's text hash and length.
+`frontend/scripts/tour-narration/generate.py` makes them: it reads every card's spoken text from
+the steps (`export-text.mjs`, through jiti), remakes only clips whose text or voice changed, and
+removes clips no step uses. `lib/demo/tour-narration.test.ts` fails when a card's text changes
+without its clip being remade, or a clip is missing.
+
 ## Real-app entry points (new UI only)
 
 "How this works" beside the page title (`components/ui/how-this-works-link.tsx`, `PageHeading`'s

@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import { DEFAULT_TOUR_MODE, isTourNodeId, parseModeParam, type TourMode, type TourNodeId } from '@/lib/demo/tour-chapters'
+import { NARRATION_STORAGE_KEY } from '@/lib/demo/tour-narration'
 
 const TOUR_KEY = 'fm_demo_tour'
 const NEVER_SHOW_KEY = 'fm_demo_tour_never_show'
@@ -91,6 +92,9 @@ interface DemoTourContextValue {
     /** Autoplay held on the current step. */
     paused: boolean
     setPaused: (paused: boolean) => void
+    /** The step cards read aloud in Brio's voice (lib/demo/tour-narration.ts): off until the visitor turns it on, then remembered. */
+    narration: boolean
+    setNarration: (on: boolean) => void
     run: boolean
     stepIndex: number
     /** The run's chapter or section, or null for the whole tour. */
@@ -149,9 +153,26 @@ export function DemoTourProvider({ children }: { children: ReactNode }) {
     const [hasCompletedTour, setHasCompletedTour] = useState(false)
     const [completedNodes, setCompletedNodes] = useState<TourNodeId[]>([])
     const [resumable, setResumable] = useState<TourResume | null>(null)
+    const [narration, setNarrationState] = useState(false)
 
-    // The saved mode after mount, so the server and the visitor's first render agree.
-    useEffect(() => setModeState(loadMode()), [])
+    // The saved mode and narration after mount, so the server and the visitor's first render agree.
+    useEffect(() => {
+        setModeState(loadMode())
+        try {
+            setNarrationState(window.localStorage.getItem(NARRATION_STORAGE_KEY) === 'on')
+        } catch {
+            /* storage blocked: narration stays off */
+        }
+    }, [])
+
+    const setNarration = (on: boolean) => {
+        setNarrationState(on)
+        try {
+            window.localStorage.setItem(NARRATION_STORAGE_KEY, on ? 'on' : 'off')
+        } catch {
+            /* ignore */
+        }
+    }
 
     const saveMode = (next: TourMode) => {
         setModeState(next)
@@ -269,7 +290,7 @@ export function DemoTourProvider({ children }: { children: ReactNode }) {
     return (
         <DemoTourContext.Provider
             value={{
-                mode, setMode, paused, setPaused, run, stepIndex, scope, active, launch, showIntroModal, showOutroModal, finishedNode, hasCompletedTour, completedNodes, resumable,
+                mode, setMode, paused, setPaused, narration, setNarration, run, stepIndex, scope, active, launch, showIntroModal, showOutroModal, finishedNode, hasCompletedTour, completedNodes, resumable,
                 openIntroModal, closeIntroModal, startTour, startNode, jumpToStep, resumeTour, restartTour, replayTour, endTour, closeNodeEnd, markNodeDone,
                 setStepIndex, setRun, saveProgress,
             }}

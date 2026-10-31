@@ -3,10 +3,12 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import * as DialogPrimitive from '@radix-ui/react-dialog'
-import { ArrowRight, Check, ChevronDown, ChevronRight, History, MapPinned, Pause, Play, X } from 'lucide-react'
+import { ArrowRight, Check, ChevronDown, ChevronRight, History, MapPinned, Pause, Play, Volume2, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Switch } from '@/components/ui/switch'
+import { Brio } from '@/components/ui/brio'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { useDemoTour } from '@/lib/demo/demo-tour-context'
 import { TOUR_MODES, TOUR_NODES, TOUR_OUTLINE, nextTourNode, tourNode, tourSubtree, type PlacedTourNode, type TourMode, type TourNodeId } from '@/lib/demo/tour-chapters'
@@ -240,7 +242,7 @@ function PanelHead({ title, caption, children }: { title: ReactNode; caption?: R
  * picks something.
  */
 function TourStart() {
-    const { mode, setMode, showIntroModal, closeIntroModal, startTour, resumeTour, resumable } = useDemoTour()
+    const { mode, setMode, narration, setNarration, showIntroModal, closeIntroModal, startTour, resumeTour, resumable } = useDemoTour()
     const [neverShowAgain, setNeverShowAgain] = useState(false)
     const hasProgress = resumable !== null && resumable.step > 0
     // Where the visitor stopped, and the chapter it's in, which starts open.
@@ -285,6 +287,14 @@ function TourStart() {
                         <div className="mt-2.5">
                             <ModeCards value={mode} onChange={setMode} />
                         </div>
+                        {/* Off until turned on; Explore has no step cards to read */}
+                        {mode !== 'explore' && (
+                            <label className="mt-2.5 flex w-fit cursor-pointer select-none items-center gap-2 text-small text-fg-muted">
+                                <Switch checked={narration} onCheckedChange={setNarration} />
+                                <Volume2 className={cn('h-3.5 w-3.5 shrink-0', narration ? 'text-action' : 'text-fg-subtle')} aria-hidden />
+                                <span>Read aloud by <Brio /></span>
+                            </label>
+                        )}
                         {stoppedAt && (
                             <button
                                 type="button"

@@ -46,6 +46,9 @@ export interface TourStep {
     /** Autoplay's time on this step (ms), when the card's length alone doesn't say it: worked out
      * from the card's words otherwise (autoplayDuration). */
     duration?: number
+    /** What the card says aloud, title included, where its own words don't read well aloud ("⌘K");
+     * otherwise its title and copy are read (lib/demo/tour-narration-text.ts). */
+    spoken?: string
 }
 
 /** A step in a run, with the node it belongs to: the step card names the node's place in the
@@ -66,6 +69,7 @@ export const NODE_STEPS: Record<TourNodeId, TourStep[]> = {
             target: '[data-demo-tour="command-palette"]',
             title: 'Search (⌘K)',
             content: <p>Press ⌘K (or Ctrl K) anywhere to jump to a client, an engagement, a document or a setting, or to run a command. Typing G and then a letter goes straight to a page: G D opens Doc Search. Search is inert in this demo.</p>,
+            spoken: 'Search. Press Command K, or Control K, anywhere to jump to a client, an engagement, a document or a setting, or to run a command. Typing G and then a letter goes straight to a page: G, then D, opens Doc Search. Search is inert in this demo.',
             route: `${firm}/home`,
             placement: 'right',
             disableBeacon: true,
@@ -285,6 +289,7 @@ export const NODE_STEPS: Record<TourNodeId, TourStep[]> = {
             target: '[data-demo-tour="engagement-add-btn"]',
             title: 'Add an engagement',
             content: <p>Engagements are client-billable projects — e.g. SEO retainers, paid media campaigns, content sprints, brand audits, or social strategy. Run them as a <strong>Retainer</strong>, <strong>T&amp;M</strong>, or <strong>Fixed Price</strong> engagement. Each has its own Files, Board, Discussions and team.</p>,
+            spoken: 'Add an engagement. Engagements are client-billable projects, like SEO retainers, paid media campaigns, content sprints, brand audits, or social strategy. Run them as a Retainer, Time and Materials, or Fixed Price engagement. Each has its own Files, Board, Discussions and team.',
             route: client,
             placement: 'bottom',
             skipScroll: true,
@@ -374,6 +379,7 @@ export const NODE_STEPS: Record<TourNodeId, TourStep[]> = {
             target: '[data-demo-tour="document-action-trigger"]',
             title: 'Document actions',
             content: <p>Hover a row for its quick actions, or click ⋯ on any file to open, download, comment on, bookmark, set a due date, rename or move it, and more.</p>,
+            spoken: 'Document actions. Hover a row for its quick actions, or click the three dots on any file to open, download, comment on, bookmark, set a due date, rename or move it, and more.',
             route: engAt({ tab: 'files', folder: inProgressId }),
             placement: 'left',
         },
@@ -455,6 +461,7 @@ export const NODE_STEPS: Record<TourNodeId, TourStep[]> = {
             target: '[data-demo-tour="deliverable-tabs"]',
             title: "The deliverable's discussion",
             content: <p>Comments is the deliverable&apos;s conversation, with your team and the client: @ mentions a teammate and # tags one of its documents.</p>,
+            spoken: "The deliverable's discussion. Comments is the deliverable's conversation, with your team and the client. Type an at sign to mention a teammate, or a hash sign to tag one of its documents.",
             route: engAt({ tab: 'board', deliverable: inProgressId }),
             placement: 'left',
             skipScroll: true,
