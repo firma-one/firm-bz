@@ -45,8 +45,8 @@ const PRONOUNCE: Record<string, string> = {
     lives: 'lˈɪvz',
 }
 
-/** The text with each pinned word in Kokoro's `[word](/phonemes/)` form. */
-function pinPronunciation(text: string): string {
+/** The text with each pinned word in Kokoro's `[word](/phonemes/)` form: the tour's cards, and Brio's other recordings. */
+export function pinPronunciation(text: string): string {
     return text.replace(/[A-Za-z]+/g, (word) => {
         const phonemes = PRONOUNCE[word.toLowerCase()]
         return phonemes ? `[${word}](/${phonemes}/)` : word

@@ -580,3 +580,69 @@
     display: none;
   }
 }
+
+/* Hear Brio: Brio introduces itself in its own voice, the tour's narrator (hear-brio.tsx). A pill
+   with a wave that follows the voice, and the line opening below it, each word coming up as it's
+   said: faint until then (::highlight(brio-unspoken)). */
+.mk-hear-brio {
+  margin-top: 28px;
+}
+.mk-hear-brio-btn {
+  gap: 8px;
+}
+.mk-hear-brio-wave {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 16px;
+  margin-left: 2px;
+}
+.mk-hear-brio-wave > span {
+  width: 3px;
+  height: 16px;
+  border-radius: 2px;
+  background: var(--mk-electric);
+  transform: scaleY(0.25);
+  transition: transform 90ms linear;
+}
+.mk-hear-brio-caption {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition: grid-template-rows 300ms ease-out, opacity 300ms ease-out;
+}
+.mk-hear-brio-caption.is-open {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+.mk-hear-brio-caption > div {
+  min-height: 0;
+  overflow: hidden;
+}
+.mk-hear-brio-caption p {
+  margin: 18px 0 0;
+  max-width: 560px;
+  padding-left: 16px;
+  border-left: 2px solid var(--mk-electric);
+  border-radius: 0;
+  font-size: 17px;
+  line-height: 1.6;
+  color: #ffffff;
+}
+::highlight(brio-unspoken) {
+  color: rgba(255, 255, 255, 0.32);
+}
+@media (max-width: 767px) {
+  .mk-hear-brio {
+    margin-top: 22px;
+  }
+  .mk-hear-brio-caption p {
+    font-size: 16px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mk-hear-brio-wave > span,
+  .mk-hear-brio-caption {
+    transition: none;
+  }
+}

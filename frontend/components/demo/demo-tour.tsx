@@ -11,7 +11,8 @@ import { GUIDE_PARAM, autoplayDuration, tourNode, type TourNodeId } from '@/lib/
 import { tourSteps } from '@/components/demo/demo-tour-steps'
 import { setStepProgress } from '@/lib/demo/tour-clock'
 import { NARRATION_BEAT_MS, narrationClip } from '@/lib/demo/tour-narration'
-import { revealTimes, type SpokenWord } from '@/lib/demo/tour-read-along'
+import { type SpokenWord } from '@/lib/demo/tour-read-along'
+import { useStreamingReveal } from '@/lib/demo/use-streaming-reveal'
 import { TOUR_CARD_GLASS_CLASS, TourNodeTitle } from '@/components/demo/demo-tour-labels'
 import { cn } from '@/lib/utils'
 
@@ -175,71 +176,6 @@ function useNarration({ index, src, timings, paused }: { index: number; src: str
 const UNSPOKEN_HIGHLIGHT = 'tour-unspoken'
 
 /**
- * The card's words streaming in with the narration: each stays faint until Brio says it, then
- * comes up, so the card fills in as it's read; still legible ahead, for anyone reading faster.
- * Covers the title and copy (`data-tour-spoken`), skipping what's hidden from screen readers as
- * the narration does. Done with the CSS Custom Highlight API, which colors stretches of text without
- * touching the card's DOM (React's to change); a browser without it shows the card as usual.
- * `heard` is how far the clip has got, in seconds: 0 until it starts, Infinity once it's over.
- */
-function useStreamingReveal({ cardRef, index, on, words, heard }: {
-    cardRef: React.RefObject<HTMLDivElement | null>
-    index: number
-    on: boolean
-    words: SpokenWord[] | null
-    heard: () => number
-}) {
-    const heardRef = useRef(heard)
-    heardRef.current = heard
-
-    useEffect(() => {
-        const card = cardRef.current
-        if (!on || !words || !card || typeof Highlight === 'undefined' || !CSS.highlights) return
-        const ranges: Range[] = []
-        const shown: string[] = []
-        card.querySelectorAll('[data-tour-spoken]').forEach((root) => {
-            const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
-                acceptNode: (node) => (node.parentElement?.closest('[aria-hidden="true"]') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
-            })
-            for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-                const text = node.textContent ?? ''
-                const word = /\S+/g
-                for (let match = word.exec(text); match; match = word.exec(text)) {
-                    const range = document.createRange()
-                    range.setStart(node, match.index)
-                    range.setEnd(node, match.index + match[0].length)
-                    ranges.push(range)
-                    shown.push(match[0])
-                }
-            }
-        })
-        const times = revealTimes(shown, words)
-        const unspoken = new Highlight()
-        CSS.highlights.set(UNSPOKEN_HIGHLIGHT, unspoken)
-        // A tick every 50ms, like Autoplay's clock rather than every frame: a word takes about 300ms
-        // to say, and the card keeps up whether or not the browser is painting frames.
-        let revealed = -1
-        const tick = () => {
-            const at = heardRef.current()
-            let count = 0
-            while (count < times.length && times[count] <= at) count++
-            if (count !== revealed) {
-                revealed = count
-                unspoken.clear()
-                for (let i = count; i < ranges.length; i++) unspoken.add(ranges[i])
-            }
-            if (count === ranges.length) clearInterval(timer)
-        }
-        const timer = setInterval(tick, 50)
-        tick()
-        return () => {
-            clearInterval(timer)
-            CSS.highlights.delete(UNSPOKEN_HIGHLIGHT)
-        }
-    }, [cardRef, index, on, words])
-}
-
-/**
  * The tour's step card, in the app's design system: a popover-style card with the step's place in
  * the outline above its title (Engagements › Files › Details), its copy in muted text, its place in
  * that section and Skip on the left, Back and Next on the right. Joyride portals it to the body,
@@ -283,12 +219,15 @@ function TourTooltip({ backProps, closeProps, primaryProps, skipProps, step, ind
     })
     // Read aloud: on, with a clip, and not refused by the browser.
     const reading = voice.status === 'loading' || voice.status === 'playing' || voice.status === 'ended'
+    // The card's title and copy streaming in as they're read (lib/demo/use-streaming-reveal.ts).
     useStreamingReveal({
-        cardRef,
-        index,
+        container: cardRef,
+        selector: '[data-tour-spoken]',
+        highlight: UNSPOKEN_HIGHLIGHT,
         on: reading,
         words: voice.words,
         heard: () => (voice.status === 'ended' ? Infinity : (voice.position() ?? 0) / 1000),
+        restartKey: index,
     })
     const held = paused || (hovered && !reading)
     const progress = useAutoplay({

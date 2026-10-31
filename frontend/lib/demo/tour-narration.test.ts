@@ -2,9 +2,10 @@ import { existsSync, readFileSync, readdirSync } from 'fs'
 import { resolve } from 'path'
 import { describe, expect, it } from 'vitest'
 import { NARRATION_MANIFEST, NARRATION_VOICE, narrationClip, narrationKey } from '@/lib/demo/tour-narration'
-import { narrationEntries, narrationHash, shownWords } from '@/lib/demo/tour-narration-text'
+import { narrationEntries, narrationHash, pinPronunciation, shownWords } from '@/lib/demo/tour-narration-text'
 import { alignWords, revealTimes, type SpokenWord } from '@/lib/demo/tour-read-along'
 import { tourSteps } from '@/components/demo/demo-tour-steps'
+import { HEAR_BRIO_CLIP, HEAR_BRIO_LINE, HEAR_BRIO_SPOKEN } from '@/components/marketing/v2/home/hear-brio-line'
 
 const CLIPS = resolve(__dirname, '../../public/tour/narration')
 const REMAKE = 'run scripts/tour-narration/generate.py (see its header) to remake the clips'
@@ -90,5 +91,38 @@ describe('tour narration', () => {
         expect(narrationHash('Files.')).toBe(narrationHash('Files.'))
         expect(narrationHash('Files.')).not.toBe(narrationHash('Files!'))
         expect(narrationHash('Files.', 'af_heart')).not.toBe(narrationHash('Files.'))
+    })
+})
+
+describe('Hear Brio on the landing page', () => {
+    const PUBLIC = resolve(__dirname, '../../public')
+    const clip = JSON.parse(readFileSync(resolve(PUBLIC, `.${HEAR_BRIO_CLIP.timings}`), 'utf8')) as {
+        hash: string
+        seconds: number
+        words: SpokenWord[]
+        levels: number[]
+    }
+
+    it("has a clip made from the line as it stands, in Brio's voice", () => {
+        expect(existsSync(resolve(PUBLIC, `.${HEAR_BRIO_CLIP.src}`)), REMAKE).toBe(true)
+        expect(clip.hash, `the line changed since its clip was made; ${REMAKE}`).toBe(narrationHash(pinPronunciation(HEAR_BRIO_SPOKEN)))
+    })
+
+    it('says the brand "Firma" while the caption shows firmä', () => {
+        expect(HEAR_BRIO_LINE).toContain('built into firmä.')
+        expect(HEAR_BRIO_SPOKEN).toContain('built into Firma.')
+        expect(HEAR_BRIO_SPOKEN).not.toContain('’')
+    })
+
+    it('reveals every word of the caption when Brio says it', () => {
+        const shown = HEAR_BRIO_LINE.split(' ')
+        const missed = alignWords(shown, clip.words).map((time, i) => (time === null ? shown[i] : null)).filter(Boolean)
+        expect(missed, 'these words in the caption aren’t said').toEqual([])
+    })
+
+    it('knows how loud the voice is through the whole clip, for its wave', () => {
+        expect(clip.levels.length).toBeGreaterThanOrEqual(Math.floor(clip.seconds * 20) - 1)
+        expect(clip.levels.every((level) => level >= 0 && level <= 1)).toBe(true)
+        expect(Math.max(...clip.levels)).toBe(1)
     })
 })
