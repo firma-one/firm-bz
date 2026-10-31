@@ -280,10 +280,13 @@ repeats every few seconds.
   speaks, a five-bar wave follows the voice, quiet in its pauses, and the line opens below the pill,
   each word coming up as it's said (the tour's streaming reveal, `lib/demo/use-streaming-reveal.ts`,
   in white over the dark band: `::highlight(brio-unspoken)`). Reduced motion: a still wave.
-- **The invitation:** "Take the tour" appears beside the pill as Brio says "take the product tour"
-  (its time from the clip's word times, `inviteAt`), and stays. It opens `/tour?narration=on`: the
-  visitor has just chosen to listen, so the tour starts with Read aloud on (`NARRATION_PARAM`,
-  read by the tour's state and remembered), and Brio carries on showing them around.
+- **The invitation:** once Brio has finished, the pill becomes "Hear again" and then, a beat
+  later, "Take the tour" comes in beside it: in that order, because showing it as Brio said the
+  words let the pill's wider "Hear again" push it along when the clip ended. It slides out from
+  behind the pill, growing a touch and coming into focus, and sends out one soft ring (still for
+  reduced motion). It opens `/tour?narration=on`: the visitor has just chosen to listen, so the tour
+  starts with Read aloud on (`NARRATION_PARAM`, read by the tour's state and remembered), and Brio
+  carries on showing them around.
 - **The clip** is one of the generator's `lines` (`export-text.mjs`), made in the same voice with
   the same pronunciation pins: `frontend/public/marketing/hear-brio.m4a`, and `hear-brio.json` with
   its text hash, length, word times and how loud the voice is 20 times a second (for the wave, so

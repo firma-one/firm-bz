@@ -5,7 +5,7 @@ import { NARRATION_MANIFEST, NARRATION_VOICE, narrationClip, narrationKey } from
 import { lineEntry, narrationEntries, narrationHash, shownWords } from '@/lib/demo/tour-narration-text'
 import { alignWords, revealTimes, type SpokenWord } from '@/lib/demo/tour-read-along'
 import { tourSteps } from '@/components/demo/demo-tour-steps'
-import { HEAR_BRIO_CLIP, HEAR_BRIO_LINE, HEAR_BRIO_PAUSE, HEAR_BRIO_SPOKEN, HEAR_BRIO_TOUR, inviteAt } from '@/components/marketing/v2/home/hear-brio-line'
+import { HEAR_BRIO_CLIP, HEAR_BRIO_LINE, HEAR_BRIO_PAUSE, HEAR_BRIO_SPOKEN, HEAR_BRIO_TOUR } from '@/components/marketing/v2/home/hear-brio-line'
 
 const CLIPS = resolve(__dirname, '../../public/tour/narration')
 const REMAKE = 'run scripts/tour-narration/generate.py (see its header) to remake the clips'
@@ -121,14 +121,10 @@ describe('Hear Brio on the landing page', () => {
         expect(missed, 'these words in the caption aren’t said').toEqual([])
     })
 
-    it('ends on the tour invitation, with Take the tour shown as Brio says it', () => {
+    it('ends on the tour invitation, and the tour it opens has Read aloud on', () => {
         expect(HEAR_BRIO_LINE).toMatch(/Come and see me at work: take the product tour, and I’ll show you around\.$/)
-        const at = inviteAt(clip.words)
-        expect(at, 'the invitation isn’t in the clip').not.toBeNull()
-        // Near the end: after the promises, a few seconds before the clip finishes.
-        expect(at!).toBeGreaterThan(clip.seconds * 0.75)
-        expect(at!).toBeLessThan(clip.seconds)
-        // It opens the tour with Read aloud on, so Brio carries on.
+        // The invitation is the clip's last sentence, spoken.
+        expect(clip.words.slice(-4).map(([word]) => word.replace(/[^A-Za-z]/g, '')).join(' ')).toBe('Ill show you around')
         expect(HEAR_BRIO_TOUR).toBe('/tour?narration=on')
     })
 

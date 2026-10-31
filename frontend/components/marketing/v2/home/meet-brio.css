@@ -596,14 +596,39 @@
 .mk-hear-brio-btn {
   gap: 8px;
 }
-/* "Take the tour", in as Brio invites the visitor. */
+/* "Take the tour", once Brio has finished: it slides out from behind the player, growing a touch and
+   coming into focus, then sends out one soft ring to draw the eye. The ring is its own layer, so the
+   button keeps its shadow. */
 .mk-hear-brio-tour {
-  animation: mk-hear-brio-in 400ms ease-out both;
+  position: relative;
+  animation: mk-hear-brio-in 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.mk-hear-brio-tour::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  animation: mk-hear-brio-ring 1300ms ease-out 380ms both;
 }
 @keyframes mk-hear-brio-in {
   from {
     opacity: 0;
-    transform: translateX(-6px);
+    transform: translateX(-18px) scale(0.92);
+    filter: blur(3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+@keyframes mk-hear-brio-ring {
+  from {
+    box-shadow: 0 0 0 0 rgba(125, 255, 119, 0.55);
+  }
+  to {
+    box-shadow: 0 0 0 12px rgba(125, 255, 119, 0);
   }
 }
 .mk-hear-brio-wave {
@@ -661,7 +686,8 @@
   .mk-hear-brio-caption {
     transition: none;
   }
-  .mk-hear-brio-tour {
+  .mk-hear-brio-tour,
+  .mk-hear-brio-tour::after {
     animation: none;
   }
 }

@@ -5,7 +5,7 @@ import { Pause, Play, RotateCcw } from 'lucide-react';
 import type { SpokenWord } from '@/lib/demo/tour-read-along';
 import { useStreamingReveal } from '@/lib/demo/use-streaming-reveal';
 import { PillLink } from '../primitives';
-import { HEAR_BRIO_CLIP, HEAR_BRIO_LINE, HEAR_BRIO_TOUR, inviteAt } from './hear-brio-line';
+import { HEAR_BRIO_CLIP, HEAR_BRIO_LINE, HEAR_BRIO_TOUR } from './hear-brio-line';
 
 type State = 'idle' | 'loading' | 'playing' | 'paused' | 'ended';
 
@@ -29,13 +29,15 @@ const REST = 0.25;
  * up as it's said. Pause holds both; at the end it offers to play again. Visitors who'd rather not
  * see motion get a still wave.
  *
- * Brio ends by inviting the visitor to the tour, and "Take the tour" appears beside the player as it
- * says so; it opens the tour with Read aloud on, so Brio carries on showing them around.
+ * Brio ends by inviting the visitor to the tour. Once it's done, the player becomes "Hear again"
+ * and then "Take the tour" comes in beside it, in that order, so the player's wider label doesn't
+ * push the new button along as it arrives. It opens the tour with Read aloud on, so Brio carries
+ * on showing them around.
  */
 export function HearBrio() {
   const [state, setState] = useState<State>('idle');
   const [timings, setTimings] = useState<Timings | null>(null);
-  // "Take the tour", from the moment Brio invites the visitor; it stays once shown.
+  // "Take the tour", once Brio has finished; it stays once shown.
   const [invited, setInvited] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const barsRef = useRef<HTMLSpanElement>(null);
@@ -107,21 +109,12 @@ export function HearBrio() {
     return () => clearInterval(timer);
   }, [state, timings]);
 
-  // The invitation: watched apart from the wave, so it comes for reduced motion too; at the end,
-  // whenever the word times didn't arrive.
+  // "Take the tour" a beat after the player has become "Hear again", so the two arrive in turn.
   useEffect(() => {
-    if (invited) return;
-    if (state === 'ended') {
-      setInvited(true);
-      return;
-    }
-    const at = timings ? inviteAt(timings.words) : null;
-    if (state !== 'playing' || at === null) return;
-    const timer = setInterval(() => {
-      if ((audioRef.current?.currentTime ?? 0) >= at) setInvited(true);
-    }, 100);
-    return () => clearInterval(timer);
-  }, [state, timings, invited]);
+    if (state !== 'ended' || invited) return;
+    const timer = setTimeout(() => setInvited(true), 250);
+    return () => clearTimeout(timer);
+  }, [state, invited]);
 
   // The line streaming in as Brio says it; whole once it's over.
   useStreamingReveal({

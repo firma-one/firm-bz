@@ -6,7 +6,6 @@
  * scripts/tour-narration/generate.py; changing the line marks it for remaking.
  */
 
-import type { SpokenWord } from '@/lib/demo/tour-read-along'
 import { NARRATION_PARAM } from '@/lib/demo/tour-chapters'
 
 /**
@@ -21,19 +20,6 @@ export const HEAR_BRIO_LINE =
 
 /** A little more breathing room between Brio's sentences than Kokoro gives on its own, in seconds. */
 export const HEAR_BRIO_PAUSE = 0.25
-
-/** Where the line's invitation starts: "Take the tour" appears beside the player as Brio says it. */
-export const HEAR_BRIO_INVITE = 'take the product tour'
-
-/** When Brio starts the invitation, in seconds, from the clip's word times; null when it isn't there. */
-export function inviteAt(words: SpokenWord[]): number | null {
-    const invite = HEAR_BRIO_INVITE.toLowerCase().split(' ')
-    const plain = (word: string) => word.toLowerCase().replace(/[^a-z]/g, '')
-    for (let i = 0; i + invite.length <= words.length; i++) {
-        if (invite.every((word, k) => plain(words[i + k][0]) === word)) return words[i][1]
-    }
-    return null
-}
 
 /** The line as Brio says it: the brand as "Firma" (said "FUR-muh") and plain apostrophes, for Kokoro. */
 export const HEAR_BRIO_SPOKEN = HEAR_BRIO_LINE.replace(/firmä/g, 'Firma').replace(/’/g, "'")
