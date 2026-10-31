@@ -148,11 +148,38 @@ export function DeliverablesTimeline({ deliverables, startDate, dueDate, nowMs }
     const engDueMs = dueDate ? new Date(dueDate).getTime() : null
     const noDueCount = rows.filter((d) => d.openEnded).length
 
+    // A handful of reference dates along the axis (Linear's month header), evenly spaced so they
+    // need no calendar math. The engagement's due date and today get their own stronger lines below,
+    // so a tick within a hair of either is dropped rather than drawn twice.
+    const nowPct = at(nowMs)
+    const ticks = Array.from({ length: 7 }, (_, i) => minMs + (span * i) / 6)
+    const interiorTicks = ticks.slice(1, -1).filter((t) => {
+        const pct = at(t)
+        return Math.abs(pct - nowPct) > 1 && (engDueMs === null || Math.abs(pct - at(engDueMs)) > 1)
+    })
+    // More ticks means less room between them: keep a minimum gap from "Today" (bold, needs extra
+    // room), from the last-shown tick, and from the axis's own right edge (always the longer
+    // "Due …" label), rather than space them blindly and let two labels run together. Ticks are
+    // evenly spaced, so any point is at most half a tick-gap from its nearest tick — a threshold
+    // just over that drops only the one tick Today actually sits on, not its further neighbors.
+    const TODAY_GAP = 100 / (ticks.length - 1) / 2 + 2
+    const NEIGHBOR_GAP = 20
+    const EDGE_GAP = 22
+    let lastShownPct = -Infinity
+    const shownTicks = ticks
+        .map((t, i) => ({ t, i, pos: at(t), first: i === 0, last: i === ticks.length - 1 }))
+        .filter(({ pos, first, last }) => {
+            if (Math.abs(pos - nowPct) < TODAY_GAP) return false
+            if (!first && !last && (pos - lastShownPct < NEIGHBOR_GAP || pos > 100 - EDGE_GAP)) return false
+            lastShownPct = pos
+            return true
+        })
+
     return (
         <ChartBlock
             icon={FolderPlus}
             title="Deliverables"
-            info="Each bar runs from when the folder was marked a deliverable to its due date (or approval). The fill shows its stage: a quarter for To Do, half for In Progress, three quarters for In Review, full when approved. Red means overdue; a dashed bar has no due date. The dashed line is today; the solid line is the engagement's due date."
+            info="Each bar runs from when the folder was marked a deliverable to its due date (or approval). The fill shows its stage: a quarter for To Do, half for In Progress, three quarters for In Review, full when approved. Red means overdue; a dashed bar has no due date. The gray line is the engagement's due date; the blue line is today."
             aside={
                 deliverables.length > 0 ? (
                     <div className="flex items-center gap-0.5 rounded-control bg-surface-muted p-0.5" data-no-export="">
@@ -176,8 +203,32 @@ export function DeliverablesTimeline({ deliverables, startDate, dueDate, nowMs }
             ) : visible.length === 0 ? (
                 <Empty>No deliverables in this window.</Empty>
             ) : (
-                <div className="flex flex-col">
-                    {visible.map((d) => {
+                // One shared grid rather than a grid per row: that lets the date lines and today's
+                // line run as a single column behind every row, the way Linear's timeline reads,
+                // instead of being redrawn (and re-clipped) inside each bar's own track.
+                <div className="grid grid-cols-[minmax(0,1fr)_7.5rem] items-center gap-x-4 gap-y-0 sm:grid-cols-[minmax(0,1fr)_minmax(0,33%)_7.5rem]">
+                    {/* The header row: a few dates along the axis, and today, pinned above every bar. */}
+                    <div className="row-start-1 hidden border-b border-line pb-1.5 sm:col-start-1 sm:block" />
+                    <div className="relative row-start-1 hidden h-4 border-b border-line pb-1.5 text-caption text-fg-subtle sm:col-start-2 sm:block">
+                        {shownTicks.map(({ t, pos, first, last }) => {
+                            const dueHere = last && engDueMs === maxMs
+                            return (
+                                <span
+                                    key={t}
+                                    className={cn('absolute', first ? 'left-0' : last ? 'right-0' : '-translate-x-1/2', dueHere && 'text-fg-muted')}
+                                    style={first || last ? undefined : { left: `${pos}%` }}
+                                >
+                                    {dueHere ? `Due ${shortDate(t)}` : shortDate(t)}
+                                </span>
+                            )
+                        })}
+                        <span className="absolute -translate-x-1/2 font-medium text-fg" style={{ left: `${Math.min(97, Math.max(3, nowPct))}%` }}>
+                            Today
+                        </span>
+                    </div>
+                    <div className="row-start-1 hidden border-b border-line pb-1.5 sm:col-start-3 sm:block" />
+
+                    {visible.map((d, idx) => {
                         const left = at(d.startMs)
                         const width = Math.max(1, at(d.endMs) - left)
                         // Overdue is the only red: the part of the bar past its due date.
@@ -185,26 +236,21 @@ export function DeliverablesTimeline({ deliverables, startDate, dueDate, nowMs }
                         const dateText = d.stage === 'approved'
                             ? (d.finalizedAt ? `Approved ${shortDate(new Date(d.finalizedAt).getTime())}` : 'Approved')
                             : d.dueDate ? `Due ${shortDate(new Date(d.dueDate).getTime())}` : 'No due date'
+                        const rowNum = idx + 2
                         return (
                             // The bar takes a third of the row, so it reads at a glance and the name keeps its room.
                             // On a phone there is no room for it: each row is name, stage and date.
-                            <div key={d.id} className="grid grid-cols-[minmax(0,1fr)_7.5rem] items-center gap-4 border-b border-line py-1.5 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_minmax(0,33%)_7.5rem]">
-                                <div className="flex min-w-0 items-center gap-2">
+                            <React.Fragment key={d.id}>
+                                <div style={{ gridRow: rowNum }} className="col-start-1 flex min-w-0 items-center gap-2 py-1.5">
                                     {d.docId && <span className="shrink-0 rounded-[4px] bg-surface-muted px-1 font-mono text-caption text-fg-muted">{d.docId}</span>}
                                     <Hint label={d.name}>
                                         <span className="truncate text-small text-fg">{d.name}</span>
                                     </Hint>
                                 </div>
-                                <div className="relative hidden h-6 sm:block">
+                                <div style={{ gridRow: rowNum }} className="relative hidden h-6 py-1.5 sm:col-start-2 sm:block">
                                     {/* The track: the whole span of the axis, so a short bar reads as a
                                         part of the engagement rather than a fragment. */}
                                     <div className="absolute inset-x-0 inset-y-1.5 rounded-[4px] bg-surface-muted" />
-                                    {engDueMs !== null && engDueMs >= minMs && engDueMs <= maxMs && (
-                                        <Hint label={`Engagement due ${shortDate(engDueMs)}`}>
-                                            <div className="absolute inset-y-0 w-px bg-line-strong" style={{ left: `${at(engDueMs)}%` }} />
-                                        </Hint>
-                                    )}
-                                    <div className="absolute inset-y-0 border-l border-dashed border-fg-subtle" style={{ left: `${at(nowMs)}%` }} />
                                     <Hint label={`${d.docId ? `${d.docId} · ` : ''}${STAGE_META[d.stage].label} · ${dateText}`}>
                                         <div
                                             className={cn('absolute inset-y-1.5 overflow-hidden rounded-[4px]', d.openEnded ? 'border border-dashed border-line-strong' : '')}
@@ -214,27 +260,37 @@ export function DeliverablesTimeline({ deliverables, startDate, dueDate, nowMs }
                                         </div>
                                     </Hint>
                                 </div>
-                                <div className="flex min-w-0 flex-col items-end">
+                                <div style={{ gridRow: rowNum }} className="col-start-2 flex min-w-0 flex-col items-end py-1.5 sm:col-start-3">
                                     {/* The stage as on the Board; overdue is the red date below, not a pill. */}
                                     <StatusPill kind="deliverable" status={d.stage} />
                                     <span className={cn('text-caption', d.isOverdue ? 'text-danger' : 'text-fg-subtle')}>{dateText}</span>
                                 </div>
-                            </div>
+                                {idx < visible.length - 1 && (
+                                    <div aria-hidden style={{ gridRow: rowNum, gridColumn: '1 / -1' }} className="h-px self-end bg-line" />
+                                )}
+                            </React.Fragment>
                         )
                     })}
-                    {/* The axis under the bars: where the span starts, today, and where it ends. */}
-                    <div className="hidden grid-cols-[minmax(0,1fr)_minmax(0,33%)_7.5rem] gap-4 pt-1.5 sm:grid">
-                        <div />
-                        <div className="relative h-4 text-caption text-fg-subtle">
-                            <span className="absolute left-0">{shortDate(minMs)}</span>
-                            <span className={cn('absolute right-0', engDueMs === maxMs && 'text-fg-muted')}>
-                                {engDueMs === maxMs ? `Due ${shortDate(maxMs)}` : shortDate(maxMs)}
-                            </span>
-                            {at(nowMs) > 12 && at(nowMs) < 82 && (
-                                <span className="absolute -translate-x-1/2 font-medium text-fg-muted" style={{ left: `${at(nowMs)}%` }}>Today</span>
-                            )}
-                        </div>
-                        <div />
+
+                    {/* On top of every row: faint reference lines, the engagement's due date, and a
+                        continuous line at today that crosses every bar, the way Linear's timeline reads. */}
+                    {/* "-1" would target the explicit grid's last line, which is none (no grid-template-rows
+                        here) — it'd collapse to zero height. Spell out the real last row instead. And since
+                        every child is absolutely positioned, this div has no intrinsic height of its own: the
+                        container's `items-center` would otherwise shrink it to 0 instead of stretching it to
+                        fill the row span. */}
+                    <div className="pointer-events-none relative hidden self-stretch sm:col-start-2 sm:block" style={{ gridRow: `1 / ${visible.length + 2}` }}>
+                        {interiorTicks.map((t) => (
+                            <div key={t} className="absolute inset-y-0 w-px bg-line" style={{ left: `${at(t)}%` }} />
+                        ))}
+                        {engDueMs !== null && engDueMs >= minMs && engDueMs <= maxMs && (
+                            <Hint label={`Engagement due ${shortDate(engDueMs)}`}>
+                                <div className="pointer-events-auto absolute inset-y-0 w-px bg-line-strong" style={{ left: `${at(engDueMs)}%` }} />
+                            </Hint>
+                        )}
+                        <Hint label={`Today, ${shortDate(nowMs)}`}>
+                            <div className="pointer-events-auto absolute inset-y-0 w-px" style={{ left: `${nowPct}%`, backgroundColor: DATA.underway }} />
+                        </Hint>
                     </div>
                 </div>
             )}

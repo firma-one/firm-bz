@@ -137,6 +137,9 @@
   --ui-status-problem-icon: #d9625a;
   --ui-status-problem-bar: #e8908a;
 
+  /* Today on a timeline: an indigo that matches no status, so "now" never reads as a stage. */
+  --ui-timeline-today: #5e6ad2;
+
   /* Data that isn't a status (roles, internal vs external): a warm gray ramp, darkest first, so a
      chart never borrows a status color it doesn't mean. Charts otherwise use the -bar tokens above. */
   --ui-data-category-1: #8a8985;
