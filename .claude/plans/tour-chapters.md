@@ -72,18 +72,23 @@ goes away (the tour steps back), the view goes back with it.
 How a run plays, picked on the tour panel's start and switchable mid-run from its mode pill
 (`TOUR_MODES`, remembered in localStorage `fm_demo_tour_mode`):
 
-- **Autoplay** (the default; Deepak's "driverless"): each step moves on by itself after its own time,
-  worked out from how much the card says (`autoplayDuration`: about 300 words a minute plus a beat,
-  within 5–15 s) or set on the step (`duration`). A line along the card's foot fills as it runs.
-  Pause holds it, and so does pointing at the card or the page being hidden. Next and Back still work.
-  The whole tour plays through; a chapter or section stops on the panel's ending.
-- **Step by step** ("guided"): waits for Next, as before.
-- **Explore** ("unguided"): no step cards and no dimmed page. The tour panel is the tour: a click
-  takes the visitor to that part's page and pulses an outline around where it is. Switching back to
-  Autoplay or Step by step shows the card where the visitor is.
+- **Autopilot** (`autoplay`; the default; Deepak's "driverless"): each step moves on by itself after
+  its own time, worked out from how much the card says (`autoplayDuration`: about 300 words a minute
+  plus a beat, within 5–15 s) or set on the step (`duration`). A bar at the card's top fills as it
+  runs. Pause holds it, and so does pointing at the card or the page being hidden. Next and Back
+  still work. The whole tour plays through; a chapter or section stops on the panel's ending.
+- **Guided** (`step`): waits for Next, as before.
+- **Explore** (`explore`; "unguided"): no step cards and no dimmed page. The tour panel is the tour:
+  a click takes the visitor to that part's page and pulses an outline around where it is. Switching
+  back to Autopilot or Guided shows the card where the visitor is.
+
+Named Autoplay and Step by step until 2026-10-31: three single words read better on the three cards
+side by side, and as a scale of how much the visitor drives (Autopilot, Guided, Explore). "Copilot"
+was passed over, since it reads as an AI assistant and Brio is the product's. The ids stayed, so
+deep links and saved choices carry on.
 
 A deep link can name its mode, `?guide=files&mode=step`; otherwise it plays in the visitor's own
-mode (Autoplay at first).
+mode (Autopilot at first).
 
 ## Deep links
 
@@ -103,7 +108,7 @@ mode (Autoplay at first).
   little longer (`settle`), or the card points at where the target was mid-animation.
 - The step card shows where the step sits ("Engagements › Files › Details") above its title, and
   counts within that section.
-- **Autoplay's clock** (2026-10-30): one inset bar at the top of the step card, for this step's time
+- **Autopilot's clock** (2026-10-30): one inset bar at the top of the step card, for this step's time
   only; where the visitor is in the tour stays in the panel, since a bar for 50-plus steps says
   little. Pausing, or pointing at the card to read it, holds the clock and greys the bar. A pause
   also says "Paused" at the bar's end and turns Pause into Play. ("Paused" was meant to sit beside
@@ -126,7 +131,7 @@ mode switch unclear, and the pane's side-to-side jumps disconcerting).
   dialog (focus kept, Escape closes), and the page behind is softly blurred until the visitor
   picks. On a first visit it waits for the cookie banner to be answered: both sit at the page's foot.
 - **Running** (a run, or exploring): the same corner and rows. "Product tour" with the step count, the
-  mode as a pill that opens the three to switch mid-run (Pause beside it in Autoplay), and the
+  mode as a pill that opens the three to switch mid-run (Pause beside it in Autopilot), and the
   outline: chapters, the current one open to its sections, where the run is, what's been seen, a
   click to anywhere. It folds to one line and closes the tour (progress saved).
 - **Ending** (2026-10-30): the same corner and glass, the page undimmed. The whole tour ends on
@@ -165,7 +170,7 @@ of it with steps is. Older `stepIndex` progress is ignored. `fm_demo_tour_never_
 under it.
 - A dashed ring: not started (as Claude Code marks a pending step; solid empty rings stay the mode radios').
 - A filling ring: the share of its steps seen. For the section the run is in, and the chapter
-  around it, the ring fills as the run goes. In Autoplay it follows the step's clock
+  around it, the ring fills as the run goes. In Autopilot it follows the step's clock
   (`lib/demo/tour-clock.ts`, kept outside React state so only the rings re-render, not the tour).
   Otherwise it moves a step at a time as each step comes on screen.
 - A round check: seen.
@@ -203,7 +208,7 @@ component; Brio's answers can end with a "See how" link from `tourGuideHref`.
 components; every node is listed once in order, Firm before Clients before Engagements; every leaf
 has 1–6 steps; every node is reachable by its deep link and has steps to run; "next" follows the
 outline; the engagement tabs map to the right sections; the modes parse from a deep link and
-Autoplay is the default; step times stay within bounds. `engagement-header.test.tsx` checks the
+Autopilot is the default; step times stay within bounds. `engagement-header.test.tsx` checks the
 link's `href` and new tab. The tour also warns in development when it skips a step.
 
 ## Out of scope

@@ -84,7 +84,7 @@ function loadResume(): TourResume | null {
 }
 
 interface DemoTourContextValue {
-    /** Autoplay, Step by step or Explore (lib/demo/tour-chapters.ts). */
+    /** Autopilot, Guided or Explore (lib/demo/tour-chapters.ts). */
     mode: TourMode
     /** Switches mode, mid-run too: into Explore the step card goes; out of it, the run shows from where the visitor is. */
     setMode: (mode: TourMode) => void

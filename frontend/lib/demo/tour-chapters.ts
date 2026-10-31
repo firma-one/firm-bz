@@ -146,9 +146,10 @@ export function nextTourNode(id: TourNodeId): PlacedTourNode | null {
 }
 
 /**
- * How a run plays: Autoplay (the default) moves on by itself, each step on its own timer; Step by
- * step waits for Next; Explore shows no step cards, and the outline pane takes the visitor to each
- * part's page instead.
+ * How a run plays: Autopilot (`autoplay`, the default) moves on by itself, each step on its own
+ * timer; Guided (`step`) waits for Next; Explore shows no step cards, and the outline pane takes the
+ * visitor to each part's page instead. The ids are what deep links and saved choices carry, so they
+ * keep their first names when the labels (TOUR_MODE_LABELS) change.
  */
 export const TOUR_MODES = ['autoplay', 'step', 'explore'] as const
 

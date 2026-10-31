@@ -20,7 +20,7 @@ export function DemoTourShell() {
     const { openIntroModal, startNode } = useDemoTour()
     const searchParams = useSearchParams()
     const guide = parseGuideParam(searchParams.get(GUIDE_PARAM))
-    // A deep link may name its mode (&mode=step); otherwise the visitor's own, Autoplay at first.
+    // A deep link may name its mode (&mode=step); otherwise the visitor's own, Autopilot at first.
     const linkMode = parseModeParam(searchParams.get(MODE_PARAM))
     const hasTriggered = useRef(false)
 
