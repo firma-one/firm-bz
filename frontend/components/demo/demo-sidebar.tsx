@@ -57,7 +57,7 @@ export function demoFirmView(pathname: string, tab: string | null): string | nul
 
 /**
  * Static counterpart to SidebarV2 (components/shell/sidebar-v2.tsx), built from the same rows,
- * sections and client groups: workspace, Search, Home and Inbox, the engagement tree and the Firm
+ * sections and client groups: workspace, Home, Inbox and Search, the engagement tree and the Firm
  * section, with the profile menu at the foot. Anything that needs an account is inert.
  *
  * Tour anchors sit on wrapping elements, so the shared rows need no demo-only props.
@@ -116,14 +116,8 @@ export function DemoSidebar({ inboxCount, onCollapse }: {
                 )}
             </div>
 
-            {/* Primary */}
+            {/* Primary: Home, Inbox, then Search, as the app's sidebar has them */}
             <div className="flex flex-col gap-px px-2 pb-3">
-                <div data-demo-tour="command-palette">
-                    {/* Hint needs a ref-taking child; the shared row is a plain function component. */}
-                    <Hint label="Search is disabled in this demo" side="right">
-                        <span className="block"><SidebarItem icon={<Search />} label="Search" onClick={() => {}} /></span>
-                    </Hint>
-                </div>
                 <div data-demo-tour="sidebar-home">
                     <SidebarItem href="/tour/home" icon={<Home />} label="Home" active={pathname === '/tour/home'} />
                 </div>
@@ -135,6 +129,12 @@ export function DemoSidebar({ inboxCount, onCollapse }: {
                         active={pathname === '/tour/inbox'}
                         trailing={inboxCount > 0 ? <CountBadge count={inboxCount} /> : undefined}
                     />
+                </div>
+                <div data-demo-tour="command-palette">
+                    {/* Hint needs a ref-taking child; the shared row is a plain function component. */}
+                    <Hint label="Search is disabled in this demo" side="right">
+                        <span className="block"><SidebarItem icon={<Search />} label="Search" onClick={() => {}} /></span>
+                    </Hint>
                 </div>
             </div>
 

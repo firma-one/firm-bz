@@ -360,15 +360,16 @@ export function SidebarV2({
                     )}
                 </div>
             ) : (<>
-            {/* Primary */}
+            {/* Primary: the places first, Home where the app opens and Inbox, then Search, which
+                opens the quick-jump palette rather than a page (⌘K for anyone who knows it). */}
             <div className="flex flex-col gap-px px-2 pb-3">
+                <HomeAndInbox pathname={pathname} inboxCount={inboxTotal} />
                 <SidebarItem
                     onClick={openCommandPalette}
                     icon={<Search />}
                     label="Search"
                     trailing={<Kbd className="hidden h-[18px] border-0 bg-transparent px-0 text-fg-subtle group-hover:inline-flex">⌘K</Kbd>}
                 />
-                <HomeAndInbox pathname={pathname} inboxCount={inboxTotal} />
             </div>
 
             <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-2 pb-4">

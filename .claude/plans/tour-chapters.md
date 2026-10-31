@@ -23,10 +23,15 @@ chapter, section or sub-section can be run on its own or linked; the whole tour 
 `lib/demo/tour-chapters.ts` holds the tree (`TOUR_OUTLINE`, flattened in order as `TOUR_NODES`); the
 steps live in `components/demo/demo-tour-steps.tsx` (`NODE_STEPS`, one list per node).
 
+The sidebar's top is Home, Inbox, then Search (2026-10-31, in the app and here alike): Home is
+where the app opens and Inbox the daily triage, while Search opens the quick-jump palette rather
+than a page, and ⌘K is for power users. The tour follows it, so the whole tour opens on Home, and
+the Search card sits on the Inbox page, where the run already is.
+
 ```
-Search (⌘K)
 Home
 Inbox
+Search (⌘K)
 Profile
 Firm
   Switch firms · Overview and daily brief · Doc Search · Calendar · Members · Audit · Settings
@@ -72,18 +77,23 @@ goes away (the tour steps back), the view goes back with it.
 How a run plays, picked on the tour panel's start and switchable mid-run from its mode pill
 (`TOUR_MODES`, remembered in localStorage `fm_demo_tour_mode`):
 
-- **Autoplay** (the default; Deepak's "driverless"): each step moves on by itself after its own time,
-  worked out from how much the card says (`autoplayDuration`: about 300 words a minute plus a beat,
-  within 5–15 s) or set on the step (`duration`). A line along the card's foot fills as it runs.
-  Pause holds it, and so does pointing at the card or the page being hidden. Next and Back still work.
-  The whole tour plays through; a chapter or section stops on the panel's ending.
-- **Step by step** ("guided"): waits for Next, as before.
-- **Explore** ("unguided"): no step cards and no dimmed page. The tour panel is the tour: a click
-  takes the visitor to that part's page and pulses an outline around where it is. Switching back to
-  Autoplay or Step by step shows the card where the visitor is.
+- **Autopilot** (`autoplay`; the default; Deepak's "driverless"): each step moves on by itself after
+  its own time, worked out from how much the card says (`autoplayDuration`: about 300 words a minute
+  plus a beat, within 5–15 s) or set on the step (`duration`). A bar at the card's top fills as it
+  runs. Pause holds it, and so does pointing at the card or the page being hidden. Next and Back
+  still work. The whole tour plays through; a chapter or section stops on the panel's ending.
+- **Guided** (`step`): waits for Next, as before.
+- **Explore** (`explore`; "unguided"): no step cards and no dimmed page. The tour panel is the tour:
+  a click takes the visitor to that part's page and pulses an outline around where it is. Switching
+  back to Autopilot or Guided shows the card where the visitor is.
+
+Named Autoplay and Step by step until 2026-10-31: three single words read better on the three cards
+side by side, and as a scale of how much the visitor drives (Autopilot, Guided, Explore). "Copilot"
+was passed over, since it reads as an AI assistant and Brio is the product's. The ids stayed, so
+deep links and saved choices carry on.
 
 A deep link can name its mode, `?guide=files&mode=step`; otherwise it plays in the visitor's own
-mode (Autoplay at first).
+mode (Autopilot at first).
 
 ## Deep links
 
@@ -103,7 +113,7 @@ mode (Autoplay at first).
   little longer (`settle`), or the card points at where the target was mid-animation.
 - The step card shows where the step sits ("Engagements › Files › Details") above its title, and
   counts within that section.
-- **Autoplay's clock** (2026-10-30): one inset bar at the top of the step card, for this step's time
+- **Autopilot's clock** (2026-10-30): one inset bar at the top of the step card, for this step's time
   only; where the visitor is in the tour stays in the panel, since a bar for 50-plus steps says
   little. Pausing, or pointing at the card to read it, holds the clock and greys the bar. A pause
   also says "Paused" at the bar's end and turns Pause into Play. ("Paused" was meant to sit beside
@@ -126,7 +136,7 @@ mode switch unclear, and the pane's side-to-side jumps disconcerting).
   dialog (focus kept, Escape closes), and the page behind is softly blurred until the visitor
   picks. On a first visit it waits for the cookie banner to be answered: both sit at the page's foot.
 - **Running** (a run, or exploring): the same corner and rows. "Product tour" with the step count, the
-  mode as a pill that opens the three to switch mid-run (Pause beside it in Autoplay), and the
+  mode as a pill that opens the three to switch mid-run (Pause beside it in Autopilot), and the
   outline: chapters, the current one open to its sections, where the run is, what's been seen, a
   click to anywhere. It folds to one line and closes the tour (progress saved).
 - **Ending** (2026-10-30): the same corner and glass, the page undimmed. The whole tour ends on
@@ -165,7 +175,7 @@ of it with steps is. Older `stepIndex` progress is ignored. `fm_demo_tour_never_
 under it.
 - A dashed ring: not started (as Claude Code marks a pending step; solid empty rings stay the mode radios').
 - A filling ring: the share of its steps seen. For the section the run is in, and the chapter
-  around it, the ring fills as the run goes. In Autoplay it follows the step's clock
+  around it, the ring fills as the run goes. In Autopilot it follows the step's clock
   (`lib/demo/tour-clock.ts`, kept outside React state so only the rings re-render, not the tour).
   Otherwise it moves a step at a time as each step comes on screen.
 - A round check: seen.
@@ -178,6 +188,70 @@ step empties `completed`, however it's started (the start panel's primary button
 or a map icon), so a second pass fills the rings afresh rather than showing every row checked.
 Replay at the end of the whole tour clears them as it opens the start panel. Resume, a single
 chapter or section, "All chapters" and coming back to /tour keep them, to show what's left.
+
+## Narration
+
+Each step card can be read aloud (2026-10-31), in **Brio's voice** (below), so the tour's narrator
+is Brio. One voice for the whole tour.
+
+### Brio's voice
+
+Brio's voice is a **blend of two of Kokoro's stock voices, in equal parts**:
+
+| | Voice | Kokoro id | What it is |
+|---|---|---|---|
+| 1 | Michael | `am_michael` | US English, male |
+| 2 | Fenrir | `am_fenrir` | US English, male |
+
+Kokoro averages the two voices' embeddings into one (`'am_michael,am_fenrir'`: a comma between
+voice ids blends them, each weighted the same). The result sounds like neither stock voice, which
+makes it Brio's own: no other product using Kokoro's voices sounds exactly like it, so it can be
+marketed as Brio's voice. Spoken by Kokoro-82M (`hexgrad/Kokoro-82M`), US English (`lang_code`
+`a`), at speed 1.0; each clip is then evened to −18 LUFS.
+
+Set in one place, `NARRATION_VOICE` in `frontend/lib/demo/tour-narration.ts`; the generator reads it
+from there, and changing it marks every clip for remaking. Chosen on 2026-10-31 from samples of
+the same Brio line in nine voices: Kokoro's `af_heart` (US female, its best rated), `am_michael`,
+`am_fenrir` and `am_puck` (US male), `bm_george` and `bm_fable` (UK male), and three blends
+(Michael + Fenrir, Puck + Michael, Michael + Heart).
+
+### How it plays
+
+- **Off by default**, a speaker toggle on the start panel and on the step card, remembered in
+  localStorage `fm_demo_tour_narration`. Unexpected sound on a website annoys people and clashes
+  with screen readers; starting the tour is a click, which lets the browser play audio.
+- **Autopilot:** the step's clock follows its clip: it waits for the clip to start, runs while it
+  plays, and moves on a beat after it ends. Pointing at the card no longer holds a step while it's
+  read aloud (it can't be read along mid-sentence); Pause pauses the voice too.
+- **Guided:** the card is read when it opens; Next or Back cuts it off.
+- **Explore:** no cards, so nothing is read.
+- A browser that won't play the clip falls back to the silent timer.
+- **Streaming reveal** (2026-10-31): while a card is read, its title and copy stay faint and each
+  word comes up as Brio says it, following the clip's actual position (so through Pause, Back and
+  a slow load too). Faint, not hidden: nothing moves as the words come up, and anyone reading
+  faster than the voice can still read ahead. Done with the CSS Custom Highlight API
+  (`::highlight(tour-unspoken)` in `app/globals.css`), which colors stretches of text without
+  touching the card's DOM; a browser without it shows the card as usual. Chosen over a word-by-word
+  read-along highlight and a sentence highlight.
+
+**What's read:** the card's title, then its copy, as a screen reader would hear them (Brio's
+"AI" subscript is hidden from them, so it's "Brio"), or the step's `spoken` text where the card
+doesn't read well aloud ("⌘K" becomes "Command K"). Kokoro guesses a heteronym's sense from its
+sentence, so `PRONOUNCE` in `tour-narration-text.ts` pins words this tour always means one way
+("lives" the verb, which came out as the plural of "life" on the Clients card).
+
+**Clips** are made ahead with [Kokoro](https://github.com/hexgrad/kokoro) (Apache-2.0, free, runs
+locally), not in the browser or a paid service: one voice for everyone, and each clip's length
+known so Autopilot can follow it. `frontend/public/tour/narration/<node>-<n>.m4a` (AAC 64 kbps,
+evened to one loudness), `<node>-<n>.json` beside each with when each word is spoken (Kokoro's own
+word timings), and `manifest.json` with each clip's text hash and length.
+`frontend/scripts/tour-narration/generate.py` makes them: it reads every card's spoken text from
+the steps (`export-text.mjs`, through jiti), remakes only clips whose text or voice changed, and
+removes clips no step uses. The card lines its own words up with the spoken ones letter by letter
+(`lib/demo/tour-read-along.ts`), so "client-billable" or "e.g." can't throw it, and a word read in
+other words ("⌘K") comes up with its neighbors. `lib/demo/tour-narration.test.ts` fails when a
+card's text changes without its clip being remade, a clip or its timings are missing, or a word
+on a card isn't matched to the narration.
 
 ## Real-app entry points (new UI only)
 
@@ -203,7 +277,7 @@ component; Brio's answers can end with a "See how" link from `tourGuideHref`.
 components; every node is listed once in order, Firm before Clients before Engagements; every leaf
 has 1–6 steps; every node is reachable by its deep link and has steps to run; "next" follows the
 outline; the engagement tabs map to the right sections; the modes parse from a deep link and
-Autoplay is the default; step times stay within bounds. `engagement-header.test.tsx` checks the
+Autopilot is the default; step times stay within bounds. `engagement-header.test.tsx` checks the
 link's `href` and new tab. The tour also warns in development when it skips a step.
 
 ## Out of scope

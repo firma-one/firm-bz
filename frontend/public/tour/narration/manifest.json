@@ -1,0 +1,217 @@
+{
+  "voice": "am_michael,am_fenrir",
+  "clips": {
+    "all-clients-1": {
+      "hash": "d4dbebb5",
+      "seconds": 7.55
+    },
+    "all-clients-2": {
+      "hash": "0410d294",
+      "seconds": 10.88
+    },
+    "all-engagements-1": {
+      "hash": "aa2bfacd",
+      "seconds": 6.88
+    },
+    "all-engagements-2": {
+      "hash": "9405a893",
+      "seconds": 12.88
+    },
+    "billing-1": {
+      "hash": "ebf7ff69",
+      "seconds": 8.28
+    },
+    "board-1": {
+      "hash": "448b8169",
+      "seconds": 8.97
+    },
+    "board-2": {
+      "hash": "76d58da2",
+      "seconds": 17.3
+    },
+    "board-3": {
+      "hash": "5724557d",
+      "seconds": 12.4
+    },
+    "board-4": {
+      "hash": "af27bf01",
+      "seconds": 10.85
+    },
+    "brio-1": {
+      "hash": "4e77ad66",
+      "seconds": 9.05
+    },
+    "brio-2": {
+      "hash": "9b34aa09",
+      "seconds": 9.68
+    },
+    "calendar-1": {
+      "hash": "a4a13e57",
+      "seconds": 10.82
+    },
+    "calendar-2": {
+      "hash": "ffdf3a2a",
+      "seconds": 9.1
+    },
+    "contacts-1": {
+      "hash": "f27a248a",
+      "seconds": 9.03
+    },
+    "deliverable-details-1": {
+      "hash": "e367f360",
+      "seconds": 10.12
+    },
+    "deliverable-details-2": {
+      "hash": "1ef55662",
+      "seconds": 12.38
+    },
+    "discussions-1": {
+      "hash": "8b404d9c",
+      "seconds": 10.75
+    },
+    "discussions-2": {
+      "hash": "ca532068",
+      "seconds": 14.45
+    },
+    "discussions-3": {
+      "hash": "bab4cfbe",
+      "seconds": 9.5
+    },
+    "doc-search-1": {
+      "hash": "a1d046fc",
+      "seconds": 11.5
+    },
+    "doc-search-2": {
+      "hash": "a4a9a237",
+      "seconds": 9.65
+    },
+    "engagement-audit-1": {
+      "hash": "4b4dd1d1",
+      "seconds": 8.43
+    },
+    "engagement-members-1": {
+      "hash": "9c58265d",
+      "seconds": 7.42
+    },
+    "engagement-overview-1": {
+      "hash": "577ab869",
+      "seconds": 8.53
+    },
+    "engagement-overview-2": {
+      "hash": "9693533b",
+      "seconds": 9.25
+    },
+    "engagement-overview-3": {
+      "hash": "5ee4b403",
+      "seconds": 16.48
+    },
+    "engagement-overview-4": {
+      "hash": "fe0c94e7",
+      "seconds": 11.3
+    },
+    "engagement-overview-5": {
+      "hash": "7e0f4911",
+      "seconds": 9.25
+    },
+    "engagement-settings-1": {
+      "hash": "171a882d",
+      "seconds": 15.35
+    },
+    "file-details-1": {
+      "hash": "1577759c",
+      "seconds": 16.3
+    },
+    "file-details-2": {
+      "hash": "a665269f",
+      "seconds": 14.4
+    },
+    "files-1": {
+      "hash": "413b39b1",
+      "seconds": 13.1
+    },
+    "files-2": {
+      "hash": "5dda0573",
+      "seconds": 14.8
+    },
+    "files-3": {
+      "hash": "030b1b63",
+      "seconds": 19.35
+    },
+    "files-4": {
+      "hash": "3aa9b58f",
+      "seconds": 12.3
+    },
+    "files-5": {
+      "hash": "20f188a2",
+      "seconds": 12.15
+    },
+    "firm-audit-1": {
+      "hash": "de7baf92",
+      "seconds": 8.28
+    },
+    "firm-members-1": {
+      "hash": "88bcebd8",
+      "seconds": 15.12
+    },
+    "firm-overview-1": {
+      "hash": "61df19aa",
+      "seconds": 9.2
+    },
+    "firm-overview-2": {
+      "hash": "3ed90db0",
+      "seconds": 10.78
+    },
+    "firm-settings-1": {
+      "hash": "faec0d36",
+      "seconds": 6.9
+    },
+    "firm-settings-2": {
+      "hash": "7380eb74",
+      "seconds": 23.18
+    },
+    "firm-switcher-1": {
+      "hash": "78cf2c56",
+      "seconds": 10.1
+    },
+    "home-1": {
+      "hash": "b8da4890",
+      "seconds": 8.15
+    },
+    "home-2": {
+      "hash": "b7754189",
+      "seconds": 9.62
+    },
+    "inbox-1": {
+      "hash": "4bb7822b",
+      "seconds": 9.8
+    },
+    "inbox-2": {
+      "hash": "ee180239",
+      "seconds": 8.62
+    },
+    "new-client-1": {
+      "hash": "0786d5fd",
+      "seconds": 8.4
+    },
+    "new-engagement-1": {
+      "hash": "faeb34c2",
+      "seconds": 19.2
+    },
+    "profile-1": {
+      "hash": "b1ebb3a2",
+      "seconds": 7.72
+    },
+    "search-1": {
+      "hash": "f7080249",
+      "seconds": 16.98
+    },
+    "support-1": {
+      "hash": "855d7271",
+      "seconds": 9.65
+    },
+    "support-2": {
+      "hash": "cc328a52",
+      "seconds": 17.4
+    }
+  }
+}

@@ -60,8 +60,8 @@ export function TourNodePlace({ id }: { id: TourNodeId }) {
 
 /** Each mode's name, icon and what happens in it, in a few words: the mode cards and the mode pill. */
 export const TOUR_MODE_LABELS: Record<TourMode, { label: string; icon: ReactNode; short: string }> = {
-    autoplay: { label: 'Autoplay', icon: <Play />, short: 'Plays itself' },
-    step: { label: 'Step by step', icon: <StepForward />, short: 'You click Next' },
+    autoplay: { label: 'Autopilot', icon: <Play />, short: 'Plays itself' },
+    step: { label: 'Guided', icon: <StepForward />, short: 'You click Next' },
     explore: { label: 'Explore', icon: <Compass />, short: 'You click around' },
 }
 

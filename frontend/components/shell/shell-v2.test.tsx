@@ -134,6 +134,13 @@ describe('SidebarV2', () => {
         expect(within(inbox).getByText('3')).toBeTruthy()
     })
 
+    it('lists Home and Inbox, then Search, at the top', () => {
+        render(<SidebarV2 />)
+        const order = (a: string, b: string) => screen.getByText(a).compareDocumentPosition(screen.getByText(b)) & Node.DOCUMENT_POSITION_FOLLOWING
+        expect(order('Home', 'Inbox')).toBeTruthy()
+        expect(order('Inbox', 'Search')).toBeTruthy()
+    })
+
     it('marks Home and Inbox active on their pages', () => {
         pathname = '/d/u/home'
         const { unmount } = render(<SidebarV2 />)

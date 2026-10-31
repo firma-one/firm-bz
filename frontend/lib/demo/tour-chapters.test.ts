@@ -62,6 +62,10 @@ describe('tour outline', () => {
         expect(TOUR_NODES.map((n) => n.id)).toEqual([...TOUR_NODE_IDS])
     })
 
+    it('starts where the sidebar does: Home, Inbox, then Search', () => {
+        expect(TOUR_NODE_IDS.slice(0, 3)).toEqual(['home', 'inbox', 'search'])
+    })
+
     it('follows the data model: Firm, then Clients, then Engagements', () => {
         const at = (id: TourNodeId) => TOUR_NODE_IDS.indexOf(id)
         expect(at('firm')).toBeLessThan(at('clients'))

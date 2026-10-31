@@ -3,13 +3,15 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import { Joyride, EVENTS, STATUS, type EventData, type Controls, type TooltipRenderProps } from 'react-joyride'
-import { Pause, Play, X } from 'lucide-react'
+import { Pause, Play, Volume2, VolumeX, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Hint } from '@/components/ui/tooltip'
 import { useDemoTour } from '@/lib/demo/demo-tour-context'
 import { GUIDE_PARAM, autoplayDuration, tourNode, type TourNodeId } from '@/lib/demo/tour-chapters'
 import { tourSteps } from '@/components/demo/demo-tour-steps'
 import { setStepProgress } from '@/lib/demo/tour-clock'
+import { NARRATION_BEAT_MS, narrationClip } from '@/lib/demo/tour-narration'
+import { revealTimes, type SpokenWord } from '@/lib/demo/tour-read-along'
 import { TOUR_CARD_GLASS_CLASS, TourNodeTitle } from '@/components/demo/demo-tour-labels'
 import { cn } from '@/lib/utils'
 
@@ -27,28 +29,44 @@ interface StepCardData {
 /**
  * Autoplay's clock for one step: runs while autoplay is on, not paused, not hovered and the page is
  * in view, and moves on once the step's time is up. The time is the step's own, or worked out from
- * how much the card says (autoplayDuration). Starts again on every step.
+ * how much the card says (autoplayDuration). Starts again on every step, and when the time changes
+ * (narration turned on or off). While the card is read aloud, the clock waits for the clip to start
+ * and then follows it (`follow`), so a clip that stalls loading isn't cut short; the beat after it
+ * runs on time.
  */
-function useAutoplay({ index, on, held, duration, read, next }: { index: number; on: boolean; held: boolean; duration?: number; read: () => string; next: () => void }) {
+function useAutoplay({ index, on, held, waiting = false, duration, follow, read, next }: {
+    index: number
+    on: boolean
+    held: boolean
+    waiting?: boolean
+    duration?: number
+    follow?: () => number | null
+    read: () => string
+    next: () => void
+}) {
     const [elapsed, setElapsed] = useState(0)
     const [total, setTotal] = useState(duration ?? 8000)
     const advanced = useRef(false)
+    const followRef = useRef(follow)
+    followRef.current = follow
 
     useLayoutEffect(() => {
         setElapsed(0)
         advanced.current = false
         setTotal(duration ?? autoplayDuration(read()))
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [index])
+    }, [index, duration])
 
-    const running = on && !held
+    const running = on && !held && !waiting
     useEffect(() => {
         if (!running) return
         let last = performance.now()
         const timer = setInterval(() => {
             const now = performance.now()
+            const at = followRef.current?.()
+            if (at != null) setElapsed(at)
             // A hidden page doesn't count: the visitor would come back to a step they never saw.
-            if (!document.hidden) setElapsed((e) => e + (now - last))
+            else if (!document.hidden) setElapsed((e) => e + (now - last))
             last = now
         }, 100)
         return () => clearInterval(timer)
@@ -68,6 +86,159 @@ function useAutoplay({ index, on, held, duration, read, next }: { index: number;
     return progress
 }
 
+type VoiceStatus = 'off' | 'loading' | 'playing' | 'ended' | 'blocked'
+
+/**
+ * A step card read aloud: plays the step's clip when the card opens, holds it while the tour is
+ * paused or the page is hidden, and stops it when the card goes. `blocked` when the browser won't
+ * play it (no click on the page yet, say): the card then runs as if narration were off. `position`
+ * is how far the clip has played (ms) while it's playing, for Autoplay's clock to follow; `words`,
+ * when each word in the clip is spoken, for the card to reveal its words as they're read.
+ */
+function useNarration({ index, src, timings, paused }: { index: number; src: string | null; timings: string | null; paused: boolean }) {
+    const [status, setStatus] = useState<VoiceStatus>(src ? 'loading' : 'off')
+    const [words, setWords] = useState<SpokenWord[] | null>(null)
+    const audioRef = useRef<HTMLAudioElement | null>(null)
+
+    // When each word is spoken: small, fetched with the clip; without it the card just isn't revealed.
+    useEffect(() => {
+        setWords(null)
+        if (!timings) return
+        const request = new AbortController()
+        fetch(timings, { signal: request.signal })
+            .then((response) => (response.ok ? response.json() : null))
+            .then((data: { words?: SpokenWord[] } | null) => setWords(data?.words ?? null))
+            .catch(() => {})
+        return () => request.abort()
+    }, [timings, index])
+    const pausedRef = useRef(paused)
+    pausedRef.current = paused
+
+    // Only the browser's autoplay rule counts as refused, and only for this card's clip: a play cut
+    // short by a pause (the card moving on mid-start) rejects too, and isn't a refusal.
+    const play = (audio: HTMLAudioElement) =>
+        audio.play().catch((error: DOMException) => {
+            if (error.name === 'NotAllowedError' && audioRef.current === audio) setStatus('blocked')
+        })
+
+    useEffect(() => {
+        if (!src) {
+            setStatus('off')
+            return
+        }
+        const audio = new Audio(src)
+        audioRef.current = audio
+        setStatus('loading')
+        const onPlaying = () => setStatus('playing')
+        const onEnded = () => setStatus('ended')
+        audio.addEventListener('playing', onPlaying)
+        audio.addEventListener('ended', onEnded)
+        if (!pausedRef.current && !document.hidden) void play(audio)
+        return () => {
+            audio.removeEventListener('playing', onPlaying)
+            audio.removeEventListener('ended', onEnded)
+            audio.pause()
+            audioRef.current = null
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [src, index])
+
+    useEffect(() => {
+        const audio = audioRef.current
+        if (!audio || audio.ended) return
+        if (paused) audio.pause()
+        else if (!document.hidden) void play(audio)
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [paused])
+
+    // Not read to an empty room: a hidden page holds the clip, as it holds Autoplay's clock.
+    useEffect(() => {
+        const onVisibility = () => {
+            const audio = audioRef.current
+            if (!audio || audio.ended) return
+            if (document.hidden) audio.pause()
+            else if (!pausedRef.current) void play(audio)
+        }
+        document.addEventListener('visibilitychange', onVisibility)
+        return () => document.removeEventListener('visibilitychange', onVisibility)
+    }, [])
+
+    const position = useCallback(() => {
+        const audio = audioRef.current
+        return audio && status === 'playing' && !audio.ended ? audio.currentTime * 1000 : null
+    }, [status])
+
+    return { status, position, words }
+}
+
+/** The ::highlight in globals.css that keeps a card's words faint until they're spoken. */
+const UNSPOKEN_HIGHLIGHT = 'tour-unspoken'
+
+/**
+ * The card's words streaming in with the narration: each stays faint until Brio says it, then
+ * comes up, so the card fills in as it's read; still legible ahead, for anyone reading faster.
+ * Covers the title and copy (`data-tour-spoken`), skipping what's hidden from screen readers as
+ * the narration does. Done with the CSS Custom Highlight API, which colors stretches of text without
+ * touching the card's DOM (React's to change); a browser without it shows the card as usual.
+ * `heard` is how far the clip has got, in seconds: 0 until it starts, Infinity once it's over.
+ */
+function useStreamingReveal({ cardRef, index, on, words, heard }: {
+    cardRef: React.RefObject<HTMLDivElement | null>
+    index: number
+    on: boolean
+    words: SpokenWord[] | null
+    heard: () => number
+}) {
+    const heardRef = useRef(heard)
+    heardRef.current = heard
+
+    useEffect(() => {
+        const card = cardRef.current
+        if (!on || !words || !card || typeof Highlight === 'undefined' || !CSS.highlights) return
+        const ranges: Range[] = []
+        const shown: string[] = []
+        card.querySelectorAll('[data-tour-spoken]').forEach((root) => {
+            const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+                acceptNode: (node) => (node.parentElement?.closest('[aria-hidden="true"]') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
+            })
+            for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+                const text = node.textContent ?? ''
+                const word = /\S+/g
+                for (let match = word.exec(text); match; match = word.exec(text)) {
+                    const range = document.createRange()
+                    range.setStart(node, match.index)
+                    range.setEnd(node, match.index + match[0].length)
+                    ranges.push(range)
+                    shown.push(match[0])
+                }
+            }
+        })
+        const times = revealTimes(shown, words)
+        const unspoken = new Highlight()
+        CSS.highlights.set(UNSPOKEN_HIGHLIGHT, unspoken)
+        // A tick every 50ms, like Autoplay's clock rather than every frame: a word takes about 300ms
+        // to say, and the card keeps up whether or not the browser is painting frames.
+        let revealed = -1
+        const tick = () => {
+            const at = heardRef.current()
+            let count = 0
+            while (count < times.length && times[count] <= at) count++
+            if (count !== revealed) {
+                revealed = count
+                unspoken.clear()
+                for (let i = count; i < ranges.length; i++) unspoken.add(ranges[i])
+            }
+            if (count === ranges.length) clearInterval(timer)
+        }
+        const timer = setInterval(tick, 50)
+        tick()
+        return () => {
+            clearInterval(timer)
+            CSS.highlights.delete(UNSPOKEN_HIGHLIGHT)
+        }
+    }, [cardRef, index, on, words])
+}
+
 /**
  * The tour's step card, in the app's design system: a popover-style card with the step's place in
  * the outline above its title (Engagements › Files › Details), its copy in muted text, its place in
@@ -79,11 +250,16 @@ function useAutoplay({ index, on, held, duration, read, next }: { index: number;
  * pointing at the card to read it; held, the bar greys, and a pause says so at the bar's end and
  * offers Play.
  *
+ * With narration on (the speaker beside its close button), the card is read aloud in Brio's voice
+ * as it opens, its words coming up from faint as they're said. In Autoplay the step then lasts as
+ * long as its clip and a beat, and pointing at the card doesn't hold it, since it can't be read
+ * along mid-sentence; Pause pauses the voice too.
+ *
  * Joyride's button props carry a `title`, which would show the browser's native tooltip; it is
  * dropped in favor of the visible labels.
  */
 function TourTooltip({ backProps, closeProps, primaryProps, skipProps, step, index, isLastStep, tooltipProps, controls }: TooltipRenderProps) {
-    const { mode, paused, setPaused } = useDemoTour()
+    const { mode, paused, setPaused, narration, setNarration } = useDemoTour()
     const { title: _back, ...back } = backProps
     const { title: _close, ...close } = closeProps
     const { title: _next, ...next } = primaryProps
@@ -98,12 +274,30 @@ function TourTooltip({ backProps, closeProps, primaryProps, skipProps, step, ind
     const [hovered, setHovered] = useState(false)
     const autoplay = mode === 'autoplay'
     const advance = useCallback(() => controls.next(), [controls])
-    const held = paused || hovered
+    const clip = narrationClip(card)
+    const voice = useNarration({
+        index,
+        src: narration && clip ? clip.src : null,
+        timings: narration && clip ? clip.timings : null,
+        paused: autoplay && paused,
+    })
+    // Read aloud: on, with a clip, and not refused by the browser.
+    const reading = voice.status === 'loading' || voice.status === 'playing' || voice.status === 'ended'
+    useStreamingReveal({
+        cardRef,
+        index,
+        on: reading,
+        words: voice.words,
+        heard: () => (voice.status === 'ended' ? Infinity : (voice.position() ?? 0) / 1000),
+    })
+    const held = paused || (hovered && !reading)
     const progress = useAutoplay({
         index,
         on: autoplay,
         held,
-        duration: card.duration,
+        waiting: voice.status === 'loading',
+        duration: reading && clip ? clip.seconds * 1000 + NARRATION_BEAT_MS : card.duration,
+        follow: voice.position,
         read: () => cardRef.current?.innerText ?? '',
         next: advance,
     })
@@ -133,8 +327,24 @@ function TourTooltip({ backProps, closeProps, primaryProps, skipProps, step, ind
                             {crumbs.map((id, i) => <span key={id}>{i > 0 && ' › '}<TourNodeTitle id={id} /></span>)}
                         </p>
                     )}
-                    <h3 className="text-ui font-semibold text-fg">{step.title as React.ReactNode}</h3>
+                    <h3 data-tour-spoken className="text-ui font-semibold text-fg">{step.title as React.ReactNode}</h3>
                 </div>
+                {clip && (
+                    <Hint label={narration ? 'Stop reading aloud' : 'Read aloud'} side="bottom">
+                        <button
+                            type="button"
+                            onClick={() => setNarration(!narration)}
+                            aria-label={narration ? 'Stop reading aloud' : 'Read aloud'}
+                            aria-pressed={narration}
+                            className={cn(
+                                '-mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-control transition-colors hover:bg-surface-hover',
+                                narration ? 'text-action' : 'text-fg-subtle hover:text-fg',
+                            )}
+                        >
+                            {narration ? <Volume2 className="h-3.5 w-3.5" /> : <VolumeX className="h-3.5 w-3.5" />}
+                        </button>
+                    </Hint>
+                )}
                 <button
                     {...close}
                     type="button"
@@ -143,7 +353,7 @@ function TourTooltip({ backProps, closeProps, primaryProps, skipProps, step, ind
                     <X className="h-3.5 w-3.5" />
                 </button>
             </div>
-            <div className="mt-1.5 space-y-2 text-small leading-relaxed text-fg-muted [&_li]:pl-0.5 [&_strong]:font-medium [&_strong]:text-fg [&_ul]:list-disc [&_ul]:space-y-1.5 [&_ul]:pl-4">
+            <div data-tour-spoken className="mt-1.5 space-y-2 text-small leading-relaxed text-fg-muted [&_li]:pl-0.5 [&_strong]:font-medium [&_strong]:text-fg [&_ul]:list-disc [&_ul]:space-y-1.5 [&_ul]:pl-4">
                 {step.content as React.ReactNode}
             </div>
             <div className="mt-4 flex items-center gap-3">

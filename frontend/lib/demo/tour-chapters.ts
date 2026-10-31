@@ -6,9 +6,9 @@
  */
 
 export const TOUR_NODE_IDS = [
-    'search',
     'home',
     'inbox',
+    'search',
     'profile',
     'firm',
     'firm-switcher',
@@ -48,11 +48,12 @@ export interface TourNode {
     children?: TourNode[]
 }
 
-/** The chapters, in the order the whole tour runs them; TOUR_NODE_IDS lists the same nodes in the same order. */
+/** The chapters, in the order the whole tour runs them; TOUR_NODE_IDS lists the same nodes in the same order.
+ * The first three follow the sidebar from the top: Home, Inbox, then Search. */
 export const TOUR_OUTLINE: TourNode[] = [
-    { id: 'search', title: 'Search (⌘K)' },
     { id: 'home', title: 'Home' },
     { id: 'inbox', title: 'Inbox' },
+    { id: 'search', title: 'Search (⌘K)' },
     { id: 'profile', title: 'Profile' },
     {
         id: 'firm',
@@ -146,9 +147,10 @@ export function nextTourNode(id: TourNodeId): PlacedTourNode | null {
 }
 
 /**
- * How a run plays: Autoplay (the default) moves on by itself, each step on its own timer; Step by
- * step waits for Next; Explore shows no step cards, and the outline pane takes the visitor to each
- * part's page instead.
+ * How a run plays: Autopilot (`autoplay`, the default) moves on by itself, each step on its own
+ * timer; Guided (`step`) waits for Next; Explore shows no step cards, and the outline pane takes the
+ * visitor to each part's page instead. The ids are what deep links and saved choices carry, so they
+ * keep their first names when the labels (TOUR_MODE_LABELS) change.
  */
 export const TOUR_MODES = ['autoplay', 'step', 'explore'] as const
 
