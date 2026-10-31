@@ -1,9 +1,15 @@
 """
 Makes the /tour step cards' narration clips in Brio's voice, with Kokoro (Apache-2.0, runs locally).
 
+Brio's voice is an even blend of two of Kokoro's stock US English male voices, am_michael and
+am_fenrir ('am_michael,am_fenrir': Kokoro averages the two). It's set once, as NARRATION_VOICE in
+lib/demo/tour-narration.ts, and comes here with the text; see .claude/plans/tour-chapters.md,
+Brio's voice.
+
 Reads what every card says aloud from the steps themselves (export-text.mjs), remakes only the clips
 whose text or voice changed, removes clips no step uses, and writes public/tour/narration/
-manifest.json with each clip's text hash and length. lib/demo/tour-narration.test.ts fails until
+manifest.json with each clip's text hash and length. Beside each clip, <key>.json holds when each
+word is spoken ([word, start, end] in seconds), for the step card to reveal its words as they're read. lib/demo/tour-narration.test.ts fails until
 this has been run after a card's copy changes. See .claude/plans/tour-chapters.md, Narration.
 
 One-time setup (macOS; Kokoro needs Python 3.10–3.12), from frontend/:
@@ -77,19 +83,29 @@ def main() -> None:
     for clip in wanted["clips"]:
         key, text, digest = clip["key"], clip["text"], clip["hash"]
         target = OUT / f"{key}.m4a"
+        timings = OUT / f"{key}.json"
         previous = old["clips"].get(key)
-        if not args.force and previous and previous["hash"] == digest and target.exists():
+        if not args.force and previous and previous["hash"] == digest and target.exists() and timings.exists():
             clips[key] = previous
             continue
         pipeline = pipeline or KPipeline(lang_code="a", repo_id="hexgrad/Kokoro-82M")
-        audio = np.concatenate([np.asarray(chunk) for _, _, chunk in pipeline(text, voice=voice, speed=1.0)])
+        chunks, words, offset = [], [], 0.0
+        for result in pipeline(text, voice=voice, speed=1.0):
+            # Each chunk's word times start from the chunk; the words carry on from the ones before.
+            for token in result.tokens or []:
+                if token.start_ts is not None and any(char.isalnum() for char in token.text):
+                    words.append([token.text, round(offset + token.start_ts, 2), round(offset + token.end_ts, 2)])
+            chunks.append(np.asarray(result.audio))
+            offset += len(result.audio) / RATE
+        audio = np.concatenate(chunks)
         encode(audio, target)
+        timings.write_text(json.dumps({"words": words}, ensure_ascii=False, separators=(",", ":")) + "\n")
         clips[key] = {"hash": digest, "seconds": round(len(audio) / RATE, 2)}
         made += 1
-        print(f"{key}: {clips[key]['seconds']}s", file=sys.stderr)
+        print(f"{key}: {clips[key]['seconds']}s, {len(words)} words", file=sys.stderr)
 
     removed = 0
-    for stale in OUT.glob("*.m4a"):
+    for stale in list(OUT.glob("*.m4a")) + [path for path in OUT.glob("*.json") if path != MANIFEST]:
         if stale.stem not in clips:
             stale.unlink()
             removed += 1

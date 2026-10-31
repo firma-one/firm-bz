@@ -46,6 +46,12 @@
     color: rgb(15 23 42);
   }
 
+  /* The /tour step card read aloud: words not yet spoken, faint but legible, each coming up as
+     Brio says it (useStreamingReveal, components/demo/demo-tour.tsx). */
+  ::highlight(tour-unspoken) {
+    color: color-mix(in srgb, var(--ui-fg-subtle) 45%, transparent);
+  }
+
   h1,
   h2,
   h3,

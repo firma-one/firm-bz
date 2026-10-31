@@ -186,10 +186,31 @@ chapter or section, "All chapters" and coming back to /tour keep them, to show w
 
 ## Narration
 
-Each step card can be read aloud (2026-10-31), in **Brio's voice**: a blend of Kokoro's
-`am_michael` and `am_fenrir` voices, so it's a voice of Brio's own rather than a stock one, and
-the tour's narrator is Brio. Picked over Kokoro's `af_heart` from samples; one voice for the whole
-tour, though a section could take another (the generator's `VOICE`).
+Each step card can be read aloud (2026-10-31), in **Brio's voice** (below), so the tour's narrator
+is Brio. One voice for the whole tour.
+
+### Brio's voice
+
+Brio's voice is a **blend of two of Kokoro's stock voices, in equal parts**:
+
+| | Voice | Kokoro id | What it is |
+|---|---|---|---|
+| 1 | Michael | `am_michael` | US English, male |
+| 2 | Fenrir | `am_fenrir` | US English, male |
+
+Kokoro averages the two voices' embeddings into one (`'am_michael,am_fenrir'`: a comma between
+voice ids blends them, each weighted the same). The result sounds like neither stock voice, which
+makes it Brio's own: no other product using Kokoro's voices sounds exactly like it, so it can be
+marketed as Brio's voice. Spoken by Kokoro-82M (`hexgrad/Kokoro-82M`), US English (`lang_code`
+`a`), at speed 1.0; each clip is then evened to −18 LUFS.
+
+Set in one place, `NARRATION_VOICE` in `frontend/lib/demo/tour-narration.ts`; the generator reads it
+from there, and changing it marks every clip for remaking. Chosen on 2026-10-31 from samples of
+the same Brio line in nine voices: Kokoro's `af_heart` (US female, its best rated), `am_michael`,
+`am_fenrir` and `am_puck` (US male), `bm_george` and `bm_fable` (UK male), and three blends
+(Michael + Fenrir, Puck + Michael, Michael + Heart).
+
+### How it plays
 
 - **Off by default**, a speaker toggle on the start panel and on the step card, remembered in
   localStorage `fm_demo_tour_narration`. Unexpected sound on a website annoys people and clashes
@@ -200,6 +221,13 @@ tour, though a section could take another (the generator's `VOICE`).
 - **Guided:** the card is read when it opens; Next or Back cuts it off.
 - **Explore:** no cards, so nothing is read.
 - A browser that won't play the clip falls back to the silent timer.
+- **Streaming reveal** (2026-10-31): while a card is read, its title and copy stay faint and each
+  word comes up as Brio says it, following the clip's actual position (so through Pause, Back and
+  a slow load too). Faint, not hidden: nothing moves as the words come up, and anyone reading
+  faster than the voice can still read ahead. Done with the CSS Custom Highlight API
+  (`::highlight(tour-unspoken)` in `app/globals.css`), which colors stretches of text without
+  touching the card's DOM; a browser without it shows the card as usual. Chosen over a word-by-word
+  read-along highlight and a sentence highlight.
 
 **What's read:** the card's title, then its copy, as a screen reader would hear them (Brio's
 "AI" subscript is hidden from them, so it's "Brio"), or the step's `spoken` text where the card
@@ -210,11 +238,15 @@ sentence, so `PRONOUNCE` in `tour-narration-text.ts` pins words this tour always
 **Clips** are made ahead with [Kokoro](https://github.com/hexgrad/kokoro) (Apache-2.0, free, runs
 locally), not in the browser or a paid service: one voice for everyone, and each clip's length
 known so Autopilot can follow it. `frontend/public/tour/narration/<node>-<n>.m4a` (AAC 64 kbps,
-evened to one loudness), and `manifest.json` beside them with each clip's text hash and length.
+evened to one loudness), `<node>-<n>.json` beside each with when each word is spoken (Kokoro's own
+word timings), and `manifest.json` with each clip's text hash and length.
 `frontend/scripts/tour-narration/generate.py` makes them: it reads every card's spoken text from
 the steps (`export-text.mjs`, through jiti), remakes only clips whose text or voice changed, and
-removes clips no step uses. `lib/demo/tour-narration.test.ts` fails when a card's text changes
-without its clip being remade, or a clip is missing.
+removes clips no step uses. The card lines its own words up with the spoken ones letter by letter
+(`lib/demo/tour-read-along.ts`), so "client-billable" or "e.g." can't throw it, and a word read in
+other words ("⌘K") comes up with its neighbors. `lib/demo/tour-narration.test.ts` fails when a
+card's text changes without its clip being remade, a clip or its timings are missing, or a word
+on a card isn't matched to the narration.
 
 ## Real-app entry points (new UI only)
 

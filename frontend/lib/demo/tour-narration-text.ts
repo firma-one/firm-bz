@@ -12,10 +12,10 @@ import { NARRATION_VOICE, narrationKey } from '@/lib/demo/tour-narration'
 
 const ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', '#x27': "'", '#39': "'", nbsp: ' ' }
 
-/** A card's title or copy as plain sentences. */
-function toSpeech(node: ReactNode): string {
+/** A card's title or copy as its lines of text, as a screen reader would hear them. */
+function textLines(node: ReactNode): string[] {
     const html = renderToStaticMarkup(createElement(Fragment, null, node))
-    const lines = html
+    return html
         .replace(/<(\w+)[^>]*aria-hidden="true"[^>]*>[\s\S]*?<\/\1>/g, '')
         .replace(/<\/(p|li|ul|ol|div)>|<br\s*\/?>/g, '\n')
         .replace(/<[^>]+>/g, '')
@@ -23,8 +23,16 @@ function toSpeech(node: ReactNode): string {
         .split('\n')
         .map((line) => line.replace(/\s+/g, ' ').trim())
         .filter(Boolean)
-    // Each line its own sentence, so a list's items don't run together.
-    return lines.map((line) => (/[.!?:;]$/.test(line) ? line : `${line}.`)).join(' ')
+}
+
+/** A card's title or copy as plain sentences: each line its own, so a list's items don't run together. */
+function toSpeech(node: ReactNode): string {
+    return textLines(node).map((line) => (/[.!?:;]$/.test(line) ? line : `${line}.`)).join(' ')
+}
+
+/** The words a card shows in its title and copy, as the step card reveals them (demo-tour.tsx). */
+export function shownWords(step: TourRunStep): string[] {
+    return [...textLines(step.title), ...textLines(step.content)].join(' ').split(' ').filter(Boolean)
 }
 
 /**

@@ -9,7 +9,14 @@ import type { TourNodeId } from '@/lib/demo/tour-chapters'
  * in tour-narration-text.ts, which only the generator and the tests load.
  */
 
-/** Brio's voice: Kokoro's am_michael and am_fenrir, blended. Changing it marks every clip for remaking. */
+/**
+ * Brio's voice: an even blend of two of Kokoro's stock US English male voices, `am_michael`
+ * ("Michael") and `am_fenrir` ("Fenrir"). Kokoro averages the two voices' embeddings into one, so
+ * Brio sounds like neither stock voice but a voice of its own. Picked on 2026-10-31 from samples,
+ * over Kokoro's `af_heart` and the other male voices and blends (.claude/plans/tour-chapters.md,
+ * Brio's voice). Spoken by Kokoro-82M (hexgrad/Kokoro-82M), US English, at normal speed.
+ * Changing it marks every clip for remaking.
+ */
 export const NARRATION_VOICE = 'am_michael,am_fenrir'
 
 /** Where the visitor's choice is remembered: narration is off until they turn it on. */
@@ -30,9 +37,9 @@ export function narrationKey(step: { node: TourNodeId; indexInNode: number }): s
     return `${step.node}-${step.indexInNode + 1}`
 }
 
-/** The step's clip and its length, or null when it has none yet. */
-export function narrationClip(step: { node: TourNodeId; indexInNode: number }): { src: string; seconds: number } | null {
+/** The step's clip, when each word in it is spoken (`timings`, lib/demo/tour-read-along.ts) and its length, or null when it has none yet. */
+export function narrationClip(step: { node: TourNodeId; indexInNode: number }): { src: string; timings: string; seconds: number } | null {
     const key = narrationKey(step)
     const clip = NARRATION_MANIFEST.clips[key]
-    return clip ? { src: `/tour/narration/${key}.m4a`, seconds: clip.seconds } : null
+    return clip ? { src: `/tour/narration/${key}.m4a`, timings: `/tour/narration/${key}.json`, seconds: clip.seconds } : null
 }
