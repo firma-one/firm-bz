@@ -2,10 +2,10 @@ import { existsSync, readFileSync, readdirSync } from 'fs'
 import { resolve } from 'path'
 import { describe, expect, it } from 'vitest'
 import { NARRATION_MANIFEST, NARRATION_VOICE, narrationClip, narrationKey } from '@/lib/demo/tour-narration'
-import { narrationEntries, narrationHash, pinPronunciation, shownWords } from '@/lib/demo/tour-narration-text'
+import { lineEntry, narrationEntries, narrationHash, shownWords } from '@/lib/demo/tour-narration-text'
 import { alignWords, revealTimes, type SpokenWord } from '@/lib/demo/tour-read-along'
 import { tourSteps } from '@/components/demo/demo-tour-steps'
-import { HEAR_BRIO_CLIP, HEAR_BRIO_LINE, HEAR_BRIO_SPOKEN, HEAR_BRIO_TOUR, inviteAt } from '@/components/marketing/v2/home/hear-brio-line'
+import { HEAR_BRIO_CLIP, HEAR_BRIO_LINE, HEAR_BRIO_PAUSE, HEAR_BRIO_SPOKEN, HEAR_BRIO_TOUR, inviteAt } from '@/components/marketing/v2/home/hear-brio-line'
 
 const CLIPS = resolve(__dirname, '../../public/tour/narration')
 const REMAKE = 'run scripts/tour-narration/generate.py (see its header) to remake the clips'
@@ -105,7 +105,8 @@ describe('Hear Brio on the landing page', () => {
 
     it("has a clip made from the line as it stands, in Brio's voice", () => {
         expect(existsSync(resolve(PUBLIC, `.${HEAR_BRIO_CLIP.src}`)), REMAKE).toBe(true)
-        expect(clip.hash, `the line changed since its clip was made; ${REMAKE}`).toBe(narrationHash(pinPronunciation(HEAR_BRIO_SPOKEN)))
+        const wanted = lineEntry('hear-brio', 'public/marketing/hear-brio', HEAR_BRIO_SPOKEN, HEAR_BRIO_PAUSE)
+        expect(clip.hash, `the line or its pauses changed since its clip was made; ${REMAKE}`).toBe(wanted.hash)
     })
 
     it('says the brand "Firma" while the caption shows firmä', () => {
@@ -121,7 +122,7 @@ describe('Hear Brio on the landing page', () => {
     })
 
     it('ends on the tour invitation, with Take the tour shown as Brio says it', () => {
-        expect(HEAR_BRIO_LINE).toMatch(/Take the product tour, and I’ll show you around\.$/)
+        expect(HEAR_BRIO_LINE).toMatch(/Come and see me at work: take the product tour, and I’ll show you around\.$/)
         const at = inviteAt(clip.words)
         expect(at, 'the invitation isn’t in the clip').not.toBeNull()
         // Near the end: after the promises, a few seconds before the clip finishes.
@@ -129,6 +130,16 @@ describe('Hear Brio on the landing page', () => {
         expect(at!).toBeLessThan(clip.seconds)
         // It opens the tour with Read aloud on, so Brio carries on.
         expect(HEAR_BRIO_TOUR).toBe('/tour?narration=on')
+    })
+
+    it('leaves a little more room between sentences, without slowing the words', () => {
+        const starts = (word: string) => clip.words.findIndex(([said]) => said.replace(/[^A-Za-z]/g, '') === word)
+        // The gap after "built into Firma." is Kokoro's own and the extra pause.
+        const i = starts('Firma')
+        expect(clip.words[i + 1][1] - clip.words[i][2]).toBeGreaterThanOrEqual(HEAR_BRIO_PAUSE)
+        // Inside a sentence, words still follow each other closely.
+        const j = starts('executive')
+        expect(clip.words[j + 1][1] - clip.words[j][2]).toBeLessThan(0.2)
     })
 
     it('knows how loud the voice is through the whole clip, for its wave', () => {

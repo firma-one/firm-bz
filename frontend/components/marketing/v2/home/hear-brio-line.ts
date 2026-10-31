@@ -12,13 +12,18 @@ import { NARRATION_PARAM } from '@/lib/demo/tour-chapters'
 /**
  * The line as the caption shows it: what Brio does, why it matters to the firm, its promises as the
  * firm staying in charge, and an invitation to the tour it narrates, so it ends on the next step
- * rather than on what it won't do.
+ * rather than on what it won't do. The invitation is a statement, not a question: Kokoro reads a
+ * question flat ("Want to see me at work?" fell rather than rose), and a confident "Come and see"
+ * lands as an invitation either way.
  */
 export const HEAR_BRIO_LINE =
-    'Hi, I’m Brio, your executive assistant for client delivery, built into firmä. I keep track of every deliverable, due date and status, and draft the briefs and client updates, so you can focus on the decisions, your client relationships, and growing your firm. And you stay in charge: I never read what’s inside your documents, every change waits for your go-ahead, and nothing reaches a client until your team publishes it. Want to see me at work? Take the product tour, and I’ll show you around.'
+    'Hi, I’m Brio, your executive assistant for client delivery, built into firmä. I keep track of every deliverable, due date and status, and draft the briefs and client updates, so you can focus on the decisions, your client relationships, and growing your firm. And you stay in charge: I never read what’s inside your documents, every change waits for your go-ahead, and nothing reaches a client until your team publishes it. Come and see me at work: take the product tour, and I’ll show you around.'
+
+/** A little more breathing room between Brio's sentences than Kokoro gives on its own, in seconds. */
+export const HEAR_BRIO_PAUSE = 0.25
 
 /** Where the line's invitation starts: "Take the tour" appears beside the player as Brio says it. */
-export const HEAR_BRIO_INVITE = 'Take the product tour'
+export const HEAR_BRIO_INVITE = 'take the product tour'
 
 /** When Brio starts the invitation, in seconds, from the clip's word times; null when it isn't there. */
 export function inviteAt(words: SpokenWord[]): number | null {

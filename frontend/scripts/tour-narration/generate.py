@@ -70,19 +70,43 @@ def encode(audio: np.ndarray, target: Path) -> None:
 _pipeline = None
 
 
-def speak(text: str, voice: str) -> tuple[np.ndarray, list]:
-    """The text in the voice, and when each word in it is spoken: [word, start, end] in seconds."""
+def speak(text: str, voice: str, pause: float = 0.0) -> tuple[np.ndarray, list]:
+    """The text in the voice, and when each word in it is spoken: [word, start, end] in seconds.
+
+    With a pause, that much more silence goes after each sentence that has another after it, on top
+    of Kokoro's own, for a little more breathing room. It's added to the spoken whole, in the quiet
+    after each full stop: spoken a sentence at a time instead, Kokoro slowed every sentence down by
+    about a third."""
     global _pipeline
     _pipeline = _pipeline or KPipeline(lang_code="a", repo_id="hexgrad/Kokoro-82M")
-    chunks, words, offset = [], [], 0.0
+    chunks, words, stops, offset = [], [], [], 0.0
     for result in _pipeline(text, voice=voice, speed=1.0):
         # Each chunk's word times start from the chunk; the words carry on from the ones before.
         for token in result.tokens or []:
-            if token.start_ts is not None and any(char.isalnum() for char in token.text):
+            if token.start_ts is None:
+                continue
+            if any(char.isalnum() for char in token.text):
                 words.append([token.text, round(offset + token.start_ts, 2), round(offset + token.end_ts, 2)])
+            elif token.text in (".", "!", "?"):
+                # The middle of a full stop's own stretch, which is silence.
+                stops.append(offset + (token.start_ts + token.end_ts) / 2)
         chunks.append(np.asarray(result.audio))
         offset += len(result.audio) / RATE
-    return np.concatenate(chunks), words
+    audio = np.concatenate(chunks)
+    stops = [stop for stop in stops if words and stop < words[-1][1]]
+    if not pause or not stops:
+        return audio, words
+    silence = np.zeros(int(pause * RATE), dtype=audio.dtype)
+    pieces, at = [], 0
+    for stop in stops:
+        cut = int(stop * RATE)
+        pieces += [audio[at:cut], silence]
+        at = cut
+    pieces.append(audio[at:])
+    for word in words:
+        later = pause * sum(1 for stop in stops if stop < word[1])
+        word[1], word[2] = round(word[1] + later, 2), round(word[2] + later, 2)
+    return np.concatenate(pieces), words
 
 
 LEVELS_PER_SECOND = 20
@@ -133,7 +157,7 @@ def main() -> None:
         if not args.force and previous.get("hash") == line["hash"] and target.exists():
             continue
         target.parent.mkdir(parents=True, exist_ok=True)
-        audio, words = speak(line["text"], voice)
+        audio, words = speak(line["text"], voice, line.get("pause", 0))
         encode(audio, target)
         seconds = round(len(audio) / RATE, 2)
         timings.write_text(json.dumps(

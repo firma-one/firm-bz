@@ -60,6 +60,16 @@ export function narrationText(step: TourRunStep): string {
     return pinPronunciation(step.spoken ?? `${toSpeech(step.title)} ${toSpeech(step.content)}`)
 }
 
+/**
+ * One of Brio's recordings outside the tour (Hear Brio on the landing page), for the generator: its
+ * text as spoken, with the tour's pronunciation pins, the extra pause between its sentences (seconds),
+ * and the hash that marks it for remaking when either changes.
+ */
+export function lineEntry(key: string, out: string, spoken: string, pause = 0) {
+    const text = pinPronunciation(spoken)
+    return { key, out, text, pause, hash: narrationHash(pause ? `${text}\n[+${pause}s between sentences]` : text) }
+}
+
 /** FNV-1a: a short, stable fingerprint of what a clip says and in which voice. */
 export function narrationHash(text: string, voice: string = NARRATION_VOICE): string {
     let hash = 0x811c9dc5
