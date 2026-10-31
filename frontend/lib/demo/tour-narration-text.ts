@@ -27,8 +27,26 @@ function toSpeech(node: ReactNode): string {
     return lines.map((line) => (/[.!?:;]$/.test(line) ? line : `${line}.`)).join(' ')
 }
 
+/**
+ * Words Kokoro can say in the wrong sense, pinned to the one this tour's copy always means, in its
+ * phonemes (misaki's). It guesses a heteronym from the sentence around it, so the same words can
+ * come out right on one card and wrong on another: "your firm lives here" came out as the plural
+ * of "life" on the Clients card while two other cards' "lives here" were fine.
+ */
+const PRONOUNCE: Record<string, string> = {
+    lives: 'lˈɪvz',
+}
+
+/** The text with each pinned word in Kokoro's `[word](/phonemes/)` form. */
+function pinPronunciation(text: string): string {
+    return text.replace(/[A-Za-z]+/g, (word) => {
+        const phonemes = PRONOUNCE[word.toLowerCase()]
+        return phonemes ? `[${word}](/${phonemes}/)` : word
+    })
+}
+
 export function narrationText(step: TourRunStep): string {
-    return step.spoken ?? `${toSpeech(step.title)} ${toSpeech(step.content)}`
+    return pinPronunciation(step.spoken ?? `${toSpeech(step.title)} ${toSpeech(step.content)}`)
 }
 
 /** FNV-1a: a short, stable fingerprint of what a clip says and in which voice. */

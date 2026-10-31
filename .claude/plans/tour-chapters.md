@@ -203,7 +203,9 @@ tour, though a section could take another (the generator's `VOICE`).
 
 **What's read:** the card's title, then its copy, as a screen reader would hear them (Brio's
 "AI" subscript is hidden from them, so it's "Brio"), or the step's `spoken` text where the card
-doesn't read well aloud ("⌘K" becomes "Command K").
+doesn't read well aloud ("⌘K" becomes "Command K"). Kokoro guesses a heteronym's sense from its
+sentence, so `PRONOUNCE` in `tour-narration-text.ts` pins words this tour always means one way
+("lives" the verb, which came out as the plural of "life" on the Clients card).
 
 **Clips** are made ahead with [Kokoro](https://github.com/hexgrad/kokoro) (Apache-2.0, free, runs
 locally), not in the browser or a paid service: one voice for everyone, and each clip's length

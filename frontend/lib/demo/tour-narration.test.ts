@@ -37,6 +37,12 @@ describe('tour narration', () => {
         expect(narrationClip(askBrio)).toEqual({ src: '/tour/narration/brio-1.m4a', seconds: NARRATION_MANIFEST.clips['brio-1'].seconds })
     })
 
+    it('says a pinned word in the sense the copy means', () => {
+        // "Every client workspace for your firm lives here": the verb, not the plural of "life".
+        const text = narrationEntries().find((entry) => entry.key === 'all-clients-1')?.text
+        expect(text).toContain('your firm [lives](/lˈɪvz/) here')
+    })
+
     it('marks a clip for remaking when its words or its voice change', () => {
         expect(narrationHash('Files.')).toBe(narrationHash('Files.'))
         expect(narrationHash('Files.')).not.toBe(narrationHash('Files!'))
