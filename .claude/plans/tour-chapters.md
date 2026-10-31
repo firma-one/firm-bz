@@ -253,6 +253,46 @@ other words ("⌘K") comes up with its neighbors. `lib/demo/tour-narration.test.
 card's text changes without its clip being remade, a clip or its timings are missing, or a word
 on a card isn't matched to the narration.
 
+### Hear Brio on the landing page
+
+The one place the marketing site speaks (2026-10-31): in Meet Brio, a "Hear Brio" pill under the
+intro, where Brio introduces itself in its own voice, the tour's narrator. Not a voice-over of the
+page: nothing plays until the visitor presses it (sound on a page people skim at their own pace
+works against them, and browsers block it anyway), and not on the hero's Ask Brio loop, which
+repeats every few seconds.
+
+- **The line** (`components/marketing/v2/home/hear-brio-line.ts`), kept to the section's "How Brio
+  is kept in its lane": *Hi, I'm Brio, your executive assistant for client delivery, built into
+  firmä. I keep track of every deliverable, due date and status, and draft the briefs and client
+  updates, so you can focus on the decisions, your client relationships, and growing your firm. And
+  you stay in charge: I never read what's inside your documents, every change waits for your
+  go-ahead, and nothing reaches a client until your team publishes it. Come and see me at work: take
+  the product tour, and I'll show you around.* Worded with Deepak: what Brio does, why it matters to
+  the firm, its promises as the firm staying in charge, then an invitation, so it ends on the next
+  step rather than on what Brio won't do (the first version ended on three "nevers" and stopped
+  abruptly). The invitation is a statement: Kokoro reads questions flat, and "Want to see me at
+  work?" fell where it should have risen (picked from five recorded endings). The caption shows
+  "firmä"; Brio says "Firma", which is "FUR-muh" (Kokoro's own reading, confirmed), and "read" in the
+  present tense (pinned). A quarter of a second more between sentences (`HEAR_BRIO_PAUSE`): the
+  generator adds it in the quiet after each full stop of the whole, spoken line, since speaking a
+  sentence at a time made Kokoro slow every sentence down by about a third.
+- **The control** (`hear-brio.tsx`): Hear Brio, then Pause, Resume and Hear again. While Brio
+  speaks, a five-bar wave follows the voice, quiet in its pauses, and the line opens below the pill,
+  each word coming up as it's said (the tour's streaming reveal, `lib/demo/use-streaming-reveal.ts`,
+  in white over the dark band: `::highlight(brio-unspoken)`). Reduced motion: a still wave.
+- **The invitation:** once Brio has finished, the pill becomes "Hear again" and then, a beat
+  later, "Take the tour" comes in beside it: in that order, because showing it as Brio said the
+  words let the pill's wider "Hear again" push it along when the clip ended. It slides out from
+  behind the pill, growing a touch and coming into focus, and sends out one soft ring (still for
+  reduced motion). It opens `/tour?narration=on`: the visitor has just chosen to listen, so the tour
+  starts with Read aloud on (`NARRATION_PARAM`, read by the tour's state and remembered), and Brio
+  carries on showing them around.
+- **The clip** is one of the generator's `lines` (`export-text.mjs`), made in the same voice with
+  the same pronunciation pins: `frontend/public/marketing/hear-brio.m4a`, and `hear-brio.json` with
+  its text hash, length, word times and how loud the voice is 20 times a second (for the wave, so
+  the browser needs no live audio analysis). The test fails when the line changes without the clip
+  being remade, or a word of the caption isn't matched to the voice.
+
 ## Real-app entry points (new UI only)
 
 "How this works" beside the page title (`components/ui/how-this-works-link.tsx`, `PageHeading`'s

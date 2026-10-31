@@ -39,14 +39,17 @@ export function shownWords(step: TourRunStep): string[] {
  * Words Kokoro can say in the wrong sense, pinned to the one this tour's copy always means, in its
  * phonemes (misaki's). It guesses a heteronym from the sentence around it, so the same words can
  * come out right on one card and wrong on another: "your firm lives here" came out as the plural
- * of "life" on the Clients card while two other cards' "lives here" were fine.
+ * of "life" on the Clients card while two other cards' "lives here" were fine, and Hear Brio's "I
+ * never read what's inside your documents" came out in the past tense ("red").
  */
 const PRONOUNCE: Record<string, string> = {
     lives: 'lˈɪvz',
+    // Present tense ("reed"), as everywhere in this copy.
+    read: 'ɹˈid',
 }
 
-/** The text with each pinned word in Kokoro's `[word](/phonemes/)` form. */
-function pinPronunciation(text: string): string {
+/** The text with each pinned word in Kokoro's `[word](/phonemes/)` form: the tour's cards, and Brio's other recordings. */
+export function pinPronunciation(text: string): string {
     return text.replace(/[A-Za-z]+/g, (word) => {
         const phonemes = PRONOUNCE[word.toLowerCase()]
         return phonemes ? `[${word}](/${phonemes}/)` : word
@@ -55,6 +58,16 @@ function pinPronunciation(text: string): string {
 
 export function narrationText(step: TourRunStep): string {
     return pinPronunciation(step.spoken ?? `${toSpeech(step.title)} ${toSpeech(step.content)}`)
+}
+
+/**
+ * One of Brio's recordings outside the tour (Hear Brio on the landing page), for the generator: its
+ * text as spoken, with the tour's pronunciation pins, the extra pause between its sentences (seconds),
+ * and the hash that marks it for remaking when either changes.
+ */
+export function lineEntry(key: string, out: string, spoken: string, pause = 0) {
+    const text = pinPronunciation(spoken)
+    return { key, out, text, pause, hash: narrationHash(pause ? `${text}\n[+${pause}s between sentences]` : text) }
 }
 
 /** FNV-1a: a short, stable fingerprint of what a clip says and in which voice. */

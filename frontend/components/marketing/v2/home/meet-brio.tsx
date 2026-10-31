@@ -1,7 +1,7 @@
 /**
  * Home §3 · Meet Brio: the dark slanted band. The intro (lockup, heading, paragraph and "How Brio is
- * kept in its lane") is static markup; "A day with Brio" is the client scroll story in
- * `meet-brio-timeline.tsx`.
+ * kept in its lane") is static markup, but for "Hear Brio" (`hear-brio.tsx`), where Brio introduces
+ * itself in its own voice; "A day with Brio" is the client scroll story in `meet-brio-timeline.tsx`.
  *
  * Phones follow the phone board: the shorter tagline and paragraph, and the three-point lane box after
  * the timeline instead of beside the intro.
@@ -10,6 +10,7 @@ import type { ReactNode } from 'react';
 import { Brio } from '@/components/ui/brio';
 import { FILES_AGENT_PUBLIC } from '../config';
 import { Band } from '../primitives';
+import { HearBrio } from './hear-brio';
 import { MeetBrioTimeline } from './meet-brio-timeline';
 import './meet-brio.css';
 
@@ -108,6 +109,7 @@ export function MeetBrioSection() {
               It answers in plain words, drafts the client update
               {FILES_AGENT_PUBLIC ? ' and keeps your files tidy' : ''}, and it always waits for you before anything changes.
             </p>
+            <HearBrio />
           </div>
 
           <div className="mk-brio-lane mk-brio-wide">

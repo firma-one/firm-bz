@@ -161,6 +161,9 @@ export const DEFAULT_TOUR_MODE: TourMode = 'autoplay'
 /** The query parameter that picks the mode for a deep link: /tour?guide=files&mode=step. */
 export const MODE_PARAM = 'mode'
 
+/** The query parameter that turns narration on, `/tour?narration=on`: Hear Brio's "Take the tour" on the landing page. */
+export const NARRATION_PARAM = 'narration'
+
 export function parseModeParam(value: string | null | undefined): TourMode | null {
     return typeof value === 'string' && (TOUR_MODES as readonly string[]).includes(value) ? (value as TourMode) : null
 }
