@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Prints what every /tour step card says aloud, as JSON, for generate.py:
- * { voice, clips: [{ key, text, hash }], lines: [{ key, out, text, pause, hash }] }. Loads the steps
+ * { voice, clips: [{ key, text, pauses, hash }], lines: [{ key, out, text, pauses, hash }] }. Loads the steps
  * themselves (TSX, with the app's `@/` imports) through jiti, so the text read aloud is always the
  * cards' own. `lines` are Brio's other recordings, outside the tour: "Hear Brio" on the landing page.
  *
@@ -18,9 +18,10 @@ const jiti = createJiti(import.meta.url, {
 })
 
 const { narrationEntries, lineEntry } = await jiti.import(path.join(frontend, 'lib/demo/tour-narration-text.ts'))
-const { NARRATION_VOICE } = await jiti.import(path.join(frontend, 'lib/demo/tour-narration.ts'))
-const { HEAR_BRIO_SPOKEN, HEAR_BRIO_PAUSE } = await jiti.import(path.join(frontend, 'components/marketing/v2/home/hear-brio-line.ts'))
+const { NARRATION_PAUSES, NARRATION_VOICE } = await jiti.import(path.join(frontend, 'lib/demo/tour-narration.ts'))
+const { HEAR_BRIO_SPOKEN } = await jiti.import(path.join(frontend, 'components/marketing/v2/home/hear-brio-line.ts'))
 
-const lines = [lineEntry('hear-brio', 'public/marketing/hear-brio', HEAR_BRIO_SPOKEN, HEAR_BRIO_PAUSE)]
+// Hear Brio pauses between its sentences as the tour does; not (yet) at its commas and colons.
+const lines = [lineEntry('hear-brio', 'public/marketing/hear-brio', HEAR_BRIO_SPOKEN, { sentence: NARRATION_PAUSES.sentence })]
 
 process.stdout.write(`${JSON.stringify({ voice: NARRATION_VOICE, clips: narrationEntries(), lines }, null, 2)}\n`)

@@ -19,7 +19,26 @@ import type { TourNodeId } from '@/lib/demo/tour-chapters'
  */
 export const NARRATION_VOICE = 'am_michael,am_fenrir'
 
-/** Where the visitor's choice is remembered: narration is off until they turn it on. */
+/** More silence at punctuation than Kokoro leaves on its own, in seconds, by how strong the mark is. */
+export interface NarrationPauses {
+    /** After a full stop, question or exclamation mark, when another sentence follows. */
+    sentence?: number
+    /** At a colon, semicolon or dash. */
+    clause?: number
+    /** At a comma or bracket. */
+    comma?: number
+}
+
+/**
+ * The breathing room Brio leaves in the tour, so a card's lists and clauses don't run together:
+ * a quarter of a second more between sentences (as in Hear Brio), less at a colon or dash, a short
+ * beat at a comma. On its own, Kokoro leaves about 0.14s after a full stop, 0.11s at a colon and
+ * 0.07s at a comma or dash. Added by the generator at the quietest moment around each mark;
+ * changing them marks every clip for remaking.
+ */
+export const NARRATION_PAUSES: NarrationPauses = { sentence: 0.25, clause: 0.15, comma: 0.1 }
+
+/** Where the visitor's choice is remembered: narration is on until they turn it off. */
 export const NARRATION_STORAGE_KEY = 'fm_demo_tour_narration'
 
 /** Autopilot's pause after a clip ends, before the next step: a beat to look at what was described. */

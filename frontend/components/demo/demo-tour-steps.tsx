@@ -290,7 +290,7 @@ export const NODE_STEPS: Record<TourNodeId, TourStep[]> = {
             target: '[data-demo-tour="engagement-add-btn"]',
             title: 'Add an engagement',
             content: <p>Engagements are client-billable projects — e.g. SEO retainers, paid media campaigns, content sprints, brand audits, or social strategy. Run them as a <strong>Retainer</strong>, <strong>T&amp;M</strong>, or <strong>Fixed Price</strong> engagement. Each has its own Files, Board, Discussions and team.</p>,
-            spoken: 'Add an engagement. Engagements are client-billable projects, like SEO retainers, paid media campaigns, content sprints, brand audits, or social strategy. Run them as a Retainer, Time and Materials, or Fixed Price engagement. Each has its own Files, Board, Discussions and team.',
+            spoken: 'Engagements are client-billable projects, like SEO retainers, paid media campaigns, content sprints, brand audits, or social strategy. Run them as a Retainer, Time and Materials, or Fixed Price engagement. Each has its own Files, Board, Discussions and team.',
             route: client,
             placement: 'bottom',
             skipScroll: true,
