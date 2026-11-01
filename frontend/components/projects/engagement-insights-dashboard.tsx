@@ -81,7 +81,6 @@ import { planningGapCount } from '@/lib/insights/health-penalties'
 import { useRightPane } from '@/lib/right-pane-context'
 import { SummaryDraftReview, SummaryDraftReviewPane, summaryReviewStore, type ReviewMode, type SummaryDraftReviewProps } from './summary-draft-review'
 import {
-    DeliverablesTimeline,
     FileOrganizationSection,
     HEALTH_SCORE_INFO,
     OverviewDetails,
@@ -90,6 +89,7 @@ import {
     type FileCheck,
     type ReportInputs,
 } from './engagement-overview-sections'
+import { DeliverablesTimeline } from './deliverables-timeline'
 import type { ChartSegment } from './overview-charts'
 
 // ─── Ring Registry ────────────────────────────────────────────────────────────

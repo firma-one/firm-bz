@@ -22,8 +22,8 @@ import {
 import { InsightCard } from '@/components/dashboard/insight-card'
 import { ActionList, attentionCount, type ActionItem } from '@/components/dashboard/action-list'
 import { DATA } from '@/components/projects/insight-rings'
+import { DeliverablesTimeline } from '@/components/projects/deliverables-timeline'
 import {
-    DeliverablesTimeline,
     FileOrganizationSection,
     OverviewDetails,
     OverviewTop,
