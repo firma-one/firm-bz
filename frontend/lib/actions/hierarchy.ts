@@ -523,18 +523,11 @@ export async function getFirmName(firmSlug: string): Promise<string> {
 
     const user = session.user
 
-    const firm = await prisma.firm.findUnique({
-        where: { slug: firmSlug },
-        select: { id: true, name: true }
+    // Only a member of the firm learns its name.
+    const firm = await prisma.firm.findFirst({
+        where: { slug: firmSlug, members: { some: { userId: user.id } } },
+        select: { name: true }
     })
 
-    if (!firm) return 'Firm'
-
-    const membership = await prisma.firmMember.findFirst({
-        where: { firmId: firm.id, userId: user.id }
-    })
-
-    if (!membership) return 'Firm'
-
-    return firm.name
+    return firm?.name ?? 'Firm'
 }

@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils'
 import { Tabs } from "@/components/ui/tabs"
 import { EngagementInsightsDashboard } from './engagement-insights-dashboard'
 import type { EngagementRoleSlug } from '@/lib/deliverable-stage-roles'
-import { EngagementFileList } from './engagement-file-list'
+import { EngagementFileList, type EngagementFolderData } from './engagement-file-list'
 import { type BreadcrumbItem } from '@/lib/files-folder-session'
 import { EngagementSettingsForm } from './engagement-settings-form'
 import { LayoutGrid, List } from 'lucide-react'
@@ -78,6 +78,8 @@ interface EngagementWorkspaceProps {
     workspaceRootLocation?: string | null
     /** Connector account email — passed to EngagementFileList for Google Drive authuser param. */
     connectorAccountEmail?: string | null
+    /** The Files tab's root folder ids, resolved on the server. */
+    initialFolderData?: EngagementFolderData | null
     fileCount?: number
     sharesCount?: number
     commentsCount?: number
@@ -126,6 +128,7 @@ export function EngagementWorkspace({
     clientConnectorType,
     workspaceRootLocation,
     connectorAccountEmail,
+    initialFolderData,
     fileCount,
     sharesCount,
     commentsCount,
@@ -292,6 +295,7 @@ export function EngagementWorkspace({
                                 <EngagementSearchProvider projectId={projectId} viewAsPersonaSlug={viewAsPersonaSlug}>
                                     <EngagementFileList
                                         projectId={projectId}
+                                        initialFolderData={initialFolderData}
                                         connectorRootFolderId={connectorRootFolderId}
                                         clientConnectorId={clientConnectorId}
                                         clientConnectorType={clientConnectorType}

@@ -57,7 +57,7 @@ export function CreateDialogFooter({
     submitLabel?: string
 }) {
     return (
-        <div className="sticky bottom-0 z-10 flex items-center justify-end gap-2 border-t border-line bg-surface px-5 py-3">
+        <div className="sticky bottom-0 z-10 flex items-center justify-end gap-2 border-t border-line bg-surface px-5 py-3 sm:rounded-b-dialog">
             <Button type="button" variant="ghost" size="sm" onClick={onCancel} disabled={cancelDisabled}>
                 Cancel
             </Button>

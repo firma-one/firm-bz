@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation"
-import { createClient } from "@/utils/supabase/server"
+import { getSessionUser } from "@/lib/auth/session-user"
 import { getHomeFirms } from "@/lib/home/home-firms"
 import { InboxView } from "@/components/inbox/inbox-view"
 
@@ -11,8 +11,7 @@ import { InboxView } from "@/components/inbox/inbox-view"
  * firm list on the server.
  */
 export default async function InboxPage() {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    const user = await getSessionUser()
     if (!user) redirect("/signin")
 
     const { firms, unavailable } = await getHomeFirms(user.id)

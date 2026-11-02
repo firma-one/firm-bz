@@ -23,6 +23,7 @@ const GRAPH_TOKEN_URL = 'https://login.microsoftonline.com/common/oauth2/v2.0/to
 
 /** Access tokens by connection id, so a secure open's several Graph calls read the row once. */
 const accessTokenCache = createShortLivedCache<string>(CONNECTOR_CACHE_TTL_MS)
+const refreshesInFlight = new Map<string, Promise<string>>()
 
 /** Thrown when OneDrive token refresh fails; API routes map this to 401/503. */
 export class OneDriveAuthError extends Error {
@@ -198,6 +199,16 @@ export class OneDriveConnector implements IConnectorInstance {
    * reconnection, same pattern as GoogleDriveConnector.refreshAccessToken.
    */
   async refreshAccessToken(connectionId: string): Promise<string> {
+    // One refresh per connection at a time: Microsoft rotates the refresh token on each use, so
+    // parallel requests on this instance share the first refresh instead of racing it.
+    const inFlight = refreshesInFlight.get(connectionId)
+    if (inFlight) return inFlight
+    const refresh = this.refreshAccessTokenOnce(connectionId).finally(() => refreshesInFlight.delete(connectionId))
+    refreshesInFlight.set(connectionId, refresh)
+    return refresh
+  }
+
+  private async refreshAccessTokenOnce(connectionId: string): Promise<string> {
     const connector = await prisma.connector.findUnique({ where: { id: connectionId } })
     if (!connector || !connector.refreshToken) {
       throw new Error('No refresh token available')

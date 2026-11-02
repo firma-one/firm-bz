@@ -178,8 +178,9 @@ function useNarration({ index, src, timings, paused }: { index: number; src: str
     return { status, position, words }
 }
 
-/** The ::highlight in globals.css that keeps a card's words faint until they're spoken. */
+/** The highlight that keeps a card's words faint (still legible) until they're spoken. */
 const UNSPOKEN_HIGHLIGHT = 'tour-unspoken'
+const UNSPOKEN_COLOR = 'color-mix(in srgb, var(--ui-fg-subtle) 45%, transparent)'
 
 /**
  * The tour's step card, in the app's design system: a popover-style card with the step's place in
@@ -230,6 +231,7 @@ function TourTooltip({ backProps, closeProps, primaryProps, skipProps, step, ind
         container: cardRef,
         selector: '[data-tour-spoken]',
         highlight: UNSPOKEN_HIGHLIGHT,
+        color: UNSPOKEN_COLOR,
         on: reading,
         words: voice.words,
         heard: () => (voice.status === 'ended' ? Infinity : (voice.position() ?? 0) / 1000),

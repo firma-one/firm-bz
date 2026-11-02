@@ -3,7 +3,7 @@ import { isRedirectError } from 'next/dist/client/components/redirect-error'
 import { FirmsView } from '@/components/projects/firms-view'
 import { getUserFirms, shouldShowSwitchWorkspace, type FirmOption } from '@/lib/actions/firms'
 import { resolveDefaultFirmLandingPath } from '@/lib/landing/default-landing-path'
-import { createClient } from '@/utils/supabase/server'
+import { getSessionUser } from '@/lib/auth/session-user'
 import { GroupPicker } from './group-picker'
 
 /**
@@ -31,8 +31,7 @@ export default async function FirmsPage({
 }: {
     searchParams: Promise<{ entry?: string }>
 }) {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    const user = await getSessionUser()
     if (!user) {
         redirect('/signin')
     }

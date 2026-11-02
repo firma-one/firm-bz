@@ -482,9 +482,10 @@ export function useEngagementUpload({
 
             addToQueue(newQueueItems)
 
-            // If we have conflicts, show dialog
+            // If we have conflicts, show dialog — default every file to Replace.
             if (conflicts.length > 0) {
                 setConflictItems(conflicts)
+                setOverwriteSelections(new Set(conflicts.map(c => c.file.name)))
             }
 
             // 3. Process Safe Uploads

@@ -123,6 +123,7 @@ export function HearBrio() {
   useStreamingReveal({
     container: captionRef,
     highlight: 'brio-unspoken',
+    color: 'rgba(255, 255, 255, 0.32)',
     on: state === 'loading' || state === 'playing' || state === 'paused',
     words: timings?.words ?? null,
     heard: () => audioRef.current?.currentTime ?? 0,

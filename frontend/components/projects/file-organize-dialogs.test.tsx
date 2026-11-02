@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, within } from '@testing-library/react'
 import { CopyMoveDialog, CopyToEngagementDialog, RenameDialog, UploadConflictDialog } from './file-organize-dialogs'
 import type { DriveFile } from '@/lib/types'
 
@@ -131,25 +131,33 @@ describe('UploadConflictDialog', () => {
     afterAll(() => { vi.unstubAllGlobals() })
     const files = [{ name: 'Plan.xlsx' }, { name: 'Deck.pptx' }]
 
-    it('names how many, says what each will do, and Replace all toggles them all', () => {
+    it('names how many, shows each choice, and Apply to all sets them all', () => {
         const onReplaceAllChange = vi.fn()
         render(<UploadConflictDialog files={files} replace={new Set(['Plan.xlsx'])} onReplaceChange={vi.fn()} onReplaceAllChange={onReplaceAllChange} onCancel={vi.fn()} onConfirm={vi.fn()} />)
         expect(screen.getByRole('dialog', { name: '2 files already in this folder' })).toBeTruthy()
-        expect(screen.getByText('Replaces the existing file')).toBeTruthy()
-        expect(screen.getByText('Uploads as a copy')).toBeTruthy()
-        fireEvent.click(screen.getByRole('checkbox', { name: 'Replace all' }))
+        const plan = within(screen.getByRole('group', { name: 'Replace or keep both for Plan.xlsx' }))
+        expect(plan.getByRole('button', { name: 'Replace' }).getAttribute('aria-pressed')).toBe('true')
+        const deck = within(screen.getByRole('group', { name: 'Replace or keep both for Deck.pptx' }))
+        expect(deck.getByRole('button', { name: 'Keep both' }).getAttribute('aria-pressed')).toBe('true')
+        expect(screen.getByText(/can't be undone/)).toBeTruthy()
+        expect(screen.queryByText(/copy/i)).toBeNull()
+        fireEvent.click(within(screen.getByRole('group', { name: 'Replace all or keep both for all' })).getByRole('button', { name: 'Replace' }))
         expect(onReplaceAllChange).toHaveBeenCalledWith(true)
+        expect(screen.getByRole('button', { name: 'Upload' })).toBeTruthy()
     })
 
-    it('one file: no Replace all; its checkbox, Upload and Cancel do what they say', () => {
+    it('one file: no Apply to all; the button names the choice, and Cancel cancels', () => {
         const onReplaceChange = vi.fn(), onConfirm = vi.fn(), onCancel = vi.fn()
-        render(<UploadConflictDialog files={[files[0]]} replace={new Set()} onReplaceChange={onReplaceChange} onReplaceAllChange={vi.fn()} onCancel={onCancel} onConfirm={onConfirm} />)
+        const { rerender } = render(<UploadConflictDialog files={[files[0]]} replace={new Set(['Plan.xlsx'])} onReplaceChange={onReplaceChange} onReplaceAllChange={vi.fn()} onCancel={onCancel} onConfirm={onConfirm} />)
         expect(screen.getByRole('dialog', { name: 'This file is already in the folder' })).toBeTruthy()
-        expect(screen.queryByRole('checkbox', { name: 'Replace all' })).toBeNull()
-        fireEvent.click(screen.getByRole('checkbox', { name: 'Replace Plan.xlsx' }))
-        expect(onReplaceChange).toHaveBeenCalledWith('Plan.xlsx', true)
-        fireEvent.click(screen.getByRole('button', { name: 'Upload' }))
+        expect(screen.queryByRole('group', { name: 'Replace all or keep both for all' })).toBeNull()
+        fireEvent.click(screen.getByRole('button', { name: 'Keep both' }))
+        expect(onReplaceChange).toHaveBeenCalledWith('Plan.xlsx', false)
+        fireEvent.click(screen.getByRole('button', { name: 'Replace file' }))
         expect(onConfirm).toHaveBeenCalled()
+
+        rerender(<UploadConflictDialog files={[files[0]]} replace={new Set()} onReplaceChange={onReplaceChange} onReplaceAllChange={vi.fn()} onCancel={onCancel} onConfirm={onConfirm} />)
+        expect(screen.getByRole('button', { name: 'Upload as new file' })).toBeTruthy()
         fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
         expect(onCancel).toHaveBeenCalled()
     })

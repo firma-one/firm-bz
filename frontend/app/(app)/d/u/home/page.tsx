@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation"
-import { createClient } from "@/utils/supabase/server"
+import { getSessionUser } from "@/lib/auth/session-user"
 import { getHomeFirms } from "@/lib/home/home-firms"
 import { getMyWork } from "@/lib/home/my-work"
 import { getHomeBookmarks } from "@/lib/home/bookmarks"
@@ -16,8 +16,7 @@ import { resolveNames } from "@/lib/auth/display-name"
  * those firms is ignored, not trusted.
  */
 export default async function HomePage({ searchParams }: { searchParams: Promise<{ firm?: string }> }) {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    const user = await getSessionUser()
     if (!user) redirect("/signin")
 
     const { firms: allFirms, unavailable } = await getHomeFirms(user.id)

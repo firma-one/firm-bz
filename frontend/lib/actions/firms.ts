@@ -67,7 +67,6 @@ export async function getUserFirms(): Promise<FirmOption[]> {
             include: {
                 firm: {
                     include: {
-                        members: true,
                         group: { select: { id: true, name: true, slug: true } },
                         _count: { select: { clients: { where: { deletedAt: null } } } },
                     },
@@ -78,7 +77,8 @@ export async function getUserFirms(): Promise<FirmOption[]> {
 
         return memberships.map((m: any) => {
             const firm = m.firm
-            const membership = firm.members.find((mem: any) => mem.userId === user.id)
+            // The row itself is this user's membership; no need to load every member of the firm.
+            const membership = m
             const branding = (firm.settings as Record<string, any>)?.branding ?? {}
             return {
                 id: firm.id,
