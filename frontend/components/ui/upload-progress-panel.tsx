@@ -1,7 +1,7 @@
 'use client'
 
 import { createPortal } from 'react-dom'
-import { CheckCircle2, Clock, Folder, Maximize2, Minimize2, X, XCircle } from 'lucide-react'
+import { CheckCircle2, Clock, Folder, Maximize2, Minimize2, RotateCw, X, XCircle } from 'lucide-react'
 import { useEffect, useRef } from 'react'
 import { cn } from '@/lib/utils'
 import { useUploadProgress } from '@/lib/upload-progress-context'
@@ -29,6 +29,7 @@ export function UploadProgressPanel() {
     isUploadModalOpen,
     setIsUploadModalOpen,
     onShowFileLocation,
+    onRetry,
     dismiss,
   } = useUploadProgress()
 
@@ -54,7 +55,10 @@ export function UploadProgressPanel() {
   if (typeof document === 'undefined' || !document.body) return null
 
   const completedCount = uploadQueue.filter(i => i.status === 'completed').length
+  const failedItems = uploadQueue.filter(i => i.status === 'error')
   const isActive = isUploading || isUploadInitiating
+  // Retry only once the run is over, and only while a Files page is open to run it.
+  const canRetry = !isActive && !!onRetry
 
   return createPortal(
     <div className={cn(
@@ -81,10 +85,25 @@ export function UploadProgressPanel() {
             ? 'Preparing upload…'
             : isUploading
               ? `Uploading ${completedCount}/${uploadQueue.length}`
-              : `Uploads complete ${completedCount}/${uploadQueue.length}`
+              : failedItems.length > 0
+                ? <>
+                    {`${completedCount} of ${uploadQueue.length} uploaded`}
+                    <span className="text-red-600">· {failedItems.length} failed</span>
+                  </>
+                : `Uploads complete ${completedCount}/${uploadQueue.length}`
           }
         </span>
         <div className="flex items-center gap-2 text-primary/60">
+          {canRetry && failedItems.length > 0 && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onRetry!(failedItems) }}
+              className="flex items-center gap-1 rounded px-1 text-[11px] font-medium text-primary hover:bg-black/10 transition-colors"
+            >
+              <RotateCw className="h-3 w-3" />
+              {failedItems.length > 1 ? 'Retry failed' : 'Retry'}
+            </button>
+          )}
           {isUploadModalOpen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
           {!isActive && (
             <button
@@ -138,11 +157,22 @@ export function UploadProgressPanel() {
                   {item.finalName || item.file.name}
                 </p>
                 {item.status === 'error' && (
-                  <p className="text-[10px] text-red-500 truncate">{item.error || 'Upload failed'}</p>
+                  <p className="text-[10px] text-red-500 truncate" title={item.error || 'Upload failed'}>{item.error || 'Upload failed'}</p>
                 )}
               </div>
               {/* Right-side icons — all constrained to h-3.5 w-3.5 to prevent row height shifts */}
               <div className="flex-shrink-0 flex items-center gap-1.5">
+                {canRetry && item.status === 'error' && (
+                  <button
+                    type="button"
+                    aria-label={`Retry ${item.file.name}`}
+                    onClick={(e) => { e.stopPropagation(); onRetry!([item]) }}
+                    className="flex items-center gap-1 rounded px-1 text-[10px] font-medium text-primary hover:bg-slate-100 transition-colors"
+                  >
+                    <RotateCw className="h-3 w-3" />
+                    Retry
+                  </button>
+                )}
                 {onShowFileLocation && (item.status === 'completed' || item.status === 'uploading') && (
                   <TooltipProvider>
                     <Tooltip delayDuration={300}>

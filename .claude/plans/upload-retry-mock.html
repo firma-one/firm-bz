@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Upload Retry Mock</title>
+<style>
+  :root {
+    /* The panel uses the firm's brand accent; blue here to match the production screenshot. */
+    --accent: hsl(207 78% 46%);
+    --accent-10: hsl(207 78% 46% / 0.10);
+    --accent-15: hsl(207 78% 46% / 0.15);
+    --accent-60: hsl(207 78% 46% / 0.60);
+    --fg: #334155; --fg-subtle: #94a3b8; --line: #eef0f3; --page: #f6f7f9; --red: #ef4444; --red-strong: #dc2626;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif; color: #0f172a; }
+  main { max-width: 1240px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .lede { color: #64748b; margin: 0 0 28px; max-width: 760px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 28px 24px; }
+  .state h2 { font-size: 13px; margin: 0 0 4px; }
+  .state p.note { font-size: 12px; color: #64748b; margin: 0 0 12px; min-height: 34px; }
+  .tag { display: inline-block; font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 4px; margin-left: 6px; vertical-align: 1px; }
+  .tag.before { background: #f1f5f9; color: #64748b; }
+  .tag.new { background: var(--accent-10); color: var(--accent); }
+
+  /* The panel, as upload-progress-panel.tsx draws it. */
+  .panel { width: 360px; max-width: 100%; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; box-shadow: 0 10px 25px -5px rgb(0 0 0 / .12); overflow: hidden; }
+  .hdr { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: var(--accent-10); border-bottom: 1px solid var(--accent-15); color: var(--accent); }
+  .hdr .title { font-size: 11px; font-weight: 500; display: flex; gap: 6px; align-items: center; }
+  .hdr .failed { color: var(--red-strong); }
+  .hdr .tools { display: flex; gap: 8px; align-items: center; color: var(--accent-60); }
+  .hdr button.retry-all { display: flex; align-items: center; gap: 4px; font-family: inherit; font-size: 11px; font-weight: 500; line-height: 1; color: var(--accent); background: none; border: 0; padding: 2px 4px; border-radius: 4px; cursor: pointer; }
+  .hdr button.retry-all:hover { background: rgb(0 0 0 / .08); }
+  .bar { height: 4px; background: var(--accent-15); position: relative; overflow: hidden; }
+  .bar::after { content: ""; position: absolute; inset: 0 auto 0 0; width: 50%; background: var(--accent); border-radius: 99px; animation: ind 1.5s infinite linear; }
+  @keyframes ind { from { left: -50%; } to { left: 100%; } }
+  .rows { max-height: 300px; overflow: hidden; }
+  .row { display: flex; align-items: center; gap: 8px; padding: 6px 12px; min-height: 32px; border-bottom: 1px solid var(--line); }
+  .row:last-child { border-bottom: 0; }
+  .row.pending { opacity: .4; }
+  .row .doc { width: 14px; height: 14px; flex: none; color: var(--accent); }
+  .row .text { flex: 1; min-width: 0; }
+  .row .name { font-size: 11px; font-weight: 500; color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin: 0; }
+  .row.uploading .name { font-weight: 700; }
+  .row .err { font-size: 10px; color: var(--red); margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row button.retry { display: flex; align-items: center; gap: 4px; font-family: inherit; font-size: 10px; font-weight: 500; line-height: 1; color: var(--accent); background: none; border: 0; padding: 3px 4px; border-radius: 4px; cursor: pointer; }
+  .row button.retry:hover { background: #f1f5f9; }
+  .ico { width: 14px; height: 14px; flex: none; }
+  .spin { animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Toast, as components/ui/toast.tsx draws an error toast with an action. */
+  .toast { width: 380px; max-width: 100%; background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; box-shadow: 0 10px 25px -5px rgb(0 0 0 / .12); padding: 12px; display: flex; gap: 10px; align-items: flex-start; }
+  .toast .chip { width: 24px; height: 24px; border-radius: 6px; background: rgb(239 68 68 / .1); color: var(--red); display: grid; place-items: center; flex: none; }
+  .toast .body { flex: 1; min-width: 0; }
+  .toast .t { font-size: 13px; font-weight: 600; margin: 0 0 2px; }
+  .toast .m { font-size: 12px; color: #64748b; margin: 0; }
+  .toast .act { align-self: center; font-family: inherit; font-size: 12px; font-weight: 500; line-height: 1; color: var(--accent); background: none; border: 0; padding: 7px 8px; border-radius: 6px; cursor: pointer; }
+  .toast .act:hover { background: #f1f5f9; }
+  .toast .x { color: var(--fg-subtle); align-self: center; }
+
+  ul.changes { margin: 36px 0 0; padding: 16px 20px 16px 36px; background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; font-size: 13px; color: #334155; max-width: 760px; }
+  ul.changes li { margin: 4px 0; }
+  @media (max-width: 420px) { .panel, .toast { width: 100%; } }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="doc" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><circle cx="10" cy="13" r="2"/><path d="m20 17-1.1-1.1a2 2 0 0 0-2.8 0L10 22"/></symbol>
+  <symbol id="ok" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></symbol>
+  <symbol id="bad" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></symbol>
+  <symbol id="clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></symbol>
+  <symbol id="rotate" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></symbol>
+  <symbol id="min" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/><path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/></symbol>
+  <symbol id="x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+  <symbol id="spinner" viewBox="0 0 14 14"><circle cx="7" cy="7" r="5" fill="none" stroke-width="2" style="stroke: hsl(207 78% 46% / .2)"/><path d="M 7 2 A 5 5 0 0 1 12 7" fill="none" stroke-width="2" stroke-linecap="round" style="stroke: hsl(207 78% 46%)"/></symbol>
+</svg>
+
+<main>
+  <h1>Upload panel: failures stay, and can be retried</h1>
+  <p class="lede">The 23-file folder upload from production, where <em>screenshots-app-crop-board-lanes.png</em> failed. Before, the panel cleared itself 8 seconds later and there was no way to retry. Shown below in order: before, then each new state.</p>
+
+  <div class="grid">
+    <section class="state">
+      <h2>Before<span class="tag before">today in production</span></h2>
+      <p class="note">Raw browser error, no retry, and the whole panel disappears 8 seconds later.</p>
+      <div class="panel">
+        <div class="hdr"><span class="title">Uploads complete 22/23</span><span class="tools"><svg class="ico"><use href="#min"/></svg><svg class="ico"><use href="#x"/></svg></span></div>
+        <div class="rows">
+          <div class="row"><svg class="doc"><use href="#doc"/></svg><div class="text"><p class="name">screenshots-app-15b-ask-brio-answer.png</p></div><svg class="ico" style="color:var(--accent)"><use href="#ok"/></svg></div>
+          <div class="row"><svg class="doc"><use href="#doc"/></svg><div class="text"><p class="name">screenshots-website-04-feature-bento.png</p></div><svg class="ico" style="color:var(--accent)"><use href="#ok"/></svg></div>
+          <div class="row"><svg class="doc"><use href="#doc"/></svg><div class="text"><p class="name">screenshots-app-crop-board-lanes.png</p><p class="err">Failed to fetch</p></div><svg class="ico" style="color:var(--red)"><use href="#bad"/></svg></div>
+          <div class="row"><svg class="doc"><use href="#doc"/></svg><div class="text"><p class="name">brand-wordmark-logo-full.png</p></div><svg class="ico" style="color:var(--accent)"><use href="#ok"/></svg></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="state">
+      <h2>1 · Finished with a failure<span class="tag new">new</span></h2>
+      <p class="note">This file already had two automatic retries. The header counts the failure, the error is in plain words, and the panel stays open until you retry or close it.</p>
+      <div class="panel">
+        <div class="hdr"><span class="title">22 of 23 uploaded <span class="failed">· 1 failed</span></span><span class="tools"><button class="retry-all"><svg class="ico" style="width:12px;height:12px"><use href="#rotate"/></svg>Retry</button><svg class="ico"><use href="#min"/></svg><svg class="ico"><use href="#x"/></svg></span></div>
+        <div class="rows">
+          <div class="row"><svg class="doc"><use href="#doc"/></svg><div class="text"><p class="name">screenshots-app-15b-ask-brio-answer.png</p></div><svg class="ico" style="color:var(--accent)"><use href="#ok"/></svg></div>
+          <div class="row"><svg class="doc"><use href="#doc"/></svg><div class="text"><p class="name">screenshots-website-04-feature-bento.png</p></div><svg class="ico" style="color:var(--accent)"><use href="#ok"/></svg></div>
+          <div class="row"><svg class="doc"><use href="#doc"/></svg><div class="text"><p class="name">screenshots-app-crop-board-lanes.png</p><p class="err">Connection dropped before the upload started.</p></div><button class="retry"><svg class="ico" style="width:12px;height:12px"><use href="#rotate"/></svg>Retry</button><svg class="ico" style="color:var(--red)"><use href="#bad"/></svg></div>
+          <div class="row"><svg class="doc"><use href="#doc"/></svg><div class="text"><p class="name">brand-wordmark-logo-full.png</p></div><svg class="ico" style="color:var(--accent)"><use href="#ok"/></svg></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="state">
+      <h2>2 · Retrying<span class="tag new">new</span></h2>
+      <p class="note">Clicking Retry uploads the file again in place, into the same subfolder, here Creative_Asset_Library. Both Retry buttons hide while it runs.</p>
+      <div class="panel">
+        <div class="hdr"><span class="title">Uploading 22/23</span><span class="tools"><svg class="ico"><use href="#min"/></svg></span></div>
+        <div class="bar"></div>
+        <div class="rows">
+          <div class="row"><svg class="doc"><use href="#doc"/></svg><div class="text"><p class="name">screenshots-app-15b-ask-brio-answer.png</p></div><svg class="ico" style="color:var(--accent)"><use href="#ok"/></svg></div>
+          <div class="row"><svg class="doc"><use href="#doc"/></svg><div class="text"><p class="name">screenshots-website-04-feature-bento.png</p></div><svg class="ico" style="color:var(--accent)"><use href="#ok"/></svg></div>
+          <div class="row uploading"><svg class="doc"><use href="#doc"/></svg><div class="text"><p class="name">screenshots-app-crop-board-lanes.png</p></div><svg class="ico spin"><use href="#spinner"/></svg></div>
+          <div class="row"><svg class="doc"><use href="#doc"/></svg><div class="text"><p class="name">brand-wordmark-logo-full.png</p></div><svg class="ico" style="color:var(--accent)"><use href="#ok"/></svg></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="state">
+      <h2>3 · Several failures<span class="tag new">new</span></h2>
+      <p class="note">Each failed row gets its own Retry. In the header it becomes "Retry failed" and retries all of them in one go.</p>
+      <div class="panel">
+        <div class="hdr"><span class="title">21 of 23 uploaded <span class="failed">· 2 failed</span></span><span class="tools"><button class="retry-all"><svg class="ico" style="width:12px;height:12px"><use href="#rotate"/></svg>Retry failed</button><svg class="ico"><use href="#min"/></svg><svg class="ico"><use href="#x"/></svg></span></div>
+        <div class="rows">
+          <div class="row"><svg class="doc"><use href="#doc"/></svg><div class="text"><p class="name">design-system.md</p><p class="err">Upload failed: 503</p></div><button class="retry"><svg class="ico" style="width:12px;height:12px"><use href="#rotate"/></svg>Retry</button><svg class="ico" style="color:var(--red)"><use href="#bad"/></svg></div>
+          <div class="row"><svg class="doc"><use href="#doc"/></svg><div class="text"><p class="name">screenshots-app-01-home.png</p></div><svg class="ico" style="color:var(--accent)"><use href="#ok"/></svg></div>
+          <div class="row"><svg class="doc"><use href="#doc"/></svg><div class="text"><p class="name">screenshots-app-crop-board-lanes.png</p><p class="err">Connection dropped during the upload.</p></div><button class="retry"><svg class="ico" style="width:12px;height:12px"><use href="#rotate"/></svg>Retry</button><svg class="ico" style="color:var(--red)"><use href="#bad"/></svg></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="state">
+      <h2>4 · Panel was closed during the upload<span class="tag new">new</span></h2>
+      <p class="note">The toast names the files that failed, up to three and then "and N more". Its Retry brings them back into the panel. Before, it only said "1 failed".</p>
+      <div class="toast">
+        <span class="chip"><svg class="ico"><use href="#bad"/></svg></span>
+        <div class="body"><p class="t">1 file didn't upload</p><p class="m">22 of 23 added. Not uploaded: screenshots-app-crop-board-lanes.png.</p></div>
+        <button class="act">Retry</button>
+        <svg class="ico x"><use href="#x"/></svg>
+      </div>
+    </section>
+  </div>
+
+  <ul class="changes">
+    <li><strong>Automatic retries:</strong> every upload (files, folders, duplicates) tries twice more, after 1.5 seconds and then 4 seconds, when the connection drops, it times out, or it gets a 5xx or 429. Folder uploads used to make no retries at all.</li>
+    <li><strong>No retry on a refusal</strong> like a 403, since trying again can't change the answer.</li>
+    <li><strong>Creating a subfolder</strong> during a folder upload retries the same way. If it still fails, a toast names the folder, so the upload no longer stalls on "Preparing upload…" forever.</li>
+    <li><strong>A finished run with no failures</strong> still clears itself after 8 seconds, as before.</li>
+  </ul>
+</main>
+</body>
+</html>
