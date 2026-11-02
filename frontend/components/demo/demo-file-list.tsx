@@ -47,7 +47,7 @@ import { FilterPill } from '@/components/ui/filter-pill'
 import { Hint } from '@/components/ui/tooltip'
 import { RelativeDateTime } from '@/components/ui/relative-date-time'
 import { StatusPill } from '@/components/ui/status-pill'
-import { DateProperty, StatusProperty } from '@/components/ui/property-cells'
+import { DateProperty, READ_ONLY_PILL_CLASS, StatusProperty } from '@/components/ui/property-cells'
 import { useToast } from '@/components/ui/toast'
 import { FILES_DROP_TARGET_ROW_CLASS, FILES_DROP_ZONE_ACTIVE_CLASS, FilesDropPill, FilesDropRow } from '@/components/projects/files-drop-zone'
 import { STAGE_ORDER, STAGE_ROLE_MAP, getAllowedTransitions } from '@/lib/deliverable-stage-roles'
@@ -390,7 +390,8 @@ function EntryRow({
     const creator = creatorOf(entryId(entry))
     const name = isFolder ? entry.folder.name.replace(/_+/g, ' ').trim() : entry.file.name
     const approved = deliverableStatus === 'approved'
-    const empty = <span className="text-small text-fg-subtle">{tracked ? 'Not set' : '—'}</span>
+    // Inset as the editable cells' buttons are, so read-only and editable values line up.
+    const empty = <span className={cn(READ_ONLY_PILL_CLASS, 'text-small text-fg-subtle')}>{tracked ? 'Not set' : '—'}</span>
     // As in the app: tracked work with no stage yet — a document is Not started, a deliverable at To do.
     const stage = status ?? (tracked ? (isFolder ? 'to_do' : 'not_started') : null)
 
@@ -477,8 +478,8 @@ function EntryRow({
                 ) : stage ? (
                     // A deliverable's stage follows its documents, as in the app.
                     deliverableStatus
-                        ? <Hint label="Follows its documents"><span className="inline-flex"><StatusPill kind="deliverable" status={stage} /></span></Hint>
-                        : <StatusPill kind="deliverable" status={stage} />
+                        ? <Hint label="Follows its documents"><span className={READ_ONLY_PILL_CLASS}><StatusPill kind="deliverable" status={stage} /></span></Hint>
+                        : <span className={READ_ONLY_PILL_CLASS}><StatusPill kind="deliverable" status={stage} /></span>
                 ) : empty}
             </div>
 

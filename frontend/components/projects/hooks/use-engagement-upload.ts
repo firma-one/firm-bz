@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { logger } from '@/lib/logger'
 import { useUploadProgress, type UploadQueueItem } from '@/lib/upload-progress-context'
 import { useToast } from '@/components/ui/toast'
@@ -13,6 +13,33 @@ const isJunkFile = (name: string) => JUNK_FILE_NAMES.has(name.toLowerCase())
 // PUT — the session URL itself is pre-authorized, same as Google's resumable session URL.
 const ONEDRIVE_CHUNK_SIZE = 60 * 1024 * 1024 - (60 * 1024 * 1024 % (320 * 1024)) // largest 320 KiB multiple <= 60 MiB
 
+// Waits before each automatic retry of a file whose upload failed for a passing reason (a dropped
+// connection, a timeout, a 5xx or 429): three tries in all before the file shows as failed.
+const RETRY_DELAYS_MS = [1500, 4000]
+
+const CONNECTION_DROPPED_BEFORE = 'Connection dropped before the upload started.'
+const CONNECTION_DROPPED_DURING = 'Connection dropped during the upload.'
+
+/** A response worth trying again: the server or Drive was briefly unavailable or busy. */
+const isTransientStatus = (status: number) => status >= 500 || status === 429
+
+/**
+ * fetch() rejects with a TypeError when no response arrives at all — the connection dropped.
+ * Browsers word it differently: "Failed to fetch" (Chrome), "Load failed" (Safari),
+ * "NetworkError when attempting to fetch resource." (Firefox).
+ */
+const isConnectionError = (e: unknown) =>
+    e instanceof TypeError && /fetch|load failed|network/i.test(e.message)
+
+type UploadResult = {
+    success: boolean
+    error?: string
+    /** The failure may pass on its own, so the file is tried again before it shows as failed. */
+    retryable?: boolean
+    finalFile?: { name: string; id: string }
+    docIdRequestSettled?: Promise<void>
+}
+
 /**
  * Upload a file to a Microsoft Graph upload session in Content-Range-addressed chunks.
  * Returns the same shape uploadFile's Google-Drive XHR path returns, via onUploadResponse
@@ -24,7 +51,7 @@ async function uploadFileToOneDriveSession(
     file: File,
     onProgress: ((p: number) => void) | undefined,
     onUploadResponse: (rawResponseText: string) => { success: true; finalFile?: { name: string; id: string }; docIdRequestSettled?: Promise<void> }
-): Promise<{ success: boolean; error?: string; finalFile?: { name: string; id: string }; docIdRequestSettled?: Promise<void> }> {
+): Promise<UploadResult> {
     const totalSize = file.size
     let offset = 0
 
@@ -46,7 +73,7 @@ async function uploadFileToOneDriveSession(
             if (!res.ok && res.status !== 202) {
                 const text = await res.text().catch(() => '')
                 logger.error('OneDrive chunk upload error', new Error(`Status: ${res.status}, Response: ${text}`))
-                return { success: false, error: `Upload failed: ${res.status}` }
+                return { success: false, error: `Upload failed: ${res.status}`, retryable: isTransientStatus(res.status) }
             }
 
             offset = chunkEnd
@@ -61,7 +88,7 @@ async function uploadFileToOneDriveSession(
         return { success: false, error: 'Upload did not complete' }
     } catch (e) {
         logger.error('Network Error during OneDrive upload', e instanceof Error ? e : new Error(String(e)))
-        return { success: false, error: 'Network interruption. Please check connection.' }
+        return { success: false, error: CONNECTION_DROPPED_DURING, retryable: true }
     }
 }
 
@@ -108,6 +135,7 @@ export function useEngagementUpload({
         setIsUploadInitiating,
         setIsUploadModalOpen,
         setShowFileLocationCallback,
+        setRetryCallback,
         dismiss: dismissUploadPanel,
     } = useUploadProgress()
     const { addToast } = useToast()
@@ -153,7 +181,7 @@ export function useEngagementUpload({
         onProgress?: (p: number) => void,
         parentFolderId?: string,
         triggerIndexing = true
-    ): Promise<{ success: boolean, error?: string, finalFile?: { name: string, id: string }, docIdRequestSettled?: Promise<void> }> => {
+    ): Promise<UploadResult> => {
         // Use ref to avoid stale closure during batch processing
         const token = sessionRef.current?.access_token
         if (!token) return { success: false, error: 'No access token' }
@@ -196,7 +224,7 @@ export function useEngagementUpload({
                     errMsg = d.error || errMsg
                 } catch { }
                 logger.error('Init Upload Error:', new Error(text))
-                return { success: false, error: errMsg }
+                return { success: false, error: errMsg, retryable: isTransientStatus(res.status) }
             }
 
             const { uploadUrl, provider } = await res.json()
@@ -287,18 +315,18 @@ export function useEngagementUpload({
                         resolve(onUploadResponse(xhr.responseText))
                     } else {
                         logger.error('Drive Upload Error', new Error(`Status: ${xhr.status}, Response: ${xhr.responseText}`))
-                        resolve({ success: false, error: `Upload failed: ${xhr.status}` })
+                        resolve({ success: false, error: `Upload failed: ${xhr.status}`, retryable: isTransientStatus(xhr.status) })
                     }
                 }
 
                 xhr.onerror = () => {
                     logger.error('Network Error during upload', new Error(xhr.statusText))
-                    resolve({ success: false, error: 'Network interruption. Please check connection.' })
+                    resolve({ success: false, error: CONNECTION_DROPPED_DURING, retryable: true })
                 }
 
                 xhr.ontimeout = () => {
                     logger.error('Upload timeout', new Error('Request timed out'))
-                    resolve({ success: false, error: 'Upload timed out. Try again or use a smaller batch.' })
+                    resolve({ success: false, error: 'Upload timed out.', retryable: true })
                 }
 
                 xhr.send(file)
@@ -306,116 +334,160 @@ export function useEngagementUpload({
 
         } catch (err: any) {
             logger.error('Upload Exception:', err)
+            // Asking our server for the upload link got no response at all.
+            if (isConnectionError(err)) return { success: false, error: CONNECTION_DROPPED_BEFORE, retryable: true }
             return { success: false, error: err.message }
         }
     }
 
-    // Batch Resolution Handler
-    const handleBatchResolution = async () => {
-        const remainingToProcess = [...conflictItems]
-        setConflictItems([]) // Close dialog
-
-        // Add conflicting items to queue
-        const newQueueItems: UploadQueueItem[] = remainingToProcess.map(item => ({
-            id: `upload-${Date.now()}-${Math.random()}`,
-            file: item.file,
-            progress: 0,
-            status: 'pending'
-        }))
-
-        // Map file to queue ID
-        const fileToQueueId = new Map<File, string>()
-        remainingToProcess.forEach((item, idx) => {
-            fileToQueueId.set(item.file, newQueueItems[idx].id)
-        })
-
-        addToQueue(newQueueItems)
-        setIsUploading(true)
-        setIsUploadModalOpen(true)
-
-        const isRetryableError = (err?: string) =>
-            err && (err.includes('Network interruption') || err.includes('timed out'))
-        const maxAttemptsPerFile = 2
-        let completedCount = 0
-        let errorCount = 0
-
-        const successfullyUploaded: { externalId: string, fileName: string }[] = []
-        for (const item of remainingToProcess) {
-            const queueId = fileToQueueId.get(item.file)!
-            updateQueueItem(queueId, { status: 'uploading' })
-
-            const updateProgress = (p: number) => {
-                updateQueueItem(queueId, { progress: p })
-            }
-
-            let result: { success: boolean; error?: string, finalFile?: { name: string, id: string } }
-            if (overwriteSelections.has(item.file.name)) {
-                result = await uploadFile(item.file, item.existingId, false, updateProgress, item.parentFolderId, false)
-            } else {
-                result = await uploadFile(item.file, undefined, true, updateProgress, item.parentFolderId, false)
-            }
-            let attempts = 1
-            while (!result.success && isRetryableError(result.error) && attempts < maxAttemptsPerFile) {
-                attempts++
-                logger.warn(`Retrying upload "${item.file.name}" (attempt ${attempts}/${maxAttemptsPerFile})`)
-                updateQueueItem(queueId, { progress: 0 })
-                await new Promise(r => setTimeout(r, 1500))
-                if (overwriteSelections.has(item.file.name)) {
-                    result = await uploadFile(item.file, item.existingId, false, updateProgress, item.parentFolderId, false)
-                } else {
-                    result = await uploadFile(item.file, undefined, true, updateProgress, item.parentFolderId, false)
-                }
-            }
-
-            if (!result.success) {
-                updateQueueItem(queueId, { status: 'error', error: result.error })
-                errorCount++
-            } else {
-                if (result.finalFile) {
-                    successfullyUploaded.push({
-                        externalId: result.finalFile.id,
-                        fileName: result.finalFile.name
-                    })
-                }
-                updateQueueItem(queueId, { status: 'completed', progress: 100 })
-                completedCount++
-            }
+    /** One queue row's upload, tried again after a passing failure. Progress lands on the row. */
+    const uploadWithRetry = async (item: UploadQueueItem, triggerIndexing: boolean): Promise<UploadResult> => {
+        const { overwriteId, rename = false, parentFolderId } = item.target ?? {}
+        const attempt = () => uploadFile(item.file, overwriteId, rename, (p) => updateQueueItem(item.id, { progress: p }), parentFolderId, triggerIndexing)
+        let result = await attempt()
+        for (let i = 0; !result.success && result.retryable && i < RETRY_DELAYS_MS.length; i++) {
+            logger.warn(`Retrying upload "${item.file.name}" (attempt ${i + 2}/${RETRY_DELAYS_MS.length + 1}): ${result.error}`)
+            updateQueueItem(item.id, { progress: 0 })
+            await new Promise(r => setTimeout(r, RETRY_DELAYS_MS[i]))
+            result = await attempt()
         }
+        return result
+    }
 
+    type QueueOutcome = {
+        uploaded: { externalId: string, fileName: string }[]
+        docIdRequests: Promise<void>[]
+        failed: UploadQueueItem[]
+    }
+
+    /** Uploads queue rows one after another, marking each completed or failed. */
+    const runQueue = async (items: UploadQueueItem[], triggerIndexing: boolean): Promise<QueueOutcome> => {
+        const outcome: QueueOutcome = { uploaded: [], docIdRequests: [], failed: [] }
+        for (const item of items) {
+            updateQueueItem(item.id, { status: 'uploading', error: undefined, progress: 0 })
+            const result = await uploadWithRetry(item, triggerIndexing)
+            if (!result.success) {
+                updateQueueItem(item.id, { status: 'error', error: result.error })
+                outcome.failed.push({ ...item, status: 'error', error: result.error })
+                continue
+            }
+            if (result.finalFile) outcome.uploaded.push({ externalId: result.finalFile.id, fileName: result.finalFile.name })
+            if (result.docIdRequestSettled) outcome.docIdRequests.push(result.docIdRequestSettled)
+            updateQueueItem(item.id, { status: 'completed', progress: 100 })
+        }
+        return outcome
+    }
+
+    /**
+     * After a run: index what uploaded (one batch POST when the run didn't index per file), refresh
+     * the list, and report. Failures keep the panel open; if it was closed, a toast names the files
+     * and offers Retry.
+     */
+    const finishRun = async (outcome: QueueOutcome, { batchIndex }: { batchIndex: boolean }) => {
         // One batch POST for all files (not one per file) — server assigns every file's docId
         // synchronously (ensureDocIdEarly, fanned out via Promise.all) and enqueues one Inngest
         // batch-indexing event, then returns. Awaiting this response does NOT wait for the
         // Inngest job (embeddings/summaries) to run — see docIdRequestSettled comment in
         // uploadFile above for the full explanation of why that split matters.
-        if (successfullyUploaded.length > 0 && !isExternalPersona) {
+        if (batchIndex && outcome.uploaded.length > 0 && !isExternalPersona) {
             await fetch(`/api/projects/${projectId}/index-file`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${sessionRef.current?.access_token}`,
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({
-                    files: successfullyUploaded
-                })
+                body: JSON.stringify({ files: outcome.uploaded })
             }).catch(e => logger.error('Failed to trigger batch indexing', e))
         }
+        // Per-file runs: wait for every docId so the refetch shows them. NOT a wait for search indexing.
+        await Promise.all(outcome.docIdRequests)
 
-        // Reset selections
-        setOverwriteSelections(new Set())
-
-        // Refresh — safe to call now: every file above either has its docId already
-        // (awaited above) or failed upload entirely (never got a docId to wait for).
         const currentFolderId = currentFolderIdRef.current
         if (currentFolderId) fetchFiles(currentFolderId, true)
         setIsUploading(false)
+
+        const completedCount = outcome.uploaded.length
+        const errorCount = outcome.failed.length
+        if (errorCount > 0) setIsUploadModalOpen(true)
         if (uploadOverlayDismissedRef.current && (completedCount > 0 || errorCount > 0)) {
-            const total = completedCount + errorCount
             if (errorCount === 0) {
                 addToast({ type: 'success', title: 'Upload complete', message: `${completedCount} file${completedCount !== 1 ? 's' : ''} added.` })
             } else {
-                addToast({ type: 'info', title: 'Upload finished', message: `${completedCount} of ${total} files added. ${errorCount} failed.` })
+                const names = outcome.failed.map(i => i.file.name)
+                const listed = names.length > 3 ? `${names.slice(0, 3).join(', ')} and ${names.length - 3} more` : names.join(', ')
+                const failed = outcome.failed
+                addToast({
+                    type: 'error',
+                    title: `${errorCount} file${errorCount !== 1 ? 's' : ''} didn't upload`,
+                    message: `${completedCount} of ${completedCount + errorCount} added. Not uploaded: ${listed}.`,
+                    duration: 12000,
+                    action: { label: 'Retry', onClick: () => { void retryRef.current(failed) } },
+                })
             }
             uploadOverlayDismissedRef.current = false
+        }
+    }
+
+    /** Uploads failed rows again, to the same folder or file they were headed for. */
+    const retryUploads = async (items: UploadQueueItem[]) => {
+        const failed = items.filter(i => i.status === 'error')
+        if (failed.length === 0 || isUploading || isUploadInitiating) return
+        // Rows still in the panel are reused in place; after the panel was closed they come back.
+        const inQueue = new Set(uploadQueue.map(i => i.id))
+        const missing = failed.filter(i => !inQueue.has(i.id))
+        const retrying = failed.map(i => ({ ...i, status: 'pending' as const, error: undefined, progress: 0 }))
+        if (missing.length) addToQueue(retrying.filter(i => !inQueue.has(i.id)))
+        retrying.filter(i => inQueue.has(i.id)).forEach(i => updateQueueItem(i.id, { status: 'pending', error: undefined, progress: 0 }))
+
+        uploadOverlayDismissedRef.current = false
+        setIsUploading(true)
+        setIsUploadModalOpen(true)
+        try {
+            const outcome = await runQueue(retrying, false)
+            await finishRun(outcome, { batchIndex: true })
+        } catch (e: any) {
+            logger.error(e)
+            setIsUploading(false)
+        }
+    }
+
+    // The panel's Retry (and the toast's) call through this ref, so they always run the current render's handler.
+    const retryRef = useRef<(items: UploadQueueItem[]) => Promise<void>>(async () => {})
+    useEffect(() => { retryRef.current = retryUploads })
+    useEffect(() => {
+        setRetryCallback((items) => { void retryRef.current(items) })
+        return () => setRetryCallback(null)
+    }, [setRetryCallback])
+
+    // Batch Resolution Handler
+    const handleBatchResolution = async () => {
+        const remainingToProcess = [...conflictItems]
+        setConflictItems([]) // Close dialog
+
+        // Each row keeps its choice — replace the existing file, or save beside it under a
+        // numbered name — so a retry does the same thing.
+        const openFolderId = currentFolderIdRef.current ?? undefined
+        const newQueueItems: UploadQueueItem[] = remainingToProcess.map(item => ({
+            id: `upload-${Date.now()}-${Math.random()}`,
+            file: item.file,
+            progress: 0,
+            status: 'pending',
+            target: overwriteSelections.has(item.file.name)
+                ? { overwriteId: item.existingId, parentFolderId: item.parentFolderId ?? openFolderId }
+                : { rename: true, parentFolderId: item.parentFolderId ?? openFolderId },
+        }))
+
+        addToQueue(newQueueItems)
+        setIsUploading(true)
+        setIsUploadModalOpen(true)
+        setOverwriteSelections(new Set())
+
+        try {
+            const outcome = await runQueue(newQueueItems, false)
+            await finishRun(outcome, { batchIndex: true })
+        } catch (e: any) {
+            logger.error(e)
+            setIsUploading(false)
         }
     }
 
@@ -473,11 +545,13 @@ export function useEngagementUpload({
             }
 
             // 2. Prepare Safe Uploads Queue
+            const parentFolderId = intoFolder ?? currentFolderIdRef.current ?? undefined
             const newQueueItems: UploadQueueItem[] = safeUploads.map(file => ({
                 id: `upload-${Date.now()}-${Math.random()}`,
                 file: file,
                 progress: 0,
-                status: 'pending'
+                status: 'pending',
+                target: { parentFolderId },
             }))
 
             addToQueue(newQueueItems)
@@ -488,66 +562,12 @@ export function useEngagementUpload({
                 setOverwriteSelections(new Set(conflicts.map(c => c.file.name)))
             }
 
-            // 3. Process Safe Uploads
-            let completedCount = 0
-            let errorCount = 0
+            // 3. Process Safe Uploads — each file indexes as it lands (per-file docId requests).
             if (safeUploads.length > 0) {
-                // Map file to queue ID
-                const fileToQueueId = new Map<File, string>()
-                safeUploads.forEach((file, idx) => {
-                    fileToQueueId.set(file, newQueueItems[idx].id)
-                })
-
-                const isRetryableError = (err?: string) =>
-                    err && (err.includes('Network interruption') || err.includes('timed out'))
-                const maxAttemptsPerFile = 2
-                // Collected per-file below, then awaited once before fetchFiles() so the Files
-                // list's refetch sees every uploaded file's docId. NOT a wait for full search
-                // indexing (embeddings/summaries) — see docIdRequestSettled comment in uploadFile.
-                const pendingDocIdRequests: Promise<void>[] = []
-
-                for (const file of safeUploads) {
-                    const queueId = fileToQueueId.get(file)!
-                    updateQueueItem(queueId, { status: 'uploading' })
-
-                    let result = await uploadFile(file, undefined, false, (p) => {
-                        updateQueueItem(queueId, { progress: p })
-                    }, intoFolder)
-                    let attempts = 1
-
-                    while (!result.success && isRetryableError(result.error) && attempts < maxAttemptsPerFile) {
-                        attempts++
-                        logger.warn(`Retrying upload "${file.name}" (attempt ${attempts}/${maxAttemptsPerFile})`)
-                        updateQueueItem(queueId, { progress: 0 })
-                        await new Promise(r => setTimeout(r, 1500))
-                        result = await uploadFile(file, undefined, false, (p) => {
-                            updateQueueItem(queueId, { progress: p })
-                        }, intoFolder)
-                    }
-
-                    if (!result.success) {
-                        updateQueueItem(queueId, { status: 'error', error: result.error })
-                        errorCount++
-                    } else {
-                        updateQueueItem(queueId, { status: 'completed', progress: 100 })
-                        completedCount++
-                        if (result.docIdRequestSettled) pendingDocIdRequests.push(result.docIdRequestSettled)
-                    }
-                }
-
-                await Promise.all(pendingDocIdRequests)
-                const currentFolderId = currentFolderIdRef.current
-                if (currentFolderId) fetchFiles(currentFolderId, true)
-            }
-            setIsUploading(false)
-            if (uploadOverlayDismissedRef.current && (completedCount > 0 || errorCount > 0)) {
-                const total = completedCount + errorCount
-                if (errorCount === 0) {
-                    addToast({ type: 'success', title: 'Upload complete', message: `${completedCount} file${completedCount !== 1 ? 's' : ''} added.` })
-                } else {
-                    addToast({ type: 'info', title: 'Upload finished', message: `${completedCount} of ${total} files added. ${errorCount} failed.` })
-                }
-                uploadOverlayDismissedRef.current = false
+                const outcome = await runQueue(newQueueItems, true)
+                await finishRun(outcome, { batchIndex: false })
+            } else {
+                setIsUploading(false)
             }
 
         } catch (e: any) {
@@ -594,35 +614,50 @@ export function useEngagementUpload({
         setIsUploadInitiating(true)
         setIsUploadModalOpen(true)
 
+        // Folders first, parents before children. A dropped connection here is retried like a file;
+        // a folder that still can't be made stops the upload and says which one.
+        const createFolder = async (name: string, parentId: string): Promise<{ id?: string; error?: string; retryable?: boolean }> => {
+            try {
+                const res = await fetch('/api/connectors/google-drive/linked-files', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        action: 'create-folder',
+                        folderId: parentId,
+                        name,
+                        mimeType: 'application/vnd.google-apps.folder',
+                        projectId
+                    })
+                })
+                const data = await res.json().catch(() => ({}))
+                if (!res.ok) return { error: data.error || 'Failed to create folder', retryable: isTransientStatus(res.status) }
+                return { id: data.id }
+            } catch (e) {
+                return { error: isConnectionError(e) ? 'The connection dropped.' : String(e), retryable: isConnectionError(e) }
+            }
+        }
+
         const folderPaths = getFolderPathsFromFileList(fileList)
         for (const path of folderPaths) {
             const parts = path.split('/')
             const name = parts[parts.length - 1]
             const parentPath = parts.length === 1 ? '' : parts.slice(0, -1).join('/')
             const parentId = pathToFolderId.get(parentPath)!
-            const res = await fetch('/api/connectors/google-drive/linked-files', {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    action: 'create-folder',
-                    folderId: parentId,
-                    name,
-                    mimeType: 'application/vnd.google-apps.folder',
-                    projectId
-                })
-            })
-            if (!res.ok) {
-                const data = await res.json()
-                const errorMessage = data.error || 'Failed to create folder'
-                logger.error(errorMessage, new Error(errorMessage))
+            let created = await createFolder(name, parentId)
+            for (let i = 0; !created.id && created.retryable && i < RETRY_DELAYS_MS.length; i++) {
+                await new Promise(r => setTimeout(r, RETRY_DELAYS_MS[i]))
+                created = await createFolder(name, parentId)
+            }
+            if (!created.id) {
+                logger.error(`Folder upload: couldn't create "${path}"`, new Error(created.error))
+                addToast({ type: 'error', title: `Couldn't create the folder “${name}”`, message: `${created.error} Nothing from this folder was uploaded past this point.`, duration: 12000 })
                 setIsUploadInitiating(false)
                 return
             }
-            const data = await res.json()
-            pathToFolderId.set(path, data.id)
+            pathToFolderId.set(path, created.id)
         }
 
         const fileItems = Array.from(fileList).filter(f => {
@@ -631,80 +666,32 @@ export function useEngagementUpload({
             const fileName = parts[parts.length - 1]
             return parts.length >= 1 && fileName !== '' && !isJunkFile(fileName)
         })
-        const fileEntries = fileItems.map(f => {
-            const rel = (f as File & { webkitRelativePath?: string }).webkitRelativePath || f.name
-            const parts = rel.split('/')
-            const dirPath = parts.length > 1 ? parts.slice(0, -1).join('/') : ''
-            return { file: f, dirPath }
-        })
-
         setIsUploading(true)
         setIsUploadInitiating(false)
-        const newQueueItems: UploadQueueItem[] = fileEntries.map(({ file }) => ({
-            id: `upload-${Date.now()}-${Math.random()}`,
-            file,
-            progress: 0,
-            status: 'pending'
-        }))
+        // Each file goes into its own subfolder, made above; a retry goes back to the same one.
+        const newQueueItems: UploadQueueItem[] = fileItems.map(file => {
+            const rel = (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name
+            const parts = rel.split('/')
+            const dirPath = parts.length > 1 ? parts.slice(0, -1).join('/') : ''
+            return {
+                id: `upload-${Date.now()}-${Math.random()}`,
+                file,
+                progress: 0,
+                status: 'pending',
+                target: { parentFolderId: pathToFolderId.get(dirPath) ?? rootId },
+            }
+        })
         addToQueue(newQueueItems)
-        const fileToQueueId = new Map<File, string>()
-        fileEntries.forEach((_, idx) => fileToQueueId.set(fileEntries[idx].file, newQueueItems[idx].id))
 
         uploadOverlayDismissedRef.current = false
-        const successfullyUploaded: { externalId: string, fileName: string }[] = []
-        let completedCount = 0
-        let errorCount = 0
-        for (const { file, dirPath } of fileEntries) {
-            const queueId = fileToQueueId.get(file)!
-            const parentId = pathToFolderId.get(dirPath) ?? rootId
-            updateQueueItem(queueId, { status: 'uploading' })
-            const result = await uploadFile(file, undefined, false, (p) => updateQueueItem(queueId, { progress: p }), parentId, false)
-            if (!result.success) {
-                updateQueueItem(queueId, { status: 'error', error: result.error })
-                errorCount++
-            } else {
-                if (result.finalFile) {
-                    successfullyUploaded.push({
-                        externalId: result.finalFile.id,
-                        fileName: result.finalFile.name
-                    })
-                }
-                updateQueueItem(queueId, { status: 'completed', progress: 100 })
-                completedCount++
-            }
-        }
-
-        // One batch POST regardless of file count (e.g. a 100-file folder upload is still a
-        // single request here) — server assigns every file's docId synchronously and enqueues
-        // one Inngest batch-indexing event, then returns; this does NOT wait for the Inngest
-        // job itself. See docIdRequestSettled comment in uploadFile above for why that split
-        // is what keeps this scalable to large folder uploads.
-        if (successfullyUploaded.length > 0 && !isExternalPersona) {
-            logger.debug(`Triggering batch indexing for ${successfullyUploaded.length} files...`)
-            await fetch(`/api/projects/${projectId}/index-file`, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    files: successfullyUploaded
-                })
-            }).catch(e => logger.error('Failed to trigger batch indexing', e))
-        }
-        // Safe to refetch now — every uploaded file's docId was assigned as part of the
-        // batch POST above (awaited), independent of file count.
-        const latestFolderId = currentFolderIdRef.current
-        if (latestFolderId) fetchFiles(latestFolderId, true)
-        setIsUploading(false)
-        if (uploadOverlayDismissedRef.current) {
-            const total = fileEntries.length
-            if (errorCount === 0) {
-                addToast({ type: 'success', title: 'Upload complete', message: `${completedCount} file${completedCount !== 1 ? 's' : ''} added.` })
-            } else {
-                addToast({ type: 'info', title: 'Upload finished', message: `${completedCount} of ${total} files added. ${errorCount} failed.` })
-            }
-            uploadOverlayDismissedRef.current = false
+        try {
+            // One batch index POST at the end regardless of file count (a 100-file folder is
+            // still a single request) — see finishRun and the docIdRequestSettled comment above.
+            const outcome = await runQueue(newQueueItems, false)
+            await finishRun(outcome, { batchIndex: true })
+        } catch (e: any) {
+            logger.error(e)
+            setIsUploading(false)
         }
     }
 

@@ -38,6 +38,12 @@ function useSaving<T>(onChange: (v: T) => unknown | Promise<unknown>) {
 const triggerClass =
     "inline-flex h-7 max-w-full items-center gap-1.5 rounded-control px-1.5 text-small text-fg transition-colors hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action/30 disabled:cursor-default disabled:hover:bg-transparent"
 
+/**
+ * A status pill nobody can change, in the same box as the editable trigger above, so read-only and
+ * editable pills in one column line up (the Files Status column mixes both).
+ */
+export const READ_ONLY_PILL_CLASS = "inline-flex h-7 max-w-full items-center px-1.5"
+
 function Empty({ label = "Empty" }: { label?: string }) {
     return <span className="text-fg-subtle">{label}</span>
 }
@@ -65,7 +71,7 @@ export function StatusProperty({
     const { saving, run } = useSaving(onChange)
     // The status language (lib/ui/status.ts). Overdue is shown on the date, not here.
     const pill = value ? <StatusPill kind={kind} status={value} /> : <span className="text-small"><Empty label={placeholder} /></span>
-    if (disabled) return <span className="inline-flex h-7 items-center px-1.5">{pill}</span>
+    if (disabled) return <span className={READ_ONLY_PILL_CLASS}>{pill}</span>
     return (
         <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
