@@ -38,6 +38,7 @@ import {
     TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
+import { READ_ONLY_PILL_CLASS } from '@/components/ui/property-cells'
 import { FILES_DROP_TARGET_ROW_CLASS } from '@/components/projects/files-drop-zone'
 import { formatFileSize } from '@/lib/utils'
 import { DriveFile } from '@/lib/types'
@@ -717,7 +718,8 @@ export function EngagementFileRow({
                         onError={(message) => onAddToast({ type: 'error', title: "Couldn't set due date", message })}
                     />
                 ) : (
-                    <>
+                    // Inset as the editable picker's button is, so a locked row's Due lines up with the others.
+                    <span className={READ_ONLY_PILL_CLASS}>
                     {/* Folders other than deliverables have no Due, whatever an older value says */}
                     {file.dueDate && (!isFolder || file.isDeliverable) ? (() => {
                         const due = new Date(file.dueDate)
@@ -753,7 +755,7 @@ export function EngagementFileRow({
                     })() : (
                         <span className={cn('text-[0.8125rem]', isTracked ? 'text-fg-subtle' : 'text-[#45474c]/40')}>{emptyTrackedValue}</span>
                     )}
-                    </>
+                    </span>
                 )}
                 {missingDue && shownStage && <MissingDueWarning stage={shownStage} />}
             </div>

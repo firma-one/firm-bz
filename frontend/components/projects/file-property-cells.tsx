@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { DateProperty, StatusProperty } from '@/components/ui/property-cells'
+import { DateProperty, READ_ONLY_PILL_CLASS, StatusProperty } from '@/components/ui/property-cells'
 import { StatusPill } from '@/components/ui/status-pill'
 import { getAllowedTransitions, type EngagementRoleSlug } from '@/lib/deliverable-stage-roles'
 import { statusOf } from '@/lib/ui/status'
@@ -54,10 +54,11 @@ export function FileStatusCell({
     const { move, dialog } = useStageMove()
     const allowed = roleSlug && !isFolder && value ? getAllowedTransitions(roleSlug, value) : []
     if (allowed.length === 0) {
-        if (!value) return <span className={cn('text-[0.8125rem]', emptyClassName)}>{emptyLabel}</span>
+        // Inset as the editable picker's button is (StatusProperty), so read-only and editable values line up.
+        if (!value) return <span className={cn(READ_ONLY_PILL_CLASS, 'text-[0.8125rem]', emptyClassName)}>{emptyLabel}</span>
         return isFolder
-            ? <Hint label="Follows its documents"><span className="inline-flex"><StatusPill kind="deliverable" status={value} /></span></Hint>
-            : <StatusPill kind="deliverable" status={value} />
+            ? <Hint label="Follows its documents"><span className={READ_ONLY_PILL_CLASS}><StatusPill kind="deliverable" status={value} /></span></Hint>
+            : <span className={READ_ONLY_PILL_CLASS}><StatusPill kind="deliverable" status={value} /></span>
     }
     return (
         <>
