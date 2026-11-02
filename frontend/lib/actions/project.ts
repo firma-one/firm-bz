@@ -7,7 +7,8 @@ import { createClient as createSupabaseClient } from '@/utils/supabase/server'
 import { upsertFollowUpReminder } from '@/lib/reminders/reminder-service'
 import { createClient as createSupabaseAdmin } from '@supabase/supabase-js'
 import { revalidatePath } from 'next/cache'
-import { canViewProjectSettings as checkCanViewProjectSettings } from '@/lib/permission-helpers'
+import { canViewProject as checkCanViewProject, canViewProjectSettings as checkCanViewProjectSettings } from '@/lib/permission-helpers'
+import { getSessionUser } from '@/lib/auth/session-user'
 import { resolveClientConnector } from '@/lib/connectors/resolve-client-connector'
 import { getStorageAdapter, getPermissionAdapter } from '@/lib/connectors/registry'
 import { ensureAppFolderStructure } from '@/lib/connectors/pockett-structure.service'
@@ -326,28 +327,21 @@ export async function createEngagement(firmSlug: string, clientSlug: string, dat
 }
 
 /**
- * Get project folder IDs (V2)
+ * An engagement's General / Confidential / Staging folder ids and whether the caller leads it, for
+ * someone who may view that engagement (checked on the engagement's own firm and client).
  */
 export async function getEngagementFolderIds(projectId: string) {
-    const supabase = await createSupabaseClient()
-    const { data: { user }, error } = await supabase.auth.getUser()
-
-    if (error || !user) {
+    const user = await getSessionUser()
+    if (!user) {
         throw new Error('Unauthorized')
     }
 
     const project = await prisma.engagement.findFirst({
         where: { id: projectId, isDeleted: false },
-        include: {
-            client: {
-                include: {
-                    firm: true
-                }
-            }
-        }
+        include: { client: true },
     })
 
-    if (!project) {
+    if (!project || !(await checkCanViewProject(project.client.firmId, project.clientId, project.id))) {
         throw new Error('Project not found')
     }
 
@@ -356,25 +350,24 @@ export async function getEngagementFolderIds(projectId: string) {
         return { generalFolderId: null, confidentialFolderId: null, stagingFolderId: null, isProjectLead: false }
     }
 
-    const permissionAdapter = await getPermissionAdapter(connectorId)
-    const folderIds = permissionAdapter
-        ? await permissionAdapter.getEngagementFolderIds(connectorId, project.slug, {
-            projectName: project.name,
-            clientSlug: project.client.slug,
-            clientName: project.client.name,
-            projectFolderId: project.connectorRootFolderId ?? undefined,
-        })
-        : { generalFolderId: null, confidentialFolderId: null, stagingFolderId: null }
-
-    const projectMember = await prisma.engagementMember.findFirst({
-        where: { engagementId: project.id, userId: user.id }
-    })
-
-    const isProjectLead = projectMember?.role === 'eng_admin'
+    const [folderIds, projectMember] = await Promise.all([
+        getPermissionAdapter(connectorId).then((permissionAdapter) => permissionAdapter
+            ? permissionAdapter.getEngagementFolderIds(connectorId, project.slug, {
+                projectName: project.name,
+                clientSlug: project.client.slug,
+                clientName: project.client.name,
+                projectFolderId: project.connectorRootFolderId ?? undefined,
+            })
+            : { generalFolderId: null, confidentialFolderId: null, stagingFolderId: null }),
+        prisma.engagementMember.findFirst({
+            where: { engagementId: project.id, userId: user.id },
+            select: { role: true },
+        }),
+    ])
 
     return {
         ...folderIds,
-        isProjectLead
+        isProjectLead: projectMember?.role === 'eng_admin',
     }
 }
 

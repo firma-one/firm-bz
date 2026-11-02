@@ -583,7 +583,7 @@
 
 /* Hear Brio: Brio introduces itself in its own voice, the tour's narrator (hear-brio.tsx). A pill
    with a wave that follows the voice, and the line opening below it, each word coming up as it's
-   said: faint until then (::highlight(brio-unspoken)). */
+   said: faint until then (the brio-unspoken highlight, added by useStreamingReveal). */
 .mk-hear-brio {
   margin-top: 28px;
 }
@@ -669,9 +669,6 @@
   font-size: 17px;
   line-height: 1.6;
   color: #ffffff;
-}
-::highlight(brio-unspoken) {
-  color: rgba(255, 255, 255, 0.32);
 }
 @media (max-width: 767px) {
   .mk-hear-brio {

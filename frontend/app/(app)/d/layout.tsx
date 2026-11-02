@@ -1,5 +1,5 @@
 import { getUserFirms } from '@/lib/actions/firms'
-import { createClient } from '@/utils/supabase/server'
+import { getSessionUser } from '@/lib/auth/session-user'
 import { isSystemAdminEmail } from '@/lib/system/admin-check'
 import { getUserUiPrefs } from '@/lib/ui-prefs'
 import { DLayoutClient } from './d-layout-client'
@@ -16,12 +16,7 @@ export default async function DLayout({
 }: {
     children: React.ReactNode
 }) {
-    const firms = await getUserFirms()
-
-    const supabase = await createClient()
-    const {
-        data: { user },
-    } = await supabase.auth.getUser()
+    const [firms, user] = await Promise.all([getUserFirms(), getSessionUser()])
 
     const isSystemAdmin = isSystemAdminEmail(user?.email)
     const uiPrefs = user ? await getUserUiPrefs(user.id) : { sidebarCollapsed: false }

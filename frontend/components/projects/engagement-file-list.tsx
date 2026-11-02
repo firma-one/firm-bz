@@ -91,10 +91,20 @@ import {
 import { useEngagementUpload } from '@/components/projects/hooks/use-engagement-upload'
 import { useEngagementFileOps } from '@/components/projects/hooks/use-engagement-file-ops'
 import { useEngagementDragDrop } from '@/components/projects/hooks/use-engagement-drag-drop'
-import { provisionEngagementDriveFolder } from '@/lib/actions/project'
+import { getProjectFolderIds, provisionEngagementDriveFolder } from '@/lib/actions/project'
+
+/** An engagement's root folder ids and the viewer's lead flag, as getProjectFolderIds returns them. */
+export type EngagementFolderData = {
+    generalFolderId: string | null
+    confidentialFolderId: string | null
+    stagingFolderId: string | null
+    isProjectLead: boolean
+}
 
 interface EngagementFileListProps {
     projectId: string
+    /** Folder ids resolved by the page's server render, so the first listing needn't wait on a lookup. */
+    initialFolderData?: EngagementFolderData | null
     connectorRootFolderId?: string | null
     rootFolderName?: string
     orgName?: string
@@ -319,7 +329,7 @@ function FileTableSkeleton({ rows = 8 }: { rows?: number }) {
     )
 }
 
-export function EngagementFileList({ projectId, connectorRootFolderId, clientConnectorId, clientConnectorType, workspaceRootLocation, rootFolderName = 'Engagement Files', orgName, clientName, projectName, canEdit = false, canManage = false, isFirmAdmin = false, restrictToSharedOnly = false, roleSlug = null, firmId, groupSlug, orgSlug, firmSandboxOnly = false, navSlot, clientSlug, connectorAccountEmail, onFileCountChange }: EngagementFileListProps) {
+export function EngagementFileList({ projectId, initialFolderData, connectorRootFolderId, clientConnectorId, clientConnectorType, workspaceRootLocation, rootFolderName = 'Engagement Files', orgName, clientName, projectName, canEdit = false, canManage = false, isFirmAdmin = false, restrictToSharedOnly = false, roleSlug = null, firmId, groupSlug, orgSlug, firmSandboxOnly = false, navSlot, clientSlug, connectorAccountEmail, onFileCountChange }: EngagementFileListProps) {
     const isOneDriveClient = clientConnectorType === 'ONEDRIVE'
     /** Display name of the client's storage provider — used in user-facing copy so it never hardcodes "Google Drive". */
     const storageProviderName = isOneDriveClient ? 'OneDrive' : 'Google Drive'
@@ -604,13 +614,16 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [currentFolderId])
 
-    // Load folder IDs and shared IDs in parallel on mount (both only need projectId)
+    // Load folder IDs and shared IDs in parallel on mount (both only need projectId). The server's
+    // folder ids seed the first run only: a later run (another engagement) asks again.
+    const initialFolderDataRef = useRef(initialFolderData ?? null)
     useEffect(() => {
         fetchSharedIds()
         const loadFolderIds = async () => {
-            const { getProjectFolderIds } = await import('@/lib/actions/project')
             try {
-                const folderData = await getProjectFolderIds(projectId)
+                const seeded = initialFolderDataRef.current
+                initialFolderDataRef.current = null
+                const folderData = seeded ?? await getProjectFolderIds(projectId)
                 if (folderData) {
                     setGeneralFolderId(folderData.generalFolderId)
                     setConfidentialFolderId(folderData.confidentialFolderId)
@@ -743,7 +756,8 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
         // the response is discarded, and `hasFolders` stays null — which hides BOTH chips and
         // leaves the row with nothing on it.
         const token = session?.access_token
-        if (!token) return
+        // After the first listing, so this doesn't compete with it for the page's first requests.
+        if (!token || !pageReady) return
 
         let cancelled = false
         fetch(`/api/projects/${projectId}/files-agent/scaffold`, {
@@ -760,7 +774,7 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
             })
             .catch(() => { if (!cancelled) setHasFolders(true) })
         return () => { cancelled = true }
-    }, [projectId, session?.access_token])
+    }, [projectId, session?.access_token, pageReady])
 
     /**
      * The chat thread, so the agent panels can write their exchanges into it.
@@ -827,7 +841,8 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
         // without one — a cookie-only fetch 401s and the chips silently fall back to the
         // engagement set. Wait for the session rather than firing early and failing quietly.
         const token = session?.access_token
-        if (!token) return
+        // After the first listing: this analyzes the whole engagement and must not hold up the rows.
+        if (!token || !pageReady) return
 
         let cancelled = false
         fetch(`/api/projects/${projectId}/files-agent`, {
@@ -855,7 +870,7 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
             // setup/review chip beside it does not depend on this call.
             .catch(() => { if (!cancelled) setFileSuggestions([]) })
         return () => { cancelled = true }
-    }, [projectId, canManage, isFirmAdmin, session?.access_token])
+    }, [projectId, canManage, isFirmAdmin, session?.access_token, pageReady])
     const [loading, setLoading] = useState(true) // Initial load
     useEffect(() => {
         if (!loading) setPageReady(true)

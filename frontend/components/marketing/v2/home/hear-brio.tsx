@@ -44,15 +44,14 @@ export function HearBrio() {
   const captionRef = useRef<HTMLParagraphElement>(null);
   const fetching = useRef(false);
 
-  // The word times and levels (about 4 KB), fetched when the visitor reaches for the button.
+  // The word times and levels (about 4 KB), fetched when the visitor reaches for the button; asked
+  // for again the next time if that fails.
   const prefetch = useCallback(() => {
     if (fetching.current) return;
     fetching.current = true;
     fetch(HEAR_BRIO_CLIP.timings)
-      .then((response) => (response.ok ? response.json() : null))
-      .then((data: Timings | null) => {
-        if (data) setTimings({ words: data.words, levels: data.levels });
-      })
+      .then((response) => (response.ok ? response.json() : Promise.reject(response.status)))
+      .then((data: Timings) => setTimings({ words: data.words, levels: data.levels }))
       .catch(() => {
         fetching.current = false;
       });
@@ -61,7 +60,9 @@ export function HearBrio() {
   const toggle = () => {
     prefetch();
     let audio = audioRef.current;
-    if (!audio) {
+    // A clip that failed to load (a dropped connection, a laptop waking from sleep) stays failed, so
+    // the next click makes a new one rather than asking the broken one again.
+    if (!audio || audio.error) {
       const clip = new Audio(HEAR_BRIO_CLIP.src);
       clip.addEventListener('playing', () => setState('playing'));
       // A pause also fires as the clip ends, just before `ended`.
@@ -69,6 +70,8 @@ export function HearBrio() {
         if (!clip.ended) setState('paused');
       });
       clip.addEventListener('ended', () => setState('ended'));
+      // Cut off partway: back to the start, to be heard afresh.
+      clip.addEventListener('error', () => setState('idle'));
       audioRef.current = clip;
       audio = clip;
     }
@@ -120,6 +123,7 @@ export function HearBrio() {
   useStreamingReveal({
     container: captionRef,
     highlight: 'brio-unspoken',
+    color: 'rgba(255, 255, 255, 0.32)',
     on: state === 'loading' || state === 'playing' || state === 'paused',
     words: timings?.words ?? null,
     heard: () => audioRef.current?.currentTime ?? 0,

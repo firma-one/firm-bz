@@ -92,7 +92,8 @@ type VoiceStatus = 'off' | 'loading' | 'playing' | 'ended' | 'blocked'
 /**
  * A step card read aloud: plays the step's clip when the card opens, holds it while the tour is
  * paused or the page is hidden, and stops it when the card goes. `blocked` when the browser won't
- * play it (no click on the page yet, say): the card then runs as if narration were off. `position`
+ * play it (no click on the page yet, say) or the clip won't load (a dropped connection): the card
+ * then runs as if narration were off. `position`
  * is how far the clip has played (ms) while it's playing, for Autoplay's clock to follow; `words`,
  * when each word in the clip is spoken, for the card to reveal its words as they're read.
  */
@@ -132,12 +133,17 @@ function useNarration({ index, src, timings, paused }: { index: number; src: str
         setStatus('loading')
         const onPlaying = () => setStatus('playing')
         const onEnded = () => setStatus('ended')
+        // A clip that won't load, or breaks off partway, isn't coming: the card goes on without it,
+        // rather than waiting faint for a voice.
+        const onError = () => setStatus('blocked')
         audio.addEventListener('playing', onPlaying)
         audio.addEventListener('ended', onEnded)
+        audio.addEventListener('error', onError)
         if (!pausedRef.current && !document.hidden) void play(audio)
         return () => {
             audio.removeEventListener('playing', onPlaying)
             audio.removeEventListener('ended', onEnded)
+            audio.removeEventListener('error', onError)
             audio.pause()
             audioRef.current = null
         }
@@ -172,8 +178,9 @@ function useNarration({ index, src, timings, paused }: { index: number; src: str
     return { status, position, words }
 }
 
-/** The ::highlight in globals.css that keeps a card's words faint until they're spoken. */
+/** The highlight that keeps a card's words faint (still legible) until they're spoken. */
 const UNSPOKEN_HIGHLIGHT = 'tour-unspoken'
+const UNSPOKEN_COLOR = 'color-mix(in srgb, var(--ui-fg-subtle) 45%, transparent)'
 
 /**
  * The tour's step card, in the app's design system: a popover-style card with the step's place in
@@ -217,13 +224,14 @@ function TourTooltip({ backProps, closeProps, primaryProps, skipProps, step, ind
         timings: narration && clip ? clip.timings : null,
         paused: autoplay && paused,
     })
-    // Read aloud: on, with a clip, and not refused by the browser.
+    // Read aloud: on, with a clip, and not refused by the browser or failed to load.
     const reading = voice.status === 'loading' || voice.status === 'playing' || voice.status === 'ended'
     // The card's title and copy streaming in as they're read (lib/demo/use-streaming-reveal.ts).
     useStreamingReveal({
         container: cardRef,
         selector: '[data-tour-spoken]',
         highlight: UNSPOKEN_HIGHLIGHT,
+        color: UNSPOKEN_COLOR,
         on: reading,
         words: voice.words,
         heard: () => (voice.status === 'ended' ? Infinity : (voice.position() ?? 0) / 1000),

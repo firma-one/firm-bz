@@ -1,10 +1,9 @@
-import { createClient } from '@/utils/supabase/server'
+import { getSessionUser } from '@/lib/auth/session-user'
 import { ProfilePageClient } from '@/app/(app)/d/profile/profile-page-client'
 import { resolveNames } from '@/lib/auth/display-name'
 
 export default async function ProfilePage() {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    const user = await getSessionUser()
 
     if (!user?.email) {
         return (

@@ -566,6 +566,7 @@ model EngagementMember {
   sharingUsers  EngagementDocumentSharingUser[]
 
   @@unique([userId, engagementId])
+  @@index([engagementId])
   @@map("engagement_members")
   @@schema("platform")
 }
@@ -1057,6 +1058,7 @@ model PlatformAuditEvent {
   projectDocument   EngagementDocument? @relation(fields: [projectDocumentId], references: [id], onDelete: SetNull)
 
   @@index([engagementId, eventAt])
+  @@index([engagementId, scope])
   @@index([engagementId, projectDocumentId, eventAt])
   @@index([firmId, scope, eventAt])
   @@map("platform_audit_events")

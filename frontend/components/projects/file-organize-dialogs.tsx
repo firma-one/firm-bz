@@ -5,7 +5,6 @@ import { Briefcase, Building2, Check, ChevronRight, Copy, Folder, FolderInput } 
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Hint } from '@/components/ui/tooltip'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { ClientIcon } from '@/components/ui/client-icon'
@@ -461,13 +460,41 @@ export interface UploadConflictDialogProps {
     onConfirm: () => void
 }
 
+/** Replace / Keep both, as the design system's segmented switch (ViewModeToggle's look). */
+function ReplaceToggle({ replacing, onChange, ariaLabel }: { replacing: boolean | null; onChange: (replace: boolean) => void; ariaLabel?: string }) {
+    return (
+        <div className="inline-flex shrink-0 items-center rounded-control border border-line bg-surface-subtle p-0.5" role="group" aria-label={ariaLabel}>
+            {([
+                { value: true, label: 'Replace' },
+                { value: false, label: 'Keep both' },
+            ] as const).map((opt) => (
+                <button
+                    key={opt.label}
+                    type="button"
+                    aria-pressed={replacing === opt.value}
+                    onClick={() => onChange(opt.value)}
+                    className={cn(
+                        'flex h-6 items-center rounded-[4px] px-2 text-small outline-none transition-colors focus-visible:ring-2 focus-visible:ring-action/30',
+                        replacing === opt.value ? 'bg-surface font-medium text-fg shadow-sm' : 'text-fg-subtle hover:text-fg'
+                    )}
+                >
+                    {opt.label}
+                </button>
+            ))}
+        </div>
+    )
+}
+
 /**
- * An upload whose files already exist in the folder: per file, replace the existing one or upload a
- * renamed copy (the default the hook starts from is replace). Cancel stops the whole upload.
+ * An upload whose files already exist in the folder: per file, Replace the existing one (the default)
+ * or Keep both, which saves the upload as a separate file under a numbered name. Cancel stops the
+ * whole upload.
  */
 export function UploadConflictDialog({ files, replace, onReplaceChange, onReplaceAllChange, onCancel, onConfirm }: UploadConflictDialogProps) {
     const allReplaced = files.length > 0 && replace.size === files.length
     const many = files.length > 1
+    const allState = allReplaced ? true : replace.size === 0 ? false : null
+    const submitLabel = many ? 'Upload' : allReplaced ? 'Replace file' : 'Upload as new file'
     return (
         <Dialog open={files.length > 0} onOpenChange={(open) => { if (!open) onCancel() }}>
             <DialogContent className={PANEL_CLASS}>
@@ -475,31 +502,30 @@ export function UploadConflictDialog({ files, replace, onReplaceChange, onReplac
                     <DividedHeader
                         title={many ? `${files.length} files already in this folder` : 'This file is already in the folder'}
                         description={many
-                            ? 'Choose which to replace. The others upload as a copy with a new name.'
-                            : 'Replace the existing file, or upload this one as a copy with a new name.'}
+                            ? "Replace the existing files with these (this can't be undone), or keep both by saving the new ones under numbered names."
+                            : "Replace the existing file with this one (this can't be undone), or keep both by saving this one under a numbered name."}
                     />
-                    <div className="px-5 pb-5 pt-4">
+                    <div className="space-y-3 px-5 pb-5 pt-4">
+                        {many && (
+                            <div className="flex items-center justify-between gap-2 px-0.5">
+                                <span className="text-small font-medium text-fg-muted">Apply to all</span>
+                                <ReplaceToggle replacing={allState} onChange={onReplaceAllChange} ariaLabel="Replace all or keep both for all" />
+                            </div>
+                        )}
                         <div className={cn(LIST_CLASS, 'divide-y divide-line')}>
-                            {many && (
-                                <label className="flex h-9 cursor-pointer items-center gap-2.5 px-3 text-small text-fg-muted">
-                                    <Checkbox checked={allReplaced} onCheckedChange={(checked) => onReplaceAllChange(checked === true)} aria-label="Replace all" />
-                                    <span className="font-medium">Replace all</span>
-                                </label>
-                            )}
                             {files.map((f) => {
                                 const replacing = replace.has(f.name)
                                 return (
-                                    <label key={f.name} className="flex min-h-10 cursor-pointer items-center gap-2.5 px-3 py-1.5 transition-colors hover:bg-surface-hover">
-                                        <Checkbox checked={replacing} onCheckedChange={(checked) => onReplaceChange(f.name, checked === true)} aria-label={`Replace ${f.name}`} />
+                                    <div key={f.name} className="flex min-h-11 items-center gap-2.5 px-3 py-1.5">
                                         <DocumentIcon mimeType={f.type} className="h-4 w-4 shrink-0" />
                                         <span className="min-w-0 flex-1 truncate text-ui text-fg" title={f.name}>{f.name}</span>
-                                        <span className="shrink-0 text-small text-fg-muted">{replacing ? 'Replaces the existing file' : 'Uploads as a copy'}</span>
-                                    </label>
+                                        <ReplaceToggle replacing={replacing} onChange={(value) => onReplaceChange(f.name, value)} ariaLabel={`Replace or keep both for ${f.name}`} />
+                                    </div>
                                 )
                             })}
                         </div>
                     </div>
-                    <CreateDialogFooter onCancel={onCancel} submitLabel="Upload" />
+                    <CreateDialogFooter onCancel={onCancel} submitLabel={submitLabel} />
                 </form>
             </DialogContent>
         </Dialog>

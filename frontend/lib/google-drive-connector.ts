@@ -4008,8 +4008,10 @@ export class GoogleDriveConnector {
       if (projectContext && (isProjectLeadPersona || isTeamMemberPersona)) {
         isListingUnderGeneral = folderId === projectContext.generalFolderId ||
           (projectContext.generalFolderId ? await isFileUnderFolderCached(folderId, projectContext.generalFolderId) : false)
-        isListingUnderConfidential = folderId === projectContext.confidentialFolderId ||
-          (projectContext.confidentialFolderId ? await isFileUnderFolderCached(folderId, projectContext.confidentialFolderId) : false)
+        // Only a lead can use Confidential, and only needs it when not already under General.
+        isListingUnderConfidential = isProjectLeadPersona && !isListingUnderGeneral && (
+          folderId === projectContext.confidentialFolderId ||
+          (projectContext.confidentialFolderId ? await isFileUnderFolderCached(folderId, projectContext.confidentialFolderId) : false))
       }
 
       for (const file of files) {

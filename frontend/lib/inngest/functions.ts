@@ -36,8 +36,16 @@ import {
 /**
  * Index a single file or folder for search (V2)
  */
+/**
+ * Search indexing and deletion share one small budget of concurrently running steps across the
+ * environment. Each step holds database connections, and on 2026-10-29 a burst of them (one hit a
+ * statement timeout) starved the Files page's requests of the pool. Over the limit, runs queue;
+ * none is dropped, and a step.sleep (the Undo window) doesn't count.
+ */
+const SEARCH_INDEX_CONCURRENCY = { scope: 'env' as const, key: '"search-index"', limit: 3 }
+
 export const indexFileForSearch = inngest.createFunction(
-    { id: "index-file-for-search", triggers: [{ event: "file.index.requested" }] },
+    { id: "index-file-for-search", triggers: [{ event: "file.index.requested" }], concurrency: SEARCH_INDEX_CONCURRENCY },
     async ({ event, step }) => {
         await step.run("index-file", async () => {
             const { SearchService } = await import("@/lib/services/search-service")
@@ -171,7 +179,7 @@ export const indexFileForSearch = inngest.createFunction(
  * Index a batch of files/folders for search (V2)
  */
 export const indexBatchForSearch = inngest.createFunction(
-    { id: "index-batch-for-search", triggers: [{ event: "file.index.batch.requested" }] },
+    { id: "index-batch-for-search", triggers: [{ event: "file.index.batch.requested" }], concurrency: SEARCH_INDEX_CONCURRENCY },
     async ({ event, step }) => {
         const { organizationId, clientId, projectId, files } = event.data
         const BATCH_SIZE = 10
@@ -202,7 +210,7 @@ export const indexBatchForSearch = inngest.createFunction(
  * Recursively scan all files in a project's Drive folder tree and index them (V2)
  */
 export const scanAndIndexProject = inngest.createFunction(
-    { id: "scan-and-index-project", triggers: [{ event: "project.index.scan.requested" }] },
+    { id: "scan-and-index-project", triggers: [{ event: "project.index.scan.requested" }], concurrency: SEARCH_INDEX_CONCURRENCY },
     async ({ event, step }) => {
         const { organizationId, clientId, projectId, connectorId, rootFolderIds: rawRootFolderIds } = event.data
         const rootFolderIds: string[] = Array.isArray(rawRootFolderIds) ? rawRootFolderIds : []
@@ -463,7 +471,7 @@ export const seedSandboxDeliverables = inngest.createFunction(
  * Reconciliation for file deletion (V2)
  */
 export const reconcileFileDeletion = inngest.createFunction(
-    { id: "reconcile-file-deletion", triggers: [{ event: "file.delete.requested" }] },
+    { id: "reconcile-file-deletion", triggers: [{ event: "file.delete.requested" }], concurrency: SEARCH_INDEX_CONCURRENCY },
     async ({ event, step }) => {
         const { organizationId, externalId, connectorPermissionId, connectorId: trashedVia, undoable } = event.data
 
@@ -551,7 +559,7 @@ export const reconcileFileDeletion = inngest.createFunction(
  * Reconciliation for folder deletion (V2)
  */
 export const reconcileFolderDeletion = inngest.createFunction(
-    { id: "reconcile-folder-deletion", triggers: [{ event: "folder.delete.requested" }] },
+    { id: "reconcile-folder-deletion", triggers: [{ event: "folder.delete.requested" }], concurrency: SEARCH_INDEX_CONCURRENCY },
     async ({ event, step }) => {
         const { organizationId, externalId, connectorId: trashedVia, undoable } = event.data
 

@@ -26,12 +26,12 @@ export async function resolveProjectCapabilitiesForUser(
   clientId: string,
   projectId: string
 ): Promise<CapabilitySet> {
-  const [canView, canViewInternal, canManage] = await Promise.all([
+  const [canView, canViewInternal, canManage, canEdit] = await Promise.all([
     canViewProject(orgId, clientId, projectId),
     canViewProjectInternalTabs(orgId, clientId, projectId),
     canViewProjectSettings(orgId, clientId, projectId),
+    canEditProject(orgId, clientId, projectId),
   ])
-  const canEdit = await canEditProject(orgId, clientId, projectId)
   return {
     'project:can_view': canView,
     'project:can_view_internal': canViewInternal,

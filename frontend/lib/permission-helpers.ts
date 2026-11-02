@@ -6,7 +6,8 @@
  */
 
 import { userSettingsPlus, UserPermissions } from './user-settings-plus'
-import { createClient } from '@/utils/supabase/server'
+import { cache } from 'react'
+import { getSessionUser } from '@/lib/auth/session-user'
 
 // Re-export for convenience
 export { userSettingsPlus, type UserPermissions }
@@ -47,20 +48,20 @@ export function findProjectInPermissions(
 // each id must really sit under the one above it.
 // ============================================================================
 
-async function clientBelongsToFirm(clientId: string, firmId: string): Promise<boolean> {
+const clientBelongsToFirm = cache(async (clientId: string, firmId: string): Promise<boolean> => {
   if (!clientId || !firmId) return false
   const { prisma } = await import('./prisma')
   return !!(await prisma.client.findFirst({ where: { id: clientId, firmId }, select: { id: true } }))
-}
+})
 
-async function engagementBelongsTo(projectId: string, clientId: string, firmId: string): Promise<boolean> {
+const engagementBelongsTo = cache(async (projectId: string, clientId: string, firmId: string): Promise<boolean> => {
   if (!projectId || !clientId || !firmId) return false
   const { prisma } = await import('./prisma')
   return !!(await prisma.engagement.findFirst({
     where: { id: projectId, clientId, client: { firmId } },
     select: { id: true },
   }))
-}
+})
 
 // ============================================================================
 // Permission Check Functions (Server-Side)
@@ -74,8 +75,7 @@ export async function checkFirmPermission(
   scope: string,
   privilege: string
 ): Promise<boolean> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getSessionUser()
 
   if (!user) return false
 
@@ -106,8 +106,7 @@ export async function checkClientPermission(
   scope: string,
   privilege: string
 ): Promise<boolean> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getSessionUser()
 
   if (!user) return false
 
@@ -164,17 +163,30 @@ export async function checkProjectPermission(
   scope: string,
   privilege: string
 ): Promise<boolean> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getSessionUser()
 
   if (!user) return false
+  return checkProjectPermissionForUser(user.id, firmId, clientId, projectId, scope, privilege)
+}
 
+/**
+ * checkProjectPermission for an already-verified user, for routes that authenticate by Bearer
+ * token. `userId` must come from verified auth, never from the request.
+ */
+export async function checkProjectPermissionForUser(
+  userId: string,
+  firmId: string,
+  clientId: string,
+  projectId: string,
+  scope: string,
+  privilege: string
+): Promise<boolean> {
   // The engagement must belong to the client and firm passed in — the firm-admin and client-manager
   // fallbacks below otherwise pass for a foreign engagement. (.claude/plans/access-gates.md, P0 #8.)
   // The JWT persona fast path is gone (P0 #7).
   if (!(await engagementBelongsTo(projectId, clientId, firmId))) return false
 
-  const settings = await userSettingsPlus.getUserSettingsPlus(user.id)
+  const settings = await userSettingsPlus.getUserSettingsPlus(userId)
 
   const project = findProjectInPermissions(settings.permissions, firmId, clientId, projectId)
 
@@ -212,11 +224,11 @@ export async function checkProjectPermission(
     const { prisma } = await import('./prisma')
     const [dbFirmMembership, dbEngagementMembership] = await Promise.all([
       prisma.firmMember.findFirst({
-        where: { userId: user.id, firmId },
+        where: { userId: userId, firmId },
         select: { role: true },
       }),
       prisma.engagementMember.findFirst({
-        where: { userId: user.id, engagementId: projectId },
+        where: { userId: userId, engagementId: projectId },
         select: { role: true },
       }),
     ])
@@ -253,8 +265,7 @@ export async function getProjectPermissions(
   clientId: string,
   projectId: string
 ): Promise<Record<string, string[]>> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getSessionUser()
 
   if (!user) return {}
 
@@ -272,8 +283,7 @@ export async function getProjectPersona(
   clientId: string,
   projectId: string
 ): Promise<string | null> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getSessionUser()
 
   if (!user) return null
 
