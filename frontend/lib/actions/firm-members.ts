@@ -16,6 +16,7 @@ import { upsertFollowUpReminder, removeRemindersByEntity } from '@/lib/reminders
 import { getAvatarUrlFromSupabaseUser } from '@/lib/supabase-user-helpers'
 import { firmSettingsPath } from '@/lib/navigation/firm-paths'
 import { normalizeInviteeName, type InviteeName } from '@/lib/auth/invite-names'
+import { endUserSessions } from '@/lib/auth/sessions'
 
 const supabaseAdmin = createSupabaseAdmin(
     process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:54321',
@@ -125,8 +126,9 @@ export async function removeFirmMember(firmId: string, memberId: string) {
         // Non-fatal — member is removed regardless
     }
 
-    // Kick the removed user's active sessions — fire-and-forget
-    supabaseAdmin.auth.admin.signOut(member.userId).catch(() => {})
+    // Removal from a firm ends the person's sign-ins everywhere — fire-and-forget (endUserSessions
+    // logs a failure). Access is already gone: every request checks firm membership.
+    endUserSessions(member.userId).catch(() => {})
 
     audit(AUDIT_EVENT.FIRM_MEMBER_REMOVED)
         .scope(AUDIT_SCOPE.FIRM)

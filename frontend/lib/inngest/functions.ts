@@ -14,7 +14,6 @@ import {
     setMigrationPending,
     setMigrationState,
     sendMaintenanceWarningToFirmMembers,
-    forceSignOutFirmMembers,
     createMigration,
     getActiveMigration,
     addMigrationFiles,
@@ -24,7 +23,6 @@ import {
     getPlatformMaintenanceConfig,
     setPlatformMaintenanceConfig,
     getAllNonAdminUserEmails,
-    signOutAllNonAdminUsers,
     sendPlatformMaintenanceEmail,
     sendPlatformMaintenanceNotification,
 } from '@/lib/platform-maintenance'
@@ -1115,7 +1113,7 @@ export const migrateWorkspaceRoot = inngest.createFunction(
     async ({ event, step }: { event: { data: { connectionId: string; newRootFolderId: string; oldRootFolderId: string; firmId: string; initiatingUserId: string; estimatedMinutes: number; organizationId?: string; startedAt?: string; graceMinutes?: number } }; step: any }) => {
         const { connectionId, newRootFolderId, oldRootFolderId, firmId, initiatingUserId, estimatedMinutes } = event.data
         // "Start now" (default) keeps the original fixed 2-minute buffer — enough time for the
-        // in-app lock notice to render before members get signed out, but not a real scheduling
+        // in-app lock notice to render before the workspace locks, but not a real scheduling
         // choice. "Notify members and start in 15 minutes" extends this so members have a
         // meaningful window to finish what they're doing. Clamped to sane bounds server-side
         // since this value rides in on a public-facing API request body.
@@ -1162,7 +1160,7 @@ export const migrateWorkspaceRoot = inngest.createFunction(
                 setMigrationPending(firmId, null),
                 ...(migration ? [updateMigrationStatus(migration.id, 'in_progress')] : []),
             ])
-            await forceSignOutFirmMembers(firmId, initiatingUserId)
+            // No sign-out: the maintenance page already holds the firm's routes until the migration ends.
         })
 
         // Resolve the migration adapter once (one DB read) and verify the access token before proceeding.
@@ -1275,12 +1273,12 @@ export const platformMaintenanceActivate = inngest.createFunction(
             await setPlatformMaintenanceConfig(updated)
 
             const users = await getAllNonAdminUserEmails()
+            // No sign-out: proxy.ts redirects everyone but system admins to /platform-maintenance.
             await Promise.allSettled([
-                signOutAllNonAdminUsers(),
                 sendPlatformMaintenanceEmail('on', updated, users),
                 sendPlatformMaintenanceNotification('on', updated),
             ])
-            logger.info(`Platform maintenance activated — ${users.length} users signed out`, 'PlatformMaintenance')
+            logger.info(`Platform maintenance activated — ${users.length} users notified`, 'PlatformMaintenance')
         })
 
         return { ok: true }
@@ -1488,7 +1486,7 @@ export const cleanupEngagementReminders = inngest.createFunction(
 // ---------------------------------------------------------------------------
 
 /**
- * Clean up reminders for a single removed member and sign them out of active sessions.
+ * Clean up reminders for a single removed member.
  * Covers: engagement-level + document-level + comment-level reminders for that user.
  *
  * Triggered by: engagement.member.removed
@@ -1529,11 +1527,8 @@ export const cleanupMemberReminders = inngest.createFunction(
             ])
         })
 
-        await step.run("sign-out-member", async () => {
-            const { createAdminClient } = await import('@/utils/supabase/admin')
-            const admin = createAdminClient()
-            await admin.auth.admin.signOut(userId)
-        })
+        // No sign-out: leaving one engagement takes away that engagement only, and every request
+        // checks membership. Ending all their sign-ins would log them out of everything else too.
 
         return { engagementId, userId }
     }

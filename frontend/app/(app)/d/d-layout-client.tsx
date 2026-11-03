@@ -18,6 +18,7 @@ import { DownloadProgressProvider } from '@/lib/download-progress-context'
 import { DownloadProgressPanel } from '@/components/ui/download-progress-panel'
 import { UploadProgressProvider } from '@/lib/upload-progress-context'
 import { UploadProgressPanel } from '@/components/ui/upload-progress-panel'
+import { NewVersionPrompt } from '@/components/app/new-version-prompt'
 import { MigrationProgressPanel } from '@/components/ui/migration-progress-panel'
 import { DebugFloatingTrigger } from '@/components/debug/debug-floating-trigger'
 import { StandardCheckoutIntentBanner } from '@/components/billing/standard-checkout-intent-banner'
@@ -161,7 +162,7 @@ function AppLayoutContent({ children, isSystemAdmin }: { children: React.ReactNo
                         {' '}— please save any open work
                     </span>
                 }
-                description="All active sessions will be signed out automatically. You can sign back in once maintenance is complete."
+                description="Firma will be unavailable until maintenance is complete. You stay signed in and can carry on when it ends."
             />
         ) : null
 
@@ -299,7 +300,7 @@ function AppLayoutContent({ children, isSystemAdmin }: { children: React.ReactNo
                                         {' '}— please save any open work
                                     </span>
                                 }
-                                description="All active sessions will be signed out automatically. You can sign back in once maintenance is complete."
+                                description="Firma will be unavailable until maintenance is complete. You stay signed in and can carry on when it ends."
                             />
                         )}
                     </main>
@@ -383,6 +384,7 @@ export function DLayoutClient({
                                     </AppLayoutContent>
                                     <DownloadProgressPanel />
                                     <UploadProgressPanel />
+                                    <NewVersionPrompt />
                                 </TooltipProvider>
                             </UploadProgressProvider>
                             </DownloadProgressProvider>

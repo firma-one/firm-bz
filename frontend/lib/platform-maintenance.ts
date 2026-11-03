@@ -101,13 +101,6 @@ export async function getAllNonAdminUserEmails(): Promise<{ id: string; email: s
   return users
 }
 
-export async function signOutAllNonAdminUsers(): Promise<void> {
-  const admin = createAdminClient()
-  const users = await getAllNonAdminUserEmails()
-  await Promise.allSettled(users.map(u => admin.auth.admin.signOut(u.id)))
-  logger.info(`Signed out ${users.length} non-admin users for platform maintenance`, 'PlatformMaintenance')
-}
-
 export async function sendPlatformMaintenanceNotification(
   type: 'on' | 'off',
   config: PlatformMaintenanceConfig

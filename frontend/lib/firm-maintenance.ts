@@ -349,7 +349,7 @@ export async function sendMaintenanceWarningToFirmMembers(firmId: string, estima
   <li><strong>Starts in:</strong> ~${graceMinutes} minute${graceMinutes === 1 ? '' : 's'}</li>
   <li><strong>Estimated duration:</strong> ~${estimatedMinutes} minute${estimatedMinutes === 1 ? '' : 's'}</li>
 </ul>
-<p>Please save any in-progress work. You will be signed out automatically when maintenance begins and can sign back in once it's complete.</p>
+<p>Please save any in-progress work. The workspace is paused while maintenance runs, and you can carry on once it's complete.</p>
 <p>— The ${BRAND_NAME} team</p>`
       )
       logger.info(`[firm-maintenance] Maintenance warning sent to ${email}`)
@@ -359,15 +359,3 @@ export async function sendMaintenanceWarningToFirmMembers(firmId: string, estima
   }
 }
 
-export async function forceSignOutFirmMembers(firmId: string, exceptUserId: string): Promise<void> {
-  const userIds = await getAllFirmMemberUserIds(firmId)
-  const targets = userIds.filter((uid) => uid !== exceptUserId)
-  for (const uid of targets) {
-    try {
-      await supabaseAdmin.auth.admin.signOut(uid)
-      logger.info(`[firm-maintenance] Signed out user ${uid}`)
-    } catch (err) {
-      logger.error(`[firm-maintenance] Failed to sign out user ${uid}`, err as Error)
-    }
-  }
-}

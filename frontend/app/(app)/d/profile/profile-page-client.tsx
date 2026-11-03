@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Copy, Mail, User } from 'lucide-react'
 import { DataPrivacyCard } from '@/components/account/data-privacy-card'
+import { SessionsCard } from '@/components/account/sessions-card'
 import { ProfileBubblePopupContent } from '@/components/ui/profile-bubble-popup'
 import { profileCopy } from '@/lib/profile-copy'
 import { updateProfileNames } from '@/lib/actions/profile'
@@ -221,6 +222,7 @@ export function ProfilePageClient({
                     Personalization page renders this component with `hideChrome`, which returns
                     here — so a card added below the other return was unreachable from the only
                     route that renders the page. */}
+                <SessionsCard />
                 <DataPrivacyCard />
             </div>
         )
@@ -259,6 +261,7 @@ export function ProfilePageClient({
             {/* Export and deletion. Below the profile rather than inside it: these act on the
                 account as a whole, not on the fields above them, and the privacy policy points
                 users here by name. */}
+            <SessionsCard />
             <DataPrivacyCard />
         </div>
     )
