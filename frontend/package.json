@@ -6,8 +6,8 @@
     "node": "24.x"
   },
   "scripts": {
-    "dev": "npm run copy:pdf-worker && DEV_SERVER_START_VERSION=dev-$(date +%s) next dev",
-    "dev:webpack": "npm run copy:pdf-worker && DEV_SERVER_START_VERSION=dev-$(date +%s) next dev --webpack",
+    "dev": "npm run copy:pdf-worker && next dev",
+    "dev:webpack": "npm run copy:pdf-worker && next dev --webpack",
     "build": "npm run copy:pdf-worker && prisma generate && next typegen && tsc --noEmit && NEXT_PUBLIC_BUILD_TIMESTAMP=$(date +%s) next build --webpack",
     "postbuild": "prisma migrate deploy && npx prisma db seed",
     "start": "next start",

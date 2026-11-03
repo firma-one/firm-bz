@@ -4,6 +4,7 @@ import Link from "next/link"
 import { Link2, Wrench, Shield, ChevronRight, Users, CalendarRange, MailPlus, Database, Activity, OctagonPause, Terminal, FlaskConical, Building2, Sparkles } from "lucide-react"
 
 import { usePlatformMaintenanceStatus } from "@/lib/hooks/use-platform-maintenance-status"
+import { SignOutEveryoneCard } from "./sign-out-everyone-card"
 
 const tools = [
     {
@@ -163,9 +164,9 @@ export default function SystemIndex() {
                 <div className="px-2 pt-4 pb-2 flex items-end justify-between gap-4">
                     <p className={`text-sm leading-relaxed text-left ${isMaintenanceOn ? 'text-red-700' : 'text-gray-500'}`}>
                         {isMaintenanceActive
-                            ? 'Platform is in maintenance mode. All non-admin sessions are signed out.'
+                            ? 'Platform is in maintenance mode. Everyone but system admins sees the maintenance page.'
                             : isMaintenanceGrace
-                                ? 'Grace period in progress — maintenance activates shortly and sessions will be signed out.'
+                                ? 'Grace period in progress — maintenance activates shortly.'
                                 : 'Toggle platform-wide maintenance mode, configure the maintenance window, and notify users.'}
                     </p>
                     <span className={`shrink-0 inline-flex items-center gap-1 text-xs font-medium whitespace-nowrap transition-colors ${
@@ -177,6 +178,8 @@ export default function SystemIndex() {
                     </span>
                 </div>
             </Link>
+
+            <SignOutEveryoneCard />
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {tools.map((tool) => (

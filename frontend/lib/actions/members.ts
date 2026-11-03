@@ -373,8 +373,8 @@ export async function updateMemberPersona(memberId: string, personaId: string) {
             data: { role: newPersonaSlug }
         })
 
-        // Role change alters permissions — kick session, fire-and-forget
-        supabaseAdmin.auth.admin.signOut(member.userId).catch(() => {})
+        // No sign-out: the new role applies on the person's next request (its cache is invalidated
+        // below), so ending their sign-ins would add nothing but an interruption.
 
         const timestamp = new Date().toISOString()
 

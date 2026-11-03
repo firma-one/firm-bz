@@ -1,7 +1,7 @@
 /**
  * Single source of truth for "where does a user go once they're authenticated?".
  *
- * Shared by every client-side auth entry point (signin's already-signed-in check and its
+ * Shared by proxy.ts (a signed-in visitor on /signin or /signup) and every client-side auth entry point (signin's already-signed-in check and its
  * post-OTP navigation; signup's already-logged-in check and its post-signup navigation) so the
  * rules below are enforced in one place rather than restated in each file. The server-side
  * `app/(app)/auth/callback/route.ts` does NOT use this — it resolves the landing path directly
@@ -11,9 +11,8 @@
  *  1. An explicit `?next=` / `?redirect=` deep link wins — invite links and the like must land
  *     exactly where they point.
  *  2. Legacy `/dash` paths normalise to their `/d` equivalents.
- *  3. A bare `/d` is NOT a destination, it's just "the app". Middleware emits `?redirect=/d`
- *     when it invalidates a session (e.g. a deployment-version mismatch, which fires on every
- *     local dev-server restart), and taking that literally strands a single-firm user on the
+ *  3. A bare `/d` is NOT a destination, it's just "the app". Links and older redirects can
+ *     carry `?redirect=/d`, and taking that literally strands a single-firm user on the
  *     group picker. Route it through `?entry=auth` so `app/(app)/d/(landing)/page.tsx` runs
  *     `resolveDefaultFirmLandingPath` and drops the user straight into their firm.
  *  4. Anything unsafe or absent falls back to the same auto-resolving `/d?entry=auth`.

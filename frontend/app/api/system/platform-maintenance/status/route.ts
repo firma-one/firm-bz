@@ -3,7 +3,6 @@ import {
   getPlatformMaintenanceConfig,
   setPlatformMaintenanceConfig,
   getAllNonAdminUserEmails,
-  signOutAllNonAdminUsers,
   sendPlatformMaintenanceEmail,
   sendPlatformMaintenanceNotification,
 } from '@/lib/platform-maintenance'
@@ -26,12 +25,12 @@ export async function GET() {
     await setPlatformMaintenanceConfig(activated)
     config = activated
 
-    // Fire sign-out + notifications in background (non-blocking)
+    // Notifications in background (non-blocking). No sign-out: proxy.ts redirects everyone but
+    // system admins to /platform-maintenance while it is on.
     void (async () => {
       try {
         const users = await getAllNonAdminUserEmails()
         await Promise.allSettled([
-          signOutAllNonAdminUsers(),
           sendPlatformMaintenanceEmail('on', activated, users),
           sendPlatformMaintenanceNotification('on', activated),
         ])

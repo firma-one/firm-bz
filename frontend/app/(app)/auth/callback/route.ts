@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
-import { getDeploymentVersion, DEPLOYMENT_VERSION_COOKIE } from '@/lib/deployment-version'
 import { resolveDefaultFirmLandingPath } from '@/lib/landing/default-landing-path'
 import { BRAND_NAME, PLATFORM_BRAND_COOKIE } from '@/config/brand'
 import { createAdminClient } from '@/utils/supabase/admin'
@@ -68,10 +67,6 @@ export async function GET(request: Request) {
       // loads faster: permission checks read from JWT/in-memory instead of hitting DB.
       await warmUserSessionOnSignin(userId, user.app_metadata ?? {}, supabase)
 
-      // Set deployment version cookie on successful login
-      // This ensures session is invalidated if server restarts
-      const deploymentVersion = getDeploymentVersion()
-
       // Determine redirect URL — force http when running locally (e.g. dev_as_prod) to avoid ERR_SSL_PROTOCOL_ERROR
       const forwardedHost = request.headers.get('x-forwarded-host')
       const isDevelopment = process.env.NODE_ENV === 'development'
@@ -89,16 +84,6 @@ export async function GET(request: Request) {
       }
 
       const response = NextResponse.redirect(redirectUrl)
-
-      // Set deployment version cookie on the redirect response
-      // This ensures it's available when middleware runs on the redirected request
-      response.cookies.set(DEPLOYMENT_VERSION_COOKIE, deploymentVersion, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV !== 'development', // secure in production/preview
-        sameSite: 'lax',
-        path: '/',
-        maxAge: 60 * 60 * 24 * 30 // 30 days
-      })
 
       // Cache platform brand name for SSR/CSR consistency
       response.cookies.set(PLATFORM_BRAND_COOKIE, BRAND_NAME, {

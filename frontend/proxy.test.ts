@@ -51,3 +51,31 @@ describe('proxy — /system is system-admin only', () => {
         expect(res.headers.get('location')).toBeNull()
     })
 })
+
+/**
+ * A deploy used to sign everyone out: a build-version cookie that no longer matched sent the user to
+ * /signin and revoked their sign-ins on every device. Sign-ins no longer depend on the build.
+ */
+describe('proxy — a deploy signs nobody out', () => {
+    it('lets a signed-in user with an older build cookie straight through', async () => {
+        auth.user = { id: 'u1', email: 'pat@acme.test' }
+        const res = await proxy(req('/d/acme', { headers: { cookie: 'fm-deployment-version=1700000000' } }))
+        expect(res.headers.get('location')).toBeNull()
+    })
+
+    it('sends a signed-in visitor on /signin to their deep link, else into the app', async () => {
+        auth.user = { id: 'u1', email: 'pat@acme.test' }
+        const deepLink = await proxy(req('/signin?redirect=%2Fd%2Facme%2Ff%2Fplum'))
+        expect(deepLink.headers.get('location')).toBe('http://localhost:3000/d/acme/f/plum')
+        const plain = await proxy(req('/signin'))
+        expect(plain.headers.get('location')).toBe('http://localhost:3000/d?entry=auth')
+        const offSite = await proxy(req('/signin?redirect=%2F%2Fevil.test'))
+        expect(offSite.headers.get('location')).toBe('http://localhost:3000/d?entry=auth')
+    })
+
+    it('leaves /signup/callback to run', async () => {
+        auth.user = { id: 'u1', email: 'pat@acme.test' }
+        const res = await proxy(req('/signup/callback'))
+        expect(res.headers.get('location')).toBeNull()
+    })
+})

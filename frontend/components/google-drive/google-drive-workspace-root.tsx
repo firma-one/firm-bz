@@ -1204,7 +1204,7 @@ export function GoogleDriveWorkspaceRoot({
                       {estimate && estimate.itemCount > 0
                         ? `${estimate.itemCount} items will be moved. `
                         : ""}
-                      All members will be emailed and signed out automatically once the lock begins.
+                      All members will be emailed, and the workspace is paused for them once the lock begins.
                     </p>
                   </div>
                 </div>

@@ -131,8 +131,8 @@ export default function PlatformMaintenancePage() {
   const confirmDescription = isActive
     ? 'This will lift maintenance mode and send a "maintenance complete" email to all users.'
     : isGrace
-      ? 'This will cancel the grace period. Users will not be signed out and the platform stays accessible.'
-      : 'A 2-minute grace period will begin immediately. Users will see a countdown warning before sessions are terminated and maintenance begins.'
+      ? 'This will cancel the grace period. The platform stays accessible.'
+      : 'A 2-minute grace period will begin immediately. Users will see a countdown warning before maintenance begins and the app is paused for them.'
 
   return (
     <div className="flex flex-col space-y-6">
@@ -164,7 +164,7 @@ export default function PlatformMaintenancePage() {
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-amber-900">Grace period in progress</p>
             <p className="text-sm text-amber-700 mt-0.5">
-              Maintenance activates in <span className="font-mono font-bold">{graceCountdown ?? '…'}</span>. Users are seeing a countdown warning. Sign-out and activation happen automatically.
+              Maintenance activates in <span className="font-mono font-bold">{graceCountdown ?? '…'}</span>. Users are seeing a countdown warning. Activation happens automatically.
             </p>
           </div>
         </div>

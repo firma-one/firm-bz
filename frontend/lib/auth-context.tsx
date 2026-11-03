@@ -33,13 +33,57 @@ function identifyToSentry(user: User | null) {
         .catch(() => { /* Sentry unavailable — never block auth on telemetry */ })
 }
 
+/**
+ * A sign-in that ended without anyone pressing Sign out in this tab: revoked from another device or
+ * by an admin, or a refresh that failed. Reported so abrupt sign-outs can be counted rather than
+ * guessed at. Never blocks the sign-out itself.
+ */
+function reportUnexpectedSignOut(userId: string | null) {
+    if (process.env.NODE_ENV === 'development') return
+    const path = typeof window !== 'undefined' ? window.location.pathname : undefined
+    import('@sentry/nextjs')
+        .then((Sentry) => {
+            Sentry.captureMessage('Signed out without a sign-out click', {
+                level: 'warning',
+                tags: { area: 'auth' },
+                // The Sentry user is cleared by the time this runs, so the id travels here.
+                user: userId ? { id: userId } : undefined,
+                extra: { path, visibility: typeof document !== 'undefined' ? document.visibilityState : undefined },
+            })
+        })
+        .catch(() => { /* Sentry unavailable */ })
+}
+
+/**
+ * A Sign out click in one tab reaches this browser's other tabs as SIGNED_OUT too. The clicking tab
+ * leaves this mark, so the others don't report an expected sign-out as an unexpected one.
+ */
+const SIGN_OUT_MARK_KEY = 'fm-signing-out-at'
+const SIGN_OUT_MARK_WINDOW_MS = 15_000
+
+function markSigningOut() {
+    try { localStorage.setItem(SIGN_OUT_MARK_KEY, String(Date.now())) } catch { /* storage blocked */ }
+}
+
+function signedOutOnPurpose(): boolean {
+    try {
+        const at = Number(localStorage.getItem(SIGN_OUT_MARK_KEY))
+        return Number.isFinite(at) && Date.now() - at < SIGN_OUT_MARK_WINDOW_MS
+    } catch {
+        return false
+    }
+}
+
 interface AuthContextType {
   user: User | null
   session: Session | null
   loading: boolean
   signInWithGoogle: (email?: string, next?: string) => Promise<void>
   signInWithMicrosoft: (email?: string, next?: string) => Promise<void>
+  /** Signs out this browser only. Other devices stay signed in. */
   signOut: () => Promise<void>
+  /** Ends every sign-in this account has, on every device, then this one. */
+  signOutEverywhere: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -50,6 +94,8 @@ export function AuthProvider({ children, initialSession }: { children: ReactNode
   // If server provided a session, skip the loading state entirely
   const [loading, setLoading] = useState<boolean>(initialSession == null)
   const lastBuiltUserIdRef = useRef<string | null>(null)
+  // Who was signed in, for reporting a sign-out that happened by itself (see reportUnexpectedSignOut).
+  const lastUserIdRef = useRef<string | null>(initialSession?.user?.id ?? null)
   const lastBuiltAtRef = useRef<number>(0)
 
   const maybeBuildUserSettingsPlus = (userId: string) => {
@@ -78,6 +124,7 @@ export function AuthProvider({ children, initialSession }: { children: ReactNode
         setSession(session)
         setUser(session?.user ?? null)
         identifyToSentry(session?.user ?? null)
+        lastUserIdRef.current = session?.user?.id ?? null
         if (session?.user) {
           maybeBuildUserSettingsPlus(session.user.id)
         }
@@ -100,12 +147,14 @@ export function AuthProvider({ children, initialSession }: { children: ReactNode
         }
 
         if (event === 'SIGNED_OUT') {
+          if (lastUserIdRef.current && !signedOutOnPurpose()) reportUnexpectedSignOut(lastUserIdRef.current)
           clearCheckoutHintSessionKeys()
           if (typeof window !== 'undefined' && window.location.pathname.startsWith('/d/')) {
             window.location.href = '/signin'
           }
         }
 
+        lastUserIdRef.current = session?.user?.id ?? null
         setLoading(false)
       }
     )
@@ -190,7 +239,10 @@ export function AuthProvider({ children, initialSession }: { children: ReactNode
       // Stale rows are pruned server-side on the next failed send anyway.
     }
 
-    const { error } = await supabase.auth.signOut()
+    // This browser only. Supabase's default ('global') also signed out the person's other devices,
+    // which then bounced to /signin with no visible cause.
+    markSigningOut()
+    const { error } = await supabase.auth.signOut({ scope: 'local' })
 
     if (error) {
       console.error('Error signing out:', error)
@@ -201,13 +253,22 @@ export function AuthProvider({ children, initialSession }: { children: ReactNode
     // Note: Redirect is handled by the calling component
   }
 
+  const signOutEverywhere = async () => {
+    // The server ends every sign-in this account has (lib/auth/sessions.ts), then this browser
+    // drops its own copy. Other devices are sent to sign in when they next renew their login.
+    const res = await fetch('/api/account/sessions', { method: 'DELETE' })
+    if (!res.ok) throw new Error("Couldn't sign out of other devices")
+    await signOut()
+  }
+
   const value = {
     user,
     session,
     loading,
     signInWithGoogle,
     signInWithMicrosoft,
-    signOut
+    signOut,
+    signOutEverywhere,
   }
 
   return (
