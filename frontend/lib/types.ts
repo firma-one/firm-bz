@@ -218,8 +218,12 @@ export interface DriveFile {
   }[]
   /** Engagement role of the file owner (e.g. eng_admin, eng_viewer). Populated server-side for display. */
   ownerRole?: string | null
-  /** Who added it — the Files "Created by" column (lib/files/file-creator.ts). */
+  /** Who added it — the Details pane's Created, and the Files "Created by me" filter (lib/files/file-creator.ts). */
   creator?: FileCreator | null
+  /** Who it's assigned to (settings.assigneeUserId) — the Files Assignee column and "Assigned to me" filter. */
+  assigneeUserId?: string | null
+  /** That person's profile; null if they can't be found. */
+  assignee?: { id: string; name: string; email: string | null; avatarUrl: string | null } | null
   parents?: string[]
   source?: string
   connectorId?: string

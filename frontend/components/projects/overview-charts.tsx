@@ -21,7 +21,7 @@ export interface ChartSegment {
 }
 
 /** An info icon with a tooltip, beside a block's title. */
-export function InfoHint({ text, label }: { text: string; label: string }) {
+export function InfoHint({ text, label }: { text: React.ReactNode; label: string }) {
     return (
         <Hint label={<span className="block max-w-[260px] text-xs leading-relaxed">{text}</span>}>
             <button type="button" aria-label={label} className="inline-flex items-center text-fg-subtle transition-colors hover:text-fg-muted" onClick={(e) => e.preventDefault()}>

@@ -12,8 +12,7 @@ import { Empty, type OverviewDeliverable } from './engagement-overview-sections'
 /*
  * The Overview's deliverables as a Linear-style timeline: neutral bars with the name above, months
  * over a row of day numbers, and color only where it means something (the stage icon, the due-date
- * diamond, today, time past a due date). Supersedes DeliverablesTimeline in
- * engagement-overview-sections.tsx, which stays until this one is signed off.
+ * diamond, today, time past a due date).
  */
 
 const DAY_MS = 86400000

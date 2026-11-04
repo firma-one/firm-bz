@@ -1,13 +1,6 @@
 import * as React from "react"
 import { cn } from "@/lib/utils"
-import {
-    OVERDUE_STYLE,
-    TAG_CLASSES,
-    TAG_DOT_CLASSES,
-    statusStyle,
-    type StatusKind,
-    type TagColor,
-} from "@/lib/ui/status-colors"
+import { TAG_CLASSES, TAG_DOT_CLASSES, type TagColor } from "@/lib/ui/status-colors"
 
 /*
  * Notion-style tags, built on the UI tokens (app/ui-tokens.css).
@@ -38,22 +31,5 @@ export function Tag({ color = "gray", dot = false, icon, className, children, ..
             {icon && <span aria-hidden className="flex shrink-0 items-center [&_svg]:h-3 [&_svg]:w-3">{icon}</span>}
             <span className="truncate">{children}</span>
         </span>
-    )
-}
-
-export interface StatusPillProps extends Omit<TagProps, "color" | "children"> {
-    kind: StatusKind
-    status: string
-    /** Shows "Overdue" in red instead of the status, e.g. past its due date and not yet approved. */
-    overdue?: boolean
-}
-
-/** A status from lib/ui/status-colors.ts — the one place status colors and labels are decided. */
-export function StatusPill({ kind, status, overdue = false, dot = true, ...props }: StatusPillProps) {
-    const style = overdue ? OVERDUE_STYLE : statusStyle(kind, status)
-    return (
-        <Tag color={style.color} dot={dot} {...props}>
-            {style.label}
-        </Tag>
     )
 }

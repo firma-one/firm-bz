@@ -44,6 +44,17 @@ export function creatorOf(
     }
 }
 
+/** Who a document is assigned to (settings.assigneeUserId), for the Files Assignee column and its filter. */
+export function assigneeOf(settings: unknown, people: Map<string, Person>) {
+    const id = (settings as { assigneeUserId?: unknown } | null)?.assigneeUserId
+    if (typeof id !== 'string') return { assigneeUserId: null, assignee: null }
+    const person = people.get(id)
+    return {
+        assigneeUserId: id,
+        assignee: person ? { id, name: person.name, email: person.email, avatarUrl: person.avatarUrl } : null,
+    }
+}
+
 /** App profiles — email, name, photo — for these users, as the Members list shows them. */
 export async function loadPeople(userIds: string[]): Promise<Map<string, Person>> {
     const people = new Map<string, Person>()

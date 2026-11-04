@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, within } from '@testing-library/react'
 
 vi.mock('next/link', () => ({ default: ({ href, children, ...rest }: any) => <a href={href} {...rest}>{children}</a> }))
 
@@ -47,6 +47,34 @@ describe('AgendaWeek', () => {
         const tip = await screen.findByRole('tooltip')
         expect(tip.textContent).toContain('Event a')
         expect(tip.textContent).toContain('Contoso')
+    })
+
+    it('marks the client in a chip\'s tooltip and says what the date is beside it', async () => {
+        render(<AgendaWeek events={[event('a', 1, { title: 'Report.xlsx · Due', name: 'Report.xlsx', dateLabel: 'Due', type: 'document' })]} calendarHref="/cal" />)
+        fireEvent.focus(screen.getByRole('link', { name: /Report\.xlsx/ }))
+        const tip = await screen.findByRole('tooltip')
+        const marks = within(tip).getAllByRole('img').map((m) => m.getAttribute('aria-label'))
+        expect(marks).toEqual(['Document', 'Client'])
+        expect(tip.textContent).toContain('Contoso · Due')
+        expect(tip.textContent).not.toContain('Report.xlsx · Due')
+        expect(tip.textContent).not.toContain('—')
+    })
+
+    it('marks each name an overdue item sits under, with the firm only when given', async () => {
+        const late: AgendaDueItem = { ...due('late', -2), firmName: 'FirmaOne', clientName: 'Contoso', engagementName: 'FY26 Audit' }
+        render(<AgendaWeek events={[]} dueItems={[late]} calendarHref="/cal" />)
+        fireEvent.focus(screen.getByRole('link', { name: /Due late/ }))
+        const tip = await screen.findByRole('tooltip')
+        expect(within(tip).getAllByRole('img').map((m) => m.getAttribute('aria-label'))).toEqual(['Deliverable', 'Firm', 'Client', 'Engagement'])
+        expect(tip.textContent).toContain('FY26 Audit · Due Oct 13')
+    })
+
+    it('shows a reminder with no place by what it asks', async () => {
+        render(<AgendaWeek events={[]} dueItems={[{ ...due('remind', 1, 'reminder'), context: 'Follow-up' }]} calendarHref="/cal" />)
+        fireEvent.focus(screen.getByRole('link', { name: /Due remind/ }))
+        const tip = await screen.findByRole('tooltip')
+        expect(tip.textContent).toContain('Follow-up')
+        expect(within(tip).queryAllByRole('img')).toHaveLength(0)
     })
 
     it('leaves out events before today or after the seventh day', () => {

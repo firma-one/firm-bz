@@ -37,6 +37,9 @@ const isExternalRole = (role: string) => role === 'eng_ext_collaborator' || role
  * On a deliverable itself, only a client's one action is taken, on its documents: an external
  * collaborator submits its In progress documents for review, a viewer sends its In review ones back.
  *
+ * A file outside any deliverable has a stage for the firm's own tracking: only the firm moves it, and
+ * moving it never shares it with clients (applyStageChange's `internalOnly`).
+ *
  * Approving a document locks it, copies the approved version into the engagement's Archive folder
  * and records it (.claude/plans/document-approval-record.md); if storage can't be reached, the
  * approval is refused (502, `approval_storage`) and nothing changes.
@@ -119,6 +122,8 @@ export async function PATCH(
     // An approved deliverable is locked, its documents with it.
     if (deliverable && parseSettingsFromDb(deliverable.settings).share?.finalizedAt)
       return NextResponse.json({ error: 'The deliverable is approved and its documents can no longer move.' }, { status: 403 })
+    if (!deliverable && isExternalRole(role))
+      return NextResponse.json({ error: 'This move is not permitted for your role.' }, { status: 403 })
 
     // Gate on allowed transitions — single source of truth from deliverable-stage-roles.ts:
     //   EL  (eng_admin):            any ±1 move, including approve
@@ -165,7 +170,7 @@ export async function PATCH(
     const approvalMeta = approval
       ? { approvalId: approval.record.id, versionId: approval.record.version.id, versionName: approvalVersionName(approval.record), archivedName: approval.record.archived.name }
       : undefined
-    await applyStageChange(existing, status, moveCtx, { orderIndex, auditMeta: approvalMeta })
+    await applyStageChange(existing, status, moveCtx, { orderIndex, auditMeta: approvalMeta, internalOnly: !deliverable })
     if (approval) {
       await recordApproval(existing.id, approval)
       if (approval.lock) {

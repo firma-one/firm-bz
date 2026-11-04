@@ -3,9 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { formatDistanceToNowStrict, format } from "date-fns"
-import { AlarmClock, ArrowLeft, ArrowRight, Bell, Briefcase, Building2, Check, CheckCheck, ChevronRight, ExternalLink, FileText, HardDrive, Inbox as InboxIcon, Loader2, Mail, MessagesSquare, Users } from "lucide-react"
-import { ClientIcon } from "@/components/ui/client-icon"
-import { DeliverableGlyph } from '@/components/ui/deliverable-icon'
+import { AlarmClock, ArrowLeft, ArrowRight, Bell, Check, CheckCheck, ChevronRight, ExternalLink, Inbox as InboxIcon, Loader2 } from "lucide-react"
+import { ENTITY_ICON } from "@/components/ui/entity-icon"
 import { getAllUserReminders, markReminderDone, type ReminderWithContext } from "@/lib/actions/user-reminders"
 import { getNeedsYou } from "@/lib/actions/inbox"
 import type { NeedsYouItem } from "@/lib/home/my-work"
@@ -21,7 +20,7 @@ import { cn, formatFullDate } from "@/lib/utils"
 import type { TagColor } from "@/lib/ui/status-colors"
 import { FirmFilter, UnavailableFirmsNote } from "@/components/home/firm-filter"
 import type { UnavailableFirm } from "@/lib/home/home-firms"
-import { needsYouLists, sortNotifications, INBOX_CHANGED_EVENT, type ApiNotification, type InboxEntity, type InboxItem, type InboxMention } from "./inbox-items"
+import { needsYouLists, sortNotifications, INBOX_CHANGED_EVENT, type ApiNotification, type InboxItem, type InboxMention } from "./inbox-items"
 
 function notifyChanged() {
     window.dispatchEvent(new Event(INBOX_CHANGED_EVENT))
@@ -37,24 +36,7 @@ function isTypingTarget(target: EventTarget | null): boolean {
     return !!el && (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName))
 }
 
-/**
- * What an item is about, in the icons the app already uses for it: Building2 a firm, Users a client
- * (and the Members tab), Briefcase an engagement, folder-plus a deliverable and FileText a document (as in
- * the calendar), MessagesSquare a comment, Mail an invitation, HardDrive storage. Anything else is a
- * generic alarm clock for a reminder or a bell for a notification.
- */
-const ENTITY_ICON: Record<InboxEntity, React.ElementType> = {
-    firm: Building2,
-    client: ClientIcon,
-    engagement: Briefcase,
-    deliverable: DeliverableGlyph,
-    document: FileText,
-    comment: MessagesSquare,
-    invitation: Mail,
-    member: Users,
-    storage: HardDrive,
-}
-
+/** What an item is about (ENTITY_ICON); anything else is a generic alarm clock for a reminder or a bell for a notification. */
 function ItemIcon({ item, className }: { item: InboxItem; className?: string }) {
     const Icon = item.entity ? ENTITY_ICON[item.entity] : item.source === "reminder" ? AlarmClock : Bell
     return <Icon className={className} aria-hidden />

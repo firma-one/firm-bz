@@ -1,7 +1,8 @@
 'use client'
 
 import React from 'react'
-import { DateProperty, READ_ONLY_PILL_CLASS, StatusProperty } from '@/components/ui/property-cells'
+import { DateProperty, PersonProperty, READ_ONLY_PILL_CLASS, StatusProperty, type PersonOption } from '@/components/ui/property-cells'
+import { saveAssignee } from '@/components/files/save-assignee'
 import { StatusPill } from '@/components/ui/status-pill'
 import { getAllowedTransitions, type EngagementRoleSlug } from '@/lib/deliverable-stage-roles'
 import { statusOf } from '@/lib/ui/status'
@@ -87,6 +88,53 @@ export function FileStatusCell({
             />
             {dialog}
         </>
+    )
+}
+
+/** The Files row's Assignee cell: leads pick someone in place, everyone else reads who it is. */
+export function FileAssigneeCell({
+    projectId,
+    documentId,
+    assignee,
+    people,
+    canEdit,
+    placeholder,
+    meEmail,
+    onSaved,
+    onError,
+}: {
+    projectId: string
+    documentId: string
+    assignee: PersonOption | null
+    /** Who may be assigned: the firm's own members, as on a deliverable. */
+    people: PersonOption[]
+    canEdit: boolean
+    /** What an empty cell reads: "Not set" for a deliverable or what's inside one, otherwise a dash. */
+    placeholder: string
+    /** The viewer's email: their own row reads "me". */
+    meEmail?: string
+    onSaved: (next: PersonOption | null) => void
+    onError: (message: string) => void
+}) {
+    const [value, setValue] = React.useState<PersonOption | null>(assignee)
+    React.useEffect(() => { setValue(assignee) }, [assignee])
+    const isMe = !!value?.email && !!meEmail && value.email.toLowerCase() === meEmail.toLowerCase()
+    return (
+        <PersonProperty
+            value={value && isMe ? { ...value, shownAs: 'me' } : value}
+            people={people}
+            disabled={!canEdit}
+            placeholder={placeholder}
+            onChange={async (next) => {
+                const result = await saveAssignee(projectId, documentId, next?.id ?? null)
+                if (!result.ok) {
+                    onError(result.error)
+                    return
+                }
+                setValue(next)
+                onSaved(next)
+            }}
+        />
     )
 }
 

@@ -1,4 +1,4 @@
-import type { ApiNotification } from '@/components/inbox/inbox-items'
+import { reminderEntity, type ApiNotification } from '@/components/inbox/inbox-items'
 import type { CalendarEvent } from '@/lib/calendar/calendar-data'
 import type { HomeBookmark } from '@/lib/home/bookmarks'
 import type { HomeFirm } from '@/lib/home/home-firms'
@@ -309,6 +309,7 @@ export function demoWork(now: Date): MyWork {
             href: `${engagementHref(client, engagement)}?tab=board`,
             actionLabel: 'Review',
             at: new Date(now.getTime() - (i + 1) * 7 * HOUR).toISOString(),
+            entity: 'deliverable' as const,
         })),
         ...(pairs[0] ? [{
             id: 'ny-intake',
@@ -321,6 +322,7 @@ export function demoWork(now: Date): MyWork {
             href: `${engagementHref(pairs[0].client, pairs[0].engagement)}?tab=files`,
             actionLabel: 'Approve upload',
             at: new Date(now.getTime() - 2 * HOUR).toISOString(),
+            entity: 'folder' as const,
         }] : []),
         // As in the app: a client comment no one has answered yet, and a deliverable sent back for changes.
         ...nextDeliverables().slice(0, 1).map(({ client, engagement, deliverable }) => ({
@@ -334,6 +336,7 @@ export function demoWork(now: Date): MyWork {
             href: `${engagementHref(client, engagement)}?tab=files`,
             actionLabel: 'Reply',
             at: new Date(now.getTime() - 3 * HOUR).toISOString(),
+            entity: 'deliverable' as const,
         })),
         ...pairs
             .flatMap(({ client, engagement }) =>
@@ -350,6 +353,7 @@ export function demoWork(now: Date): MyWork {
                 href: `${engagementHref(client, engagement)}?tab=board`,
                 actionLabel: 'See changes',
                 at: new Date(now.getTime() - 26 * HOUR).toISOString(),
+                entity: 'deliverable' as const,
             })),
         // The demo user's reminders that need them now, by Home's rule: review requests and undated ones.
         ...demoReminders(now).filter(isNeedsYouReminder).map((r) => ({
@@ -361,6 +365,7 @@ export function demoWork(now: Date): MyWork {
             href: r.ctaUrl ?? '/tour',
             actionLabel: 'Open',
             at: r.dateValue,
+            entity: reminderEntity(r.entityKey, r.action),
         })),
     ]
 
@@ -373,11 +378,14 @@ export function demoWork(now: Date): MyWork {
             kind: r.action === 'Deliverable due' ? ('deliverable' as const) : ('reminder' as const),
             firmId: r.firmId,
             title: r.entityName,
-            context: (r.clientName && r.engagementName ? `${r.clientName} · ${r.engagementName}` : null) ?? r.note ?? r.action,
+            context: r.note ?? r.action,
+            clientName: r.clientName,
+            engagementName: r.engagementName,
             href: r.ctaUrl ?? '/tour',
             dueDate: r.dateValue!,
             overdue: (r.delta ?? 0) < 0,
             status: dueStatus.get(r.id) ?? null,
+            entity: reminderEntity(r.entityKey, r.action),
         }))
 
     return { engagements, needsYou, dueSoon }

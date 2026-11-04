@@ -59,6 +59,8 @@ export type CalendarEvent = {
   engagementDueDate: string | null
   /** Document/deliverable name — same as title's subject, kept separate for structured display. */
   documentName: string | null
+  /** Document events only: its type, for its file-type icon. */
+  mimeType?: string | null
   /** Human-readable short id (e.g. "NVQ-7") for deliverable/document events. */
   docId: string | null
   status: ActivityStatus | null
@@ -128,7 +130,7 @@ export async function loadCalendarData(params: {
       members: { where: { userId }, select: { role: true } },
       documents: {
         where: { dueDate: window ? inWindow : { not: null } },
-        select: { id: true, externalId: true, fileName: true, dueDate: true, isFolder: true, settings: true, parentId: true, docId: true },
+        select: { id: true, externalId: true, fileName: true, mimeType: true, dueDate: true, isFolder: true, settings: true, parentId: true, docId: true },
       },
     },
     orderBy: { updatedAt: 'desc' },
@@ -265,7 +267,7 @@ export async function loadCalendarData(params: {
         engagementId: e.id,
         firmId: e.firmId,
         type: 'kickoff',
-        title: `${e.name} — Kickoff`,
+        title: `${e.name} · Kickoff`,
         date: e.kickoffDate.toISOString(),
         ctaUrl: engagementUrl,
         clientName: e.client.name,
@@ -287,7 +289,7 @@ export async function loadCalendarData(params: {
         engagementId: e.id,
         firmId: e.firmId,
         type: 'due',
-        title: `${e.name} — Due`,
+        title: `${e.name} · Due`,
         date: e.dueDate.toISOString(),
         ctaUrl: engagementUrl,
         clientName: e.client.name,
@@ -309,7 +311,7 @@ export async function loadCalendarData(params: {
         engagementId: e.id,
         firmId: e.firmId,
         type: 'followUp',
-        title: `${e.name} — Follow-up`,
+        title: `${e.name} · Follow-up`,
         date: e.followUpDate.toISOString(),
         ctaUrl: engagementUrl,
         clientName: e.client.name,
@@ -336,24 +338,28 @@ export async function loadCalendarData(params: {
       })()
       const isDeliverableFolder = doc.isFolder && isDeliverableSettings(doc.settings)
       const assigneeUserId = assigneeUserIdByDocId.get(doc.id) ?? null
+      const deliverableId = isDeliverableFolder ? doc.id : findAncestorDeliverableId(e.id, doc.parentId ?? null)
       events.push({
         id: `${doc.id}:deliverable`,
         engagementId: e.id,
         firmId: e.firmId,
         type: isDeliverableFolder ? 'deliverable' : 'document',
-        title: `${doc.fileName} — Due`,
+        title: `${doc.fileName} · Due`,
         date: doc.dueDate.toISOString(),
-        ctaUrl: `${engagementUrl}/board#doc-file:${doc.id}`,
+        // A document outside any deliverable isn't on the Board: it opens in Files.
+        ctaUrl: `${engagementUrl}/${deliverableId ? 'board' : 'files'}#doc-file:${doc.id}`,
         clientName: e.client.name,
         engagementName: e.name,
         engagementStatus: e.status,
         engagementDueDate,
         documentName: doc.fileName,
+        // DocumentIcon draws a folder from this type, whichever storage it's in.
+        mimeType: doc.isFolder ? 'application/vnd.google-apps.folder' : doc.mimeType,
         docId: doc.docId ?? null,
         status: parsedSettings?.activity?.status ?? null,
         assignee: assigneeUserId ? (assigneeMap.get(assigneeUserId) ?? null) : null,
         documentId: doc.id,
-        deliverableId: isDeliverableFolder ? doc.id : findAncestorDeliverableId(e.id, doc.parentId ?? null),
+        deliverableId,
         hasReminder: hasDocumentReminder(doc.id),
       })
     }

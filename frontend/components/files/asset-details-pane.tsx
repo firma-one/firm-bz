@@ -6,6 +6,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DocumentIcon } from "@/components/ui/document-icon"
 import { PropertyList, PropertyRow } from "@/components/ui/property-list"
 import { PersonAvatar, PersonProperty, type PersonOption } from "@/components/ui/property-cells"
+import { saveAssignee } from "@/components/files/save-assignee"
+import { InfoHint } from "@/components/projects/overview-charts"
+import { Brio } from "@/components/ui/brio"
 import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/components/ui/toast"
 import { DocumentDiscussionTab } from "@/components/files/document-discussion-tab"
@@ -25,8 +28,8 @@ import type { ActivityStatus } from "@/lib/sharing-settings"
 /**
  * A document's Details in one right pane, laid out as the Board's pane lays out a deliverable
  * (components/projects/shares/deliverable-detail-panel.tsx): the shared fields first — Status,
- * Assignee, Due, Created, Modified, Type — then tabs for Details (the description), Versions,
- * Activity and Discussions (the deliverable's thread, about this file) (.claude/plans/engagement-assets-details.md, Phase 2). Opened from the
+ * Assignee, Due, Created, Modified, Type — then tabs for Details (the description), Discussions (the
+ * deliverable's thread, about this file), Versions and Activity (.claude/plans/engagement-assets-details.md, Phase 2). Opened from the
  * document menu's Details item and from the row's Details icon.
  */
 
@@ -47,9 +50,9 @@ const TAB_META: Record<AssetDetailsTab, { label: string; icon: React.ComponentTy
  */
 export function assetDetailsTabs({ isExternalUser, isLink, hasProject }: { isExternalUser: boolean; isLink: boolean; hasProject: boolean }): AssetDetailsTab[] {
     const tabs: AssetDetailsTab[] = ['details']
+    if (hasProject) tabs.push('discussions')
     if (hasProject && !isExternalUser && !isLink) tabs.push('versions')
     if (hasProject && !isExternalUser) tabs.push('activity')
-    if (hasProject) tabs.push('discussions')
     return tabs
 }
 
@@ -61,7 +64,7 @@ export function assetDetailsTabs({ isExternalUser, isLink, hasProject }: { isExt
 export interface AssetDetailsEditing {
     /** The viewer's role when they may move this file's stage here; null when the stage reads only. */
     statusRole: EngagementRoleSlug | null
-    /** A deliverable or a document inside one: the work Status and Due track. Others read "—". */
+    /** A deliverable or a document: the work Status and Due track. A plain folder reads "—". */
     tracked: boolean
     canEditDue: boolean
     /** Engagement leads: the assignee and description routes allow them only. */
@@ -100,6 +103,10 @@ async function authHeaders(): Promise<Record<string, string>> {
 type Member = { userId: string; name: string | null; email: string | null; avatarUrl: string | null; role: string; isAgent?: boolean }
 
 const personOf = (m: Member): PersonOption => ({ id: m.userId, name: m.name ?? m.email ?? 'Member', email: m.email, avatarUrl: m.avatarUrl })
+
+/** Only the firm's own members can be assigned, as on a deliverable. */
+export const assignablePeople = (members: Member[]): PersonOption[] =>
+    members.filter((m) => !m.isAgent && (m.role === 'eng_admin' || m.role === 'eng_member')).map(personOf)
 
 /** "Who · when" for Created and Modified: either half may be missing. */
 function WhoWhen({ name, avatarUrl, at }: { name?: string | null; avatarUrl?: string | null; at?: string }) {
@@ -169,8 +176,7 @@ function useAssetRecord(projectId: string | undefined, recordId: string | undefi
 function AssetFields({ document, projectId, recordId, editing, record }: { document: any; projectId?: string; recordId?: string; editing?: AssetDetailsEditing; record: AssetRecord }) {
     const { addToast } = useToast()
     const { members, assigneeId, setAssigneeId } = record
-    // Only the firm's own members can be assigned, as on a deliverable.
-    const people = members.filter((m) => !m.isAgent && (m.role === 'eng_admin' || m.role === 'eng_member')).map(personOf)
+    const people = assignablePeople(members)
     const assignee = assigneeId ? members.find((m) => m.userId === assigneeId) : undefined
     const canManage = !!editing?.canManage && record.canLoad
     const tracked = !!editing?.tracked
@@ -183,14 +189,9 @@ function AssetFields({ document, projectId, recordId, editing, record }: { docum
     const [dueDate, setDueDate] = useState<string | null>(document.dueDate ?? null)
 
     const changeAssignee = async (next: PersonOption | null) => {
-        const res = await fetch(`/api/projects/${projectId}/documents/${recordId}/assignee`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
-            body: JSON.stringify({ assigneeUserId: next?.id ?? null }),
-        })
-        if (!res.ok) {
-            const err = await res.json().catch(() => ({}))
-            addToast({ type: 'error', title: "Couldn't change the assignee", message: err.error ?? 'Please try again.' })
+        const result = await saveAssignee(projectId!, recordId!, next?.id ?? null)
+        if (!result.ok) {
+            addToast({ type: 'error', title: "Couldn't change the assignee", message: result.error })
             return
         }
         setAssigneeId(next?.id ?? null)
@@ -301,6 +302,16 @@ function AssetFields({ document, projectId, recordId, editing, record }: { docum
 /** The Board pane's section label (deliverable-detail-panel.tsx FIELD_LABEL). */
 const FIELD_LABEL = 'mb-1.5 flex items-center gap-1.5 text-small font-medium text-fg-muted'
 
+/** What the Description field is for, beside its label. Brio really does read it: lib/ai/files-context.ts. */
+export function DescriptionHint() {
+    return (
+        <InfoHint
+            label="About Description"
+            text={<>What this file is and what it&apos;s for, in your own words. <Brio /> reads it to understand what the document is about, and Doc Search matches it too.</>}
+        />
+    )
+}
+
 /** The Details tab: the description, as the Board pane's section. The firm's internal notes are in the deliverable's thread. */
 function AssetDetailsSections({ projectId, recordId, editing, record }: { projectId?: string; recordId?: string; editing?: AssetDetailsEditing; record: AssetRecord }) {
     const { addToast } = useToast()
@@ -343,6 +354,7 @@ function AssetDetailsSections({ projectId, recordId, editing, record }: { projec
             <div className="px-4 py-4">
                 <div className={FIELD_LABEL}>
                     Description
+                    <DescriptionHint />
                     <span role="status" aria-live="polite" className="inline-flex items-center gap-1 text-caption font-normal">
                         {saveState === 'saving' && <><Loader2 className="h-2.5 w-2.5 animate-spin text-fg-subtle" /><span className="text-fg-subtle">Saving…</span></>}
                         {saveState === 'saved' && <><Check className="h-3 w-3 text-action" /><span className="text-fg-subtle">Saved</span></>}

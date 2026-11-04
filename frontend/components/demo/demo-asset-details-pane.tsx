@@ -14,7 +14,7 @@ import { Tag } from '@/components/ui/tag'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { BlockedTag } from '@/components/files/blocked-tag'
 import { MissingDueWarning } from '@/components/files/missing-due-warning'
-import { ApprovalList } from '@/components/files/asset-details-pane'
+import { ApprovalList, DescriptionHint } from '@/components/files/asset-details-pane'
 import { DemoDeliverableComments, type DemoTaggableDocument } from '@/components/demo/demo-deliverable-comments'
 import { BLOCKED_NOTE_MAX, BLOCKED_REASONS, BLOCKED_REASON_LABEL, type BlockedFlag } from '@/lib/files/blocked'
 import { versionName, type ApprovalRecord } from '@/lib/files/approvals'
@@ -26,7 +26,7 @@ import { cn, formatFileSize, formatFullDate } from '@/lib/utils'
 
 /*
  * Static counterpart to the app's Details pane (components/files/asset-details-pane.tsx): the shared
- * fields first, then the Details, Versions, Activity and Discussions tabs. The Blocked flag and the
+ * fields first, then the Details, Discussions, Versions and Activity tabs. The Blocked flag and the
  * description change on screen only; versions are named as Google Drive names them, by when each was
  * saved. Discussions is the deliverable's thread, with this file's comments first.
  */
@@ -161,7 +161,7 @@ export function DemoAssetDetailsPane({ file, creator, assignee, stage, dueDate, 
 
             <Tabs defaultValue="details" className="flex min-h-0 flex-1 flex-col">
                 <TabsList className="flex w-full shrink-0 gap-4 px-4" data-demo-tour="details-tabs">
-                    {([['details', 'Details', Info], ['versions', 'Versions', History], ['activity', 'Activity', ActivityIcon], ['discussions', 'Discussions', MessagesSquare]] as const).map(([value, label, Icon]) => (
+                    {([['details', 'Details', Info], ['discussions', 'Discussions', MessagesSquare], ['versions', 'Versions', History], ['activity', 'Activity', ActivityIcon]] as const).map(([value, label, Icon]) => (
                         <TabsTrigger key={value} value={value} className="gap-1.5">
                             <Icon className="h-3.5 w-3.5" />
                             {label}
@@ -173,6 +173,7 @@ export function DemoAssetDetailsPane({ file, creator, assignee, stage, dueDate, 
                     <div className="px-4 py-4">
                         <div className="mb-1.5 flex items-center gap-1.5 text-small font-medium text-fg-muted">
                             Description
+                            <DescriptionHint />
                             {saved && <span className="inline-flex items-center gap-1 text-caption font-normal text-fg-subtle"><Check className="h-3 w-3 text-action" />Saved</span>}
                         </div>
                         <Textarea

@@ -1,7 +1,8 @@
 import Link from "next/link"
 import { format } from "date-fns"
-import { ArrowRight, AtSign, Bell, Clock, History, Home, Inbox, Briefcase, MessageSquare } from "lucide-react"
+import { ArrowRight, Bell, Clock, History, Home, Inbox, Briefcase } from "lucide-react"
 import { ClientIcon } from "@/components/ui/client-icon"
+import { EntityIcon } from "@/components/ui/entity-icon"
 import type { RecentVisit } from "@/lib/recents"
 import type { MyWork, NeedsYouItem } from "@/lib/home/my-work"
 import type { HomeFirm, UnavailableFirm } from "@/lib/home/home-firms"
@@ -13,7 +14,6 @@ import { cn } from "@/lib/utils"
 import { ListRow } from "@/components/ui/list-row"
 import { EmptyPanel } from "@/components/ui/empty-panel"
 import { interactiveCardClass } from "@/components/ui/interactive-card"
-import { StatusIcon } from "@/components/ui/status-icon"
 import { Greeting, MyEngagementsList, RelativeTime } from "./home-client"
 import { AgendaWeek, type AgendaDueItem, type AgendaEvent } from "./agenda-week"
 import { HomeBookmarks } from "./home-bookmarks"
@@ -32,19 +32,9 @@ import { HomeEmptyLine, HomeSection } from "./home-section"
  * holds (.claude/plans/app-design-refinements.md, section 13).
  */
 
-/**
- * A deliverable to review and an upload to approve are both waiting on you, so they lead with the
- * status language's "Waiting" icon, named for screen readers; changes requested are its "Problem";
- * a client comment is a speech bubble, a mention keeps its @, any other reminder its bell.
- */
+/** Each row leads with what the item is; its action button says what it needs. A reminder about nothing in particular keeps its bell. */
 function needsIcon(item: NeedsYouItem): React.ReactNode {
-    switch (item.kind) {
-        case "deliverable_review": return <StatusIcon stage="waiting" label="In review" />
-        case "intake": return <StatusIcon stage="waiting" label="Upload to review" />
-        case "changes_requested": return <StatusIcon stage="problem" label="Changes requested" />
-        case "client_comment": return <MessageSquare aria-label="Client comment" />
-        case "reminder": return /comment/i.test(item.context) ? <AtSign /> : <Bell />
-    }
+    return item.entity ? <EntityIcon kind={item.entity} mimeType={item.mimeType} /> : <Bell aria-hidden />
 }
 
 /** How many recents to show: only full rows, so the cards line up — 1–3 in one row, else 6 in two. */
@@ -164,29 +154,44 @@ export function HomeView({
     const shownFirms = selectedFirm ? [selectedFirm] : firms
     const multiFirm = shownFirms.length > 1
     const firmName = new Map(firms.map((f) => [f.id, f.name]))
-    // "FirmaOne · DataSentry" — only when rows from several firms share the page.
+    // Only when rows from several firms share the page.
+    const firmLabel = (firmId: string | null | undefined) => (multiFirm && firmId ? firmName.get(firmId) ?? null : null)
+    // "FirmaOne · DataSentry"
     const label: Label = (firmId, context) => {
-        const name = multiFirm && firmId ? firmName.get(firmId) : null
+        const name = firmLabel(firmId)
         return name ? `${name} · ${context}` : context
     }
 
-    const agendaEvents: AgendaEvent[] = calendarEvents.map((e) => ({
-        id: e.id,
-        type: e.type,
-        title: e.title,
-        date: e.date,
-        href: e.ctaUrl ?? "#",
-        engagementId: e.engagementId,
-        clientName: label(e.firmId, e.clientName),
-    }))
+    const agendaEvents: AgendaEvent[] = calendarEvents.map((e) => {
+        const name = e.documentName ?? e.engagementName
+        return {
+            id: e.id,
+            type: e.type,
+            title: e.title,
+            name,
+            // A calendar title is "<name> · <what the date is>".
+            dateLabel: e.title.replace(`${name} · `, ""),
+            date: e.date,
+            href: e.ctaUrl ?? "#",
+            engagementId: e.engagementId,
+            firmName: firmLabel(e.firmId),
+            clientName: e.clientName,
+            mimeType: e.mimeType,
+        }
+    })
     const dueItems: AgendaDueItem[] = work.dueSoon.map((d) => ({
         id: d.id,
         kind: d.kind,
         title: d.title,
-        context: label(d.firmId, d.context),
+        context: d.context,
+        firmName: firmLabel(d.firmId),
+        clientName: d.clientName,
+        engagementName: d.engagementName,
         href: d.href,
         date: d.dueDate,
         status: d.status,
+        entity: d.entity,
+        mimeType: d.mimeType,
     }))
     // One firm on screen has one calendar to open; a cross-firm week has none.
     const calendarHref =

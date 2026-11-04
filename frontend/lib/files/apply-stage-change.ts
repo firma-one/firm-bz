@@ -17,6 +17,9 @@ import { renderDocumentStatusChangedEmail } from '@/lib/email-templates/document
  *
  * Shared by a person's move of a document and the derived move of its deliverable that can follow
  * (lib/files/deliverable-stage.ts), so both behave alike. Lifted unchanged from the stage route.
+ *
+ * A file outside any deliverable moves with `internalOnly`: its stage is the firm's own tracking, so
+ * the move never opens the file to clients and only the firm hears of it.
  */
 
 export interface StageRow {
@@ -58,12 +61,12 @@ export async function applyStageChange(
     row: StageRow,
     next: ActivityStatus,
     ctx: StageMoveContext,
-    opts: { orderIndex?: number; derived?: boolean; auditMeta?: Record<string, unknown> } = {},
+    opts: { orderIndex?: number; derived?: boolean; auditMeta?: Record<string, unknown>; internalOnly?: boolean } = {},
 ): Promise<{ oldStatus: ActivityStatus }> {
     const { projectId, firmId, clientId, actorUserId } = ctx
     const oldStatus = currentStageOf(row)
     const now = new Date().toISOString()
-    const widened = accessWidenedBy(row, next)
+    const widened = opts.internalOnly ? { externalCollaborators: false, viewers: false } : accessWidenedBy(row, next)
 
     // Only update EC/EV enabled flags on forward moves — once granted, access is never
     // revoked by a backward lane move. Use "Untag as Deliverable" to fully revoke.
@@ -158,21 +161,27 @@ export async function applyStageChange(
             const eventCfg = isRejection ? config.events.documentRejected : config.events.statusChanged
             if (!eventCfg.inApp && !eventCfg.email) return
 
+            const staff = await prisma.engagementMember.findMany({
+                where: { engagementId: projectId, role: { in: ['eng_admin', 'eng_member'] } },
+                select: { userId: true },
+            })
+            const staffIds = new Set(staff.map((m) => m.userId))
             const recipientIds = new Set<string>()
             if (isRejection) {
-                if (row.createdBy) recipientIds.add(row.createdBy)
+                // The firm's own tracking stays with the firm, even when a client added the file.
+                if (row.createdBy && (!opts.internalOnly || staffIds.has(row.createdBy))) recipientIds.add(row.createdBy)
             } else {
-                const staff = await prisma.engagementMember.findMany({
-                    where: { engagementId: projectId, role: { in: ['eng_admin', 'eng_member'] } },
-                    select: { userId: true },
-                })
-                staff.forEach((m) => recipientIds.add(m.userId))
+                staffIds.forEach((id) => recipientIds.add(id))
             }
             recipientIds.delete(actorUserId) // don't notify the actor of their own change
             if (recipientIds.size === 0) return
 
             const entityCtx = await resolveEntity('platform.engagements.shares', projectId)
-            const ctaUrl = buildAbsoluteUrl(entityCtx?.ctaUrl ?? null)
+            // A file outside any deliverable isn't on the Board: its link goes to it in Files.
+            const link = opts.internalOnly
+                ? entityCtx?.ctaUrl?.replace(/\/shares$/, `/files#doc-file:${row.id}`) ?? null
+                : entityCtx?.ctaUrl ?? null
+            const ctaUrl = buildAbsoluteUrl(link)
             const notifType = isRejection ? 'DOCUMENT_REJECTED' : 'DOCUMENT_STATUS_CHANGED'
             const title = isRejection
                 ? `Changes requested: "${row.fileName}"`
@@ -187,7 +196,7 @@ export async function applyStageChange(
                     userId,
                     type: notifType,
                     title,
-                    ctaUrl: entityCtx?.ctaUrl ?? null,
+                    ctaUrl: link,
                     metadata: { fileName: row.fileName, oldStatus, newStatus: next },
                     dedupeKey: `doc:${row.id}:${notifType}:${next}`,
                 })))

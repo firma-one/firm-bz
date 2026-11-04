@@ -41,7 +41,7 @@ vi.mock('@/lib/engagement-sharing-ids', () => ({
     getSharedAndAncestorIdsForPersona: vi.fn(async () => ({ sharedIds: ['D'], ancestorIds: [], parentMap: new Map() })),
     isFolderUnderSharedFolderDB: vi.fn(() => false),
 }))
-vi.mock('@/lib/files/file-creator', () => ({ loadPeople: vi.fn(async () => new Map()), byEmail: () => new Map(), creatorOf: () => null }))
+vi.mock('@/lib/files/file-creator', () => ({ loadPeople: vi.fn(async () => new Map()), byEmail: () => new Map(), creatorOf: () => null, assigneeOf: () => ({ assigneeUserId: null, assignee: null }) }))
 vi.mock('@/lib/doc-id', () => ({ assignDocId: vi.fn() }))
 vi.mock('@/lib/inngest/client', () => ({ safeInngestSend: vi.fn() }))
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } }))
