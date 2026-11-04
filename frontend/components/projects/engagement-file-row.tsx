@@ -24,10 +24,10 @@ import { DeliverableIcon } from '@/components/ui/deliverable-icon'
 import { DocumentActionMenu } from '@/components/ui/document-action-menu'
 import { openAssetDetailsPane } from '@/components/files/asset-details-pane'
 import { useRightPane } from '@/lib/right-pane-context'
-import { ProfileBubbleWithPopup } from '@/components/ui/profile-bubble-popup'
 import { RelativeDateTime } from '@/components/ui/relative-date-time'
 import type { EngagementRoleSlug } from '@/lib/deliverable-stage-roles'
-import { FileDueDateCell, FileStatusCell } from '@/components/projects/file-property-cells'
+import { FileAssigneeCell, FileDueDateCell, FileStatusCell } from '@/components/projects/file-property-cells'
+import { fileStage } from '@/lib/files/file-stage'
 import { BlockedTag } from '@/components/files/blocked-tag'
 import { MissingDueWarning } from '@/components/files/missing-due-warning'
 import { needsDueDate } from '@/lib/ui/due-date'
@@ -38,7 +38,7 @@ import {
     TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
-import { READ_ONLY_PILL_CLASS } from '@/components/ui/property-cells'
+import { READ_ONLY_PILL_CLASS, type PersonOption } from '@/components/ui/property-cells'
 import { FILES_DROP_TARGET_ROW_CLASS } from '@/components/projects/files-drop-zone'
 import { formatFileSize } from '@/lib/utils'
 import { DriveFile } from '@/lib/types'
@@ -140,6 +140,8 @@ export interface EngagementFileRowProps {
     inDeliverableFolder?: boolean
     /** The viewer's engagement role: decides which stages they may move a row to (as on the Board). */
     roleSlug?: EngagementRoleSlug | null
+    /** Who a lead may assign from the Assignee column. */
+    assignablePeople?: PersonOption[]
 }
 
 export function EngagementFileRow({
@@ -209,6 +211,7 @@ export function EngagementFileRow({
     isInsideApprovedDeliverable = false,
     inDeliverableFolder = false,
     roleSlug = null,
+    assignablePeople = [],
 }: EngagementFileRowProps) {
     // The row's ⋮ menu already reads the pane; the Details icon opens the same pane it does.
     const rightPane = useRightPane()
@@ -235,16 +238,13 @@ export function EngagementFileRow({
     const canEditDueDate = canManage && (!isFolder || !!file.isDeliverable) && !isFolderApproved && !locked && !isIntakeRow
     // The Status column shows a deliverable's stage; the row's deliverable badge steps aside while it's visible.
     const hasStatus = !!file.isDeliverable && !!file.deliverableStatus
-    // Tracked work: a deliverable, and the documents inside one. An empty Status or Due reads "Not set" there.
-    // The folders inside a deliverable only organize it, so they have no Status or Due: a dash, as other rows.
+    // Tracked work: a deliverable and every document. An empty Status or Due reads "Not set" there.
+    // Plain folders only organize, so they have no Status or Due: a dash.
     const isInsideDeliverable = isInsideApprovedDeliverable || inDeliverableFolder
         || (isGuest ? descendantIdsForGuest : isEC ? descendantIdsForEC : descendantIds).has(file.id)
-    const isTracked = !!file.isDeliverable || (!isFolder && isInsideDeliverable)
+    // The stage the Status column shows (and its filter matches).
+    const { tracked: isTracked, stage: shownStage } = fileStage(file, { isFolder, isInsideDeliverable, isExternalViewer: isEC || isGuest })
     const emptyTrackedValue = isTracked ? 'Not set' : '—'
-    // A row's own stage: the deliverable's, or a document's inside one.
-    const statusValue = file.activityStatus ?? (file.isDeliverable ? file.deliverableStatus : null) ?? null
-    // The stage the Status column shows. Tracked work with no stage yet: a document is Not started, a deliverable at To do.
-    const shownStage = isTracked ? (statusValue ?? (isFolder ? 'to_do' : 'not_started')) : isFolder && !file.isDeliverable ? null : statusValue
     // Underway (In progress, In review) with no due date: unplanned work, flagged in the Due column.
     // The date as last saved here, so setting one clears the warning at once.
     const [savedDue, setSavedDue] = React.useState<string | null>(file.dueDate ?? null)
@@ -252,6 +252,10 @@ export function EngagementFileRow({
     const missingDue = isTracked && needsDueDate(shownStage, savedDue)
     // Changeable in place on tracked rows, until the deliverable is approved; the role decides which moves.
     const canEditStatus = isTracked && !!roleSlug && !!file.projectDocumentId && !isIntakeRow && !isFolderApproved && !isInsideApprovedDeliverable
+    // As the Due column has it: a plain folder only organizes, so it has no assignee. Leads, as the assignee route allows.
+    const hasAssignee = !isFolder || !!file.isDeliverable
+    const canEditAssignee = hasAssignee && isProjectLead && !isEC && !isGuest && !!file.projectDocumentId
+        && !locked && !isIntakeRow && !isFolderApproved && !isInsideApprovedDeliverable
     const isIndexing = !isFolder && !!file.projectDocumentId && file.indexingStatus === 'PROCESSING'
     // Row tools appear on hover or keyboard focus, and stay while the row is in use.
     const toolsPinned = isActionMenuOpen || isSelected || isIndexing || file.id === activePreviewDocId || file.id === highlightedFileId
@@ -760,43 +764,23 @@ export function EngagementFileRow({
                 {missingDue && shownStage && <MissingDueWarning stage={shownStage} />}
             </div>
 
-            {/* Created by: who added it — the member who added it in the app, not the connector account
-                Drive names as the owner of everything the app adds; for a file added straight in Drive,
-                its Drive owner (lib/files/file-creator.ts) */}
-            <div className={cn('min-w-0', OWNER_COL_CLASS, FILE_TABLE_COL_LINE_CLASS)}>
-                {(() => {
-                    const ownerName = file.creator?.displayName || null
-                    const ownerEmail = file.creator?.emailAddress || null
-                    const ownerPhoto = file.creator?.photoLink || null
-                    const isMe = ownerEmail && sessionUserEmail
-                        && ownerEmail.toLowerCase() === sessionUserEmail.toLowerCase()
-                    const ROLE_LABELS: Record<string, string> = {
-                        eng_admin: 'Engagement Lead',
-                        eng_member: 'Team Member',
-                        eng_ext_collaborator: 'External Collaborator',
-                        eng_viewer: 'Reviewer',
-                    }
-                    const roleLabel = file.ownerRole ? (ROLE_LABELS[file.ownerRole] ?? file.ownerRole) : undefined
-                    const personaName = file.creator?.viaDrive
-                        ? (roleLabel ? `${roleLabel} · added in Drive` : 'Added in Drive')
-                        : roleLabel
-                    if (!ownerName) return (
-                        <span className="text-[0.8125rem] text-fg-muted">—</span>
-                    )
-                    return (
-                        <div className="flex items-center gap-1.5 min-w-0">
-                            <ProfileBubbleWithPopup
-                                name={ownerName}
-                                email={ownerEmail || ''}
-                                avatarUrl={ownerPhoto || null}
-                                personaName={personaName}
-                            />
-                            <span className="text-[0.8125rem] text-fg-muted truncate">
-                                {isMe ? 'me' : ownerName}
-                            </span>
-                        </div>
-                    )
-                })()}
+            {/* Assignee Column: who's on it, picked in place by a lead so planning happens here. */}
+            <div className={cn('min-w-0 items-center', OWNER_COL_CLASS, FILE_TABLE_COL_LINE_CLASS)} onClick={(e) => { if (canEditAssignee) e.stopPropagation() }}>
+                <FileAssigneeCell
+                    projectId={projectId}
+                    documentId={file.projectDocumentId ?? file.id}
+                    assignee={hasAssignee ? file.assignee ?? null : null}
+                    people={assignablePeople}
+                    canEdit={canEditAssignee}
+                    placeholder={emptyTrackedValue}
+                    meEmail={sessionUserEmail}
+                    onSaved={(next) => {
+                        file.assigneeUserId = next?.id ?? null
+                        file.assignee = next ? { id: next.id, name: next.name, email: next.email ?? null, avatarUrl: next.avatarUrl ?? null } : null
+                        onShareSaved()
+                    }}
+                    onError={(message) => onAddToast({ type: 'error', title: "Couldn't change the assignee", message })}
+                />
             </div>
 
             {/* Date Modified Column. Rows are a fixed 34px, so a date must never wrap onto a second line:

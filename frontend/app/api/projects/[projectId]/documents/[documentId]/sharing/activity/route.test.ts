@@ -3,8 +3,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // A deliverable's stage follows its documents (.claude/plans/deliverable-stages-blocked.md, section 2):
 // a document's move carries it, asking first when that shows it to clients or approves it.
 
-const { st, applied, approvals } = vi.hoisted(() => ({
+const { st, applied, moveOpts, approvals } = vi.hoisted(() => ({
     applied: [] as { id: string; next: string; derived: boolean }[],
+    moveOpts: [] as { internalOnly?: boolean }[],
     approvals: { archived: [] as any[], recorded: [] as any[], fail: false },
     st: {
         role: 'eng_admin' as string,
@@ -24,8 +25,9 @@ vi.mock('@/lib/permission-helpers', () => ({ getProjectPersona: async () => st.r
 vi.mock('@/lib/files/deliverable-of', () => ({ deliverableOf: async () => (st.inDeliverable ? { id: 'D', docId: 'QSR-1', name: 'Market report' } : null) }))
 vi.mock('@/lib/files/apply-stage-change', async (importActual) => ({
     ...(await importActual<typeof import('@/lib/files/apply-stage-change')>()),
-    applyStageChange: async (row: any, next: string, _ctx: unknown, opts: { derived?: boolean } = {}) => {
+    applyStageChange: async (row: any, next: string, _ctx: unknown, opts: { derived?: boolean; internalOnly?: boolean } = {}) => {
         applied.push({ id: row.id, next, derived: !!opts.derived })
+        moveOpts.push(opts)
         return { oldStatus: 'x' }
     },
 }))
@@ -83,6 +85,7 @@ beforeEach(() => {
     st.inDeliverable = true
     st.members = { eng_ext_collaborator: 1, eng_viewer: 2 }
     applied.length = 0
+    moveOpts.length = 0
     approvals.archived.length = 0
     approvals.recorded.length = 0
     approvals.fail = false
@@ -176,6 +179,23 @@ describe('moving a document', () => {
         const res = await patch('d1', { status: 'in_progress' })
         expect(res.status).toBe(200)
         expect(applied).toEqual([{ id: 'd1', next: 'in_progress', derived: false }])
+        // The firm's own tracking: this move must not open it to clients.
+        expect(moveOpts[0].internalOnly).toBe(true)
+    })
+
+    it('keeps a document inside a deliverable on its usual path', async () => {
+        setRows(deliverable('in_progress'), doc('d1', 'to_do'), doc('d2', 'in_progress'))
+        await patch('d1', { status: 'in_progress' })
+        expect(moveOpts[0].internalOnly).toBe(false)
+    })
+
+    it("doesn't let a client move a document outside any deliverable", async () => {
+        st.inDeliverable = false
+        st.role = 'eng_ext_collaborator'
+        setRows(doc('d1', 'in_progress'))
+        const res = await patch('d1', { status: 'in_review' })
+        expect(res.status).toBe(403)
+        expect(applied).toEqual([])
     })
 
     it("doesn't send a client the document's Blocked flag", async () => {

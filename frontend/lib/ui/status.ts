@@ -7,7 +7,6 @@
  * Each record is typed against its enum, so a new enum value can't ship without a stage.
  * "Overdue" is not a stage: it's a red date on whatever stage the item is in.
  *
- * Supersedes lib/ui/status-colors.ts, whose callers move over in waves 2 and 3.
  * Class strings are written out in full so Tailwind's scanner (which reads lib/) generates them.
  */
 

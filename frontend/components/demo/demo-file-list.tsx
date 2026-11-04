@@ -47,7 +47,7 @@ import { FilterPill } from '@/components/ui/filter-pill'
 import { Hint } from '@/components/ui/tooltip'
 import { RelativeDateTime } from '@/components/ui/relative-date-time'
 import { StatusPill } from '@/components/ui/status-pill'
-import { DateProperty, READ_ONLY_PILL_CLASS, StatusProperty } from '@/components/ui/property-cells'
+import { DateProperty, PersonProperty, READ_ONLY_PILL_CLASS, StatusProperty, type PersonOption } from '@/components/ui/property-cells'
 import { useToast } from '@/components/ui/toast'
 import { FILES_DROP_TARGET_ROW_CLASS, FILES_DROP_ZONE_ACTIVE_CLASS, FilesDropPill, FilesDropRow } from '@/components/projects/files-drop-zone'
 import { STAGE_ORDER, STAGE_ROLE_MAP, getAllowedTransitions } from '@/lib/deliverable-stage-roles'
@@ -77,7 +77,6 @@ import {
     STATUS_COL_CLASS,
 } from '@/components/projects/engagement-file-table-grid'
 import { cn, formatFileSize } from '@/lib/utils'
-import { initialsOf } from '@/lib/initials'
 import type { DemoFolder, DemoFile } from '@/lib/demo/static-demo-data'
 import { DELIVERABLE_ACTORS, demoDocumentStages, demoFilesIn, type DeliverableStatus, type DemoDocumentStage } from '@/lib/demo/demo-deliverables'
 import { ACTIVITY_STAGES, type ActivityStatus } from '@/lib/sharing-settings'
@@ -110,8 +109,11 @@ export const MIME_BY_TYPE: Record<string, string> = {
 }
 
 const OWNER = 'Alex Jordan'
-/** Who added each file, as the app's Created by column shows it: one of the team, the same on every visit. */
+/** Who added each file, as the Details pane's Created shows it: one of the team, the same on every visit. */
 const creatorOf = (id: string) => DELIVERABLE_ACTORS[Array.from(id).reduce((n, c) => n + c.charCodeAt(0), 0) % DELIVERABLE_ACTORS.length]
+const DEMO_PEOPLE: PersonOption[] = DELIVERABLE_ACTORS.map((name) => ({ id: name, name }))
+/** Work that has started is on someone's plate; the tour's Assignee column and Details pane agree on who. */
+const defaultAssignee = (id: string, stage: ActivityStatus | null) => (stage && stage !== 'not_started' ? creatorOf(id) : null)
 const NOT_IN_DEMO = 'Not available in this demo'
 /** The tour engagement's clients, as its Members tab lists them: one reviewer (Morgan Ellis), no external contributors. */
 const TOUR_CLIENTS = { externalCollaborators: 0, viewers: 1 }
@@ -357,12 +359,15 @@ function EntryRow({
     uploadTarget = false,
     onFileDragOver,
     onFileDrop,
+    assigneeOverride,
+    assigneeEditable,
+    onSetAssignee,
 }: {
     entry: Entry
     onOpenFolder?: () => void
     deliverableStatus?: DeliverableStatus
     dueDate?: string | null
-    /** A deliverable, or a document inside one: an empty Status or Due reads "Not set", not a dash. */
+    /** A deliverable, or any document: an empty Status or Due reads "Not set", not a dash. */
     tracked: boolean
     /** Inside a deliverable: a folder here wears the lighter folder-plus, though it has no Status or Due. */
     inside?: boolean
@@ -384,16 +389,21 @@ function EntryRow({
     uploadTarget?: boolean
     onFileDragOver?: (e: React.DragEvent) => void
     onFileDrop?: (e: React.DragEvent) => void
+    /** Who it was assigned to on the tour, if it was (null: unassigned). */
+    assigneeOverride?: string | null
+    /** As in the app: a plain folder has no assignee, and an approved deliverable no longer changes. */
+    assigneeEditable: boolean
+    onSetAssignee: (next: string | null) => void
 }) {
     const isFolder = entry.kind === 'folder'
     const docId = isFolder ? entry.folder.docId : entry.file.docId
-    const creator = creatorOf(entryId(entry))
     const name = isFolder ? entry.folder.name.replace(/_+/g, ' ').trim() : entry.file.name
     const approved = deliverableStatus === 'approved'
     // Inset as the editable cells' buttons are, so read-only and editable values line up.
     const empty = <span className={cn(READ_ONLY_PILL_CLASS, 'text-small text-fg-subtle')}>{tracked ? 'Not set' : '—'}</span>
     // As in the app: tracked work with no stage yet — a document is Not started, a deliverable at To do.
     const stage = status ?? (tracked ? (isFolder ? 'to_do' : 'not_started') : null)
+    const assignee = assigneeOverride !== undefined ? assigneeOverride : defaultAssignee(entryId(entry), stage)
 
     return (
         <div
@@ -492,9 +502,14 @@ function EntryRow({
                 {tracked && stage && needsDueDate(stage, dueDate) && <MissingDueWarning stage={stage} className="ml-1" />}
             </div>
 
-            <div className={`min-w-0 items-center gap-1.5 ${OWNER_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}>
-                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-surface-muted text-[9px] font-medium text-fg-muted">{initialsOf(creator)}</span>
-                <span className="truncate text-fg-muted">{creator}</span>
+            <div className={`min-w-0 items-center ${OWNER_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}>
+                <PersonProperty
+                    value={assignee ? { id: assignee, name: assignee } : null}
+                    people={DEMO_PEOPLE}
+                    onChange={(next) => onSetAssignee(next?.name ?? null)}
+                    disabled={!assigneeEditable}
+                    placeholder={tracked ? 'Not set' : '—'}
+                />
             </div>
 
             <div className={`items-center ${DATE_MODIFIED_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}>
@@ -537,6 +552,7 @@ export function DemoFileList({
     // Due dates and stages set on the tour, by row: the edits the demo keeps (until the page reloads).
     const [dueOverrides, setDueOverrides] = useState<Record<string, string | null>>({})
     const [statusOverrides, setStatusOverrides] = useState<Record<string, ActivityStatus>>({})
+    const [assigneeOverrides, setAssigneeOverrides] = useState<Record<string, string | null>>({})
     const { addToast } = useToast()
     // The drop zone, as in the app (components/projects/files-drop-zone.tsx): files dropped on the list, or
     // on a folder row, or picked with Browse, are added on screen only; the tour uploads nothing.
@@ -746,12 +762,15 @@ export function DemoFileList({
     paneRef.current = rightPane
     const detailsStage = detailsFor ? documentStage(detailsFor.file.id) : null
     const detailsDue = detailsFor ? dueOf(detailsFor.file.id) : null
+    const detailsAssignee = !detailsFor ? null : detailsFor.file.id in assigneeOverrides
+        ? assigneeOverrides[detailsFor.file.id]
+        : defaultAssignee(detailsFor.file.id, detailsStage ?? 'not_started')
     useEffect(() => {
         if (!detailsFor) return
         const { file, deliverable } = detailsFor
         const pane = paneRef.current
         const creator = creatorOf(file.id)
-        const stage = deliverable ? detailsStage ?? 'not_started' : null
+        const stage = detailsStage ?? 'not_started'
         pane.setTitle(file.docId)
         pane.setHeaderSubtitle(file.name)
         pane.setHeaderIcon(<DocumentIcon mimeType={MIME_BY_TYPE[file.type] ?? 'application/octet-stream'} className="h-4 w-4" />)
@@ -763,7 +782,7 @@ export function DemoFileList({
                 key={file.id}
                 file={file}
                 creator={creator}
-                assignee={stage && stage !== 'not_started' ? creator : null}
+                assignee={detailsAssignee}
                 stage={stage}
                 dueDate={detailsDue}
                 blocked={deliverable ? blockedOf(file.id) : null}
@@ -779,7 +798,7 @@ export function DemoFileList({
         )
         // Only the file, its stage and its due date re-set the pane; a Blocked change comes from the pane itself.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [detailsFor, detailsStage, detailsDue])
+    }, [detailsFor, detailsStage, detailsDue, detailsAssignee])
     // Closed from the pane's own ×.
     useEffect(() => {
         if (!rightPane.content) setDetailsFor(null)
@@ -946,6 +965,7 @@ export function DemoFileList({
                             />
                             <Hint label="Filters aren't available in this demo" side="bottom">
                                 <div className="flex items-center gap-1.5">
+                                    <FilterPill icon={<CircleDot />} label="Status" />
                                     <FilterPill icon={<FileText />} label="Type" />
                                     <FilterPill icon={<User />} label="People" />
                                     <FilterPill icon={<Clock3 />} label="Modified" />
@@ -979,7 +999,7 @@ export function DemoFileList({
                         <div className={`col-span-3 flex items-center ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Name" icon={<Type />} /></div>
                         <div className={`items-center ${STATUS_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Status" icon={<CircleDot />} /></div>
                         <div className={`items-center ${DUE_DATE_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Due" icon={<Flag />} /></div>
-                        <div className={`items-center ${OWNER_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Created by" icon={<UserRound />} /></div>
+                        <div className={`items-center ${OWNER_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Assignee" icon={<UserRound />} /></div>
                         <div className={`items-center ${DATE_MODIFIED_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Modified" icon={<Clock3 />} /></div>
                         <div className={`items-center ${FILE_SIZE_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Size" icon={<HardDrive />} /></div>
                     </div>
@@ -1001,15 +1021,18 @@ export function DemoFileList({
                                 onOpenFolder={entry.kind === 'folder' ? () => openFolder([...path, entry.folder]) : undefined}
                                 deliverableStatus={entry.kind === 'folder' ? deliverableStage(entry.folder) : undefined}
                                 status={statusFor(entry)}
-                                // As in the app: a deliverable's documents have a Status you change; the deliverable's follows them,
-                                // and the folders inside it only organize it
-                                statusEditable={entry.kind === 'file' && insideDeliverable && !deliverableApproved}
+                                // As in the app: every document has a Status you change (outside a deliverable, for the firm's own
+                                // tracking); a deliverable's follows its documents, and plain folders only organize
+                                statusEditable={entry.kind === 'file' && !deliverableApproved}
                                 onSetStatus={(next) => setStatus(entry, next)}
+                                assigneeOverride={id in assigneeOverrides ? assigneeOverrides[id] : undefined}
+                                assigneeEditable={entry.kind === 'file' ? !deliverableApproved : !!deliverableStatusByFolderId?.[id] && deliverableStage(entry.folder) !== 'approved'}
+                                onSetAssignee={(next) => setAssigneeOverrides((prev) => ({ ...prev, [id]: next }))}
                                 blocked={entry.kind === 'file' && insideDeliverable ? blockedOf(id) ?? undefined : undefined}
                                 onOpenDetails={entry.kind === 'file' ? () => openDetails(entry.file) : undefined}
                                 dueDate={id in dueOverrides ? dueOverrides[id] : entry.kind === 'folder' ? deliverableDueByFolderId?.[id] : null}
                                 onSetDue={(next) => setDue(entry, next)}
-                                tracked={(entry.kind === 'file' && insideDeliverable) || (entry.kind === 'folder' && !!deliverableStatusByFolderId?.[id])}
+                                tracked={entry.kind === 'file' || !!deliverableStatusByFolderId?.[id]}
                                 inside={insideDeliverable}
                                 pinTools={index === 0}
                                 selected={selected.has(id)}

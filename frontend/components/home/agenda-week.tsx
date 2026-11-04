@@ -5,6 +5,7 @@ import Link from "next/link"
 import { addDays, format, isSameDay, startOfDay } from "date-fns"
 import { type LucideProps, AlertCircle, ArrowRight, Bell, Briefcase, CalendarDays, FileText } from "lucide-react"
 import { DeliverableGlyph } from '@/components/ui/deliverable-icon'
+import { EntityIcon, type EntityKind } from '@/components/ui/entity-icon'
 import type { CalendarEventType } from "@/lib/actions/calendar"
 import { getEngagementTagColor } from "@/lib/calendar/engagement-color"
 import { HomeEmptyLine, HomeSection } from "./home-section"
@@ -16,45 +17,96 @@ import { statusOf } from "@/lib/ui/status"
 
 type AgendaEventType = CalendarEventType | "reminder"
 
-/** The app's tooltip, not the browser's: the full title, then where it belongs, muted. */
-function ChipTooltip({ title, detail, children }: { title: ReactNode; detail?: ReactNode; children: ReactElement }) {
+/** Where an item sits. The firm is set only when several share the page. */
+type AgendaPlace = { firmName?: string | null; clientName?: string | null; engagementName?: string | null }
+
+/** One tooltip line, its mark in a column of its own so the text lines up. */
+function TipLine({ icon, muted, children }: { icon?: ReactNode; muted?: boolean; children: ReactNode }) {
+    return (
+        <span className={cn("flex items-start gap-1.5", muted && "text-fg-muted")}>
+            {icon && <span className="mt-0.5 flex shrink-0 items-center text-fg-muted">{icon}</span>}
+            <span className="min-w-0 break-words">{children}</span>
+        </span>
+    )
+}
+
+/**
+ * The app's tooltip, not the browser's: what the item is and its full name, then where it sits,
+ * each name with its mark. `note` says what the date is, closing the last line.
+ */
+function ChipTooltip({ icon, title, place, note, children }: { icon?: ReactNode; title: ReactNode; place?: AgendaPlace; note?: ReactNode; children: ReactElement }) {
+    const places = ([["firm", place?.firmName], ["client", place?.clientName], ["engagement", place?.engagementName]] as const).filter(([, name]) => name)
     return (
         <Tooltip>
             <TooltipTrigger asChild>{children}</TooltipTrigger>
             <TooltipContent side="bottom" align="start" className="flex flex-col gap-0.5">
-                <span className="font-medium">{title}</span>
-                {detail && <span className="text-fg-muted">{detail}</span>}
+                <TipLine icon={icon}><span className="font-medium">{title}</span></TipLine>
+                {places.map(([kind, name], i) => (
+                    <TipLine key={kind} muted icon={<EntityIcon kind={kind} className="h-3.5 w-3.5" />}>
+                        {name}
+                        {note && i === places.length - 1 && <> · {note}</>}
+                    </TipLine>
+                ))}
+                {places.length === 0 && note && (
+                    <TipLine muted icon={icon && <span className="block h-3.5 w-3.5" />}>{note}</TipLine>
+                )}
             </TooltipContent>
         </Tooltip>
     )
+}
+
+/** An item's icon in its tooltip. A reminder about nothing in particular keeps its bell. */
+function itemIcon(kind: EntityKind | null | undefined, mimeType?: string | null) {
+    return kind ? <EntityIcon kind={kind} mimeType={mimeType} className="h-3.5 w-3.5" /> : <Bell aria-hidden className="h-3.5 w-3.5" />
 }
 
 /**
  * One chip on the agenda: a firm calendar event (same data and access rules as the calendar page),
  * or one of the viewer's own dated reminders, which the calendar doesn't show.
  */
-export type AgendaEvent = {
+export type AgendaEvent = AgendaPlace & {
     id: string
     type: AgendaEventType
+    /** The chip's text: "Report.pdf · Due". */
     title: string
+    /** The title's two parts, which the tooltip lays out on their own lines. */
+    name?: string
+    dateLabel?: string | null
     /** ISO timestamp; bucketed into days in the viewer's timezone, like the calendar page. */
     date: string
     href: string
     /** Colors the chip like the calendar does; reminders have none and stay gray. */
     engagementId: string | null
-    clientName: string
+    /** A reminder's subject; a calendar event's follows from its type. */
+    entity?: EntityKind | null
+    /** A document's type, for its file-type icon. */
+    mimeType?: string | null
 }
 
 /** Something of the viewer's that is due: an assigned deliverable, an engagement they lead, a reminder. */
-export type AgendaDueItem = {
+export type AgendaDueItem = AgendaPlace & {
     id: string
     kind: "deliverable" | "engagement" | "reminder"
     title: string
+    /** A reminder's own words: what it asks. Everything else says it's due. */
     context: string
     href: string
     date: string
     /** The deliverable's stage or the engagement's status; the chip leads with its StatusIcon. */
     status?: string | null
+    /** What it is, for its tooltip's icon. */
+    entity?: EntityKind | null
+    mimeType?: string | null
+}
+
+/** What a calendar event is about. A kickoff, due date or follow-up is the engagement's. */
+const TYPE_ENTITY: Record<AgendaEventType, EntityKind | null> = {
+    kickoff: "engagement",
+    due: "engagement",
+    followUp: "engagement",
+    deliverable: "deliverable",
+    document: "document",
+    reminder: null,
 }
 
 const TYPE_ICON: Record<AgendaEventType, React.ComponentType<LucideProps>> = {
@@ -117,7 +169,7 @@ export function AgendaWeek({
         if (!today) return events
         const reminders = dueItems
             .filter((d) => d.kind === "reminder" && Date.parse(d.date) >= today.getTime())
-            .map((d) => ({ id: d.id, type: "reminder" as const, title: d.title, date: d.date, href: d.href, engagementId: null, clientName: d.context }))
+            .map((d) => ({ id: d.id, type: "reminder" as const, title: d.title, dateLabel: d.context, date: d.date, href: d.href, engagementId: null, firmName: d.firmName, clientName: d.clientName, engagementName: d.engagementName, entity: d.entity, mimeType: d.mimeType }))
         return [...events, ...reminders]
     }, [events, dueItems, today])
 
@@ -166,15 +218,16 @@ export function AgendaWeek({
                         {shownOverdue.map((d) => {
                             const Icon = DUE_KIND_ICON[d.kind]
                             const status = d.status && d.kind !== "reminder" ? statusOf(d.kind, d.status) : null
+                            const when = format(new Date(d.date), "MMM d")
                             return (
-                                <ChipTooltip key={d.id} title={d.title} detail={`${d.context} · due ${format(new Date(d.date), "MMM d")}`}>
+                                <ChipTooltip key={d.id} icon={itemIcon(d.entity ?? (d.kind === "reminder" ? null : d.kind), d.mimeType)} title={d.title} place={d} note={d.kind === "reminder" ? `${d.context} · ${when}` : `Due ${when}`}>
                                     <Link
                                         href={d.href}
                                         className="flex min-w-0 max-w-[18rem] items-center gap-1 rounded bg-tag-red-bg px-1.5 py-0.5 text-caption font-medium text-tag-red-fg transition-[filter] hover:brightness-95"
                                     >
                                         {status ? <StatusIcon stage={status.stage} size={12} label={status.label} /> : <Icon className="h-3 w-3 shrink-0" />}
                                         <span className="truncate">{d.title}</span>
-                                        <span className="shrink-0 font-normal tabular-nums opacity-80">· {format(new Date(d.date), "MMM d")}</span>
+                                        <span className="shrink-0 font-normal tabular-nums opacity-80">· {when}</span>
                                     </Link>
                                 </ChipTooltip>
                             )
@@ -219,7 +272,7 @@ export function AgendaWeek({
                                     const Icon = TYPE_ICON[e.type] ?? Briefcase
                                     const color = e.engagementId ? getEngagementTagColor(e.engagementId) : "gray"
                                     return (
-                                        <ChipTooltip key={e.id} title={e.title} detail={e.clientName}>
+                                        <ChipTooltip key={e.id} icon={itemIcon(e.entity ?? TYPE_ENTITY[e.type], e.mimeType)} title={e.name ?? e.title} place={e} note={e.dateLabel}>
                                             <Link
                                                 href={e.href}
                                                 className="flex min-w-0 items-center gap-1 rounded px-1.5 py-0.5 text-caption font-medium transition-[filter] hover:brightness-95"
@@ -239,7 +292,7 @@ export function AgendaWeek({
                                     ) : (
                                         <ChipTooltip
                                             title={`${items.length - PER_DAY} more`}
-                                            detail={items.slice(PER_DAY).map((e) => <span key={e.id} className="block">{e.title}</span>)}
+                                            note={items.slice(PER_DAY).map((e) => <span key={e.id} className="block">{e.title}</span>)}
                                         >
                                             <span tabIndex={0} className="self-start rounded-control px-1.5 text-caption text-fg-muted outline-none focus-visible:ring-2 focus-visible:ring-action/30">
                                                 +{items.length - PER_DAY} more

@@ -37,7 +37,7 @@ const LEAD: AssetDetailsEditing = { statusRole: 'eng_admin', tracked: true, canE
 
 describe('assetDetailsTabs', () => {
     it('gives the firm all four tabs on a file', () => {
-        expect(assetDetailsTabs({ isExternalUser: false, isLink: false, hasProject: true })).toEqual(['details', 'versions', 'activity', 'discussions'])
+        expect(assetDetailsTabs({ isExternalUser: false, isLink: false, hasProject: true })).toEqual(['details', 'discussions', 'versions', 'activity'])
     })
 
     it('gives an external user Details and Discussions only', () => {
@@ -45,7 +45,7 @@ describe('assetDetailsTabs', () => {
     })
 
     it('leaves Versions out for a link', () => {
-        expect(assetDetailsTabs({ isExternalUser: false, isLink: true, hasProject: true })).toEqual(['details', 'activity', 'discussions'])
+        expect(assetDetailsTabs({ isExternalUser: false, isLink: true, hasProject: true })).toEqual(['details', 'discussions', 'activity'])
     })
 
     it('has only Details without the engagement', () => {
@@ -92,7 +92,7 @@ describe('AssetDetailsPane — fields first, then the tabs', () => {
 
     it('names the tabs, with Discussions as the engagement page calls them', () => {
         render(<AssetDetailsPane document={FILE} projectId="p1" editing={LEAD} />)
-        expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Details', 'Versions', 'Activity', 'Discussions'])
+        expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Details', 'Discussions', 'Versions', 'Activity'])
         expect(screen.getByRole('tab', { name: 'Details' }).getAttribute('aria-selected')).toBe('true')
     })
 

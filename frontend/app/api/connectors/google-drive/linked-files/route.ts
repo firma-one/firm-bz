@@ -21,7 +21,7 @@ import { blockedOf } from '@/lib/files/blocked'
 import { descriptionOf } from '@/lib/files/description'
 import { reconcileNativeDescriptions } from '@/lib/files/native-description'
 import { SearchService } from '@/lib/services/search-service'
-import { byEmail, creatorOf, loadPeople } from '@/lib/files/file-creator'
+import { assigneeOf, byEmail, creatorOf, loadPeople } from '@/lib/files/file-creator'
 import { assertWithinDocumentCap } from '@/lib/billing/effective-billing-caps'
 import { getPermissionAdapter, getStorageAdapter, getContentAdapter } from '@/lib/connectors/registry'
 import { getOneDriveItemActivity, listOneDriveFiles } from '@/lib/connectors/adapters/onedrive-list-files'
@@ -395,6 +395,7 @@ export async function POST(request: NextRequest) {
                     lastModifyingUser: fresh?.lastModifyingUser ?? (row.metadata as any)?.lastModifyingUser ?? null,
                     actorEmail: row.createdBy ? (creatorEmailMap.get(row.createdBy) ?? null) : null,
                     creator,
+                    ...assigneeOf(row.settings, people),
                     ownerRole: creator?.emailAddress ? (roleByEmail.get(creator.emailAddress.toLowerCase()) ?? null) : null,
                     isFolder: row.isFolder,
                     connectorId: connector.id,
@@ -407,8 +408,9 @@ export async function POST(request: NextRequest) {
                     // writes it on any settings save) doesn't make it one.
                     isDeliverable: row.isFolder && !!(s.share?.createdAt),
                     deliverableStatus: row.isFolder && s.share?.createdAt ? (s.activity?.status ?? null) : null,
-                    // Every document's own stage: a deliverable's, or a document's inside one (the Files Status column).
-                    activityStatus: s.activity?.status ?? null,
+                    // Every document's own stage (the Files Status column). A client browsing here sees a file outside
+                    // a deliverable only if it was shared directly, and its stage stays the firm's own tracking.
+                    activityStatus: !row.isFolder && !folderInShared && !folderUnderShared ? null : s.activity?.status ?? null,
                     // The firm's own: a client is never sent it.
                     blocked: personaSlugToFilter ? null : blockedOf(row.settings),
                     isPendingApproval: intakeExternalIds.has(row.externalId),
@@ -459,7 +461,7 @@ export async function POST(request: NextRequest) {
                             parentId: folderId,
                             documentType: 'LINK',
                         },
-                        select: { id: true, externalId: true, fileName: true, mimeType: true, externalUrl: true, metadata: true, status: true, docId: true, createdBy: true },
+                        select: { id: true, externalId: true, fileName: true, mimeType: true, externalUrl: true, metadata: true, settings: true, status: true, docId: true, createdBy: true },
                     }),
                 ])
                 files = listed
@@ -479,6 +481,7 @@ export async function POST(request: NextRequest) {
                         : []
 
                     const internalByExternal = new Map<string, string>(enrichRows.map((r: any) => [r.externalId, r.id]))
+                    const settingsByExternal = new Map<string, unknown>(enrichRows.map((r: any) => [r.externalId, r.settings]))
                     const statusByExternal = new Map<string, string>(enrichRows.map((r: any) => [r.externalId, r.status]))
                     const dueDateByExternal = new Map<string, string | null>(enrichRows.map((r: any) => [r.externalId, r.dueDate ? (r.dueDate as Date).toISOString() : null]))
                     const docIdByExternal = new Map<string, string | null>(enrichRows.map((r: any) => [r.externalId, r.docId ?? null]))
@@ -578,6 +581,7 @@ export async function POST(request: NextRequest) {
                         )
                         return {
                         ...f,
+                        ...assigneeOf(settingsByExternal.get(f.id), listingPeople),
                         projectDocumentId: internalByExternal.get(f.id) ?? undefined,
                         indexingStatus: statusByExternal.get(f.id) ?? undefined,
                         dueDate: dueDateByExternal.get(f.id) ?? null,
@@ -642,6 +646,7 @@ export async function POST(request: NextRequest) {
                                 owners: creator ? [{ displayName: creator.displayName, emailAddress: creator.email }] : null,
                                 actorEmail: creator?.email ?? null,
                                 creator: creator ? { displayName: creator.displayName, emailAddress: creator.email, photoLink: null, viaDrive: false } : null,
+                                ...assigneeOf(row.settings, listingPeople),
                                 ownerRole: creator ? (elRoleByEmail.get(creator.email) ?? null) : null,
                             })
                         }

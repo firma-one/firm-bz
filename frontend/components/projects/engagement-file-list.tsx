@@ -22,7 +22,12 @@ import { DeliverableIcon } from '@/components/ui/deliverable-icon'
 import { DocumentActionMenu } from '@/components/ui/document-action-menu'
 import { DocumentPreviewPanelContent } from '@/components/files/document-edit-sheet'
 import { DocumentPreviewPane } from '@/components/files/document-preview-pane'
-import { isAssetDetailsPaneContent } from '@/components/files/asset-details-pane'
+import { assignablePeople, isAssetDetailsPaneContent } from '@/components/files/asset-details-pane'
+import { StatusIcon } from '@/components/ui/status-icon'
+import type { PersonOption } from '@/components/ui/property-cells'
+import { fileStage } from '@/lib/files/file-stage'
+import { ACTIVITY_STAGES, type ActivityStatus } from '@/lib/sharing-settings'
+import { statusOf } from '@/lib/ui/status'
 import { evictPreview } from '@/lib/preview-cache'
 import { DocumentDocCommentsPane } from '@/components/projects/document-doc-comments-pane'
 import { formatFileSize } from '@/lib/utils'
@@ -150,7 +155,7 @@ const FILE_TYPE_FILTERS: Array<[string, string]> = [
     ['image', 'Images'],
     ['other', 'Other'],
 ]
-const OWNER_FILTER_LABEL = { me: 'Created by me', 'not-me': 'Created by others', 'private-me': 'Private to me' } as const
+const OWNER_FILTER_LABEL = { 'assigned-me': 'Assigned to me', me: 'Created by me', 'not-me': 'Created by others', 'private-me': 'Private to me' } as const
 const MODIFIED_FILTER_LABEL = { '7d': 'Last 7 days', '30d': 'Last 30 days', year: 'This year' } as const
 const SORT_BY_LABEL: Record<SortByOption, string> = {
     name: 'Name',
@@ -580,6 +585,18 @@ export function EngagementFileList({ projectId, initialFolderData, connectorRoot
     const [confidentialFolderId, setConfidentialFolderId] = useState<string | null>(null)
     const [stagingFolderId, setStagingFolderId] = useState<string | null>(null)
     const [isProjectLead, setIsProjectLead] = useState(false)
+    // Who a lead may assign from the Assignee column.
+    const [assignableMembers, setAssignableMembers] = useState<PersonOption[]>([])
+    useEffect(() => {
+        const token = session?.access_token
+        if (!isProjectLead || !token) return
+        let cancelled = false
+        fetch(`/api/projects/${projectId}/members`, { headers: { Authorization: `Bearer ${token}` } })
+            .then((res) => (res.ok ? res.json() : null))
+            .then((data) => { if (!cancelled && data) setAssignableMembers(assignablePeople(data.members ?? [])) })
+            .catch(() => {})
+        return () => { cancelled = true }
+    }, [isProjectLead, projectId, session?.access_token])
     const [isLoadingFolders, setIsLoadingFolders] = useState(true)
     const [currentFolderType, setCurrentFolderType] = useState<'general' | 'confidential' | 'staging'>('general')
     // Tracks whether the current folder is an approved deliverable (locks write ops)
@@ -915,7 +932,8 @@ export function EngagementFileList({ projectId, initialFolderData, connectorRoot
     const [sortConfig, setSortConfig] = useState<SortConfig>({ sortBy: 'name', direction: 'asc', foldersFirst: true })
     const { searchQuery, setSearchQuery, isSearching } = useEngagementSearch()
     const [filterTypes, setFilterTypes] = useState<Set<string>>(new Set())
-    const [filterOwner, setFilterOwner] = useState<'any' | 'me' | 'not-me' | 'private-me'>('any')
+    const [filterStatuses, setFilterStatuses] = useState<Set<ActivityStatus>>(new Set())
+    const [filterOwner, setFilterOwner] = useState<'any' | keyof typeof OWNER_FILTER_LABEL>('any')
     const [peopleFilterOpen, setPeopleFilterOpen] = useState(false)
     const [filterModified, setFilterModified] = useState<'any' | '7d' | '30d' | 'year'>('any')
     /** Files' "Deliverables" toggle: only deliverables, what's inside them, and the folders that lead to them. */
@@ -2202,6 +2220,23 @@ const handleRefresh = async () => {
     // Check if we're at project root level (not in general or confidential)
     const isAtProjectRoot = currentFolderId === connectorRootFolderId || (!currentFolderId && !generalFolderId && !confidentialFolderId)
 
+    const toggleFilterStatus = (status: ActivityStatus) => {
+        setFilterStatuses(prev => {
+            const next = new Set(prev)
+            if (next.has(status)) next.delete(status)
+            else next.add(status)
+            return next
+        })
+    }
+    const anyFilterSet = deliverablesOnly || filterTypes.size > 0 || filterStatuses.size > 0 || filterOwner !== 'any' || filterModified !== 'any'
+    const clearFilters = () => {
+        setDeliverablesOnly(false)
+        setFilterTypes(new Set())
+        setFilterStatuses(new Set())
+        setFilterOwner('any')
+        setFilterModified('any')
+    }
+
     const toggleFilterType = (type: string) => {
         setFilterTypes(prev => {
             const next = new Set(prev)
@@ -2252,10 +2287,27 @@ const handleRefresh = async () => {
             })
         }
 
-        if (filterOwner !== 'any' && session?.user?.email) {
+        if (filterStatuses.size > 0) {
+            // What the row's Status column shows, so a filter never disagrees with the pill beside it.
+            const isEC = restrictToSharedOnly ? canEdit : viewAsPersonaSlug === 'eng_ext_collaborator'
+            const isGuest = restrictToSharedOnly ? !canEdit : viewAsPersonaSlug === 'eng_viewer'
+            const descendants = isGuest ? descendantIdsForGuest : isEC ? descendantIdsForEC : descendantIds
+            result = result.filter(f => {
+                const { stage } = fileStage(f, {
+                    isFolder: f.mimeType === 'application/vnd.google-apps.folder',
+                    isInsideDeliverable: currentFolderIsApprovedDeliverable || listingInsideDeliverable || descendants.has(f.id),
+                    isExternalViewer: isEC || isGuest,
+                })
+                return !!stage && filterStatuses.has(stage)
+            })
+        }
+
+        if (filterOwner === 'assigned-me') {
+            result = result.filter(f => !!f.assigneeUserId && f.assigneeUserId === session?.user?.id)
+        } else if (filterOwner !== 'any' && session?.user?.email) {
             const myEmail = session.user.email.toLowerCase()
             result = result.filter(f => {
-                // Matches the Created by column: who added it
+                // Who added it, as the Details pane's Created says
                 const owner = (f.creator?.emailAddress || f.actorEmail || '').toLowerCase()
                 if (filterOwner === 'me') return owner === myEmail || owner === '' || !owner
                 if (filterOwner === 'not-me') return owner !== '' && owner !== myEmail
@@ -2304,7 +2356,7 @@ const handleRefresh = async () => {
             return [...folders, ...rest]
         }
         return result.sort(cmp)
-    }, [files, sortConfig, filterTypes, filterOwner, filterModified, deliverablesOnly, sharedExternalIds, ancestorFolderIds, descendantIds, session?.user?.email, breadcrumbs])
+    }, [files, sortConfig, filterTypes, filterStatuses, filterOwner, filterModified, deliverablesOnly, sharedExternalIds, ancestorFolderIds, descendantIds, descendantIdsForEC, descendantIdsForGuest, restrictToSharedOnly, canEdit, viewAsPersonaSlug, currentFolderIsApprovedDeliverable, listingInsideDeliverable, session?.user?.email, session?.user?.id, breadcrumbs])
 
     /** Notion-style column header: muted small text with a column-type icon. */
     const TableHeader = ({ label, icon }: { label: string; icon?: React.ReactNode }) => (
@@ -2722,6 +2774,34 @@ const handleRefresh = async () => {
                             <DropdownMenuTrigger asChild>
                                 <FilterPill
                                     disabled={loading}
+                                    icon={<CircleDot />}
+                                    label="Status"
+                                    value={filterStatuses.size > 0
+                                        ? summarizePicks(ACTIVITY_STAGES.filter((s) => filterStatuses.has(s)).map((s) => statusOf('deliverable', s).label))
+                                        : undefined}
+                                    onClear={() => setFilterStatuses(new Set())}
+                                />
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start" className="w-[220px] p-1">
+                                <FilterMenuLabel>Status</FilterMenuLabel>
+                                <FilterMenuRow multi selected={filterStatuses.size === 0} onSelect={() => setFilterStatuses(new Set())}>
+                                    Any status
+                                </FilterMenuRow>
+                                <DropdownMenuSeparator className="mx-0 my-1" />
+                                {ACTIVITY_STAGES.map((s) => {
+                                    const { stage, label } = statusOf('deliverable', s)
+                                    return (
+                                        <FilterMenuRow key={s} multi selected={filterStatuses.has(s)} icon={<StatusIcon stage={stage} size={14} />} onSelect={() => toggleFilterStatus(s)}>
+                                            {label}
+                                        </FilterMenuRow>
+                                    )
+                                })}
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <FilterPill
+                                    disabled={loading}
                                     icon={<FileText />}
                                     label="Type"
                                     value={filterTypes.size > 0
@@ -2760,11 +2840,14 @@ const handleRefresh = async () => {
                                     Anyone
                                 </FilterMenuRow>
                                 <DropdownMenuSeparator className="mx-0 my-1" />
-                                {(Object.keys(OWNER_FILTER_LABEL) as Array<keyof typeof OWNER_FILTER_LABEL>).map((key) => (
-                                    <FilterMenuRow key={key} selected={filterOwner === key} onSelect={() => setFilterOwner(key)}>
-                                        {OWNER_FILTER_LABEL[key]}
-                                    </FilterMenuRow>
-                                ))}
+                                {(Object.keys(OWNER_FILTER_LABEL) as Array<keyof typeof OWNER_FILTER_LABEL>)
+                                    // Only the firm's own members can be assigned, so a client has nothing to find here.
+                                    .filter((key) => key !== 'assigned-me' || !restrictToSharedOnly)
+                                    .map((key) => (
+                                        <FilterMenuRow key={key} selected={filterOwner === key} onSelect={() => setFilterOwner(key)}>
+                                            {OWNER_FILTER_LABEL[key]}
+                                        </FilterMenuRow>
+                                    ))}
                             </DropdownMenuContent>
                         </DropdownMenu>
 
@@ -2828,15 +2911,10 @@ const handleRefresh = async () => {
                             </DropdownMenuContent>
                         </DropdownMenu>
 
-                        {(deliverablesOnly || filterTypes.size > 0 || filterOwner !== 'any' || filterModified !== 'any') && (
+                        {anyFilterSet && (
                             <button
                                 type="button"
-                                onClick={() => {
-                                    setDeliverablesOnly(false)
-                                    setFilterTypes(new Set())
-                                    setFilterOwner('any')
-                                    setFilterModified('any')
-                                }}
+                                onClick={clearFilters}
                                 className="ml-0.5 h-7 rounded-full px-2 text-small text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg"
                             >
                                 Clear
@@ -3037,7 +3115,7 @@ const handleRefresh = async () => {
                         </div>
                         <div className={`items-center ${STATUS_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Status" icon={<CircleDot />} /></div>
                         <div className={`items-center ${DUE_DATE_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Due" icon={<Flag />} /></div>
-                        <div className={`items-center ${OWNER_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Created by" icon={<UserRound />} /></div>
+                        <div className={`items-center ${OWNER_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Assignee" icon={<UserRound />} /></div>
                         <div className={`items-center ${DATE_MODIFIED_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Modified" icon={<Clock3 />} /></div>
                         <div className={`items-center ${FILE_SIZE_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Size" icon={<HardDrive />} /></div>
                     </div>
@@ -3139,10 +3217,19 @@ const handleRefresh = async () => {
                             <div className="h-16 w-16 bg-surface-subtle rounded-full flex items-center justify-center mb-4">
                                 <Folder className="h-8 w-8 text-fg-subtle" />
                             </div>
-                            <h3 className="text-sm font-medium text-fg mb-1">Folder is empty</h3>
-                            <p className="text-sm text-fg-muted max-w-[280px] mx-auto">
-                                Drop folders or files here from your computer.
-                            </p>
+                            {files.length > 0 && anyFilterSet ? (
+                                <>
+                                    <h3 className="text-sm font-medium text-fg mb-1">Nothing matches these filters</h3>
+                                    <Button variant="link" onClick={clearFilters} className="h-auto p-0 text-fg-muted hover:text-fg text-sm">Clear filters</Button>
+                                </>
+                            ) : (
+                                <>
+                                    <h3 className="text-sm font-medium text-fg mb-1">Folder is empty</h3>
+                                    <p className="text-sm text-fg-muted max-w-[280px] mx-auto">
+                                        Drop folders or files here from your computer.
+                                    </p>
+                                </>
+                            )}
                         </div>
                     ) : (
                         <>
@@ -3176,6 +3263,7 @@ const handleRefresh = async () => {
                                     onItemClick={handleItemClick}
                                     isProjectLead={isProjectLead}
                                     roleSlug={roleSlug}
+                                    assignablePeople={assignableMembers}
                                     restrictToSharedOnly={restrictToSharedOnly}
                                     viewAsPersonaSlug={viewAsPersonaSlug}
                                     canManage={canManage && !currentFolderIsApprovedDeliverable}

@@ -76,13 +76,20 @@ describe('getMyWork — scope', () => {
             eng('a', 'eng_member'),
             eng('b', 'eng_member', { client: { name: 'Globex', slug: 'globex', firmId: 'f2' } }),
         ])
-        routeRaw({ assigned: [{ id: 'd1', engagementId: 'b', fileName: 'Return', dueDate: soon, status: 'to_do' }] })
+        routeRaw({ assigned: [{ id: 'd1', engagementId: 'b', fileName: 'Return', dueDate: soon, status: 'to_do', isFolder: true, isDeliverable: true, mimeType: null }] })
         const work = await getMyWork({ ...base, firms: [ACME, BETA] })
         expect(work.engagements.map((e) => [e.href, e.firmId])).toEqual([
             ['/d/g/f/acme/c/contoso/e/a', 'f1'],
             ['/d/h/f/beta/c/globex/e/b', 'f2'],
         ])
-        expect(work.dueSoon[0]).toMatchObject({ firmId: 'f2', href: '/d/h/f/beta/c/globex/e/b/shares/board' })
+        expect(work.dueSoon[0]).toMatchObject({ firmId: 'f2', href: '/d/h/f/beta/c/globex/e/b/shares/board', entity: 'deliverable' })
+    })
+
+    it('links a document to Files, with its own file type', async () => {
+        prisma.engagement.findMany.mockResolvedValueOnce([eng('a', 'eng_member')])
+        routeRaw({ assigned: [{ id: 'd1', engagementId: 'a', fileName: 'Plan.xlsx', dueDate: soon, status: 'in_progress', isFolder: false, isDeliverable: true, mimeType: 'text/csv' }] })
+        const work = await getMyWork(base)
+        expect(work.dueSoon[0]).toMatchObject({ href: '/d/g/f/acme/c/contoso/e/a/files#doc-file:d1', entity: 'document', mimeType: 'text/csv' })
     })
 
     it('runs no approval queries for a user who leads nothing', async () => {

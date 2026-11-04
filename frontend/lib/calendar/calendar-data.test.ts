@@ -54,6 +54,8 @@ describe('loadCalendarData', () => {
             ['a:due', 'f1', '/d/g/f/acme/c/contoso/e/a'],
             ['b:due', 'f2', '/d/h/f/beta/c/contoso/e/b'],
         ])
+        // Home's tooltip splits a title on this separator: "<name> · <what the date is>".
+        expect(events.map((e) => e.title)).toEqual(events.map((e) => `${e.engagementName} · Due`))
     })
 
     it('skips assignee lookups when asked to', async () => {

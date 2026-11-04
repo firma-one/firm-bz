@@ -8,6 +8,8 @@ import type { ActivityStatus } from '@/lib/sharing-settings'
 import type { ReminderWithContext } from '@/lib/actions/user-reminders'
 import type { HomeFirm } from '@/lib/home/home-firms'
 import { isNeedsYouReminder } from '@/lib/home/needs-you-rules'
+import { reminderEntity } from '@/components/inbox/inbox-items'
+import type { EntityKind } from '@/components/ui/entity-icon'
 
 /**
  * Data for the New UI Home (.claude/plans/ui-ux-overhaul.md, Phase 3), across the firms it is
@@ -64,6 +66,9 @@ export type NeedsYouItem = {
     /** A dated reminder that needs you (due today or overdue): its due label, shown in place of `at`. */
     dueLabel?: string | null
     overdue?: boolean
+    /** What the item is, for its icon. */
+    entity?: EntityKind | null
+    mimeType?: string | null
 }
 
 export type DueItem = {
@@ -72,11 +77,24 @@ export type DueItem = {
     firmId: string | null
     title: string
     context: string
+    /** Where it sits, for the Agenda tooltip's marks. */
+    clientName?: string | null
+    engagementName?: string | null
     href: string
     dueDate: string
     overdue: boolean
     status: string | null
+    /** What the item is, for its icon: a `deliverable` here can be a document assigned to the caller. */
+    entity?: EntityKind | null
+    mimeType?: string | null
 }
+
+type DocShape = { isFolder: boolean; mimeType: string | null; isDeliverable: boolean }
+
+const docEntity = (d: DocShape): { entity: EntityKind; mimeType: string | null } => ({
+    entity: d.isFolder ? (d.isDeliverable ? 'deliverable' : 'folder') : 'document',
+    mimeType: d.isFolder ? null : d.mimeType,
+})
 
 export type MyWork = {
     engagements: HomeEngagement[]
@@ -150,6 +168,10 @@ export async function getMyWork(params: {
         }
         const firmOf = (id: string) => byId.get(id)?.firmId ?? null
         const sharesBoard = (id: string) => pathOf(rows.find((r) => r.id === id)!, { tab: 'shares', subpath: 'board' })
+        // A deliverable's place is the Board; a document's is Files, as one outside any deliverable isn't on the Board.
+        const placeOfDoc = (d: DocShape & { id: string; engagementId: string }) => d.isFolder && d.isDeliverable
+            ? sharesBoard(d.engagementId)
+            : pathOf(rows.find((r) => r.id === d.engagementId)!, { tab: 'files', hash: `doc-file:${d.id}` })
 
         const allIds = engagements.map((e) => e.id)
         const leadIds = engagements.filter((e) => e.role === 'eng_admin').map((e) => e.id)
@@ -188,8 +210,9 @@ export async function getMyWork(params: {
                       LIMIT ${LIST_LIMIT}`
                 : [],
             // Deliverables assigned to the caller that are due soon or overdue and not yet approved.
-            prisma.$queryRaw<{ id: string; engagementId: string; fileName: string; dueDate: Date; status: string | null }[]>`
-                SELECT ed.id, ed."engagementId", ed."fileName", ed."dueDate", ed.settings->'activity'->>'status' AS status
+            prisma.$queryRaw<({ id: string; engagementId: string; fileName: string; dueDate: Date; status: string | null } & DocShape)[]>`
+                SELECT ed.id, ed."engagementId", ed."fileName", ed."dueDate", ed.settings->'activity'->>'status' AS status,
+                       ed."isFolder", ed."mimeType", (ed.settings->'share'->>'createdAt') IS NOT NULL AS "isDeliverable"
                 FROM platform.engagement_documents ed
                 WHERE ed."engagementId" = ANY(${allIds}::uuid[])
                   AND ed.settings->>'assigneeUserId' = ${userId}
@@ -200,8 +223,9 @@ export async function getMyWork(params: {
                 LIMIT ${LIST_LIMIT}`,
             // Sent back for changes, and still in progress: what the caller owns (its assignee, else
             // whoever added it) whose latest stage change was In review → In progress by someone else.
-            prisma.$queryRaw<{ id: string; engagementId: string; fileName: string; eventAt: Date }[]>`
-                SELECT ed.id, ed."engagementId", ed."fileName", last."eventAt"
+            prisma.$queryRaw<({ id: string; engagementId: string; fileName: string; eventAt: Date } & DocShape)[]>`
+                SELECT ed.id, ed."engagementId", ed."fileName", last."eventAt",
+                       ed."isFolder", ed."mimeType", (ed.settings->'share'->>'createdAt') IS NOT NULL AS "isDeliverable"
                 FROM platform.engagement_documents ed
                 JOIN LATERAL (
                     SELECT e."eventAt", e."actorUserId", e.metadata
@@ -222,11 +246,13 @@ export async function getMyWork(params: {
             // external member's (EC/EV), on engagements the caller leads. A team reply clears it, and so
             // does resolving the discussion (the Discussions page's Awaiting reply rule).
             leadIds.length
-                ? prisma.$queryRaw<{ id: string; engagementId: string; projectDocumentId: string; fileName: string; createdAt: Date }[]>`
-                      SELECT latest.id, latest."engagementId", latest."projectDocumentId", latest."fileName", latest."createdAt"
+                ? prisma.$queryRaw<({ id: string; engagementId: string; projectDocumentId: string; fileName: string; createdAt: Date } & DocShape)[]>`
+                      SELECT latest.id, latest."engagementId", latest."projectDocumentId", latest."fileName", latest."createdAt",
+                             latest."isFolder", latest."mimeType", latest."isDeliverable"
                       FROM (
                           SELECT DISTINCT ON (m."projectDocumentId")
-                              m.id, m."engagementId", m."projectDocumentId", ed."fileName", m."createdAt", em.role
+                              m.id, m."engagementId", m."projectDocumentId", ed."fileName", m."createdAt", em.role,
+                              ed."isFolder", ed."mimeType", (ed.settings->'share'->>'createdAt') IS NOT NULL AS "isDeliverable"
                           FROM platform.doc_comment_messages m
                           JOIN platform.engagement_documents ed ON ed.id = m."projectDocumentId"
                           LEFT JOIN platform.engagement_members em
@@ -255,6 +281,7 @@ export async function getMyWork(params: {
                 href: sharesBoard(d.engagementId),
                 actionLabel: 'Review',
                 at: d.updatedAt.toISOString(),
+                entity: 'deliverable' as const,
             })),
             ...intake.map((d) => ({
                 id: `intake:${d.id}`,
@@ -266,6 +293,7 @@ export async function getMyWork(params: {
                 href: sharesBoard(d.engagementId),
                 actionLabel: 'Approve upload',
                 at: d.createdAt.toISOString(),
+                entity: 'folder' as const,
             })),
             ...clientComments.map((c) => {
                 const e = rows.find((r) => r.id === c.engagementId)!
@@ -280,6 +308,7 @@ export async function getMyWork(params: {
                     href: engagementDocCommentPath(firm.groupSlug, firm.slug, e.client.slug, e.slug, c.projectDocumentId, c.id),
                     actionLabel: 'Reply',
                     at: c.createdAt.toISOString(),
+                    ...docEntity(c),
                 }
             }),
             ...changesRequested
@@ -295,9 +324,10 @@ export async function getMyWork(params: {
                     title: d.fileName,
                     context: contextOf(d.engagementId),
                     ...placeOf(d.engagementId),
-                    href: sharesBoard(d.engagementId),
+                    href: placeOfDoc(d),
                     actionLabel: 'See changes',
                     at: d.eventAt.toISOString(),
+                    ...docEntity(d),
                 })),
         ]
 
@@ -313,10 +343,12 @@ export async function getMyWork(params: {
                 firmId: firmOf(d.engagementId),
                 title: d.fileName,
                 context: contextOf(d.engagementId),
-                href: sharesBoard(d.engagementId),
+                ...placeOf(d.engagementId),
+                href: placeOfDoc(d),
                 dueDate: d.dueDate.toISOString(),
                 overdue: d.dueDate < today,
                 status,
+                ...docEntity(d),
             })
         }
         for (const e of rows) {
@@ -327,10 +359,12 @@ export async function getMyWork(params: {
                 firmId: e.client.firmId,
                 title: e.name,
                 context: e.client.name,
+                clientName: e.client.name,
                 href: byId.get(e.id)!.href,
                 dueDate: e.dueDate.toISOString(),
                 overdue: e.dueDate < today,
                 status: e.status,
+                entity: 'engagement',
             })
         }
 
@@ -368,6 +402,7 @@ function remindersOnly(reminders: ReminderWithContext[], firmIds: Set<string>): 
                 at: r.dateValue,
                 dueLabel: r.dateValue ? r.label : null,
                 overdue: r.delta !== null && r.delta < 0,
+                entity: reminderEntity(r.entityKey, r.action),
             })
         } else if (r.dateValue && r.delta !== null && r.delta <= DUE_SOON_DAYS) {
             dueSoon.push({
@@ -376,10 +411,13 @@ function remindersOnly(reminders: ReminderWithContext[], firmIds: Set<string>): 
                 firmId: r.firmId,
                 title: r.entityName,
                 context: r.action,
+                clientName: r.clientName,
+                engagementName: r.engagementName,
                 href: r.ctaUrl ?? '#',
                 dueDate: new Date(r.dateValue).toISOString(),
                 overdue: r.delta < 0,
                 status: null,
+                entity: reminderEntity(r.entityKey, r.action),
             })
         }
     }

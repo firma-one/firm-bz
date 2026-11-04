@@ -174,7 +174,14 @@ export function DateProperty({
 
 // ── Person ────────────────────────────────────────────────────────────────────
 
-export type PersonOption = { id: string; name: string; email?: string | null; avatarUrl?: string | null }
+export type PersonOption = {
+    id: string
+    name: string
+    email?: string | null
+    avatarUrl?: string | null
+    /** Shown in the cell in place of the name, e.g. "me"; the avatar and the picker keep the name. */
+    shownAs?: string
+}
 
 export function PersonAvatar({ person, size = 20 }: { person: Pick<PersonOption, "name" | "avatarUrl">; size?: number }) {
     const style = { width: size, height: size }
@@ -209,7 +216,7 @@ export function PersonProperty({
     const label = value ? (
         <>
             <PersonAvatar person={value} />
-            <span className="truncate">{value.name}</span>
+            <span className="truncate">{value.shownAs ?? value.name}</span>
         </>
     ) : (
         <Empty label={placeholder} />
