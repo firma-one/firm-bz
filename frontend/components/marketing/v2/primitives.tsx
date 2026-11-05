@@ -60,6 +60,9 @@ export function Eyebrow({ children, className = '' }: { children: ReactNode; cla
 
 const isExternal = (href: string) => /^https?:|^mailto:/.test(href);
 
+/** Other sites open in a new tab, like the nav's external items, so the visitor keeps this one. */
+const NEW_TAB = { target: '_blank', rel: 'noopener noreferrer' };
+
 /** Pill button with the › chevron. */
 export function PillLink({
   href,
@@ -94,7 +97,7 @@ export function PillLink({
     </>
   );
   return isExternal(href) ? (
-    <a href={href} className={cls}>
+    <a href={href} className={cls} {...(href.startsWith('http') ? NEW_TAB : {})}>
       {inner}
     </a>
   ) : (
