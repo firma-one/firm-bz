@@ -1,4 +1,4 @@
-import { brioWhatsNew2026_11 } from './brio-whats-new-2026-11'
+import { firmaIntro2026_11 } from './firma-intro-2026-11'
 import type { CampaignContext } from './kit'
 
 /**
@@ -14,8 +14,8 @@ import type { CampaignContext } from './kit'
  *    it: a full document under Gmail's clipping limit, absolute links, images that exist, no em dashes.
  * 4. Hold every claim to what ships today. Features hidden behind a flag don't count.
  *
- * Images load from the live site, so a template's images must be deployed before its first real
- * send. The page checks, and holds Send until they are live.
+ * A send embeds every image in the message, so each one adds to every email: keep the set small
+ * (about 350 KB today), and use plain `<img>`s, never CSS backgrounds. `embed.test.ts` checks both.
  */
 export type CampaignTemplate = {
   /** Stable slug. Also the image folder and the UTM campaign. */
@@ -32,7 +32,11 @@ export type CampaignTemplate = {
   render: (ctx: CampaignContext) => string
 }
 
-export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [brioWhatsNew2026_11]
+/**
+ * `brio-whats-new-2026-11.ts` stays off this list: it reads as an update to existing customers, and
+ * there are none yet. Add it here once there are.
+ */
+export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [firmaIntro2026_11]
 
 /** Newest first, as the picker shows them. */
 export function listCampaignTemplates(): CampaignTemplate[] {
@@ -48,9 +52,7 @@ export function renderCampaignTemplate(template: CampaignTemplate, origin: strin
   return template.render({ origin, campaignId: template.id })
 }
 
-/** Every hosted image a rendered template points at: `<img>`s and CSS or attribute backgrounds. */
+/** Every image a rendered template points at, once each. */
 export function campaignImageUrls(html: string): string[] {
-  const patterns = [/<img\s[^>]*src="([^"]+)"/g, /\sbackground="([^"]+)"/g, /url\('([^']+)'\)/g]
-  const urls = patterns.flatMap((pattern) => Array.from(html.matchAll(pattern), (match) => match[1]))
-  return Array.from(new Set(urls))
+  return Array.from(new Set(Array.from(html.matchAll(/<img\s[^>]*src="([^"]+)"/g), (match) => match[1])))
 }

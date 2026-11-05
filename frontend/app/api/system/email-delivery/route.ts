@@ -6,6 +6,7 @@ import { listMailableAuthUsers } from '@/lib/system/auth-users'
 import { EMAIL_DELIVERY_BATCH_SIZE, parseEmailList } from '@/lib/system/email-recipients'
 import { emailFromAddress, isEmailConfigured, sendEmail } from '@/lib/email'
 import { getCampaignTemplate, listCampaignTemplates, renderCampaignTemplate } from '@/lib/email-templates/campaigns'
+import { embedCampaignImages } from '@/lib/email-templates/campaigns/embed'
 import { UNSUBSCRIBE_MAILTO } from '@/lib/email-templates/campaigns/kit'
 import { getPlatformSiteOrigin } from '@/config/platform-domain'
 import { logger } from '@/lib/logger'
@@ -60,7 +61,8 @@ export async function GET() {
  *
  * Sends one template to one batch. Each recipient gets their own message, so nobody sees anyone
  * else's address, and each outcome is reported separately: one bad address never fails the batch.
- * Links and images always point at the live site, whichever server this runs on.
+ * Links always point at the live site, whichever server this runs on, and the images travel inside
+ * the message, so Outlook shows them without asking.
  */
 export async function POST(request: Request) {
     const auth = await requireSystemAdmin()
@@ -85,9 +87,18 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'SMTP is not configured on this server, so nothing was sent.' }, { status: 503 })
     }
 
-    const html = renderCampaignTemplate(template, getPlatformSiteOrigin())
+    let message: Awaited<ReturnType<typeof embedCampaignImages>>
+    try {
+        message = await embedCampaignImages(renderCampaignTemplate(template, getPlatformSiteOrigin()))
+    } catch (error) {
+        return NextResponse.json(
+            { error: error instanceof Error ? error.message : 'Could not prepare the email, so nothing was sent.' },
+            { status: 500 },
+        )
+    }
+
     const outcomes = await Promise.allSettled(
-        valid.map((email) => sendEmail(email, template.subject, html, undefined, {
+        valid.map((email) => sendEmail(email, template.subject, message.html, message.attachments, {
             headers: { 'List-Unsubscribe': `<${UNSUBSCRIBE_MAILTO}>` },
         })),
     )

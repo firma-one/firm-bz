@@ -62,6 +62,11 @@ describe.each(CAMPAIGN_TEMPLATES.map((t) => [t.id, t] as const))('%s', (id, temp
         expect(html).not.toMatch(/<table[^>]*\salign="right"/)
     })
 
+    it('carries images only as <img>, the one form that can be embedded everywhere', () => {
+        expect(html).not.toMatch(/\sbackground="/)
+        expect(html).not.toMatch(/url\(/)
+    })
+
     it('keeps em dashes out of its copy', () => {
         expect(`${html} ${template.subject} ${template.preheader}`).not.toContain('—')
     })

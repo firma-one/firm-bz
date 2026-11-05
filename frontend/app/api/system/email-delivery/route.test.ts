@@ -1,8 +1,8 @@
 // @vitest-environment node
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { NextRequest } from 'next/server'
 
-const { auth, admins, mail, users } = vi.hoisted(() => ({
+const { auth, admins, mail, users, embed } = vi.hoisted(() => ({
     auth: { user: null as { id: string } | null },
     admins: new Set<string>(),
     mail: {
@@ -11,11 +11,21 @@ const { auth, admins, mail, users } = vi.hoisted(() => ({
         emailFromAddress: vi.fn(() => '"firma" <info@firmaone.com>'),
     },
     users: { listMailableAuthUsers: vi.fn() },
+    embed: { failure: null as Error | null },
 }))
 vi.mock('@/utils/supabase/server', () => ({ createClient: async () => ({ auth: { getUser: async () => ({ data: { user: auth.user } }) } }) }))
 vi.mock('@/lib/system/user-data-map', () => ({ isSysAdminUser: async (id: string) => admins.has(id) }))
 vi.mock('@/lib/email', () => mail)
 vi.mock('@/lib/system/auth-users', () => users)
+vi.mock('@/lib/email-templates/campaigns/embed', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('@/lib/email-templates/campaigns/embed')>()
+    return {
+        embedCampaignImages: async (html: string) => {
+            if (embed.failure) throw embed.failure
+            return actual.embedCampaignImages(html)
+        },
+    }
+})
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
 
 import { GET, POST } from './route'
@@ -38,6 +48,7 @@ const signInAsAdmin = () => {
 beforeEach(() => {
     auth.user = null
     admins.clear()
+    embed.failure = null
     mail.sendEmail.mockReset().mockResolvedValue({ messageId: 'm' })
     mail.isEmailConfigured.mockReset().mockReturnValue(true)
     users.listMailableAuthUsers.mockReset().mockResolvedValue([{ id: 'u1', email: 'pat@x.com' }])
@@ -84,7 +95,7 @@ describe('GET: what the page opens with', () => {
 describe('POST: sending', () => {
     beforeEach(signInAsAdmin)
 
-    it('sends each recipient their own copy of the template, with links to the live site', async () => {
+    it('sends each recipient their own copy, with links to the live site and its images inside', async () => {
         const res = await post({ templateId: TEMPLATE.id, recipients: ['pat@x.com', 'sam@x.com'] })
         expect(res.status).toBe(200)
         expect((await res.json()).results).toEqual([{ email: 'pat@x.com', ok: true }, { email: 'sam@x.com', ok: true }])
@@ -95,7 +106,10 @@ describe('POST: sending', () => {
         expect(subject).toBe(TEMPLATE.subject)
         expect(html).toContain('https://firma.bz/')
         expect(html).not.toContain('localhost')
-        expect(attachments).toBeUndefined()
+        expect(html).not.toMatch(/src="https?:/)
+        expect(html).toContain('src="cid:')
+        expect(attachments.length).toBeGreaterThan(0)
+        expect(attachments.every((a: { cid?: string }) => a.cid && html.includes(`cid:${a.cid}`))).toBe(true)
         expect(options.headers['List-Unsubscribe']).toMatch(/^<mailto:.+>$/)
     })
 
@@ -115,6 +129,14 @@ describe('POST: sending', () => {
     it('sends one copy when an address appears twice', async () => {
         await post({ templateId: TEMPLATE.id, recipients: ['Pat@x.com', 'pat@x.com'] })
         expect(mail.sendEmail).toHaveBeenCalledTimes(1)
+    })
+
+    it('sends nothing if an image can’t be prepared, rather than a message with a hole in it', async () => {
+        embed.failure = new Error('Could not load the email image /email/x.png')
+        const res = await post({ templateId: TEMPLATE.id, recipients: ['pat@x.com'] })
+        expect(res.status).toBe(500)
+        expect((await res.json()).error).toContain('/email/x.png')
+        expect(mail.sendEmail).not.toHaveBeenCalled()
     })
 
     it('never claims success when SMTP is unset', async () => {
@@ -147,15 +169,7 @@ describe('POST: sending', () => {
 })
 
 describe('GET preview', () => {
-    const previewOf = (id: string) => preview(new NextRequest(`http://localhost:3001/api/system/email-delivery/preview?templateId=${id}`))
-    const respondWith = (answer: (url: string) => Response) => vi.stubGlobal('fetch', vi.fn(async (url: string) => answer(url)))
-    const image = () => new Response(null, { status: 200, headers: { 'content-type': 'image/jpeg' } })
-
-    beforeEach(() => {
-        signInAsAdmin()
-        respondWith(image)
-    })
-    afterEach(() => vi.unstubAllGlobals())
+    beforeEach(signInAsAdmin)
 
     it('renders against this server, so new images show before they are deployed', async () => {
         const res = await preview(new NextRequest(`http://localhost:3001/api/system/email-delivery/preview?templateId=${TEMPLATE.id}`))
@@ -166,35 +180,5 @@ describe('GET preview', () => {
     it('refuses an unknown template', async () => {
         const res = await preview(new NextRequest('http://localhost/api/system/email-delivery/preview?templateId=nope'))
         expect(res.status).toBe(404)
-    })
-
-    it('checks the images on the live site, not this server', async () => {
-        const body = await (await previewOf(TEMPLATE.id)).json()
-        expect(body.images).toEqual({ origin: 'https://firma.bz', missing: [], unverified: [] })
-        const checked = vi.mocked(fetch).mock.calls.map(([url]) => String(url))
-        expect(checked.length).toBeGreaterThan(0)
-        for (const url of checked) expect(url.startsWith('https://firma.bz/email/')).toBe(true)
-    })
-
-    it('reports an image the site doesn’t have, or answers with a page instead of', async () => {
-        respondWith((url) => {
-            if (url.endsWith('/hero.jpg')) return new Response(null, { status: 404 })
-            if (url.endsWith('/logo.png')) return new Response(null, { status: 200, headers: { 'content-type': 'text/html' } })
-            return image()
-        })
-        const { images } = await (await previewOf(TEMPLATE.id)).json()
-        expect(images.missing).toEqual([`/email/${TEMPLATE.id}/hero.jpg`, '/email/shared/logo.png'])
-        expect(images.unverified).toEqual([])
-    })
-
-    it('calls a failed check unverified, not missing: an outage shouldn’t read as a verdict', async () => {
-        vi.stubGlobal('fetch', vi.fn(async (url: string) => {
-            if (url.endsWith('/hero.jpg')) throw new Error('network down')
-            if (url.endsWith('/logo.png')) return new Response(null, { status: 503 })
-            return image()
-        }))
-        const { images } = await (await previewOf(TEMPLATE.id)).json()
-        expect(images.missing).toEqual([])
-        expect(images.unverified).toEqual([`/email/${TEMPLATE.id}/hero.jpg`, '/email/shared/logo.png'])
     })
 })
