@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { Link2, Wrench, Shield, ChevronRight, Users, CalendarRange, MailPlus, Database, Activity, OctagonPause, Terminal, FlaskConical, Building2, Sparkles } from "lucide-react"
+import { Link2, Wrench, Shield, ChevronRight, Users, CalendarRange, MailPlus, Send, Database, Activity, OctagonPause, Terminal, FlaskConical, Building2, Sparkles } from "lucide-react"
 
 import { usePlatformMaintenanceStatus } from "@/lib/hooks/use-platform-maintenance-status"
 import { SignOutEveryoneCard } from "./sign-out-everyone-card"
@@ -44,6 +44,14 @@ const tools = [
         description: "Send a signup completion email with a coupon code for end-users.",
         href: "/system/admin-signup",
         icon: MailPlus,
+        className: "group bg-white border border-gray-200 rounded-xl p-6 hover:shadow-sm hover:border-gray-400 transition-all duration-200 flex flex-col items-start",
+        iconClassName: "w-10 h-10 rounded-lg flex items-center justify-center mb-4 bg-gray-100 text-gray-900 group-hover:bg-black group-hover:text-white transition-colors"
+    },
+    {
+        title: "Email Delivery",
+        description: "Preview a designed email, choose recipients from every account plus any other address, and send it.",
+        href: "/system/email-delivery",
+        icon: Send,
         className: "group bg-white border border-gray-200 rounded-xl p-6 hover:shadow-sm hover:border-gray-400 transition-all duration-200 flex flex-col items-start",
         iconClassName: "w-10 h-10 rounded-lg flex items-center justify-center mb-4 bg-gray-100 text-gray-900 group-hover:bg-black group-hover:text-white transition-colors"
     },

@@ -1,6 +1,7 @@
 import 'server-only'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { resolveNames } from '@/lib/auth/display-name'
+import { isAgentEmail } from '@/lib/ai/agent-email'
 
 /**
  * Resolving Supabase auth identities in bulk for system-admin pages.
@@ -57,6 +58,45 @@ export async function loadAuthUsers(userIds: Set<string>): Promise<Map<string, A
         if (out.size === userIds.size || users.length < AUTH_PAGE_SIZE) break
     }
     return out
+}
+
+export type MailableUser = AuthLite & {
+    email: string
+    createdAt: string
+    lastSignInAt: string | null
+}
+
+/**
+ * Every account an admin can sensibly email, sorted by address.
+ *
+ * Unlike `loadAuthUsers` this has no page bound: quietly stopping at a cap here would mean people
+ * silently missing from a "select all". Leaves out accounts with no address, banned accounts, and
+ * Brio's agent accounts, whose addresses are on a domain with no inbox. Throws if Supabase refuses,
+ * so a partial list can't pass as the whole audience.
+ */
+export async function listMailableAuthUsers(): Promise<MailableUser[]> {
+    const admin = createAdminClient()
+    const out: MailableUser[] = []
+    const now = Date.now()
+    for (let page = 1; ; page += 1) {
+        const { data, error } = await admin.auth.admin.listUsers({ page, perPage: AUTH_PAGE_SIZE })
+        if (error) throw new Error(`Could not list users: ${error.message}`)
+        const users = data?.users ?? []
+        for (const u of users) {
+            if (!u.email || isAgentEmail(u.email)) continue
+            if (u.banned_until && new Date(u.banned_until).getTime() > now) continue
+            const meta = (u.user_metadata ?? {}) as Record<string, unknown>
+            out.push({
+                id: u.id,
+                email: u.email,
+                ...namesFrom(meta),
+                createdAt: u.created_at,
+                lastSignInAt: u.last_sign_in_at ?? null,
+            })
+        }
+        if (users.length < AUTH_PAGE_SIZE) break
+    }
+    return out.sort((a, b) => a.email.localeCompare(b.email))
 }
 
 /** A display name for an auth record, falling back to the email local part, then the raw id. */

@@ -18,6 +18,16 @@ const transporter = nodemailer.createTransport({
 const DEFAULT_EMAIL_FROM = `"${BRAND_NAME}" <info@firmaone.com>`
 let warnedMissingFrom = false
 
+/** Without SMTP_HOST, sendEmail logs and returns without sending. Check first where that must not pass as sent. */
+export function isEmailConfigured(): boolean {
+    return Boolean(process.env.SMTP_HOST)
+}
+
+/** The From line mail actually goes out with. */
+export function emailFromAddress(): string {
+    return process.env.SMTP_FROM || DEFAULT_EMAIL_FROM
+}
+
 export interface EmailAttachment {
     filename: string
     content: Buffer
@@ -32,7 +42,13 @@ function withEmailShell(subject: string, html: string): string {
     return /<html[\s>]/i.test(html) ? html : renderEmail({ title: subject, body: html })
 }
 
-export async function sendEmail(to: string, subject: string, html: string, attachments?: EmailAttachment[]) {
+export async function sendEmail(
+    to: string,
+    subject: string,
+    html: string,
+    attachments?: EmailAttachment[],
+    options?: { headers?: Record<string, string> },
+) {
     if (!process.env.SMTP_HOST) {
         logger.warn("SMTP_HOST not configured. Email not sent", 'Email', { subject, to })
         return
@@ -45,11 +61,12 @@ export async function sendEmail(to: string, subject: string, html: string, attac
 
     try {
         const info = await transporter.sendMail({
-            from: process.env.SMTP_FROM || DEFAULT_EMAIL_FROM,
+            from: emailFromAddress(),
             to,
             subject,
             html: withEmailShell(subject, html),
             ...(attachments?.length ? { attachments } : {}),
+            ...(options?.headers ? { headers: options.headers } : {}),
         })
         // Log email delivery without exposing full email address
         const emailDomain = to.split('@')[1] || 'unknown'
