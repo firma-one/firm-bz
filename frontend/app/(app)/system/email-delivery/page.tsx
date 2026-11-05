@@ -19,15 +19,12 @@ import { EMAIL_DELIVERY_BATCH_SIZE, parseEmailList } from '@/lib/system/email-re
  *
  * After a send, whoever got the email is deselected and whoever didn't stays selected. A second click
  * therefore retries the failures rather than mailing everyone again.
- *
- * The preview loads images from this server, but a real send points at the live site. So Send waits
- * until the template's images are confirmed there; otherwise a perfect preview arrives broken.
  */
 
 type Template = { id: string; name: string; description: string; createdAt: string; subject: string; preheader: string }
 type User = { id: string; email: string; firstName: string | null; lastName: string | null; createdAt: string; lastSignInAt: string | null }
 type LoadResponse = { templates: Template[]; users: User[]; email: { configured: boolean; from: string } }
-type Preview = { html: string; images: { origin: string; missing: string[]; unverified: string[] } }
+type Preview = { html: string }
 type SendResult = { email: string; ok: boolean; error?: string }
 type Outcome = { sent: number; failed: { email: string; error: string }[] }
 
@@ -64,7 +61,6 @@ export default function EmailDeliveryPage() {
     const [templateId, setTemplateId] = useState<string | null>(null)
     const [previews, setPreviews] = useState<Record<string, Preview>>({})
     const [previewError, setPreviewError] = useState<string | null>(null)
-    const [checkingImages, setCheckingImages] = useState(false)
     const [previewSize, setPreviewSize] = useState<'desktop' | 'mobile'>('desktop')
 
     const [search, setSearch] = useState('')
@@ -112,22 +108,6 @@ export default function EmailDeliveryPage() {
 
     const template = data?.templates.find((t) => t.id === templateId) ?? null
     const preview = templateId ? previews[templateId] : undefined
-    const imagesMissing = preview?.images.missing.length ?? 0
-    const imagesUnverified = preview?.images.unverified.length ?? 0
-    const liveHost = preview ? new URL(preview.images.origin).host : ''
-
-    const recheckImages = async () => {
-        if (!templateId) return
-        setCheckingImages(true)
-        try {
-            const next = await fetchPreview(templateId)
-            setPreviews((prev) => ({ ...prev, [templateId]: next }))
-        } catch (error) {
-            setPreviewError(error instanceof Error ? error.message : 'Could not check the images')
-        } finally {
-            setCheckingImages(false)
-        }
-    }
     const users = useMemo(() => data?.users ?? [], [data])
 
     const visibleUsers = useMemo(() => {
@@ -211,8 +191,7 @@ export default function EmailDeliveryPage() {
     }
 
     const emailReady = data?.email.configured ?? false
-    const canSend = Boolean(template) && Boolean(preview) && imagesMissing === 0
-        && recipients.length > 0 && extras.invalid.length === 0 && emailReady && !sending
+    const canSend = Boolean(template) && recipients.length > 0 && extras.invalid.length === 0 && emailReady && !sending
 
     return (
         <div className="flex flex-col space-y-6">
@@ -339,27 +318,6 @@ export default function EmailDeliveryPage() {
                             {!emailReady && (
                                 <p className="mb-3 rounded-md border border-amber-200 bg-amber-50 p-2.5 text-xs leading-relaxed text-amber-800">
                                     SMTP isn&apos;t configured on this server, so nothing can be sent from here.
-                                </p>
-                            )}
-                            {imagesMissing > 0 && (
-                                <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 p-2.5 text-xs leading-relaxed text-amber-800">
-                                    <p>
-                                        {imagesMissing === 1 ? "1 image isn't" : `${imagesMissing} images aren't`} live on {liveHost} yet,
-                                        so recipients would see broken images. Ship this template, then check again.
-                                    </p>
-                                    <button
-                                        type="button"
-                                        onClick={recheckImages}
-                                        disabled={checkingImages}
-                                        className="mt-1.5 font-medium underline underline-offset-2 hover:text-amber-950 disabled:opacity-60"
-                                    >
-                                        {checkingImages ? 'Checking' : 'Check again'}
-                                    </button>
-                                </div>
-                            )}
-                            {imagesMissing === 0 && imagesUnverified > 0 && (
-                                <p className="mb-3 rounded-md border border-amber-200 bg-amber-50 p-2.5 text-xs leading-relaxed text-amber-800">
-                                    Couldn&apos;t confirm {imagesUnverified === 1 ? '1 image is' : `${imagesUnverified} images are`} live on {liveHost}. Send one to yourself first.
                                 </p>
                             )}
                             <button

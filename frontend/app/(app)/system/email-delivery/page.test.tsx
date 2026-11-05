@@ -25,7 +25,6 @@ let payload: Payload
 /** What each POST answers, given its recipients. */
 let sendResponse: (recipients: string[]) => Response | Promise<Response>
 let posts: { templateId: string; recipients: string[] }[]
-let images: { origin: string; missing: string[]; unverified: string[] }
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 const allOk = (recipients: string[]) => json({ results: recipients.map((email) => ({ email, ok: true })) })
@@ -34,14 +33,13 @@ beforeEach(() => {
     addToast.mockReset()
     posts = []
     sendResponse = allOk
-    images = { origin: 'https://firma.bz', missing: [], unverified: [] }
     payload = {
         templates: [TEMPLATE],
         users: [user('pat@x.com', 'Pat'), user('sam@x.com', 'Sam'), user('lee@y.com')],
         email: { configured: true, from: '"firma" <info@firmaone.com>' },
     }
     vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
-        if (url.includes('/preview')) return json({ html: '<html><head><title>x</title></head><body>The email</body></html>', images })
+        if (url.includes('/preview')) return json({ html: '<html><head><title>x</title></head><body>The email</body></html>' })
         if (init?.method === 'POST') {
             const body = JSON.parse(String(init.body))
             posts.push(body)
@@ -96,29 +94,6 @@ describe('opening the page', () => {
         vi.stubGlobal('fetch', vi.fn(async () => json({ error: 'Could not list users: rate limited' }, 500)))
         render(<EmailDeliveryPage />)
         expect(await screen.findByText(/rate limited/)).toBeTruthy()
-    })
-})
-
-describe('images that aren’t live yet', () => {
-    it('holds Send, says why, and lets go once they are', async () => {
-        images.missing = ['/email/news-1/hero.jpg', '/email/shared/logo.png']
-        await open()
-        fireEvent.click(checkboxFor('Pat'))
-        expect(screen.getByText(/2 images aren.t live on firma.bz yet/)).toBeTruthy()
-        expect((sendButton() as HTMLButtonElement).disabled).toBe(true)
-
-        images = { origin: 'https://firma.bz', missing: [], unverified: [] }
-        fireEvent.click(screen.getByRole('button', { name: 'Check again' }))
-        await waitFor(() => expect((sendButton() as HTMLButtonElement).disabled).toBe(false))
-        expect(screen.queryByText(/live on firma.bz yet/)).toBeNull()
-    })
-
-    it('warns but doesn’t block when the check itself couldn’t tell', async () => {
-        images.unverified = ['/email/news-1/hero.jpg']
-        await open()
-        fireEvent.click(checkboxFor('Pat'))
-        expect(screen.getByText(/Couldn.t confirm 1 image is live on firma.bz/)).toBeTruthy()
-        expect((sendButton() as HTMLButtonElement).disabled).toBe(false)
     })
 })
 

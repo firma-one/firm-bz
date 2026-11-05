@@ -32,6 +32,8 @@ export interface EmailAttachment {
     filename: string
     content: Buffer
     contentType: string
+    /** Shows it inside the message at `<img src="cid:…">` rather than as a file to download. */
+    cid?: string
 }
 
 /**

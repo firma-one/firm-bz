@@ -35,6 +35,10 @@ const nextConfig = {
   //     and fails with "Cannot find module .../chunks/pdf.worker.mjs".
   // Keeping them external means Node require()s them from node_modules as-is.
   serverExternalPackages: ['officeparser', 'pdf-parse'],
+  // Campaign emails carry their images inside the message, so the send route reads them from disk.
+  outputFileTracingIncludes: {
+    '/api/system/email-delivery': ['./public/email/**/*'],
+  },
 
   // Types are checked as their own step in `npm run build` (`next typegen && tsc --noEmit`, before
   // `next build`), not inside `next build`. Inside it, the check ran while the compile's memory was

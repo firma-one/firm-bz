@@ -8,7 +8,8 @@ import { EMAIL_COLORS as C, EMAIL_FONTS as F, escHtml } from '../base'
  * `base.ts` is deliberately plain, for transactional mail. These are for announcements, so they use
  * what the site does: the silk ribbon, dark slanted bands, electric-green pills and real product
  * screens. Canvas, SVG and clip-path don't survive email clients, so the ribbon, the slants and the
- * Brio mark are hosted images (public/email/), and every layout is an inline-styled table.
+ * Brio mark are images (public/email/), and every layout is an inline-styled table. A send embeds the
+ * images in the message (./embed.ts), so they must all be plain `<img>`s, never CSS backgrounds.
  *
  * Everything degrades to something readable: with images blocked the bands keep their color, the
  * copy is live text and each screen has alt text; without media queries the column just scales.
@@ -35,6 +36,8 @@ export const EMAIL_WIDTH = 680
 const GUTTER = 40
 /** Inside a padded column, less the feature card's 1 px borders. */
 const CARD_IMAGE_WIDTH = EMAIL_WIDTH - GUTTER * 2 - 2
+/** The hero's ribbon strip. */
+const RIBBON_WIDTH = 200
 
 export type CampaignContext = {
   /** Where the email's links and images point: the live site for a send, this server for a preview. */
@@ -52,7 +55,7 @@ export function campaignLink(ctx: CampaignContext, path: string): string {
   return url.toString()
 }
 
-/** A hosted image under public/email/. */
+/** An image under public/email/. A send embeds it in the message; the preview loads it from this server. */
 export function emailAsset(ctx: CampaignContext, path: string): string {
   return new URL(`/email/${path}`, ctx.origin).toString()
 }
@@ -78,6 +81,7 @@ export function campaignDocument({ title, preheader, rows }: { title: string; pr
       .fc-shell { border-radius: 0 !important; }
       .fc-pad { padding-left: 24px !important; padding-right: 24px !important; }
       .fc-hero { padding-right: 24px !important; }
+      .fc-hero-art { display: none !important; }
       .fc-h1 { font-size: 36px !important; line-height: 40px !important; }
       .fc-h2 { font-size: 28px !important; line-height: 33px !important; }
     }
@@ -115,7 +119,7 @@ export function para(html: string, { color = C.BODY, size = 16, margin = '0 0 24
 
 /**
  * Brio's mark: sparkle, name and AI subscript, as `components/ui/brio.tsx` draws it. The sparkle is a
- * hosted PNG because email clients drop inline SVG; `tone` says what it sits on.
+ * PNG because email clients drop inline SVG; `tone` says what it sits on.
  */
 export function brioMark(ctx: CampaignContext, tone: 'light' | 'dark' | 'green' = 'light', size = 16): string {
   const sparkle = tone === 'dark' ? 'brio-sparkle-electric.png' : 'brio-sparkle-green.png'
@@ -144,7 +148,7 @@ export function pills(items: { label: string; href: string; variant: PillVariant
         <a href="${escHtml(item.href)}" style="display:inline-block;padding:13px 22px;font-family:${F.FONT};font-size:15px;font-weight:700;line-height:1;color:${p.color};text-decoration:none;border-radius:999px;white-space:nowrap;">${escHtml(item.label)}&nbsp;<span style="color:${p.chevron};">&rsaquo;</span></a>
       </td>${i < items.length - 1 ? '<td width="10" style="width:10px;font-size:0;line-height:0;">&nbsp;</td>' : ''}`
   })
-  return `<table role="presentation" align="${align}" cellpadding="0" cellspacing="0" border="0"${align === 'center' ? ' style="margin:0 auto;"' : ''}><tr>${cells.join('')}</tr></table>`
+  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0"${align === 'center' ? ' align="center" style="margin:0 auto;"' : ''}><tr>${cells.join('')}</tr></table>`
 }
 
 /** A full-bleed screen or artwork, as wide as the email. */
@@ -152,15 +156,16 @@ export function imageRow({ src, alt, bg = '#FFFFFF' }: { src: string; alt: strin
   return `<tr><td bgcolor="${bg}" style="background-color:${bg};font-size:0;line-height:0;"><img src="${src}" width="${EMAIL_WIDTH}" alt="${escHtml(alt)}" style="display:block;width:100%;max-width:${EMAIL_WIDTH}px;height:auto;font-family:${F.FONT};font-size:14px;line-height:1.5;color:${C.MUTED};" /></td></tr>`
 }
 
-/** The site's slanted band edge: a hosted image, since clip-path doesn't reach the inbox. */
+/** The site's slanted band edge: an image, since clip-path doesn't reach the inbox. */
 export function slant(ctx: CampaignContext, name: 'white-band' | 'band-gray' | 'gray-band'): string {
   return `<tr><td style="font-size:0;line-height:0;"><img src="${emailAsset(ctx, `shared/slant-${name}.png`)}" width="${EMAIL_WIDTH}" alt="" style="display:block;width:100%;max-width:${EMAIL_WIDTH}px;height:auto;" /></td></tr>`
 }
 
 /**
- * The hero: logo, announcement chip, headline, copy and buttons on white, with the silk ribbon
- * behind the right side. The ribbon keeps its full size and anchors left, so a narrower screen crops
- * it away instead of sliding it under the text.
+ * The hero: logo, announcement chip, headline, copy and buttons on white, with the silk ribbon down
+ * the right side. The ribbon is its own cell rather than a background, because a background can't be
+ * embedded reliably; it fades to white at the bottom, so the text can run longer than it, and phones
+ * drop it to give the text the full width.
  */
 export function heroRow({
   ctx,
@@ -179,8 +184,9 @@ export function heroRow({
   lede: string
   actions: string
 }): string {
-  return `<tr>
-    <td background="${ribbon}" bgcolor="#FFFFFF" class="fc-pad fc-hero" style="padding:32px 200px 32px ${GUTTER}px;background-color:#FFFFFF;background-image:url('${ribbon}');background-repeat:no-repeat;background-position:left top;background-size:${EMAIL_WIDTH}px auto;">
+  return `<tr><td bgcolor="#FFFFFF" style="background-color:#FFFFFF;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+    <td class="fc-pad fc-hero" valign="top" style="padding:32px 12px 32px ${GUTTER}px;">
       <a href="${escHtml(campaignLink(ctx, '/'))}" style="display:inline-block;"><img src="${emailAsset(ctx, 'shared/logo.png')}" width="109" height="28" alt="${escHtml(BRAND_NAME)}" style="display:block;width:109px;height:28px;font-family:${F.DISPLAY};font-size:22px;font-weight:700;color:${C.INK};" /></a>
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:34px 0 20px;"><tr>
         <td bgcolor="#FFFFFF" style="background-color:#FFFFFF;border:1px solid #DCE6E1;border-radius:999px;padding:4px 14px 4px 4px;font-family:${F.FONT};font-size:13px;line-height:18px;color:${C.INK};">
@@ -191,7 +197,9 @@ export function heroRow({
       ${para(lede, { margin: '0 0 26px' })}
       ${actions}
     </td>
-  </tr>`
+    <td class="fc-hero-art" width="${RIBBON_WIDTH}" valign="top" style="width:${RIBBON_WIDTH}px;font-size:0;line-height:0;"><img src="${ribbon}" width="${RIBBON_WIDTH}" alt="" style="display:block;width:${RIBBON_WIDTH}px;height:auto;" /></td>
+    </tr></table>
+  </td></tr>`
 }
 
 /** A padded section on white. */
@@ -282,11 +290,15 @@ export function listCard(title: string, lines: string[]): string {
 export const UNSUBSCRIBE_MAILTO = `mailto:${PLATFORM_SUPPORT_EMAIL}?subject=${encodeURIComponent('Unsubscribe from product updates')}`
 
 /** The closing row: site links, why you got this, and how to stop. */
-export function footerRow(ctx: CampaignContext, links: { label: string; path: string }[]): string {
+export function footerRow(
+  ctx: CampaignContext,
+  links: { label: string; path: string }[],
+  reason = `You’re receiving this product update from ${BRAND_NAME}, the client workspace built on your own Drive.`,
+): string {
   const linkStyle = `color:#FFFFFF;font-weight:600;text-decoration:none;`
   return `<tr><td class="fc-pad" bgcolor="${BAND_DEEP}" style="background-color:${BAND_DEEP};padding:24px ${GUTTER}px 30px;font-family:${F.FONT};font-size:12.5px;line-height:1.7;color:${ON_BAND_BODY};text-align:center;">
     <p style="margin:0 0 10px;">${links.map((l) => `<a href="${escHtml(campaignLink(ctx, l.path))}" style="${linkStyle}">${escHtml(l.label)}</a>`).join(' &nbsp;·&nbsp; ')}</p>
-    <p style="margin:0;">You’re receiving this product update from ${escHtml(BRAND_NAME)}, the client workspace built on your own Drive.<br />
+    <p style="margin:0;">${escHtml(reason)}<br />
     Prefer not to get these? <a href="${escHtml(UNSUBSCRIBE_MAILTO)}" style="color:${ON_BAND_BODY};text-decoration:underline;">Unsubscribe</a>.<br />
     &copy; ${new Date().getFullYear()} ${escHtml(BRAND_NAME)}</p>
   </td></tr>`

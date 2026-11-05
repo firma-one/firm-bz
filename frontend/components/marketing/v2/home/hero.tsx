@@ -15,6 +15,9 @@ import { HeroRibbon } from './hero-ribbon';
 
 const BrioLight = () => <Brio fixedColor iconClassName="mk-sparkle" />;
 
+/** Half a phone's width: tighter than a full-width pill. `!` because .mk-btn loads after Tailwind. */
+const PHONE_PAIR_PILL = 'max-md:!px-3 max-md:!text-[16px]';
+
 function DesktopComposite() {
   return (
     <div
@@ -113,21 +116,20 @@ export function HeroSection() {
           <PillLink href="/signup" block>
             Start free
           </PillLink>
-          <PillLink href="/tour" variant="secondary" block>
-            Take the tour
-          </PillLink>
-          <a href={DEMO_BOOKING_URL} className="ml-1.5 hidden text-[15px] font-semibold !text-[var(--mk-bottle-dark)] hover:underline md:inline">
-            or book a demo
-          </a>
+          {/* On phones the pair sits side by side under Start free, stacking below 360 px where it stops
+              fitting. On desktop the wrapper drops out, so all three share the one row. */}
+          <div className="grid grid-cols-1 gap-2.5 min-[360px]:grid-cols-2 md:contents">
+            <PillLink href="/tour" variant="secondary" block className={PHONE_PAIR_PILL}>
+              Take the tour
+            </PillLink>
+            <PillLink href={DEMO_BOOKING_URL} variant="secondary" block className={PHONE_PAIR_PILL}>
+              Book a demo
+            </PillLink>
+          </div>
         </div>
         <p className="mt-3.5 text-center text-[13.5px] text-[var(--mk-body)] md:mt-[22px] md:text-left md:text-[14px] md:text-[var(--mk-muted)]">
           <span className="hidden md:inline">Free for your first client · No credit card · Google Drive and OneDrive</span>
-          <span className="md:hidden">
-            Free for your first client · No credit card ·{' '}
-            <a href={DEMO_BOOKING_URL} className="font-semibold underline">
-              Book a demo
-            </a>
-          </span>
+          <span className="md:hidden">Free for your first client · No credit card</span>
         </p>
       </div>
 
