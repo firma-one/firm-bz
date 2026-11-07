@@ -27,9 +27,9 @@ export function trustMapNodes(brand: string): TrustMapNode[] {
       id: 'team',
       kind: 'People',
       title: 'Your team',
-      subtitle: 'Owners, contributors, reviewers',
+      subtitle: 'Leads, contributors, reviewers',
       detail: `Your team signs in to ${brand} with a one-time email code or a Google account, through a dedicated sign-in service on OpenID Connect. There is no password to leak. Roles decide who can edit, who reviews and who only views.`,
-      points: ['Email code or Google sign-in (OIDC)', 'Roles: Owner, Contributor, Reviewer', 'Every open and download is in the audit log'],
+      points: ['Email code or Google sign-in (OIDC)', 'Roles: Lead, Contributor, Reviewer', 'Every open and download is in the audit log'],
     },
     {
       id: 'client',

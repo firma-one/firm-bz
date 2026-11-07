@@ -293,7 +293,7 @@ export interface HealthScoreInput {
 export const HEALTH_SCORE_INFO =
     'A score out of 100 that starts at 100 and loses points for what puts the engagement at risk: '
     + 'an overdue engagement, overdue deliverables and documents, planning gaps, falling behind pace, '
-    + 'unanswered client comments and sensitive files. 80 and up is healthy, 50–79 needs attention, '
+    + 'unanswered comments and sensitive files. 80 and up is healthy, 50–79 needs attention, '
     + 'below 50 is critical.'
 
 /**
@@ -408,7 +408,7 @@ export function OverviewDetails({ report: r }: { report: ReportInputs }) {
                             <SegmentedBar segments={commentItems} />
                             {commentTotal > 0
                                 ? <Legend items={commentItems} />
-                                : <Empty>No comment threads yet. Tracks how quickly client comments get a reply.</Empty>}
+                                : <Empty>No comment threads yet. Tracks how quickly comments get a reply.</Empty>}
                         </ChartBlock>
                     )}
                 </div>
@@ -477,17 +477,17 @@ export function TeamSection({ joined, invited, roles, internal, external }: {
         },
         {
             title: 'By role',
-            info: 'Joined members by role: Admin (engagement lead) and Member on the firm side, Collaborator and Reviewer on the client side.',
+            info: 'Joined members by role: Lead, Full Access, Limited Access and Reviewer.',
             aside: roleTotal > 0 ? `${roleTotal} member${roleTotal === 1 ? '' : 's'}` : undefined,
             items: roles,
             empty: 'No members yet.',
         },
         {
-            title: 'Internal vs external',
-            info: 'Firm-side members (Admins and Members) against client-side members (Collaborators and Reviewers).',
+            title: 'Internal vs limited',
+            info: 'Leads and Full Access contributors against Limited Access contributors and Reviewers.',
             aside: roleTotal > 0 ? `${Math.round((internal / roleTotal) * 100)}% internal` : undefined,
             // Not a status: the categorical grays.
-            items: [{ label: 'Internal', hex: DATA.category1, value: internal }, { label: 'External', hex: DATA.category3, value: external }],
+            items: [{ label: 'Internal', hex: DATA.category1, value: internal }, { label: 'Limited', hex: DATA.category3, value: external }],
             empty: 'No members yet.',
         },
     ]

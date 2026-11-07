@@ -24,6 +24,12 @@ ${nextSteps}
 `
 
 describe('findUnfilledSections', () => {
+    it('still catches the older wording, in drafts saved before the role was renamed', () => {
+        const old = '_Awaiting the Engagement Lead\u2019s input._'
+        expect(findUnfilledSections(build(old, old))).toEqual(findUnfilledSections(build(LEAD_PLACEHOLDER, LEAD_PLACEHOLDER)))
+        expect(findUnfilledSections(build(old, old)).length).toBeGreaterThan(0)
+    })
+
     it('flags both lead sections when the model leaves its placeholder', () => {
         expect(findUnfilledSections(build(LEAD_PLACEHOLDER, LEAD_PLACEHOLDER)))
             .toEqual(['Mitigation & Contingency', 'Next Steps'])

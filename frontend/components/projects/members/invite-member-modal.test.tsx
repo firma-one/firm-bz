@@ -39,7 +39,7 @@ describe('InviteMemberModal', () => {
         expect(screen.getByRole('dialog', { name: 'Invite to engagement' })).toBeTruthy()
         expect(screen.getByLabelText('Email')).toBeTruthy()
         expect(screen.getByText('Role')).toBeTruthy()
-        expect(screen.getByText('Engagement Lead · manages the engagement and its members · internal')).toBeTruthy()
+        expect(screen.getByText('Lead · manages the engagement and its members · internal')).toBeTruthy()
         expect(screen.getByRole('button', { name: 'Cancel' })).toBeTruthy()
         expect((sendButton() as HTMLButtonElement).disabled).toBe(true)
     })
@@ -48,11 +48,11 @@ describe('InviteMemberModal', () => {
         renderModal('contributor')
         const full = screen.getByRole('radio', { name: 'Full Access' })
         expect(full.getAttribute('aria-checked')).toBe('true')
-        expect(screen.getByText('Contributor · edits all engagement content · internal')).toBeTruthy()
+        expect(screen.getByText('Full Access · edits all engagement content · internal')).toBeTruthy()
 
         fireEvent.click(screen.getByRole('radio', { name: 'Limited Access' }))
         expect(screen.getByRole('radio', { name: 'Limited Access' }).getAttribute('aria-checked')).toBe('true')
-        expect(screen.getByText('Contributor · edits only what is shared with them · guest')).toBeTruthy()
+        expect(screen.getByText('Limited Access · edits only what is shared with them')).toBeTruthy()
     })
 
     it('has no access level for an owner', () => {

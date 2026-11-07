@@ -224,13 +224,13 @@ export function SummaryDraftReview({
                         {blocked ? (
                             <span>Fill in <strong className="font-medium text-fg">{unfilledSections.join(' and ')}</strong> to publish.</span>
                         ) : (
-                            <span>Publishing saves this as the engagement summary the client sees.</span>
+                            <span>Publishing saves this as the engagement summary everyone on it sees.</span>
                         )}
                         <InfoHint
                             label="About publishing"
                             text={blocked
                                 ? `${unfilledSections.join(' and ')} ${unfilledSections.length === 1 ? 'is' : 'are'} yours to decide: Brio reports what the data shows and does not commit your firm to a plan.`
-                                : `It is visible to the client and goes into PDF and email exports.${published ? ' It replaces the summary published' + (published.publishedAt ? ` ${formatRelativeTime(published.publishedAt)}` : ' earlier') + '.' : ''}`}
+                                : `It is visible to everyone on the engagement and goes into PDF and email exports.${published ? ' It replaces the summary published' + (published.publishedAt ? ` ${formatRelativeTime(published.publishedAt)}` : ' earlier') + '.' : ''}`}
                         />
                     </p>
                     <div className="flex items-center gap-2">

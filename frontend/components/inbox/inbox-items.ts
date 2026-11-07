@@ -256,7 +256,7 @@ export function sortNotifications(notifications: ApiNotification[]): InboxItem[]
 const WORK_LABEL: Record<Exclude<NeedsYouItem["kind"], "reminder">, string> = {
     deliverable_review: "Waiting for your approval",
     intake: "Upload to approve",
-    client_comment: "Client comment",
+    client_comment: "Comment",
     changes_requested: "Changes requested",
 }
 const WORK_STAGE: Record<Exclude<NeedsYouItem["kind"], "reminder">, StatusStage | null> = {

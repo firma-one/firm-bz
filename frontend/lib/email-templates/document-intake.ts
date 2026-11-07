@@ -20,7 +20,7 @@ export function renderDocumentIntakeEmail(params: DocumentIntakeEmailParams): { 
     emailHeading('A new document is awaiting review'),
     detailCard({ label: 'File', title: fileName, lines: [engagementName] }),
     ctaUrl ? ctaButton('Review intake', ctaUrl) : '',
-    emailFootnote("A client uploaded this file for your engagement and it needs approval before it's indexed and shared. You can turn this email off in Firm Settings → Event Notifications."),
+    emailFootnote("Someone with limited access uploaded this file for your engagement and it needs approval before it's indexed and shared. You can turn this email off in Firm Settings → Event Notifications."),
   ].join('\n')
 
   return { subject, html: renderEmail({ title: subject, preheader: `${fileName} — ${engagementName}`, body }) }

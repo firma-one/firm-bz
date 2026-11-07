@@ -85,8 +85,8 @@ Judgement — when the rules disagree with the engagement, the engagement wins.
 const SYSTEM = `You help a professional services firm tidy an engagement's files.
 
 You are given FINDINGS computed from the file tree, and the FILE LIST they refer to. Your job is to
-propose concrete fixes using the tools provided. You do not decide whether to apply them — an
-Engagement Lead reviews every proposal before anything changes.
+propose concrete fixes using the tools provided. You do not decide whether to apply them — a
+Lead reviews every proposal before anything changes.
 
 ${ORGANIZATION_RULES}
 

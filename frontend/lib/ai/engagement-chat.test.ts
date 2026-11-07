@@ -238,7 +238,7 @@ describe('member and invitation context', () => {
 
     it('renders roles as product labels, not enum keys', () => {
         const ctx = buildEngagementContext(base({ pendingInvitations: [] }), {})
-        expect(ctx).toContain('External Collaborator')
+        expect(ctx).toContain('Contributor · Limited Access')
         expect(ctx).not.toContain('engagement_collaborator')
     })
 })

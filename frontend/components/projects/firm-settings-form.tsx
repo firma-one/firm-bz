@@ -92,7 +92,7 @@ const EVENT_NOTIFICATION_ROWS: { key: EventKey; label: string }[] = [
     { key: 'newDocumentIntake', label: 'New document intake' },
     { key: 'statusChanged', label: 'Status changed (doc/deliverable)' },
     { key: 'documentRejected', label: 'Document rejected' },
-    { key: 'externalClientComment', label: 'Client comment posted' },
+    { key: 'externalClientComment', label: 'Comment from a Limited Access contributor or Reviewer' },
     { key: 'engagementInviteAccepted', label: 'Engagement invite accepted' },
     { key: 'deliverableOverdue', label: 'Deliverable overdue' },
     { key: 'reminders', label: 'Reminders due (in-app also enables push)' },
@@ -845,8 +845,8 @@ export function FirmSettingsForm({
                     </section>
 
                     <section>
-                        <h3 className={SETTINGS_SECTION_HEADING_CLASS}>Overview for contributors and reviewers</h3>
-                        <p className="mb-1 text-small text-fg-muted">Which sections external members see on an engagement&apos;s Overview. Internal members always see everything.</p>
+                        <h3 className={SETTINGS_SECTION_HEADING_CLASS}>Overview for Limited Access contributors and Reviewers</h3>
+                        <p className="mb-1 text-small text-fg-muted">Which sections they see on an engagement&apos;s Overview. Leads and Full Access contributors always see everything.</p>
                         {([
                             { label: 'Engagement health', value: extEngagementHealth, set: setExtEngagementHealth },
                             { label: 'File organization', value: extFileOrganization, set: setExtFileOrganization },

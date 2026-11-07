@@ -287,7 +287,7 @@ export function AddEngagementModal({ groupSlug, firmSlug, clientSlug, trigger, o
                                                 disabled={isDisabled}
                                                 className={PROPERTY_TEXTAREA_CLASS}
                                             />
-                                            <p className={PROPERTY_HINT_CLASS}>Only your firm sees this.</p>
+                                            <p className={PROPERTY_HINT_CLASS}>Internal only.</p>
                                         </div>
                                     </PropertyRow>
                                 </PropertyList>

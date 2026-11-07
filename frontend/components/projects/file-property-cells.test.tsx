@@ -80,16 +80,16 @@ describe('FileStatusCell', () => {
         expect(sent).toEqual([{ status: 'in_progress' }])
     })
 
-    it('asks before the move shows its deliverable to the client, then sends it agreed', async () => {
+    it('asks before the move shows its deliverable to someone new, then sends it agreed', async () => {
         answer = (body) => (body.confirm ? { status: 200, json: { deliverable: { id: 'D', status: 'in_progress' } } } : { status: 409, json: CONFIRMATION })
         const { onSaved } = cell()
         await pick('In progress')
         // What the move opens to them is the documents: they see the deliverable's card already.
-        expect(await screen.findByText('Share its documents with 1 external contributor?')).toBeTruthy()
+        expect(await screen.findByText('Share its documents with 1 Limited Access contributor?')).toBeTruthy()
         // Named by its Doc ID, as everywhere in the app
         expect(screen.getByText('QSR-9 · Market report moves to In progress')).toBeTruthy()
         expect(screen.getByText('QSR-9 · Market report')).toBeTruthy()
-        expect(screen.getByText(/1 external contributor already sees the deliverable\. From then on they.ll see its documents too/)).toBeTruthy()
+        expect(screen.getByText(/1 Limited Access contributor already sees the deliverable\. From then on they.ll see its documents too/)).toBeTruthy()
         await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Move and share' })) })
         await waitFor(() => expect(onSaved).toHaveBeenCalledWith('in_progress'))
         expect(sent).toEqual([{ status: 'in_progress' }, { status: 'in_progress', confirm: true }])

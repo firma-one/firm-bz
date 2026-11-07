@@ -121,7 +121,7 @@ export function DemoSummaryCard({ input, today }: { input: DemoSummaryInput; tod
         setDraft(null)
         setDraftEdit('')
         clearPaneRef.current()
-        addToast({ type: 'success', title: 'Summary published', message: 'Visible to the client and in exports.' })
+        addToast({ type: 'success', title: 'Summary published', message: 'Visible to everyone on the engagement and in exports.' })
     }
 
     const copy = async (text: string, which: 'published' | 'draft') => {

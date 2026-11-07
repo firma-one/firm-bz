@@ -27,7 +27,7 @@ interface DemoEngagementMember {
 
 /** The app's engagement roles, tagged as member-list.tsx tags them. */
 const DEMO_ENGAGEMENT_MEMBERS: DemoEngagementMember[] = [
-    { name: 'Alex Jordan', email: 'alex@beacongrowth.com', role: <Tag color="purple">Owner</Tag>, addedDaysAgo: 88 },
+    { name: 'Alex Jordan', email: 'alex@beacongrowth.com', role: <Tag color="purple">Lead</Tag>, addedDaysAgo: 88 },
     { name: 'Sam Rivera', email: 'sam@beacongrowth.com', role: <Tag color="gray">Contributor · Full Access</Tag>, addedDaysAgo: 85 },
     { name: 'Jordan Lee', email: 'jordan@beacongrowth.com', role: <Tag color="gray">Contributor · Full Access</Tag>, addedDaysAgo: 60 },
     { name: 'Morgan Ellis', email: 'morgan@client-example.com', role: <Tag color="blue">Reviewer</Tag>, addedDaysAgo: 41 },

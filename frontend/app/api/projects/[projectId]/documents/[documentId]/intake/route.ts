@@ -45,13 +45,13 @@ export async function PATCH(
     const isLead = isEngagementLeadRole(member.role)
 
     if ((action === 'approve' || action === 'reject') && !isLead) {
-      return NextResponse.json({ error: 'Only Engagement Lead can approve or reject' }, { status: 403 })
+      return NextResponse.json({ error: 'Only a Lead can approve or reject' }, { status: 403 })
     }
     if (action === 'withdraw' && !isExternal) {
       return NextResponse.json({ error: 'Only EC/EV can withdraw their own uploads' }, { status: 403 })
     }
     if ((action === 'approve-folder' || action === 'reject-folder') && !isLead) {
-      return NextResponse.json({ error: 'Only Engagement Lead can approve or reject' }, { status: 403 })
+      return NextResponse.json({ error: 'Only a Lead can approve or reject' }, { status: 403 })
     }
     if (action === 'withdraw-folder' && !isExternal) {
       return NextResponse.json({ error: 'Only EC/EV can withdraw their own uploads' }, { status: 403 })

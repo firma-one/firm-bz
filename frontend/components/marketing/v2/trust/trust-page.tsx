@@ -101,7 +101,7 @@ function ViewsPeek() {
 }
 
 const ACCESS: { who: keyof typeof PEOPLE; org: string; role: string; external?: boolean }[] = [
-  { who: 'AJ', org: 'Your team', role: 'Owner' },
+  { who: 'AJ', org: 'Your team', role: 'Lead' },
   { who: 'SR', org: 'Your team', role: 'Contributor' },
   { who: 'MC', org: 'Horizon FinTech', role: 'Reviewer · view only', external: true },
 ];

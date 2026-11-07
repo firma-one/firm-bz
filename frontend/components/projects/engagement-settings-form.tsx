@@ -295,7 +295,7 @@ export function EngagementSettingsForm({
                                 disabled={disabled}
                                 className={textareaFieldCls}
                             />
-                            <p className="px-2 text-caption text-fg-subtle">Only your firm sees this.</p>
+                            <p className="px-2 text-caption text-fg-subtle">Internal only.</p>
                         </div>
                     </PropertyRow>
                 </PropertyList>

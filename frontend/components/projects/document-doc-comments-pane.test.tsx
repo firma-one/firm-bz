@@ -115,7 +115,7 @@ describe('DocumentDocCommentsPane — mentions', () => {
         type(box, 'Hi @an')
         const menu = await screen.findByRole('listbox', { name: 'Mention someone' })
         expect(menu.textContent).toContain('Ana Lopez')
-        expect(menu.textContent).toContain('Member')
+        expect(menu.textContent).toContain('Full Access')
         expect(menu.textContent).not.toContain('Me Myself')
         expect(menu.textContent).not.toContain('Brio')
     })

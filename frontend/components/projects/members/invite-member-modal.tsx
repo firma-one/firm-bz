@@ -12,16 +12,16 @@ import { CreateDialogFooter, CreateDialogHeader, CreateDialogNotice } from '@/co
 import { cn } from '@/lib/utils'
 import { inviteMember } from '@/lib/actions/invitations'
 import { InviteeNameFields } from '@/components/projects/members/invitee-name-fields'
-import { PersonaUiRole, PersonaUiSubRole, SUB_ROLE_LABEL, resolvePersonaSlug } from '@/lib/persona-ui-groups'
+import { roleDescription, PersonaUiRole, PersonaUiSubRole, SUB_ROLE_LABEL, resolvePersonaSlug } from '@/lib/persona-ui-groups'
 
 type ProjectPersonaWithRole = Persona
 
 /** One line on what each engagement role can do, shown under the Role row. */
 const ROLE_SUMMARY: Record<string, string> = {
-    eng_admin: 'Engagement Lead · manages the engagement and its members · internal',
-    eng_member: 'Contributor · edits all engagement content · internal',
-    eng_ext_collaborator: 'Contributor · edits only what is shared with them · guest',
-    eng_viewer: 'Reviewer · views shared content, read-only · guest',
+    eng_admin: 'Lead · manages the engagement and its members · internal',
+    eng_member: 'Full Access · edits all engagement content · internal',
+    eng_ext_collaborator: 'Limited Access · edits only what is shared with them',
+    eng_viewer: 'Reviewer · views shared content, read-only',
 }
 
 interface InviteMemberModalProps {
@@ -175,7 +175,7 @@ export function InviteMemberModal({ projectId, open, onOpenChange, personas, pre
                                             <SelectValue placeholder="Empty" />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            <SelectItem value="owner">Owner</SelectItem>
+                                            <SelectItem value="owner">Lead</SelectItem>
                                             <SelectItem value="contributor">Contributor</SelectItem>
                                             <SelectItem value="reviewer">Reviewer</SelectItem>
                                         </SelectContent>
@@ -193,7 +193,7 @@ export function InviteMemberModal({ projectId, open, onOpenChange, personas, pre
                                         {(['internal', 'external'] as const).map((sr) => {
                                             const persona = personas.find((p) => p.slug === resolvePersonaSlug('contributor', sr))
                                             return (
-                                                <Hint key={sr} label={persona?.description || SUB_ROLE_LABEL[sr]} side="top">
+                                                <Hint key={sr} label={roleDescription(persona?.slug) ?? SUB_ROLE_LABEL[sr]} side="top">
                                                     <button
                                                         type="button"
                                                         role="radio"

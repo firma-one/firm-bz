@@ -76,7 +76,7 @@ export function EngagementTabsList({ pendingTab, ...c }: EngagementTabsConfig & 
                     <PenTool className="h-4 w-4" />
                     Dossier
                     <Tag color="yellow" className="h-4 px-1 text-[10px]">Beta</Tag>
-                    <AccessLock label="Internal only — external contributors and reviewers don't see this" />
+                    <AccessLock label="Internal only · Hidden from Limited Access contributors and Reviewers" />
                     {count(c.wikiPageCount)}
                     {pending('wiki')}
                 </TabsTrigger>
@@ -86,7 +86,7 @@ export function EngagementTabsList({ pendingTab, ...c }: EngagementTabsConfig & 
                     <ClipboardList className="h-4 w-4" />
                     Audit
                     {count(c.auditCount)}
-                    <AccessLock label="Engagement leads and firm admins only" />
+                    <AccessLock label="Leads and firm admins only" />
                     {pending('audit')}
                 </TabsTrigger>
             )}
@@ -95,7 +95,7 @@ export function EngagementTabsList({ pendingTab, ...c }: EngagementTabsConfig & 
                     <Users className="h-4 w-4" />
                     Members
                     {count(c.memberCount)}
-                    <AccessLock label="Internal only — external contributors and reviewers don't see this" />
+                    <AccessLock label="Internal only · Hidden from Limited Access contributors and Reviewers" />
                     {pending('members')}
                 </TabsTrigger>
             )}
@@ -103,7 +103,7 @@ export function EngagementTabsList({ pendingTab, ...c }: EngagementTabsConfig & 
                 <TabsTrigger value="settings" data-demo-tour="engagement-settings-tab" className="relative gap-1.5">
                     <Settings className="h-4 w-4" />
                     Settings
-                    <AccessLock label="Engagement leads and firm admins only" />
+                    <AccessLock label="Leads and firm admins only" />
                     {pending('settings')}
                 </TabsTrigger>
             )}

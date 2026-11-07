@@ -1,6 +1,6 @@
 # One set of role names
 
-**Status:** for Deepak's review (2026-11-07). No app code has changed for this.
+**Status:** applied 2026-11-07 with the recommendations below, labels only: the database's role names and descriptions stay as they are, because `lib/google-drive-connector.ts` and `lib/connectors/adapters/onedrive-list-files.ts` compare them. Names live in `lib/persona-ui-groups.ts`.
 
 ## The problem
 

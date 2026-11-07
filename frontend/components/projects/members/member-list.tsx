@@ -31,7 +31,7 @@ import { Label } from "@/components/ui/label"
 import { removeMember, revokeInvitation, updateMemberPersona } from '@/lib/actions/members'
 import { resendInvitation } from '@/lib/actions/invitations'
 import { useToast } from "@/components/ui/toast"
-import { PERSONA_UI_GROUPS, PersonaUiRole, PersonaUiSubRole, SUB_ROLE_LABEL, getPersonaUiGroup, resolvePersonaSlug } from '@/lib/persona-ui-groups'
+import { roleDescription, PERSONA_UI_GROUPS, PersonaUiRole, PersonaUiSubRole, SUB_ROLE_LABEL, getPersonaUiGroup, resolvePersonaSlug } from '@/lib/persona-ui-groups'
 import { initialsOf } from '@/lib/initials'
 
 interface MemberListProps {
@@ -44,7 +44,7 @@ interface MemberListProps {
 }
 
 const UI_ROLE_ORDER: PersonaUiRole[] = ['owner', 'contributor', 'reviewer']
-const UI_ROLE_DISPLAY_LABEL: Record<PersonaUiRole, string> = { owner: 'Owner', contributor: 'Contributor', reviewer: 'Reviewer' }
+const UI_ROLE_DISPLAY_LABEL: Record<PersonaUiRole, string> = { owner: 'Lead', contributor: 'Contributor', reviewer: 'Reviewer' }
 
 export function MemberList({ members, invitations, personas, onRefresh, canManage = false, onInviteWithRole }: MemberListProps) {
     const [actionLoading, setActionLoading] = useState<string | null>(null)
@@ -275,7 +275,7 @@ export function MemberList({ members, invitations, personas, onRefresh, canManag
                     </div>
                 </NotionTableCell>
                 <NotionTableCell className="hidden text-fg-subtle md:table-cell">—</NotionTableCell>
-                <NotionTableCell>{roleTag(persona?.slug, persona?.description)}</NotionTableCell>
+                <NotionTableCell>{roleTag(persona?.slug, roleDescription(persona?.slug))}</NotionTableCell>
                 <NotionTableCell className="hidden sm:table-cell">
                     <StatusPill kind="invitation" status={invite.status} className={cn(resendFeedback.isFresh(invite.id) && FRESH_CHIP_CLASS)} />
                 </NotionTableCell>
@@ -405,7 +405,7 @@ export function MemberList({ members, invitations, personas, onRefresh, canManag
                                             <RadioGroupItem value={uiRoleValue} id={`role-${uiRoleValue}`} className="mt-0.5" />
                                             <div className="flex-1 cursor-pointer">
                                                 <Label htmlFor={`role-${uiRoleValue}`} className="cursor-pointer text-ui font-medium text-fg">{label}</Label>
-                                                <p className="text-small text-fg-muted">{persona?.description || 'No description'}</p>
+                                                <p className="text-small text-fg-muted">{roleDescription(persona?.slug) ?? 'No description'}</p>
                                             </div>
                                         </div>
                                     )
@@ -429,7 +429,7 @@ export function MemberList({ members, invitations, personas, onRefresh, canManag
                                                                 <Info className="h-3.5 w-3.5 text-fg-subtle cursor-help shrink-0" />
                                                             </TooltipTrigger>
                                                             <TooltipContent side="top" className="max-w-[260px]">
-                                                                {persona?.description || 'No description'}
+                                                                {roleDescription(persona?.slug) ?? 'No description'}
                                                             </TooltipContent>
                                                         </Tooltip>
                                                     </TooltipProvider>

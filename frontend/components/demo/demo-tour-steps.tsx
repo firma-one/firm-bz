@@ -219,7 +219,7 @@ export const NODE_STEPS: Record<TourNodeId, TourStep[]> = {
                 <ul>
                     <li><strong>General</strong> — the firm&apos;s details and an internal memo only admins see.</li>
                     <li><strong>Branding</strong> — the name, tagline, color and logo shown in the app.</li>
-                    <li><strong>App settings</strong> — who can join by email domain, currency, reminder emails, notifications, and what collaborators and reviewers see on an engagement&apos;s Overview.</li>
+                    <li><strong>App settings</strong> — who can join by email domain, currency, reminder emails, notifications, and what Limited Access contributors and Reviewers see on an engagement&apos;s Overview.</li>
                     <li><strong>Storage</strong> — the firm&apos;s Google Drive or OneDrive.</li>
                 </ul>
             ),
@@ -360,7 +360,7 @@ export const NODE_STEPS: Record<TourNodeId, TourStep[]> = {
                     <p>Each document in a deliverable has a stage, from Not started to Approved. Change it here.</p>
                     <ul>
                         <li><strong>The deliverable follows</strong> — its stage is worked out from its documents&apos;, so there&apos;s nothing to keep in step by hand.</li>
-                        <li><strong>Firma asks first</strong> when a move would show the deliverable to the client for the first time, or approve it.</li>
+                        <li><strong>Firma asks first</strong> when a move would show the deliverable to a Limited Access contributor or Reviewer for the first time, or approve it.</li>
                     </ul>
                 </div>
             ),
@@ -392,7 +392,7 @@ export const NODE_STEPS: Record<TourNodeId, TourStep[]> = {
             content: (
                 <div className="space-y-2">
                     <p>Details has everything about a file: its stage, due date, assignee and type.</p>
-                    <p>When a document is waiting on someone, flag it <strong>Blocked</strong> with a reason and a note. Only your firm sees the flag, and the Board can filter by it.</p>
+                    <p>When a document is waiting on someone, flag it <strong>Blocked</strong> with a reason and a note. Only Leads and Full Access contributors see the flag, and the Board can filter by it.</p>
                 </div>
             ),
             route: engAt({ tab: 'files', folder: inProgressId, details: firstDocumentId }),
@@ -498,7 +498,7 @@ export const NODE_STEPS: Record<TourNodeId, TourStep[]> = {
         {
             target: '[data-demo-tour="engagement-members-tab"]',
             title: 'Engagement members',
-            content: <p>Manage who has access to this engagement and their role — Lead, Collaborator or Viewer.</p>,
+            content: <p>Manage who has access to this engagement and their role: Lead, Contributor or Reviewer.</p>,
             route: engAt({ tab: 'members' }),
             placement: 'bottom',
             skipScroll: true,

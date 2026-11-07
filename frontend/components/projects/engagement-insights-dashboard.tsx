@@ -1,5 +1,6 @@
 'use client'
 
+import { ROLE_SHORT_NAME } from '@/lib/persona-ui-groups'
 import React, { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback, useSyncExternalStore } from 'react'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -294,7 +295,7 @@ function TeamStatusBody({ data }: { data: EngagementInsightsResponse }) {
             <div className="flex flex-col items-center gap-3">
                 <p className="text-sm font-semibold text-fg-muted flex items-center gap-1.5">
                     <Users className="h-4 w-4 text-fg-subtle" /> Distribution by Role
-                    <InfoTip ariaLabel="About Distribution by Role" text="Breakdown of joined engagement members by role: Admin (Engagement Lead) · Member · Collaborator (external) · Reviewer (external)." />
+                    <InfoTip ariaLabel="About Distribution by Role" text="Breakdown of joined engagement members by role: Lead · Full Access · Limited Access · Reviewer." />
                 </p>
                 {rolesTotal > 0 ? (
                     <RingWithLegend
@@ -307,17 +308,17 @@ function TeamStatusBody({ data }: { data: EngagementInsightsResponse }) {
                 )}
             </div>
 
-            {/* Ring 3 — Internal vs External mix */}
+            {/* Ring 3: Internal vs Limited mix */}
             <div className="flex flex-col items-center gap-3">
                 <p className="text-sm font-semibold text-fg-muted flex items-center gap-1.5">
-                    <Users className="h-4 w-4 text-fg-subtle" /> Internal vs External
-                    <InfoTip ariaLabel="About Internal vs External" text="Firm-side members (Admins + Team Members) vs client-side members (Collaborators + Reviewers). Signals whether the engagement is well-connected on both sides." />
+                    <Users className="h-4 w-4 text-fg-subtle" /> Internal vs Limited
+                    <InfoTip ariaLabel="About Internal vs Limited" text="Leads and Full Access contributors vs Limited Access contributors and Reviewers. Signals whether both groups have joined." />
                 </p>
                 {rolesTotal > 0 ? (
                     <RingWithLegend
                         items={[
                             { label: 'Internal', hex: RING.green, value: internalCount },
-                            { label: 'External', hex: RING.indigo, value: externalCount },
+                            { label: 'Limited', hex: RING.indigo, value: externalCount },
                         ]}
                         centerTop={<span className="text-xl font-bold text-fg tabular-nums leading-none">{internalPct}%</span>}
                         centerBottom={<span className="text-[10px] text-fg-subtle mt-0.5">internal</span>}
@@ -336,10 +337,10 @@ function TeamStatusBody({ data }: { data: EngagementInsightsResponse }) {
 // Roles aren't statuses, so the team bars use the categorical gray ramp (DATA), darkest for the
 // firm side's lead, lightest for the client side's reviewer.
 const ROLE_META: Record<string, { label: string; hex: string }> = {
-    eng_admin:            { label: 'Admin',        hex: DATA.category1 },  // Engagement Lead — firm side, top authority
-    eng_member:           { label: 'Member',       hex: DATA.category2 },  // Team Member — firm side
-    eng_ext_collaborator: { label: 'Collaborator', hex: DATA.category3 },  // External Collaborator — client side
-    eng_viewer:           { label: 'Reviewer',     hex: DATA.category4 },  // External Reviewer — client side
+    eng_admin:            { label: ROLE_SHORT_NAME.eng_admin,            hex: DATA.category1 },
+    eng_member:           { label: ROLE_SHORT_NAME.eng_member,           hex: DATA.category2 },
+    eng_ext_collaborator: { label: ROLE_SHORT_NAME.eng_ext_collaborator, hex: DATA.category3 },
+    eng_viewer:           { label: ROLE_SHORT_NAME.eng_viewer,           hex: DATA.category4 },
 }
 const INTERNAL_ROLES = new Set(['eng_admin', 'eng_member'])
 
@@ -1346,7 +1347,7 @@ function EngagementActionCenterV2({ data, loading, engagementBase, setRefreshTic
           href: '/comments', ringId: 'ring-comments', ringLabel: 'Comment responsiveness',
           gatingRing: 'engagement.comment_responsiveness' },
         { key: 'intake', label: 'Intake awaiting review', count: intakeCount, severity: 'info', icon: MailOpen,
-          sub: intakeCount > 0 ? 'files submitted by clients' : undefined,
+          sub: intakeCount > 0 ? 'files submitted for review' : undefined,
           href: '/board',
           gatingRing: 'engagement.delivery_status' },
         { key: 'invites', label: 'Pending invitations', count: pendingInvitesCount, severity: 'info', icon: Users,
@@ -2604,7 +2605,7 @@ export function EngagementInsightsDashboard({
             } : prev)
             // Publishing was silent before; it reaches the client, so say so.
             addToast(text
-                ? { type: 'success', title: 'Summary published', message: 'Visible to the client and in exports.' }
+                ? { type: 'success', title: 'Summary published', message: 'Visible to everyone on the engagement and in exports.' }
                 : { type: 'success', title: 'Summary removed' })
             setSummaryEditing(false)
             setRefreshTick((t) => t + 1)
@@ -2852,7 +2853,7 @@ export function EngagementInsightsDashboard({
                 insightsSummarySource: 'ai',
                 insightsSummaryPublishedBy: myDisplayName,
             } : prev)
-            addToast({ type: 'success', title: 'Summary published', message: 'Visible to the client and in exports.' })
+            addToast({ type: 'success', title: 'Summary published', message: 'Visible to everyone on the engagement and in exports.' })
             setAiGenerateNote(null)
             setRefreshTick((t) => t + 1)
         } finally {
@@ -3048,7 +3049,7 @@ export function EngagementInsightsDashboard({
                                         className="h-[6.5rem] w-full resize-none rounded-control border border-line bg-surface px-3 py-2 text-ui leading-relaxed text-fg placeholder:text-fg-subtle focus:border-action/60 focus:outline-none focus:ring-2 focus:ring-action/20 disabled:opacity-60"
                                     />
                                     <p className="text-caption text-fg-muted">
-                                        Visible to the client and included in PDF and email exports.
+                                        Visible to everyone on the engagement and included in PDF and email exports.
                                     </p>
                                     <div className="flex items-center justify-end gap-2">
                                         <Button size="sm" variant="ghost" onClick={() => setSummaryEditing(false)} disabled={summarySaving}>

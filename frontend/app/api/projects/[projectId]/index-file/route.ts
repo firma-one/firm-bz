@@ -90,7 +90,7 @@ export async function POST(
         const member = await requireEngagementMember(projectId, authResult.user.id)
         if (member && isExternalEngagementRole(member.role)) {
             return NextResponse.json(
-                { error: 'External collaborators submit files via index-file-intake' },
+                { error: 'Limited Access contributors submit files via index-file-intake' },
                 { status: 403 },
             )
         }

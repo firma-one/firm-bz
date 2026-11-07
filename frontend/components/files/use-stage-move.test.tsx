@@ -25,8 +25,8 @@ describe('StageConfirmDialog', () => {
 
     it('asks to share, counting who would newly see its documents', () => {
         render(<StageConfirmDialog confirmation={share} onOpenChange={noop} onCancel={noop} onConfirm={noop} />)
-        expect(screen.getByText('Share its documents with 1 reviewer?')).toBeTruthy()
-        expect(screen.getByText(/1 reviewer already sees the deliverable/)).toBeTruthy()
+        expect(screen.getByText('Share its documents with 1 Reviewer?')).toBeTruthy()
+        expect(screen.getByText(/1 Reviewer already sees the deliverable/)).toBeTruthy()
         expect(screen.getByRole('button', { name: 'Move and share' })).toBeTruthy()
     })
 })

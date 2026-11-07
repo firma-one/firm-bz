@@ -95,7 +95,7 @@ function NeedsYouSection({ items, label }: { items: NeedsYouItem[]; label: Label
     return (
         <HomeSection icon={<Inbox />} title="Needs you" count={items.length}>
             {items.length === 0 ? (
-                <HomeEmptyLine>All caught up. Approvals, client comments, changes requested and mentions show up here.</HomeEmptyLine>
+                <HomeEmptyLine>All caught up. Approvals, comments, changes requested and mentions show up here.</HomeEmptyLine>
             ) : (
                 <div className="flex flex-col">
                 {items.map((item) => (
