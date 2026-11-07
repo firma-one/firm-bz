@@ -157,7 +157,7 @@ const FILE_TYPE_FILTERS: Array<[string, string]> = [
     ['image', 'Images'],
     ['other', 'Other'],
 ]
-const OWNER_FILTER_LABEL = { 'assigned-me': 'Assigned to me', me: 'Created by me', 'not-me': 'Created by others', 'private-me': 'Private to me' } as const
+const OWNER_FILTER_LABEL = { 'assigned-me': 'Assigned to me', me: 'Created by me', 'not-me': 'Created by others', 'internal-only': 'Internal only' } as const
 const MODIFIED_FILTER_LABEL = { '7d': 'Last 7 days', '30d': 'Last 30 days', year: 'This year' } as const
 const SORT_BY_LABEL: Record<SortByOption, string> = {
     name: 'Name',
@@ -414,6 +414,8 @@ export function EngagementFileList({ projectId, initialFolderData, connectorRoot
     const [descendantIdsForGuest, setDescendantIdsForGuest] = useState<Set<string>>(new Set())
     const [sharedByMeExternalIds, setSharedByMeExternalIds] = useState<Set<string>>(new Set())
     const [bookmarkIdByDocumentId, setBookmarkIdByDocumentId] = useState<Map<string, string>>(new Map())
+    const [internalOnlyIds, setInternalOnlyIds] = useState<Set<string>>(new Set())
+    const [internalOnlyAncestorIds, setInternalOnlyAncestorIds] = useState<Set<string>>(new Set())
     // Whether a folder is a deliverable or inside one, from the share state already loaded: the
     // breadcrumb's and the Move/Copy picker's folder-plus, as the rows wear it. A lookup, no fetch.
     const deliverableKindOf = useCallback((id: string): DeliverableKind =>
@@ -572,6 +574,8 @@ export function EngagementFileList({ projectId, initialFolderData, connectorRoot
                 setDescendantIdsForEC(new Set(descIdsEC))
                 setDescendantIdsForGuest(new Set(descIdsGuest))
                 setSharedByMeExternalIds(new Set(idsByMe))
+                setInternalOnlyIds(new Set(Array.isArray(data?.internalOnlyIds) ? data.internalOnlyIds as string[] : []))
+                setInternalOnlyAncestorIds(new Set(Array.isArray(data?.internalOnlyAncestorIds) ? data.internalOnlyAncestorIds as string[] : []))
             })
             .catch(() => {
                 setSharedExternalIds(new Set())
@@ -584,6 +588,8 @@ export function EngagementFileList({ projectId, initialFolderData, connectorRoot
                 setDescendantIdsForEC(new Set())
                 setDescendantIdsForGuest(new Set())
                 setSharedByMeExternalIds(new Set())
+                setInternalOnlyIds(new Set())
+                setInternalOnlyAncestorIds(new Set())
             })
     }, [projectId])
 
@@ -2318,6 +2324,9 @@ const handleRefresh = async () => {
 
         if (filterOwner === 'assigned-me') {
             result = result.filter(f => !!f.assigneeUserId && f.assigneeUserId === session?.user?.id)
+        } else if (filterOwner === 'internal-only') {
+            // What's internal only, what's inside it, and the folders that lead to it (so you can still get there).
+            result = result.filter(f => internalOnlyIds.has(f.id) || internalOnlyAncestorIds.has(f.id))
         } else if (filterOwner !== 'any' && session?.user?.email) {
             const myEmail = session.user.email.toLowerCase()
             result = result.filter(f => {
@@ -2325,11 +2334,6 @@ const handleRefresh = async () => {
                 const owner = (f.creator?.emailAddress || f.actorEmail || '').toLowerCase()
                 if (filterOwner === 'me') return owner === myEmail || owner === '' || !owner
                 if (filterOwner === 'not-me') return owner !== '' && owner !== myEmail
-                if (filterOwner === 'private-me') {
-                    const isOwner = owner === myEmail || owner === '' || !owner
-                    const isShared = sharedExternalIds.has(f.id) || ancestorFolderIds.has(f.id)
-                    return isOwner && !isShared
-                }
                 return true
             })
         }
@@ -2370,7 +2374,7 @@ const handleRefresh = async () => {
             return [...folders, ...rest]
         }
         return result.sort(cmp)
-    }, [files, sortConfig, filterTypes, filterStatuses, filterOwner, filterModified, deliverablesOnly, sharedExternalIds, ancestorFolderIds, descendantIds, descendantIdsForEC, descendantIdsForGuest, restrictToSharedOnly, canEdit, viewAsPersonaSlug, currentFolderIsApprovedDeliverable, listingInsideDeliverable, session?.user?.email, session?.user?.id, breadcrumbs])
+    }, [files, sortConfig, filterTypes, filterStatuses, filterOwner, filterModified, deliverablesOnly, internalOnlyIds, internalOnlyAncestorIds, sharedExternalIds, ancestorFolderIds, descendantIds, descendantIdsForEC, descendantIdsForGuest, restrictToSharedOnly, canEdit, viewAsPersonaSlug, currentFolderIsApprovedDeliverable, listingInsideDeliverable, session?.user?.email, session?.user?.id, breadcrumbs])
 
     /** Notion-style column header: muted small text with a column-type icon. */
     return (
@@ -2774,7 +2778,11 @@ const handleRefresh = async () => {
                                 icon={<FolderPlus />}
                                 label="Deliverables"
                                 pressed={deliverablesOnly}
-                                onClick={() => setDeliverablesOnly((v) => !v)}
+                                onClick={() => {
+                                    // Internal only already means inside a deliverable, so the two never combine.
+                                    if (!deliverablesOnly && filterOwner === 'internal-only') setFilterOwner('any')
+                                    setDeliverablesOnly((v) => !v)
+                                }}
                             />
                         )}
                         <DropdownMenu>
@@ -2848,10 +2856,17 @@ const handleRefresh = async () => {
                                 </FilterMenuRow>
                                 <DropdownMenuSeparator className="mx-0 my-1" />
                                 {(Object.keys(OWNER_FILTER_LABEL) as Array<keyof typeof OWNER_FILTER_LABEL>)
-                                    // Only the firm's own members can be assigned, so a client has nothing to find here.
-                                    .filter((key) => key !== 'assigned-me' || !restrictToSharedOnly)
+                                    // Limited roles can't be assigned work, and what's internal only is hidden from them.
+                                    .filter((key) => !restrictToSharedOnly || (key !== 'assigned-me' && key !== 'internal-only'))
                                     .map((key) => (
-                                        <FilterMenuRow key={key} selected={filterOwner === key} onSelect={() => setFilterOwner(key)}>
+                                        <FilterMenuRow
+                                            key={key}
+                                            selected={filterOwner === key}
+                                            onSelect={() => {
+                                                if (key === 'internal-only') setDeliverablesOnly(false)
+                                                setFilterOwner(key)
+                                            }}
+                                        >
                                             {OWNER_FILTER_LABEL[key]}
                                         </FilterMenuRow>
                                     ))}

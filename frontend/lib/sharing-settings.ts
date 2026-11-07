@@ -376,6 +376,27 @@ export function privateSubtreeIds(
   return hidden
 }
 
+/**
+ * What the Files "Internal only" filter keeps: everything hidden (privateSubtreeIds), and the folders above
+ * it, so it can still be reached by walking down the tree, as the Deliverables filter does.
+ */
+export function internalOnlyTree(
+  rows: ReadonlyArray<{ externalId: string | null; parentId: string | null; settings: unknown }>,
+): { ids: Set<string>; ancestorIds: Set<string> } {
+  const ids = privateSubtreeIds(rows)
+  const parentOf = new Map(rows.filter((r) => r.externalId).map((r) => [r.externalId as string, r.parentId]))
+  const ancestorIds = new Set<string>()
+  ids.forEach((id) => {
+    let parent = parentOf.get(id) ?? null
+    // Stops at a folder already walked, so a cycle in provider data can't hang it.
+    while (parent && !ancestorIds.has(parent)) {
+      ancestorIds.add(parent)
+      parent = parentOf.get(parent) ?? null
+    }
+  })
+  return { ids, ancestorIds }
+}
+
 /** Returns true when the document has any lock type (intake, finalize, or private). */
 export function isDocumentLocked(settings: unknown): boolean {
   return getLock(settings) !== null

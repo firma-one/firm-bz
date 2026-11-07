@@ -6,7 +6,7 @@
  */
 
 import { prisma } from '@/lib/prisma'
-import { privateSubtreeIds } from '@/lib/sharing-settings'
+import { internalOnlyTree, privateSubtreeIds } from '@/lib/sharing-settings'
 
 const MAX_ANCESTOR_DEPTH = 15
 /** Max depth of descendants to include when a shared item is a folder (inheritance visibility). */
@@ -269,6 +269,16 @@ export async function getSharedAndAncestorIdsForPersona(
 }
 
 /** What's private to the firm in this engagement, by external ID (see privateSubtreeIds). */
+/** For the Files "Internal only" filter. The firm's own view: never send this to a limited role. */
+export async function internalOnlyTreeIds(engagementId: string): Promise<{ ids: string[]; ancestorIds: string[] }> {
+  const rows = await prisma.engagementDocument.findMany({
+    where: { engagementId },
+    select: { externalId: true, parentId: true, settings: true },
+  })
+  const { ids, ancestorIds } = internalOnlyTree(rows)
+  return { ids: Array.from(ids), ancestorIds: Array.from(ancestorIds) }
+}
+
 export async function privateExternalIds(engagementId: string): Promise<Set<string>> {
   const rows = await prisma.engagementDocument.findMany({
     where: { engagementId },
