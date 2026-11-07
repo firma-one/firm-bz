@@ -643,6 +643,10 @@ export function EngagementFileList({ projectId, initialFolderData, connectorRoot
     const initialFolderDataRef = useRef(initialFolderData ?? null)
     useEffect(() => {
         fetchSharedIds()
+        // Read now, not after the await below. The deeplink handler clears the hash once it has landed, so a
+        // run still waiting on the server would take that for an ordinary visit and send them back to the root.
+        const hasDeeplinkHash = typeof window !== 'undefined'
+            && (window.location.hash.startsWith('#doc-file:') || window.location.hash.startsWith('#doc-comment:'))
         const loadFolderIds = async () => {
             try {
                 const seeded = initialFolderDataRef.current
@@ -688,9 +692,6 @@ export function EngagementFileList({ projectId, initialFolderData, connectorRoot
 
                 // When a deeplink hash is present the deeplink handler owns navigation entirely.
                 // Skip restoring saved/default folder so the file list never flashes General first.
-                const hasDeeplinkHash = typeof window !== 'undefined'
-                    && (window.location.hash.startsWith('#doc-file:') || window.location.hash.startsWith('#doc-comment:'))
-
                 if (!hasDeeplinkHash) {
                     if (defaultFolderId) {
                         setCurrentFolderId(defaultFolderId)
