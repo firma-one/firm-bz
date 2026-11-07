@@ -26,7 +26,7 @@ export const SUMMARY_SECTIONS = [
 ] as const
 
 /** Text the model writes into lead-authored sections, and the marker publishing checks for. */
-export const LEAD_PLACEHOLDER = '_Awaiting the Engagement Lead\u2019s input._'
+export const LEAD_PLACEHOLDER = '_Awaiting the Lead\u2019s input._'
 
 /**
  * A section still counts as unfilled if it merely restates the placeholder.
@@ -44,8 +44,9 @@ export function isPlaceholderText(body: string): boolean {
         .trim()
         .toLowerCase()
     if (!normalised) return true
-    return /^awaiting the engagement lead'?s input\.?$/.test(normalised)
-        || /^to be completed by the engagement lead\.?$/.test(normalised)
+    // "Engagement Lead" is the older wording, still in drafts saved before the role was renamed.
+    return /^awaiting the (engagement )?lead'?s input\.?$/.test(normalised)
+        || /^to be completed by the (engagement )?lead\.?$/.test(normalised)
 }
 
 /**

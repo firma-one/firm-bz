@@ -137,7 +137,7 @@ export function EmptyDiscussions({ view, query }: { view: CommentsView; query: s
   const [icon, title, body] = query.trim()
     ? [<Search key="i" />, `No discussions for “${query.trim()}”`, 'Search finds a discussion by its ID or its deliverable’s, or by a member who wrote or was mentioned in it.']
     : view === 'awaiting'
-      ? [<Reply key="i" />, 'Nothing awaiting a reply', 'Discussions where a client or external collaborator spoke last show up here.']
+      ? [<Reply key="i" />, 'Nothing awaiting a reply', 'Discussions where a Limited Access contributor or Reviewer spoke last show up here.']
       : view === 'resolved'
         ? [<CheckCircle2 key="i" />, 'Nothing resolved yet', 'Resolve a discussion from its pane once it’s settled; a new comment reopens it.']
         : [<MessagesSquare key="i" />, 'No discussions yet', 'Comment on any deliverable or document, and its discussion shows up here.']
@@ -683,7 +683,7 @@ export function ThreadRow({
           ) : r.latest?.authorIsExternal ? (
               <span
                   className="shrink-0 inline-flex items-center gap-0.5 rounded-full bg-amber-50 border border-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-600 leading-none"
-                  title="Last message is from an external contributor — awaiting your reply."
+                  title="Last message is from a Limited Access contributor or Reviewer · awaiting your reply."
               >
                   <Reply className="h-2.5 w-2.5" />
                   Awaiting reply

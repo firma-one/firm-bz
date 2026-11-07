@@ -30,7 +30,7 @@ const EVENT_ROWS: { label: string; email: boolean; inApp: boolean }[] = [
     { label: 'New document intake', email: true, inApp: true },
     { label: 'Status changed (doc/deliverable)', email: false, inApp: true },
     { label: 'Document rejected', email: true, inApp: true },
-    { label: 'Client comment posted', email: true, inApp: true },
+    { label: 'Comment from a Limited Access contributor or Reviewer', email: true, inApp: true },
     { label: 'Engagement invite accepted', email: false, inApp: true },
     { label: 'Deliverable overdue', email: true, inApp: true },
     { label: 'Reminders due (in-app also enables push)', email: true, inApp: true },
@@ -201,8 +201,8 @@ export function DemoFirmSettings({ firm }: { firm: DemoFirm }) {
                         </NotionTable>
                     </section>
                     <section>
-                        <h3 className={SETTINGS_SECTION_HEADING_CLASS}>Overview for contributors and reviewers</h3>
-                        <p className="mb-1 text-small text-fg-muted">Which sections external members see on an engagement&apos;s Overview. Internal members always see everything.</p>
+                        <h3 className={SETTINGS_SECTION_HEADING_CLASS}>Overview for Limited Access contributors and Reviewers</h3>
+                        <p className="mb-1 text-small text-fg-muted">Which sections they see on an engagement&apos;s Overview. Leads and Full Access contributors always see everything.</p>
                         <SwitchRow icon={<BarChart2 />} title="Engagement health" initial={true} />
                         <SwitchRow icon={<BarChart2 />} title="File organization" initial={false} />
                         <SwitchRow icon={<BarChart2 />} title="Document activity" initial={true} />

@@ -181,12 +181,12 @@ export async function POST(
     const recipientId = typeof body.recipientId === 'string' ? body.recipientId : null
     const isInternal = body.internal === true
     if (isInternal && !canWriteInternalNote(member.role)) {
-      return NextResponse.json({ error: "Only the firm's team can write internal notes" }, { status: 403 })
+      return NextResponse.json({ error: 'Only Leads and Full Access contributors can write internal notes' }, { status: 403 })
     }
     if (isInternal && isReminder && recipientId) {
       const recipient = await prisma.engagementMember.findFirst({ where: { engagementId: projectId, userId: recipientId }, select: { role: true } })
       if (!canBeRemindedOfInternalNote(recipient?.role)) {
-        return NextResponse.json({ error: 'An internal note cannot remind a client' }, { status: 400 })
+        return NextResponse.json({ error: 'An internal note can only remind Leads and Full Access contributors' }, { status: 400 })
       }
     }
 
@@ -393,7 +393,7 @@ export async function PATCH(
     })
     if (!message) return NextResponse.json({ error: 'Comment not found' }, { status: 404 })
     if (message.isInternal && !canBeRemindedOfInternalNote(recipientMember.role)) {
-      return NextResponse.json({ error: 'An internal note cannot remind a client' }, { status: 400 })
+      return NextResponse.json({ error: 'An internal note can only remind Leads and Full Access contributors' }, { status: 400 })
     }
 
     try {

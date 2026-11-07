@@ -192,7 +192,7 @@ export function buildSnapshot(data: FirmInsightsResponse): string {
 
     if (data.unansweredThreads?.length) {
         lines.push(
-            `${data.unansweredThreads.length} unanswered client comment thread(s), most recent: ` +
+            `${data.unansweredThreads.length} unanswered comment thread(s), most recent: ` +
             data.unansweredThreads.slice(0, 3)
                 .map((t) => `"${t.documentName}" in ${t.engagementName}`)
                 .join('; ') + '.'

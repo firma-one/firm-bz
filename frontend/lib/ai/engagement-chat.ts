@@ -218,7 +218,7 @@ export const PLATFORM_DATA_MODEL = `HOW THIS PLATFORM IS STRUCTURED — five lev
   THIS SNAPSHOT IS A SINGLE ENGAGEMENT. Everything you say is scoped to it.
 - Deliverable: a shared work item inside the engagement — in practice a folder shared with the
   client. It carries a DOC-ID (like "QSR-9"), a name, its own due date, and a stage:
-  to_do -> in_progress -> in_review -> approved. Deliverables are what the client receives, and
+  to_do -> in_progress -> in_review -> approved. Deliverables are what gets delivered, and
   they are what "overdue", "approved", "revisions" and "pace" are measured on.
 - Document: an individual file inside a deliverable. Documents can have their own due date and
   assignee. They are the supporting work; they are not themselves delivered to the client.
@@ -511,7 +511,7 @@ export function buildEngagementContext(
         const s = data.sharesProgress
         lines.push(`Deliverable stages: ${s.toDo} to do, ${s.inProgress} in progress, ${s.approved} approved, ` +
             `${s.finalized} finalized (${s.total} total).`)
-        lines.push(`External participants: ${s.externalCollaborators} collaborators, ${s.externalViewers} viewers.`)
+        lines.push(`Limited-access participants: ${s.externalCollaborators} Limited Access contributors, ${s.externalViewers} Reviewers.`)
     }
 
     if (data.deliverables?.length) {
@@ -566,7 +566,7 @@ export function buildEngagementContext(
     }
 
     if (data.unansweredThreads?.length) {
-        lines.push('Documents with unanswered client comments: ' +
+        lines.push('Documents with unanswered comments: ' +
             data.unansweredThreads.slice(0, 10).map((t: any) => t.documentName).join('; ') + '.')
     }
 
@@ -625,10 +625,10 @@ export function buildEngagementContext(
     const ROLE_LABELS: Record<string, string> = {
         firm_admin: 'Firm Admin',
         firm_member: 'Firm Member',
-        engagement_manager: 'Engagement Manager',
-        engagement_member: 'Engagement Member',
-        engagement_collaborator: 'External Collaborator',
-        engagement_viewer: 'External Viewer',
+        engagement_manager: 'Lead',
+        engagement_member: 'Contributor · Full Access',
+        engagement_collaborator: 'Contributor · Limited Access',
+        engagement_viewer: 'Reviewer',
         client_contact: 'Client Contact',
     }
     const roleLabel = (key: string) => ROLE_LABELS[key] ?? key.replace(/_/g, ' ')

@@ -3941,14 +3941,14 @@ const handleRefresh = async () => {
                             </div>
                             <div>
                                 <p className="text-[11px] font-headline font-bold tracking-widest uppercase text-fg leading-tight">Revoke external access</p>
-                                <p className="text-xs text-fg-muted mt-0.5">Remove sharing for all external collaborators.</p>
+                                <p className="text-xs text-fg-muted mt-0.5">Remove sharing for all Limited Access contributors and Reviewers.</p>
                             </div>
                         </div>
                         {/* Body */}
                         <div className="p-5">
                             <p className="text-xs text-fg-muted leading-relaxed">
                                 <span className="font-semibold text-fg">{unshareConfirmFile?.name}</span>
-                                {' '}will be unshared. All external collaborators and viewers will lose access, and any secure links sent by email will no longer work.
+                                {' '}will be unshared. All Limited Access contributors and Reviewers will lose access, and any secure links sent by email will no longer work.
                             </p>
                         </div>
                         {/* Footer */}

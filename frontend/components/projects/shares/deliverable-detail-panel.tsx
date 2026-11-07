@@ -1139,7 +1139,7 @@ export function DeliverableDetailPanel({
 
             {showEC && (
               <div className="px-4 py-4">
-                <label className={FIELD_LABEL}>External contributors</label>
+                <label className={FIELD_LABEL}>Limited Access contributors</label>
                 <ToggleRow
                   label="Allow download"
                   checked={sharingOptions.ecAllowDownload}

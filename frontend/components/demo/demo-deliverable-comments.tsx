@@ -289,7 +289,7 @@ export function DemoDeliverableComments({ documents, thread, onPost, focusDocId,
                                 <span className="font-medium text-fg">{c.author === ME ? 'You' : c.author}</span>
                                 <span className="text-fg-subtle" suppressHydrationWarning>{Date.now() - Date.parse(c.at) < 60_000 ? 'just now' : formatDistanceToNowStrict(new Date(c.at), { addSuffix: true })}</span>
                                 {c.internal && (
-                                    <Hint label="Only the firm's team sees this">
+                                    <Hint label="Only Leads and Full Access contributors see this">
                                         <span className="inline-flex items-center gap-1 text-caption font-medium text-tag-yellow-fg">
                                             <Lock className="h-2.5 w-2.5" /> Internal
                                         </span>
@@ -388,7 +388,7 @@ export function DemoDeliverableComments({ documents, thread, onPost, focusDocId,
                         value={text}
                         rows={1}
                         aria-label={internalMode ? 'Internal note' : 'Comment'}
-                        placeholder={internalMode ? "Internal note — only the firm's team sees this…" : 'Leave a comment… @ to mention, # to tag a document'}
+                        placeholder={internalMode ? 'Internal note · only Leads and Full Access contributors see this…' : 'Leave a comment… @ to mention, # to tag a document'}
                         onScroll={(e) => { if (backdropRef.current) backdropRef.current.scrollTop = e.currentTarget.scrollTop }}
                         onChange={(e) => {
                             setText(e.target.value)

@@ -27,7 +27,7 @@ type Kind = 'overdue' | 'threads' | 'setup' | 'prospects' | 'idle' | 'invites'
 
 const KINDS: Record<Kind, { label: string; sub: string; how: string; icon: React.ElementType; severity: ActionSeverity }> = {
     overdue: { label: 'Extend or close overdue engagements', sub: 'Past their due date', how: 'Move the due date in the engagement’s header, or close the engagement if the work is done.', icon: AlertTriangle, severity: 'critical' },
-    threads: { label: 'Reply to client comments', sub: 'The client wrote last', how: 'Threads where the client had the last word. Reply, or resolve the thread.', icon: MessagesSquare, severity: 'warning' },
+    threads: { label: 'Reply to comments', sub: 'Waiting on your reply', how: 'Threads where a Limited Access contributor or Reviewer had the last word. Reply, or resolve the thread.', icon: MessagesSquare, severity: 'warning' },
     setup: { label: 'Finish engagement setup', sub: 'No lead, due date or deliverables yet', how: 'An engagement can’t be tracked without a lead, a due date and its deliverables. Set them in its header, and mark deliverables on its Board.', icon: ListChecks, severity: 'warning' },
     invites: { label: 'Resend invitations', sub: 'Expired, or expiring within 3 days', how: 'Invitations to join an engagement. Resend from its Members tab, so they can still join.', icon: MailWarning, severity: 'warning' },
     idle: { label: 'Start work with idle clients', sub: 'Active, with no active engagement', how: 'Start an engagement for them, or mark the client as past.', icon: UserMinus, severity: 'info' },

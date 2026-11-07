@@ -96,7 +96,7 @@ export function StageConfirmDialog({ confirmation, loading, onOpenChange, onCanc
             onOpenChange={onOpenChange}
             icon={shown?.approves ? <CheckCircle2 /> : <Eye />}
             iconVariant={shown?.approves ? 'primary' : 'amber'}
-            title={shown?.approves ? 'Approve the deliverable?' : `Share its documents with ${whoSees(shown ?? undefined)}?`}
+            title={shown?.approves ? 'Approve the deliverable?' : (whoSees(shown ?? undefined) ? `Share its documents with ${whoSees(shown ?? undefined)}?` : 'Share its documents?')}
             subtitle={shown ? `${deliverableLabel(shown)} moves to ${statusOf('deliverable', shown.to).label}` : undefined}
             description={shown ? <StageConfirmationText confirmation={shown} /> : ''}
             confirmLabel={shown?.approves ? 'Approve' : 'Move and share'}
@@ -111,16 +111,16 @@ export function StageConfirmDialog({ confirmation, loading, onOpenChange, onCanc
 const sentence = (text: string) => text.charAt(0).toUpperCase() + text.slice(1)
 
 /**
- * Who the move newly lets in. A client sees a deliverable's card on the Board from the moment it's
- * promoted; what a forward move opens to them is its documents (and its folder in Files):
- * In progress for external contributors, In review for reviewers.
+ * Who the move newly lets in. Limited Access contributors and Reviewers see a deliverable's card on the
+ * Board from the moment it's promoted; what a forward move opens to them is its documents (and its folder
+ * in Files): In progress for Limited Access contributors, In review for Reviewers.
  */
 const whoSees = (confirmation: StageConfirmation | undefined): string => {
     const count = (n: number | undefined, one: string, many: string) => (n ? `${n} ${n === 1 ? one : many}` : null)
     return [
-        count(confirmation?.externalCollaborators, 'external contributor', 'external contributors'),
-        count(confirmation?.viewers, 'reviewer', 'reviewers'),
-    ].filter(Boolean).join(' and ') || 'the client'
+        count(confirmation?.externalCollaborators, 'Limited Access contributor', 'Limited Access contributors'),
+        count(confirmation?.viewers, 'Reviewer', 'Reviewers'),
+    ].filter(Boolean).join(' and ')
 }
 
 /** The deliverable as the app names it everywhere: its Doc ID, then its name ("QSR-9 · Market report"). */

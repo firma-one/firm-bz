@@ -15,7 +15,7 @@ export function renderClientCommentEmail(params: ClientCommentEmailParams): { su
   const subject = `${brandCap}: New comment from ${commenterName} — ${engagementName}`
 
   const body = [
-    emailHeading('New comment from your client'),
+    emailHeading('New comment'),
     detailCard({ label: 'From', title: `${commenterName} — ${engagementName}`, lines: [commentPreview] }),
     ctaUrl ? ctaButton('View comment', ctaUrl) : '',
     emailFootnote('You can turn this email off in Firm Settings → Event Notifications.'),

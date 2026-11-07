@@ -1,3 +1,5 @@
+import { ROLE_SHORT_NAME } from '@/lib/persona-ui-groups'
+
 /**
  * @-mentions in comments: finding what is being typed after "@", inserting a picked name, and
  * reading mentions back out of a posted comment. Pure, so the comment composer and the thread
@@ -104,12 +106,7 @@ export function splitMentions(content: string, names: string[]): MentionToken[] 
 }
 
 /** A person's role on the engagement, as the mention menu labels it. */
-export const ENGAGEMENT_ROLE_LABEL: Record<string, string> = {
-    eng_admin: 'Lead',
-    eng_member: 'Member',
-    eng_ext_collaborator: 'Collaborator',
-    eng_viewer: 'Reviewer',
-}
+export const ENGAGEMENT_ROLE_LABEL: Record<string, string> = ROLE_SHORT_NAME
 
 /*
  * #-tags: a document in the deliverable, written as "#" + its document ID ("#QSR-12") where it was

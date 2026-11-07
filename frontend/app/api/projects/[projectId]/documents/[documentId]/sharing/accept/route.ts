@@ -28,7 +28,7 @@ export async function PATCH(
 
     const member = await requireEngagementMember(projectId, user.id)
     if (!member || !EXTERNAL_ROLES.has(member.role)) {
-      return NextResponse.json({ error: 'Forbidden: only external members can accept documents' }, { status: 403 })
+      return NextResponse.json({ error: 'Only Limited Access contributors and Reviewers can accept documents' }, { status: 403 })
     }
 
     const fileInfo = await getFileInfo(projectId, documentIdParam)
@@ -122,7 +122,7 @@ export async function PATCH(
           userId: l.userId,
           type: 'DOCUMENT_ACCEPTED_BY_CLIENT',
           priority: 'INFO',
-          title: 'Document accepted by client',
+          title: 'Document accepted',
           body: `"${existing.fileName}" has been accepted and locked.`,
           ctaUrl: null,
           metadata: { fileName: existing.fileName, acceptedBy: user.id },

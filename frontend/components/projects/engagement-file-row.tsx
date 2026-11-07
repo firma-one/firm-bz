@@ -509,7 +509,7 @@ export function EngagementFileRow({
                                 <TooltipContent side="top">
                                     {isProjectLead
                                         ? 'Document Finalized — read-only. Click to Return to Draft'
-                                        : 'Document Finalized — read-only. Engagement Lead can Return to Draft'}
+                                        : 'Document finalized · read-only. A Lead can return it to draft'}
                                 </TooltipContent>
                             </Tooltip>
                         ) : null}

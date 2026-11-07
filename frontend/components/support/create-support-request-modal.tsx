@@ -64,7 +64,7 @@ const REQUEST_TYPES = [
 const placeholders: Record<string, string> = {
   [TicketType.BUG]: 'E.g., When I click the Save button in the Files tab, nothing happens...',
   [TicketType.REQUEST]: 'E.g., It would be helpful if we could bulk export documents as PDFs...',
-  [TicketType.ENQUIRY]: 'E.g., How do I share files with external collaborators?',
+  [TicketType.ENQUIRY]: 'E.g., How do I share files with a Reviewer?',
 }
 
 export function CreateSupportRequestModal({ firmSlug, trigger }: CreateSupportRequestModalProps) {

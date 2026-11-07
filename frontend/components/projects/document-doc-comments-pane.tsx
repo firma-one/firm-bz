@@ -933,7 +933,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
           rows={1}
           onScroll={(e) => { if (backdropRef.current) backdropRef.current.scrollTop = e.currentTarget.scrollTop }}
           disabled={submitting}
-          placeholder={internalMode ? "Internal note — only the firm's team sees this…" : 'Leave a comment…'}
+          placeholder={internalMode ? 'Internal note · only Leads and Full Access contributors see this…' : 'Leave a comment…'}
           aria-label={internalMode ? 'Internal note' : 'Comment'}
           onChange={(e) => {
             setNewContent(e.target.value)
@@ -1176,7 +1176,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
                           <span className="shrink-0 cursor-default text-caption text-fg-subtle">{formatRelativeTime(msg.createdAt)}</span>
                         </Hint>
                         {msg.isInternal && (
-                          <Hint label="Only the firm's team sees this">
+                          <Hint label="Only Leads and Full Access contributors see this">
                             <span className="inline-flex shrink-0 items-center gap-1 self-center text-caption font-medium text-tag-yellow-fg">
                               <Lock className="h-2.5 w-2.5" /> Internal
                             </span>

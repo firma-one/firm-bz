@@ -30,7 +30,7 @@ describe('MemberList', () => {
         render(<MemberList members={members} invitations={invitations} personas={personas} onRefresh={() => {}} />)
         // The first row of each group is its header.
         const header = (text: string) => groupOf(text).querySelector('tr') as HTMLElement
-        expect(within(header('Pat Lee')).getByText('Owner')).toBeTruthy()
+        expect(within(header('Pat Lee')).getByText('Lead')).toBeTruthy()
         expect(within(header('Sam Roy')).getByText('Contributor')).toBeTruthy()
         expect(within(screen.getByText('Sam Roy').closest('tr') as HTMLElement).getByText('Contributor · Limited Access')).toBeTruthy()
         expect(within(header('new@client.test')).getByText('Reviewer')).toBeTruthy()

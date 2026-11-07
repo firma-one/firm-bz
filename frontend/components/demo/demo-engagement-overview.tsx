@@ -223,9 +223,9 @@ export function DemoEngagementOverview({ engagement }: { engagement: DemoEngagem
                         joined={3}
                         invited={1}
                         roles={[
-                            { label: 'Admin', hex: DATA.category1, value: 1 },
-                            { label: 'Member', hex: DATA.category2, value: 1 },
-                            { label: 'Collaborator', hex: DATA.category3, value: 1 },
+                            { label: 'Lead', hex: DATA.category1, value: 1 },
+                            { label: 'Full Access', hex: DATA.category2, value: 1 },
+                            { label: 'Limited Access', hex: DATA.category3, value: 1 },
                         ]}
                         internal={2}
                         external={1}

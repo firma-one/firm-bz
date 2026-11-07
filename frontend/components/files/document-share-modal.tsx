@@ -205,7 +205,7 @@ export function DocumentShareModal({
                     <Label htmlFor="share-ec" className="text-xs font-semibold text-fg cursor-pointer leading-tight">
                       {projExtCollaborator}
                     </Label>
-                    <p className="text-caption text-fg-muted mt-0.5">Contractors, consultants &amp; agency partners who co-create content</p>
+                    <p className="text-caption text-fg-muted mt-0.5">People who co-create content</p>
                   </div>
                 </div>
                 <Switch
@@ -254,7 +254,7 @@ export function DocumentShareModal({
                     <Label htmlFor="share-guest" className="text-xs font-semibold text-fg cursor-pointer leading-tight">
                       {projViewer}
                     </Label>
-                    <p className="text-caption text-fg-muted mt-0.5">Clients, sponsors &amp; stakeholders who review &amp; stay informed</p>
+                    <p className="text-caption text-fg-muted mt-0.5">People who review and stay informed</p>
                   </div>
                 </div>
                 <Switch

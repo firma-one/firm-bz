@@ -544,7 +544,7 @@ export function InboxView({
                     description={
                         tab === "updates"
                             ? "Notifications about your engagements land here."
-                            : "Approvals, client comments, changes requested, review requests and your reminders show up here."
+                            : "Approvals, comments, changes requested, review requests and your reminders show up here."
                     }
                 />
             ) : (

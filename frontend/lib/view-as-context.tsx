@@ -26,10 +26,10 @@ export type EffectivePermissions = {
 export const RBAC_PERSONAS = [
   { slug: "firm_admin", displayName: "Firm Administrator", description: "Manages a specific firm within the platform. Can manage firm members, clients, engagements, and firm-level settings." },
   { slug: "firm_member", displayName: "Firm Member", description: "Full-time internal member of the firm with access to firm resources and projects they are assigned to." },
-  { slug: "eng_admin", displayName: "Engagement Lead", description: "Responsible for managing a specific engagement. Can manage engagement members, documents, and settings." },
-  { slug: "eng_member", displayName: "Contributor (Internal)", description: "Internal team member contributing to engagement work. Can create and edit documents within assigned engagements." },
-  { slug: "eng_ext_collaborator", displayName: "Contributor (External)", description: "External collaborator invited to contribute to an engagement. Can create and edit documents they have been granted access to." },
-  { slug: "eng_viewer", displayName: "Reviewer", description: "External stakeholder with read-only access to engagement content. Cannot create or edit documents." },
+  { slug: "eng_admin", displayName: "Lead", description: "Manages the engagement, its members and its content." },
+  { slug: "eng_member", displayName: "Contributor · Full Access", description: "Can see and edit all engagement content." },
+  { slug: "eng_ext_collaborator", displayName: "Contributor · Limited Access", description: "Can edit only what is shared with them. Internal only content stays hidden." },
+  { slug: "eng_viewer", displayName: "Reviewer", description: "Can view only what is shared with them. Read-only." },
 ] as const
 
 type ViewAsContextValue = {

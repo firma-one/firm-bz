@@ -9,11 +9,11 @@ import { DocumentIcon } from '@/components/ui/document-icon'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 
-/** Formal display names from platform.personas seed data */
+/** Role names as people see them (lib/persona-ui-groups.ts), plus the firm's own roles. */
 const ROLE_DISPLAY: Record<string, string> = {
-  eng_admin: 'Engagement Lead',
-  eng_member: 'Contributor (Internal)',
-  eng_ext_collaborator: 'Contributor (External)',
+  eng_admin: 'Lead',
+  eng_member: 'Contributor · Full Access',
+  eng_ext_collaborator: 'Contributor · Limited Access',
   eng_viewer: 'Reviewer',
   firm_admin: 'Firm Administrator',
   firm_member: 'Firm Member',

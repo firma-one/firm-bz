@@ -312,7 +312,7 @@ export function DocumentActionMenu({
         const err = await res.json().catch(() => ({}))
         throw new Error(typeof err?.error === 'string' ? err.error : 'Failed to finalize')
       }
-      addToast({ type: 'success', title: 'Version locked', message: 'Collaborators can view this file only until you unlock.' })
+      addToast({ type: 'success', title: 'Version locked', message: 'Others can only view this file until you unlock it.' })
       onShareSaved?.()
     } catch (error) {
       addToast({
@@ -1410,7 +1410,7 @@ export function DocumentActionMenu({
         iconVariant="red"
         title="Demote Deliverable to Folder"
         subtitle={document.name}
-        description="It goes back to being a plain folder and comes off the Board. External collaborators and viewers lose their access to it."
+        description="It goes back to being a plain folder and comes off the Board. Limited Access contributors and Reviewers lose their access to it."
         confirmLabel="Demote"
         confirmVariant="red"
         onCancel={() => setShowUntagConfirm(false)}

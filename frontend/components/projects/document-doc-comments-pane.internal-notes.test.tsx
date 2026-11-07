@@ -49,7 +49,7 @@ describe('internal notes in the thread', () => {
         await settle()
         fireEvent.click(screen.getByRole('radio', { name: /Internal note/ }))
         const box = screen.getByLabelText('Internal note') as HTMLTextAreaElement
-        expect(box.placeholder).toMatch(/only the firm's team/)
+        expect(box.placeholder).toMatch(/only Leads and Full Access contributors/)
         fireEvent.change(box, { target: { value: 'Pricing needs partner sign-off' } })
         await act(async () => { fireEvent.submit(box.closest('form')!) })
         expect(posted[0]).toEqual({ content: 'Pricing needs partner sign-off', internal: true })
