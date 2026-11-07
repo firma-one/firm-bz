@@ -4,8 +4,9 @@ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 vi.mock('@/lib/auth-context', () => ({
     useAuth: () => ({ user: { id: 'me', email: 'me@firm.com', user_metadata: {} } }),
 }))
+const { pane } = vi.hoisted(() => ({ pane: { clearPane: vi.fn(), canClose: vi.fn(() => true) } }))
 vi.mock('@/lib/right-pane-context', () => ({
-    useRightPane: () => ({ clearPane: vi.fn() }),
+    useRightPane: () => pane,
 }))
 
 import { DocumentDocCommentsPane } from './document-doc-comments-pane'
@@ -61,6 +62,41 @@ function type(textarea: HTMLTextAreaElement, value: string) {
     // and the change would then look like no change.
     fireEvent.change(textarea, { target: { value, selectionStart: value.length, selectionEnd: value.length } })
 }
+
+describe('DocumentDocCommentsPane — Esc', () => {
+    beforeEach(() => {
+        pane.clearPane.mockClear()
+        pane.canClose.mockClear()
+        pane.canClose.mockReturnValue(true)
+    })
+
+    it('closes the pane once, though the pane renders this twice', async () => {
+        renderPane()
+        renderPane()
+        await settle()
+        fireEvent.keyDown(document, { key: 'Escape' })
+        expect(pane.canClose).toHaveBeenCalledTimes(1)
+        expect(pane.clearPane).toHaveBeenCalledTimes(1)
+    })
+
+    it('leaves the pane open when its content says so: a preview closes instead', async () => {
+        pane.canClose.mockReturnValue(false)
+        renderPane()
+        await settle()
+        fireEvent.keyDown(document, { key: 'Escape' })
+        expect(pane.clearPane).not.toHaveBeenCalled()
+    })
+
+    it('leaves the key to a menu that has already taken it', async () => {
+        renderPane()
+        await settle()
+        const taken = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+        taken.preventDefault()
+        document.dispatchEvent(taken)
+        expect(pane.canClose).not.toHaveBeenCalled()
+        expect(pane.clearPane).not.toHaveBeenCalled()
+    })
+})
 
 describe('DocumentDocCommentsPane — reading', () => {
     it('marks the discussion read once it has loaded, so the Discussions page drops its dot', async () => {

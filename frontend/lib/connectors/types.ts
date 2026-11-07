@@ -126,6 +126,8 @@ export interface IConnectorPermissionAdapter {
   revokePermission(connectionId: string, fileId: string, permissionId: string): Promise<boolean>
   /** Downgrade an existing user permission on a folder to viewer. Returns true if the permission was changed. */
   downgradeFolderUserPermissionToReader(connectionId: string, folderId: string, email: string): Promise<boolean>
+  /** Give a user write on a folder again: a reader is raised, one with no access is granted it, anyone higher is left alone. Returns true if they end up able to edit. */
+  upgradeFolderUserPermissionToEditor(connectionId: string, folderId: string, email: string): Promise<boolean>
   /** Get the engagement folder structure (general, confidential, staging) for a project. */
   getEngagementFolderIds(connectionId: string, engagementSlug: string, opts: { projectName?: string; clientSlug?: string; clientName?: string; projectFolderId?: string }): Promise<EngagementFolderIds>
   /** Move a file to trash (soft delete). */

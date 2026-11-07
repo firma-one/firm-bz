@@ -1,7 +1,10 @@
 import { inngest } from "./client";
 import { prisma } from "@/lib/prisma";
 import { googleDriveConnector } from "@/lib/google-drive-connector";
+import { isDocumentPrivate } from "@/lib/sharing-settings";
 import { getPermissionAdapter, getMigrationAdapter, getConnectorInstance } from "@/lib/connectors/registry";
+import { markSharesRevoked, revokeSharePermissions, SHARE_TO_REVOKE_SELECT } from "@/lib/connectors/revoke-share-permissions";
+import { setFirmFolderAccess } from "@/lib/connectors/firm-folder-access";
 import { TRASH_UNDO_WINDOW_SECONDS, wasRestoredFromBin } from "@/lib/connectors/trash-undo";
 import { parseSettingsFromDb } from "@/lib/sharing-settings";
 import { logger } from "@/lib/logger";
@@ -629,120 +632,29 @@ export const reconcileFolderDeletion = inngest.createFunction(
 export const revokeProjectSharing = inngest.createFunction(
     { id: "revoke-project-sharing", triggers: [{ event: "project/archived" }] },
     async ({ event, step }) => {
-        const { projectId, organizationId, reason = "unknown" } = event.data;
+        const { projectId } = event.data;
 
         const shares = await step.run("fetch-shares", async () => {
             return await prisma.engagementDocumentSharingUser.findMany({
                 where: {
                     engagementId: projectId,
-                    sharingPermissionStatus: DocumentSharingPermissionStatus.GRANTED,
+                    // A row keeping a permission id is one an earlier revoke couldn't finish: this retries it.
+                    OR: [
+                        { sharingPermissionStatus: DocumentSharingPermissionStatus.GRANTED },
+                        { connectorPermissionId: { not: null } },
+                    ],
                 },
-                include: { document: true },
+                select: SHARE_TO_REVOKE_SELECT,
             });
         });
 
-        if (shares.length === 0) {
-            return { message: "No shares to revoke", reason, projectId };
+        const revokeResults = await step.run("revoke-permissions", () => revokeSharePermissions(projectId, shares));
+
+        if (shares.length > 0) {
+            await step.run("mark-shares-revoked", () => markSharesRevoked({ engagementId: projectId }, revokeResults.failed));
         }
 
-        const connectorId = await step.run("fetch-connector", async () => {
-            const firm = await prisma.firm.findUnique({
-                where: { id: organizationId },
-                select: { connectorId: true }
-            })
-            return firm?.connectorId;
-        });
-
-        if (!connectorId) {
-            logger.warn("Missing active Google Drive connector", { organizationId, projectId })
-            await step.run("cleanup-db-no-connector", async () => {
-                await prisma.engagementDocumentSharingUser.updateMany({
-                    where: { engagementId: projectId },
-                    data: {
-                        sharingPermissionStatus: DocumentSharingPermissionStatus.REVOKED,
-                        connectorPermissionId: null,
-                    },
-                });
-            });
-            return { message: "Marked shares revoked (no connector)", projectId };
-        }
-
-        const revokeResults = await step.run("revoke-permissions", async () => {
-            const adapter = await getPermissionAdapter(connectorId)
-            if (!adapter) return { successCount: 0, failureCount: 0 }
-            let successCount = 0;
-            let failureCount = 0;
-            const BATCH_SIZE = 10;
-
-            for (let i = 0; i < shares.length; i += BATCH_SIZE) {
-                const batch = shares.slice(i, i + BATCH_SIZE);
-                await Promise.all(batch.map(async (share: { connectorPermissionId: string | null; document: { externalId: string } | null }) => {
-                    if (share.connectorPermissionId && share.document?.externalId) {
-                        try {
-                            await adapter.revokePermission(connectorId, share.document.externalId, share.connectorPermissionId);
-                            successCount++;
-                        } catch (e) {
-                            failureCount++
-                        }
-                    }
-                }));
-            }
-            return { successCount, failureCount };
-        });
-
-        await step.run("mark-shares-revoked", async () => {
-            await prisma.engagementDocumentSharingUser.updateMany({
-                where: { engagementId: projectId },
-                data: {
-                    sharingPermissionStatus: DocumentSharingPermissionStatus.REVOKED,
-                    connectorPermissionId: null,
-                },
-            });
-        });
-
-        await step.run("downgrade-internal-member-folder-access", async () => {
-            const engagement = await prisma.engagement.findFirst({
-                where: { id: projectId, isDeleted: false },
-                select: {
-                    slug: true,
-                    name: true,
-                    connectorRootFolderId: true,
-                    client: { select: { slug: true, name: true, firm: { select: { connectorId: true } } } },
-                },
-            });
-            const cid = engagement?.client.firm.connectorId;
-            if (!cid || !engagement?.connectorRootFolderId) return { downgraded: 0 };
-
-            const members = await prisma.engagementMember.findMany({
-                where: { engagementId: projectId, role: { in: ["eng_member", "eng_admin"] } },
-                select: { userId: true },
-            });
-            if (members.length === 0) return { downgraded: 0 };
-
-            const userIds = members.map((m) => m.userId);
-            const authUsers = await prisma.$queryRaw<Array<{ id: string; email: string }>>(
-                Prisma.sql`SELECT id::text, email FROM auth.users WHERE id = ANY(${userIds}::uuid[])`
-            );
-            const adapter = await getPermissionAdapter(cid)
-            if (!adapter) return { downgraded: 0 }
-            const folderIds = await adapter.getEngagementFolderIds(cid, engagement.slug, {
-                projectName: engagement.name,
-                clientSlug: engagement.client.slug,
-                clientName: engagement.client.name,
-                projectFolderId: engagement.connectorRootFolderId,
-            });
-            let n = 0;
-            for (const row of authUsers) {
-                if (!row.email) continue;
-                if (folderIds.generalFolderId) {
-                    if (await adapter.downgradeFolderUserPermissionToReader(cid, folderIds.generalFolderId, row.email)) n++;
-                }
-                if (folderIds.confidentialFolderId) {
-                    await adapter.downgradeFolderUserPermissionToReader(cid, folderIds.confidentialFolderId, row.email);
-                }
-            }
-            return { downgraded: n };
-        });
+        await step.run("downgrade-internal-member-folder-access", () => setFirmFolderAccess(projectId, 'read_only'));
 
         await step.run("clear-share-configs", async () => {
             const documents = await prisma.engagementDocument.findMany({
@@ -781,22 +693,26 @@ export const revokeProjectSharing = inngest.createFunction(
 );
 
 /**
+ * An engagement marked Completed is read-only for the firm in Drive too, and reopening it gives write back.
+ * What this does for the firm only: clients' access doesn't change with the status.
+ */
+export const restrictFirmFoldersOnCompletion = inngest.createFunction(
+    { id: "restrict-firm-folders-on-completion", triggers: [{ event: "engagement.completed" }] },
+    async ({ event, step }) => step.run("downgrade-firm-folder-access", () => setFirmFolderAccess(event.data.projectId, 'read_only'))
+);
+
+export const restoreFirmFoldersOnReopen = inngest.createFunction(
+    { id: "restore-firm-folders-on-reopen", triggers: [{ event: "engagement.reopened" }] },
+    async ({ event, step }) => step.run("restore-firm-folder-access", () => setFirmFolderAccess(event.data.projectId, 'restore'))
+);
+
+/**
  * Revoke permissions when sharing settings updated (V2)
  */
 export const revokeByDisabledPersona = inngest.createFunction(
     { id: "revoke-by-disabled-persona", triggers: [{ event: "sharing.settings.updated" }] },
     async ({ event, step }) => {
-        const { projectId, organizationId, sharingId, disabledPersonas, documentId } = event.data;
-
-        const connectorId = await step.run("fetch-connector", async () => {
-            const firm = await prisma.firm.findUnique({
-                where: { id: organizationId },
-                select: { connectorId: true }
-            })
-            return firm?.connectorId;
-        });
-
-        if (!connectorId) return { message: "No active connector" };
+        const { projectId, sharingId, disabledPersonas } = event.data;
 
         const usersToRevoke = await step.run("fetch-sharing-users", async () => {
             const doc = await prisma.engagementDocument.findUnique({
@@ -818,7 +734,11 @@ export const revokeByDisabledPersona = inngest.createFunction(
                     (disabledPersonas.includes('externalCollaborator') && personaSlug === 'eng_ext_collaborator');
 
                 if (shouldRevoke && user.connectorPermissionId) {
-                    usersForRevocation.push(user);
+                    usersForRevocation.push({
+                        id: user.id,
+                        connectorPermissionId: user.connectorPermissionId,
+                        document: { externalId: doc.externalId, connectorId: doc.connectorId },
+                    });
                 }
             }
             return usersForRevocation;
@@ -826,33 +746,9 @@ export const revokeByDisabledPersona = inngest.createFunction(
 
         if (usersToRevoke.length === 0) return { message: "No users to revoke" };
 
-        const revokeResults = await step.run("revoke-permissions", async () => {
-            const adapter = await getPermissionAdapter(connectorId)
-            if (!adapter) return { successCount: 0 }
-            let successCount = 0;
-            for (const user of usersToRevoke) {
-                if (user.connectorPermissionId) {
-                    try {
-                        await adapter.revokePermission(connectorId, documentId, user.connectorPermissionId);
-                        successCount++;
-                    } catch (e) {
-                        // ignore
-                    }
-                }
-            }
-            return { successCount };
-        });
+        const revokeResults = await step.run("revoke-permissions", () => revokeSharePermissions(projectId, usersToRevoke));
 
-        await step.run("cleanup-db", async () => {
-            const userIdsToDelete = usersToRevoke.map((u: { id: string }) => u.id);
-            await prisma.engagementDocumentSharingUser.updateMany({
-                where: { id: { in: userIdsToDelete } },
-                data: {
-                    sharingPermissionStatus: DocumentSharingPermissionStatus.REVOKED,
-                    connectorPermissionId: null,
-                },
-            });
-        });
+        await step.run("cleanup-db", () => markSharesRevoked({ id: { in: usersToRevoke.map((u: { id: string }) => u.id) } }, revokeResults.failed));
 
         return { message: "Revoked disabled personas", results: revokeResults };
     }
@@ -866,57 +762,30 @@ export const revokeByDisabledPersona = inngest.createFunction(
 export const revokeByRemovedMember = inngest.createFunction(
     { id: "revoke-by-removed-member", triggers: [{ event: "project.member.removed" }] },
     async ({ event, step }) => {
-        const { projectId, organizationId, userId, personaSlug } = event.data;
+        const { projectId, userId, personaSlug } = event.data;
 
         const revokablePersonas = ['eng_viewer', 'eng_ext_collaborator'];
         if (!revokablePersonas.includes(personaSlug)) return { message: "Non-external role — no revocation needed" };
-
-        const connectorId = await step.run("fetch-connector", async () => {
-            const firm = await prisma.firm.findUnique({
-                where: { id: organizationId },
-                select: { connectorId: true },
-            });
-            return firm?.connectorId;
-        });
 
         const sharesToRevoke = await step.run("find-shares-to-revoke", async () => {
             return prisma.engagementDocumentSharingUser.findMany({
                 where: {
                     engagementId: projectId,
                     userId,
-                    sharingPermissionStatus: DocumentSharingPermissionStatus.GRANTED,
+                    OR: [
+                        { sharingPermissionStatus: DocumentSharingPermissionStatus.GRANTED },
+                        { connectorPermissionId: { not: null } },
+                    ],
                 },
-                include: { document: { select: { externalId: true } } },
+                select: SHARE_TO_REVOKE_SELECT,
             });
         });
 
         if (sharesToRevoke.length === 0) return { message: "No shares to revoke" };
 
-        if (connectorId) {
-            await step.run("revoke-drive-permissions", async () => {
-                const adapter = await getPermissionAdapter(connectorId);
-                if (!adapter) return;
-                for (const share of sharesToRevoke) {
-                    if (share.connectorPermissionId && share.document?.externalId) {
-                        try {
-                            await adapter.revokePermission(connectorId, share.document.externalId, share.connectorPermissionId);
-                        } catch {
-                            // non-fatal — DB cleanup still runs
-                        }
-                    }
-                }
-            });
-        }
+        const revokeResults = await step.run("revoke-drive-permissions", () => revokeSharePermissions(projectId, sharesToRevoke));
 
-        await step.run("cleanup-db", async () => {
-            await prisma.engagementDocumentSharingUser.updateMany({
-                where: { id: { in: sharesToRevoke.map((s: { id: string }) => s.id) } },
-                data: {
-                    sharingPermissionStatus: DocumentSharingPermissionStatus.REVOKED,
-                    connectorPermissionId: null,
-                },
-            });
-        });
+        await step.run("cleanup-db", () => markSharesRevoked({ id: { in: sharesToRevoke.map((s: { id: string }) => s.id) } }, revokeResults.failed));
 
         return { message: "Revoked for removed member", revokedCount: sharesToRevoke.length };
     }
@@ -928,61 +797,25 @@ export const revokeByRemovedMember = inngest.createFunction(
 export const revokeByMemberPersonaChange = inngest.createFunction(
     { id: "revoke-by-member-persona-change", triggers: [{ event: "project.member.persona.updated" }] },
     async ({ event, step }) => {
-        const { projectId, organizationId, userId, oldPersonaSlug, newPersonaSlug } = event.data;
+        const { projectId, userId, oldPersonaSlug } = event.data;
 
         const revokablePersonas = ['eng_viewer', 'eng_ext_collaborator'];
         const shouldRevoke = oldPersonaSlug && revokablePersonas.includes(oldPersonaSlug);
 
         if (!shouldRevoke) return { message: "No revocation needed" };
 
-        const connectorId = await step.run("fetch-connector", async () => {
-            const firm = await prisma.firm.findUnique({
-                where: { id: organizationId },
-                select: { connectorId: true }
-            })
-            return firm?.connectorId;
-        });
-
-        if (!connectorId) return { message: "No connector" };
-
         const sharesToRevoke = await step.run("find-shares-to-revoke", async () => {
-            const docs = await prisma.engagementDocument.findMany({
-                where: { engagementId: projectId },
-                include: { sharingUsers: { where: { userId } } }
+            return prisma.engagementDocumentSharingUser.findMany({
+                where: { engagementId: projectId, userId, connectorPermissionId: { not: null } },
+                select: SHARE_TO_REVOKE_SELECT,
             });
-
-            return docs.flatMap((d: any) => d.sharingUsers.map((u: any) => ({ document: d, user: u }))).filter((x: any) => x.user.connectorPermissionId);
         });
 
         if (sharesToRevoke.length === 0) return { message: "No shares found" };
 
-        const revokeResults = await step.run("revoke-permissions", async () => {
-            const adapter = await getPermissionAdapter(connectorId)
-            if (!adapter) return { successCount: 0 }
-            let successCount = 0;
-            for (const { document, user } of sharesToRevoke) {
-                if (user.connectorPermissionId && document.externalId) {
-                    try {
-                        await adapter.revokePermission(connectorId, document.externalId, user.connectorPermissionId);
-                        successCount++;
-                    } catch (e) {
-                        // ignore
-                    }
-                }
-            }
-            return { successCount };
-        });
+        const revokeResults = await step.run("revoke-permissions", () => revokeSharePermissions(projectId, sharesToRevoke));
 
-        await step.run("cleanup-db", async () => {
-            const userShareIds = sharesToRevoke.map((s: { user: { id: string } }) => s.user.id);
-            await prisma.engagementDocumentSharingUser.updateMany({
-                where: { id: { in: userShareIds } },
-                data: {
-                    sharingPermissionStatus: DocumentSharingPermissionStatus.REVOKED,
-                    connectorPermissionId: null,
-                },
-            });
-        });
+        await step.run("cleanup-db", () => markSharesRevoked({ id: { in: sharesToRevoke.map((s: { id: string }) => s.id) } }, revokeResults.failed));
 
         return { message: "Revoked for persona change", results: revokeResults };
     }
@@ -1043,6 +876,7 @@ export const grantPermissionsForNewMember = inngest.createFunction(
 
             return docs.filter((doc: { sharingUsers: unknown[]; settings: unknown; externalId: string | null }) => {
                 if (doc.sharingUsers.length > 0) return false;
+                if (isDocumentPrivate(doc.settings)) return false;
                 const settings = doc.settings as { share?: { guest?: { enabled?: boolean }; externalCollaborator?: { enabled?: boolean } } };
                 const guestEnabled = settings?.share?.guest?.enabled === true;
                 const ecEnabled = settings?.share?.externalCollaborator?.enabled === true;

@@ -16,19 +16,15 @@ import {
     Download,
     Edit3,
     ExternalLink,
-    Eye,
     FileText,
-    Flag,
     Folder,
-    FolderLock,
+    Lock,
     FolderOpen,
-    HardDrive,
-    Hash,
     Info,
     Link2,
-    MessagesSquare,
     MoreVertical,
     FolderInput,
+    FolderUp,
     CopyPlus,
     RefreshCw,
     ScanEye,
@@ -36,12 +32,12 @@ import {
     Trash2,
     Type,
     User,
-    UserRound,
     FolderPlus,
     FolderMinus,
     Upload,
 } from 'lucide-react'
 import { DocumentIcon } from '@/components/ui/document-icon'
+import { GoogleDriveIcon } from '@/components/ui/google-drive-icon'
 import { Checkbox } from '@/components/ui/checkbox'
 import { FilterPill } from '@/components/ui/filter-pill'
 import { Hint } from '@/components/ui/tooltip'
@@ -82,6 +78,8 @@ import { DELIVERABLE_ACTORS, demoDocumentStages, demoFilesIn, type DeliverableSt
 import { ACTIVITY_STAGES, type ActivityStatus } from '@/lib/sharing-settings'
 import { deriveDeliverableStage } from '@/lib/deliverable-derivation'
 import { BlockedTag } from '@/components/files/blocked-tag'
+import { PrivateMark } from '@/components/files/private-mark'
+import { FileTableHeaderCells } from '@/components/projects/file-table-header-cells'
 import { MissingDueWarning } from '@/components/files/missing-due-warning'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { conflictText } from '@/components/files/use-due-date-save'
@@ -126,15 +124,6 @@ const TOOLBAR_ICON_CLASS =
 /** A bulk action in the selection bar, as engagement-file-list.tsx draws it. */
 const SELECTION_ACTION_CLASS =
     'inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-control px-2 text-small text-fg transition-colors hover:bg-surface-hover'
-
-function TableHeader({ label, icon }: { label: string; icon: React.ReactNode }) {
-    return (
-        <span className="flex select-none items-center gap-1.5 text-small text-fg-muted [&_svg]:h-3.5 [&_svg]:w-3.5 [&_svg]:text-fg-subtle">
-            {icon}
-            {label}
-        </span>
-    )
-}
 
 /** A ghost icon button with the app's hint; inert in the demo unless it's given something to do. */
 function QuickAction({ icon, label, className, onClick }: { icon: React.ReactNode; label: string; className?: string; onClick?: () => void }) {
@@ -191,7 +180,7 @@ function DemoSubmenu({ icon, label, children }: { icon: React.ReactNode; label: 
  * the same compact header and the same items, grouped the same way, for a file or a folder. Every
  * action is inert.
  */
-function RowActionMenu({ entry, name, docId, deliverableStatus, dueDate, onSetDue, inside = false, onOpenDetails }: {
+function RowActionMenu({ entry, name, docId, deliverableStatus, dueDate, onSetDue, inside = false, isPrivate = false, onOpenDetails }: {
     entry: Entry
     name: string
     docId?: string | null
@@ -201,6 +190,8 @@ function RowActionMenu({ entry, name, docId, deliverableStatus, dueDate, onSetDu
     onSetDue: (next: string | null) => void
     /** Inside a deliverable: deliverables don't nest, so Promote is off, as in the app. */
     inside?: boolean
+    /** Internal only: the menu offers to remove it. Making something internal only is for inside a deliverable. */
+    isPrivate?: boolean
     /** Details works too: it opens the Details pane. */
     onOpenDetails?: () => void
 }) {
@@ -272,21 +263,22 @@ function RowActionMenu({ entry, name, docId, deliverableStatus, dueDate, onSetDu
                             )}
                             <DemoSubmenu icon={<FolderOpen />} label="Organize">
                                 <DemoMenuItem icon={<Edit3 />}>Rename</DemoMenuItem>
+                                <DemoMenuItem icon={<CopyPlus />}>Duplicate</DemoMenuItem>
+                                <DemoMenuItem icon={<Copy />}>Copy to…</DemoMenuItem>
                                 <DemoMenuItem icon={<FolderInput />}>Move to…</DemoMenuItem>
-                                <DropdownMenuSeparator />
-                                <DemoMenuItem icon={<FolderLock />}>Make private</DemoMenuItem>
+                                {inside && <DropdownMenuSeparator />}
+                                {inside && <DemoMenuItem icon={<Lock />}>Make internal only</DemoMenuItem>}
                             </DemoSubmenu>
                             <DropdownMenuSeparator />
                             <DemoSubmenu icon={<ExternalLink />} label="Drive actions">
-                                <DemoMenuItem icon={<ExternalLink />}>Open folder in Drive UI</DemoMenuItem>
+                                <DemoMenuItem icon={<GoogleDriveIcon size={16} />}>Open folder in Drive UI</DemoMenuItem>
                             </DemoSubmenu>
                         </>
                     ) : (
                         <>
-                            <DemoMenuItem icon={<Eye />}>Open</DemoMenuItem>
+                            <DemoMenuItem icon={<ExternalLink />}>Open</DemoMenuItem>
                             <DemoMenuItem icon={<Link2 />}>Copy link</DemoMenuItem>
                             <DemoMenuItem icon={<Download />}>Download</DemoMenuItem>
-                            <DemoMenuItem icon={<MessagesSquare />}>Comment</DemoMenuItem>
                             <DropdownMenuSeparator />
                             <DemoMenuItem icon={<Bookmark />}>Bookmark</DemoMenuItem>
                             <DropdownMenuSub>
@@ -317,8 +309,10 @@ function RowActionMenu({ entry, name, docId, deliverableStatus, dueDate, onSetDu
                                 <DemoMenuItem icon={<FolderInput />}>Move to…</DemoMenuItem>
                                 <DropdownMenuSeparator />
                                 <DemoMenuItem icon={<Briefcase />}>Copy to another engagement…</DemoMenuItem>
-                                <DropdownMenuSeparator />
-                                <DemoMenuItem icon={<FolderLock />}>Make private</DemoMenuItem>
+                                {(inside || isPrivate) && <DropdownMenuSeparator />}
+                                {isPrivate
+                                    ? <DemoMenuItem icon={<FolderUp />}>Remove internal only</DemoMenuItem>
+                                    : inside && <DemoMenuItem icon={<Lock />}>Make internal only</DemoMenuItem>}
                             </DemoSubmenu>
                             <DemoMenuItem icon={<Info />} onSelect={onOpenDetails}>Details</DemoMenuItem>
                             <DemoSubmenu icon={<ExternalLink />} label="Drive actions">
@@ -355,6 +349,8 @@ function EntryRow({
     statusEditable,
     onSetStatus,
     blocked,
+    isPrivate = false,
+    onMakePublic,
     onOpenDetails,
     uploadTarget = false,
     onFileDragOver,
@@ -383,6 +379,9 @@ function EntryRow({
     onSetStatus: (next: ActivityStatus) => void
     /** The firm's Blocked flag on a document. */
     blocked?: BlockedFlag
+    /** Marked Private, as the app's row draws it: faded, with a small mark that makes it public when clicked. */
+    isPrivate?: boolean
+    onMakePublic?: () => void
     /** Opens the file's Details pane. */
     onOpenDetails?: () => void
     /** Files from the computer dragged over this folder row would land in it (the drop zone, as in the app). */
@@ -412,6 +411,7 @@ function EntryRow({
             className={`${FILE_TABLE_GRID_COLS_CLASS} ${cn(
                 'group relative grid h-[34px] cursor-default items-center gap-4 overflow-hidden pl-1 pr-2 text-ui transition-colors',
                 selected ? 'bg-surface-selected' : approved ? 'bg-action/5 hover:bg-action/10' : 'hover:bg-surface-hover',
+                isPrivate && 'opacity-60',
                 uploadTarget && `${FILES_DROP_TARGET_ROW_CLASS} z-[1]`,
             )}`}
         >
@@ -450,6 +450,7 @@ function EntryRow({
                 )}
                 {/* As in the app: the firm's Blocked tag, after the name */}
                 {blocked && <BlockedTag blocked={blocked} />}
+                {isPrivate && <PrivateMark onMakePublic={onMakePublic} />}
                 {/* The deliverable marker steps aside once the Status column has room to say it. */}
                 {deliverableStatus && (
                     <Hint label={approved ? 'Deliverable — approved' : 'Deliverable'}>
@@ -468,10 +469,12 @@ function EntryRow({
                     )}
                 >
                     {!isFolder && <QuickAction icon={<Info />} label="Details" onClick={onOpenDetails} />}
+                    <QuickAction icon={<Edit3 />} label="Rename" />
                     {!isFolder && <QuickAction icon={<ScanEye />} label="Preview" />}
+                    {!isFolder && <QuickAction icon={<ExternalLink />} label="Open in Google Drive" />}
                     {/* As in the app: Copy link (also in the ⋮ menu) gives way at the table's narrowest */}
                     <QuickAction icon={<Link2 />} label="Copy link" className="hidden @[49rem]/file-table:inline-flex" />
-                    <RowActionMenu entry={entry} name={name} docId={docId} deliverableStatus={deliverableStatus} dueDate={dueDate} onSetDue={onSetDue} inside={inside} onOpenDetails={onOpenDetails} />
+                    <RowActionMenu isPrivate={isPrivate} entry={entry} name={name} docId={docId} deliverableStatus={deliverableStatus} dueDate={dueDate} onSetDue={onSetDue} inside={inside} onOpenDetails={onOpenDetails} />
                 </div>
             </div>
 
@@ -552,6 +555,7 @@ export function DemoFileList({
     // Due dates and stages set on the tour, by row: the edits the demo keeps (until the page reloads).
     const [dueOverrides, setDueOverrides] = useState<Record<string, string | null>>({})
     const [statusOverrides, setStatusOverrides] = useState<Record<string, ActivityStatus>>({})
+    const [madePublic, setMadePublic] = useState<Set<string>>(new Set())
     const [assigneeOverrides, setAssigneeOverrides] = useState<Record<string, string | null>>({})
     const { addToast } = useToast()
     // The drop zone, as in the app (components/projects/files-drop-zone.tsx): files dropped on the list, or
@@ -995,13 +999,7 @@ export function DemoFileList({
                         >
                             <Checkbox checked={allSelected} className="pointer-events-none h-4 w-4" />
                         </div>
-                        <div className="flex items-center"><TableHeader label="ID" icon={<Hash />} /></div>
-                        <div className={`col-span-3 flex items-center ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Name" icon={<Type />} /></div>
-                        <div className={`items-center ${STATUS_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Status" icon={<CircleDot />} /></div>
-                        <div className={`items-center ${DUE_DATE_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Due" icon={<Flag />} /></div>
-                        <div className={`items-center ${OWNER_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Assignee" icon={<UserRound />} /></div>
-                        <div className={`items-center ${DATE_MODIFIED_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Modified" icon={<Clock3 />} /></div>
-                        <div className={`items-center ${FILE_SIZE_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Size" icon={<HardDrive />} /></div>
+                        <FileTableHeaderCells />
                     </div>
                 </div>
 
@@ -1030,6 +1028,11 @@ export function DemoFileList({
                                 onSetAssignee={(next) => setAssigneeOverrides((prev) => ({ ...prev, [id]: next }))}
                                 blocked={entry.kind === 'file' && insideDeliverable ? blockedOf(id) ?? undefined : undefined}
                                 onOpenDetails={entry.kind === 'file' ? () => openDetails(entry.file) : undefined}
+                                isPrivate={entry.kind === 'file' && !!entry.file.private && !madePublic.has(id)}
+                                onMakePublic={() => {
+                                    setMadePublic((prev) => new Set(prev).add(id))
+                                    addToast({ type: 'success', title: `${name} is no longer internal only` })
+                                }}
                                 dueDate={id in dueOverrides ? dueOverrides[id] : entry.kind === 'folder' ? deliverableDueByFolderId?.[id] : null}
                                 onSetDue={(next) => setDue(entry, next)}
                                 tracked={entry.kind === 'file' || !!deliverableStatusByFolderId?.[id]}

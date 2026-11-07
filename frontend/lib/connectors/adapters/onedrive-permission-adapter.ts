@@ -25,6 +25,7 @@ import { OneDriveConnector } from '@/lib/connectors/onedrive-connector'
 import { resolveOneDriveDriveBase } from './onedrive-adapter'
 import { prisma } from '@/lib/prisma'
 import { logger } from '@/lib/logger'
+import { storageFailure, storageFailureFromResponse } from '@/lib/connectors/storage-failure'
 import type { IConnectorPermissionAdapter, EngagementFolderIds, ConnectorRole, ConnectorFileMetadata } from '../types'
 
 const oneDrive = OneDriveConnector.getInstance()
@@ -68,6 +69,29 @@ async function auth(connectionId: string): Promise<string> {
   return token
 }
 
+/**
+ * Graph's DELETE moves the item to the drive's recycle bin: there's no "trashed" flag to set. 404 means
+ * it's already gone, which counts as done. Anything else throws a StorageFailure saying why.
+ */
+async function moveToRecycleBin(connectionId: string, fileId: string): Promise<void> {
+  let token: string
+  let base: string
+  try {
+    ;[token, base] = await Promise.all([auth(connectionId), resolveOneDriveDriveBase(connectionId)])
+  } catch (error) {
+    logger.error('Failed to get a OneDrive connection', error as Error)
+    throw storageFailure('reconnect', 'OneDrive')
+  }
+  let res: Response
+  try {
+    res = await fetch(`${base}/items/${fileId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })
+  } catch (error) {
+    logger.error('Failed to reach OneDrive', error as Error)
+    throw storageFailure('unreachable', 'OneDrive')
+  }
+  if (!res.ok && res.status !== 404) throw await storageFailureFromResponse(res, 'OneDrive', 'move an item to the trash')
+}
+
 export function createOneDrivePermissionAdapter(): IConnectorPermissionAdapter {
   return {
     async grantFolderPermission(connectionId, folderId, email, role, opts) {
@@ -101,6 +125,26 @@ export function createOneDrivePermissionAdapter(): IConnectorPermissionAdapter {
       return patchRes.ok
     },
 
+    async upgradeFolderUserPermissionToEditor(connectionId, folderId, email) {
+      const [token, base] = await Promise.all([auth(connectionId), resolveOneDriveDriveBase(connectionId)])
+      const listRes = await fetch(`${base}/items/${folderId}/permissions`, { headers: { Authorization: `Bearer ${token}` } })
+      if (!listRes.ok) return false
+      const data = await listRes.json()
+      const perm = (data.value || []).find(
+        (p: { grantedToV2?: { user?: { email?: string } } }) =>
+          p.grantedToV2?.user?.email?.toLowerCase() === email.toLowerCase()
+      ) as { id: string; roles?: string[] } | undefined
+      if (!perm) return !!(await grantItemPermission(connectionId, folderId, email, 'editor', { notify: false }))
+      // Only a reader is raised: an owner or editor keeps what they have.
+      if (perm.roles?.some((role) => role !== 'read')) return true
+      const patchRes = await fetch(`${base}/items/${folderId}/permissions/${perm.id}`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roles: ['write'] }),
+      })
+      return patchRes.ok
+    },
+
     async getEngagementFolderIds(connectionId, engagementSlug, _opts): Promise<EngagementFolderIds> {
       // pockett-structure.service's ensureAppFolderStructure (provider-agnostic, already used
       // for OneDrive folder provisioning — see onedrive/route.ts update-root-folder and
@@ -127,17 +171,7 @@ export function createOneDrivePermissionAdapter(): IConnectorPermissionAdapter {
     },
 
     async trashFile(connectionId, fileId) {
-      const [token, base] = await Promise.all([auth(connectionId), resolveOneDriveDriveBase(connectionId)])
-      // Graph DELETE moves the item to the drive's recycle bin — no explicit "trashed" flag to set.
-      const res = await fetch(`${base}/items/${fileId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })
-      // 404 means the item is already gone — treat as success (idempotent). Any other non-2xx is a real failure.
-      if (!res.ok && res.status !== 404) {
-        const body = await res.text().catch(() => '')
-        if (res.status === 423) {
-          throw new Error('This item is locked — it (or a file inside it) is currently open/checked out elsewhere. Close it and try again.')
-        }
-        throw new Error(`OneDrive trash failed (${res.status}): ${body}`)
-      }
+      await moveToRecycleBin(connectionId, fileId)
     },
 
     async listFiles(connectionId, folderId, pageSize) {
@@ -220,13 +254,8 @@ export function createOneDrivePermissionAdapter(): IConnectorPermissionAdapter {
     },
 
     async deleteFile(connectionId, fileId, _opts) {
-      const [token, base] = await Promise.all([auth(connectionId), resolveOneDriveDriveBase(connectionId)])
       // Graph has no true hard-delete via this endpoint (always recycle-bins) — see file header.
-      const res = await fetch(`${base}/items/${fileId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })
-      if (!res.ok && res.status !== 404) {
-        const err = await res.text()
-        throw new Error(`Failed to delete file ${fileId}: ${res.status} - ${err}`)
-      }
+      await moveToRecycleBin(connectionId, fileId)
     },
 
     async patchFilePermissionRole(connectionId, fileId, permissionId, role) {

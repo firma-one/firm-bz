@@ -9,6 +9,8 @@ export interface DemoFile {
     size: number
     /** What the firm wrote for it in the Details pane; Doc Search matches it too. */
     description?: string
+    /** Marked Private: clients can't see it. */
+    private?: boolean
 }
 
 export interface DemoFolder {
@@ -43,7 +45,7 @@ export interface DemoFirm {
     clients: DemoClient[]
 }
 
-interface RawSampleFile { name: string; type: string; description?: string }
+interface RawSampleFile { name: string; type: string; description?: string; private?: boolean }
 interface RawSampleFolder { name: string; files?: RawSampleFile[]; subfolders?: RawSampleFolder[] }
 interface RawEngagement {
     name: string
@@ -107,6 +109,7 @@ function buildFile(raw: RawSampleFile, docPrefix: string, docNumber: number): De
         modifiedTime: new Date(Date.now() - fileCounter * 86400000).toISOString(),
         size: (fileCounter % 9 + 1) * 128 * 1024,
         ...(raw.description ? { description: raw.description } : {}),
+        ...(raw.private ? { private: true } : {}),
     }
 }
 

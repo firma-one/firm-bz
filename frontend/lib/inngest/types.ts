@@ -55,6 +55,19 @@ export interface ProjectArchivedEvent {
 }
 
 /**
+ * Fired when an engagement's status becomes Completed, or leaves it: the firm's Drive access follows
+ */
+export interface EngagementCompletedEvent {
+  type: 'engagement.completed'
+  data: { projectId: string }
+}
+
+export interface EngagementReopenedEvent {
+  type: 'engagement.reopened'
+  data: { projectId: string }
+}
+
+/**
  * Fired when a new member joins a project (invitation accepted)
  * or when a member's persona is upgraded to an access-granting role
  */

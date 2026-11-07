@@ -35,9 +35,7 @@ import {
   Check,
   BadgeCheck,
   Info,
-  Eye,
   X,
-  FolderLock,
   FolderUp,
   MessagesSquare,
   Link2,
@@ -794,7 +792,7 @@ export function DocumentActionMenu({
                       {canManage && !document.isPrivate && onMakePrivate && (
                         isApprovedDeliverable ? (
                           <div className="flex items-center gap-2 px-2 py-1 text-small text-fg-subtle opacity-40 cursor-not-allowed select-none">
-                            <FolderLock className="h-3.5 w-3.5" /><span>Make private</span>
+                            <Lock className="h-3.5 w-3.5" /><span>Make internal only</span>
                           </div>
                         ) : document.isSharedWithExternal ? (
                           <TooltipProvider>
@@ -804,32 +802,32 @@ export function DocumentActionMenu({
                                   onClick={(e) => { e.stopPropagation(); setPrivateInfoOpen((v) => !v) }}
                                   className="flex items-center gap-2 px-2 py-1 text-small text-fg-subtle cursor-pointer opacity-50 rounded-control hover:bg-surface-hover"
                                 >
-                                  <FolderLock className="h-3.5 w-3.5 text-fg-subtle" />
-                                  <span>Make private</span>
+                                  <Lock className="h-3.5 w-3.5 text-fg-subtle" />
+                                  <span>Make internal only</span>
                                   <Info className="h-3.5 w-3.5 ml-auto text-fg-subtle" />
                                 </div>
                               </TooltipTrigger>
                               <TooltipContent side="left" className="text-xs max-w-[220px]">
-                                A shared document can't be made private. Turn off sharing first.
+                                A shared document can't be made internal only. Turn off sharing first.
                               </TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
                         ) : (
                           <DropdownMenuItem onClick={() => onMakePrivate(document)} className="flex cursor-pointer items-center gap-2">
-                            <FolderLock className="h-3.5 w-3.5 text-fg-subtle" />
-                            <span>Make private</span>
+                            <Lock className="h-3.5 w-3.5 text-fg-subtle" />
+                            <span>Make internal only</span>
                           </DropdownMenuItem>
                         )
                       )}
                       {canManage && document.isPrivate && onMakePublic && (
                         isApprovedDeliverable ? (
                           <div className="flex items-center gap-2 px-2 py-1 text-small text-fg-subtle opacity-40 cursor-not-allowed select-none">
-                            <FolderUp className="h-3.5 w-3.5" /><span>Make public</span>
+                            <FolderUp className="h-3.5 w-3.5" /><span>Remove internal only</span>
                           </div>
                         ) : (
                           <DropdownMenuItem onClick={() => onMakePublic(document)} className="flex cursor-pointer items-center gap-2">
                             <FolderUp className="h-3.5 w-3.5 text-fg-muted" />
-                            <span>Make public</span>
+                            <span>Remove internal only</span>
                           </DropdownMenuItem>
                         )
                       )}
@@ -911,7 +909,7 @@ export function DocumentActionMenu({
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <div className="flex items-center gap-2 px-2 py-1 text-small text-fg-subtle opacity-50 cursor-not-allowed select-none">
-                          <Eye className="h-3.5 w-3.5" />
+                          <ExternalLink className="h-3.5 w-3.5" />
                           <span>Open</span>
                         </div>
                       </TooltipTrigger>
@@ -938,7 +936,7 @@ export function DocumentActionMenu({
                     }}
                     className="flex cursor-pointer items-center gap-2"
                   >
-                    <Eye className="h-3.5 w-3.5 text-fg-muted" />
+                    <ExternalLink className="h-3.5 w-3.5 text-fg-muted" />
                     <span>Open</span>
                   </DropdownMenuItem>
                 )}
@@ -1229,7 +1227,7 @@ export function DocumentActionMenu({
                       {canManage && !document.isPrivate && onMakePrivate && (
                         isApprovedDeliverable ? (
                           <div className="flex items-center gap-2 px-2 py-1 text-small text-fg-subtle opacity-40 cursor-not-allowed select-none">
-                            <FolderLock className="h-3.5 w-3.5" /><span>Make private</span>
+                            <Lock className="h-3.5 w-3.5" /><span>Make internal only</span>
                           </div>
                         ) : document.isSharedWithExternal ? (
                           <TooltipProvider>
@@ -1239,13 +1237,13 @@ export function DocumentActionMenu({
                                   onClick={(e) => { e.stopPropagation(); setPrivateInfoOpen((v) => !v) }}
                                   className="flex items-center gap-2 px-2 py-1 text-small text-fg-subtle cursor-pointer opacity-50 rounded-control hover:bg-surface-hover"
                                 >
-                                  <FolderLock className="h-3.5 w-3.5 text-fg-subtle" />
-                                  <span>Make private</span>
+                                  <Lock className="h-3.5 w-3.5 text-fg-subtle" />
+                                  <span>Make internal only</span>
                                   <Info className="h-3.5 w-3.5 ml-auto text-fg-subtle" />
                                 </div>
                               </TooltipTrigger>
                               <TooltipContent side="left" className="text-xs max-w-[220px]">
-                                A shared document can't be made private. Turn off sharing first.
+                                A shared document can't be made internal only. Turn off sharing first.
                               </TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
@@ -1254,15 +1252,15 @@ export function DocumentActionMenu({
                             onClick={() => onMakePrivate(document)}
                             className="flex cursor-pointer items-center gap-2"
                           >
-                            <FolderLock className="h-3.5 w-3.5 text-fg-subtle" />
-                            <span>Make private</span>
+                            <Lock className="h-3.5 w-3.5 text-fg-subtle" />
+                            <span>Make internal only</span>
                           </DropdownMenuItem>
                         )
                       )}
                       {canManage && document.isPrivate && onMakePublic && (
                         isApprovedDeliverable ? (
                           <div className="flex items-center gap-2 px-2 py-1 text-small text-fg-subtle opacity-40 cursor-not-allowed select-none">
-                            <FolderUp className="h-3.5 w-3.5" /><span>Make public</span>
+                            <FolderUp className="h-3.5 w-3.5" /><span>Remove internal only</span>
                           </div>
                         ) : (
                           <DropdownMenuItem
@@ -1270,7 +1268,7 @@ export function DocumentActionMenu({
                             className="flex cursor-pointer items-center gap-2"
                           >
                             <FolderUp className="h-3.5 w-3.5 text-fg-muted" />
-                            <span>Make public</span>
+                            <span>Remove internal only</span>
                           </DropdownMenuItem>
                         )
                       )}

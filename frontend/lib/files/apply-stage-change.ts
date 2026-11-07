@@ -18,6 +18,9 @@ import { renderDocumentStatusChangedEmail } from '@/lib/email-templates/document
  * Shared by a person's move of a document and the derived move of its deliverable that can follow
  * (lib/files/deliverable-stage.ts), so both behave alike. Lifted unchanged from the stage route.
  *
+ * A private document moves with `internalOnly` too (lib/files/private-documents.ts puts it where its
+ * stage would have it if it's made public).
+ *
  * A file outside any deliverable moves with `internalOnly`: its stage is the firm's own tracking, so
  * the move never opens the file to clients and only the firm hears of it.
  */
@@ -96,6 +99,7 @@ export async function applyStageChange(
 
                 // Descendants have empty settings so syncDocumentSharingUsers would no-op on them.
                 // Instead, directly insert rows for the newly-enabled roles based on the folder's flags.
+                // Not for anything private, nor inside a private folder: the walk stops there.
                 const newlyEnabledRoles: EngagementRole[] = []
                 if (shareUpdate.externalCollaborator) newlyEnabledRoles.push(EngagementRole.eng_ext_collaborator)
                 if (shareUpdate.guest) newlyEnabledRoles.push(EngagementRole.eng_viewer)
@@ -110,10 +114,12 @@ export async function applyStageChange(
                     `WITH RECURSIVE descendants AS (
                        SELECT id, "externalId" FROM platform.engagement_documents
                        WHERE "parentId" = $1 AND "engagementId" = $2::uuid
+                         AND COALESCE(settings->'lock'->>'type', settings->>'locked', '') <> 'private'
                        UNION ALL
                        SELECT ed.id, ed."externalId" FROM platform.engagement_documents ed
                        INNER JOIN descendants d ON ed."parentId" = d."externalId"
                        WHERE ed."engagementId" = $2::uuid
+                         AND COALESCE(ed.settings->'lock'->>'type', ed.settings->>'locked', '') <> 'private'
                      )
                      SELECT id FROM descendants`,
                     row.externalId,

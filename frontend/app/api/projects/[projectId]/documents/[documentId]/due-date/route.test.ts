@@ -4,8 +4,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // 409 with what to resolve; a chosen fix moves the other dates through the same path.
 
 const { st, calls } = vi.hoisted(() => ({
-    st: { plan: { conflict: null as any, documents: [] as any[], engagementDue: null as Date | null } },
-    calls: { updates: [] as any[], engagement: [] as any[], fixes: [] as any[], reminders: [] as string[] },
+    st: { plan: { conflict: null as any, documents: [] as any[], engagementDue: null as Date | null }, privateIds: new Set<string>() },
+    calls: { updates: [] as any[], engagement: [] as any[], fixes: [] as any[], reminders: [] as string[], notified: [] as string[] },
 }))
 
 vi.mock('@/utils/supabase/server', () => ({
@@ -21,6 +21,7 @@ vi.mock('@/lib/notification-links', () => ({ documentLink: () => '/x' }))
 vi.mock('@/lib/files/due-date-check', () => ({
     planDueDate: async (_e: string, _t: unknown, _d: unknown, fixes: unknown) => { calls.fixes.push(fixes); return st.plan },
 }))
+vi.mock('@/lib/engagement-sharing-ids', () => ({ privateExternalIds: async () => st.privateIds, getSharedAndAncestorIdsForPersona: vi.fn() }))
 vi.mock('@/lib/actions/project', () => ({
     updateEngagement: async (...args: unknown[]) => { calls.engagement.push(args) },
 }))
@@ -33,9 +34,9 @@ vi.mock('@/lib/prisma', () => ({
             }),
             update: async ({ where, data }: any) => { calls.updates.push({ id: where.id, dueDate: data.dueDate }) },
         },
-        engagementMember: { findMany: async () => [] },
+        engagementMember: { findMany: async () => [{ userId: 'me', role: 'eng_admin' }, { userId: 'staff', role: 'eng_member' }, { userId: 'client', role: 'eng_viewer' }] },
         engagement: { findUnique: async () => ({ slug: 'e', client: { slug: 'cl', firm: { slug: 'fi', group: { slug: 'g' } } } }) },
-        notification: { updateMany: async () => ({}), createMany: async () => ({}) },
+        notification: { updateMany: async () => ({}), createMany: async ({ data }: any) => { calls.notified.push(...data.map((n: any) => n.userId)); return {} } },
     },
 }))
 
@@ -46,7 +47,21 @@ const patch = (documentId: string, body: object) =>
 
 beforeEach(() => {
     st.plan = { conflict: null, documents: [], engagementDue: null }
+    st.privateIds = new Set()
     for (const k of Object.keys(calls) as (keyof typeof calls)[]) calls[k].length = 0
+})
+
+describe('the notice of a new due date', () => {
+    it('goes to every other member', async () => {
+        await patch('d1', { dueDate: '2026-11-12' })
+        expect(calls.notified).toEqual(['staff', 'client'])
+    })
+
+    it('stays with the firm for a private file', async () => {
+        st.privateIds = new Set(['ext-d1'])
+        await patch('d1', { dueDate: '2026-11-12' })
+        expect(calls.notified).toEqual(['staff'])
+    })
 })
 
 describe('PATCH due-date', () => {

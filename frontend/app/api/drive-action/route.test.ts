@@ -50,6 +50,7 @@ vi.mock('@/lib/audit', () => ({
 import { POST } from './route'
 import { prisma } from '@/lib/prisma'
 import { safeInngestSend } from '@/lib/inngest/client'
+import { storageFailure } from '@/lib/connectors/storage-failure'
 
 const call = (body: Record<string, unknown>) =>
     POST(new NextRequest(new URL('http://localhost/api/drive-action'), { method: 'POST', headers: { authorization: 'Bearer t' }, body: JSON.stringify(body) }))
@@ -105,6 +106,33 @@ describe('actions without an engagement', () => {
         const res = await call({ action: 'revoke', fileId: 'f', permissionId: 'p' })
         expect(res.status).toBe(200)
         expect(adapter.revokePermission).toHaveBeenCalledWith('firm-conn', 'f', 'p')
+    })
+})
+
+describe('when the storage refuses a trash', () => {
+    const LOCKED = 'OneDrive has this locked, usually because a file is open in Word, Excel or another app. Close it everywhere, then try again. It can take a minute to unlock.'
+
+    it("answers the storage's reason and status", async () => {
+        state.canEdit = true
+        adapter.trashFile.mockRejectedValueOnce(storageFailure('locked', 'OneDrive'))
+        const res = await call({ action: 'trash', fileId: 'file', projectId: 'e1' })
+        expect(res.status).toBe(409)
+        expect((await res.json()).error).toBe(LOCKED)
+    })
+
+    it("keeps the first connector's reason when a fallback on another Drive only adds \"not found\"", async () => {
+        state.manageable.add('target').add('other')
+        vi.mocked(prisma.firm.findMany).mockResolvedValueOnce([
+            { id: 'f1', connector: { id: 'target', name: 'Target' } },
+            { id: 'f2', connector: { id: 'other', name: 'Other' } },
+        ] as never)
+        adapter.trashFile
+            .mockRejectedValueOnce(storageFailure('locked', 'OneDrive'))
+            .mockRejectedValueOnce(storageFailure('not_found', 'Google Drive'))
+        const res = await call({ action: 'trash', fileId: 'file', connectorId: 'target' })
+        expect(adapter.trashFile.mock.calls.map((c: unknown[]) => c[0])).toEqual(['target', 'other'])
+        expect(res.status).toBe(409)
+        expect((await res.json()).error).toBe(LOCKED)
     })
 })
 

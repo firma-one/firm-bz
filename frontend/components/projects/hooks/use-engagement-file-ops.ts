@@ -1,3 +1,4 @@
+import { failureFrom, failureReason } from '@/lib/files/action-failure'
 import { useState, useCallback, useRef } from 'react'
 import { logger } from '@/lib/logger'
 import { useToast } from '@/components/ui/toast'
@@ -122,15 +123,12 @@ export function useEngagementFileOps({
                 },
                 body: JSON.stringify({ action: 'duplicate', projectId, fileId: doc.id })
             })
-            if (!res.ok) {
-                const err = await res.json()
-                throw new Error(err.error || 'Failed to duplicate')
-            }
+            if (!res.ok) throw await failureFrom(res)
             addToast({ type: 'success', title: 'Duplicated', message: `${doc.name} duplicated with a unique name` })
             const currentFolderId = currentFolderIdRef.current
             if (currentFolderId) fetchFiles(currentFolderId, true)
-        } catch (e: any) {
-            addToast({ type: 'error', title: 'Error', message: e?.message || 'Something went wrong' })
+        } catch (e) {
+            addToast({ type: 'error', title: 'Duplicate failed', message: failureReason(e) })
         } finally {
             stopProcessing(doc.id)
         }
@@ -167,8 +165,8 @@ export function useEngagementFileOps({
             addToast({ type: 'success', title: 'Restored', message: `${doc.name} is back` })
             const currentFolderId = currentFolderIdRef.current
             if (currentFolderId) fetchFiles(currentFolderId, true)
-        } catch (e: any) {
-            addToast({ type: 'error', title: 'Couldn’t undo', message: e?.message || 'Something went wrong' })
+        } catch (e) {
+            addToast({ type: 'error', title: 'Couldn’t undo', message: failureReason(e) })
         }
     }, [sessionRef, projectId, currentFolderIdRef, fetchFiles, addToast])
 
@@ -182,8 +180,8 @@ export function useEngagementFileOps({
         const doc = trashConfirmTarget
         setTrashConfirming(true)
         startProcessing(doc.id)
+        const isLink = doc.documentType === 'LINK'
         try {
-            const isLink = doc.documentType === 'LINK'
             const res = isLink
                 ? await fetch(`/api/projects/${projectId}/documents/${doc.projectDocumentId ?? doc.id}`, {
                     method: 'DELETE',
@@ -205,10 +203,7 @@ export function useEngagementFileOps({
                         fileName: doc.name
                     })
                 })
-            if (!res.ok) {
-                const err = await res.json()
-                throw new Error(err.error || (isLink ? 'Failed to delete link' : 'Failed to move to trash'))
-            }
+            if (!res.ok) throw await failureFrom(res)
             addToast(
                 isLink
                     ? { type: 'success', title: 'Deleted', message: `${doc.name} was deleted` }
@@ -222,8 +217,8 @@ export function useEngagementFileOps({
             setTrashConfirmTarget(null)
             const currentFolderId = currentFolderIdRef.current
             if (currentFolderId) fetchFiles(currentFolderId, true)
-        } catch (e: any) {
-            addToast({ type: 'error', title: 'Error', message: e?.message || 'Something went wrong' })
+        } catch (e) {
+            addToast({ type: 'error', title: isLink ? 'Delete failed' : 'Move to trash failed', message: failureReason(e) })
             setTrashConfirmTarget(null)
         } finally {
             setTrashConfirming(false)
@@ -384,13 +379,10 @@ export function useEngagementFileOps({
                         keepBoth: copyMoveKeepBoth
                     })
                 })
-                if (!res.ok) {
-                    const err = await res.json().catch(() => ({}))
-                    throw new Error(err.error || 'Failed to ' + action)
-                }
+                if (!res.ok) throw await failureFrom(res)
                 if (action === 'move') onItemRemoved?.(target.id)
-            } catch (e: any) {
-                failed.push({ name: target.name, error: e?.message || 'Something went wrong' })
+            } catch (e) {
+                failed.push({ name: target.name, error: failureReason(e) })
             } finally {
                 stopProcessing(target.id)
             }
@@ -412,7 +404,7 @@ export function useEngagementFileOps({
         if (failed.length === 0) {
             addToast({ type: 'success', title, message: targets.length === 1 ? `${targets[0].name} ${verb} successfully` : `${targets.length} items ${verb}` })
         } else if (targets.length === 1) {
-            addToast({ type: 'error', title: 'Error', message: failed[0].error })
+            addToast({ type: 'error', title: action === 'copy' ? 'Copy failed' : 'Move failed', message: failed[0].error })
         } else {
             addToast({ type: 'error', title: `${done} of ${targets.length} ${verb}`, message: `Couldn’t ${action} ${failed.map((f) => f.name).join(', ')}: ${failed[0].error}` })
         }
@@ -442,17 +434,14 @@ export function useEngagementFileOps({
                     targetRoot
                 })
             })
-            if (!res.ok) {
-                const err = await res.json()
-                throw new Error(err.error || 'Failed to move')
-            }
+            if (!res.ok) throw await failureFrom(res)
             const label = targetRoot === 'general' ? 'Restored to General' : targetRoot === 'confidential' ? 'Restricted to Confidential' : 'Promoted to General'
             addToast({ type: 'success', title: label, message: `${doc.name} moved successfully` })
             onItemRemoved?.(doc.id)
             const currentFolderId = currentFolderIdRef.current
             if (currentFolderId) fetchFiles(currentFolderId, true)
-        } catch (e: any) {
-            addToast({ type: 'error', title: 'Error', message: e?.message || 'Something went wrong' })
+        } catch (e) {
+            addToast({ type: 'error', title: 'Move failed', message: failureReason(e) })
         } finally {
             stopProcessing(doc.id)
         }
@@ -505,13 +494,13 @@ export function useEngagementFileOps({
                 name: newName
             })
         })
-            .then((res) => {
-                if (!res.ok) return res.json().then((err: { error?: string }) => { throw new Error(err.error || 'Failed to rename') })
+            .then(async (res) => {
+                if (!res.ok) throw await failureFrom(res)
                 addToast({ type: 'success', title: 'Renamed', message: `"${previousName}" renamed to "${newName}"` })
             })
             .catch((e: unknown) => {
                 setFiles(prev => prev.map(f => f.id === fileId ? { ...f, name: previousName } : f))
-                addToast({ type: 'error', title: 'Rename failed', message: e instanceof Error ? e.message : 'Could not rename in Google Drive' })
+                addToast({ type: 'error', title: 'Rename failed', message: failureReason(e) })
             })
             .finally(() => {
                 stopProcessing(fileId)
@@ -520,21 +509,23 @@ export function useEngagementFileOps({
 
     const handlePrivacy = useCallback(async (file: DriveFile, makePrivate: boolean) => {
         const docId = file.projectDocumentId ?? file.id
-        const res = await fetch(`/api/projects/${projectId}/documents/${docId}/privacy`, {
-            method: 'PATCH',
-            headers: {
-                'Authorization': `Bearer ${sessionRef.current?.access_token}`,
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ private: makePrivate }),
-        })
-        if (!res.ok) {
-            addToast({ type: 'error', title: 'Failed to update privacy', message: 'Could not update file privacy.' })
+        try {
+            const res = await fetch(`/api/projects/${projectId}/documents/${docId}/privacy`, {
+                method: 'PATCH',
+                headers: {
+                    'Authorization': `Bearer ${sessionRef.current?.access_token}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ private: makePrivate }),
+            })
+            if (!res.ok) throw await failureFrom(res)
+        } catch (e) {
+            addToast({ type: 'error', title: makePrivate ? 'Couldn’t make it internal only' : 'Couldn’t remove internal only', message: failureReason(e) })
             return
         }
         addToast({
             type: 'success',
-            title: makePrivate ? 'File marked Private' : 'File is now visible to all members',
+            title: makePrivate ? `${file.name} is now internal only` : `${file.name} is no longer internal only`,
         })
         refreshShareStateAndFiles()
     }, [projectId, addToast, refreshShareStateAndFiles])
@@ -755,18 +746,15 @@ export function useEngagementFileOps({
                     targetEngagementId: crossEngagementSelectedId,
                 }),
             })
-            if (!res.ok) {
-                const err = await res.json()
-                throw new Error(err.error || 'Failed to copy')
-            }
+            if (!res.ok) throw await failureFrom(res)
             addToast({
                 type: 'success',
                 title: 'Copied',
                 message: `${crossEngagementTarget.name} copied to the selected engagement.`,
             })
             setCrossEngagementModalOpen(false)
-        } catch (e: any) {
-            addToast({ type: 'error', title: 'Error', message: e?.message || 'Something went wrong' })
+        } catch (e) {
+            addToast({ type: 'error', title: 'Copy failed', message: failureReason(e) })
         } finally {
             setCrossEngagementSubmitting(false)
             stopProcessing(crossEngagementTarget.id)

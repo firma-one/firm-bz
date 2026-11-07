@@ -40,6 +40,7 @@ vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 vi.mock('@/lib/files/due-date-check', () => ({ deliverableDueAfter: async () => dueRule.later }))
 
 import { updateEngagement } from './project'
+import { safeInngestSend } from '@/lib/inngest/client'
 
 beforeEach(() => {
     vi.clearAllMocks()
@@ -64,6 +65,36 @@ describe('updateEngagement and its deliverables', () => {
         await expect(updateEngagement('eng-1', { dueDate: '2026-11-30T12:00:00Z' }, 'acme', 'contoso'))
             .rejects.toThrow("QSR-9 · Market report is due Dec 20, 2026, after that. Set the engagement's due date on or after it, or move that deliverable first.")
         expect(prisma.engagement.update).not.toHaveBeenCalled()
+    })
+})
+
+// A completed engagement is read-only for the firm in Drive too (lib/connectors/firm-folder-access.ts).
+describe("updateEngagement and the firm's Drive access", () => {
+    const from = (status: string) => {
+        const answer = prisma.engagement.findFirst.getMockImplementation()!
+        prisma.engagement.findFirst.mockImplementation(async (args: any) => {
+            const row = await answer(args) as Record<string, unknown>
+            return args.select.status ? { ...row, status } : row
+        })
+    }
+    const statusEvents = () => vi.mocked(safeInngestSend).mock.calls.filter(([name]) => name === 'engagement.completed' || name === 'engagement.reopened')
+
+    it('restricts it when the engagement is marked Completed', async () => {
+        await updateEngagement('eng-1', { status: 'COMPLETED' }, 'acme', 'contoso')
+        expect(statusEvents()).toEqual([['engagement.completed', { projectId: 'eng-1' }]])
+    })
+
+    it.each(['ACTIVE', 'PAUSED', 'PLANNED'] as const)('restores it when a Completed engagement becomes %s', async (status) => {
+        from('COMPLETED')
+        await updateEngagement('eng-1', { status }, 'acme', 'contoso')
+        expect(statusEvents()).toEqual([['engagement.reopened', { projectId: 'eng-1' }]])
+    })
+
+    it('leaves it alone for any other change', async () => {
+        await updateEngagement('eng-1', { status: 'PAUSED' }, 'acme', 'contoso')
+        await updateEngagement('eng-1', { status: 'ACTIVE' }, 'acme', 'contoso')
+        await updateEngagement('eng-1', { name: 'Renamed' }, 'acme', 'contoso')
+        expect(statusEvents()).toEqual([])
     })
 })
 

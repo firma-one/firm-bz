@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 // A file outside any deliverable has a stage for the firm's own tracking: moving it must never open it
 // to clients, which is what a deliverable document's forward move does.
 
-const { update, sync, notify, members } = vi.hoisted(() => ({
+const { update, sync, notify, members, queries } = vi.hoisted(() => ({
+    queries: [] as string[],
     update: vi.fn(async (_args: unknown) => ({})),
     sync: vi.fn(async () => {}),
     notify: vi.fn(async (_rows: unknown[]) => {}),
@@ -15,7 +16,7 @@ vi.mock('@/lib/prisma', () => ({
         engagementDocument: { update },
         engagementMember: { findMany: async () => members },
         engagementDocumentSharingUser: { upsert: async () => ({}) },
-        $queryRawUnsafe: async () => [],
+        $queryRawUnsafe: async (query: string) => { queries.push(query); return [] },
     },
 }))
 vi.mock('@/lib/sync-document-sharing', () => ({ syncDocumentSharingUsers: sync }))
@@ -41,6 +42,7 @@ beforeEach(() => {
     update.mockClear()
     sync.mockClear()
     notify.mockClear()
+    queries.length = 0
 })
 
 describe('applyStageChange', () => {
@@ -50,6 +52,14 @@ describe('applyStageChange', () => {
         expect(savedShare().externalCollaborator.enabled).toBe(true)
         expect(savedShare().guest.enabled).toBe(true)
         expect(sync).toHaveBeenCalled()
+    })
+
+    it("stops at anything private when it writes sharing rows for what's inside a folder", async () => {
+        await applyStageChange({ ...row(), isFolder: true }, 'in_review', ctx)
+        await settle()
+        expect(queries).toHaveLength(1)
+        // In the starting rows and in the walk down, so a private folder hides all it holds.
+        expect(queries[0].match(/<> 'private'/g)).toHaveLength(2)
     })
 
     it('never opens a file outside a deliverable to clients, at any stage', async () => {

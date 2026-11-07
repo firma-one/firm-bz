@@ -6,6 +6,7 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { privateSubtreeIds } from '@/lib/sharing-settings'
 
 const MAX_ANCESTOR_DEPTH = 15
 /** Max depth of descendants to include when a shared item is a folder (inheritance visibility). */
@@ -188,7 +189,7 @@ export async function getSharedAndAncestorIdsForPersona(
   projectId: string,
   personaSlug: SharedOnlyPersonaSlug | null,
   options?: GetSharedAndAncestorOptions
-): Promise<{ sharedIds: string[]; ancestorIds: string[]; descendantIds: string[]; parentMap: Map<string, string> }> {
+): Promise<{ sharedIds: string[]; ancestorIds: string[]; descendantIds: string[]; parentMap: Map<string, string>; privateIds: Set<string> }> {
   const { skipDescendants = false } = options ?? {}
   const allRows = await prisma.engagementDocument.findMany({
     where: { engagementId: projectId },
@@ -220,6 +221,10 @@ export async function getSharedAndAncestorIdsForPersona(
       ])
     )
   }
+
+  // A client's subtree never holds what's private to the firm. With no persona (the firm's own view) it stays.
+  const privateIds = personaSlug ? privateSubtreeIds(settingsRows) : new Set<string>()
+  sharedIds = sharedIds.filter((id) => !privateIds.has(id))
 
   const sharedFolderIds = settingsRows
     .filter((r) => sharedIds.includes(r.externalId) && r.isFolder)
@@ -257,10 +262,19 @@ export async function getSharedAndAncestorIdsForPersona(
 
   let descendantIds: string[] = []
   if (!skipDescendants && sharedFolderIds.length > 0 && connectorId && googleDriveConnector) {
-    descendantIds = await buildDescendantIds(sharedFolderIds, connectorId, googleDriveConnector)
+    descendantIds = (await buildDescendantIds(sharedFolderIds, connectorId, googleDriveConnector)).filter((id) => !privateIds.has(id))
   }
 
-  return { sharedIds, ancestorIds, descendantIds, parentMap }
+  return { sharedIds, ancestorIds, descendantIds, parentMap, privateIds }
+}
+
+/** What's private to the firm in this engagement, by external ID (see privateSubtreeIds). */
+export async function privateExternalIds(engagementId: string): Promise<Set<string>> {
+  const rows = await prisma.engagementDocument.findMany({
+    where: { engagementId },
+    select: { externalId: true, parentId: true, settings: true },
+  })
+  return privateSubtreeIds(rows)
 }
 
 /**
@@ -277,12 +291,14 @@ export async function getAccessibleFileCountForPersona(
     select: { externalId: true, parentId: true, isFolder: true, settings: true },
   })
 
-  const rows = allRows.filter((r) => r.externalId) as {
+  const known = allRows.filter((r) => r.externalId) as {
     externalId: string
     parentId: string | null
     isFolder: boolean
     settings: unknown
   }[]
+  const privateIds = privateSubtreeIds(known)
+  const rows = known.filter((r) => !privateIds.has(r.externalId))
 
   const isEnabled = personaSlug === 'eng_ext_collaborator' ? isECEnabled : isGuestEnabled
   const sharedIdSet = new Set(rows.filter((r) => isEnabled(r.settings)).map((r) => r.externalId))

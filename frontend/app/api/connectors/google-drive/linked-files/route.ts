@@ -16,7 +16,8 @@ import { GoogleDriveAuthError } from '@/lib/google-drive-connector'
 import { blockIfEngagementFileMutationForbidden } from '@/lib/engagement-access'
 import { resolveEngagementConnector } from '@/lib/connectors/resolve-client-connector'
 import { IndexingInterceptor } from '@/lib/services/indexing-interceptor'
-import { getLock, isDocumentPrivate, buildSettingsForDb } from '@/lib/sharing-settings'
+import { getLock, buildSettingsForDb } from '@/lib/sharing-settings'
+import { StorageFailure, storageFailure } from '@/lib/connectors/storage-failure'
 import { blockedOf } from '@/lib/files/blocked'
 import { descriptionOf } from '@/lib/files/description'
 import { reconcileNativeDescriptions } from '@/lib/files/native-description'
@@ -281,7 +282,7 @@ export async function POST(request: NextRequest) {
             if (personaSlugToFilter && engagementContext) {
                 // EC/Guest: fully DB-driven listing — no Drive API call for listing.
                 // sharedIds/ancestorIds computed from engagement_documents (Drive authoritative for parents).
-                const { sharedIds, ancestorIds, parentMap } = await getSharedAndAncestorIdsForPersona(
+                const { sharedIds, ancestorIds, parentMap, privateIds } = await getSharedAndAncestorIdsForPersona(
                     engagementContext.projectId, personaSlugToFilter, { skipDescendants: true }
                 )
                 const allowSet = new Set([...sharedIds, ...ancestorIds])
@@ -322,7 +323,8 @@ export async function POST(request: NextRequest) {
                     }),
                 ])
 
-                const visibleDbRows = dbRows.filter((row) => !isDocumentPrivate(row.settings))
+                // By the whole private subtree, so opening a private folder by its ID shows nothing either.
+                const visibleDbRows = dbRows.filter((row) => !privateIds.has(row.externalId))
 
                 // Batch-resolve all relevant userIds → people (email, name, photo), and build email → engagement role map
                 const allRows = [...visibleDbRows, ...intakeRows]
@@ -905,7 +907,6 @@ export async function POST(request: NextRequest) {
             const result = isOneDrive(connector)
                 ? await copyOneDriveFile(connector.id, fileId, parentId, newName)
                 : await googleDriveConnector.copyFile(connector.id, fileId, parentId, newName)
-            if (!result) return NextResponse.json({ error: 'Failed to duplicate file' }, { status: 500 })
 
             // Index the duplicated file
             await safeInngestSend('file.index.requested', {
@@ -958,7 +959,7 @@ export async function POST(request: NextRequest) {
                         if (onOneDrive) {
                             await permissionAdapter?.deleteFile(connector.id, sameName.id, { permanent: false })
                         } else {
-                            await googleDriveConnector.trashFile(connector.id, sameName.id)
+                            await googleDriveConnector.trashFileWithReason(connector.id, sameName.id)
                         }
                         await safeInngestSend('file.delete.requested', {
                             organizationId: engagement.firmId,
@@ -971,7 +972,6 @@ export async function POST(request: NextRequest) {
                 const result = onOneDrive
                     ? await copyOneDriveFile(connector.id, fileId, destinationFolderId, copyName)
                     : await googleDriveConnector.copyFile(connector.id, fileId, destinationFolderId, copyName)
-                if (!result) return NextResponse.json({ error: 'Failed to copy file' }, { status: 500 })
 
                 // Index the copied file
                 await safeInngestSend('file.index.requested', {
@@ -988,7 +988,6 @@ export async function POST(request: NextRequest) {
             const result = onOneDrive
                 ? await moveOneDriveFile(connector.id, fileId, destinationFolderId)
                 : await googleDriveConnector.moveFile(connector.id, fileId, destinationFolderId)
-            if (!result) return NextResponse.json({ error: 'Failed to move file' }, { status: 500 })
 
             // Update index for moved file (parentId may have changed)
             const meta = onOneDrive
@@ -1101,7 +1100,6 @@ export async function POST(request: NextRequest) {
             const result = onOneDriveTree
                 ? await moveOneDriveFile(connector.id, fileId, destFolderId)
                 : await googleDriveConnector.moveFile(connector.id, fileId, destFolderId)
-            if (!result) return NextResponse.json({ error: 'Failed to move' }, { status: 500 })
 
             // Index the moved item
             await safeInngestSend('file.index.requested', {
@@ -1185,10 +1183,12 @@ export async function POST(request: NextRequest) {
                         ? await recursiveCopyOneDrive(connector.id, fileId, destFolderId)
                         : await (async () => {
                             const accessToken = await googleDriveConnector.getAccessToken(connector.id)
-                            if (!accessToken) throw new Error('Could not obtain Drive access token')
+                            if (!accessToken) throw storageFailure('reconnect', 'Google Drive')
                             return googleDriveConnector.recursiveCopy(fileId, destFolderId, accessToken)
-                        })().catch(() => [])
-                    if (!copiedItems.length) return NextResponse.json({ error: 'Failed to copy folder' }, { status: 500 })
+                        })()
+                    if (!copiedItems.length) {
+                        throw storageFailure('other', onOneDriveCross ? 'OneDrive' : 'Google Drive', "none of the folder's files could be copied")
+                    }
 
                     await IndexingInterceptor.indexBatch(request, {
                         organizationId: targetProject.client.firmId,
@@ -1204,7 +1204,6 @@ export async function POST(request: NextRequest) {
                 const result = onOneDriveCross
                     ? await copyOneDriveFile(connector.id, fileId, destFolderId, fileName)
                     : await googleDriveConnector.copyFile(connector.id, fileId, destFolderId, fileName)
-                if (!result) return NextResponse.json({ error: 'Failed to copy file' }, { status: 500 })
 
                 await safeInngestSend('file.index.requested', {
                     organizationId: targetProject.client.firmId,
@@ -1222,7 +1221,6 @@ export async function POST(request: NextRequest) {
             const result = onOneDriveCross
                 ? await moveOneDriveFile(connector.id, fileId, destFolderId)
                 : await googleDriveConnector.moveFile(connector.id, fileId, destFolderId)
-            if (!result) return NextResponse.json({ error: 'Failed to move file' }, { status: 500 })
 
             // Re-stamp engagement on the DB record
             await prisma.engagementDocument.updateMany({
@@ -1287,10 +1285,11 @@ export async function POST(request: NextRequest) {
                 select: { fileName: true },
             }))?.fileName ?? null
 
+            // A refusal throws a StorageFailure saying why, answered at the end of this route, as for
+            // the other file actions here.
             const result = isOneDrive(connector)
                 ? await renameOneDriveFile(connector.id, fileId, newName.trim())
                 : await googleDriveConnector.renameFile(connector.id, fileId, newName.trim())
-            if (!result) return NextResponse.json({ error: 'Failed to rename file' }, { status: 500 })
 
             // DOCUMENT_CHANGED was declared in the audit constants but never emitted, so a rename
             // left no trace at all. Agent-performed renames need to be reviewable, and a trail
@@ -1317,6 +1316,9 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
 
     } catch (error) {
+        if (error instanceof StorageFailure) {
+            return NextResponse.json({ error: error.message, code: error.reason }, { status: error.status })
+        }
         if (error instanceof GoogleDriveAuthError) {
             const status = error.oauthMisconfigured ? 503 : 401
             return NextResponse.json(

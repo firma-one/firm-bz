@@ -1,3 +1,4 @@
+import { storageFailure, storageFailureFromResponse } from '@/lib/connectors/storage-failure'
 import { prisma, basePrisma } from './prisma'
 import { Connector, ConnectorStatus, ConnectorType, WorkspaceRootLocation } from '@prisma/client'
 import { upsertFollowUpReminder } from '@/lib/reminders/reminder-service'
@@ -2779,6 +2780,20 @@ export class GoogleDriveConnector {
     }
   }
 
+  /** trashFile for someone waiting on the answer: throws a StorageFailure saying why, when Drive refuses. */
+  async trashFileWithReason(connectorId: string, fileId: string): Promise<void> {
+    const accessToken = await this.tokenForAction(connectorId)
+    const res = await this.reachDrive(`https://www.googleapis.com/drive/v3/files/${fileId}?supportsAllDrives=true`, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ trashed: true })
+    })
+    if (!res.ok) throw await storageFailureFromResponse(res, 'Google Drive', 'move a file to the trash')
+  }
+
   /** Take a file out of the trash: the reverse of trashFile. */
   async untrashFile(connectorId: string, fileId: string): Promise<boolean> {
     try {
@@ -2834,43 +2849,37 @@ export class GoogleDriveConnector {
   /**
    * Move a file or folder to a new parent (Drive API: addParents + removeParents).
    */
-  async moveFile(connectorId: string, fileId: string, newParentId: string): Promise<{ id: string } | null> {
-    try {
-      const accessToken = await this.getAccessToken(connectorId)
-      if (!accessToken) throw new Error('Could not get access token')
+  /** Throws a StorageFailure saying why, when Drive refuses. */
+  async moveFile(connectorId: string, fileId: string, newParentId: string): Promise<{ id: string }> {
+    const accessToken = await this.tokenForAction(connectorId)
+    const getRes = await this.reachDrive(
+      `https://www.googleapis.com/drive/v3/files/${fileId}?fields=parents&supportsAllDrives=true`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    )
+    if (!getRes.ok) throw await storageFailureFromResponse(getRes, 'Google Drive', 'move a file')
+    const file = await getRes.json()
+    const parents = file.parents as string[] | undefined
+    if (!parents?.length) throw storageFailure('other', 'Google Drive', 'this item has no folder to move it from')
 
-      const getRes = await fetch(
-        `https://www.googleapis.com/drive/v3/files/${fileId}?fields=parents&supportsAllDrives=true`,
-        { headers: { Authorization: `Bearer ${accessToken}` } }
-      )
-      if (!getRes.ok) return null
-      const file = await getRes.json()
-      const parents = file.parents as string[] | undefined
-      if (!parents?.length) return null
-
-      const params = new URLSearchParams({
-        addParents: newParentId,
-        removeParents: parents.join(','),
-        supportsAllDrives: 'true'
-      })
-      const updateRes = await fetch(
-        `https://www.googleapis.com/drive/v3/files/${fileId}?${params}`,
-        {
-          method: 'PATCH',
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({})
-        }
-      )
-      if (!updateRes.ok) return null
-      const updated = await updateRes.json()
-      return { id: updated.id }
-    } catch (error) {
-      logger.error('Failed to move file', error as Error)
-      return null
-    }
+    const params = new URLSearchParams({
+      addParents: newParentId,
+      removeParents: parents.join(','),
+      supportsAllDrives: 'true'
+    })
+    const updateRes = await this.reachDrive(
+      `https://www.googleapis.com/drive/v3/files/${fileId}?${params}`,
+      {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({})
+      }
+    )
+    if (!updateRes.ok) throw await storageFailureFromResponse(updateRes, 'Google Drive', 'move a file')
+    const updated = await updateRes.json()
+    return { id: updated.id }
   }
 
   /**
@@ -3007,30 +3016,47 @@ export class GoogleDriveConnector {
   /**
    * Rename a file or folder in Google Drive (Drive API PATCH with name).
    */
-  async renameFile(connectorId: string, fileId: string, newName: string): Promise<{ id: string; name: string } | null> {
+  /** A file action's token. Not getting one means the connection needs renewing. */
+  private async tokenForAction(connectorId: string): Promise<string> {
+    let accessToken: string | null
     try {
-      const accessToken = await this.getAccessToken(connectorId)
-      if (!accessToken) throw new Error('Could not get access token')
-      const trimmed = newName.trim()
-      if (!trimmed) return null
-      const res = await fetch(
-        `https://www.googleapis.com/drive/v3/files/${fileId}?supportsAllDrives=true`,
-        {
-          method: 'PATCH',
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ name: trimmed })
-        }
-      )
-      if (!res.ok) return null
-      const updated = await res.json()
-      return { id: updated.id, name: updated.name ?? trimmed }
+      accessToken = await this.getAccessToken(connectorId)
     } catch (error) {
-      logger.error('Failed to rename file', error as Error)
-      return null
+      logger.error('Failed to get a Google Drive connection', error as Error)
+      throw storageFailure('reconnect', 'Google Drive')
     }
+    if (!accessToken) throw storageFailure('reconnect', 'Google Drive')
+    return accessToken
+  }
+
+  private async reachDrive(url: string, init: RequestInit): Promise<Response> {
+    try {
+      return await fetch(url, init)
+    } catch (error) {
+      logger.error('Failed to reach Google Drive', error as Error)
+      throw storageFailure('unreachable', 'Google Drive')
+    }
+  }
+
+  /** Throws a StorageFailure saying why, when Drive refuses. */
+  async renameFile(connectorId: string, fileId: string, newName: string): Promise<{ id: string; name: string }> {
+    const trimmed = newName.trim()
+    if (!trimmed) throw storageFailure('invalid_name', 'Google Drive')
+    const accessToken = await this.tokenForAction(connectorId)
+    const res = await this.reachDrive(
+      `https://www.googleapis.com/drive/v3/files/${fileId}?supportsAllDrives=true`,
+      {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ name: trimmed })
+      }
+    )
+    if (!res.ok) throw await storageFailureFromResponse(res, 'Google Drive', 'rename a file')
+    const updated = await res.json()
+    return { id: updated.id, name: updated.name ?? trimmed }
   }
 
   /**
@@ -3072,16 +3098,25 @@ export class GoogleDriveConnector {
   /**
    * Copy a file or folder to a new parent. Returns the new file id or null.
    */
-  async copyFile(connectorId: string, fileId: string, parentId: string, name?: string): Promise<{ id: string } | null> {
-    try {
-      const accessToken = await this.getAccessToken(connectorId)
-      if (!accessToken) throw new Error('Could not get access token')
-
-      return this.copyFileWithToken(accessToken, fileId, parentId, name)
-    } catch (error) {
-      logger.error('Failed to copy file', error as Error)
-      return null
-    }
+  /** Throws a StorageFailure saying why, when Drive refuses. */
+  async copyFile(connectorId: string, fileId: string, parentId: string, name?: string): Promise<{ id: string }> {
+    const accessToken = await this.tokenForAction(connectorId)
+    const body: { parents: string[]; name?: string } = { parents: [parentId] }
+    if (name) body.name = name
+    const res = await this.reachDrive(
+      `https://www.googleapis.com/drive/v3/files/${fileId}/copy?supportsAllDrives=true`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body)
+      }
+    )
+    if (!res.ok) throw await storageFailureFromResponse(res, 'Google Drive', 'copy a file')
+    const created = await res.json()
+    return { id: created.id }
   }
 
   /**
@@ -3261,7 +3296,8 @@ export class GoogleDriveConnector {
         headers: { 'Authorization': `Bearer ${accessToken}` }
       })
 
-      return res.ok || res.status === 204
+      // Already gone counts as revoked, as the OneDrive adapter has it.
+      return res.ok || res.status === 404
     } catch (error) {
       logger.error('Failed to revoke permission', error as Error)
       return false
@@ -3450,6 +3486,50 @@ export class GoogleDriveConnector {
       return patchRes.ok
     } catch (error) {
       logger.error('Failed to downgrade folder user permission', error as Error, 'GoogleDrive', { folderId, email })
+      return false
+    }
+  }
+
+  /**
+   * Gives a user write on a folder again, the reverse of downgradeFolderUserPermissionToReader, for a
+   * reopened engagement. Only a reader is changed: an owner or organizer keeps what they have. With no
+   * permission there at all, grants one, without Drive's email.
+   */
+  async restoreFolderUserPermissionToWriter(
+    connectorId: string,
+    folderId: string,
+    email: string
+  ): Promise<boolean> {
+    try {
+      const accessToken = await this.getAccessToken(connectorId)
+      if (!accessToken) throw new Error('Could not get access token')
+
+      const listRes = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${folderId}/permissions?supportsAllDrives=true&fields=permissions(id,emailAddress,role)`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      )
+      if (!listRes.ok) return false
+      const listData = await listRes.json()
+      const permission = (listData.permissions || []).find(
+        (p: { emailAddress?: string }) => p.emailAddress?.toLowerCase() === email.toLowerCase()
+      ) as { id?: string; role?: string } | undefined
+      if (!permission?.id) return !!(await this.grantFolderPermission(connectorId, folderId, email, 'writer', { notify: false }))
+      if (permission.role !== 'reader') return true
+
+      const patchRes = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${folderId}/permissions/${permission.id}?supportsAllDrives=true`,
+        {
+          method: 'PATCH',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ role: 'writer' }),
+        }
+      )
+      return patchRes.ok
+    } catch (error) {
+      logger.error('Failed to restore folder user permission', error as Error, 'GoogleDrive', { folderId, email })
       return false
     }
   }

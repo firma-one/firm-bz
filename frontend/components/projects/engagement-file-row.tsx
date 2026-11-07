@@ -5,8 +5,6 @@ import {
     Folder,
     Share2,
     Lock,
-    FolderLock,
-    FolderUp,
     Link2,
     ScanEye,
     MoreVertical,
@@ -17,6 +15,8 @@ import {
     Upload,
     FolderInput,
     Info,
+    Edit3,
+    ExternalLink,
 } from 'lucide-react'
 import { DocumentIcon } from '@/components/ui/document-icon'
 import { SharedFolderIcon } from '@/components/ui/folder-shared-icon'
@@ -29,6 +29,7 @@ import type { EngagementRoleSlug } from '@/lib/deliverable-stage-roles'
 import { FileAssigneeCell, FileDueDateCell, FileStatusCell } from '@/components/projects/file-property-cells'
 import { fileStage } from '@/lib/files/file-stage'
 import { BlockedTag } from '@/components/files/blocked-tag'
+import { PrivateMark } from '@/components/files/private-mark'
 import { MissingDueWarning } from '@/components/files/missing-due-warning'
 import { needsDueDate } from '@/lib/ui/due-date'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -51,6 +52,10 @@ import {
     FILE_SIZE_COL_CLASS,
     FILE_TABLE_COL_LINE_CLASS,
 } from '@/components/projects/engagement-file-table-grid'
+
+/** A quick icon on the row's strip. Off with a reason (aria-disabled, so its tooltip still shows) it reads faded and holds its slot. */
+const QUICK_ICON_CLASS =
+    'h-7 w-7 rounded-md inline-flex items-center justify-center text-fg-muted hover:text-fg-muted hover:bg-surface-hover disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-fg-muted aria-disabled:cursor-not-allowed aria-disabled:opacity-40 aria-disabled:hover:bg-transparent'
 
 export interface EngagementFileRowProps {
     file: DriveFile
@@ -281,6 +286,13 @@ export function EngagementFileRow({
         })
     }
 
+    // Rename and Open on the strip follow the ⋮ menu's rules, and say why when they're off.
+    const renameOffReason = locked
+        ? "Finalized documents can't be renamed"
+        : (isFolderApproved || isInsideApprovedDeliverable) ? 'Approved deliverables cannot be reorganized' : null
+    const openOffReason = isInsideApprovedDeliverable ? 'Use the preview panel to view this document' : null
+    const openLabel = file.documentType === 'LINK' ? 'Open link' : isOneDriveClient ? 'Open in OneDrive' : 'Open in Google Drive'
+
     async function handleRemoveBookmark(e: React.MouseEvent) {
         e.stopPropagation()
         try {
@@ -445,22 +457,7 @@ export function EngagementFileRow({
                 {file.blocked && !isFolder && <BlockedTag blocked={file.blocked} />}
 
                 {/* Badges — hidden when hideBadges=true (e.g. medium pane) to prevent icon overflow */}
-                <div className={cn("flex shrink-0 items-center justify-end gap-1", hideBadges && "hidden")} onClick={(e) => e.stopPropagation()}>
-                        {bookmarkId && (
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <button
-                                        type="button"
-                                        className="h-7 w-7 inline-flex items-center justify-center rounded-md text-primary hover:bg-red-50 hover:text-red-500 transition-colors"
-                                        aria-label="Remove bookmark"
-                                        onClick={handleRemoveBookmark}
-                                    >
-                                        <Bookmark className="h-4 w-4 fill-current" />
-                                    </button>
-                                </TooltipTrigger>
-                                <TooltipContent side="top" className="text-xs">Bookmarked — click to remove</TooltipContent>
-                            </Tooltip>
-                        )}
+                <div className={cn("flex shrink-0 items-center justify-end gap-1", bookmarkId && "-mr-2.5", hideBadges && "hidden")} onClick={(e) => e.stopPropagation()}>
                         {/* Only a deliverable itself (until the Status column says it) and a pending upload carry this
                             badge; rows inside a deliverable already show it in their icon and the breadcrumb. A
                             deliverable is a folder: a file can be in the shared set too (its settings carry
@@ -516,26 +513,24 @@ export function EngagementFileRow({
                                 </TooltipContent>
                             </Tooltip>
                         ) : null}
-                        {file.isPrivate && !isFolder ? (
-                            <span className="inline-flex items-center gap-1 shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium bg-orange-50 text-orange-700 border border-orange-200">
-                                <FolderLock className="h-3 w-3" />
-                                Private
-                                {(canManage && file.lock?.type !== 'finalize') && (
-                                    <Tooltip>
-                                        <TooltipTrigger asChild>
-                                            <button
-                                                type="button"
-                                                onClick={(e) => { e.stopPropagation(); onPrivacy(file, false) }}
-                                                className="ml-0.5 rounded-full text-orange-500 hover:text-orange-700 hover:bg-orange-100 p-0.5"
-                                            >
-                                                <FolderUp className="h-3 w-3" />
-                                            </button>
-                                        </TooltipTrigger>
-                                        <TooltipContent side="top" className="text-xs">Make Public</TooltipContent>
-                                    </Tooltip>
-                                )}
-                            </span>
-                        ) : null}
+                        {/* Whoever the ⋮ menu lets make it public can do so from the mark. */}
+                        {file.isPrivate && <PrivateMark onMakePublic={canOrganizeTree ? () => onPrivacy(file, false) : undefined} />}
+                        {/* Last, and pulled up against the strip: Bookmark leads the row's quick actions. */}
+                        {bookmarkId && (
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <button
+                                        type="button"
+                                        className="h-7 w-7 inline-flex items-center justify-center rounded-md text-primary hover:bg-red-50 hover:text-red-500 transition-colors"
+                                        aria-label="Remove bookmark"
+                                        onClick={handleRemoveBookmark}
+                                    >
+                                        <Bookmark className="h-4 w-4 fill-current" />
+                                    </button>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="text-xs">Bookmarked · Click to remove</TooltipContent>
+                            </Tooltip>
+                        )}
                 </div>
 
                 {/* Quick icons: on hover or focus (always on touch screens), and while the row is in use. At rest they
@@ -544,8 +539,8 @@ export function EngagementFileRow({
                     "flex shrink-0 items-center justify-end transition-opacity duration-ui-fast",
                     !toolsPinned && "max-w-0 overflow-hidden opacity-0 focus-within:max-w-none focus-within:opacity-100 group-hover:max-w-none group-hover:opacity-100 [@media(hover:none)]:max-w-none [@media(hover:none)]:opacity-100"
                 )}>
-                    {/* Four icons, Details first: packed closer, and Copy link (also in the ⋮ menu) gives way
-                        when the table is at its narrowest. */}
+                    {/* In order: Details, Rename, Preview, Open, Copy link, packed closer. Copy link (also in the
+                        ⋮ menu) gives way when the table is at its narrowest. */}
                     <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
 
                         {!isFolder && file.documentType !== 'LINK' && (
@@ -568,6 +563,24 @@ export function EngagementFileRow({
                                     </button>
                                 </TooltipTrigger>
                                 <TooltipContent side="top" className="text-xs">Details</TooltipContent>
+                            </Tooltip>
+                        )}
+
+                        {canEdit && (
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <button
+                                        type="button"
+                                        className={QUICK_ICON_CLASS}
+                                        aria-label="Rename"
+                                        aria-disabled={renameOffReason ? true : undefined}
+                                        disabled={isIntakeRow}
+                                        onClick={() => { if (!renameOffReason) onOpenRename(file) }}
+                                    >
+                                        <Edit3 className="h-4 w-4" />
+                                    </button>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="text-xs max-w-48">{renameOffReason ?? 'Rename'}</TooltipContent>
                             </Tooltip>
                         )}
 
@@ -594,6 +607,30 @@ export function EngagementFileRow({
                             </Tooltip>
                         )}
 
+                        {!isFolder && (
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <button
+                                        type="button"
+                                        className={QUICK_ICON_CLASS}
+                                        aria-label="Open"
+                                        aria-disabled={openOffReason ? true : undefined}
+                                        disabled={isIntakeRow}
+                                        onClick={() => {
+                                            if (openOffReason) return
+                                            if (file.documentType === 'LINK' && file.externalUrl) {
+                                                window.open(file.externalUrl, '_blank', 'noopener,noreferrer')
+                                                return
+                                            }
+                                            onOpenDocument(file)
+                                        }}
+                                    >
+                                        <ExternalLink className="h-4 w-4" />
+                                    </button>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="text-xs max-w-48">{openOffReason ?? openLabel}</TooltipContent>
+                            </Tooltip>
+                        )}
 
                         <Tooltip>
                             <TooltipTrigger asChild>
@@ -673,7 +710,7 @@ export function EngagementFileRow({
                             onMoveDocument={generalFolderId && canEdit && !locked && !isIntakeRow ? (doc) => onOpenCopyMove(doc as DriveFile, 'move') : undefined}
                             onCrossEngagementCopy={isProjectLead && canMutateFile ? (doc) => onOpenCrossEngagement(doc as DriveFile) : undefined}
                             onDeleteDocument={canMutateFile ? (doc) => onTrash(doc as DriveFile) : undefined}
-                            onMakePrivate={canManage && !locked && !isIntakeRow && !file.isPrivate ? () => onPrivacy(file, true) : undefined}
+                            onMakePrivate={canManage && !locked && !isIntakeRow && !file.isPrivate && isInsideDeliverable ? () => onPrivacy(file, true) : undefined}
                             onMakePublic={canManage && !locked && !isIntakeRow && file.isPrivate ? () => onPrivacy(file, false) : undefined}
                             onOpenChange={(open) => onActionMenuOpenChange(open)}
                             onOpenDocument={(doc) => {

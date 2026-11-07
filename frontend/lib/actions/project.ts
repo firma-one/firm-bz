@@ -493,6 +493,12 @@ export async function updateEngagement(
         })
         .fireAndForget()
 
+    // The firm's Drive access follows the status: read-only while Completed (setFirmFolderAccess).
+    if (data.status && data.status !== project.status) {
+        if (data.status === 'COMPLETED') await safeInngestSend('engagement.completed', { projectId })
+        else if (project.status === 'COMPLETED') await safeInngestSend('engagement.reopened', { projectId })
+    }
+
     // The engagement's name and link, for the due-date notifications and the caller's date reminders.
     const datesChanged = parsedDue !== undefined || parsedKickoff !== undefined || parsedFollowUp !== undefined
     const engDetails = datesChanged
@@ -742,6 +748,7 @@ export async function reopenEngagement(projectId: string, firmSlug: string, clie
         where: { id: projectId },
         data: { status: 'ACTIVE' }
     })
+    await safeInngestSend('engagement.reopened', { projectId })
 
     const supabase = await createSupabaseClient()
     const { data: { user } } = await supabase.auth.getUser()

@@ -325,6 +325,7 @@ export function EngagementWorkspace({
                             <ErrorBoundary context="ProjectShares">
                                 <EngagementSharesTab
                                     projectId={projectId}
+                                    clientConnectorType={clientConnectorType}
                                     canManage={canManage}
                                     restrictToSharedOnly={restrictToSharedOnly}
                                     isExternalViewer={isExternalViewer}
@@ -345,6 +346,7 @@ export function EngagementWorkspace({
                             <ErrorBoundary context="ProjectBoard">
                                 <EngagementSharesTab
                                     projectId={projectId}
+                                    clientConnectorType={clientConnectorType}
                                     canManage={canManage}
                                     restrictToSharedOnly={restrictToSharedOnly}
                                     isExternalViewer={isExternalViewer}

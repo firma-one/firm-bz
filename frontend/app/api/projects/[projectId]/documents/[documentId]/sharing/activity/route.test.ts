@@ -11,6 +11,8 @@ const { st, applied, moveOpts, approvals } = vi.hoisted(() => ({
         role: 'eng_admin' as string,
         rows: {} as Record<string, any>,
         inDeliverable: true,
+        /** What's private to the firm, by external ID. */
+        privateIds: new Set<string>(),
         /** The engagement's client members, by role. */
         members: { eng_ext_collaborator: 1, eng_viewer: 2 } as Record<string, number>,
     },
@@ -68,6 +70,8 @@ vi.mock('@/lib/prisma', () => ({
     },
 }))
 
+vi.mock('@/lib/engagement-sharing-ids', () => ({ privateExternalIds: async () => st.privateIds }))
+
 import { PATCH } from './route'
 
 const row = (id: string, settings: object, isFolder = false) => ({
@@ -83,12 +87,41 @@ const patch = (documentId: string, body: object) =>
 beforeEach(() => {
     st.role = 'eng_admin'
     st.inDeliverable = true
+    st.privateIds = new Set()
     st.members = { eng_ext_collaborator: 1, eng_viewer: 2 }
     applied.length = 0
     moveOpts.length = 0
     approvals.archived.length = 0
     approvals.recorded.length = 0
     approvals.fail = false
+})
+
+describe('a private document', () => {
+    it('moves for the firm without opening it to clients', async () => {
+        st.privateIds = new Set(['ext-d2'])
+        setRows(deliverable('in_progress', { externalCollaborator: { enabled: true } }), doc('d1', 'in_progress'), doc('d2', 'to_do', { lock: { type: 'private' } }))
+        const res = await patch('d2', { status: 'in_progress' })
+        expect(res.status).toBe(200)
+        expect(moveOpts[0].internalOnly).toBe(true)
+    })
+
+    it("can't be moved by a client", async () => {
+        st.role = 'eng_ext_collaborator'
+        st.privateIds = new Set(['ext-d1'])
+        setRows(deliverable('in_progress', { externalCollaborator: { enabled: true } }), doc('d1', 'in_progress', { lock: { type: 'private' } }))
+        const res = await patch('d1', { status: 'in_review' })
+        expect(res.status).toBe(403)
+        expect(applied).toEqual([])
+    })
+
+    it("is left out of a client's action on the whole deliverable", async () => {
+        st.role = 'eng_ext_collaborator'
+        st.privateIds = new Set(['ext-d2'])
+        setRows(deliverable('in_progress', { externalCollaborator: { enabled: true } }), doc('d1', 'in_progress'), doc('d2', 'in_progress', { lock: { type: 'private' } }))
+        const res = await patch('D', { status: 'in_review', confirm: true })
+        expect(res.status).toBe(200)
+        expect(applied.filter((a) => !a.derived).map((a) => a.id)).toEqual(['d1'])
+    })
 })
 
 describe('moving a document', () => {

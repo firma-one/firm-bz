@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { createClient as createSupabaseAdmin } from '@supabase/supabase-js'
 import { prisma } from '@/lib/prisma'
-import { documentStage, isOnBoard, parseSettingsFromDb, flattenForLegacyUI } from '@/lib/sharing-settings'
+import { documentStage, isOnBoard, parseSettingsFromDb, flattenForLegacyUI, privateSubtreeIds } from '@/lib/sharing-settings'
 import { blockedOf, type BlockedReason } from '@/lib/files/blocked'
 import { resolveProjectContext } from '@/lib/resolve-project-context'
 import { canViewProject, getProjectPersona } from '@/lib/permission-helpers'
@@ -188,7 +188,8 @@ parentId: share.parentId ?? (indexMetadata.parents?.[0] ?? indexMetadata.parentI
 
     // Subtask counts per deliverable — one recursive CTE per folder (mirrors subtasks route logic).
     // Progress counts the documents on the Board (To do and beyond), as the deliverable's stage does
-    // (.claude/plans/deliverable-stages-blocked.md). Blocked documents are listed for the firm only.
+    // (.claude/plans/deliverable-stages-blocked.md). Blocked documents are listed for the firm only,
+    // and a client's progress leaves out what's private to the firm.
     const role = await getProjectPersona(ctx.firmId, ctx.clientId, ctx.projectId)
     const isFirm = role === 'eng_admin' || role === 'eng_member'
     const deliverableFolders = sharesWithDetails
@@ -199,25 +200,27 @@ parentId: share.parentId ?? (indexMetadata.parents?.[0] ?? indexMetadata.parentI
       try {
         const rows = await (prisma as any).$queryRawUnsafe(
           `WITH RECURSIVE descendants AS (
-             SELECT id, "externalId", "isFolder", "fileName", "docId", settings
+             SELECT id, "externalId", "parentId", "isFolder", "fileName", "docId", settings
              FROM platform.engagement_documents
              WHERE "parentId" = $1 AND "engagementId" = $2::uuid
              UNION ALL
-             SELECT ed.id, ed."externalId", ed."isFolder", ed."fileName", ed."docId", ed.settings
+             SELECT ed.id, ed."externalId", ed."parentId", ed."isFolder", ed."fileName", ed."docId", ed.settings
              FROM platform.engagement_documents ed
              INNER JOIN descendants d ON ed."parentId" = d."externalId"
              WHERE ed."engagementId" = $2::uuid
            )
-           SELECT id, "fileName", "docId", settings FROM descendants WHERE "isFolder" = false`,
+           SELECT id, "externalId", "parentId", "isFolder", "fileName", "docId", settings FROM descendants`,
           externalId,
           projectId
-        ) as { id: string; fileName: string; docId: string | null; settings: unknown }[]
-        const onBoard = rows.filter((r) => isOnBoard(documentStage(r.settings)))
+        ) as { id: string; externalId: string; parentId: string | null; isFolder: boolean; fileName: string; docId: string | null; settings: unknown }[]
+        const privateIds = isFirm ? new Set<string>() : privateSubtreeIds(rows)
+        const documents = rows.filter((r) => !r.isFolder && !privateIds.has(r.externalId))
+        const onBoard = documents.filter((r) => isOnBoard(documentStage(r.settings)))
         subtaskCounts[shareId] = {
           total: onBoard.length,
           approved: onBoard.filter((r) => documentStage(r.settings) === 'approved').length,
           blocked: isFirm
-            ? rows.flatMap((r) => {
+            ? documents.flatMap((r) => {
                 const flag = blockedOf(r.settings)
                 return flag ? [{ documentId: r.id, docId: r.docId ?? null, fileName: r.fileName, reason: flag.reason }] : []
               })

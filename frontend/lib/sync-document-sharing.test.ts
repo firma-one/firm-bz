@@ -1,22 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { DocumentSharingPermissionStatus } from '@prisma/client'
+import { DocumentSharingPermissionStatus, EngagementRole } from '@prisma/client'
 import { syncDocumentSharingUsers } from './sync-document-sharing'
+
+// syncDocumentSharingUsers keeps the sharing rows, and only those: Drive grants and revokes belong to
+// the secure-open flow (regrant) and the revoke jobs, so a client gets Drive access file by file.
 
 // ── Mocks ──────────────────────────────────────────────────────────────────
 
-const mockGrantFolderPermission = vi.fn().mockResolvedValue('perm-new')
-const mockRevokePermission = vi.fn().mockResolvedValue(true)
-
+const mockGetPermissionAdapter = vi.fn()
 vi.mock('@/lib/connectors/registry', () => ({
-  getPermissionAdapter: vi.fn().mockResolvedValue({
-    grantFolderPermission: (...args: unknown[]) => mockGrantFolderPermission(...args),
-    revokePermission: (...args: unknown[]) => mockRevokePermission(...args),
-  }),
+  getPermissionAdapter: (...args: unknown[]) => mockGetPermissionAdapter(...args),
 }))
 
 const mockFindUnique = vi.fn()
 const mockFindMany = vi.fn()
-const mockQueryRawUnsafe = vi.fn()
+const mockQueryRaw = vi.fn()
 const mockUpdateMany = vi.fn()
 const mockUpdate = vi.fn()
 const mockCreate = vi.fn()
@@ -24,14 +22,13 @@ const mockCreate = vi.fn()
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     engagementDocument: { findUnique: (...a: unknown[]) => mockFindUnique(...a) },
-    firm: { findUnique: (...a: unknown[]) => mockFindUnique(...a) },
     engagementMember: { findMany: (...a: unknown[]) => mockFindMany(...a) },
     engagementDocumentSharingUser: {
       updateMany: (...a: unknown[]) => mockUpdateMany(...a),
       update: (...a: unknown[]) => mockUpdate(...a),
       create: (...a: unknown[]) => mockCreate(...a),
     },
-    $queryRaw: (...a: unknown[]) => mockQueryRawUnsafe(...a),
+    $queryRaw: (...a: unknown[]) => mockQueryRaw(...a),
   },
 }))
 
@@ -55,6 +52,14 @@ function makeDoc(overrides: Record<string, unknown> = {}) {
   }
 }
 
+const shareRow = (id: string, userId: string, status: DocumentSharingPermissionStatus, role: EngagementRole = EngagementRole.eng_ext_collaborator) => ({
+  id, userId, connectorPermissionId: null, sharingPermissionStatus: status, member: { role },
+})
+
+const CLIENT_ROLES = [EngagementRole.eng_ext_collaborator, EngagementRole.eng_viewer]
+const EC_ON = { share: { externalCollaborator: { enabled: true } } }
+const EC_OFF = { share: { externalCollaborator: { enabled: false } } }
+
 // ── Tests ──────────────────────────────────────────────────────────────────
 
 describe('syncDocumentSharingUsers', () => {
@@ -64,150 +69,128 @@ describe('syncDocumentSharingUsers', () => {
     mockUpdate.mockResolvedValue({})
     mockCreate.mockResolvedValue({})
     mockFindMany.mockResolvedValue([])
-    mockQueryRawUnsafe.mockResolvedValue([])
+    mockQueryRaw.mockResolvedValue([])
   })
 
   it('returns early without error when document is not found', async () => {
     mockFindUnique.mockResolvedValue(null)
     await expect(syncDocumentSharingUsers('doc-missing')).resolves.toBeUndefined()
-  })
-
-  it('returns early without error when no connectorId can be resolved', async () => {
-    mockFindUnique
-      .mockResolvedValueOnce(makeDoc({ connectorId: null, firmId: 'firm-1' }))
-      .mockResolvedValueOnce({ connectorId: null }) // firm lookup
-    await syncDocumentSharingUsers('doc-1')
-    expect(mockGrantFolderPermission).not.toHaveBeenCalled()
+    expect(mockUpdateMany).not.toHaveBeenCalled()
   })
 
   // ── EC sharing disabled ──────────────────────────────────────────────────
 
   describe('when externalCollaborator sharing is disabled', () => {
-    it('revokes outstanding permissions and marks them REVOKED in DB', async () => {
-      const sharingUsers = [
-        { id: 'su-1', userId: 'u-1', connectorPermissionId: 'perm-old', sharingPermissionStatus: DocumentSharingPermissionStatus.GRANTED },
-      ]
-      mockFindUnique.mockResolvedValue(makeDoc({ settings: { share: { externalCollaborator: { enabled: false } } }, sharingUsers }))
+    it("marks clients' GRANTED rows REVOKED", async () => {
+      mockFindUnique.mockResolvedValue(makeDoc({ settings: EC_OFF, sharingUsers: [shareRow('su-1', 'u-1', DocumentSharingPermissionStatus.GRANTED)] }))
 
       await syncDocumentSharingUsers('doc-1')
 
-      expect(mockRevokePermission).toHaveBeenCalledWith('conn-1', 'drive-file-1', 'perm-old')
-      expect(mockUpdateMany).toHaveBeenCalledWith(expect.objectContaining({
-        where: { projectDocumentId: 'doc-1' },
-        data: expect.objectContaining({
-          sharingPermissionStatus: DocumentSharingPermissionStatus.REVOKED,
-          connectorPermissionId: null,
-        }),
-      }))
+      expect(mockUpdateMany).toHaveBeenCalledWith({
+        where: {
+          projectDocumentId: 'doc-1',
+          sharingPermissionStatus: DocumentSharingPermissionStatus.GRANTED,
+          member: { role: { in: CLIENT_ROLES } },
+        },
+        data: { sharingPermissionStatus: DocumentSharingPermissionStatus.REVOKED, connectorPermissionId: null },
+      })
     })
 
-    it('skips revoke for sharing users with no connectorPermissionId', async () => {
-      const sharingUsers = [
-        { id: 'su-1', userId: 'u-1', connectorPermissionId: null, sharingPermissionStatus: DocumentSharingPermissionStatus.GRANTED },
-      ]
-      mockFindUnique.mockResolvedValue(makeDoc({ settings: { share: { externalCollaborator: { enabled: false } } }, sharingUsers }))
+    it("leaves the firm's own rows alone", async () => {
+      mockFindUnique.mockResolvedValue(makeDoc({ settings: EC_OFF, sharingUsers: [shareRow('su-1', 'u-1', DocumentSharingPermissionStatus.GRANTED, EngagementRole.eng_admin)] }))
 
       await syncDocumentSharingUsers('doc-1')
 
-      expect(mockRevokePermission).not.toHaveBeenCalled()
-      expect(mockUpdateMany).toHaveBeenCalled() // DB still cleared
+      expect(mockUpdateMany).not.toHaveBeenCalled()
     })
 
-    it('uses registry adapter, not googleDriveConnector directly', async () => {
-      const { getPermissionAdapter } = await import('@/lib/connectors/registry')
-      const sharingUsers = [
-        { id: 'su-1', userId: 'u-1', connectorPermissionId: 'perm-old', sharingPermissionStatus: DocumentSharingPermissionStatus.GRANTED },
-      ]
-      mockFindUnique.mockResolvedValue(makeDoc({ settings: { share: { externalCollaborator: { enabled: false } } }, sharingUsers }))
+    it('never touches Drive: revoking there is the revoke job\'s', async () => {
+      mockFindUnique.mockResolvedValue(makeDoc({ settings: EC_OFF, sharingUsers: [shareRow('su-1', 'u-1', DocumentSharingPermissionStatus.GRANTED)] }))
 
       await syncDocumentSharingUsers('doc-1')
 
-      expect(getPermissionAdapter).toHaveBeenCalledWith('conn-1')
+      expect(mockGetPermissionAdapter).not.toHaveBeenCalled()
     })
   })
 
   // ── EC sharing enabled ───────────────────────────────────────────────────
 
   describe('when externalCollaborator sharing is enabled', () => {
+    const member = (userId: string) => ({ userId, role: EngagementRole.eng_ext_collaborator })
+
     beforeEach(() => {
-      mockFindUnique.mockResolvedValue(makeDoc({
-        settings: { share: { externalCollaborator: { enabled: true } } },
-        sharingUsers: [],
-      }))
+      mockFindUnique.mockResolvedValue(makeDoc({ settings: EC_ON }))
     })
 
-    it('grants permission to EC members and records connectorPermissionId', async () => {
-      mockFindMany.mockResolvedValue([{ userId: 'u-ec-1', role: 'eng_ext_collaborator' }])
-      mockQueryRawUnsafe.mockResolvedValue([{ id: 'u-ec-1', email: 'ec@external.com' }])
+    it('writes a GRANTED row for each EC member, with no Drive call', async () => {
+      mockFindMany.mockResolvedValue([member('u-ec-1')])
+      mockQueryRaw.mockResolvedValue([{ id: 'u-ec-1', email: 'ec@external.com' }])
 
-      await syncDocumentSharingUsers('doc-1')
+      await syncDocumentSharingUsers('doc-1', 'actor')
 
-      expect(mockGrantFolderPermission).toHaveBeenCalledWith('conn-1', 'drive-file-1', 'ec@external.com', 'writer')
-      expect(mockCreate).toHaveBeenCalledWith(expect.objectContaining({
-        data: expect.objectContaining({
-          connectorPermissionId: 'perm-new',
+      expect(mockCreate).toHaveBeenCalledWith({
+        data: {
+          projectDocumentId: 'doc-1',
+          engagementId: 'eng-1',
+          userId: 'u-ec-1',
           sharingPermissionStatus: DocumentSharingPermissionStatus.GRANTED,
-          email: 'ec@external.com',
-        }),
-      }))
+          createdBy: 'actor',
+          updatedBy: 'actor',
+        },
+      })
+      expect(mockGetPermissionAdapter).not.toHaveBeenCalled()
     })
 
-    it('skips users already with GRANTED status', async () => {
-      const existingShare = {
-        id: 'su-1', userId: 'u-ec-1',
-        sharingPermissionStatus: DocumentSharingPermissionStatus.GRANTED,
-        connectorPermissionId: 'perm-existing',
-      }
-      mockFindUnique.mockResolvedValue(makeDoc({
-        settings: { share: { externalCollaborator: { enabled: true } } },
-        sharingUsers: [existingShare],
-      }))
-      mockFindMany.mockResolvedValue([{ userId: 'u-ec-1', role: 'eng_ext_collaborator' }])
-      mockQueryRawUnsafe.mockResolvedValue([{ id: 'u-ec-1', email: 'ec@external.com' }])
+    it.each([
+      DocumentSharingPermissionStatus.GRANTED,
+      DocumentSharingPermissionStatus.INHERITED,
+      DocumentSharingPermissionStatus.PENDING,
+    ])('leaves a row that is already %s as it is', async (status) => {
+      mockFindUnique.mockResolvedValue(makeDoc({ settings: EC_ON, sharingUsers: [shareRow('su-1', 'u-ec-1', status)] }))
+      mockFindMany.mockResolvedValue([member('u-ec-1')])
+      mockQueryRaw.mockResolvedValue([{ id: 'u-ec-1', email: 'ec@external.com' }])
 
       await syncDocumentSharingUsers('doc-1')
 
-      expect(mockGrantFolderPermission).not.toHaveBeenCalled()
+      expect(mockCreate).not.toHaveBeenCalled()
+      expect(mockUpdate).not.toHaveBeenCalled()
     })
 
-    it('revokes permission for users no longer in the EC member list', async () => {
-      const staleShare = {
-        id: 'su-stale', userId: 'u-removed',
-        sharingPermissionStatus: DocumentSharingPermissionStatus.GRANTED,
-        connectorPermissionId: 'perm-stale',
-      }
-      const activeShare = {
-        id: 'su-active', userId: 'u-active',
-        sharingPermissionStatus: DocumentSharingPermissionStatus.GRANTED,
-        connectorPermissionId: 'perm-active',
-      }
-      mockFindUnique.mockResolvedValue(makeDoc({
-        settings: { share: { externalCollaborator: { enabled: true } } },
-        // staleShare's userId is NOT in the current EC members list below
-        sharingUsers: [staleShare, activeShare],
-      }))
-      // Only u-active remains as EC member — u-removed has been removed
-      mockFindMany.mockResolvedValue([{ userId: 'u-active', role: 'eng_ext_collaborator' }])
-      mockQueryRawUnsafe.mockResolvedValue([{ id: 'u-active', email: 'active@firm.com' }])
+    it('grants a REVOKED row again', async () => {
+      mockFindUnique.mockResolvedValue(makeDoc({ settings: EC_ON, sharingUsers: [shareRow('su-1', 'u-ec-1', DocumentSharingPermissionStatus.REVOKED)] }))
+      mockFindMany.mockResolvedValue([member('u-ec-1')])
+      mockQueryRaw.mockResolvedValue([{ id: 'u-ec-1', email: 'ec@external.com' }])
 
       await syncDocumentSharingUsers('doc-1')
 
-      expect(mockRevokePermission).toHaveBeenCalledWith('conn-1', 'drive-file-1', 'perm-stale')
-      expect(mockUpdate).toHaveBeenCalledWith(expect.objectContaining({
+      expect(mockUpdate).toHaveBeenCalledWith({
+        where: { id: 'su-1' },
+        data: { sharingPermissionStatus: DocumentSharingPermissionStatus.GRANTED, connectorPermissionId: null },
+      })
+    })
+
+    it('revokes the row of a client no longer in the EC member list', async () => {
+      mockFindUnique.mockResolvedValue(makeDoc({
+        settings: EC_ON,
+        // u-removed is NOT in the current EC members list below
+        sharingUsers: [shareRow('su-stale', 'u-removed', DocumentSharingPermissionStatus.GRANTED), shareRow('su-active', 'u-active', DocumentSharingPermissionStatus.GRANTED)],
+      }))
+      mockFindMany.mockResolvedValue([member('u-active')])
+      mockQueryRaw.mockResolvedValue([{ id: 'u-active', email: 'active@firm.com' }])
+
+      await syncDocumentSharingUsers('doc-1')
+
+      expect(mockUpdate).toHaveBeenCalledTimes(1)
+      expect(mockUpdate).toHaveBeenCalledWith({
         where: { id: 'su-stale' },
-        data: expect.objectContaining({
-          sharingPermissionStatus: DocumentSharingPermissionStatus.REVOKED,
-          connectorPermissionId: null,
-        }),
-      }))
+        data: { sharingPermissionStatus: DocumentSharingPermissionStatus.REVOKED, connectorPermissionId: null },
+      })
     })
 
-    it('returns early without granting when no EC members exist', async () => {
-      mockFindMany.mockResolvedValue([])
-
+    it('writes nothing when no EC members exist', async () => {
       await syncDocumentSharingUsers('doc-1')
 
-      expect(mockGrantFolderPermission).not.toHaveBeenCalled()
+      expect(mockCreate).not.toHaveBeenCalled()
     })
   })
 })

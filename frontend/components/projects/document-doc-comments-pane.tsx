@@ -295,8 +295,13 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
   }, [engagementId, documentId])
 
   useEffect(() => {
+    // As the pane's × does, so its content can stop it: a preview open over the details closes instead.
+    // Claimed with preventDefault, because the pane renders its content twice and the other copy hears
+    // the same key, and a menu open in here has already taken it.
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') rightPane.clearPane()
+      if (e.key !== 'Escape' || e.defaultPrevented) return
+      e.preventDefault()
+      if (rightPane.canClose()) rightPane.clearPane()
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)

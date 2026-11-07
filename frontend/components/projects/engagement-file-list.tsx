@@ -1,5 +1,6 @@
 'use client'
 
+import { failureFrom, failureReason } from '@/lib/files/action-failure'
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { FloatingAiChat } from '@/components/projects/floating-ai-chat'
@@ -12,7 +13,7 @@ import { LoadingAnnouncement, ShimmerBar, ShimmerBlock } from "@/components/ui/s
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { FilterMenuLabel, FilterMenuRow, FilterPill, summarizePicks } from "@/components/ui/filter-pill"
 import { CoffeeIcon, type CoffeeIconHandle } from "@/components/ui/coffee-icon"
-import { SquarePlus, Upload, FolderUp, X, Folder, File as FileIcon, ArrowUp, ArrowDown, ChevronRight, Search, List as ListIcon, LayoutGrid, ChevronDown, User, FileText, FileSpreadsheet, Presentation, ListChecks, PenTool, Map as MapIcon, LayoutTemplate, FileCode, AlertCircle, ShieldCheck, Maximize2, Minimize2, CheckCircle2, XCircle, Trash2, Layout, Code, Laptop, RefreshCw, Info, Share2, Layers, Building2, Briefcase, Lock, FolderLock, Inbox, Sparkles, Link2, ExternalLink, MessagesSquare, CircleChevronLeft, Download, MoreVertical, Clock, Copy, FolderInput, Loader2, Pencil, Hash, Type, UserRound, Clock3, Flag, HardDrive, Plus, CircleDot, FolderPlus } from 'lucide-react'
+import { SquarePlus, Upload, FolderUp, X, Folder, File as FileIcon, ArrowUp, ArrowDown, ChevronRight, Search, List as ListIcon, LayoutGrid, ChevronDown, User, FileText, FileSpreadsheet, Presentation, ListChecks, PenTool, Map as MapIcon, LayoutTemplate, FileCode, AlertCircle, ShieldCheck, Maximize2, Minimize2, CheckCircle2, XCircle, Trash2, Layout, Code, Laptop, RefreshCw, Info, Share2, Layers, Building2, Briefcase, Lock, FolderLock, Inbox, Sparkles, Link2, ExternalLink, MessagesSquare, CircleChevronLeft, Download, MoreVertical, Clock, Copy, FolderInput, Loader2, Pencil, Type, Plus, CircleDot, FolderPlus } from 'lucide-react'
 import { ClientIcon } from '@/components/ui/client-icon'
 import Fuse from 'fuse.js'
 import { config } from "@/lib/config"
@@ -93,6 +94,7 @@ import {
     FILE_SIZE_COL_CLASS,
     FILE_TABLE_COL_LINE_CLASS,
 } from '@/components/projects/engagement-file-table-grid'
+import { FileTableHeaderCells } from '@/components/projects/file-table-header-cells'
 import { useEngagementUpload } from '@/components/projects/hooks/use-engagement-upload'
 import { useEngagementFileOps } from '@/components/projects/hooks/use-engagement-file-ops'
 import { useEngagementDragDrop } from '@/components/projects/hooks/use-engagement-drag-drop'
@@ -378,6 +380,11 @@ export function EngagementFileList({ projectId, initialFolderData, connectorRoot
 
     // Prevents concurrent resolve-deeplink fetches when multiple effect deps fire at once.
     const deeplinkFetchInProgressRef = useRef(false)
+    // A run that fetch turned away may be the only one that sees the folders loaded: the fetch's own run
+    // still holds the values from when it began. So it runs again when the fetch lands, or a lookup slower
+    // than the folders would leave the list on "Loading files" for good.
+    const deeplinkRunSkippedRef = useRef(false)
+    const [deeplinkRerun, setDeeplinkRerun] = useState(0)
 
     // True from mount until the deeplink hash is resolved — suppresses the file list so the root folder never flashes.
     // Always start false (SSR-safe). useLayoutEffect sets it to true synchronously on the client
@@ -1189,7 +1196,10 @@ export function EngagementFileList({ projectId, initialFolderData, connectorRoot
             if (!cached) {
                 // Guard against concurrent fetches — when multiple deps fire simultaneously, only
                 // one fetch should run. Others return and re-run once the cache is populated.
-                if (deeplinkFetchInProgressRef.current) return
+                if (deeplinkFetchInProgressRef.current) {
+                    deeplinkRunSkippedRef.current = true
+                    return
+                }
                 deeplinkFetchInProgressRef.current = true
                 try {
                     const viewAs = viewAsPersonaSlug ? `?viewAsPersonaSlug=${encodeURIComponent(viewAsPersonaSlug)}` : ''
@@ -1219,6 +1229,11 @@ export function EngagementFileList({ projectId, initialFolderData, connectorRoot
                 if (!externalId) {
                     const maybe = files.find((f) => f.projectDocumentId === documentIdParam || f.id === documentIdParam)
                     if (maybe) { externalId = maybe.id; fileName = maybe.name ?? null; isFolder = maybe.mimeType === 'application/vnd.google-apps.folder' }
+                }
+
+                if (deeplinkRunSkippedRef.current) {
+                    deeplinkRunSkippedRef.current = false
+                    setDeeplinkRerun((n) => n + 1)
                 }
 
                 deeplinkResolvedCacheRef.current[hash] = { externalId, fileName, isFolder, status: resolveStatus, path: resolvedPath, projectRootFolderId }
@@ -1324,6 +1339,7 @@ export function EngagementFileList({ projectId, initialFolderData, connectorRoot
         isLoadingFolders,
         // navigateToItem / files / loading included only as fallback triggers — cache + in-progress
         // guard ensure the fetch only fires once even if these change concurrently.
+        deeplinkRerun,
         navigateToItem,
         loading,
         files,
@@ -1708,13 +1724,10 @@ export function EngagementFileList({ projectId, initialFolderData, connectorRoot
                     headers: { Authorization: `Bearer ${sessionRef.current?.access_token}`, 'Content-Type': 'application/json' },
                     body: JSON.stringify({ action: 'trash', fileId: item.id, connectorId: item.connectorId, projectId, fileName: item.name }),
                 })
-                if (!res.ok) {
-                    const err = await res.json().catch(() => ({}))
-                    throw new Error(err.error || 'Failed to move to trash')
-                }
+                if (!res.ok) throw await failureFrom(res)
                 setTrashQueue(prev => prev.map(i => i.id === item.id ? { ...i, status: 'done' } : i))
-            } catch (e: any) {
-                setTrashQueue(prev => prev.map(i => i.id === item.id ? { ...i, status: 'error', error: e?.message || 'Failed' } : i))
+            } catch (e) {
+                setTrashQueue(prev => prev.map(i => i.id === item.id ? { ...i, status: 'error', error: failureReason(e) } : i))
             }
         }
 
@@ -2359,13 +2372,6 @@ const handleRefresh = async () => {
     }, [files, sortConfig, filterTypes, filterStatuses, filterOwner, filterModified, deliverablesOnly, sharedExternalIds, ancestorFolderIds, descendantIds, descendantIdsForEC, descendantIdsForGuest, restrictToSharedOnly, canEdit, viewAsPersonaSlug, currentFolderIsApprovedDeliverable, listingInsideDeliverable, session?.user?.email, session?.user?.id, breadcrumbs])
 
     /** Notion-style column header: muted small text with a column-type icon. */
-    const TableHeader = ({ label, icon }: { label: string; icon?: React.ReactNode }) => (
-        <div className="flex items-center gap-1.5 text-small font-normal text-fg-muted select-none [&_svg]:h-3.5 [&_svg]:w-3.5 [&_svg]:text-fg-subtle">
-            {icon}
-            {label}
-        </div>
-    )
-
     return (
         <div className="flex flex-col h-full overflow-hidden"
             onDragOver={handleDragOver}
@@ -3106,18 +3112,7 @@ const handleRefresh = async () => {
                                 className="h-4 w-4 pointer-events-none"
                             />
                         </div>
-                        <div className="flex items-center">
-                            <TableHeader label="ID" icon={<Hash />} />
-                        </div>
-                        {/* Name spans the badge and quick-action tracks too, as each row's Name cell does */}
-                        <div className={`col-span-3 flex items-center ${FILE_TABLE_COL_LINE_CLASS}`}>
-                            <TableHeader label="Name" icon={<Type />} />
-                        </div>
-                        <div className={`items-center ${STATUS_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Status" icon={<CircleDot />} /></div>
-                        <div className={`items-center ${DUE_DATE_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Due" icon={<Flag />} /></div>
-                        <div className={`items-center ${OWNER_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Assignee" icon={<UserRound />} /></div>
-                        <div className={`items-center ${DATE_MODIFIED_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Modified" icon={<Clock3 />} /></div>
-                        <div className={`items-center ${FILE_SIZE_COL_CLASS} ${FILE_TABLE_COL_LINE_CLASS}`}><TableHeader label="Size" icon={<HardDrive />} /></div>
+                        <FileTableHeaderCells />
                     </div>
                 </div>
 

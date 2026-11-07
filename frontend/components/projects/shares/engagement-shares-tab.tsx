@@ -52,7 +52,8 @@ import { logger } from '@/lib/logger'
 import { RelativeDateTime } from '@/components/ui/relative-date-time'
 import { displayFolderName, splitFolderOrdinal } from '@/lib/display-names'
 import { DocumentDocCommentsPane } from '@/components/projects/document-doc-comments-pane'
-import { DocumentPreviewPane } from '@/components/files/document-preview-pane'
+import { createPanePreview, LocatedDocumentPreview } from './pane-preview'
+import { folderPathLabels } from '@/lib/files/engagement-root'
 import { formatDistanceToNow } from 'date-fns'
 import { cn, formatFullDate } from '@/lib/utils'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
@@ -135,8 +136,10 @@ interface EngagementSharesTabProps {
   /** When set, view mode is driven by URL; changes navigate */
   sharesBasePath?: string
   pathViewMode?: 'list' | 'board' | 'grid'
-  /** Base URL for deeplinks (e.g. ".../files"). Used for Copy Link buttons. */
+  /** Base URL for deeplinks (e.g. ".../files"). Used for Copy Link buttons and Open in Files. */
   deeplinkBase?: string
+  /** The client's storage, which a preview's Open names. */
+  clientConnectorType?: string | null
   orgSlug?: string
 }
 
@@ -1515,6 +1518,7 @@ export function EngagementSharesTab({
   onOpenInFiles,
   pathViewMode,
   deeplinkBase,
+  clientConnectorType,
   orgSlug,
 }: EngagementSharesTabProps) {
   const rightPane = useRightPane()
@@ -1566,6 +1570,7 @@ export function EngagementSharesTab({
     projectId,
     logContext: 'ProjectShares',
   })
+  const storageOpenLabel = clientConnectorType === 'ONEDRIVE' ? 'Open in OneDrive' : 'Open in Google Drive'
 
   const viewMode = (pathViewMode ?? 'grid') as SharesViewMode
   const { projExtCollaborator, projViewer } = useProjectPersonaLabels()
@@ -1777,11 +1782,15 @@ export function EngagementSharesTab({
       setOpenDeliverableId(share.id)
       const hashSuffix = initialTab === 'comments' ? ':comments' : ''
       window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#doc-file:${share.documentId}${hashSuffix}`)
-      rightPane.setTitle(share.docId ?? share.documentName)
-      rightPane.setHeaderSubtitle(displayFolderName(share.documentName))
-      rightPane.setHeaderIcon(<DeliverableIcon />)
-      rightPane.setIconTooltip('Deliverable')
+      const showDetailsHeader = () => {
+        rightPane.setTitle(share.docId ?? share.documentName)
+        rightPane.setHeaderSubtitle(displayFolderName(share.documentName))
+        rightPane.setHeaderIcon(<DeliverableIcon />)
+        rightPane.setIconTooltip('Deliverable')
+      }
+      showDetailsHeader()
       rightPane.setPaneSize('medium')
+      const panePreview = createPanePreview(rightPane, showDetailsHeader)
       rightPane.setContent(
         <DeliverableDetailPanel
           documentId={share.documentId}
@@ -1797,26 +1806,17 @@ export function EngagementSharesTab({
           orgSlug={orgSlug}
           deeplinkBase={deeplinkBase}
           initialTab={initialTab}
-          onOpenSubtaskDocument={(subtask) => {
+          onOpenSubtaskDocument={(doc) => {
             void handleSecureOpen({
-              documentId: subtask.documentId,
-              externalId: subtask.externalId ?? subtask.documentId,
-              fileName: subtask.fileName,
-              mimeType: subtask.mimeType ?? undefined,
+              documentId: doc.documentId,
+              externalId: doc.externalId ?? doc.documentId,
+              fileName: doc.fileName,
+              mimeType: doc.mimeType ?? undefined,
               projectId,
-            }, subtask.documentId)
+            }, doc.documentId)
           }}
-          onPreviewSubtaskDocument={(subtask) => {
-            rightPane.setTitle(subtask.fileName)
-            rightPane.setHeaderSubtitle('')
-            rightPane.setHeaderIcon(<ScanEye className="h-4 w-4" />)
-            rightPane.setContent(
-              <DocumentPreviewPane
-                document={{ id: subtask.documentId, name: subtask.fileName }}
-                projectId={projectId}
-              />
-            )
-          }}
+          panePreview={panePreview}
+          openLabel={storageOpenLabel}
           onStatusChange={(newStatus) => {
             setShares((prev) =>
               prev.map((s) =>
@@ -1839,8 +1839,10 @@ export function EngagementSharesTab({
           onClose={() => { setOpenDeliverableId(null); rightPane.clearPane(); window.history.replaceState(null, '', window.location.pathname + window.location.search) }}
         />
       )
+      // After setContent, which clears any guard: with a preview open, × goes back to the details.
+      rightPane.setBeforeClose(() => !panePreview.close())
     },
-    [rightPane, projectId, canManage, isExternalViewer, orgSlug, roleSlug, restrictToSharedOnly, handleSecureOpen]
+    [rightPane, projectId, canManage, isExternalViewer, orgSlug, roleSlug, restrictToSharedOnly, handleSecureOpen, deeplinkBase, storageOpenLabel]
   )
 
   // Capture the hash at mount so re-renders don't lose it before shares load
@@ -2096,14 +2098,33 @@ export function EngagementSharesTab({
       rightPane.setTitle(share.documentName || 'Preview')
       rightPane.setHeaderSubtitle('')
       rightPane.setHeaderIcon(<ScanEye className="h-4 w-4" />)
+      rightPane.setIconTooltip('Preview')
       rightPane.setContent(
-        <DocumentPreviewPane
-          document={{ id: share.documentId, name: share.documentName }}
+        <LocatedDocumentPreview
+          doc={{
+            documentId: share.documentId,
+            externalId: share.documentExternalId,
+            fileName: share.documentName,
+            mimeType: share.documentMimeType,
+            folderPath: folderPathLabels(share.parentName ? [share.parentName] : []),
+            approved: share.activity?.status === 'approved',
+          }}
           projectId={share.projectId}
+          filesBase={deeplinkBase}
+          openLabel={storageOpenLabel}
+          onOpen={(doc) => {
+            void handleSecureOpen({
+              documentId: doc.documentId,
+              externalId: doc.externalId ?? doc.documentId,
+              fileName: doc.fileName,
+              mimeType: doc.mimeType ?? undefined,
+              projectId: share.projectId,
+            }, doc.documentId)
+          }}
         />
       )
     },
-    [rightPane]
+    [rightPane, deeplinkBase, storageOpenLabel, handleSecureOpen]
   )
 
   return (

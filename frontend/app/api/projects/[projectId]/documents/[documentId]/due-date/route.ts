@@ -8,6 +8,8 @@ import { sendEmail } from '@/lib/email'
 import { renderReminderEmail } from '@/lib/email-templates/reminder'
 import { safeInngestSend } from '@/lib/inngest/client'
 import { parseSettingsFromDb } from '@/lib/sharing-settings'
+import { isExternalEngagementRole } from '@/lib/engagement-access'
+import { privateExternalIds } from '@/lib/engagement-sharing-ids'
 import { formatFullDate } from '@/lib/utils'
 import { documentLink } from '@/lib/notification-links'
 import { planDueDate } from '@/lib/files/due-date-check'
@@ -69,10 +71,18 @@ export async function PATCH(
 
     const members = await prisma.engagementMember.findMany({
       where: { engagementId: projectId },
-      select: { userId: true },
+      select: { userId: true, role: true },
     })
     const memberUserIds = members.map((m) => m.userId)
-    const setDue = (row: DueRow, next: Date | null) => applyDueDate(row, next, { projectId, clientId: ctx.clientId, actorUserId: user.id, memberUserIds })
+    // A private file's date is the firm's own: its notice names the file, so no client gets one.
+    const firmUserIds = members.filter((m) => !isExternalEngagementRole(m.role)).map((m) => m.userId)
+    const privateIds = await privateExternalIds(projectId)
+    const setDue = (row: DueRow, next: Date | null) => applyDueDate(row, next, {
+      projectId,
+      clientId: ctx.clientId,
+      actorUserId: user.id,
+      memberUserIds: privateIds.has(row.externalId) ? firmUserIds : memberUserIds,
+    })
 
     await setDue(doc, dueDate)
     // The other dates the chosen fix moves: its deliverable, or its documents.
@@ -95,6 +105,7 @@ export async function PATCH(
 
 type DueRow = {
   id: string
+  externalId: string
   fileName: string
   dueDate: Date | null
   isFolder: boolean

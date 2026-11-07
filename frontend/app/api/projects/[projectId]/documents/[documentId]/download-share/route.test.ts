@@ -8,6 +8,7 @@ const { st, drive, content } = vi.hoisted(() => {
     const content = { getRenderableContent: vi.fn(), getVersionContent: vi.fn() as ReturnType<typeof vi.fn> | undefined }
     const st = {
         memberRole: 'eng_admin' as string | null,
+        hidden: false,
         connectorType: 'GOOGLE_DRIVE' as 'GOOGLE_DRIVE' | 'ONEDRIVE',
     }
     return { st, drive, content }
@@ -21,6 +22,7 @@ vi.mock('@/lib/file-utils', () => ({
 }))
 vi.mock('@/lib/engagement-access', () => ({
     requireEngagementMember: async () => (st.memberRole ? { role: st.memberRole } : null),
+    isHiddenFromMember: async () => st.hidden,
 }))
 vi.mock('@/lib/connectors/registry', () => ({
     getPermissionAdapter: async () => ({}),
@@ -55,12 +57,23 @@ const get = (qs = '') =>
 
 beforeEach(() => {
     st.memberRole = 'eng_admin'
+    st.hidden = false
     st.connectorType = 'GOOGLE_DRIVE'
     drive.downloadFile.mockReset()
     content.getRenderableContent.mockReset()
     drive.downloadFile.mockResolvedValue({ stream: new ReadableStream(), mimeType: 'application/pdf', size: '10', name: 'Plan v2.pdf' })
     content.getRenderableContent.mockResolvedValue({ stream: Buffer.from('x'), mimeType: 'application/pdf', size: '1', fileName: 'Plan.xlsx' })
     content.getVersionContent = vi.fn().mockResolvedValue({ stream: Buffer.from('old'), mimeType: 'application/pdf', size: '3', fileName: 'Plan.xlsx' })
+})
+
+describe('GET download-share of a private file', () => {
+    it('is refused to a client, with no sign the file exists', async () => {
+        st.memberRole = 'eng_viewer'
+        st.hidden = true
+        const res = await get()
+        expect(res.status).toBe(404)
+        expect(content.getRenderableContent).not.toHaveBeenCalled()
+    })
 })
 
 describe('GET download-share ?revisionId', () => {

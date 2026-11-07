@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { prisma } from '@/lib/prisma'
+import { privateExternalIds } from '@/lib/engagement-sharing-ids'
 import { ACTIVITY_STAGES, documentStage, isOnBoard, parseSettingsFromDb, type ActivityStatus } from '@/lib/sharing-settings'
 import { getFileInfo } from '@/lib/file-utils'
 import { getProjectPersona } from '@/lib/permission-helpers'
@@ -38,7 +39,8 @@ const isExternalRole = (role: string) => role === 'eng_ext_collaborator' || role
  * collaborator submits its In progress documents for review, a viewer sends its In review ones back.
  *
  * A file outside any deliverable has a stage for the firm's own tracking: only the firm moves it, and
- * moving it never shares it with clients (applyStageChange's `internalOnly`).
+ * moving it never shares it with clients (applyStageChange's `internalOnly`). Nor does moving a private
+ * document, which clients can neither see nor move.
  *
  * Approving a document locks it, copies the approved version into the engagement's Archive folder
  * and records it (.claude/plans/document-approval-record.md); if storage can't be reached, the
@@ -98,7 +100,9 @@ export async function PATCH(
           { status: 400 },
         )
       }
+      const privateIds = await privateExternalIds(projectId)
       const documents = (await deliverableDocuments(projectId, existing.externalId))
+        .filter((d) => !privateIds.has(d.externalId))
         .filter((d) => isOnBoard(documentStage(d.settings)) && !parseSettingsFromDb(d.settings).share?.finalizedAt)
         .filter((d) => getAllowedTransitions(role, documentStage(d.settings)).includes(status))
       if (documents.length === 0)
@@ -123,6 +127,9 @@ export async function PATCH(
     if (deliverable && parseSettingsFromDb(deliverable.settings).share?.finalizedAt)
       return NextResponse.json({ error: 'The deliverable is approved and its documents can no longer move.' }, { status: 403 })
     if (!deliverable && isExternalRole(role))
+      return NextResponse.json({ error: 'This move is not permitted for your role.' }, { status: 403 })
+    const isPrivate = !!deliverable && (await privateExternalIds(projectId)).has(existing.externalId)
+    if (isPrivate && isExternalRole(role))
       return NextResponse.json({ error: 'This move is not permitted for your role.' }, { status: 403 })
 
     // Gate on allowed transitions — single source of truth from deliverable-stage-roles.ts:
@@ -170,7 +177,7 @@ export async function PATCH(
     const approvalMeta = approval
       ? { approvalId: approval.record.id, versionId: approval.record.version.id, versionName: approvalVersionName(approval.record), archivedName: approval.record.archived.name }
       : undefined
-    await applyStageChange(existing, status, moveCtx, { orderIndex, auditMeta: approvalMeta, internalOnly: !deliverable })
+    await applyStageChange(existing, status, moveCtx, { orderIndex, auditMeta: approvalMeta, internalOnly: !deliverable || isPrivate })
     if (approval) {
       await recordApproval(existing.id, approval)
       if (approval.lock) {

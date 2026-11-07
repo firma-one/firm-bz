@@ -379,8 +379,8 @@ export const NODE_STEPS: Record<TourNodeId, TourStep[]> = {
         {
             target: '[data-demo-tour="document-action-trigger"]',
             title: 'Document actions',
-            content: <p>Hover a row for its quick actions, or click ⋯ on any file to open, download, comment on, bookmark, set a due date, rename or move it, and more.</p>,
-            spoken: 'Document actions. Hover a row for its quick actions, or click the three dots on any file to open, download, comment on, bookmark, set a due date, rename or move it, and more.',
+            content: <p>Hover a row for its quick actions, or click ⋯ on any file to open, download, bookmark, set a due date, rename or move it, and more.</p>,
+            spoken: 'Document actions. Hover a row for its quick actions, or click the three dots on any file to open, download, bookmark, set a due date, rename or move it, and more.',
             route: engAt({ tab: 'files', folder: inProgressId }),
             placement: 'left',
         },

@@ -351,6 +351,31 @@ export function isDocumentPrivate(settings: unknown): boolean {
   return getLock(settings)?.type === 'private'
 }
 
+/**
+ * What's private to the firm, by external ID: documents marked private, and everything inside a folder
+ * marked private. Every path that shows or opens a document to a client goes by this. A client's other
+ * gates (shared with them, under a shared folder) say what they may see, and this takes precedence.
+ */
+export function privateSubtreeIds(
+  rows: ReadonlyArray<{ externalId: string | null; parentId: string | null; settings: unknown }>,
+): Set<string> {
+  const childrenOf = new Map<string, string[]>()
+  const pending: string[] = []
+  for (const row of rows) {
+    if (!row.externalId) continue
+    if (row.parentId) childrenOf.set(row.parentId, [...(childrenOf.get(row.parentId) ?? []), row.externalId])
+    if (isDocumentPrivate(row.settings)) pending.push(row.externalId)
+  }
+  const hidden = new Set<string>()
+  while (pending.length > 0) {
+    const id = pending.pop() as string
+    if (hidden.has(id)) continue
+    hidden.add(id)
+    pending.push(...(childrenOf.get(id) ?? []))
+  }
+  return hidden
+}
+
 /** Returns true when the document has any lock type (intake, finalize, or private). */
 export function isDocumentLocked(settings: unknown): boolean {
   return getLock(settings) !== null

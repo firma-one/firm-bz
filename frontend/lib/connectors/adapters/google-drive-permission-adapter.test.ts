@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { createGoogleDrivePermissionAdapter } from './google-drive-permission-adapter'
 import type { IConnectorPermissionAdapter } from '../types'
+import { storageFailure } from '@/lib/connectors/storage-failure'
 
 // Stub the GDrive connector singleton — tests must not hit the DB or Drive API
 vi.mock('@/lib/google-drive-connector', () => ({
@@ -19,7 +20,7 @@ const mockGDrive = {
     confidentialFolderId: 'conf-1',
     stagingFolderId: 'stag-1',
   }),
-  trashFile: vi.fn().mockResolvedValue(undefined),
+  trashFileWithReason: vi.fn().mockResolvedValue(undefined),
   listFiles: vi.fn().mockResolvedValue([{ id: 'f1', name: 'Doc.docx', mimeType: 'application/vnd.google-apps.document' }]),
   getFileMetadata: vi.fn().mockResolvedValue({ id: 'f1', name: 'Doc.docx', parents: ['parent-1'], driveId: null }),
   grantFilePermission: vi.fn().mockResolvedValue('file-perm-id-1'),
@@ -102,11 +103,18 @@ describe('createGoogleDrivePermissionAdapter', () => {
     expect(ids.stagingFolderId).toBeNull()
   })
 
-  it('trashFile returns void regardless of underlying GDrive return value', async () => {
+  it('trashFile returns void when Drive trashes the file', async () => {
     const adapter = createGoogleDrivePermissionAdapter()
     const result = await adapter.trashFile('conn-1', 'file-1')
     expect(result).toBeUndefined()
-    expect(mockGDrive.trashFile).toHaveBeenCalledWith('conn-1', 'file-1')
+    expect(mockGDrive.trashFileWithReason).toHaveBeenCalledWith('conn-1', 'file-1')
+  })
+
+  it("trashFile says why when Drive doesn't, rather than reporting a trash that never happened", async () => {
+    const refusal = storageFailure('no_permission', 'Google Drive')
+    mockGDrive.trashFileWithReason.mockRejectedValueOnce(refusal)
+    const adapter = createGoogleDrivePermissionAdapter()
+    await expect(adapter.trashFile('conn-1', 'file-1')).rejects.toThrow(refusal.message)
   })
 
   it('listFiles delegates to GDrive and returns file list', async () => {
@@ -163,7 +171,7 @@ describe('createGoogleDrivePermissionAdapter', () => {
   it('deleteFile trashes by default and permanently deletes when permanent:true', async () => {
     const adapter = createGoogleDrivePermissionAdapter()
     await adapter.deleteFile('conn-1', 'file-1')
-    expect(mockGDrive.trashFile).toHaveBeenCalledWith('conn-1', 'file-1')
+    expect(mockGDrive.trashFileWithReason).toHaveBeenCalledWith('conn-1', 'file-1')
 
     await adapter.deleteFile('conn-1', 'file-2', { permanent: true })
     expect(mockGDrive.permanentlyDeleteFile).toHaveBeenCalledWith('conn-1', 'file-2')

@@ -7,6 +7,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/components/ui/toast'
 import { supabase } from '@/lib/supabase'
 import { DocumentDocCommentsPane } from '@/components/projects/document-doc-comments-pane'
+import { folderPathLabels } from '@/lib/files/engagement-root'
+import { LocatedDocumentPreview, usePanePreview, type PanePreview } from './pane-preview'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { useRightPane } from '@/lib/right-pane-context'
 import {
@@ -99,10 +101,12 @@ export interface DeliverableDetailPanelProps {
   onSubtaskStatusChange?: (totalCount: number, approvedCount: number) => void
   /** Ref the parent can call to push a new status into the panel without remounting it (e.g. after board drag). */
   externalStatusRef?: React.MutableRefObject<((s: ActivityStatus) => void) | null>
-  /** Called when "Open" is clicked on a subtask row — triggers the regrant/secure-open flow. */
-  onOpenSubtaskDocument?: (subtask: SubtaskRecord) => void
-  /** Called when "Preview" is clicked on a subtask row — opens the preview pane. */
-  onPreviewSubtaskDocument?: (subtask: SubtaskRecord) => void
+  /** Called when "Open" is clicked on a subtask row or a preview's strip — triggers the regrant/secure-open flow. */
+  onOpenSubtaskDocument?: (doc: Pick<SubtaskRecord, 'documentId' | 'externalId' | 'fileName' | 'mimeType'>) => void
+  /** Where a document's preview opens over this panel: "Preview" on a row, or a document tagged in a comment. */
+  panePreview?: PanePreview
+  /** The preview strip's Open label, naming the client's storage. */
+  openLabel?: string
   onClose?: () => void
   className?: string
   /** Tab to open on mount — e.g. deep-linking from a comment thread should land on 'comments'. */
@@ -564,7 +568,8 @@ export function DeliverableDetailPanel({
   onSubtaskStatusChange,
   externalStatusRef,
   onOpenSubtaskDocument,
-  onPreviewSubtaskDocument,
+  panePreview,
+  openLabel = 'Open',
   className,
   initialTab,
 }: DeliverableDetailPanelProps) {
@@ -573,6 +578,20 @@ export function DeliverableDetailPanel({
   const { paneSize } = useRightPane()
   const showExtras = paneSize !== 'small'
   const [activeTab, setActiveTab] = useState<Tab>(initialTab ?? 'details')
+  const preview = usePanePreview(panePreview)
+
+  // Esc goes back to the details, as the pane's × does. Claimed with preventDefault, because the pane
+  // renders its content twice and the other copy hears the same key.
+  useEffect(() => {
+    if (!panePreview || !preview) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return
+      e.preventDefault()
+      panePreview.close()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [panePreview, preview])
 
   const [status, setStatus] = useState<ActivityStatus>(activityStatus)
   const [deliverableDueDate, setDeliverableDueDate] = useState<string>(dueDate ?? '')
@@ -818,6 +837,16 @@ export function DeliverableDetailPanel({
   }
 
   const isApproved = status === 'approved'
+  const previewSubtask = panePreview
+    ? (subtask: SubtaskRecord) => panePreview.open({
+        documentId: subtask.documentId,
+        externalId: subtask.externalId,
+        fileName: subtask.fileName,
+        mimeType: subtask.mimeType,
+        folderPath: folderPathLabels(subtask.breadcrumb ?? []),
+        approved: isApproved,
+      }, paneSize)
+    : undefined
   const overdueDays = (() => {
     if (!deliverableDueDate) return 0
     const due = new Date(deliverableDueDate); due.setHours(0, 0, 0, 0)
@@ -866,7 +895,7 @@ export function DeliverableDetailPanel({
       onDeliverableChanged={(next) => { if (next !== status) followDocuments(next) }}
       onDeliverableDueChanged={(due) => setDeliverableDueDate(due.slice(0, 10))}
       onOpenDocument={onOpenSubtaskDocument}
-      onPreviewDocument={onPreviewSubtaskDocument}
+      onPreviewDocument={previewSubtask}
       onStatusChange={(id, newStatus) => setSubtasks((prev) => prev.map((t) => t.id === id ? { ...t, status: newStatus } : t))}
       onRemoveSubtask={(id) => setSubtasks((prev) => prev.filter((t) => t.id !== id))}
       onDueDateChange={(id, due) => setSubtasks((prev) => prev.map((t) => t.id === id ? { ...t, dueDate: due } : t))}
@@ -883,7 +912,9 @@ export function DeliverableDetailPanel({
   ]
 
   return (
-    <div className={cn('flex flex-col h-full overflow-hidden bg-surface', className)}>
+    <div className={cn('relative flex flex-col h-full overflow-hidden bg-surface', className)}>
+      {/* Kept mounted and laid out behind a preview, so closing it returns to the same tab, scroll and draft. */}
+      <div className={cn('flex min-h-0 flex-1 flex-col', preview && 'invisible')}>
 
       {/* Properties (Linear issue peek): status and due date as label → value rows */}
       <div className="shrink-0 px-4 py-2">
@@ -1158,14 +1189,26 @@ export function DeliverableDetailPanel({
             orgSlug={orgSlug}
             // "#" tags the deliverable's documents — the ones this viewer may see (persona-filtered above)
             taggableDocuments={subtasks.map((t) => ({ documentId: t.documentId, docId: t.docId, fileName: t.fileName, mimeType: t.mimeType, breadcrumb: t.breadcrumb }))}
-            onOpenDocument={onPreviewSubtaskDocument ? (doc) => {
+            onOpenDocument={previewSubtask ? (doc) => {
               const subtask = subtasks.find((t) => t.documentId === doc.documentId)
-              if (subtask) onPreviewSubtaskDocument(subtask)
+              if (subtask) previewSubtask(subtask)
             } : undefined}
           />
         )}
 
       </div>
+      </div>
+      {preview && (
+        <div className="absolute inset-0 z-20 flex flex-col bg-surface">
+          <LocatedDocumentPreview
+            doc={preview}
+            projectId={projectId}
+            filesBase={deeplinkBase}
+            openLabel={openLabel}
+            onOpen={onOpenSubtaskDocument}
+          />
+        </div>
+      )}
       {stageDialog}
       {dueDialog}
     </div>
