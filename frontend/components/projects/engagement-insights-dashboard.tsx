@@ -2623,8 +2623,8 @@ export function EngagementInsightsDashboard({
     const paneOpen = useSyncExternalStore(summaryReviewStore.subscribe, summaryReviewStore.isOpen, () => false)
     const clearPaneRef = useRef(rightPane.clearPane)
     useEffect(() => { clearPaneRef.current = rightPane.clearPane }, [rightPane.clearPane])
-    // Preview (sections, with the lead's own as text boxes) or Markdown. Kept here so both of the
-    // pane's copies show the same view, and back to Preview for each new draft.
+    // Preview (sections, with the lead's own as text boxes) or Markdown. Kept here so the pane and the
+    // page show the same view, and back to Preview for each new draft.
     const [reviewMode, setReviewMode] = useState<ReviewMode>('preview')
     const draftGeneratedAt = data?.insightsSummaryDraft?.generatedAt ?? null
     useEffect(() => { setReviewMode('preview') }, [draftGeneratedAt])

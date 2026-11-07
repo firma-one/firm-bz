@@ -580,8 +580,8 @@ export function DeliverableDetailPanel({
   const [activeTab, setActiveTab] = useState<Tab>(initialTab ?? 'details')
   const preview = usePanePreview(panePreview)
 
-  // Esc goes back to the details, as the pane's × does. Claimed with preventDefault, because the pane
-  // renders its content twice and the other copy hears the same key.
+  // Esc goes back to the details, as the pane's × does. Claimed with preventDefault, because the comments
+  // pane underneath hears the same key.
   useEffect(() => {
     if (!panePreview || !preview) return
     const onKey = (e: KeyboardEvent) => {

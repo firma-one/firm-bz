@@ -111,15 +111,14 @@ describe('DeliverableDetailPanel', () => {
 })
 
 describe('a preview over the details', () => {
-    // The right pane renders its content twice, docked and full screen, so these render both copies.
-    const twoCopies = (props: Partial<React.ComponentProps<typeof DeliverableDetailPanel>> = {}) => {
+    const openPanel = (props: Partial<React.ComponentProps<typeof DeliverableDetailPanel>> = {}) => {
         thread.mounts = 0
         thread.openDocument = null
         const pane = { setTitle: vi.fn(), setHeaderSubtitle: vi.fn(), setHeaderIcon: vi.fn(), setIconTooltip: vi.fn(), setPaneSize: vi.fn() }
         const showDetailsHeader = vi.fn()
         const panePreview = createPanePreview(pane, showDetailsHeader)
         const onOpenSubtaskDocument = vi.fn()
-        const copy = (
+        render(
             <DeliverableDetailPanel
                 documentId="D"
                 projectId="p1"
@@ -132,9 +131,8 @@ describe('a preview over the details', () => {
                 openLabel="Open in OneDrive"
                 onOpenSubtaskDocument={onOpenSubtaskDocument}
                 {...props}
-            />
+            />,
         )
-        render(<><div>{copy}</div><div>{copy}</div></>)
         return { pane, showDetailsHeader, panePreview, onOpenSubtaskDocument }
     }
     const previewFirstDocument = async () => {
@@ -146,15 +144,15 @@ describe('a preview over the details', () => {
         subtasks = [subtask('d2', 'in_progress', { externalId: 'x2', breadcrumb: ['General', 'Research'] })]
     })
 
-    it('shows in both copies, so it survives switching to full screen', async () => {
-        twoCopies()
+    it('shows the document under its location', async () => {
+        openPanel()
         await previewFirstDocument()
-        expect(screen.getAllByText('previewing d2.docx')).toHaveLength(2)
-        expect(screen.getAllByText('Engagement root / Research')).toHaveLength(2)
+        expect(screen.getByText('previewing d2.docx')).toBeTruthy()
+        expect(screen.getByText('Engagement root / Research')).toBeTruthy()
     })
 
     it('hides the details without unmounting them, and brings them back', async () => {
-        const { panePreview, pane, showDetailsHeader } = twoCopies()
+        const { panePreview, pane, showDetailsHeader } = openPanel()
         await previewFirstDocument()
         const row = screen.getAllByText('d2.docx')[0]
         expect(row.closest('.invisible')).not.toBeNull()
@@ -168,22 +166,22 @@ describe('a preview over the details', () => {
     })
 
     it('comes back to the discussion it was opened from, with the thread never remounted', async () => {
-        const { panePreview } = twoCopies()
+        const { panePreview } = openPanel()
         await screen.findAllByRole('button', { name: 'Preview' })
         fireEvent.click(screen.getAllByRole('button', { name: /^Comments/ })[0])
         const mounts = thread.mounts
         expect(mounts).toBeGreaterThan(0)
 
         act(() => thread.openDocument!({ documentId: 'd2' }))
-        expect(screen.getAllByText('previewing d2.docx')).toHaveLength(2)
+        expect(screen.getByText('previewing d2.docx')).toBeTruthy()
 
         act(() => { panePreview.close() })
         expect(screen.getByText('the thread')).toBeTruthy()
         expect(thread.mounts).toBe(mounts)
     })
 
-    it('closes on Esc once, though both copies hear it', async () => {
-        const { panePreview, showDetailsHeader } = twoCopies()
+    it('closes on Esc, and goes back to the details', async () => {
+        const { panePreview, showDetailsHeader } = openPanel()
         await previewFirstDocument()
         fireEvent.keyDown(document, { key: 'Escape' })
         expect(panePreview.get()).toBeNull()
@@ -191,7 +189,7 @@ describe('a preview over the details', () => {
     })
 
     it('opens the document it shows', async () => {
-        const { onOpenSubtaskDocument } = twoCopies()
+        const { onOpenSubtaskDocument } = openPanel()
         await previewFirstDocument()
         fireEvent.click(screen.getAllByRole('button', { name: 'Open in OneDrive' })[0])
         expect(onOpenSubtaskDocument).toHaveBeenCalledWith(expect.objectContaining({ documentId: 'd2', externalId: 'x2', fileName: 'd2.docx' }))
@@ -199,7 +197,7 @@ describe('a preview over the details', () => {
 
     it('turns Open off in an approved deliverable', async () => {
         subtasks = [subtask('d2', 'approved')]
-        const { onOpenSubtaskDocument } = twoCopies({ activityStatus: 'approved' })
+        const { onOpenSubtaskDocument } = openPanel({ activityStatus: 'approved' })
         await previewFirstDocument()
         const open = screen.getAllByRole('button', { name: 'Open in OneDrive' })[0]
         expect(open.getAttribute('aria-disabled')).toBe('true')

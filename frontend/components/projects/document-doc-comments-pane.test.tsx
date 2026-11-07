@@ -70,7 +70,7 @@ describe('DocumentDocCommentsPane — Esc', () => {
         pane.canClose.mockReturnValue(true)
     })
 
-    it('closes the pane once, though the pane renders this twice', async () => {
+    it('closes the pane once, however many handlers hear the key', async () => {
         renderPane()
         renderPane()
         await settle()

@@ -31,12 +31,10 @@ export interface PanePreview {
 }
 
 /**
- * The preview open over a deliverable's details. Held outside the panel because the right pane renders
- * its content twice, docked and full screen (components/app/layout-right-panel.tsx), each copy with its
- * own React state: kept in the panel, a preview would vanish on switching to full screen.
+ * The preview open over a deliverable's details. Held outside the panel so the Board's pane wiring (the
+ * close guard, the header) and the panel share one answer to "is a preview open?".
  *
- * Closing restores the pane's size as well as its header. A preview is often enlarged just to read it,
- * and the size decides which copy shows, so this is also what returns to the tab, scroll and draft left.
+ * Closing restores the pane's size as well as its header: a preview is often enlarged just to read it.
  */
 export function createPanePreview(pane: PaneControls, showDetailsHeader: () => void): PanePreview {
     let current: PanePreviewDocument | null = null
