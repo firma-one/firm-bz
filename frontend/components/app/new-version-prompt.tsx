@@ -40,7 +40,7 @@ export function NewVersionPrompt() {
                 promptedForRef.current = version
                 addToast({
                     type: 'info',
-                    title: 'A new version of Firma is available',
+                    title: 'A new version of firmä is available',
                     message: 'Reload to get the latest. You stay signed in.',
                     duration: 24 * 60 * 60 * 1000,
                     action: { label: 'Reload', onClick: () => window.location.reload() },
