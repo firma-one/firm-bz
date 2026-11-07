@@ -29,7 +29,7 @@ vi.mock('@/lib/google-drive-connector', () => ({
       revokePermission: vi.fn().mockResolvedValue(true),
       downgradeFolderUserPermissionToReader: vi.fn().mockResolvedValue(true),
       getProjectFolderIds: vi.fn().mockResolvedValue({ generalFolderId: 'g', confidentialFolderId: 'c', stagingFolderId: 's' }),
-      trashFile: vi.fn().mockResolvedValue(undefined),
+      trashFileWithReason: vi.fn().mockResolvedValue(undefined),
       listFiles: vi.fn().mockResolvedValue([]),
       getFileMetadata: vi.fn().mockResolvedValue(null),
       listTopLevelChildren: vi.fn().mockResolvedValue([]),
@@ -156,7 +156,7 @@ describe('connector registry', () => {
       })
     })
 
-    it('trashFile returns void (does not surface boolean from GDrive)', async () => {
+    it('trashFile returns void when Drive trashes the file (does not surface its boolean)', async () => {
       mockFindUnique.mockResolvedValue({ id: 'conn-1', type: ConnectorType.GOOGLE_DRIVE })
       const adapter = await getPermissionAdapter('conn-1')
       const result = await adapter!.trashFile('conn-1', 'file-id')

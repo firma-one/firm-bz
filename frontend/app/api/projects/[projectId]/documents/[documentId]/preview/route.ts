@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { prisma } from '@/lib/prisma'
 import { getFileInfo } from '@/lib/file-utils'
-import { requireEngagementMember } from '@/lib/engagement-access'
+import { isHiddenFromMember, requireEngagementMember } from '@/lib/engagement-access'
 import { resolveEngagementConnectorId } from '@/lib/connectors/resolve-client-connector'
 import { getContentAdapter } from '@/lib/connectors/registry'
 import { ConnectorContentError } from '@/lib/connectors/types'
@@ -102,7 +102,7 @@ export async function GET(
 
         // 2. Permission check — engagement membership is the access gate for preview.
         const member = await requireEngagementMember(projectId, user.id)
-        if (!member) {
+        if (!member || (await isHiddenFromMember(projectId, member.role, fileInfo.externalId))) {
             return NextResponse.json({ error: 'Access denied' }, { status: 403 })
         }
 

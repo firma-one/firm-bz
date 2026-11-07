@@ -2,6 +2,8 @@ import { serve } from "inngest/next";
 import { inngest } from "@/lib/inngest/client";
 import {
     revokeProjectSharing,
+    restrictFirmFoldersOnCompletion,
+    restoreFirmFoldersOnReopen,
     revokeByDisabledPersona,
     revokeByMemberPersonaChange,
     revokeByRemovedMember,
@@ -30,6 +32,8 @@ export const { GET, POST, PUT } = serve({
     client: inngest,
     functions: [
         revokeProjectSharing,
+        restrictFirmFoldersOnCompletion,
+        restoreFirmFoldersOnReopen,
         revokeByDisabledPersona,
         revokeByMemberPersonaChange,
         revokeByRemovedMember,

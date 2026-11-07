@@ -7,7 +7,8 @@ const { st, calls } = vi.hoisted(() => ({
     st: {
         type: 'GOOGLE_DRIVE' as string,
         settings: {} as Record<string, any>,
-        copyId: 'copy-1' as string | null,
+        copyId: 'copy-1',
+        copyFailure: null as Error | null,
         versions: [] as any[],
     },
     calls: {
@@ -45,16 +46,17 @@ vi.mock('@/lib/connectors/registry', () => ({
     getContentAdapter: async () => ({ listVersions: async () => st.versions }),
 }))
 vi.mock('@/lib/connectors/adapters/onedrive-file-ops', () => ({
-    copyOneDriveFile: async (_c: string, id: string, parent: string, name: string) => { calls.copies.push({ id, parent, name }); return st.copyId ? { id: st.copyId } : null },
+    copyOneDriveFile: async (_c: string, id: string, parent: string, name: string) => { calls.copies.push({ id, parent, name }); if (st.copyFailure) throw st.copyFailure; return { id: st.copyId } },
 }))
 vi.mock('@/lib/google-drive-connector', () => ({
     googleDriveConnector: {
         getAccessToken: async () => 'token',
-        copyFile: async (_c: string, id: string, parent: string, name: string) => { calls.copies.push({ id, parent, name }); return st.copyId ? { id: st.copyId } : null },
+        copyFile: async (_c: string, id: string, parent: string, name: string) => { calls.copies.push({ id, parent, name }); if (st.copyFailure) throw st.copyFailure; return { id: st.copyId } },
     },
 }))
 
 import { ApprovalStorageError, archiveApprovedVersion } from './approval-archive'
+import { storageFailure } from '@/lib/connectors/storage-failure'
 
 const input = (settings: unknown = {}) => ({
     connectorId: 'conn',
@@ -68,6 +70,7 @@ beforeEach(() => {
     st.type = 'GOOGLE_DRIVE'
     st.settings = { organizations: { firm: { projectFolderIds: { 'eq-seer': 'engagement-folder' }, projectFolderSettings: { 'eq-seer': { generalFolderId: 'general' } } } } }
     st.copyId = 'copy-1'
+    st.copyFailure = null
     st.versions = []
     for (const k of Object.keys(calls) as (keyof typeof calls)[]) calls[k].length = 0
     vi.stubGlobal('fetch', vi.fn(async () => ({
@@ -115,10 +118,18 @@ describe('archiveApprovedVersion', () => {
     })
 
     it('refuses with what to do, and undoes the lock, when the copy fails', async () => {
-        st.copyId = null
+        st.copyFailure = new Error('socket hang up')
         const err = await archiveApprovedVersion(input()).catch((e) => e)
         expect(err).toBeInstanceOf(ApprovalStorageError)
         expect(err.message).toBe("Couldn't reach Google Drive to archive the approved version. Try again, or reconnect the storage.")
+        expect(calls.unlocked).toEqual(['file-1'])
+    })
+
+    it('says what the storage said, where it said something, and still undoes the lock', async () => {
+        st.copyFailure = storageFailure('storage_full', 'Google Drive')
+        const err = await archiveApprovedVersion(input()).catch((e) => e)
+        expect(err).toBeInstanceOf(ApprovalStorageError)
+        expect(err.message).toBe("Couldn't archive the approved version. The Google Drive account connected to this client is out of storage space. Free some up, then try again.")
         expect(calls.unlocked).toEqual(['file-1'])
     })
 
@@ -130,7 +141,7 @@ describe('archiveApprovedVersion', () => {
     })
 
     it('leaves a document locked already as it is: no new lock, none undone', async () => {
-        st.copyId = null
+        st.copyFailure = new Error('socket hang up')
         await archiveApprovedVersion(input({ lock: { type: 'finalize' } })).catch(() => {})
         expect(calls.locked).toEqual([])
         expect(calls.unlocked).toEqual([])

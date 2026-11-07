@@ -5,6 +5,7 @@ import { resolveEngagementConnector } from '@/lib/connectors/resolve-client-conn
 import { getStorageAdapter } from '@/lib/connectors/registry'
 import { googleDriveConnector } from '@/lib/google-drive-connector'
 import { moveOneDriveFile, renameOneDriveFile } from '@/lib/connectors/adapters/onedrive-file-ops'
+import { applyFailureMessage } from '@/lib/ai/files-agent/apply-failure'
 import { verifyApprovalToken } from '@/lib/ai/files-agent/approval'
 import { ensureFirmAgentUser } from '@/lib/ai/files-agent/agent-identity'
 import { agentApprovalMeta } from '@/lib/ai/files-agent/agent-audit'
@@ -55,19 +56,6 @@ interface ApplyOutcome {
  * Operations run sequentially and independently: one failure does not abort the rest, because a
  * half-applied batch the user cannot see is worse than a fully-reported partial one.
  */
-/**
- * Failures whose message was written for the user and is safe to show.
- *
- * A name collision is no longer one of these — collisions are resolved with a suffix rather than
- * refused. What remains is the case a suffix cannot fix: a name that breaks the format rules, such
- * as a changed extension or a reserved folder name.
- *
- * Matched on shape rather than tagged with an error class because these are thrown inline;
- * anything unrecognized falls back to the generic line, so a provider error cannot leak internals
- * into the panel.
- */
-const KNOWN_FAILURE = /cannot be used|reserved/i
-
 /**
  * Names currently in a folder, excluding one file.
  *
@@ -248,10 +236,9 @@ export async function POST(
                         throw new Error(`"${finalName}" cannot be used in this folder`)
                     }
 
-                    const result = isOneDrive(connector)
-                        ? await renameOneDriveFile(connector.id, proposal.externalId, finalName)
-                        : await googleDriveConnector.renameFile(connector.id, proposal.externalId, finalName)
-                    if (!result) throw new Error('Provider rejected the rename')
+                    // A refusal throws saying why, which this proposal's result then reports.
+                    if (isOneDrive(connector)) await renameOneDriveFile(connector.id, proposal.externalId, finalName)
+                    else await googleDriveConnector.renameFile(connector.id, proposal.externalId, finalName)
 
                     await prisma.engagementDocument.updateMany({
                         where: { engagementId: projectId, externalId: proposal.externalId },
@@ -300,20 +287,16 @@ export async function POST(
                     // files of one name in the folder, which is the state the provider refuses —
                     // and if the rename then failed, it would be the state we are left in.
                     if (renamedOnArrival) {
-                        const renamed = isOneDrive(connector)
-                            ? await renameOneDriveFile(connector.id, proposal.externalId, movedName)
-                            : await googleDriveConnector.renameFile(connector.id, proposal.externalId, movedName)
-                        if (!renamed) throw new Error('Provider rejected the rename before the move')
+                        if (isOneDrive(connector)) await renameOneDriveFile(connector.id, proposal.externalId, movedName)
+                        else await googleDriveConnector.renameFile(connector.id, proposal.externalId, movedName)
                         await prisma.engagementDocument.updateMany({
                             where: { engagementId: projectId, externalId: proposal.externalId },
                             data: { fileName: movedName, updatedBy: actorId },
                         })
                     }
 
-                    const result = isOneDrive(connector)
-                        ? await moveOneDriveFile(connector.id, proposal.externalId, proposal.destinationFolderId)
-                        : await googleDriveConnector.moveFile(connector.id, proposal.externalId, proposal.destinationFolderId)
-                    if (!result) throw new Error('Provider rejected the move')
+                    if (isOneDrive(connector)) await moveOneDriveFile(connector.id, proposal.externalId, proposal.destinationFolderId)
+                    else await googleDriveConnector.moveFile(connector.id, proposal.externalId, proposal.destinationFolderId)
 
                     await prisma.engagementDocument.updateMany({
                         where: { engagementId: projectId, externalId: proposal.externalId },
@@ -375,11 +358,7 @@ export async function POST(
                 outcomes.push({
                     proposal,
                     ok: false,
-                    // The REASON, where we wrote it ourselves. A collision is something the user
-                    // can act on, where we wrote the message ourselves. Provider and runtime
-                    // errors still collapse to the generic line, since their text is not written
-                    // for a reader and may carry internals.
-                    error: KNOWN_FAILURE.test(message) ? message : 'Could not apply this change',
+                    error: applyFailureMessage(error),
                 })
             }
         }

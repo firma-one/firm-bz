@@ -12,9 +12,12 @@
 
 import { logger } from '@/lib/logger'
 import { OneDriveConnector } from '@/lib/connectors/onedrive-connector'
+import { storageFailure, storageFailureFromResponse } from '@/lib/connectors/storage-failure'
 import { resolveOneDriveDriveBase } from './onedrive-adapter'
 
 const oneDrive = OneDriveConnector.getInstance()
+
+const COPY_POLL_MS = 1000
 
 async function auth(connectionId: string): Promise<string> {
   const token = await oneDrive.getAccessToken(connectionId)
@@ -22,40 +25,51 @@ async function auth(connectionId: string): Promise<string> {
   return token
 }
 
-export async function moveOneDriveFile(connectionId: string, fileId: string, newParentId: string): Promise<{ id: string } | null> {
+/** The token and drive to call OneDrive with. Not getting them means the connection needs renewing. */
+async function connect(connectionId: string): Promise<{ token: string; base: string }> {
   try {
     const [token, base] = await Promise.all([auth(connectionId), resolveOneDriveDriveBase(connectionId)])
-    const res = await fetch(`${base}/items/${fileId}`, {
-      method: 'PATCH',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ parentReference: { id: newParentId } }),
-    })
-    if (!res.ok) return null
-    const data = await res.json()
-    return { id: data.id }
+    return { token, base }
   } catch (error) {
-    logger.error('Failed to move OneDrive file', error as Error)
-    return null
+    logger.error('Failed to get a OneDrive connection', error as Error)
+    throw storageFailure('reconnect', 'OneDrive')
   }
 }
 
-export async function renameOneDriveFile(connectionId: string, fileId: string, newName: string): Promise<{ id: string; name: string } | null> {
+async function call(url: string, init?: RequestInit): Promise<Response> {
   try {
-    const trimmed = newName.trim()
-    if (!trimmed) return null
-    const [token, base] = await Promise.all([auth(connectionId), resolveOneDriveDriveBase(connectionId)])
-    const res = await fetch(`${base}/items/${fileId}`, {
-      method: 'PATCH',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: trimmed }),
-    })
-    if (!res.ok) return null
-    const data = await res.json()
-    return { id: data.id, name: data.name }
+    return await fetch(url, init)
   } catch (error) {
-    logger.error('Failed to rename OneDrive file', error as Error)
-    return null
+    logger.error('Failed to reach OneDrive', error as Error)
+    throw storageFailure('unreachable', 'OneDrive')
   }
+}
+
+/** Throws a StorageFailure saying why, when OneDrive refuses, as do the others here. */
+export async function moveOneDriveFile(connectionId: string, fileId: string, newParentId: string): Promise<{ id: string }> {
+  const { token, base } = await connect(connectionId)
+  const res = await call(`${base}/items/${fileId}`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ parentReference: { id: newParentId } }),
+  })
+  if (!res.ok) throw await storageFailureFromResponse(res, 'OneDrive', 'move a file')
+  const data = await res.json()
+  return { id: data.id }
+}
+
+export async function renameOneDriveFile(connectionId: string, fileId: string, newName: string): Promise<{ id: string; name: string }> {
+  const trimmed = newName.trim()
+  if (!trimmed) throw storageFailure('invalid_name', 'OneDrive')
+  const { token, base } = await connect(connectionId)
+  const res = await call(`${base}/items/${fileId}`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: trimmed }),
+  })
+  if (!res.ok) throw await storageFailureFromResponse(res, 'OneDrive', 'rename a file')
+  const data = await res.json()
+  return { id: data.id, name: data.name }
 }
 
 /**
@@ -69,60 +83,53 @@ export async function copyOneDriveFile(
   fileId: string,
   parentId: string,
   name?: string
-): Promise<{ id: string } | null> {
-  try {
-    const [token, base] = await Promise.all([auth(connectionId), resolveOneDriveDriveBase(connectionId)])
-    const body: { parentReference: { id: string }; name?: string } = { parentReference: { id: parentId } }
-    if (name) body.name = name
+): Promise<{ id: string }> {
+  const { token, base } = await connect(connectionId)
+  const body: { parentReference: { id: string }; name?: string } = { parentReference: { id: parentId } }
+  if (name) body.name = name
 
-    const res = await fetch(`${base}/items/${fileId}/copy`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    })
-    if (res.status !== 202) {
-      const err = await res.text().catch(() => '')
-      logger.error(`OneDrive copy failed: ${res.status} - ${err}`, new Error(`HTTP ${res.status}`))
-      return null
-    }
-    const monitorUrl = res.headers.get('Location')
-    if (!monitorUrl) return null
+  const res = await call(`${base}/items/${fileId}/copy`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (res.status !== 202) throw await storageFailureFromResponse(res, 'OneDrive', 'copy a file')
+  const monitorUrl = res.headers.get('Location')
+  if (!monitorUrl) throw storageFailure('other', 'OneDrive', 'it gave no way to follow the copy')
 
-    // Poll the copy-progress monitor (unauthenticated, no bearer token needed — same
-    // pre-authorized-URL convention as the upload session and resumable-upload URLs).
-    const maxAttempts = 30
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      const statusRes = await fetch(monitorUrl)
-      if (statusRes.ok) {
-        const status = await statusRes.json()
-        if (status.status === 'completed') {
-          const resourceId: string | undefined = status.resourceId
-          if (resourceId) return { id: resourceId }
-          break // fall through to name-match lookup below
-        }
-        if (status.status === 'failed') {
-          logger.error('OneDrive async copy failed', new Error(status.error?.message || 'copy failed'))
-          return null
-        }
+  // Poll the copy-progress monitor (unauthenticated, no bearer token needed — same
+  // pre-authorized-URL convention as the upload session and resumable-upload URLs).
+  const maxAttempts = 30
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const statusRes = await call(monitorUrl)
+    if (statusRes.ok) {
+      const status = await statusRes.json()
+      if (status.status === 'completed') {
+        const resourceId: string | undefined = status.resourceId
+        if (resourceId) return { id: resourceId }
+        break // fall through to name-match lookup below
       }
-      await new Promise((r) => setTimeout(r, 1000))
+      if (status.status === 'failed') {
+        const said = status.error?.message as string | undefined
+        logger.error('OneDrive async copy failed', new Error(said || 'copy failed'))
+        throw storageFailure('other', 'OneDrive', said || 'the copy failed partway')
+      }
     }
-
-    // Fallback: resolve by name in the destination folder (copy completed but resourceId
-    // wasn't in the final status payload).
-    const destName = name ?? (await getFileName(connectionId, fileId)) ?? undefined
-    if (!destName) return null
-    const listRes = await fetch(`${base}/items/${parentId}/children?$select=id,name`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-    if (!listRes.ok) return null
-    const listData = await listRes.json()
-    const match = (listData.value || []).find((f: { name: string }) => f.name === destName)
-    return match ? { id: match.id } : null
-  } catch (error) {
-    logger.error('Failed to copy OneDrive file', error as Error)
-    return null
+    await new Promise((r) => setTimeout(r, COPY_POLL_MS))
   }
+
+  // Fallback: resolve by name in the destination folder (copy completed but resourceId
+  // wasn't in the final status payload).
+  const destName = name ?? (await getFileName(connectionId, fileId).catch(() => null)) ?? undefined
+  if (!destName) throw storageFailure('timed_out', 'OneDrive')
+  const listRes = await call(`${base}/items/${parentId}/children?$select=id,name`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!listRes.ok) throw storageFailure('timed_out', 'OneDrive')
+  const listData = await listRes.json()
+  const match = (listData.value || []).find((f: { name: string }) => f.name === destName)
+  if (!match) throw storageFailure('timed_out', 'OneDrive')
+  return { id: match.id }
 }
 
 async function getFileName(connectionId: string, fileId: string): Promise<string | null> {
@@ -145,9 +152,8 @@ export async function recursiveCopyOneDrive(
   fileId: string,
   targetParentId: string
 ): Promise<{ id: string; name: string }[]> {
-  const name = await getFileName(connectionId, fileId)
+  const name = await getFileName(connectionId, fileId).catch(() => null)
   const result = await copyOneDriveFile(connectionId, fileId, targetParentId, name ?? undefined)
-  if (!result) return []
   return [{ id: result.id, name: name ?? 'Copied item' }]
 }
 

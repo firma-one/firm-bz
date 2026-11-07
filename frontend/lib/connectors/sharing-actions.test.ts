@@ -33,8 +33,21 @@ vi.mock('@/lib/prisma', () => ({
       update: (...a: unknown[]) => mockClientUpdate(...a),
       updateMany: (...a: unknown[]) => mockClientUpdateMany(...a),
     },
+    firm: { findUnique: async () => ({ slug: 'firm-1' }) },
+    engagement: { findMany: async () => [], update: async () => ({}) },
   },
 }))
+
+// Sharing a connector also provisions the client's Drive folders: no Drive in these tests.
+vi.mock('@/lib/connectors/registry', () => ({ getStorageAdapter: async () => ({}) }))
+vi.mock('@/lib/connectors/pockett-structure.service', () => ({
+  ensureAppFolderStructure: async () => ({ projectId: null }),
+  setupFirmFolder: async () => {},
+}))
+vi.mock('@/lib/audit', () => {
+  const chain: any = new Proxy({}, { get: (_t, k) => (k === 'fireAndForget' ? () => {} : () => chain) })
+  return { audit: () => chain, AUDIT_EVENT: {}, AUDIT_SCOPE: {} }
+})
 
 vi.mock('@/lib/logger', () => ({
   logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn() },

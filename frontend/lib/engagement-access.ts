@@ -1,7 +1,7 @@
 import type { EngagementRole, EngagementStatus } from '@prisma/client'
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { getSharedAndAncestorIdsForPersona } from '@/lib/engagement-sharing-ids'
+import { getSharedAndAncestorIdsForPersona, privateExternalIds } from '@/lib/engagement-sharing-ids'
 
 export type EngagementMemberRow = {
   role: EngagementRole
@@ -71,6 +71,19 @@ export async function visibleDocumentIdsFor(
     skipDescendants: false,
   })
   return new Set([...sharedIds, ...descendantIds])
+}
+
+/**
+ * A client never reaches what's private to the firm, even holding its ID. For routes that open a
+ * document directly (secure open, preview, download), which otherwise check membership alone.
+ */
+export async function isHiddenFromMember(
+  projectId: string,
+  role: EngagementRole | null | undefined,
+  documentExternalId: string
+): Promise<boolean> {
+  if (!isExternalEngagementRole(role)) return false
+  return (await privateExternalIds(projectId)).has(documentExternalId)
 }
 
 /** Blocks file mutations when user is not an engagement member or is read-only after closure. */

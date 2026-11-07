@@ -2,7 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { createAdminClient } from '@/utils/supabase/admin'
-import { parseSettingsFromDb, type ActivityStatus } from '@/lib/sharing-settings'
+import { parseSettingsFromDb, type ActivityStatus, privateSubtreeIds } from '@/lib/sharing-settings'
 import { getReminderKeysForUser } from '@/lib/reminders/reminder-service'
 import { engagementPath } from '@/lib/navigation/firm-paths'
 import { isExternalEngagementRole } from '@/lib/engagement-access'
@@ -191,9 +191,12 @@ export async function loadCalendarData(params: {
   const visibleDocumentsByEngagement = new Map<string, typeof engagements[number]['documents']>()
   for (const e of engagements) {
     const access = externalAccessByEngagement.get(e.id)
+    const privateIds = access ? privateSubtreeIds([...allFolders.filter((f) => f.engagementId === e.id), ...e.documents]) : null
     visibleDocumentsByEngagement.set(e.id, e.documents.filter((doc) => {
       if (!doc.dueDate) return false
       if (!access) return true
+      // The subtree check below walks up to a shared folder, so a private file inside one would pass it.
+      if (privateIds?.has(doc.externalId)) return false
       const deliverableId = doc.isFolder && isDeliverableSettings(doc.settings)
         ? doc.id
         : findAncestorDeliverableId(e.id, doc.parentId ?? null)

@@ -59,38 +59,37 @@ describe('grantEngagementDriveFolderAccess', () => {
   // ── Role: eng_member ──────────────────────────────────────────────────────
 
   describe('eng_member role', () => {
-    it('grants writer access to generalFolder only', async () => {
+    it('grants editor access to generalFolder only', async () => {
       await grantEngagementDriveFolderAccess({
         connectorId: 'conn-1', engagementSlug: 'eng', email: 'member@firm.com', role: 'eng_member',
       })
       expect(mockGrantFolderPermission).toHaveBeenCalledTimes(1)
-      expect(mockGrantFolderPermission).toHaveBeenCalledWith('conn-1', 'gen-1', 'member@firm.com', 'writer', { notify: false })
+      expect(mockGrantFolderPermission).toHaveBeenCalledWith('conn-1', 'gen-1', 'member@firm.com', 'editor', { notify: false })
     })
   })
 
-  // ── Role: eng_viewer (guest) ──────────────────────────────────────────────
+  // ── Clients: per-file access only, so nothing private can reach them through a folder ──
 
-  describe('eng_viewer role', () => {
-    it('grants reader access to generalFolder only', async () => {
+  describe.each(['eng_viewer', 'eng_ext_collaborator'] as const)('%s role', (role) => {
+    it('gets no folder access', async () => {
       await grantEngagementDriveFolderAccess({
-        connectorId: 'conn-1', engagementSlug: 'eng', email: 'viewer@firm.com', role: 'eng_viewer',
+        connectorId: 'conn-1', engagementSlug: 'eng', email: 'client@example.com', role,
       })
-      expect(mockGrantFolderPermission).toHaveBeenCalledTimes(1)
-      expect(mockGrantFolderPermission).toHaveBeenCalledWith('conn-1', 'gen-1', 'viewer@firm.com', 'reader', { notify: false })
+      expect(mockGrantFolderPermission).not.toHaveBeenCalled()
     })
   })
 
   // ── Role: eng_admin ───────────────────────────────────────────────────────
 
   describe('eng_admin role', () => {
-    it('grants writer access to all three folders', async () => {
+    it('grants editor access to all three folders', async () => {
       await grantEngagementDriveFolderAccess({
         connectorId: 'conn-1', engagementSlug: 'eng', email: 'admin@firm.com', role: 'eng_admin',
       })
       expect(mockGrantFolderPermission).toHaveBeenCalledTimes(3)
-      expect(mockGrantFolderPermission).toHaveBeenCalledWith('conn-1', 'gen-1', 'admin@firm.com', 'writer', { notify: false })
-      expect(mockGrantFolderPermission).toHaveBeenCalledWith('conn-1', 'conf-1', 'admin@firm.com', 'writer', { notify: false })
-      expect(mockGrantFolderPermission).toHaveBeenCalledWith('conn-1', 'stag-1', 'admin@firm.com', 'writer', { notify: false })
+      expect(mockGrantFolderPermission).toHaveBeenCalledWith('conn-1', 'gen-1', 'admin@firm.com', 'editor', { notify: false })
+      expect(mockGrantFolderPermission).toHaveBeenCalledWith('conn-1', 'conf-1', 'admin@firm.com', 'editor', { notify: false })
+      expect(mockGrantFolderPermission).toHaveBeenCalledWith('conn-1', 'stag-1', 'admin@firm.com', 'editor', { notify: false })
     })
 
     it('skips null folder ids gracefully', async () => {
@@ -103,7 +102,7 @@ describe('grantEngagementDriveFolderAccess', () => {
         connectorId: 'conn-1', engagementSlug: 'eng', email: 'admin@firm.com', role: 'eng_admin',
       })
       expect(mockGrantFolderPermission).toHaveBeenCalledTimes(1)
-      expect(mockGrantFolderPermission).toHaveBeenCalledWith('conn-1', 'gen-1', 'admin@firm.com', 'writer', { notify: false })
+      expect(mockGrantFolderPermission).toHaveBeenCalledWith('conn-1', 'gen-1', 'admin@firm.com', 'editor', { notify: false })
     })
   })
 

@@ -98,6 +98,7 @@ describe('connector types', () => {
       grantFolderPermission: async () => null,
       revokePermission: async () => false,
       downgradeFolderUserPermissionToReader: async () => false,
+      upgradeFolderUserPermissionToEditor: async () => false,
       getEngagementFolderIds: async () => ({
         generalFolderId: null,
         confidentialFolderId: null,
@@ -133,6 +134,7 @@ describe('connector types', () => {
       grantFolderPermission: async (_id, _folderId, _email, _role) => 'perm-xyz',
       revokePermission: async () => true,
       downgradeFolderUserPermissionToReader: async () => true,
+      upgradeFolderUserPermissionToEditor: async () => true,
       getEngagementFolderIds: async () => ({ generalFolderId: 'g', confidentialFolderId: 'c', stagingFolderId: 's' }),
       trashFile: async () => {},
       listFiles: async () => [],

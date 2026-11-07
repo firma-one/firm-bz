@@ -45,8 +45,8 @@ function setup(opts: { canUndoTrash?: boolean; storageBinName?: string } = {}) {
 }
 
 /** Moves the file to the trash the way the UI does: open the confirmation, wait, confirm. */
-async function moveToBin(result: { current: ReturnType<typeof useEngagementFileOps> }) {
-    act(() => { result.current.handleTrash(FILE) })
+async function moveToBin(result: { current: ReturnType<typeof useEngagementFileOps> }, doc = FILE) {
+    act(() => { result.current.handleTrash(doc) })
     act(() => { vi.advanceTimersByTime(700) })
     await act(async () => { await result.current.handleTrashConfirmed() })
 }
@@ -72,6 +72,50 @@ describe('Moved to trash — Undo', () => {
         const toast = addToast.mock.calls[0][0]
         expect(toast.message).toBe('podcast-ep04.jpg moved to Recycle bin')
         expect(toast.action).toBeUndefined()
+    })
+})
+
+describe('a failed action says why', () => {
+    const REASON = 'OneDrive has this locked, usually because a file is open in Word, Excel or another app.'
+    const LINK = { ...FILE, documentType: 'LINK' }
+
+    /** The billing gate lets it through; anything else gets this answer. */
+    function everyAction(answer: () => Promise<Response>) {
+        vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+            if (url.startsWith('/api/billing/document-gate')) return { ok: true, json: async () => ({ allowed: true }) } as Response
+            return answer()
+        }))
+    }
+    const refused = async () => ({ ok: false, status: 409, json: async () => ({ error: REASON }) }) as Response
+    const noReason = async () => ({ ok: false, status: 500, json: async () => { throw new SyntaxError('not JSON') } }) as unknown as Response
+    const offline = async () => { throw new TypeError('Failed to fetch') }
+
+    const ACTIONS: [string, string, (r: { current: ReturnType<typeof useEngagementFileOps> }) => Promise<unknown>][] = [
+        ['duplicating', 'Duplicate failed', (r) => act(async () => { await r.current.handleDuplicate(FILE) })],
+        ['moving to the trash', 'Move to trash failed', (r) => moveToBin(r)],
+        ['deleting a link', 'Delete failed', (r) => moveToBin(r, LINK)],
+        ['moving to another area', 'Move failed', (r) => act(async () => { await r.current.handleMoveTree(FILE, 'confidential') })],
+    ]
+
+    it.each(ACTIONS)("%s shows the server's reason", async (_name, title, run) => {
+        everyAction(refused)
+        const { result } = setup()
+        await run(result)
+        expect(addToast).toHaveBeenLastCalledWith({ type: 'error', title, message: REASON })
+    })
+
+    it.each(ACTIONS)('%s still gives a reason when the answer has none', async (_name, title, run) => {
+        everyAction(noReason)
+        const { result } = setup()
+        await run(result)
+        expect(addToast).toHaveBeenLastCalledWith({ type: 'error', title, message: 'The server answered 500. Try again.' })
+    })
+
+    it.each(ACTIONS)('%s says so when the request never got there', async (_name, title, run) => {
+        everyAction(offline)
+        const { result } = setup()
+        await run(result)
+        expect(addToast).toHaveBeenLastCalledWith({ type: 'error', title, message: "Couldn't reach Firma. Check your connection and try again." })
     })
 })
 
@@ -215,6 +259,27 @@ describe('Move/Copy to folder — one item or the selection', () => {
         expect(onItemRemoved).not.toHaveBeenCalled()
         expect(addToast).toHaveBeenLastCalledWith(expect.objectContaining({ type: 'error', message: 'Drive said no' }))
         expect(result.current.copyMoveModalOpen).toBe(true)
+    })
+
+    it.each([['copy', 'Copy failed'], ['move', 'Move failed']] as const)('titles a failed %s, and gives the reason', async (action, title) => {
+        stubDrive(['a'])
+        const { result } = setupWithRemoval()
+        act(() => { result.current.openCopyMoveModal(A, action) })
+        await act(async () => { await result.current.handleCopyMoveToFolder('dest') })
+        expect(addToast).toHaveBeenLastCalledWith(expect.objectContaining({ type: 'error', title, message: 'Drive said no' }))
+    })
+
+    it('says so when a move never got there', async () => {
+        stubDrive()
+        const answering = vi.mocked(fetch).getMockImplementation()!
+        vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+            if (init?.body && JSON.parse(init.body as string).action === 'move') throw new TypeError('Failed to fetch')
+            return answering(url, init)
+        }))
+        const { result } = setupWithRemoval()
+        act(() => { result.current.openCopyMoveModal(A, 'move') })
+        await act(async () => { await result.current.handleCopyMoveToFolder('dest') })
+        expect(addToast).toHaveBeenLastCalledWith(expect.objectContaining({ title: 'Move failed', message: "Couldn't reach Firma. Check your connection and try again." }))
     })
 
     it('does nothing to items moved into the folder they are already in', async () => {

@@ -18,6 +18,7 @@ const { st, perm, content } = vi.hoisted(() => {
     const st = {
         user: { id: 'u1', email: 'sam@client.com', identities: [] as Array<{ provider: string; identity_data: { email: string } }> },
         memberRole: 'eng_admin',
+        hidden: false,
         connectorType: 'GOOGLE_DRIVE' as 'GOOGLE_DRIVE' | 'ONEDRIVE',
         accountEmail: 'deepak@firmaone.com',
         sharingUser: { id: 'su1', connectorPermissionId: 'perm-old', sharingPermissionStatus: 'GRANTED' } as Record<string, unknown> | null,
@@ -37,6 +38,7 @@ vi.mock('@/lib/engagement-access', () => ({
     getEngagementStatus: async () => 'ACTIVE',
     isEngagementMemberReadOnlyWhenCompleted: () => false,
     isExternalEngagementRole: (role: string) => role === 'eng_ext_collaborator' || role === 'eng_viewer',
+    isHiddenFromMember: async () => st.hidden,
 }))
 vi.mock('@/lib/connectors/registry', () => ({
     getPermissionAdapter: async () => perm,
@@ -72,6 +74,7 @@ beforeEach(() => {
     content.setCopyRestricted.mockReset()
     st.user = { id: 'u1', email: 'sam@client.com', identities: [] }
     st.memberRole = 'eng_admin'
+    st.hidden = false
     st.connectorType = 'GOOGLE_DRIVE'
     st.accountEmail = 'deepak@firmaone.com'
     st.sharingUser = { id: 'su1', connectorPermissionId: 'perm-old', sharingPermissionStatus: 'GRANTED' }
@@ -81,6 +84,20 @@ beforeEach(() => {
     perm.grantFilePermission.mockResolvedValue('perm-new')
     perm.listFilePermissions.mockResolvedValue([])
     perm.preInviteGuest.mockResolvedValue({ inviteRedeemUrl: null })
+})
+
+describe('POST regrant of a private file', () => {
+    it('grants a client nothing, whatever rows they hold', async () => {
+        st.memberRole = 'eng_ext_collaborator'
+        st.hidden = true
+        const res = await POST(
+            { nextUrl: new URL('http://x/api/projects/p1/documents/d1/sharing/regrant') } as never,
+            { params: Promise.resolve({ projectId: 'p1', documentId: 'd1' }) },
+        )
+        expect(res.status).toBe(403)
+        expect(perm.grantFilePermission).not.toHaveBeenCalled()
+        expect(perm.getFilePermission).not.toHaveBeenCalled()
+    })
 })
 
 describe('POST regrant — Google Drive', () => {

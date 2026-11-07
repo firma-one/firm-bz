@@ -124,6 +124,24 @@ describe('getFirmCalendarData — external members', () => {
     expect(await documentEventsFor('eng_viewer')).toEqual(['D-review', 'F-shared'])
   })
 
+  it('hides a private file from a client, even inside a folder shared with them', async () => {
+    const privateFile = { ...file('F-private', 'x-D-wip'), settings: { lock: { type: 'private' } } }
+    DOCS.push(privateFile)
+    // On the walk up it reaches a shared folder, so the private check is all that stops it.
+    getSharedAndAncestorIdsForPersona.mockResolvedValue({
+      sharedIds: ['x-D-wip'],
+      ancestorIds: [],
+      descendantIds: [],
+      parentMap: new Map([['x-F-private', 'x-D-wip']]),
+    })
+    try {
+      expect(await documentEventsFor('eng_ext_collaborator')).not.toContain('F-private')
+      expect(await documentEventsFor('eng_admin')).toContain('F-private')
+    } finally {
+      DOCS.pop()
+    }
+  })
+
   it('shows an external member nothing that is not shared with their persona', async () => {
     getSharedAndAncestorIdsForPersona.mockResolvedValue({
       sharedIds: [], ancestorIds: [], descendantIds: [], parentMap: new Map(),

@@ -20,7 +20,7 @@
             ]},
             "Internal Only": { "name": "Internal Only", "files": [
               { "name": "Market Expansion Financial Model.xlsx", "type": "xlsx" },
-              { "name": "Internal Pricing Sensitivity.xlsx", "type": "xlsx" }
+              { "name": "Internal Pricing Sensitivity.xlsx", "type": "xlsx", "private": true }
             ]},
             "01__Market_&_Competitive_Intelligence_Report": { "name": "01__Market_&_Competitive_Intelligence_Report", "files": [
               { "name": "Discovery Workshop Notes.md", "type": "md" },

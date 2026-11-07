@@ -32,6 +32,9 @@ export function createGoogleDrivePermissionAdapter(): IConnectorPermissionAdapte
     downgradeFolderUserPermissionToReader: (id, folderId, email) =>
       g.downgradeFolderUserPermissionToReader(id, folderId, email),
 
+    upgradeFolderUserPermissionToEditor: (id, folderId, email) =>
+      g.restoreFolderUserPermissionToWriter(id, folderId, email),
+
     getEngagementFolderIds: async (id, slug, opts): Promise<EngagementFolderIds> => {
       const result = await g.getProjectFolderIds(id, slug, opts)
       return {
@@ -41,10 +44,7 @@ export function createGoogleDrivePermissionAdapter(): IConnectorPermissionAdapte
       }
     },
 
-    trashFile: async (id, fileId) => {
-      const ok = await g.trashFile(id, fileId)
-      if (!ok) throw new Error(`Failed to trash Google Drive file ${fileId}`)
-    },
+    trashFile: (id, fileId) => g.trashFileWithReason(id, fileId),
 
     restoreFile: async (id, fileId) => {
       const ok = await g.untrashFile(id, fileId)
@@ -81,8 +81,7 @@ export function createGoogleDrivePermissionAdapter(): IConnectorPermissionAdapte
       if (opts?.permanent) {
         await g.permanentlyDeleteFile(id, fileId)
       } else {
-        const ok = await g.trashFile(id, fileId)
-        if (!ok) throw new Error(`Failed to trash Google Drive file ${fileId}`)
+        await g.trashFileWithReason(id, fileId)
       }
     },
 

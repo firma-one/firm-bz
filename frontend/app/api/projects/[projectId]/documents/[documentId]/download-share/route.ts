@@ -3,7 +3,7 @@ import { createClient } from '@/utils/supabase/server'
 import { prisma } from '@/lib/prisma'
 import { parseSettingsFromDb, buildSettingsForDb } from '@/lib/sharing-settings'
 import { getFileInfo } from '@/lib/file-utils'
-import { requireEngagementMember } from '@/lib/engagement-access'
+import { isHiddenFromMember, requireEngagementMember } from '@/lib/engagement-access'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 import { applyDiagonalWatermark } from '@/lib/watermark-pdf'
 import { resolveEngagementConnectorId } from '@/lib/connectors/resolve-client-connector'
@@ -55,6 +55,9 @@ export async function GET(
       select: { id: true, clientId: true, connectorId: true, fileName: true, settings: true, status: true },
     })
     if (!document) return NextResponse.json({ error: 'Document not found' }, { status: 404 })
+    if (await isHiddenFromMember(projectId, projectMember.role, fileInfo.externalId)) {
+      return NextResponse.json({ error: 'File not found' }, { status: 404 })
+    }
 
     const settings = parseSettingsFromDb(document.settings)
     // Audit events below record `fileName` (the document's own name, which the Audit page shows)

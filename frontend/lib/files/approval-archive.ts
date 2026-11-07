@@ -4,6 +4,7 @@ import { ConnectorType } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { getContentAdapter, getPermissionAdapter, getStorageAdapter } from '@/lib/connectors/registry'
 import { copyOneDriveFile } from '@/lib/connectors/adapters/onedrive-file-ops'
+import { StorageFailure } from '@/lib/connectors/storage-failure'
 import { googleDriveConnector } from '@/lib/google-drive-connector'
 import { getLock, type LockBlock } from '@/lib/sharing-settings'
 import { logger } from '@/lib/logger'
@@ -186,7 +187,6 @@ export async function archiveApprovedVersion(input: {
         const copy = type === ConnectorType.ONEDRIVE
             ? await copyOneDriveFile(connectorId, document.externalId, parentId, name)
             : await googleDriveConnector.copyFile(connectorId, document.externalId, parentId, name)
-        if (!copy) throw new Error('Copy failed')
 
         // The archive itself mustn't drift: the copy is read-only.
         try {
@@ -206,7 +206,9 @@ export async function archiveApprovedVersion(input: {
             await unlockFileInStorage(connectorId, document.externalId, downgraded)
                 .catch((err) => logger.error('[approval] could not undo the lock', err as Error))
         }
-        throw e instanceof ApprovalStorageError ? e : unreachable(type, e)
+        if (e instanceof ApprovalStorageError) throw e
+        if (e instanceof StorageFailure) throw new ApprovalStorageError(`Couldn't archive the approved version. ${e.message}`, e)
+        throw unreachable(type, e)
     }
 }
 

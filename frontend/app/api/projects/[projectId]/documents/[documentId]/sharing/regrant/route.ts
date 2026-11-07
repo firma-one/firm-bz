@@ -9,6 +9,7 @@ import {
   isEngagementMemberReadOnlyWhenCompleted,
   isExternalEngagementRole,
   requireEngagementMember,
+  isHiddenFromMember,
 } from '@/lib/engagement-access'
 import { isDocumentFinalized, parseSettingsFromDb, buildSettingsForDb } from '@/lib/sharing-settings'
 import { applyDiagonalWatermark } from '@/lib/watermark-pdf'
@@ -79,6 +80,11 @@ export async function POST(
         })
 
         if (!document) return NextResponse.json({ error: 'Document not found' }, { status: 404 })
+
+        // This route grants a real Drive permission, so a private file stops here, whatever rows it has.
+        if (await isHiddenFromMember(projectId, projectMember.role, document.externalId)) {
+            return NextResponse.json({ error: 'File is not accessible' }, { status: 403 })
+        }
 
         let sharingUser = await prisma.engagementDocumentSharingUser.findFirst({
             where: {
