@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
-import { getSharedAndAncestorIdsForAllPersonas } from '@/lib/engagement-sharing-ids'
+import { getSharedAndAncestorIdsForAllPersonas, internalOnlyTreeIds } from '@/lib/engagement-sharing-ids'
 import { prisma } from '@/lib/prisma'
 import { resolveProjectContext } from '@/lib/resolve-project-context'
-import { canViewProject } from '@/lib/permission-helpers'
+import { canViewProject, getProjectPersona } from '@/lib/permission-helpers'
 
 /**
  * GET /api/projects/[projectId]/sharing/ids
@@ -28,8 +28,13 @@ export async function GET(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    const [result, sharedByMeRows] = await Promise.all([
+    // Limited roles call this too, and what's hidden from them must not reach them as a list of ids.
+    const role = await getProjectPersona(ctx.firmId, ctx.clientId, projectId)
+    const isInternal = role === 'eng_admin' || role === 'eng_member'
+
+    const [result, internalOnly, sharedByMeRows] = await Promise.all([
       getSharedAndAncestorIdsForAllPersonas(projectId),
+      isInternal ? internalOnlyTreeIds(projectId) : { ids: [], ancestorIds: [] },
       // Use sharing table as source of truth — slug: { not: null } was a fragile proxy
       (prisma as any).$queryRawUnsafe(
         `SELECT DISTINCT ed."externalId"
@@ -61,6 +66,8 @@ export async function GET(
       descendantIdsForEC: result.descendantIdsForEC,
       descendantIdsForGuest: result.descendantIdsForGuest,
       sharedByMeExternalIds,
+      internalOnlyIds: internalOnly.ids,
+      internalOnlyAncestorIds: internalOnly.ancestorIds,
     })
   } catch (e) {
     console.error('GET sharing ids error', e)

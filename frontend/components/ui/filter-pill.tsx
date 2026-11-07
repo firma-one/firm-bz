@@ -100,7 +100,7 @@ export function FilterMenuLabel({ children, className }: { children: React.React
     return <p className={cn("px-2 pb-1 pt-1.5 text-caption text-fg-subtle", className)}>{children}</p>
 }
 
-/** One row in a filter menu, Notion-style: compact, with a check on the chosen value. */
+/** One row in a filter menu, Notion-style: compact, led by a marker that says what kind of choice it is. */
 export function FilterMenuRow({
     selected,
     multi = false,
@@ -110,11 +110,11 @@ export function FilterMenuRow({
 }: {
     selected: boolean
     /**
-     * Multi-select (Type): a checkbox leads the row and the menu stays open, so several values can
-     * be ticked. Single-select rows show a check on the chosen value and close the menu.
+     * Multi-select (Type): a square checkbox leads the row and the menu stays open, so several values
+     * can be ticked. Single-select (People): a round marker leads it, and choosing closes the menu.
      */
     multi?: boolean
-    /** Optional leading icon, after the checkbox. */
+    /** Optional leading icon, after the marker. */
     icon?: React.ReactNode
     onSelect: () => void
     children: React.ReactNode
@@ -125,24 +125,22 @@ export function FilterMenuRow({
                 if (multi) e.preventDefault()
                 onSelect()
             }}
-            role={multi ? "menuitemcheckbox" : undefined}
-            aria-checked={multi ? selected : undefined}
-            className={cn("h-8 cursor-pointer gap-2 px-2 py-0", !multi && selected && "font-medium")}
+            role={multi ? "menuitemcheckbox" : "menuitemradio"}
+            aria-checked={selected}
+            className="h-8 cursor-pointer gap-2 px-2 py-0"
         >
-            {multi && (
-                <span
-                    aria-hidden
-                    className={cn(
-                        "flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[3px] border",
-                        selected ? "border-action bg-action text-action-fg" : "border-line-strong"
-                    )}
-                >
-                    {selected && <Check className="h-2.5 w-2.5" strokeWidth={3} />}
-                </span>
-            )}
+            <span
+                aria-hidden
+                className={cn(
+                    "flex h-3.5 w-3.5 shrink-0 items-center justify-center border",
+                    multi ? "rounded-[3px]" : "rounded-full",
+                    selected ? "border-action bg-action text-action-fg" : "border-line-strong"
+                )}
+            >
+                {selected && <Check className="h-2.5 w-2.5" strokeWidth={3} />}
+            </span>
             {icon && <span className="flex shrink-0 items-center text-fg-subtle [&_svg]:h-3.5 [&_svg]:w-3.5">{icon}</span>}
             <span className="min-w-0 flex-1 truncate">{children}</span>
-            {!multi && selected && <Check className="h-3.5 w-3.5 shrink-0 text-fg-muted" aria-hidden />}
         </DropdownMenuItem>
     )
 }

@@ -1,6 +1,8 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { FilterPill, summarizePicks } from './filter-pill'
+import { FilterMenuRow } from './filter-pill'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from './dropdown-menu'
 
 describe('FilterPill', () => {
     it('reads as the bare label when empty, with no clear control', () => {
@@ -55,5 +57,40 @@ describe('FilterPill collapsible', () => {
         render(<FilterPill icon={<span />} label="People" />)
         expect(screen.getByText('People').className).not.toContain('sr-only')
         expect(screen.getByRole('button').getAttribute('title')).toBeNull()
+    })
+})
+
+describe('FilterMenuRow markers', () => {
+    const openRow = (props: Partial<React.ComponentProps<typeof FilterMenuRow>> = {}) => {
+        render(
+            <DropdownMenu open>
+                <DropdownMenuTrigger>Open</DropdownMenuTrigger>
+                <DropdownMenuContent>
+                    <FilterMenuRow selected={false} onSelect={() => {}} {...props}>Row</FilterMenuRow>
+                </DropdownMenuContent>
+            </DropdownMenu>,
+        )
+    }
+
+    it('leads a single-choice row with a round marker, and says it is one', () => {
+        openRow({ selected: true })
+        const row = screen.getByRole('menuitemradio', { name: 'Row' })
+        expect(row.getAttribute('aria-checked')).toBe('true')
+        expect(row.querySelector('span.rounded-full svg')).not.toBeNull()
+    })
+
+    it('leaves the marker empty on a single-choice row that is not chosen', () => {
+        openRow()
+        const row = screen.getByRole('menuitemradio', { name: 'Row' })
+        expect(row.getAttribute('aria-checked')).toBe('false')
+        expect(row.querySelector('span.rounded-full')).not.toBeNull()
+        expect(row.querySelector('span.rounded-full svg')).toBeNull()
+    })
+
+    it('keeps a square checkbox on a multi-select row', () => {
+        openRow({ multi: true, selected: true })
+        const row = screen.getByRole('menuitemcheckbox', { name: 'Row' })
+        expect(row.querySelector('span.rounded-full')).toBeNull()
+        expect(row.querySelector('svg')).not.toBeNull()
     })
 })
