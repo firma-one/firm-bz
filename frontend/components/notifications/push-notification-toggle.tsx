@@ -3,6 +3,7 @@
 import { Switch } from '@/components/ui/switch'
 import { useRegisterPush } from '@/lib/hooks/use-register-push'
 import { Bell, BellOff } from 'lucide-react'
+import { useToast } from '@/components/ui/toast'
 
 /**
  * User-level opt-in for Web Push notifications. Registration is greenfield (see
@@ -11,6 +12,7 @@ import { Bell, BellOff } from 'lucide-react'
  */
 export function PushNotificationToggle() {
   const { supportState, subscribing, subscribed, subscribe, unsubscribe } = useRegisterPush()
+  const { addToast } = useToast()
 
   if (supportState === 'unsupported') return null
 
@@ -18,11 +20,15 @@ export function PushNotificationToggle() {
   // rendering but keep the switch disabled so it cannot be toggled from an unknown state.
   const enabled = subscribed === true
 
+  // The switch shows what the server stored; a change that didn't happen says why (OT-1, P2-29).
   const handleToggle = async (checked: boolean) => {
-    if (checked) {
-      await subscribe()
-    } else {
-      await unsubscribe()
+    const result = checked ? await subscribe() : await unsubscribe()
+    if (!result.ok) {
+      addToast({
+        type: 'error',
+        title: checked ? "Couldn't turn on notifications" : "Couldn't turn off notifications",
+        message: result.error,
+      })
     }
   }
 

@@ -24,6 +24,8 @@ export interface TranscriptMessage {
     content: string
     /** True for an answer the user stopped mid-stream; noted in the transcript rather than hidden. */
     stopped?: boolean
+    /** True for an answer that broke off part-way; noted the same way. */
+    cutOff?: boolean
 }
 
 export interface TranscriptMeta {
@@ -77,7 +79,12 @@ export function buildChatTranscript(
                 // answer looks complete once it leaves the chat, and a half-answer about an
                 // engagement presented as whole is exactly the failure this file's footer guards
                 // against elsewhere.
-                lines.push(m.stopped ? `${answer}\n\n_[stopped — incomplete answer]_` : answer, '')
+                lines.push(
+                    m.stopped ? `${answer}\n\n_[stopped — incomplete answer]_`
+                        : m.cutOff ? `${answer}\n\n_[cut off · incomplete answer]_`
+                            : answer,
+                    '',
+                )
             }
         }
     }

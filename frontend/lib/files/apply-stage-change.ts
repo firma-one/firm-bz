@@ -60,6 +60,73 @@ export function accessWidenedBy(row: Pick<StageRow, 'settings' | 'isFolder'>, ne
     }
 }
 
+const STAGE_NAMES: Record<ActivityStatus, string> = {
+    not_started: 'Not started',
+    to_do: 'To do',
+    in_progress: 'In progress',
+    in_review: 'In review',
+    approved: 'Approved',
+}
+
+/** Clients couldn't be given what a forward move opens to them, so the move wasn't made (P1-58). */
+export class StageAccessError extends Error {
+    constructor(readonly stage: ActivityStatus, readonly cause?: unknown) {
+        super(`Couldn't move it to ${STAGE_NAMES[stage]} · clients couldn't be given access to what's in it. Try again.`)
+        this.name = 'StageAccessError'
+    }
+}
+
+/**
+ * Rows for the roles a move opens it to, on everything inside it (a deliverable's documents and
+ * folders), as INHERITED. Not for anything private, nor inside a private folder: the walk stops there.
+ * One transaction, so a failure leaves none half written.
+ */
+async function openDescendantsTo(row: StageRow, roles: EngagementRole[], ctx: StageMoveContext): Promise<void> {
+    const { projectId, actorUserId } = ctx
+    const members = await prisma.engagementMember.findMany({
+        where: { engagementId: projectId, role: { in: roles } },
+    })
+    if (members.length === 0) return
+
+    const descendants = (await prisma.$queryRawUnsafe(
+        `WITH RECURSIVE descendants AS (
+           SELECT id, "externalId" FROM platform.engagement_documents
+           WHERE "parentId" = $1 AND "engagementId" = $2::uuid
+             AND COALESCE(settings->'lock'->>'type', settings->>'locked', '') <> 'private'
+           UNION ALL
+           SELECT ed.id, ed."externalId" FROM platform.engagement_documents ed
+           INNER JOIN descendants d ON ed."parentId" = d."externalId"
+           WHERE ed."engagementId" = $2::uuid
+             AND COALESCE(ed.settings->'lock'->>'type', ed.settings->>'locked', '') <> 'private'
+         )
+         SELECT id FROM descendants`,
+        row.externalId,
+        projectId,
+    )) as Array<{ id: string }>
+    if (descendants.length === 0) return
+
+    const childIds = descendants.map((d) => d.id)
+    const userIds = members.map((m) => m.userId)
+    // Created where missing, and made INHERITED where they stand: what one upsert per pair did.
+    await prisma.$transaction([
+        prisma.engagementDocumentSharingUser.createMany({
+            data: childIds.flatMap((projectDocumentId) => userIds.map((userId) => ({
+                projectDocumentId,
+                engagementId: projectId,
+                userId,
+                sharingPermissionStatus: DocumentSharingPermissionStatus.INHERITED,
+                createdBy: actorUserId,
+                updatedBy: actorUserId,
+            }))),
+            skipDuplicates: true,
+        }),
+        prisma.engagementDocumentSharingUser.updateMany({
+            where: { projectDocumentId: { in: childIds }, userId: { in: userIds } },
+            data: { sharingPermissionStatus: DocumentSharingPermissionStatus.INHERITED, updatedBy: actorUserId },
+        }),
+    ])
+}
+
 export async function applyStageChange(
     row: StageRow,
     next: ActivityStatus,
@@ -85,68 +152,29 @@ export async function applyStageChange(
         ...(finalizedAt !== undefined ? { finalizedAt } : {}),
     })
 
+    // A forward move into a stage that opens it to clients: what's inside it (a deliverable's
+    // documents) gets their rows first, awaited and in one transaction (P1-58). It used to run after
+    // the response, logging a failure nobody saw. When it can't be done the move isn't made, so
+    // moving it again retries it (the settings below are what mark it opened).
+    const newlyEnabledRoles: EngagementRole[] = []
+    if (shareUpdate.externalCollaborator) newlyEnabledRoles.push(EngagementRole.eng_ext_collaborator)
+    if (shareUpdate.guest) newlyEnabledRoles.push(EngagementRole.eng_viewer)
+    if (newlyEnabledRoles.length > 0) {
+        try {
+            await openDescendantsTo(row, newlyEnabledRoles, ctx)
+        } catch (err) {
+            console.error('[stage] descendant sync error:', err)
+            throw new StageAccessError(next, err)
+        }
+    }
+
     await prisma.engagementDocument.update({
         where: { id: row.id },
         data: { settings: settings as object, updatedAt: new Date() },
     })
 
-    // Sync EC/EV sharing rows for the folder and all descendants on forward moves
-    if (Object.keys(shareUpdate).length > 0) {
-        Promise.resolve().then(async () => {
-            try {
-                // Folder itself — syncDocumentSharingUsers reads the folder's own settings correctly
-                await syncDocumentSharingUsers(row.id, actorUserId)
-
-                // Descendants have empty settings so syncDocumentSharingUsers would no-op on them.
-                // Instead, directly insert rows for the newly-enabled roles based on the folder's flags.
-                // Not for anything private, nor inside a private folder: the walk stops there.
-                const newlyEnabledRoles: EngagementRole[] = []
-                if (shareUpdate.externalCollaborator) newlyEnabledRoles.push(EngagementRole.eng_ext_collaborator)
-                if (shareUpdate.guest) newlyEnabledRoles.push(EngagementRole.eng_viewer)
-                if (newlyEnabledRoles.length === 0) return
-
-                const members = await prisma.engagementMember.findMany({
-                    where: { engagementId: projectId, role: { in: newlyEnabledRoles } },
-                })
-                if (members.length === 0) return
-
-                const descendants = (await prisma.$queryRawUnsafe(
-                    `WITH RECURSIVE descendants AS (
-                       SELECT id, "externalId" FROM platform.engagement_documents
-                       WHERE "parentId" = $1 AND "engagementId" = $2::uuid
-                         AND COALESCE(settings->'lock'->>'type', settings->>'locked', '') <> 'private'
-                       UNION ALL
-                       SELECT ed.id, ed."externalId" FROM platform.engagement_documents ed
-                       INNER JOIN descendants d ON ed."parentId" = d."externalId"
-                       WHERE ed."engagementId" = $2::uuid
-                         AND COALESCE(ed.settings->'lock'->>'type', ed.settings->>'locked', '') <> 'private'
-                     )
-                     SELECT id FROM descendants`,
-                    row.externalId,
-                    projectId,
-                )) as Array<{ id: string }>
-
-                for (const child of descendants) {
-                    for (const member of members) {
-                        await prisma.engagementDocumentSharingUser.upsert({
-                            where: { projectDocumentId_userId: { projectDocumentId: child.id, userId: member.userId } },
-                            update: { sharingPermissionStatus: DocumentSharingPermissionStatus.INHERITED, updatedBy: actorUserId },
-                            create: {
-                                projectDocumentId: child.id,
-                                engagementId: projectId,
-                                userId: member.userId,
-                                sharingPermissionStatus: DocumentSharingPermissionStatus.INHERITED,
-                                createdBy: actorUserId,
-                                updatedBy: actorUserId,
-                            },
-                        })
-                    }
-                }
-            } catch (err) {
-                console.error('[stage] descendant sync error:', err)
-            }
-        })
-    }
+    // Its own rows, now its settings say who it's open to. (This sync logs its own failures.)
+    if (Object.keys(shareUpdate).length > 0) await syncDocumentSharingUsers(row.id, actorUserId)
 
     audit(AUDIT_EVENT.DOCUMENT_STATUS_CHANGED)
         .scope(AUDIT_SCOPE.DOCUMENT)

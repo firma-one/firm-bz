@@ -3,10 +3,12 @@ import { getManageableConnector } from '@/lib/connectors/connector-access'
 import { ConnectorType } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { googleDriveConnector } from '@/lib/google-drive-connector'
-import { isExternalEngagementRole } from '@/lib/engagement-access'
+import { blockIfEngagementFileMutationForbidden, isExternalEngagementRole } from '@/lib/engagement-access'
 import { resolveEngagementConnector } from '@/lib/connectors/resolve-client-connector'
 import { getConnectorInstance, getPermissionAdapter } from '@/lib/connectors/registry'
 import { createOneDriveContentAdapter } from '@/lib/connectors/adapters/onedrive-content-adapter'
+import { StorageFailure } from '@/lib/connectors/storage-failure'
+import { reconnectFailure, storageFailureResponse } from '@/lib/connectors/folder-step-failure'
 
 export async function POST(request: NextRequest) {
     try {
@@ -57,6 +59,9 @@ export async function POST(request: NextRequest) {
             const member = engagement.members[0]
             if (!member) return NextResponse.json({ error: 'Not a member of this engagement' }, { status: 403 })
 
+            const closedDenied = await blockIfEngagementFileMutationForbidden(user.id, engagementId)
+            if (closedDenied) return closedDenied
+
             connector = resolvedConnector
             if (!connector) return NextResponse.json({ error: 'No active storage connector found' }, { status: 404 })
 
@@ -96,9 +101,8 @@ export async function POST(request: NextRequest) {
         if (connector.type === ConnectorType.ONEDRIVE) {
             const oneDriveInstance = getConnectorInstance(ConnectorType.ONEDRIVE)
             const accessToken = await oneDriveInstance.getAccessToken(connector.id)
-            if (!accessToken) {
-                return NextResponse.json({ error: 'Failed to get access token' }, { status: 500 })
-            }
+            // No token: the connection needs renewing. Not a 500, which the upload retries as passing.
+            if (!accessToken) return storageFailureResponse(reconnectFailure('OneDrive'))
             if (!resolvedParentId) {
                 return NextResponse.json({ error: 'No parent folder specified' }, { status: 400 })
             }
@@ -114,9 +118,7 @@ export async function POST(request: NextRequest) {
 
         const origin = request.headers.get('origin') || request.headers.get('referer') || ''
         const accessToken = await googleDriveConnector.getAccessToken(connector.id)
-        if (!accessToken) {
-            return NextResponse.json({ error: 'Failed to get access token' }, { status: 500 })
-        }
+        if (!accessToken) return storageFailureResponse(reconnectFailure('Google Drive'))
 
         const uploadUrl = await googleDriveConnector.getResumableUploadUrl(accessToken, {
             name,
@@ -127,7 +129,10 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ uploadUrl, resolvedParentId: resolvedParentId ?? null, provider: 'google_drive' })
 
     } catch (e: any) {
+        // The storage refused to start the upload (a locked file, a full drive): its reason in words,
+        // never its raw answer (P2-14).
+        if (e instanceof StorageFailure) return storageFailureResponse(e)
         console.error('Upload Init Error:', e)
-        return NextResponse.json({ error: e.message || 'Upload initialization failed' }, { status: 500 })
+        return NextResponse.json({ error: "Couldn't start the upload. Something went wrong on our side. Try again." }, { status: 500 })
     }
 }

@@ -3,9 +3,13 @@ import { createClient } from '@/utils/supabase/server'
 import { prisma } from '@/lib/prisma'
 import { getFileInfo } from '@/lib/file-utils'
 import { lockFileInStorage, StorageNotSupportedError, type DowngradedPermission } from '@/lib/files/storage-lock'
-import { requireEngagementMember, isEngagementLeadRole } from '@/lib/engagement-access'
+import { requireEngagementMember, isEngagementLeadRole, blockIfEngagementCompleted } from '@/lib/engagement-access'
 import { isDocumentFinalized } from '@/lib/sharing-settings'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
+import { resolveEngagementConnectorId } from '@/lib/connectors/resolve-client-connector'
+import { StorageFailure } from '@/lib/connectors/storage-failure'
+
+const NO_STORAGE = "No storage is connected to this engagement, so the file can't be locked. Reconnect the storage, then try again."
 
 /**
  * PATCH /api/projects/[projectId]/documents/[documentId]/sharing/finalize
@@ -26,6 +30,9 @@ export async function PATCH(
     if (!member || !isEngagementLeadRole(member.role)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
+
+    const completed = await blockIfEngagementCompleted(projectId)
+    if (completed) return completed
 
     const fileInfo = await getFileInfo(projectId, documentIdParam)
     if (!fileInfo)
@@ -52,25 +59,21 @@ export async function PATCH(
       return NextResponse.json({ error: 'Document is already locked' }, { status: 409 })
     }
 
-    let connectorId = existing.connectorId
-    if (!connectorId && fileInfo.organizationId) {
-      const org = await prisma.firm.findUnique({
-        where: { id: fileInfo.organizationId },
-        select: { connectorId: true },
-      })
-      connectorId = org?.connectorId ?? null
-    }
+    // The connector the document is on (its own, else its client's), as the regrant route resolves it.
+    const connectorId = await resolveEngagementConnectorId(projectId, existing.connectorId)
     if (!connectorId) {
-      return NextResponse.json({ error: 'No active storage connection' }, { status: 500 })
+      return NextResponse.json({ error: NO_STORAGE, code: 'no_connector' }, { status: 409 })
     }
 
     // The file itself: editors become viewers, the content read-only (lib/files/storage-lock.ts,
-    // which approving a document uses too).
+    // which approving a document uses too). All or nothing: a refusal is answered with its reason,
+    // what was downgraded is put back, and nothing is recorded (AP-1).
     let downgraded: DowngradedPermission[]
     try {
       downgraded = await lockFileInStorage(connectorId, fileInfo.externalId)
     } catch (e) {
-      if (e instanceof StorageNotSupportedError) return NextResponse.json({ error: e.message }, { status: 500 })
+      if (e instanceof StorageNotSupportedError) return NextResponse.json({ error: e.message, code: 'unsupported' }, { status: 502 })
+      if (e instanceof StorageFailure) return NextResponse.json({ error: e.message, code: e.reason }, { status: e.status })
       throw e
     }
 
@@ -102,6 +105,6 @@ export async function PATCH(
     return NextResponse.json({ ok: true })
   } catch (e) {
     console.error('PATCH sharing/finalize error', e)
-    return NextResponse.json({ error: 'Failed to finalize' }, { status: 500 })
+    return NextResponse.json({ error: "Couldn't lock this version. Something went wrong on our side. Try again." }, { status: 500 })
   }
 }

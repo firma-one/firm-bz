@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { adminFailure } from '@/app/api/system/admin-error'
 import { createClient } from '@supabase/supabase-js'
 import { prisma } from '@/lib/prisma'
 import { isSysAdminUser } from '@/lib/system/user-data-map'
@@ -140,8 +141,9 @@ export async function GET(request: NextRequest) {
       if (!res.ok) {
         const body = await res.text()
         logger.error(`Inngest API error ${res.status}`, new Error(body))
+        // Inngest's own answer, trimmed: a bad signing key and a rate limit need different fixes.
         return NextResponse.json(
-          { error: `Inngest API error ${res.status}` },
+          { error: `Inngest answered ${res.status} · ${body.slice(0, 300) || 'no reason given'}` },
           { status: 502 }
         )
       }
@@ -192,10 +194,6 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(response)
   } catch (error) {
-    logger.error('Error in inngest-jobs route', error as Error)
-    return NextResponse.json(
-      { error: 'Failed to fetch Inngest jobs' },
-      { status: 500 }
-    )
+    return adminFailure('load the Inngest jobs', error)
   }
 }

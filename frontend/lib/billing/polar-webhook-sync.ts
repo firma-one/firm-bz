@@ -8,6 +8,8 @@ import { pricingModelFromRecurringFlag } from '@/lib/billing/pricing-model'
 import { refreshBillingPlanForFirmGroupUsers } from '@/lib/billing/billing-user-session-sync'
 import { resolveSubscriptionAuditUserId } from '@/lib/billing/subscription-audit'
 import { advanceOnboardingPastSubscribeForBillingAnchor } from '@/lib/onboarding/advance-past-subscribe-on-paid'
+import { polarServer } from '@/lib/billing/polar-client'
+import { PolarWebhookRetryError, withinPolarRetryWindow } from '@/lib/billing/polar-webhook-retry'
 
 export type SubscriptionStatus = 'active' | 'trialing' | 'past_due' | 'canceled' | 'unpaid' | 'none'
 
@@ -110,6 +112,9 @@ function extractSubscriptionDetails(body: UnknownRecord) {
         {}
 
     return {
+        /** The group our checkout route wrote into the checkout's metadata, read on its own as a fallback. */
+        metadataGroupId: metadataGroupId(body),
+        checkoutId: asString(body.checkoutId) ?? asString(body.checkout_id),
         subscriptionId: asString(body.id) ?? asString(body.subscriptionId),
         customerId:
             asString(body.customerId) ??
@@ -152,6 +157,16 @@ async function resolveGroupForPayload(details: ReturnType<typeof extractSubscrip
         if (group) return group.id
     }
 
+    // The customer's external id wins above, so a Polar customer already mapped to a group that no
+    // longer exists would miss even though our checkout named the group in its metadata.
+    if (details.metadataGroupId && details.metadataGroupId !== details.customerExternalId) {
+        const group = await prisma.group.findUnique({
+            where: { id: details.metadataGroupId },
+            select: { id: true },
+        })
+        if (group) return group.id
+    }
+
     if (details.customerId) {
         const id = await findGroupIdByPolarCustomerId(details.customerId)
         if (id) return id
@@ -188,17 +203,40 @@ export async function syncFirmSubscriptionFromPolarEvent(
     }
 
     const details = extractSubscriptionDetails(body)
+    const status = options?.statusOverride ?? mapPolarSubscriptionStatusToDb(body.status)
     const groupId = await resolveGroupForPayload(details)
     if (!groupId) {
-        logger.warn('Polar webhook: no group mapping found', {
+        const ids = {
             customerExternalId: details.customerExternalId,
+            metadataGroupId: details.metadataGroupId,
             customerId: details.customerId,
             subscriptionId: details.subscriptionId,
-        })
-        return null
+            checkoutId: details.checkoutId,
+            productId: details.productId,
+            status,
+        }
+        const freeProductId = process.env.POLAR_FREE_PRODUCT_ID?.trim()
+        const isPaid =
+            isSubscriptionAccessActive(status) && !(freeProductId && details.productId === freeProductId)
+        // A sandbox Polar organization is shared by local, preview and staging, so every endpoint
+        // hears about every environment's subscriptions: a miss there is expected, not an alarm.
+        if (!isPaid || polarServer() !== 'production') {
+            logger.warn('Polar webhook: no group mapping found', ids)
+            return null
+        }
+        // Someone paid and no group gets the plan. Reach an operator (Sentry) and fail, so Polar
+        // delivers it again once the mapping is fixed.
+        const err = new PolarWebhookRetryError(
+            `Paid Polar subscription ${details.subscriptionId ?? '(no id)'} matches no billing group`
+        )
+        if (!withinPolarRetryWindow(payload)) {
+            logger.error('Polar webhook: paid subscription matches no group; retry window over, giving up', err, 'billing', ids)
+            return null
+        }
+        logger.error('Polar webhook: paid subscription matches no group', err, 'billing', ids)
+        throw err
     }
 
-    const status = options?.statusOverride ?? mapPolarSubscriptionStatusToDb(body.status)
     const overrideScheduledCancelAt = options?.scheduledCancelAt
 
     const active = isSubscriptionAccessActive(status)

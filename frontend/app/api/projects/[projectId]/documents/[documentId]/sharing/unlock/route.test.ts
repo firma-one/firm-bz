@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // comes back, the approval is kept and marked reopened, and an approved document goes to To do.
 
 const { st, calls } = vi.hoisted(() => ({
-    st: { role: 'eng_admin' as string, settings: {} as Record<string, any> },
+    st: { role: 'eng_admin' as string, settings: {} as Record<string, any>, outcome: { notRestored: [] as any[], stillReadOnly: false, problem: null as string | null } },
     calls: { unlocked: [] as any[], written: [] as any[], moved: [] as any[], derived: [] as any[] },
 }))
 
@@ -12,12 +12,14 @@ vi.mock('@/utils/supabase/server', () => ({
     createClient: async () => ({ auth: { getUser: async () => ({ data: { user: { id: 'me' } } }) } }),
 }))
 vi.mock('@/lib/engagement-access', () => ({
+    blockIfEngagementCompleted: async () => null,
     requireEngagementMember: async () => ({ role: st.role }),
     isEngagementLeadRole: (r: string) => r === 'eng_admin',
 }))
 vi.mock('@/lib/file-utils', () => ({ getFileInfo: async () => ({ organizationId: 'f', externalId: 'ext-d1' }) }))
 vi.mock('@/lib/files/storage-lock', () => ({
-    unlockFileInStorage: async (...args: any[]) => { calls.unlocked.push(args) },
+    StorageNotSupportedError: class extends Error {},
+    unlockFileInStorage: async (...args: any[]) => { calls.unlocked.push(args); return st.outcome },
 }))
 vi.mock('@/lib/files/apply-stage-change', () => ({
     applyStageChange: async (row: any, next: string, _ctx: unknown, opts: any) => { calls.moved.push({ id: row.id, next, opts }) },
@@ -56,6 +58,7 @@ beforeEach(() => {
         lock: { type: 'finalize', downgraded: [{ permissionId: 'p1', previousRole: 'editor' }] },
         approvals: [approval],
     }
+    st.outcome = { notRestored: [], stillReadOnly: false, problem: null }
     for (const k of Object.keys(calls) as (keyof typeof calls)[]) calls[k].length = 0
 })
 
@@ -92,5 +95,44 @@ describe('PATCH unlock', () => {
         const res = await patch()
         expect(res.status).toBe(403)
         expect(calls.unlocked).toEqual([])
+    })
+
+    // AP-2: the lock record is the only list of who was downgraded, so what couldn't be given back stays on it.
+    it("keeps who couldn't be given edit access back, and stays locked, with a warning", async () => {
+        st.settings.lock.downgraded = [{ permissionId: 'p1', previousRole: 'editor', email: 'ana@client.com' }, { permissionId: 'p2', previousRole: 'editor', email: 'ben@client.com' }]
+        st.outcome = {
+            notRestored: [{ permissionId: 'p2', previousRole: 'editor', email: 'ben@client.com' }],
+            stillReadOnly: false,
+            problem: "Couldn't restore edit access for ben@client.com in Google Drive · Google Drive refused the change. Try again in a moment.",
+        }
+        const res = await patch()
+        expect(res.status).toBe(200)
+        expect(await res.json()).toEqual({
+            ok: true,
+            unlocked: false,
+            warning: "Couldn't restore edit access for ben@client.com in Google Drive · Google Drive refused the change. Try again in a moment. It stays locked until then. Try Unlock again.",
+            notRestored: ['ben@client.com'],
+        })
+        expect(calls.written).toHaveLength(1)
+        expect(calls.written[0].lock).toEqual({ type: 'finalize', downgraded: [{ permissionId: 'p2', previousRole: 'editor', email: 'ben@client.com' }] })
+        expect(calls.written[0].approvals).toEqual([approval])
+        expect(calls.moved).toEqual([])
+    })
+
+    it('says so when no storage is connected, and changes nothing', async () => {
+        const { prisma } = await import('@/lib/prisma')
+        const original = prisma.engagementDocument.findUnique
+        ;(prisma.engagementDocument as any).findUnique = async () => ({ id: 'd1', clientId: 'c', connectorId: null, fileName: 'Plan.xlsx', settings: st.settings })
+        ;(prisma as any).engagement = { findUnique: async () => ({ firmId: 'f', client: { connectorId: null } }) }
+        ;(prisma as any).firm = { findUnique: async () => ({ connectorId: null }) }
+        try {
+            const res = await patch()
+            expect(res.status).toBe(409)
+            expect((await res.json()).code).toBe('no_connector')
+            expect(calls.unlocked).toEqual([])
+            expect(calls.written).toEqual([])
+        } finally {
+            ;(prisma.engagementDocument as any).findUnique = original
+        }
     })
 })

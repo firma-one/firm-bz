@@ -5,7 +5,7 @@ import { createClient } from '@/utils/supabase/server'
 import { submitErrorTicket } from '@/app/actions/submit-ticket'
 import { logger } from '@/lib/logger'
 import { sendEmail } from '@/lib/email'
-import { PLATFORM_NOTIFICATION_EMAIL } from '@/config/platform-emails'
+import { PLATFORM_NOTIFICATION_EMAIL, PLATFORM_SUPPORT_EMAIL } from '@/config/platform-emails'
 import { DELETION_REQUEST_KIND } from '@/lib/account/deletion-plan'
 
 export const dynamic = 'force-dynamic'
@@ -73,16 +73,20 @@ export async function POST(request: NextRequest) {
         })
 
         if (!result.success || !result.ticketNumber) {
-            return NextResponse.json({ error: 'Could not raise the request' }, { status: 500 })
+            return NextResponse.json(
+                { error: `It wasn't saved on our side, so nothing was requested. Try again, or email ${PLATFORM_SUPPORT_EMAIL}.` },
+                { status: 500 },
+            )
         }
 
         // Someone has to be told, or this is a write-only queue: the request sets no firmId — so
         // it never lands in a firm's support list — and creating a ticket notifies nobody. A user
         // told "we will email you" while the request sits unseen is worse than no feature at all.
         //
-        // Fire-and-forget: a mail failure must not fail a request the user has already made, and
-        // the row is the record of record either way.
-        void sendEmail(
+        // Awaited, so it isn't dropped when the request ends, but a mail failure still doesn't fail
+        // a request the user has already made: the row is the record either way, and it shows in
+        // the Firma team's Support list, which reads every firm's requests.
+        await sendEmail(
             PLATFORM_NOTIFICATION_EMAIL,
             `Account deletion requested — ${result.ticketNumber}`,
             [
@@ -104,7 +108,10 @@ export async function POST(request: NextRequest) {
         })
     } catch (error) {
         logger.error('[account/deletion-request] failed:', error as Error)
-        return NextResponse.json({ error: 'Could not raise the request' }, { status: 500 })
+        return NextResponse.json(
+            { error: `Something went wrong on our side, so nothing was requested. Try again, or email ${PLATFORM_SUPPORT_EMAIL}.` },
+            { status: 500 },
+        )
     }
 }
 
@@ -135,6 +142,7 @@ export async function GET() {
         return NextResponse.json({ data: { open } })
     } catch (error) {
         logger.error('[account/deletion-request] GET failed:', error as Error)
-        return NextResponse.json({ data: { open: null } })
+        // Not "no open request": the card would say there's none when it couldn't tell.
+        return NextResponse.json({ error: "Couldn't check for an earlier request." }, { status: 500 })
     }
 }

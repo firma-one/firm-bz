@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import { usePathname } from "next/navigation"
-import { AlarmClock, ArrowUpRight, BellOff, Building2, CheckCircle2, ChevronRight, Clock, Eye, EyeOff, FileText, SquareX, Undo2 } from "lucide-react"
+import { AlarmClock, AlertCircle, ArrowUpRight, BellOff, Building2, CheckCircle2, ChevronRight, Clock, Eye, EyeOff, FileText, SquareX, Undo2 } from "lucide-react"
 import { ClientIcon } from "@/components/ui/client-icon"
 import Link from "next/link"
 import {
@@ -14,6 +14,9 @@ import {
     type ReminderWithContext,
 } from "@/lib/actions/user-reminders"
 import { Tip } from "@/components/ui/tip"
+import { reminderActionReason } from "@/components/inbox/inbox-items"
+import { failureReason } from "@/lib/files/action-failure"
+import type { ActionResult } from "@/lib/actions/action-result"
 
 const ENTITY_KEY_ICON: Record<string, React.ElementType> = {
     'platform.clients': ClientIcon,
@@ -166,6 +169,10 @@ export function RemindersPanel({ onCountChange }: Props) {
     const mountedRef = useRef(false)
     const seenCountRef = useRef<number>(getSeenCount())
     const [hasNewReminders, setHasNewReminders] = useState(false)
+    /** The list didn't load: said in place of "No reminders". */
+    const [loadFailed, setLoadFailed] = useState(false)
+    /** The last Done, Hide or Show that didn't happen, and why (P2-30). */
+    const [actionError, setActionError] = useState<{ title: string; message: string } | null>(null)
 
     const isHidden = (r: ReminderWithContext) => r.hiddenAt !== null
     const sorted = [...reminders].sort((a, b) => {
@@ -187,6 +194,11 @@ export function RemindersPanel({ onCountChange }: Props) {
             const data = await getUserReminders()
             setReminders(data)
             setHasNewReminders(data.length > seenCountRef.current)
+            setLoadFailed(false)
+        }
+        catch {
+            // getUserReminders throws, and a thrown action's words don't reach the browser: say it plainly.
+            setLoadFailed(true)
         }
         finally { setLoading(false) }
     }, [])
@@ -229,14 +241,25 @@ export function RemindersPanel({ onCountChange }: Props) {
         return () => document.removeEventListener('mousedown', h)
     }, [open])
 
+    /** Runs Done, Hide or Show; when it doesn't happen, the reminder stays as it was and the panel says why. */
+    async function act(id: string, title: string, run: () => Promise<ActionResult>) {
+        setActing(id)
+        setActionError(null)
+        try {
+            const result = await run()
+            if (!result.ok) setActionError({ title, message: reminderActionReason(result) })
+            await load()
+        }
+        catch (e) { setActionError({ title, message: failureReason(e) }) }
+        finally { setActing(null) }
+    }
+
     function handleDone(id: string) {
         setPendingDoneIds((prev) => new Set(prev).add(id))
         pendingTimers.current[id] = setTimeout(async () => {
             setPendingDoneIds((prev) => { const s = new Set(prev); s.delete(id); return s })
             delete pendingTimers.current[id]
-            setActing(id)
-            try { await markReminderDone(id); await load() }
-            finally { setActing(null) }
+            await act(id, "Couldn't mark it done", () => markReminderDone(id))
         }, 10_000)
     }
     function handleUndoDone(id: string) {
@@ -245,14 +268,10 @@ export function RemindersPanel({ onCountChange }: Props) {
         setPendingDoneIds((prev) => { const s = new Set(prev); s.delete(id); return s })
     }
     async function handleHide(id: string) {
-        setActing(id)
-        try { await hideReminder(id); await load() }
-        finally { setActing(null) }
+        await act(id, "Couldn't hide it", () => hideReminder(id))
     }
     async function handleShow(id: string) {
-        setActing(id)
-        try { await showReminder(id); await load() }
-        finally { setActing(null) }
+        await act(id, "Couldn't show it again", () => showReminder(id))
     }
 
     return (
@@ -321,6 +340,12 @@ export function RemindersPanel({ onCountChange }: Props) {
                     {/* Body */}
                     <style>{`@keyframes reminder-undo-shrink { from { width: 100% } to { width: 0% } }`}</style>
                     <div className="p-3 space-y-1.5 max-h-[400px] overflow-y-auto bg-white">
+                        {actionError && (
+                            <div role="alert" className="flex items-start gap-1.5 rounded border border-[#e5e7eb] bg-[#f9f9fb] px-3 py-2 text-xs text-[#45474c]">
+                                <AlertCircle aria-hidden className="mt-0.5 h-3.5 w-3.5 shrink-0 text-danger" />
+                                <span><span className="font-semibold text-[#1b1b1d]">{actionError.title}</span> · {actionError.message}</span>
+                            </div>
+                        )}
                         {loading ? (
                             <div className="space-y-1.5">
                                 {[1, 2, 3].map((i) => (
@@ -338,6 +363,15 @@ export function RemindersPanel({ onCountChange }: Props) {
                                         </div>
                                     </div>
                                 ))}
+                            </div>
+                        ) : loadFailed && reminders.length === 0 ? (
+                            <div role="alert" className="text-center py-8">
+                                <AlertCircle className="h-7 w-7 mx-auto mb-2 text-danger" />
+                                <p className="text-[0.8125rem] font-semibold text-[#1b1b1d]">Couldn&apos;t load your reminders</p>
+                                <p className="text-xs text-[#45474c] mt-0.5">Something went wrong on our side.</p>
+                                <button type="button" onClick={() => void load()} className="mt-2 text-xs font-semibold text-firma hover:text-firma/80">
+                                    Try again
+                                </button>
                             </div>
                         ) : displayed.length === 0 ? (
                             <div className="text-center py-8">

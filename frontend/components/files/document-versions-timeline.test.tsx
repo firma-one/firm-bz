@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 
 const { versions } = vi.hoisted(() => ({
-    versions: { revisions: [] as unknown[], loading: false, error: null as string | null, unsupported: false },
+    versions: { revisions: [] as unknown[], loading: false, error: null as string | null, unsupported: false, reload: () => {} },
 }))
 vi.mock('@/components/files/use-document-versions', () => ({ useDocumentVersions: () => versions }))
 vi.mock('@/lib/download-progress-context', () => ({ useDownloadProgress: () => ({ addTask: vi.fn(), updateTask: vi.fn() }) }))
@@ -102,6 +102,16 @@ describe('DocumentVersionsTimeline', () => {
         versions.unsupported = true
         renderTimeline()
         expect(screen.getByText("Version history isn't available for this storage yet.")).toBeTruthy()
+    })
+
+    it("gives the storage's reason with Try again when the list didn't load, never 'No versions yet'", () => {
+        versions.revisions = []
+        versions.error = "Google Drive won't show versions for this file to the account connected to this client."
+        renderTimeline()
+        expect(screen.getByText("Couldn't load version history")).toBeTruthy()
+        expect(screen.getByText(/won't show versions for this file/)).toBeTruthy()
+        expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy()
+        expect(screen.queryByText('No versions yet.')).toBeNull()
     })
 })
 

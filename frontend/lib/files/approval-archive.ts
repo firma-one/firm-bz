@@ -8,7 +8,7 @@ import { StorageFailure } from '@/lib/connectors/storage-failure'
 import { googleDriveConnector } from '@/lib/google-drive-connector'
 import { getLock, type LockBlock } from '@/lib/sharing-settings'
 import { logger } from '@/lib/logger'
-import { lockFileInStorage, unlockFileInStorage, type DowngradedPermission } from './storage-lock'
+import { lockFileInStorage, StorageNotSupportedError, unlockFileInStorage, type DowngradedPermission } from './storage-lock'
 import { archiveNameFor, type ApprovalRecord, type ApprovedVersion } from './approvals'
 
 /**
@@ -16,7 +16,10 @@ import { archiveNameFor, type ApprovalRecord, type ApprovedVersion } from './app
  * lock the file, read which version is current, and copy that version into the engagement's
  * Archive folder. In that order, so the copy is exactly the version recorded. If any step fails the
  * approval is refused and the lock undone: an approval without its copy is the gap the record exists
- * to close.
+ * to close. A lock storage refuses refuses the approval too (lib/files/storage-lock.ts, AP-1).
+ *
+ * What protects the copy itself (an owner-only Archive folder, read-only content on Google) is
+ * reported as a warning when storage refuses it (P1-54): the approval stands, but the firm is told.
  */
 
 export const ARCHIVE_FOLDER_NAME = 'Archive'
@@ -107,7 +110,13 @@ function orgSettingsOf(settings: Record<string, any>, firmId: string): { scope: 
  * The Files listings leave it out, as they do Staging; nothing crawls it (search and indexing start
  * from General, Confidential and Staging).
  */
-export async function ensureArchiveFolder(connectorId: string, firmId: string, engagementSlug: string): Promise<string> {
+export async function ensureArchiveFolder(
+    connectorId: string,
+    firmId: string,
+    engagementSlug: string,
+    warn: (warning: string) => void = () => {},
+    provider: 'Google Drive' | 'OneDrive' = 'Google Drive',
+): Promise<string> {
     const storage = await getStorageAdapter(connectorId)
     const connector = await prisma.connector.findUnique({ where: { id: connectorId }, select: { settings: true } })
     const settings = (connector?.settings as Record<string, any>) || {}
@@ -125,6 +134,7 @@ export async function ensureArchiveFolder(connectorId: string, firmId: string, e
         await storage.restrictFolderToOwnerOnly?.(connectorId, archiveFolderId)
     } catch (e) {
         logger.error('[approval] could not restrict the Archive folder', e as Error)
+        warn(`The Archive folder couldn't be made owner-only in ${provider}, so people with access to the engagement's folder can open the archive copy.`)
     }
 
     // Read again just before writing, so a settings change made meanwhile isn't lost.
@@ -149,6 +159,8 @@ export interface ApprovalInStorage {
     record: ApprovalRecord
     /** The lock to record in `settings.lock`; null when the document was already locked. */
     lock: LockBlock | null
+    /** What storage refused that doesn't undo the approval: the archive copy left editable, say. */
+    warnings: string[]
 }
 
 /**
@@ -174,13 +186,18 @@ export async function archiveApprovedVersion(input: {
         try {
             downgraded = await lockFileInStorage(connectorId, document.externalId)
         } catch (e) {
+            // A refused lock says who can still edit, and why (storage-lock.ts puts back what it changed).
+            if (e instanceof StorageFailure) throw new ApprovalStorageError(`${e.message} It wasn't approved.`, e)
+            if (e instanceof StorageNotSupportedError) throw new ApprovalStorageError(`${e.message} It wasn't approved.`, e)
             throw unreachable(type, e)
         }
     }
 
+    const warnings: string[] = []
+    const provider = providerName(type)
     try {
         const version = await readCurrentVersion(connectorId, type, document.externalId)
-        const archiveFolderId = await ensureArchiveFolder(connectorId, engagement.firmId, engagement.slug)
+        const archiveFolderId = await ensureArchiveFolder(connectorId, engagement.firmId, engagement.slug, (w) => warnings.push(w), provider)
         const storage = await getStorageAdapter(connectorId)
         const parentId = deliverableName ? await storage.findOrCreateFolder(connectorId, archiveFolderId, deliverableName) : archiveFolderId
         const name = archiveNameFor(document.fileName, version)
@@ -188,28 +205,64 @@ export async function archiveApprovedVersion(input: {
             ? await copyOneDriveFile(connectorId, document.externalId, parentId, name)
             : await googleDriveConnector.copyFile(connectorId, document.externalId, parentId, name)
 
-        // The archive itself mustn't drift: the copy is read-only.
-        try {
-            const permissions = await getPermissionAdapter(connectorId)
-            await permissions?.setFileContentReadOnly(connectorId, copy.id, true)
-        } catch (e) {
-            logger.error('[approval] could not make the Archive copy read-only', e as Error)
+        // The archive itself mustn't drift: on Google the copy is read-only. OneDrive has no read-only
+        // content (always false there); its copy is kept by the owner-only Archive folder instead.
+        if (type !== ConnectorType.ONEDRIVE) {
+            let readOnly = false
+            try {
+                const permissions = await getPermissionAdapter(connectorId)
+                readOnly = (await permissions?.setFileContentReadOnly(connectorId, copy.id, true)) === true
+            } catch (e) {
+                logger.error('[approval] could not make the Archive copy read-only', e as Error)
+            }
+            if (!readOnly) warnings.push(`Approved, but the archive copy couldn't be made read-only in ${provider}. Anyone who can edit the Archive folder can change it.`)
         }
 
         const now = new Date().toISOString()
         return {
             record: { id: randomUUID(), version, archived: { fileId: copy.id, name }, approvedAt: now, approvedBy: actorUserId },
             lock: lockHere ? { type: 'finalize', finalizedBy: actorUserId, finalizedAt: now, downgraded } : null,
+            warnings,
         }
     } catch (e) {
+        // The lock is undone; who couldn't be given edit access back is said, since nothing records them.
+        let undoProblem: string | null = null
         if (lockHere) {
-            await unlockFileInStorage(connectorId, document.externalId, downgraded)
-                .catch((err) => logger.error('[approval] could not undo the lock', err as Error))
+            const undone = await unlockFileInStorage(connectorId, document.externalId, downgraded).catch((err) => {
+                logger.error('[approval] could not undo the lock', err as Error)
+                return null
+            })
+            undoProblem = undone ? undone.problem : 'Its lock in storage could not be undone.'
+            if (undoProblem) logger.error('[approval] could not fully undo the lock', new Error(undoProblem))
         }
-        if (e instanceof ApprovalStorageError) throw e
-        if (e instanceof StorageFailure) throw new ApprovalStorageError(`Couldn't archive the approved version. ${e.message}`, e)
-        throw unreachable(type, e)
+        const also = undoProblem ? ` ${undoProblem}` : ''
+        if (e instanceof ApprovalStorageError) throw new ApprovalStorageError(`${e.message}${also}`, e.cause)
+        if (e instanceof StorageFailure) throw new ApprovalStorageError(`Couldn't archive the approved version. ${e.message}${also}`, e)
+        const plain = unreachable(type, e)
+        throw new ApprovalStorageError(`${plain.message}${also}`, e)
     }
+}
+
+/**
+ * Undoes an approval made in storage that Firma couldn't record (P1-55): the lock is lifted and the
+ * archive copy trashed, so a retry starts clean instead of making a second copy. True when all of it
+ * was undone.
+ */
+export async function undoApprovalInStorage(connectorId: string, externalId: string, approval: ApprovalInStorage): Promise<boolean> {
+    let undone = true
+    if (approval.lock) {
+        const outcome = await unlockFileInStorage(connectorId, externalId, (approval.lock.downgraded ?? []) as DowngradedPermission[]).catch(() => null)
+        if (!outcome || outcome.problem) undone = false
+    }
+    try {
+        const permissions = await getPermissionAdapter(connectorId)
+        if (!permissions) throw new Error('No permission adapter')
+        await permissions.trashFile(connectorId, approval.record.archived.fileId)
+    } catch (e) {
+        logger.error('[approval] could not trash the archive copy of an unrecorded approval', e as Error)
+        undone = false
+    }
+    return undone
 }
 
 /**

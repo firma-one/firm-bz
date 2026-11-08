@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { blockIfEngagementCompleted } from '@/lib/engagement-access'
 import { withoutAgentIds } from '@/lib/ai/agent-email'
 import { createClient } from '@/utils/supabase/server'
 import { prisma } from '@/lib/prisma'
@@ -12,7 +13,10 @@ import { withoutFirmOnlySettings } from '@/lib/files/blocked'
 import { deliverableOf } from '@/lib/files/deliverable-of'
 import { writeNativeDescription } from '@/lib/files/native-description'
 import { SearchService } from '@/lib/services/search-service'
-import { resolveEngagementConnector, resolveEngagementConnectorId } from '@/lib/connectors/resolve-client-connector'
+import { resolveEngagementConnectorId } from '@/lib/connectors/resolve-client-connector'
+import { StorageFailure } from '@/lib/connectors/storage-failure'
+import { takeBackClientAccess } from '@/lib/files/take-back-client-access'
+import { logger } from '@/lib/logger'
 import { getPermissionAdapter, getContentAdapter } from '@/lib/connectors/registry'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 import { assertFirmSubscriptionAccess } from '@/lib/billing/subscription-gate'
@@ -31,6 +35,25 @@ function toJsonSafeSharing(doc: Record<string, unknown> | null): Record<string, 
     ...rest,
     fileSize: fileSize != null ? String(fileSize) : null,
   } as Record<string, unknown>
+}
+
+/**
+ * Trashes Firma's own PDF copy of a document, which has no use once Reviewers no longer get it, through
+ * the connector the document is on. A failure is logged (P2-18): it leaves a Firma-made file in storage,
+ * which nobody has to act on now, so the change it follows still stands.
+ */
+async function trashSystemPdf(projectId: string, documentConnectorId: string | null, pdfId: string): Promise<void> {
+  const connectorId = await resolveEngagementConnectorId(projectId, documentConnectorId)
+  if (!connectorId) {
+    logger.warn('[sharing] no connector to trash the system PDF copy', { projectId, pdfId })
+    return
+  }
+  try {
+    const adapter = await getPermissionAdapter(connectorId)
+    await adapter?.trashFile(connectorId, pdfId)
+  } catch (e) {
+    logger.error('[sharing] could not trash the system PDF copy', e instanceof Error ? e : new Error(String(e)), undefined, { projectId, pdfId, connectorId })
+  }
 }
 
 /** Ensure a document row exists in engagement_documents before sharing.
@@ -139,6 +162,8 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ projectId: string; documentId: string }> }
 ) {
+  /** What this request was doing, for the words a failure answers with. */
+  let failing = 'save sharing'
   try {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
@@ -149,6 +174,9 @@ export async function PUT(
     if (!ctx) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
     const canManage = await canManageProject(ctx.firmId, ctx.clientId, ctx.projectId)
     if (!canManage) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+    const completed = await blockIfEngagementCompleted(projectId)
+    if (completed) return completed
 
     await assertFirmSubscriptionAccess(ctx.firmId)
 
@@ -187,6 +215,7 @@ export async function PUT(
       })
       if (!doc) return NextResponse.json({ error: 'Document not found' }, { status: 404 })
       if (!doc.isFolder) return NextResponse.json({ error: 'Cannot mark a file as a Deliverable' }, { status: 400 })
+      failing = 'promote this folder'
       // Deliverables don't nest: a folder inside one, or one holding one, can't become one. The
       // menu says so too; a folder made a moment ago may not be known to it yet.
       const insideOf = await deliverableOf(projectId, doc.parentId)
@@ -233,10 +262,9 @@ export async function PUT(
       })
       const dueDate = typeof body.dueDate === 'string' && body.dueDate ? new Date(body.dueDate) : null
 
-      await prisma.engagementDocument.update({
-        where: { id: doc.id },
-        data: { settings, dueDate, updatedAt: new Date(), updatedBy: user.id },
-      })
+      // The rows come first and the settings last (P1-59): the settings are what put it on the Board,
+      // so a failure partway leaves a folder with a few rows for the firm's own members, which grant
+      // nothing new and are written again on a retry, not a deliverable only some of them can reach.
 
       // Insert GRANTED rows for EL (eng_admin) and EM (eng_member) on the folder.
       //
@@ -300,6 +328,11 @@ export async function PUT(
         }
       }
 
+      await prisma.engagementDocument.update({
+        where: { id: doc.id },
+        data: { settings, dueDate, updatedAt: new Date(), updatedBy: user.id },
+      })
+
       audit(AUDIT_EVENT.DOCUMENT_SHARE_CREATED)
         .scope(AUDIT_SCOPE.DOCUMENT)
         .firm(engagement.firmId)
@@ -322,19 +355,8 @@ export async function PUT(
       })
       if (!doc) return NextResponse.json({ error: 'Document not found' }, { status: 404 })
       if (!doc.isFolder) return NextResponse.json({ error: 'Only a folder can be demoted from a deliverable' }, { status: 400 })
+      failing = 'demote this deliverable'
 
-      // Clear the sharing settings (share.createdAt, activity, etc.), keeping the document's own description and assignee
-      await prisma.engagementDocument.update({
-        where: { id: doc.id },
-        data: { settings: assetSettingsOf(doc.settings) as object, updatedAt: new Date(), updatedBy: user.id },
-      })
-
-      // Revoke all GRANTED and INHERITED sharing rows for this folder
-      await prisma.engagementDocumentSharingUser.deleteMany({
-        where: { projectDocumentId: doc.id },
-      })
-
-      // Revoke INHERITED rows for all descendants via recursive CTE
       const allDescendants = (await (prisma as any).$queryRawUnsafe(
         `WITH RECURSIVE descendants AS (
            SELECT id, "externalId" FROM platform.engagement_documents
@@ -348,14 +370,33 @@ export async function PUT(
         doc.externalId,
         projectId
       )) as Array<{ id: string }>
-      if (allDescendants.length > 0) {
+      const descendantIds = allDescendants.map((c: { id: string }) => c.id)
+
+      // Decision 5 (AC-8): what clients were granted inside it is taken back first, in storage, before
+      // any row holding a permission id goes. A row whose permission storage wouldn't give up stays
+      // (revoked in Firma, its id kept) so a later revoke can retry it.
+      const takenBack = await takeBackClientAccess(projectId, { projectDocumentId: { in: [doc.id, ...descendantIds] } })
+
+      // The folder's own rows, and the rows its documents inherited from it
+      await prisma.engagementDocumentSharingUser.deleteMany({
+        where: { projectDocumentId: doc.id, id: { notIn: takenBack.kept } },
+      })
+      if (descendantIds.length > 0) {
         await prisma.engagementDocumentSharingUser.deleteMany({
           where: {
-            projectDocumentId: { in: allDescendants.map((c: { id: string }) => c.id) },
+            projectDocumentId: { in: descendantIds },
             sharingPermissionStatus: DocumentSharingPermissionStatus.INHERITED,
+            id: { notIn: takenBack.kept },
           },
         })
       }
+
+      // Last (P1-59): the settings are what put it on the Board, so a failure above leaves a
+      // deliverable to demote again. The document's own description and assignee are kept.
+      await prisma.engagementDocument.update({
+        where: { id: doc.id },
+        data: { settings: assetSettingsOf(doc.settings) as object, updatedAt: new Date(), updatedBy: user.id },
+      })
 
       const engagement = await prisma.engagement.findUnique({
         where: { id: projectId },
@@ -369,11 +410,14 @@ export async function PUT(
         .engagement(projectId)
         .document(doc.id)
         .actor(user.id)
-        .meta({ fileName: doc.fileName, action: 'untagAsDeliverable' })
+        .meta({ fileName: doc.fileName, action: 'untagAsDeliverable', ...(takenBack.peopleStillHolding ? { stillHoldingAccess: takenBack.peopleStillHolding } : {}) })
         .fireAndForget()
 
       const updated = await prisma.engagementDocument.findUnique({ where: { id: doc.id } })
-      return NextResponse.json({ sharing: toJsonSafeSharing(updated as Record<string, unknown> | null) })
+      return NextResponse.json({
+        sharing: toJsonSafeSharing(updated as Record<string, unknown> | null),
+        ...(takenBack.stillHolding ? { warning: `Demoted, but ${takenBack.stillHolding}` } : {}),
+      })
     }
     // --- End Untag as Deliverable ---
 
@@ -391,25 +435,13 @@ export async function PUT(
       try {
         fileInfo = await ensureDocument(projectId, documentIdParam, title, user.id, mimeType)
       } catch (err) {
+        // A plain sentence (P2-19): this used to answer the raw database message, labeled 404.
         console.error('ensureDocument error', err)
-        return NextResponse.json(
-          { error: err instanceof Error ? err.message : 'File not found in this project' },
-          { status: 404 }
-        )
+        if (err instanceof Error && err.message === 'Project not found') {
+          return NextResponse.json({ error: 'This engagement no longer exists.' }, { status: 404 })
+        }
+        return NextResponse.json({ error: "Couldn't set up sharing for this file. Try again." }, { status: 500 })
       }
-    }
-
-    const externalCollaborator = body.externalCollaborator !== false
-    const guest = body.guest === true
-    const ecOptions = {
-      allowDownload: body.ecOptions?.allowDownload === true,
-    }
-    const guestOptions = {
-      sharePdfOnly: body.guestOptions?.sharePdfOnly !== false,
-      allowDownload: body.guestOptions?.allowDownload === true,
-      addWatermark: body.guestOptions?.addWatermark === true,
-      publish: body.guestOptions?.publish === true,
-      sharedPdfDriveId: body.guestOptions?.sharedPdfDriveId ?? null,
     }
 
     const existing = await prisma.engagementDocument.findUnique({
@@ -422,7 +454,32 @@ export async function PUT(
       },
     })
 
-    if (!externalCollaborator && !guest) {
+    // A key left out means "unchanged" (AC-11). The deliverable pane's Delivery settings send only the
+    // options, and reading a missing `guest` as off took the deliverable away from its Reviewers (and a
+    // missing `externalCollaborator` as on opened it to Limited Access contributors). The options sent
+    // are merged over the stored ones, so one toggle changes only its own option.
+    const stored = parseSettingsFromDb((existing?.settings as Record<string, unknown>) || {}).share
+    const given = (value: unknown): boolean | undefined => (typeof value === 'boolean' ? value : undefined)
+    const askedEc = given(body.externalCollaborator)
+    const askedGuest = given(body.guest)
+    const externalCollaborator = askedEc ?? stored?.externalCollaborator?.enabled ?? false
+    const guest = askedGuest ?? stored?.guest?.enabled ?? false
+    const storedGuestOptions = stored?.guest?.options ?? {}
+    const ecOptions = {
+      allowDownload: given(body.ecOptions?.allowDownload) ?? stored?.externalCollaborator?.options?.allowDownload ?? false,
+    }
+    const guestOptions = {
+      sharePdfOnly: given(body.guestOptions?.sharePdfOnly) ?? storedGuestOptions.sharePdfOnly ?? false,
+      allowDownload: given(body.guestOptions?.allowDownload) ?? storedGuestOptions.allowDownload ?? false,
+      addWatermark: given(body.guestOptions?.addWatermark) ?? storedGuestOptions.addWatermark ?? false,
+      publish: given(body.guestOptions?.publish) ?? storedGuestOptions.publish ?? false,
+      // Firma's own PDF copy is Firma's to set (regrant makes it), never the browser's: a save
+      // without it used to clear it, and a made-up id would have been trashed or restricted.
+      sharedPdfDriveId: storedGuestOptions.sharedPdfDriveId ?? null,
+    }
+
+    // Both roles off, when asked for: the document is no longer shared. Options alone never get here.
+    if (!externalCollaborator && !guest && (askedEc === false || askedGuest === false)) {
       if (existing) {
         const oldSettings = parseSettingsFromDb((existing.settings as Record<string, unknown>) || {})
         const disabledPersonas: Array<'guest' | 'externalCollaborator'> = []
@@ -431,19 +488,7 @@ export async function PUT(
 
         // Trash the system PDF copy if guest sharing was active
         const sharedPdfDriveId = oldSettings?.share?.guest?.options?.sharedPdfDriveId
-        if (sharedPdfDriveId) {
-          let resolvedConnectorId = existing.connectorId
-          if (!resolvedConnectorId) {
-            const engagementConnector = await resolveEngagementConnector(projectId)
-            if (engagementConnector?.status === 'ACTIVE') resolvedConnectorId = engagementConnector.id
-          }
-          if (resolvedConnectorId) {
-            try {
-              const adapter = await getPermissionAdapter(resolvedConnectorId)
-              await adapter?.trashFile(resolvedConnectorId, sharedPdfDriveId)
-            } catch {}
-          }
-        }
+        if (sharedPdfDriveId) await trashSystemPdf(projectId, existing.connectorId, sharedPdfDriveId)
 
         await prisma.engagementDocument.update({
           where: { id: existing.id },
@@ -531,6 +576,7 @@ export async function PUT(
       },
     })
 
+    let settingsWarning: string | null = null
     if (updated) {
       Promise.resolve().then(() => syncDocumentSharingUsers(updated.id, user.id))
 
@@ -549,21 +595,7 @@ export async function PUT(
       // If guest was just disabled, trash the system PDF copy — it has no value without guest sharing
       if (disabledPersonas.includes('guest')) {
         const pdfDriveId = oldSettings?.share?.guest?.options?.sharedPdfDriveId
-        if (pdfDriveId) {
-          let resolvedConnectorId = updated.connectorId
-          if (!resolvedConnectorId) {
-            const engagementConnector = await resolveEngagementConnector(projectId)
-            if (engagementConnector?.status === 'ACTIVE') resolvedConnectorId = engagementConnector.id
-          }
-          if (resolvedConnectorId) {
-            try {
-              const adapter = await getPermissionAdapter(resolvedConnectorId)
-              await adapter?.trashFile(resolvedConnectorId, pdfDriveId)
-            } catch (e) {
-              console.error('Failed to trash system PDF on guest disable:', e)
-            }
-          }
-        }
+        if (pdfDriveId) await trashSystemPdf(projectId, updated.connectorId, pdfDriveId)
       }
 
       if (disabledPersonas.length > 0) {
@@ -582,57 +614,22 @@ export async function PUT(
       // setCopyRestricted (IConnectorContentAdapter) so this works for any connector type —
       // it's a documented no-op for providers without an equivalent concept (currently OneDrive;
       // see onedrive-content-adapter.ts).
+      // The connector it was shared on (the document's, else its client's), not the legacy firm one.
       if (guest) {
-        let resolvedConnectorId: string | null = null
-        if (updated.connectorId) {
-          const docConnector = await prisma.connector.findUnique({
-            where: { id: updated.connectorId },
-            select: { id: true, status: true },
-          })
-          if (docConnector?.status === 'ACTIVE') {
-            resolvedConnectorId = docConnector.id
-          }
-        }
-        if (!resolvedConnectorId) {
-          const org = await prisma.firm.findUnique({
-            where: { id: fileInfo.organizationId },
-            include: { connector: true, connectors: true },
-          })
-          const active = [...(org?.connectors ?? []), ...(org?.connector ? [org.connector] : [])].find(c => c.status === 'ACTIVE')
-          if (active) resolvedConnectorId = active.id
-        }
-
-        if (resolvedConnectorId) {
-          const contentAdapter = await getContentAdapter(resolvedConnectorId)
-          const sharePdfOnly = guestOptions.sharePdfOnly ?? false
-
-          // Always block native download — Firma controls download via its own action menu
-          if (contentAdapter) {
-            if (sharePdfOnly) {
-              const sharedPdfDriveId = guestOptions.sharedPdfDriveId
-              if (sharedPdfDriveId) {
-                try {
-                  await contentAdapter.setCopyRestricted(resolvedConnectorId, sharedPdfDriveId, true)
-                } catch (e) {
-                  console.error('Failed to set copy-restriction on shared PDF:', e)
-                }
-              }
-            } else {
-              try {
-                await contentAdapter.setCopyRestricted(resolvedConnectorId, fileInfo.externalId, true)
-              } catch (e) {
-                console.error('Failed to set copy-restriction on file:', e)
-              }
-            }
-
-            // Always lock download for EC persona too (download only via Firma action menu)
-            if (externalCollaborator && !sharePdfOnly) {
-              try {
-                await contentAdapter.setCopyRestricted(resolvedConnectorId, fileInfo.externalId, true)
-              } catch (e) {
-                console.error('Failed to set copy-restriction for EC:', e)
-              }
-            }
+        const connectorId = await resolveEngagementConnectorId(projectId, updated.connectorId)
+        const contentAdapter = connectorId ? await getContentAdapter(connectorId) : null
+        // Always block native download — Firma controls download via its own action menu: on the PDF
+        // copy when Reviewers get only that, else on the file itself (which Limited Access
+        // contributors open too).
+        const restrictId = guestOptions.sharePdfOnly ? guestOptions.sharedPdfDriveId : fileInfo.externalId
+        if (connectorId && contentAdapter && restrictId) {
+          try {
+            await contentAdapter.setCopyRestricted(connectorId, restrictId, true)
+          } catch (e) {
+            // Each secure open sets it again, and refuses the open when it can't (regrant), so this
+            // is saved, with a word that storage didn't take it yet.
+            console.error('Failed to set copy-restriction:', e)
+            settingsWarning = `Saved, but storage didn't block downloading of this file yet · ${e instanceof StorageFailure ? e.message : 'It is blocked again the next time a client opens it.'}`
           }
         }
       }
@@ -697,14 +694,18 @@ export async function PUT(
       }
     }
 
-    return NextResponse.json({ sharing: toJsonSafeSharing(updated as Record<string, unknown> | null) })
+    return NextResponse.json({
+      sharing: toJsonSafeSharing(updated as Record<string, unknown> | null),
+      ...(settingsWarning ? { warning: settingsWarning } : {}),
+    })
   } catch (e) {
     if (e instanceof SubscriptionRevokedError) return NextResponse.json({ error: e.message }, { status: 403 })
     if (e instanceof Error && e.message.startsWith('Your plan allows')) {
       return NextResponse.json({ error: e.message }, { status: 402 })
     }
+    if (e instanceof StorageFailure) return NextResponse.json({ error: e.message, code: e.reason }, { status: e.status })
     console.error('PUT sharing error', e)
-    return NextResponse.json({ error: 'Failed to save sharing' }, { status: 500 })
+    return NextResponse.json({ error: `Couldn't ${failing}. Something went wrong on our side. Try again.` }, { status: 500 })
   }
 }
 
@@ -722,6 +723,9 @@ export async function DELETE(
     if (!ctx) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
     const canManage = await canManageProject(ctx.firmId, ctx.clientId, ctx.projectId)
     if (!canManage) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+    const completed = await blockIfEngagementCompleted(projectId)
+    if (completed) return completed
 
     await assertFirmSubscriptionAccess(ctx.firmId)
 
@@ -759,26 +763,7 @@ export async function DELETE(
     // Trash the system PDF copy in Drive — it's a Firma-managed artifact with no value once unshared
     const existingSettings = parseSettingsFromDb((existing.settings as Record<string, unknown>) || {})
     const sharedPdfDriveId = existingSettings.share?.guest?.options?.sharedPdfDriveId
-    if (sharedPdfDriveId) {
-      const connector = existing.connectorId
-        ? await prisma.connector.findUnique({ where: { id: existing.connectorId } })
-        : await prisma.firm.findUnique({
-            where: { id: fileInfo.organizationId },
-            include: { connector: true, connectors: true },
-          }).then(org => {
-            const all = [...(org?.connectors ?? []), ...(org?.connector ? [org.connector] : [])]
-            return all.find(c => c.status === 'ACTIVE') ?? null
-          })
-
-      if (connector?.status === 'ACTIVE') {
-        try {
-          const adapter = await getPermissionAdapter(connector.id)
-          await adapter?.trashFile(connector.id, sharedPdfDriveId)
-        } catch (e) {
-          console.error('Failed to trash system PDF file:', e)
-        }
-      }
-    }
+    if (sharedPdfDriveId) await trashSystemPdf(projectId, existing.connectorId, sharedPdfDriveId)
 
     await safeInngestSend('sharing.settings.updated', {
       projectId,

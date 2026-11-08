@@ -1,22 +1,55 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { prisma } from '@/lib/prisma'
-import { requireEngagementMember, isExternalEngagementRole, isEngagementLeadRole } from '@/lib/engagement-access'
+import { requireEngagementMember, isExternalEngagementRole, isEngagementLeadRole, blockIfEngagementCompleted } from '@/lib/engagement-access'
 import { getFileInfo } from '@/lib/file-utils'
 import { getPermissionAdapter } from '@/lib/connectors/registry'
+import { resolveEngagementConnectorId } from '@/lib/connectors/resolve-client-connector'
+import { StorageFailure } from '@/lib/connectors/storage-failure'
 import { safeInngestSend } from '@/lib/inngest/client'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 import { buildSettingsForDb } from '@/lib/sharing-settings'
+
+type TrashAnswer = { ok: true } | { ok: false; response: NextResponse }
+
+/**
+ * Reject or withdraw (decision 6, AP-3): the file goes to the storage's trash first, through the
+ * engagement's connector. Only then does its row go. When storage refuses, the row stays, so the file
+ * isn't left in storage with nothing in Firma to act on it again, and the answer says why. No connector
+ * at all is a refusal too, never a silent skip. Already gone from storage counts as done.
+ */
+async function trashFirst(
+  projectId: string,
+  documentConnectorId: string | null,
+  externalId: string,
+  what: { verb: 'reject' | 'withdraw'; name: string },
+): Promise<TrashAnswer> {
+  const refuse = (error: string, code: string, status: number): TrashAnswer => ({ ok: false, response: NextResponse.json({ error, code }, { status }) })
+  const connectorId = await resolveEngagementConnectorId(projectId, documentConnectorId)
+  const adapter = connectorId ? await getPermissionAdapter(connectorId) : null
+  if (!connectorId || !adapter) {
+    return refuse(`Couldn't ${what.verb} "${what.name}" · no storage is connected to remove it from. Reconnect the storage, then try again.`, 'no_connector', 409)
+  }
+  try {
+    await adapter.trashFile(connectorId, externalId)
+    return { ok: true }
+  } catch (e) {
+    if (e instanceof StorageFailure && e.reason === 'not_found') return { ok: true }
+    console.error('[intake] trashFile error', { connectorId, externalId, error: String(e) })
+    if (e instanceof StorageFailure) return refuse(`Couldn't ${what.verb} "${what.name}" · ${e.message}`, e.reason, e.status)
+    return refuse(`Couldn't ${what.verb} "${what.name}" · the storage couldn't be reached to remove it. Try again in a moment.`, 'unreachable', 502)
+  }
+}
 
 /**
  * PATCH /api/projects/[projectId]/documents/[documentId]/intake
  * Body: { action: 'approve' | 'reject' | 'withdraw' | 'approve-folder' | 'reject-folder' | 'withdraw-folder' }
  *
  * approve        — EL only: flip sharing row PENDING→GRANTED, set share flag, fire Inngest index
- * reject         — EL only: delete EngagementDocument (cascades sharing row) + trash Drive file
- * withdraw       — EC/EV only (own uploads): same delete + trash flow
+ * reject         — EL only: trash the Drive file, then delete EngagementDocument (cascades sharing row)
+ * withdraw       — EC/EV only (own uploads): same trash + delete flow
  * approve-folder — EL only: approve all children + the folder itself
- * reject-folder  — EL only: delete folder + children + trash Drive files
+ * reject-folder  — EL only: trash the Drive folder (and so what it holds), then delete it and its children
  * withdraw-folder— EC/EV only: same as reject-folder but scoped to own uploads
  */
 export async function PATCH(
@@ -40,6 +73,9 @@ export async function PATCH(
 
     const member = await requireEngagementMember(projectId, user.id)
     if (!member) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+    const completed = await blockIfEngagementCompleted(projectId)
+    if (completed) return completed
 
     const isExternal = isExternalEngagementRole(member.role)
     const isLead = isEngagementLeadRole(member.role)
@@ -105,11 +141,6 @@ export async function PATCH(
           return NextResponse.json({ error: 'You can only withdraw your own uploads' }, { status: 403 })
         }
       }
-
-      const connectorId = folderDoc.connectorId ?? (await prisma.firm.findUnique({
-        where: { id: folderDoc.firmId },
-        select: { connectorId: true },
-      }))?.connectorId
 
       // Fetch full subtree (BFS) — handles nested subfolders created by EC/EV
       const fetchSubtree = async (rootExternalId: string) => {
@@ -179,24 +210,23 @@ export async function PATCH(
 
         await clearIntakeReminders([folderDoc.externalId, ...subtreeDocs.map((d) => d.externalId)])
       } else {
-        // reject-folder or withdraw-folder: delete full subtree (bottom-up) + trash Drive files
-        // Delete leaves first so FK constraints don't block parent deletes
+        // reject-folder or withdraw-folder: the folder goes to the storage's trash first, taking what
+        // it holds with it; only then do its rows go. Refused, nothing in Firma changes.
+        const trashed = await trashFirst(projectId, folderDoc.connectorId, folderDoc.externalId, {
+          verb: action === 'reject-folder' ? 'reject' : 'withdraw',
+          name: folderDoc.fileName,
+        })
+        if (!trashed.ok) return trashed.response
+
+        // Leaves first so FK constraints don't block parent deletes
         const allDocs = [
           ...subtreeDocs.reverse(),
           { id: folderDoc.id, externalId: folderDoc.externalId, firmId: folderDoc.firmId },
         ]
-        await Promise.all(allDocs.map(async (doc) => {
-          await prisma.engagementDocument.delete({ where: { id: doc.id } }).catch(() => {})
+        for (const doc of allDocs) {
+          await prisma.engagementDocument.deleteMany({ where: { id: doc.id } })
           await (prisma as any).notification.deleteMany({ where: { dedupeKey: `intake-pending:${projectId}:${doc.externalId}` } })
-          if (connectorId) {
-            const adapter = await getPermissionAdapter(connectorId)
-            if (adapter) {
-              await adapter.trashFile(connectorId, doc.externalId).catch((e) => {
-                console.error('[intake] trashFile error', { connectorId, externalId: doc.externalId, error: String(e), message: e?.message, status: e?.status })
-              })
-            }
-          }
-        }))
+        }
         await clearIntakeReminders(allDocs.map((d) => d.externalId))
       }
 
@@ -281,25 +311,19 @@ export async function PATCH(
       return NextResponse.json({ ok: true, action: 'approved' })
     }
 
-    // reject or withdraw — delete DB record (cascades sharing row) + trash Drive file
+    // reject or withdraw: the file goes to the storage's trash first, then its record (which cascades
+    // the sharing row). Refused, the record stays, and the answer says why.
+    const trashed = await trashFirst(projectId, doc.connectorId, fileInfo.externalId, {
+      verb: action === 'reject' ? 'reject' : 'withdraw',
+      name: doc.fileName,
+    })
+    if (!trashed.ok) return trashed.response
+
     await prisma.engagementDocument.delete({ where: { id: doc.id } })
     await Promise.all([
       (prisma as any).notification.deleteMany({ where: { dedupeKey } }),
       clearIntakeReminders([fileInfo.externalId]),
     ])
-
-    const connectorId = doc.connectorId ?? (await prisma.firm.findUnique({
-      where: { id: doc.firmId },
-      select: { connectorId: true },
-    }))?.connectorId
-    if (connectorId) {
-      const adapter = await getPermissionAdapter(connectorId)
-      if (adapter) {
-        await adapter.trashFile(connectorId, fileInfo.externalId).catch((e) => {
-          console.error('[intake] trashFile error', { connectorId, externalId: fileInfo.externalId, error: String(e), message: e?.message, status: e?.status })
-        })
-      }
-    }
 
     audit(AUDIT_EVENT.DOCUMENT_DELETED)
       .scope(AUDIT_SCOPE.DOCUMENT)
@@ -314,6 +338,6 @@ export async function PATCH(
     return NextResponse.json({ ok: true, action })
   } catch (e) {
     console.error('intake PATCH error', e)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return NextResponse.json({ error: 'Something went wrong on our side. Try again.' }, { status: 500 })
   }
 }

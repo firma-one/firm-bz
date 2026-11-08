@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { adminFailure } from '@/app/api/system/admin-error'
 import { createClient } from '@supabase/supabase-js'
 import { prisma } from '@/lib/prisma'
 import { isSysAdminUser } from '@/lib/system/user-data-map'
@@ -110,10 +111,6 @@ export async function GET(request: NextRequest) {
     const response: StuckFirmsResponse = { firms }
     return NextResponse.json(response)
   } catch (error) {
-    logger.error('Error querying stuck firms', error as Error)
-    return NextResponse.json(
-      { error: 'Failed to query stuck firms' },
-      { status: 500 }
-    )
+    return adminFailure('load the stuck firms', error)
   }
 }

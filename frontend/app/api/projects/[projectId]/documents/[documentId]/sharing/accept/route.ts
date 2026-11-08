@@ -2,12 +2,16 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { prisma } from '@/lib/prisma'
 import { getFileInfo } from '@/lib/file-utils'
-import { getPermissionAdapter } from '@/lib/connectors/registry'
-import { requireEngagementMember, externalMemberCanAccessDocument } from '@/lib/engagement-access'
+import { resolveEngagementConnectorId } from '@/lib/connectors/resolve-client-connector'
+import { StorageFailure } from '@/lib/connectors/storage-failure'
+import { lockFileInStorage, StorageNotSupportedError, type DowngradedPermission } from '@/lib/files/storage-lock'
+import { requireEngagementMember, externalMemberCanAccessDocument, blockIfEngagementCompleted } from '@/lib/engagement-access'
 import { isDocumentFinalized } from '@/lib/sharing-settings'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 
 const EXTERNAL_ROLES = new Set(['eng_ext_collaborator', 'eng_viewer'])
+
+const NO_STORAGE = "This document can't be accepted right now: its storage isn't connected. Ask the engagement's Lead to reconnect it."
 
 /**
  * PATCH /api/projects/[projectId]/documents/[documentId]/sharing/accept
@@ -30,6 +34,9 @@ export async function PATCH(
     if (!member || !EXTERNAL_ROLES.has(member.role)) {
       return NextResponse.json({ error: 'Only Limited Access contributors and Reviewers can accept documents' }, { status: 403 })
     }
+
+    const completed = await blockIfEngagementCompleted(projectId)
+    if (completed) return completed
 
     const fileInfo = await getFileInfo(projectId, documentIdParam)
     if (!fileInfo)
@@ -57,40 +64,23 @@ export async function PATCH(
     if (isDocumentFinalized(existing.settings))
       return NextResponse.json({ error: 'Document is already finalized' }, { status: 409 })
 
-    let connectorId = existing.connectorId
-    if (!connectorId && fileInfo.organizationId) {
-      const org = await prisma.firm.findUnique({
-        where: { id: fileInfo.organizationId },
-        select: { connectorId: true },
-      })
-      connectorId = org?.connectorId ?? null
-    }
+    // The connector the document is on (its own, else its client's), as the regrant route resolves it.
+    const connectorId = await resolveEngagementConnectorId(projectId, existing.connectorId)
     if (!connectorId)
-      return NextResponse.json({ error: 'No active storage connection' }, { status: 500 })
+      return NextResponse.json({ error: NO_STORAGE, code: 'no_connector' }, { status: 409 })
 
-    const permissionAdapter = await getPermissionAdapter(connectorId)
-    if (!permissionAdapter)
-      return NextResponse.json({ error: 'Connector type not supported' }, { status: 500 })
-
-    // Downgrade elevated permissions to viewer (same as finalize route)
-    const downgraded: Array<{ permissionId: string; previousRole: string }> = []
-    const perms = await permissionAdapter.listFilePermissions(connectorId, fileInfo.externalId)
-    const elevRoles = new Set(['editor', 'commenter'])
-
-    for (const p of perms) {
-      if (!p.id || !p.email) continue
-      if (!elevRoles.has(p.role)) continue
-
-      const ok = await permissionAdapter.patchFilePermissionRole(
-        connectorId,
-        fileInfo.externalId,
-        p.id,
-        'viewer'
-      )
-      if (ok) downgraded.push({ permissionId: p.id, previousRole: p.role })
+    // The same lock as Finalize (lib/files/storage-lock.ts): all or nothing, so a refusal is
+    // answered with its reason and nothing is recorded as accepted (AP-1).
+    let downgraded: DowngradedPermission[]
+    try {
+      downgraded = await lockFileInStorage(connectorId, fileInfo.externalId)
+    } catch (e) {
+      if (e instanceof StorageNotSupportedError) return NextResponse.json({ error: e.message, code: 'unsupported' }, { status: 502 })
+      if (e instanceof StorageFailure) {
+        return NextResponse.json({ error: e.message.replace("Couldn't lock this", "Couldn't accept this. It couldn't be locked"), code: e.reason }, { status: e.status })
+      }
+      throw e
     }
-
-    await permissionAdapter.setFileContentReadOnly(connectorId, fileInfo.externalId, true)
 
     const now = new Date().toISOString()
     const prevSettings = (existing.settings as Record<string, unknown>) || {}
@@ -148,6 +138,6 @@ export async function PATCH(
     return NextResponse.json({ ok: true })
   } catch (e) {
     console.error('PATCH sharing/accept error', e)
-    return NextResponse.json({ error: 'Failed to accept document' }, { status: 500 })
+    return NextResponse.json({ error: "Couldn't accept this document. Something went wrong on our side. Try again." }, { status: 500 })
   }
 }

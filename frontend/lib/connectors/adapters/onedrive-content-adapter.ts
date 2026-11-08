@@ -24,12 +24,14 @@ import { ConnectorContentError, type IConnectorContentAdapter } from '../types'
 import { trimWorkbookToUsedRange, isSpreadsheetMime } from '@/lib/spreadsheet-print-trim'
 import { isClientRenderable, previewKind, needsRangeSupport } from '@/lib/preview-kinds'
 import { logger } from '@/lib/logger'
+import { storageFailure, storageFailureFromResponse } from '@/lib/connectors/storage-failure'
 
 const oneDrive = OneDriveConnector.getInstance()
 
 async function auth(connectionId: string): Promise<string> {
   const token = await oneDrive.getAccessToken(connectionId)
-  if (!token) throw new Error('Could not get OneDrive access token')
+  // No token means the connection needs renewing: one reason, in the shared words.
+  if (!token) throw storageFailure('reconnect', 'OneDrive')
   return token
 }
 
@@ -142,10 +144,7 @@ export function createOneDriveContentAdapter(): IConnectorContentAdapter {
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': mimeType },
         body: new Uint8Array(content),
       })
-      if (!res.ok) {
-        const err = await res.text()
-        throw new Error(`Failed to create ${fileName}: ${res.status} - ${err}`)
-      }
+      if (!res.ok) throw await storageFailureFromResponse(res, 'OneDrive', `create ${fileName}`)
       const data = await res.json()
       return { id: data.id }
     },
@@ -181,10 +180,8 @@ export function createOneDriveContentAdapter(): IConnectorContentAdapter {
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ item }),
       })
-      if (!res.ok) {
-        const err = await res.text()
-        throw new Error(`Failed to create upload session for ${fileName}: ${res.status} - ${err}`)
-      }
+      // Upload start: OneDrive's reason in words (a locked file, a full drive), not its raw JSON (P2-14).
+      if (!res.ok) throw await storageFailureFromResponse(res, 'OneDrive', `start uploading ${fileName}`)
       const data = await res.json()
       return { uploadUrl: data.uploadUrl }
     },

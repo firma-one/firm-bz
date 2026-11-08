@@ -15,31 +15,45 @@ import { findAuthUserIdByEmail } from '@/lib/actions/auth-user-lookup'
 import { joinEngagementForUser, provisionAndNotifyExistingUser } from '@/lib/actions/engagement-membership'
 import { InvitationStatus } from '@prisma/client'
 import { engagementPath, clientPath, firmPath } from '@/lib/navigation/firm-paths'
-import { requireEngagementManager, isEngagementPersonaSlug } from '@/lib/permissions/require-engagement-manager'
+import { isEngagementPersonaSlug } from '@/lib/permissions/require-engagement-manager'
 import { normalizeInviteeName, type InviteeName } from '@/lib/auth/invite-names'
+import { asResult, userFacing, type ActionResult } from '@/lib/actions/action-result'
+import { asResultWithWarning, gone, requireEngagementManagerTo, signedOut } from '@/lib/actions/action-reasons'
+import { inviteEmailFailed } from '@/lib/actions/invite-email-words'
+
+/** What an engagement invite did: an invitation was sent, or someone with an account was added at once. */
+export type InviteMemberOutcome = { added: boolean }
 
 /**
- * Invite a member to a project (V2)
+ * Invite a member to a project (V2).
+ *
+ * The invitation (or, for someone with an account, the membership) is saved first. When its email
+ * can't be sent the answer is still ok, with a `warning` saying so: the invitation's row reads Email
+ * failed, with Resend; someone added at once has to be told by the inviter.
  */
-export async function inviteMember(projectId: string, email: string, personaId: string, invitee?: InviteeName) {
+export async function inviteMember(projectId: string, email: string, personaId: string, invitee?: InviteeName): Promise<ActionResult<InviteMemberOutcome>> {
+    return asResultWithWarning('inviteMember', () => inviteMemberOrThrow(projectId, email, personaId, invitee))
+}
+
+async function inviteMemberOrThrow(projectId: string, email: string, personaId: string, invitee?: InviteeName): Promise<{ data: InviteMemberOutcome; warning?: string }> {
     const inviteeName = normalizeInviteeName(invitee)
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error("Unauthorized")
+    if (!user) throw signedOut()
 
     // Without this, anyone signed in could invite themselves to any engagement as its lead.
-    await requireEngagementManager(projectId)
+    await requireEngagementManagerTo(projectId, 'invite members to this engagement')
     const invitePersona = await prisma.persona.findUnique({ where: { id: personaId }, select: { slug: true } })
-    if (!isEngagementPersonaSlug(invitePersona?.slug)) throw new Error("Not an engagement role")
+    if (!isEngagementPersonaSlug(invitePersona?.slug)) throw userFacing("That role can't be given in an engagement.", 'invalid_role')
 
     // Sandbox restriction: disallow invites for sandbox orgs
     const projectOrg = await prisma.engagement.findFirst({
         where: { id: projectId, isDeleted: false },
         select: { slug: true, name: true, client: { select: { slug: true, name: true, firm: { select: { id: true, slug: true, name: true, sandboxOnly: true, group: { select: { slug: true } } } } } } },
     })
-    if (!projectOrg) throw new Error("Engagement not found")
+    if (!projectOrg) throw gone('This engagement was deleted.')
     if (projectOrg.client?.firm?.sandboxOnly) {
-        throw new Error('Inviting members is restricted for Sandbox Organizations. Upgrade to invite teammates.')
+        throw userFacing('Inviting members is restricted for Sandbox firms. Upgrade to invite teammates.', 'upgrade_required')
     }
     const invReminderCtx = {
         firmId: projectOrg?.client?.firm?.id ?? '',
@@ -64,10 +78,10 @@ export async function inviteMember(projectId: string, email: string, personaId: 
 
     if (existing) {
         if (existing.status === InvitationStatus.JOINED) {
-            throw new Error("User has already joined the engagement")
+            throw userFacing('This person has already joined the engagement', 'already_joined')
         }
         if (existing.status === InvitationStatus.ACCEPTED) {
-            throw new Error("User is currently accepting this invitation — please wait")
+            throw userFacing('This person is accepting the invitation right now. Wait a moment, then refresh.', 'mid_accept')
         }
 
         await prisma.engagementInvitation.update({
@@ -88,12 +102,13 @@ export async function inviteMember(projectId: string, email: string, personaId: 
                 where: { id: existing.id },
                 include: { persona: true, engagement: { include: { client: { include: { firm: { include: { group: { select: { slug: true } } } } } } } } }
             })
-            return await provisionAndNotifyExistingUser(existingAuthUserId, normalizedEmail, inviteWithRelations, projectOrg)
+            return addedAtOnce(await provisionAndNotifyExistingUser(existingAuthUserId, normalizedEmail, inviteWithRelations, projectOrg), normalizedEmail, inviteeName)
         }
 
         await maybeProvisionInviteeAccount(normalizedEmail, inviteeName)
 
         const inviteUrl = `${process.env.NEXT_PUBLIC_APP_URL}/invite/${token}`
+        let warning: string | undefined
         try {
             const { subject, html } = renderInviteEmail({
                 firmName: projectOrg?.client?.firm?.name ?? BRAND_NAME,
@@ -107,7 +122,8 @@ export async function inviteMember(projectId: string, email: string, personaId: 
             await prisma.engagementInvitation.update({
                 where: { id: existing.id },
                 data: { status: InvitationStatus.ERROR, updatedAt: new Date() }
-            })
+            }).catch((e) => logger.error('Could not mark the invitation Email failed', e as Error))
+            warning = inviteEmailFailed(normalizedEmail, 'saved')
         }
 
         upsertFollowUpReminder({
@@ -122,7 +138,7 @@ export async function inviteMember(projectId: string, email: string, personaId: 
             ctaUrl: invReminderCtx.ctaUrl,
         }).catch(() => {})
 
-        return existing
+        return { data: { added: false }, ...(warning ? { warning } : {}) }
     }
 
     // 2. Create new invite (V2)
@@ -145,12 +161,13 @@ export async function inviteMember(projectId: string, email: string, personaId: 
             where: { id: invite.id },
             include: { persona: true, engagement: { include: { client: { include: { firm: { include: { group: { select: { slug: true } } } } } } } } }
         })
-        return await provisionAndNotifyExistingUser(existingAuthUserId, normalizedEmail, inviteWithRelations, projectOrg)
+        return addedAtOnce(await provisionAndNotifyExistingUser(existingAuthUserId, normalizedEmail, inviteWithRelations, projectOrg), normalizedEmail, inviteeName)
     }
 
     await maybeProvisionInviteeAccount(normalizedEmail, inviteeName)
 
     const inviteUrl = `${process.env.NEXT_PUBLIC_APP_URL}/invite/${token}`
+    let warning: string | undefined
     try {
         const { subject, html } = renderInviteEmail({
             firmName: projectOrg?.client?.firm?.name ?? BRAND_NAME,
@@ -164,7 +181,8 @@ export async function inviteMember(projectId: string, email: string, personaId: 
         await prisma.engagementInvitation.update({
             where: { id: invite.id },
             data: { status: InvitationStatus.ERROR, updatedAt: new Date() }
-        })
+        }).catch((e) => logger.error('Could not mark the invitation Email failed', e as Error))
+        warning = inviteEmailFailed(normalizedEmail, 'saved')
     }
 
     upsertFollowUpReminder({
@@ -179,27 +197,44 @@ export async function inviteMember(projectId: string, email: string, personaId: 
         ctaUrl: invReminderCtx.ctaUrl,
     }).catch(() => {})
 
-    return invite
+    return { data: { added: false }, ...(warning ? { warning } : {}) }
+}
+
+/** Someone with an account was added at once; only the "added to engagement" email can have failed. */
+function addedAtOnce(
+    outcome: { emailed: boolean },
+    email: string,
+    inviteeName: { firstName: string | null; lastName: string | null } | null | undefined,
+): { data: InviteMemberOutcome; warning?: string } {
+    if (outcome.emailed) return { data: { added: true } }
+    const name = inviteeName?.firstName?.trim() || undefined
+    return { data: { added: true }, warning: inviteEmailFailed(email, 'added', name) }
 }
 
 /**
- * Resend invitation (V2)
+ * Resend invitation (V2). Its whole job is the email, so an email that can't be sent is the answer's
+ * error (and the row reads Email failed), never "Invitation resent".
  */
-export async function resendInvitation(invitationId: string) {
+export async function resendInvitation(invitationId: string): Promise<ActionResult> {
+    return asResult('resendInvitation', () => resendInvitationOrThrow(invitationId))
+}
+
+async function resendInvitationOrThrow(invitationId: string): Promise<void> {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error("Unauthorized")
+    if (!user) throw signedOut()
 
     const invite = await prisma.engagementInvitation.findUnique({ where: { id: invitationId } })
-    if (!invite) throw new Error("Invitation not found")
-    await requireEngagementManager(invite.engagementId)
-    if (invite.status === InvitationStatus.JOINED) throw new Error("User has already joined")
+    if (!invite) throw gone('This invitation was withdrawn.')
+    await requireEngagementManagerTo(invite.engagementId, "resend this engagement's invitations")
+    if (invite.status === InvitationStatus.JOINED) throw userFacing('This person has already joined the engagement.', 'already_joined')
+    if (invite.status === InvitationStatus.ACCEPTED) throw userFacing('This person is accepting the invitation right now. Wait a moment, then refresh.', 'mid_accept')
 
     const token = crypto.randomUUID()
     const expireAt = new Date()
     expireAt.setDate(expireAt.getDate() + 7)
 
-    const updated = await prisma.engagementInvitation.update({
+    await prisma.engagementInvitation.update({
         where: { id: invitationId },
         data: { token, updatedAt: new Date(), status: InvitationStatus.PENDING, expireAt }
     })
@@ -222,7 +257,8 @@ export async function resendInvitation(invitationId: string) {
         await prisma.engagementInvitation.update({
             where: { id: invitationId },
             data: { status: InvitationStatus.ERROR, updatedAt: new Date() }
-        })
+        }).catch((e) => logger.error('Could not mark the invitation Email failed', e as Error))
+        throw userFacing(inviteEmailFailed(invite.email, 'resend'), 'email_failed')
     }
     upsertFollowUpReminder({
         userId: user.id,
@@ -237,8 +273,6 @@ export async function resendInvitation(invitationId: string) {
             ? engagementPath(engDetails.client.firm.group.slug, engDetails.client.firm.slug, engDetails.client.slug, engDetails.slug, { tab: 'members' })
             : null,
     }).catch(() => {})
-
-    return updated
 }
 
 /** Discriminated invite payload for landing page (firm, client, or engagement). redirectUrl set when status is JOINED. */

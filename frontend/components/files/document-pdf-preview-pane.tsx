@@ -7,6 +7,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu'
 import { PreviewLoadingState } from '@/components/files/preview-loading-state'
 import { DocumentBlobPreviewPane } from '@/components/files/document-blob-preview-pane'
+import { PreviewUnavailable } from '@/components/files/preview-unavailable'
+import { failureFrom, failureReason } from '@/lib/files/action-failure'
 import { cacheRead, cacheWrite } from '@/lib/preview-cache'
 import type { PDFDocumentLoadingTask, PDFDocumentProxy, RenderTask } from 'pdfjs-dist'
 
@@ -411,6 +413,11 @@ export function DocumentPdfPreviewPane({ document, projectId, alternateView }: D
      *  off to the iframe pane, which already handles images and the server's
      *  "preview not available" HTML. */
     const [fallback, setFallback] = useState(false)
+    /** The preview route refused (gone, no access, a connection to renew): its reason, shown with
+     *  Reload, rather than handing its JSON to the iframe pane to print (P1-39). */
+    const [failure, setFailure] = useState<string | null>(null)
+    /** Reload after a failure: asks the route again. */
+    const [attempt, setAttempt] = useState(0)
     const [containerWidth, setContainerWidth] = useState(0)
     const [containerHeight, setContainerHeight] = useState(0)
     /** 'width' reproduces the original behavior and stays the default. */
@@ -468,6 +475,7 @@ export function DocumentPdfPreviewPane({ document, projectId, alternateView }: D
         void (async () => {
             setLoading(true)
             setFallback(false)
+            setFailure(null)
             setPdf(null)
             setBasePages([])
             setCurrentPage(1)
@@ -499,8 +507,25 @@ export function DocumentPdfPreviewPane({ document, projectId, alternateView }: D
                     data = cached.bytes
                 } else {
                     const url = `/api/projects/${effectiveProjectId}/documents/${encodeURIComponent(documentId)}/preview`
-                    const res = await fetch(url)
+                    let res: Response
+                    try {
+                        res = await fetch(url)
+                    } catch (e) {
+                        if (cancelled) return
+                        setFailure(failureReason(e))
+                        setLoading(false)
+                        return
+                    }
                     if (cancelled) return
+
+                    // A refusal is the reason to show, not a file for another pane to try.
+                    if (!res.ok) {
+                        const reason = (await failureFrom(res)).message
+                        if (cancelled) return
+                        setFailure(reason)
+                        setLoading(false)
+                        return
+                    }
 
                     const contentType = res.headers.get('Content-Type') ?? ''
                     if (!res.ok || !contentType.includes('application/pdf')) {
@@ -619,7 +644,7 @@ export function DocumentPdfPreviewPane({ document, projectId, alternateView }: D
             cancelled = true
             void loadingTask?.destroy()
         }
-    }, [effectiveProjectId, documentId, documentVersion])
+    }, [effectiveProjectId, documentId, documentVersion, attempt])
 
     useEffect(() => {
         const el = toolbarRef.current
@@ -969,6 +994,10 @@ export function DocumentPdfPreviewPane({ document, projectId, alternateView }: D
                 Preview not available.
             </div>
         )
+    }
+
+    if (failure) {
+        return <PreviewUnavailable reason={failure} onReload={() => setAttempt((n) => n + 1)} dark />
     }
 
     if (fallback) {

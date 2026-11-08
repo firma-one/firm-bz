@@ -9,6 +9,7 @@ import { EntityIcon, type EntityKind } from '@/components/ui/entity-icon'
 import type { CalendarEventType } from "@/lib/actions/calendar"
 import { getEngagementTagColor } from "@/lib/calendar/engagement-color"
 import { HomeEmptyLine, HomeSection } from "./home-section"
+import { HomeLoadNote } from "./home-load-failed"
 import { ShimmerBar } from "@/components/ui/shimmer"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
@@ -147,11 +148,14 @@ export function AgendaWeek({
     events,
     dueItems = [],
     calendarHref,
+    loadFailed = false,
 }: {
     events: AgendaEvent[]
     dueItems?: AgendaDueItem[]
     /** The firm calendar to open. Omitted on a cross-firm week, which has no single calendar. */
     calendarHref?: string
+    /** The calendar, the due work or the reminders didn't load: never "Nothing overdue" then (EM-2). */
+    loadFailed?: boolean
 }) {
     // Days are the viewer's, not the server's (UTC): resolve them after mount.
     const [today, setToday] = useState<Date | null>(null)
@@ -205,8 +209,12 @@ export function AgendaWeek({
                     <ShimmerBar className="w-1/2" />
                 </div>
             ) : total === 0 && overdue.length === 0 ? (
-                <HomeEmptyLine>Nothing overdue or on the calendar this week.</HomeEmptyLine>
+                loadFailed
+                    ? <HomeLoadNote what="your agenda" />
+                    : <HomeEmptyLine>Nothing overdue or on the calendar this week.</HomeEmptyLine>
             ) : (
+                <>
+                {loadFailed && <HomeLoadNote what="your agenda" partial />}
                 <div className="overflow-hidden rounded-card border border-line">
                 {overdue.length > 0 && (
                     <div className={cn("flex flex-wrap items-center gap-1.5 px-3 py-2", total > 0 && "border-b border-line")}>
@@ -305,6 +313,7 @@ export function AgendaWeek({
                 </div>
                 )}
                 </div>
+                </>
             )}
         </HomeSection>
         </TooltipProvider>

@@ -10,6 +10,8 @@ import { DeliverableIcon } from '@/components/ui/deliverable-icon'
 import { DocumentIcon } from '@/components/ui/document-icon'
 import { Hint, Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useToast } from '@/components/ui/toast'
+import { LoadFailed } from '@/components/ui/load-failed'
+import { failureFrom, failureReason } from '@/lib/files/action-failure'
 import { useRightPane } from '@/lib/right-pane-context'
 import { useAuth } from '@/lib/auth-context'
 import { CommentText, type CommentPerson } from '@/components/comments/comment-text'
@@ -161,7 +163,7 @@ type MentionRow = {
 }
 
 export type ThreadMessage = { id: string; createdAt: string; authorUserId: string | null; authorEmail: string | null; authorName?: string | null; content: string; isInternal?: boolean }
-export type Thread = { status: 'loading' | 'error' | 'ready'; messages: ThreadMessage[] }
+export type Thread = { status: 'loading' | 'error' | 'ready'; messages: ThreadMessage[]; /** Why it didn't load. */ reason?: string }
 type Member = { userId: string; email: string; name: string; avatarUrl: string | null; role: string }
 
 /** How a comment's text is drawn: mentions as pills, document tags as chips. */
@@ -174,10 +176,13 @@ export type TextKit = {
 export function EngagementCommentsTab({
   projectId,
   boardUrl,
+  readOnly = false,
 }: {
   projectId: string
   orgSlug?: string
   boardUrl?: string
+  /** The engagement is completed: discussions read, and can't be resolved or reopened. */
+  readOnly?: boolean
 }) {
   const rightPane = useRightPane()
   const { user } = useAuth()
@@ -197,6 +202,7 @@ export function EngagementCommentsTab({
   const [mentionsLoading, setMentionsLoading] = useState(true)
   const [mentionRows, setMentionRows] = useState<MentionRow[]>([])
   const [mentionsError, setMentionsError] = useState<string | null>(null)
+  const [mentionsAttempt, setMentionsAttempt] = useState(0)
 
   // Opened rows, and the threads loaded for them (kept while the list reloads)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
@@ -220,10 +226,7 @@ export function EngagementCommentsTab({
       try {
         const qs = new URLSearchParams(query.trim() ? { q: query.trim() } : {})
         const res = await fetch(`/api/projects/${projectId}/doc-comments?${qs.toString()}`)
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}))
-          throw new Error(data.error ?? 'Failed to load discussions')
-        }
+        if (!res.ok) throw await failureFrom(res)
         const data = await res.json()
         if (!cancelled) {
           const next: DocRow[] = data.documents ?? []
@@ -231,7 +234,7 @@ export function EngagementCommentsTab({
           addTagged(data.taggedDocuments)
         }
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load discussions')
+        if (!cancelled) setError(failureReason(e))
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -247,38 +250,42 @@ export function EngagementCommentsTab({
       setMentionsError(null)
       try {
         const res = await fetch(`/api/projects/${projectId}/doc-comments?filter=mentions`)
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}))
-          throw new Error(data.error ?? 'Failed to load mentions')
-        }
+        if (!res.ok) throw await failureFrom(res)
         const data = await res.json()
         if (!cancelled) {
           setMentionRows(data.mentions ?? [])
           addTagged(data.taggedDocuments)
         }
       } catch (e) {
-        if (!cancelled) setMentionsError(e instanceof Error ? e.message : 'Failed to load mentions')
+        if (!cancelled) setMentionsError(failureReason(e))
       } finally {
         if (!cancelled) setMentionsLoading(false)
       }
     }
     load()
     return () => { cancelled = true }
-  }, [projectId, addTagged])
+  }, [projectId, addTagged, mentionsAttempt])
 
   // Engagement members: the names mentions are written with, the names and faces of authors, and
   // the viewer's own role (which of a deliverable's documents they may tag).
   const [members, setMembers] = useState<Member[]>([])
-  useEffect(() => {
-    fetch(`/api/projects/${projectId}/members`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        setMembers((data?.members ?? [])
-          .filter((m: any) => m.userId && m.email)
-          .map((m: any) => ({ userId: m.userId, email: m.email, name: m.name ?? m.email.split('@')[0], avatarUrl: m.avatarUrl ?? null, role: m.role ?? '' })))
-      })
-      .catch(() => {})
+  /** They didn't load: names show as the server knew them, and the page says why (P2-21). */
+  const [membersFailed, setMembersFailed] = useState<string | null>(null)
+  const loadMembers = useCallback(async () => {
+    setMembersFailed(null)
+    try {
+      const res = await fetch(`/api/projects/${projectId}/members`)
+      if (!res.ok) throw await failureFrom(res)
+      const data = await res.json()
+      setMembers((data?.members ?? [])
+        .filter((m: any) => m.userId && m.email)
+        .map((m: any) => ({ userId: m.userId, email: m.email, name: m.name ?? m.email.split('@')[0], avatarUrl: m.avatarUrl ?? null, role: m.role ?? '' })))
+    } catch (e) {
+      // The route's own words are this sentence; a dropped connection adds its own.
+      setMembersFailed(e instanceof TypeError ? failureReason(e) : '')
+    }
   }, [projectId])
+  useEffect(() => { void loadMembers() }, [loadMembers])
 
   const memberById = useMemo(() => new Map(members.map((m) => [m.userId, m])), [members])
   const myRole = user?.id ? memberById.get(user.id)?.role ?? null : null
@@ -306,12 +313,12 @@ export function EngagementCommentsTab({
     setThreads((prev) => ({ ...prev, [projectDocumentId]: { status: 'loading', messages: prev[projectDocumentId]?.messages ?? [] } }))
     try {
       const res = await fetch(`/api/projects/${projectId}/documents/${projectDocumentId}/doc-comments?limit=${PEEK}`)
-      if (!res.ok) throw new Error()
+      if (!res.ok) throw await failureFrom(res)
       const data = await res.json()
       addTagged(data.taggedDocuments)
       setThreads((prev) => ({ ...prev, [projectDocumentId]: { status: 'ready', messages: data.messages ?? [] } }))
-    } catch {
-      setThreads((prev) => ({ ...prev, [projectDocumentId]: { status: 'error', messages: [] } }))
+    } catch (e) {
+      setThreads((prev) => ({ ...prev, [projectDocumentId]: { status: 'error', messages: [], reason: failureReason(e) } }))
     }
   }
 
@@ -335,9 +342,12 @@ export function EngagementCommentsTab({
   /** Resolves an open discussion, or reopens a resolved one; the row moves views at once. */
   const toggleResolved = useCallback(async (r: DocRow) => {
     const resolving = !r.resolved
-    const res = await fetch(`/api/projects/${projectId}/documents/${r.projectDocumentId}/doc-comments/resolve`, { method: resolving ? 'POST' : 'DELETE' })
-    if (!res.ok) {
-      addToast({ type: 'error', title: resolving ? 'Couldn’t resolve this discussion' : 'Couldn’t reopen this discussion' })
+    // The server's reason, or that the request never got there (P1-74).
+    try {
+      const res = await fetch(`/api/projects/${projectId}/documents/${r.projectDocumentId}/doc-comments/resolve`, { method: resolving ? 'POST' : 'DELETE' })
+      if (!res.ok) throw await failureFrom(res)
+    } catch (e) {
+      addToast({ type: 'error', title: resolving ? 'Couldn’t resolve this discussion' : 'Couldn’t reopen this discussion', message: failureReason(e) })
       return
     }
     const me = user?.id ? memberById.get(user.id) : undefined
@@ -382,12 +392,12 @@ export function EngagementCommentsTab({
     rightPane.setHeaderActions(
       <DiscussionActions
         resolved={openResolved}
-        onToggleResolved={() => toggleResolved(openRow)}
+        onToggleResolved={readOnly ? undefined : () => toggleResolved(openRow)}
         onOpenInDeliverable={boardUrl ? () => goToDeliverable(openRow.projectDocumentId) : undefined}
       />
     )
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [openId, openResolved, toggleResolved, goToDeliverable, boardUrl])
+  }, [openId, openResolved, toggleResolved, goToDeliverable, boardUrl, readOnly])
 
   // The pane closed (or shows something else): no row is open.
   const paneOpen = !!rightPane.content
@@ -423,10 +433,17 @@ export function EngagementCommentsTab({
         onQuery={setQuery}
       />
 
+      {membersFailed !== null && (
+        <p role="alert" className="text-small text-fg-muted">
+          Couldn&apos;t load the people on this engagement, so some names may show as emails.{membersFailed ? ` ${membersFailed}` : ''}{' '}
+          <button type="button" onClick={() => void loadMembers()} className="font-medium text-fg hover:underline">Try again</button>
+        </p>
+      )}
+
       {activeTab !== 'mentions' && (
           <div className="overflow-hidden border-t border-line">
             {error ? (
-              <div className="p-6 text-sm text-rose-700 bg-rose-50 border-b border-rose-100">{error}</div>
+              <LoadFailed what="the discussions" reason={error} onRetry={() => { setLoading(true); reload() }} />
             ) : loading ? (
               <div className="p-6 text-sm text-fg-muted">Loading discussions…</div>
             ) : empty ? (
@@ -457,7 +474,7 @@ export function EngagementCommentsTab({
       {activeTab === 'mentions' && (
         <div className="overflow-hidden border-t border-line">
           {mentionsError ? (
-            <div className="p-6 text-sm text-rose-700 bg-rose-50 border-b border-rose-100">{mentionsError}</div>
+            <LoadFailed what="your mentions" reason={mentionsError} onRetry={() => setMentionsAttempt((n) => n + 1)} />
           ) : mentionsLoading ? (
             <div className="p-6 text-sm text-fg-muted">Loading mentions…</div>
           ) : mentionsEmpty ? (
@@ -512,12 +529,13 @@ export function DiscussionActions({
   onOpenInDeliverable,
 }: {
   resolved: boolean
-  onToggleResolved: () => void | Promise<void>
+  onToggleResolved?: () => void | Promise<void>
   onOpenInDeliverable?: () => void
 }) {
   const [busy, setBusy] = useState(false)
   return (
     <>
+      {onToggleResolved && (
       <button
         type="button"
         disabled={busy}
@@ -534,6 +552,7 @@ export function DiscussionActions({
         {resolved ? <RotateCcw className="h-3.5 w-3.5" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
         {resolved ? 'Reopen' : 'Resolve'}
       </button>
+      )}
       {onOpenInDeliverable && (
         <Hint label="Open in deliverable" side="bottom">
           <button
@@ -731,8 +750,8 @@ export function ThreadRow({
           // Reading here doesn't open the discussion: the text can be selected, and chips hovered.
           <div id={listId} className="mt-2 cursor-default" onClick={(e) => e.stopPropagation()}>
             {thread?.status === 'error' ? (
-              <div className="text-xs text-fg-muted">
-                Couldn’t load these comments.{' '}
+              <div role="alert" className="text-xs text-fg-muted">
+                Couldn’t load these comments{thread.reason ? ` · ${thread.reason}` : '.'}{' '}
                 <button type="button" onClick={onRetry} className="font-medium text-fg hover:underline">Try again</button>
               </div>
             ) : thread?.status !== 'ready' ? (

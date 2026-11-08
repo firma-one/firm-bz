@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { ReminderWithContext } from '@/lib/actions/user-reminders'
-import { groupReminders, notificationToItem, readableDates, reminderEntity, sortNotifications, type ApiNotification } from './inbox-items'
+import { groupReminders, notificationToItem, readableDates, reminderActionReason, reminderEntity, sortNotifications, type ApiNotification } from './inbox-items'
 
 function reminder(over: Partial<ReminderWithContext>): ReminderWithContext {
     return {
@@ -72,5 +72,31 @@ describe('what an item is about', () => {
         expect(readableDates('Playbook.pdf due on 2026-11-30')).toBe('Playbook.pdf due on Nov 30, 2026')
         expect(readableDates('Kickoff 2027-01-05 and 2027-01-31')).toBe('Kickoff Jan 05, 2027 and Jan 31, 2027')
         expect(readableDates('No dates here')).toBe('No dates here')
+    })
+})
+
+describe('the storage access notice (STORAGE_ACCESS_NOT_CHANGED)', () => {
+    const storage = (over: Partial<ApiNotification>) => note({ type: 'STORAGE_ACCESS_NOT_CHANGED', title: 'Google Drive still lets ana@x.test open Budget.xlsx', ...over })
+
+    it('is a problem in storage, labeled in words, never the raw type', () => {
+        const item = notificationToItem(storage({ subject: 'engagement', ctaUrl: '/e/audit/files' }))
+        expect(item.entity).toBe('storage')
+        expect(item.stage).toBe('problem')
+        expect(item.label).toBe('Access not changed in storage')
+    })
+
+    it('goes to the file it names, or to the Members or Files where the Lead can act', () => {
+        expect(notificationToItem(storage({ subject: 'document', subjectName: 'Budget.xlsx', ctaUrl: '/e/audit/files#doc-file:d1' })).actionLabel).toBe('Go to document')
+        expect(notificationToItem(storage({ subject: 'deliverable', ctaUrl: '/e/audit/board#doc-file:d2' })).actionLabel).toBe('Go to deliverable')
+        expect(notificationToItem(storage({ subject: 'engagement', ctaUrl: '/e/audit/members' })).actionLabel).toBe('Go to members')
+        expect(notificationToItem(storage({ subject: 'engagement', ctaUrl: '/e/audit/files' })).actionLabel).toBe('Go to files')
+        expect(notificationToItem(storage({ subject: 'engagement', ctaUrl: null })).actionLabel).toBe('Go to engagement')
+    })
+})
+
+describe('reminderActionReason (P2-30)', () => {
+    it('asks to sign in again when the session ended, and keeps the action\'s words otherwise', () => {
+        expect(reminderActionReason({ code: 'unauthorized', error: 'Your session has ended. Sign in again.' })).toBe('Sign in again to update this.')
+        expect(reminderActionReason({ code: 'internal', error: 'Something went wrong on our side. Try again.' })).toBe('Something went wrong on our side. Try again.')
     })
 })

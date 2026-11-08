@@ -49,14 +49,14 @@ export async function POST(
     const { folderId, name, url } = body as { folderId?: string; name?: string; url?: string }
 
     if (typeof folderId !== 'string' || !folderId) {
-      return NextResponse.json({ error: 'Missing folderId' }, { status: 400 })
+      return NextResponse.json({ error: 'Open the folder the link goes in, then try again.' }, { status: 400 })
     }
     if (typeof name !== 'string' || !name.trim()) {
-      return NextResponse.json({ error: 'Missing name' }, { status: 400 })
+      return NextResponse.json({ error: 'Give the link a name.' }, { status: 400 })
     }
     const normalizedUrl = typeof url === 'string' ? normalizeUrl(url) : null
     if (!normalizedUrl) {
-      return NextResponse.json({ error: 'Missing or invalid URL' }, { status: 400 })
+      return NextResponse.json({ error: "That isn't a web address. Use one that starts with https://" }, { status: 400 })
     }
 
     const member = await requireEngagementMember(projectId, user.id)
@@ -165,6 +165,6 @@ export async function POST(
       return NextResponse.json({ error: error.message }, { status: 402 })
     }
     console.error('create-link API error:', error)
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
+    return NextResponse.json({ error: "Couldn't save the link. Something went wrong on our side. Try again." }, { status: 500 })
   }
 }

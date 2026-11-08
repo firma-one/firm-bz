@@ -29,6 +29,8 @@ import { supabase } from '@/lib/supabase'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { SelectWithCustomEntry } from '@/components/ui/select-with-custom-entry'
 import { FirmDriveSection } from '@/components/connectors/firm-drive-section'
+import { LoadFailed } from '@/components/ui/load-failed'
+import { failureFrom, failureReason } from '@/lib/files/action-failure'
 
 function normaliseUrl(raw: string): string {
     const v = raw.trim()
@@ -198,7 +200,12 @@ export function FirmSettingsForm({
     const [savingBrand, setSavingBrand] = useState(false)
     const [deleting, setDeleting] = useState(false)
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
-    const [loaded, setLoaded] = useState(false)
+    // A failed load must lock the form: its fields would hold defaults, and saving them wrote those
+    // defaults over the firm's real settings (memo, notes, reminders, beta features, domain access).
+    const [loadState, setLoadState] = useState<'loading' | 'ready' | 'failed'>('loading')
+    const [loadError, setLoadError] = useState<string | null>(null)
+    const [loadAttempt, setLoadAttempt] = useState(0)
+    const loaded = loadState === 'ready'
 
     // Deep link to the danger zone (?section=danger): it sits at the bottom of General.
     const dangerRef = useRef<HTMLElement>(null)
@@ -239,17 +246,21 @@ export function FirmSettingsForm({
 
     useEffect(() => {
         let cancelled = false
+        setLoadState('loading')
+        setLoadError(null)
         const loadBranding = async () => {
             try {
                 const { data: { session } } = await supabase.auth.getSession()
-                if (!session?.access_token) return
+                if (!session?.access_token) throw new Error('Your session has ended. Sign in again.')
                 const res = await fetch(`/api/firm?slug=${encodeURIComponent(orgSlug)}`, {
                     headers: { Authorization: `Bearer ${session.access_token}` },
                 })
-                if (!res.ok || cancelled) return
+                if (cancelled) return
+                if (!res.ok) throw await failureFrom(res)
                 const data = await res.json()
                 const firm = data.firm ?? data
-                if (!cancelled && firm?.id) setOrgIdState(firm.id)
+                if (!firm?.id) throw new Error("The firm's settings came back empty. Try again.")
+                if (!cancelled) setOrgIdState(firm.id)
                 const settings = (firm?.settings as Record<string, unknown>) ?? {}
                 const c = (settings.currency as Record<string, string | undefined>) ?? {}
                 if (!cancelled) {
@@ -324,14 +335,18 @@ export function FirmSettingsForm({
                         setCurrencyIsCustom(true)
                         setCurrencyCustom(savedSymbol)
                     }
+                    setLoadState('ready')
                 }
-            } catch { /* ignore */ } finally {
-                if (!cancelled) setLoaded(true)
+            } catch (e) {
+                if (!cancelled) {
+                    setLoadError(failureReason(e))
+                    setLoadState('failed')
+                }
             }
         }
         loadBranding()
         return () => { cancelled = true }
-    }, [orgSlug])
+    }, [orgSlug, loadAttempt])
 
     const isPublicDomain = allowedEmailDomain && PUBLIC_EMAIL_DOMAINS.has(allowedEmailDomain.toLowerCase())
 
@@ -385,6 +400,8 @@ export function FirmSettingsForm({
     }
 
     const handleSaveBrand = async () => {
+        // Never on unloaded settings: the logo would be saved as none, erasing the real one.
+        if (!loaded) return
         setSavingBrand(true)
         try {
             let logoData: string | null = null
@@ -397,7 +414,7 @@ export function FirmSettingsForm({
             } else if (brandLogoUrl?.startsWith('data:')) {
                 logoData = brandLogoUrl
             }
-            await updateFirm(orgSlug, {
+            const result = await updateFirm(orgSlug, {
                 branding: {
                     name: brandName || null,
                     subtext: brandSubtext || null,
@@ -408,25 +425,30 @@ export function FirmSettingsForm({
                     website: website || null,
                 },
             })
+            if (!result.ok) {
+                addToast({ type: 'error', title: "Couldn't save branding", message: result.error })
+                return
+            }
             if (logoData) setBrandLogoUrl(logoData)
             setBrandLogoFile(null); setBrandLogoPreviewUrl(null); setBrandDirty(false)
             addToast({ type: 'success', title: 'Branding saved', message: 'Firm branding updated.' })
             window.dispatchEvent(new CustomEvent('firm-branding-updated'))
         } catch (e) {
-            addToast({ type: 'error', title: 'Save failed', message: e instanceof Error ? e.message : 'Could not save branding.' })
+            addToast({ type: 'error', title: "Couldn't save branding", message: failureReason(e) })
         } finally {
             setSavingBrand(false)
         }
     }
 
     const handleSave = async ({ skipNavigation = false }: { skipNavigation?: boolean } = {}) => {
+        if (!loaded) return
         if (!name.trim()) {
-            addToast({ type: 'error', title: 'Required', message: 'Firm name is required.' })
+            addToast({ type: 'error', title: "Couldn't save firm settings", message: 'Firm name is required.' })
             return
         }
         setSaving(true)
         try {
-            await updateFirm(orgSlug, {
+            const result = await updateFirm(orgSlug, {
                 name,
                 branding: {
                     website: website.trim() || null,
@@ -462,6 +484,10 @@ export function FirmSettingsForm({
                     documentActivity: extDocumentActivity,
                 },
             })
+            if (!result.ok) {
+                addToast({ type: 'error', title: "Couldn't save firm settings", message: result.error })
+                return
+            }
             setMainDirty(false); setAppDirty(false)
             addToast({ type: 'success', title: 'Saved', message: 'Firm details updated.' })
             if (typeof window !== 'undefined') {
@@ -474,11 +500,7 @@ export function FirmSettingsForm({
             }
             if (!skipNavigation) onSaved?.()
         } catch (e: unknown) {
-            addToast({
-                type: 'error',
-                title: 'Update failed',
-                message: e instanceof Error ? e.message : 'Could not update firm.',
-            })
+            addToast({ type: 'error', title: "Couldn't save firm settings", message: failureReason(e) })
         } finally {
             setSaving(false)
         }
@@ -487,13 +509,17 @@ export function FirmSettingsForm({
     const performDeleteFirm = async () => {
         setDeleting(true)
         try {
-            await deleteFirm(orgSlug)
-            addToast({ type: 'success', title: 'Organization deleted', message: 'Organization has been removed.' })
+            const result = await deleteFirm(orgSlug)
+            if (!result.ok) {
+                addToast({ type: 'error', title: "Couldn't delete firm", message: result.error })
+                return
+            }
+            addToast({ type: 'success', title: 'Firm deleted', message: 'The firm has been removed.' })
             setDeleteConfirmOpen(false)
             onSaved?.()
             router.push('/d')
         } catch (e: unknown) {
-            addToast({ type: 'error', title: 'Delete failed', message: e instanceof Error ? e.message : 'Could not delete firm.' })
+            addToast({ type: 'error', title: "Couldn't delete firm", message: failureReason(e) })
         } finally {
             setDeleting(false)
         }
@@ -547,7 +573,17 @@ export function FirmSettingsForm({
                 ))}
             </div>
 
-            {activeTab === 'main' && (
+            {loadState === 'failed' && activeTab !== 'storage' && (
+                <div className="mx-auto w-full max-w-2xl" role="tabpanel">
+                    <LoadFailed
+                        what="firm settings"
+                        reason={`${loadError ?? 'Something went wrong.'} Nothing here can be changed until they load.`}
+                        onRetry={() => setLoadAttempt((n) => n + 1)}
+                    />
+                </div>
+            )}
+
+            {activeTab === 'main' && loadState !== 'failed' && (
                 <div className="mx-auto flex w-full max-w-2xl flex-col gap-8" role="tabpanel">
                     <section>
                         <h3 className={SETTINGS_SECTION_HEADING_CLASS}>Details</h3>
@@ -603,7 +639,7 @@ export function FirmSettingsForm({
                 </div>
             )}
 
-            {activeTab === 'branding' && (
+            {activeTab === 'branding' && loadState !== 'failed' && (
                 <div className="mx-auto flex w-full max-w-2xl flex-col gap-4" role="tabpanel">
                     <PropertyList>
                         <PropertyRow label={<label htmlFor="firm-brand-name">Display name</label>} icon={<User />}>
@@ -714,7 +750,7 @@ export function FirmSettingsForm({
                         </PropertyRow>
                     </PropertyList>
                     <div className="flex items-center gap-2">
-                        <Button onClick={() => void handleSaveBrand()} disabled={savingBrand || !brandDirty} variant="greenCta">
+                        <Button onClick={() => void handleSaveBrand()} disabled={savingBrand || !loaded || !brandDirty} variant="greenCta">
                             {savingBrand ? 'Saving…' : 'Save branding'}
                         </Button>
                         {/* With one color, the row's own reset does this. */}
@@ -728,7 +764,7 @@ export function FirmSettingsForm({
                 </div>
             )}
 
-            {activeTab === 'appsettings' && (
+            {activeTab === 'appsettings' && loadState !== 'failed' && (
                 <div className="mx-auto flex w-full max-w-2xl flex-col gap-8" role="tabpanel">
                     <section>
                         <h3 className={SETTINGS_SECTION_HEADING_CLASS}>Access</h3>

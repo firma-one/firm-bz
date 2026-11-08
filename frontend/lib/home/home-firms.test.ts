@@ -60,8 +60,8 @@ describe('getHomeFirms', () => {
         ])
     })
 
-    it('returns nothing rather than throwing when the lookup fails', async () => {
+    it('throws when the lookup fails, so Home and the Inbox say it did not load rather than show no firms', async () => {
         prisma.firmMember.findMany.mockRejectedValue(new Error('db down'))
-        expect(await getHomeFirms('u1')).toEqual({ firms: [], unavailable: [] })
+        await expect(getHomeFirms('u1')).rejects.toThrow('db down')
     })
 })

@@ -16,6 +16,8 @@ import { OptionalFieldsSection } from "@/components/ui/optional-fields-toggle"
 import { DateTimePicker } from "@/components/ui/date-time-picker"
 import { createProject, type LwCrmEngagementStatus } from '@/lib/actions/project'
 import { clientTabPath } from '@/lib/navigation/firm-paths'
+import { failureReason } from '@/lib/files/action-failure'
+import { useToast } from '@/components/ui/toast'
 
 interface AddEngagementModalProps {
     groupSlug: string
@@ -47,6 +49,7 @@ export function AddEngagementModal({ groupSlug, firmSlug, clientSlug, trigger, o
     const [currencySymbol, setCurrencySymbol] = useState('')
     const [showOptional, setShowOptional] = useState(false)
     const router = useRouter()
+    const { addToast } = useToast()
 
     useEffect(() => {
         let mounted = true
@@ -132,7 +135,7 @@ export function AddEngagementModal({ groupSlug, firmSlug, clientSlug, trigger, o
         setError(null)
 
         try {
-            await createProject(firmSlug, clientSlug, {
+            const result = await createProject(firmSlug, clientSlug, {
                 name,
                 description: description || undefined,
                 status,
@@ -143,6 +146,11 @@ export function AddEngagementModal({ groupSlug, firmSlug, clientSlug, trigger, o
                 tags: tagInput.trim() ? [...tags, tagInput.trim().toLowerCase().replace(/\s+/g, '-')] : tags,
                 internalMemo: internalMemo.trim() || null,
             })
+            if (!result.ok) {
+                setError(result.error)
+                return
+            }
+            if (result.warning) addToast({ type: 'warning', title: 'Engagement created', message: result.warning })
             setOpen(false)
             setName('')
             setDescription('')
@@ -158,9 +166,8 @@ export function AddEngagementModal({ groupSlug, firmSlug, clientSlug, trigger, o
             setShowOptional(false)
             router.push(clientTabPath(groupSlug, firmSlug, clientSlug, 'projects'), { scroll: false })
             onSaved?.()
-        } catch (error: any) {
-            console.error(error)
-            setError(error.message || "Failed to create engagement")
+        } catch (error: unknown) {
+            setError(failureReason(error))
         } finally {
             setIsLoading(false)
         }

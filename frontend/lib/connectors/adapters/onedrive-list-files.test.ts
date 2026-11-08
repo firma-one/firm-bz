@@ -92,8 +92,23 @@ describe('listOneDriveFiles', () => {
         expect(files.map((f) => f.id)).toEqual(['a', 'b'])
     })
 
-    it('a missing folder lists nothing', async () => {
+    it('a missing folder is not an empty one: it says it is gone (EM-8)', async () => {
         fetchMock.mockImplementationOnce(async () => json({}, 404))
-        expect(await listOneDriveFiles('conn1', 'nope', 100, null)).toEqual([])
+        await expect(listOneDriveFiles('conn1', 'nope', 100, null)).rejects.toMatchObject({ reason: 'not_found' })
+    })
+})
+
+describe('listOneDriveFiles when the folder is gone or refused', () => {
+    it('says the folder is no longer available, rather than listing it as empty', async () => {
+        vi.stubGlobal('fetch', vi.fn(async () => json({ error: { code: 'itemNotFound' } }, 404)))
+        await expect(listOneDriveFiles('conn1', 'gone', 100, null)).rejects.toMatchObject({
+            reason: 'not_found',
+            message: 'This folder is no longer available in OneDrive. It may have been moved or deleted there.',
+        })
+    })
+
+    it("passes on Graph's reason for a refusal", async () => {
+        vi.stubGlobal('fetch', vi.fn(async () => json({ error: { code: 'accessDenied', message: 'Access denied' } }, 403)))
+        await expect(listOneDriveFiles('conn1', 'F', 100, null)).rejects.toMatchObject({ reason: 'no_permission' })
     })
 })

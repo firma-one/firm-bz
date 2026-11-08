@@ -74,10 +74,11 @@ describe('AssetDetailsPane — fields first, then the tabs', () => {
 
     // A file's settings can carry share.createdAt (any settings save writes it); the listing used to
     // read that as a deliverable, and the pane then left the file's Status read-only, Blocked out.
-    it("lets a file's Status be set and offers Blocked, even flagged as a deliverable", () => {
+    it("lets a file's Status be set and offers Blocked, even flagged as a deliverable", async () => {
         render(<AssetDetailsPane document={{ ...FILE, isDeliverable: true }} projectId="p1" editing={{ ...LEAD, canBlock: true }} />)
         expect(screen.getByRole('button', { name: /In review/ })).toBeTruthy()
-        expect(screen.getByRole('button', { name: 'Blocked' })).toBeTruthy()
+        // Blocked is set once the file's record has loaded.
+        expect(await screen.findByRole('button', { name: 'Blocked' })).toBeTruthy()
     })
 
     it('warns when the work is underway with no due date', () => {
@@ -206,5 +207,29 @@ describe('AssetDetailsPane — layout', () => {
         render(<AssetDetailsPane document={FILE} projectId="p1" editing={LEAD} />)
         expect(screen.getByText('Description')).toBeTruthy()
         expect(screen.queryByText(/Only the firm's team sees these/)).toBeNull()
+    })
+})
+
+describe('AssetDetailsPane — a failed load', () => {
+    it("says so with the reason and Try again, and leaves nothing to type over", async () => {
+        fetchMock.mockImplementation(async (url: string) => {
+            if (url.endsWith('/sharing')) return new Response(JSON.stringify({ error: 'Something went wrong on our side. Try again.' }), { status: 500 })
+            if (url.endsWith('/members')) return new Response(JSON.stringify({ members: MEMBERS }))
+            return new Response('{}', { status: 404 })
+        })
+        render(<AssetDetailsPane document={FILE} projectId="p1" editing={LEAD} />)
+        expect(await screen.findByText("Couldn't load this file's details")).toBeTruthy()
+        expect(screen.getByText('Something went wrong on our side. Try again.')).toBeTruthy()
+        // No description box to type into, and no "No assignee" for an assignee it couldn't read.
+        expect(screen.queryByPlaceholderText('What is this file for?')).toBeNull()
+        expect(screen.queryByText('No assignee')).toBeNull()
+
+        fetchMock.mockImplementation(async (url: string) => {
+            if (url.endsWith('/sharing')) return new Response(JSON.stringify({ sharing: { settings: { assigneeUserId: 'u-ana', description: 'Sizing model for the Q2 plan' } } }))
+            if (url.endsWith('/members')) return new Response(JSON.stringify({ members: MEMBERS }))
+            return new Response('{}', { status: 404 })
+        })
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+        expect(await screen.findByDisplayValue('Sizing model for the Q2 plan')).toBeTruthy()
     })
 })

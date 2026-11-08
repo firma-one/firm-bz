@@ -92,8 +92,17 @@ describe('syncDocumentSharingUsers', () => {
           sharingPermissionStatus: DocumentSharingPermissionStatus.GRANTED,
           member: { role: { in: CLIENT_ROLES } },
         },
-        data: { sharingPermissionStatus: DocumentSharingPermissionStatus.REVOKED, connectorPermissionId: null },
+        data: { sharingPermissionStatus: DocumentSharingPermissionStatus.REVOKED },
       })
+    })
+
+    it('keeps the permission id, so the revoke job can take the Drive permission back', async () => {
+      mockFindUnique.mockResolvedValue(makeDoc({ settings: EC_OFF, sharingUsers: [{ ...shareRow('su-1', 'u-1', DocumentSharingPermissionStatus.GRANTED), connectorPermissionId: 'perm-1' }] }))
+
+      await syncDocumentSharingUsers('doc-1')
+
+      expect(mockUpdateMany).toHaveBeenCalledTimes(1)
+      expect(mockUpdateMany.mock.calls[0][0].data).not.toHaveProperty('connectorPermissionId')
     })
 
     it("leaves the firm's own rows alone", async () => {
@@ -163,9 +172,10 @@ describe('syncDocumentSharingUsers', () => {
 
       await syncDocumentSharingUsers('doc-1')
 
+      // Its permission id stays: one a revoke couldn't take back still stands, and the next open reuses it.
       expect(mockUpdate).toHaveBeenCalledWith({
         where: { id: 'su-1' },
-        data: { sharingPermissionStatus: DocumentSharingPermissionStatus.GRANTED, connectorPermissionId: null },
+        data: { sharingPermissionStatus: DocumentSharingPermissionStatus.GRANTED },
       })
     })
 
@@ -183,7 +193,7 @@ describe('syncDocumentSharingUsers', () => {
       expect(mockUpdate).toHaveBeenCalledTimes(1)
       expect(mockUpdate).toHaveBeenCalledWith({
         where: { id: 'su-stale' },
-        data: { sharingPermissionStatus: DocumentSharingPermissionStatus.REVOKED, connectorPermissionId: null },
+        data: { sharingPermissionStatus: DocumentSharingPermissionStatus.REVOKED },
       })
     })
 

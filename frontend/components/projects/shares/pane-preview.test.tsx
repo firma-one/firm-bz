@@ -1,8 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { act, fireEvent, render, renderHook, screen } from '@testing-library/react'
 
-// A preview over a deliverable's details. It lives outside the panel because the right pane renders its
-// content twice, and closing it goes back to the details at the size they were.
+// A preview over a deliverable's details. Closing it goes back to the details at the size they were.
 
 vi.mock('@/lib/right-pane-context', () => ({ useRightPane: () => ({ paneSize: 'medium' }) }))
 vi.mock('@/components/files/document-preview-pane', () => ({
@@ -58,7 +57,7 @@ describe('createPanePreview', () => {
         expect(pane.setPaneSize).toHaveBeenCalledWith('medium')
     })
 
-    it('tells every copy of the pane\'s content', () => {
+    it('tells everyone watching it', () => {
         const { preview } = setup()
         const docked = renderHook(() => usePanePreview(preview))
         const fullScreen = renderHook(() => usePanePreview(preview))

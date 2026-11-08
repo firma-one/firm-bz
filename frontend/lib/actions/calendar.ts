@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
 import { loadCalendarData, type CalendarData } from '@/lib/calendar/calendar-data'
+import { asResult, type ActionResult } from '@/lib/actions/action-result'
 
 export type {
   CalendarData,
@@ -19,8 +20,15 @@ const EMPTY_CALENDAR_DATA: CalendarData = { engagements: [], events: [] }
  * Fetch all Engagement/Deliverable calendar events for a firm, scoped to the
  * requesting user's engagement memberships. The query and its visibility rules live in
  * loadCalendarData (lib/calendar/calendar-data.ts), shared with the cross-firm Home's agenda.
+ *
+ * The calendar page calls this from the browser, so a failed load answers `{ ok: false }` (P1-68):
+ * the page showed an empty calendar and "No engagements yet." Signed out still redirects.
  */
-export async function getFirmCalendarData(firmSlug: string): Promise<CalendarData> {
+export async function getFirmCalendarData(firmSlug: string): Promise<ActionResult<CalendarData>> {
+  return asResult('getFirmCalendarData', () => firmCalendarData(firmSlug))
+}
+
+async function firmCalendarData(firmSlug: string): Promise<CalendarData> {
   const supabase = await createClient()
   const { data: { session } } = await supabase.auth.getSession()
   if (!session?.user) redirect('/signin')

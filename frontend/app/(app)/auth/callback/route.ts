@@ -46,11 +46,23 @@ export async function GET(request: Request) {
       const userId = user.id
 
       // An OAuth sign-in has just merged the provider's identity_data over user_metadata, so
-      // settle the name keys before anything renders from them.
-      await reconcileUserNames(user, supabase)
+      // settle the name keys before anything renders from them. The session is set by now, so a
+      // failure in any of this must not end on a bare 500 (P2-55): names settle on a later load.
+      try {
+        await reconcileUserNames(user, supabase)
+      } catch (e) {
+        console.error('[auth/callback] reconcileUserNames failed', e)
+      }
 
       if (!requestedNext) {
-        const resolved = await resolveDefaultFirmLandingPath(userId)
+        let resolved: string | null = null
+        try {
+          resolved = await resolveDefaultFirmLandingPath(userId)
+        } catch (e) {
+          // `/d` resolves the landing itself, and says why if it can't.
+          console.error('[auth/callback] resolveDefaultFirmLandingPath failed', e)
+          resolved = '/d'
+        }
         // No slug / malformed firm data: same as legacy "no default firm" — send to onboarding.
         next = resolved ?? '/d/onboarding'
         // Already resolved here (unlike the client-side signin/signup flows, which redirect to
@@ -65,7 +77,11 @@ export async function GET(request: Request) {
       // Warm JWT claims and userSettingsPlus cache on signin.
       // This adds ~200-400ms to the signin redirect but makes all subsequent page
       // loads faster: permission checks read from JWT/in-memory instead of hitting DB.
-      await warmUserSessionOnSignin(userId, user.app_metadata ?? {}, supabase)
+      try {
+        await warmUserSessionOnSignin(userId, user.app_metadata ?? {}, supabase)
+      } catch (e) {
+        console.error('[auth/callback] warming the session failed', e)
+      }
 
       // Determine redirect URL — force http when running locally (e.g. dev_as_prod) to avoid ERR_SSL_PROTOCOL_ERROR
       const forwardedHost = request.headers.get('x-forwarded-host')
@@ -100,12 +116,18 @@ export async function GET(request: Request) {
     }
   }
 
-  // return the user to an error page — force http when running locally
+  // Back to sign-in, which reads `auth_code_error` and says so (P1-19), with the provider's own
+  // sentence when Supabase relayed one (`error_description`). Force http when running locally.
   const url = new URL(origin)
   const isLocalhost = url.hostname === 'localhost' || url.hostname === '127.0.0.1'
   const runningLocally = process.env.RUNNING_LOCALLY === 'true'
   const base = (process.env.NODE_ENV === 'development' || runningLocally) && isLocalhost ? `http://${url.host}` : origin
-  return NextResponse.redirect(`${base}/signin?error=auth_code_error`)
+  const back = new URL('/signin', base)
+  back.searchParams.set('error', 'auth_code_error')
+  const description = searchParams.get('error_description')?.trim()
+  if (description) back.searchParams.set('error_description', description.slice(0, 200))
+  if (requestedNext) back.searchParams.set('next', requestedNext)
+  return NextResponse.redirect(back.toString())
 }
 
 /**

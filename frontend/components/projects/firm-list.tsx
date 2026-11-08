@@ -46,15 +46,17 @@ export function FirmList({ firms, viewMode = 'grid', activeOrgIdFromJWT }: FirmL
         // If it's the default org and we are on the landing dashboard (/d),
         // we can navigate directly or auto-switch without showing the confirmation dialog.
         if (org.isDefault && !currentOrgSlug) {
+            // Anything that stops the quick switch falls back to the dialog, which says why.
             try {
-                await switchFirm(org.slug)
-                const { supabase } = await import('@/lib/supabase')
-                await supabase.auth.refreshSession()
-                window.location.href = firmHref(org)
-                return
+                const result = await switchFirm(org.slug)
+                if (result.ok) {
+                    const { supabase } = await import('@/lib/supabase')
+                    await supabase.auth.refreshSession()
+                    window.location.href = firmHref(org)
+                    return
+                }
             } catch (err) {
                 console.error('Failed to auto-switch to default org:', err)
-                // Fallback to normal flow if something goes wrong
             }
         }
 

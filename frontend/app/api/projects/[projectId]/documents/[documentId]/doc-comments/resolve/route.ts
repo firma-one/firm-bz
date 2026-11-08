@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { blockIfEngagementCompleted } from '@/lib/engagement-access'
 import { discussionAccess, setDiscussionResolved } from '@/lib/comments/discussions'
 
 /**
@@ -12,7 +13,14 @@ async function setResolved({ params }: Params, resolve: boolean) {
   const { projectId, documentId } = await params
   const access = await discussionAccess(projectId, documentId)
   if (access instanceof NextResponse) return access
-  await setDiscussionResolved(access.documentId, projectId, resolve ? access.userId : null)
+  const completed = await blockIfEngagementCompleted(projectId)
+  if (completed) return completed
+  try {
+    await setDiscussionResolved(access.documentId, projectId, resolve ? access.userId : null)
+  } catch (e) {
+    console.error('doc-comments resolve: not saved', { projectId, documentId, resolve, message: e instanceof Error ? e.message : String(e) })
+    return NextResponse.json({ error: "It wasn't saved on our side. Try again." }, { status: 500 })
+  }
   return NextResponse.json({ ok: true, resolved: resolve })
 }
 

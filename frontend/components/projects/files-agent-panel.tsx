@@ -10,6 +10,8 @@ import { SCAFFOLD_QUESTIONS } from '@/lib/ai/files-agent/scaffold'
 import { ChatMarkdown } from '@/components/ui/chat-markdown'
 import { ElapsedTime } from '@/components/ui/elapsed-time'
 import type { AnalysisSummary } from '@/lib/ai/files-agent/analyze'
+import { ASSISTANT } from '@/lib/ai/assistant'
+import { BRIO_UNREACHABLE } from '@/lib/ai/brio-failure'
 
 /**
  * Review and approval for agent-proposed file changes.
@@ -51,6 +53,11 @@ export interface ReviewData {
     creditsSpent: number
     dropped: number
     truncated: boolean
+    /**
+     * A model turn failed part-way: the findings are complete, the suggestions are not (none, when
+     * the first turn failed). The panel says so rather than "Nothing to change".
+     */
+    modelFailed?: boolean
     estimate: number
     /**
      * True when nobody has told us what kind of engagement this is.
@@ -270,6 +277,13 @@ function ProposalRow({ proposal }: { proposal: Proposal }) {
     )
 }
 
+const REVIEW_FAILED = `${ASSISTANT.name} couldn't review the files. Nothing was changed. Try again.`
+
+/** What one proposal is about, to name it beside its reason in the report. */
+function proposalLabel(p: Proposal): string {
+    return p.kind === 'folder' ? p.name : p.kind === 'move' ? p.fileName : p.currentName
+}
+
 /**
  * Running a review: what the "Review folder organization" task does when clicked, and what the
  * results panel calls again when the user names the engagement's kind.
@@ -300,20 +314,27 @@ export function useFilesReview({ projectId, setReview, onThreadTurn }: {
         setReviewing(true)
         setError(null)
         try {
-            const res = await fetch(`/api/projects/${projectId}/files-agent`, {
-                method: 'POST',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
-                credentials: 'include',
-                // Sent only when the user has just answered. The server persists it, so this
-                // happens once per engagement rather than on every review.
-                body: JSON.stringify(engagementKind ? { engagementKind } : {}),
-            })
+            let res: Response
+            try {
+                res = await fetch(`/api/projects/${projectId}/files-agent`, {
+                    method: 'POST',
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        'Content-Type': 'application/json',
+                    },
+                    credentials: 'include',
+                    // Sent only when the user has just answered. The server persists it, so this
+                    // happens once per engagement rather than on every review.
+                    body: JSON.stringify(engagementKind ? { engagementKind } : {}),
+                })
+            } catch {
+                // The request never got there: a review changes nothing anyway.
+                setError(BRIO_UNREACHABLE)
+                return
+            }
             const body = await res.json().catch(() => ({}))
             if (!res.ok) {
-                setError(body.error ?? 'Could not review the files')
+                setError(body.error ?? REVIEW_FAILED)
                 return
             }
             setReview(body.data)
@@ -324,7 +345,7 @@ export function useFilesReview({ projectId, setReview, onThreadTurn }: {
                 onThreadTurn?.('assistant', body.data.summaryMarkdown)
             }
         } catch {
-            setError('Could not review the files')
+            setError(REVIEW_FAILED)
         } finally {
             setReviewing(false)
         }
@@ -423,30 +444,43 @@ export function FilesAgentPanel({
 
         setApplying(true)
         try {
-            const res = await fetch(`/api/projects/${projectId}/files-agent/apply`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${token}`,
-                },
-                credentials: 'include',
-                body: JSON.stringify({
-                    token: review.token,
-                    proposals: approved.map((a) => a.proposal),
-                    // Keyed by the same digest-stable identity the proposals carry, so the server
-                    // can pair an override to its proposal without trusting array order.
-                    overrides: Object.fromEntries(
-                        approved.flatMap((a) => a.renameTo
-                            ? [[proposalKey(a.proposal), a.renameTo]]
-                            : []),
-                    ),
-                }),
-            })
-            const body = await res.json().catch(() => ({}))
-            if (!res.ok) {
-                setOutcome({ ok: false, message: body.error ?? 'Please try again.' })
+            let res: Response
+            try {
+                res = await fetch(`/api/projects/${projectId}/files-agent/apply`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: `Bearer ${token}`,
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        token: review.token,
+                        proposals: approved.map((a) => a.proposal),
+                        // Keyed by the same digest-stable identity the proposals carry, so the server
+                        // can pair an override to its proposal without trusting array order.
+                        overrides: Object.fromEntries(
+                            approved.flatMap((a) => a.renameTo
+                                ? [[proposalKey(a.proposal), a.renameTo]]
+                                : []),
+                        ),
+                    }),
+                })
+            } catch {
+                // The request never got there, so nothing in the Drive was touched.
+                setOutcome({ ok: false, message: BRIO_UNREACHABLE })
                 return
             }
+            const body = await res.json().catch(() => ({}))
+            if (!res.ok) {
+                // The route's words ("This review has expired…", "already applied"); its refusals
+                // all come before any change is made.
+                setOutcome({
+                    ok: false,
+                    message: body?.error ?? `${ASSISTANT.name} couldn't apply these changes. Nothing was changed. Try again.`,
+                })
+                return
+            }
+            if (!body?.data) throw new Error('No result')
 
             const { applied, failed } = body.data
             // Reported IN THE THREAD, not as a toast.
@@ -459,13 +493,16 @@ export function FilesAgentPanel({
             // Each failure with its own reason, not just a count. A collision names the file and
             // the folder, which is what makes it something the user can resolve; "1 could not be
             // applied" leaves them opening folders to find out which.
-            const outcomes: Array<{ ok: boolean; error?: string; appliedAs?: string | null }> =
+            const outcomes: Array<{ proposal?: Proposal; ok: boolean; error?: string; appliedAs?: string | null }> =
                 body.data.outcomes ?? []
 
+            // Each one named, beside its reason: "- Budget.xlsx: Google Drive has this locked…".
             const reasons = outcomes
                 .filter((o) => !o.ok)
-                .map((o) => o.error)
-                .filter((e): e is string => typeof e === 'string')
+                .map((o) => {
+                    const reason = o.error ?? 'Could not apply this change'
+                    return o.proposal ? `${proposalLabel(o.proposal)}: ${reason}` : reason
+                })
 
             // Names that had to change because the folder already held them. Said plainly: the
             // user approved one name and a different one was applied, and they should not have to
@@ -475,10 +512,13 @@ export function FilesAgentPanel({
                 .map((o) => o.appliedAs as string)
 
             const lines = [
-                failed > 0
-                    ? `Applied ${applied}, ${failed} could not be applied.`
-                    : `Applied ${applied} change${applied === 1 ? '' : 's'}, recorded in the audit `
-                        + 'trail as Brio, your Executive Assistant.',
+                failed > 0 && applied === 0
+                    // Nothing done is a failure, not a partial success.
+                    ? `None of these could be applied, so nothing was changed.`
+                    : failed > 0
+                        ? `Applied ${applied} of ${applied + failed}. Not applied:`
+                        : `Applied ${applied} change${applied === 1 ? '' : 's'}, recorded in the audit `
+                            + 'trail as Brio, your Executive Assistant.',
                 ...reasons.map((r) => `- ${r}`),
             ]
             if (renamed.length > 0) {
@@ -497,7 +537,8 @@ export function FilesAgentPanel({
             // saw the thread empty itself and had to take the toast's word for what happened.
             onApplied?.()
         } catch {
-            setOutcome({ ok: false, message: 'Please try again.' })
+            // Past the request, so the work may have run: say so rather than "Nothing was changed".
+            setOutcome({ ok: false, message: `${ASSISTANT.name} couldn't read the result. Refresh the file list to see what changed.` })
         } finally {
             setApplying(false)
         }
@@ -562,6 +603,7 @@ export function FilesAgentPanel({
         : applying ? 'Applying…'
         : outcome ? (outcome.ok ? 'Done' : 'Needs attention')
         : review.needsEngagementKind ? 'One question'
+        : review.proposals.length === 0 && review.modelFailed ? "Couldn't finish"
         : review.proposals.length === 0 ? 'Nothing to change'
         : `${answeredCount} of ${review.proposals.length} answered`
 
@@ -713,6 +755,16 @@ export function FilesAgentPanel({
                             ))}
                     </ul>
                 </div>
+            )}
+
+            {/* A run that stopped early: the findings above stand, but some have no suggestion. */}
+            {(review.modelFailed || review.truncated) && !outcome && (
+                <p role="status" className="flex items-start gap-1.5 text-caption leading-relaxed text-amber-800">
+                    <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" aria-hidden />
+                    {review.modelFailed
+                        ? `${ASSISTANT.name} couldn't finish suggesting changes, so some findings have none. Nothing was changed. Run the review again for the rest.`
+                        : `${ASSISTANT.name} stopped at its limit for one review, so some findings may have no suggestion. Run the review again for the rest.`}
+                </p>
             )}
 
             {review.dropped > 0 && (

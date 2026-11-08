@@ -7,6 +7,7 @@ import { prisma } from '@/lib/prisma'
 import { resolveGroupId } from '@/lib/billing/billing-group'
 import { updatePolarCustomerNameByExternalId } from '@/lib/billing/polar-customers'
 import { logger } from '@/lib/logger'
+import { authErrorWords } from '@/lib/actions/auth-error-words'
 
 const MAX_NAME_LEN = 80
 
@@ -57,7 +58,8 @@ export async function updateProfileNames(
     })
 
     if (updateError) {
-        return { error: updateError.message || profileCopy.updateFailed }
+        logger.error('[updateProfileNames] Supabase refused the update', updateError)
+        return { error: authErrorWords(updateError, profileCopy.updateFailed) }
     }
 
     if (fullName && fullName !== existingFullName) {

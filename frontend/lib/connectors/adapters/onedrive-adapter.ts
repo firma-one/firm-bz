@@ -12,6 +12,7 @@ import { prisma } from '@/lib/prisma'
 import { WorkspaceRootLocation, type Connector } from '@prisma/client'
 import type { IConnectorStorageAdapter } from '../types'
 import { logger } from '@/lib/logger'
+import { storageFailureFromResponse } from '@/lib/connectors/storage-failure'
 import { CONNECTOR_CACHE_TTL_MS, createShortLivedCache } from '../short-lived-cache'
 
 const GRAPH_API = 'https://graph.microsoft.com/v1.0'
@@ -55,7 +56,8 @@ export function createOneDriveAdapter(getAccessToken: GetAccessToken): IConnecto
     async listFolderChildren(connectionId, folderId) {
       const [token, base] = await Promise.all([auth(connectionId), resolveDriveBase(connectionId)])
       const res = await graphFetch(token, `${base}/items/${folderId}/children?$select=id,name`)
-      if (!res.ok) return []
+      // An empty folder answers []; a refused listing says why, so setup stops instead of making duplicates (P2-35).
+      if (!res.ok) throw await storageFailureFromResponse(res, 'OneDrive', 'list a folder')
       const data = await res.json()
       return (data.value || []).map((f: { id: string; name: string }) => ({ id: f.id, name: f.name }))
     },
@@ -99,10 +101,8 @@ export function createOneDriveAdapter(getAccessToken: GetAccessToken): IConnecto
         method: 'POST',
         body: JSON.stringify({ name, folder: {}, '@microsoft.graph.conflictBehavior': 'rename' }),
       })
-      if (!res.ok) {
-        const err = await res.text()
-        throw new Error(`Failed to create folder ${name}: ${res.status} - ${err}`)
-      }
+      // New folder and folder upload: a refusal says why (P1-36).
+      if (!res.ok) throw await storageFailureFromResponse(res, 'OneDrive', `create the folder ${name}`)
       const data = await res.json()
       return data.id
     },
@@ -165,7 +165,8 @@ export function createOneDriveAdapter(getAccessToken: GetAccessToken): IConnecto
     async search(connectionId, query) {
       const [token, base] = await Promise.all([auth(connectionId), resolveDriveBase(connectionId)])
       const res = await graphFetch(token, `${base}/root/search(q='${encodeURIComponent(query)}')?$select=id,name`)
-      if (!res.ok) return []
+      // A refused search isn't "nothing found".
+      if (!res.ok) throw await storageFailureFromResponse(res, 'OneDrive', 'search for folders')
       const data = await res.json()
       return (data.value || []).map((f: { id: string; name: string }) => ({ id: f.id, name: f.name }))
     },

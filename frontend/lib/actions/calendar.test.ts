@@ -17,7 +17,7 @@ vi.mock('@/utils/supabase/server', () => ({
 vi.mock('@/utils/supabase/admin', () => ({
   createAdminClient: () => ({ auth: { admin: { getUserById: async () => ({ data: { user: null } }) } } }),
 }))
-vi.mock('next/navigation', () => ({ redirect: vi.fn() }))
+vi.mock('next/navigation', () => ({ redirect: vi.fn(), unstable_rethrow: vi.fn() }))
 vi.mock('@/lib/reminders/reminder-service', () => ({ getReminderKeysForUser: async () => new Set<string>() }))
 vi.mock('@/lib/engagement-sharing-ids', async (importActual) => ({
   ...(await importActual<typeof import('@/lib/engagement-sharing-ids')>()),
@@ -89,8 +89,9 @@ function engagementWithRole(role: string) {
 async function documentEventsFor(role: string) {
   engagementFindMany.mockResolvedValue([engagementWithRole(role)])
   const { getFirmCalendarData } = await import('./calendar')
-  const data = await getFirmCalendarData('acme')
-  return data.events.filter((e) => e.documentId).map((e) => e.documentId).sort()
+  const result = await getFirmCalendarData('acme')
+  if (!result.ok) throw new Error(result.error)
+  return result.data.events.filter((e) => e.documentId).map((e) => e.documentId).sort()
 }
 
 describe('getFirmCalendarData — external members', () => {
@@ -167,5 +168,13 @@ describe('externalCanSeeDocumentDueDate', () => {
 
   it('has no stage gate outside a deliverable', () => {
     expect(externalCanSeeDocumentDueDate('eng_viewer', { inSharedSubtree: true, deliverableStage: null })).toBe(true)
+  })
+})
+
+describe('getFirmCalendarData when the load fails (P1-68)', () => {
+  it('answers that it did not load, never an empty calendar', async () => {
+    engagementFindMany.mockRejectedValueOnce(new Error('connection reset'))
+    const { getFirmCalendarData } = await import('./calendar')
+    expect(await getFirmCalendarData('acme')).toEqual({ ok: false, code: 'internal', error: 'Something went wrong on our side. Try again.' })
   })
 })

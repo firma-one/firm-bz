@@ -9,13 +9,14 @@ import { supabase } from '@/lib/supabase'
 import { DocumentDocCommentsPane } from '@/components/projects/document-doc-comments-pane'
 import { folderPathLabels } from '@/lib/files/engagement-root'
 import { LocatedDocumentPreview, usePanePreview, type PanePreview } from './pane-preview'
+import { PrivateMark } from '@/components/files/private-mark'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { useRightPane } from '@/lib/right-pane-context'
 import {
   Loader2,
   Folder, MoreVertical,
   Info, MessagesSquare, Settings as SettingsIcon,
-  UserPlus, ChevronDown, X, ScanEye, FolderOpen, Check, CircleDot, CalendarClock, UserRound, ListChecks, AlertTriangle,
+  UserPlus, ChevronDown, X, ScanEye, FolderOpen, Check, CircleDot, CalendarClock, UserRound, ListChecks, AlertTriangle, Trash2,
 } from 'lucide-react'
 import {
   DropdownMenu,
@@ -35,13 +36,16 @@ import { PropertyList, PropertyRow } from '@/components/ui/property-list'
 import { DateProperty, PersonAvatar, PersonProperty, type PersonOption } from '@/components/ui/property-cells'
 import { ACTIVITY_STAGES, isOnBoard, type ActivityStatus } from '@/lib/sharing-settings'
 import { getAllowedTransitions, type EngagementRoleSlug } from '@/lib/deliverable-stage-roles'
-import { useStageMove } from '@/components/files/use-stage-move'
+import { stageDoneTitle, stageFailureTitle, useStageMove } from '@/components/files/use-stage-move'
 import { useDueDateSave } from '@/components/files/use-due-date-save'
 import { isLaterDay } from '@/lib/files/due-date-rule'
 import { Hint } from '@/components/ui/tooltip'
 import { BlockedTag } from '@/components/files/blocked-tag'
 import type { BlockedFlag } from '@/lib/files/blocked'
 import { versionName } from '@/lib/files/approvals'
+import { failureFrom, failureReason } from '@/lib/files/action-failure'
+import { LoadFailed } from '@/components/ui/load-failed'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -70,6 +74,8 @@ interface SubtaskRecord {
   /** The approval that stands: which version was approved, and when. */
   approval?: { version: { label: string | null; savedAt: string }; approvedAt: string } | null
   breadcrumb?: string[]
+  /** Internal only: listed for the firm, but left out of the deliverable's stage and progress. */
+  isPrivate?: boolean
 }
 
 interface EngagementMember {
@@ -90,6 +96,8 @@ export interface DeliverableDetailPanelProps {
   activityStatus: ActivityStatus
   dueDate?: string | null
   canManage: boolean
+  /** The engagement is completed: the pane reads, and nothing in it changes anything. */
+  readOnly?: boolean
   isExternalViewer?: boolean
   isExternalCollaborator?: boolean
   /** Engagement role slug — used to derive allowed lane transitions. */
@@ -114,6 +122,18 @@ export interface DeliverableDetailPanelProps {
 }
 
 type Tab = 'details' | 'delivery' | 'comments'
+
+/** A load that can fail: after a failure the pane says why, never shows defaults or "nothing yet". */
+type LoadState = { state: 'loading' } | { state: 'ready' } | { state: 'failed'; reason: string }
+
+const SESSION_ENDED = 'Your session has ended. Refresh the page and sign in again.'
+
+/** The signed-in person's token, or a failure that says why there is none. */
+async function accessToken(): Promise<string> {
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session?.access_token) throw new Error(SESSION_ENDED)
+  return session.access_token
+}
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -208,6 +228,7 @@ function SubtaskRow({
         if (!result.cancelled) addToast({ type: 'error', title: "Couldn't set due date", message: result.error })
         return
       }
+      if (result.warning) addToast({ type: 'warning', title: 'Due date set', message: result.warning })
       setSubtaskDueDate(result.dueDate ? result.dueDate.slice(0, 10) : '')
       onDueDateChange?.(subtask.id, result.dueDate)
       const movedDeliverable = result.alsoChanged[0]
@@ -219,20 +240,24 @@ function SubtaskRow({
 
   const handleAssigneeSelect = useCallback(async (member: EngagementMember | null) => {
     const userId = member?.userId ?? null
+    const previous = subtask
     onAssigneeChange?.(subtask.id, userId, member?.name ?? null, member?.email ?? null, member?.avatarUrl ?? null)
     setSavingAssignee(true)
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session?.access_token) return
-      await fetch(`/api/projects/${projectId}/documents/${subtask.documentId}/assignee`, {
+      const res = await fetch(`/api/projects/${projectId}/documents/${subtask.documentId}/assignee`, {
         method: 'PATCH',
-        headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+        headers: { Authorization: `Bearer ${await accessToken()}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ assigneeUserId: userId }),
       })
+      if (!res.ok) throw await failureFrom(res)
+    } catch (e) {
+      // BD-2: shown at once, so put back, and say why.
+      onAssigneeChange?.(subtask.id, previous.assigneeUserId, previous.assigneeName, previous.assigneeEmail, previous.assigneeAvatarUrl ?? null)
+      addToast({ type: 'error', title: "Couldn't change the assignee", message: failureReason(e) })
     } finally {
       setSavingAssignee(false)
     }
-  }, [projectId, subtask.id, subtask.documentId, onAssigneeChange])
+  }, [projectId, subtask, onAssigneeChange, addToast])
 
   const handleStatusChange = useCallback(async (newStatus: string) => {
     const s = newStatus as ActivityStatus
@@ -244,9 +269,11 @@ function SubtaskRow({
       if (!result.ok) {
         // The change was shown optimistically; put it back, and say so unless the move was called off.
         onStatusChange(subtask.id, previous)
-        if (!result.cancelled) addToast({ type: 'error', title: 'Failed to update status', message: result.error })
+        if (!result.cancelled) addToast({ type: 'error', title: stageFailureTitle(result, s), message: result.error })
         return
       }
+      // Moved, but part of it couldn't be done (its deliverable stayed, storage refused part of an approval).
+      if (result.warning) addToast({ type: 'warning', title: stageDoneTitle(s), message: result.warning })
       if (result.deliverable) onDeliverableChanged?.(result.deliverable.status)
       // Approving a document gets the same feedback as approving a deliverable (none before).
       if (s === 'approved') approvalFeedback.confirm({ id: subtask.id, name: subtask.fileName })
@@ -255,17 +282,30 @@ function SubtaskRow({
     }
   }, [subtask.id, subtask.documentId, subtask.fileName, projectId, status, onStatusChange, onDeliverableChanged, addToast, approvalFeedback, move])
 
+  const [confirmTrash, setConfirmTrash] = useState(false)
+  const [trashing, setTrashing] = useState(false)
+  // BD-1: the same trash the Files list uses (/api/drive-action), which checks the file is in this
+  // engagement. There was no /documents/[id]/trash route, so the row vanished and the file stayed.
   const handleTrash = useCallback(async () => {
+    setTrashing(true)
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session?.access_token) return
-      await fetch(`/api/projects/${projectId}/documents/${subtask.documentId}/trash`, {
+      if (!subtask.externalId) throw new Error("This document's place in storage isn't known yet. Refresh, then try again.")
+      const res = await fetch('/api/drive-action', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${session.access_token}` },
+        credentials: 'include',
+        headers: { Authorization: `Bearer ${await accessToken()}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'trash', fileId: subtask.externalId, projectId, fileName: subtask.fileName }),
       })
+      if (!res.ok) throw await failureFrom(res)
       onRemoveSubtask?.(subtask.id)
-    } catch { /* ignore */ }
-  }, [subtask.id, subtask.documentId, projectId, onRemoveSubtask])
+      addToast({ type: 'success', title: 'Moved to trash', message: `${subtask.fileName} moved to the storage's trash` })
+    } catch (e) {
+      addToast({ type: 'error', title: 'Move to trash failed', message: failureReason(e) })
+    } finally {
+      setTrashing(false)
+      setConfirmTrash(false)
+    }
+  }, [subtask.id, subtask.externalId, subtask.fileName, projectId, onRemoveSubtask, addToast])
 
   const fileUrl = deeplinkBase && subtask.documentId
     ? `${deeplinkBase}#doc-file:${subtask.documentId}`
@@ -297,6 +337,7 @@ function SubtaskRow({
           <span className="min-w-0 flex-1 truncate text-ui text-fg">{subtask.fileName}</span>
         )}
         {!showExtras && <span className="flex-1 min-w-0" />}
+        {subtask.isPrivate && <PrivateMark />}
         {subtask.blocked && <BlockedTag blocked={subtask.blocked} />}
         {/* Expand toggle */}
         {showExtras && (
@@ -364,7 +405,7 @@ function SubtaskRow({
             canManage={false}
             showShareModal={false}
             onOpenDocument={onOpenDocument ? () => onOpenDocument(subtask) : undefined}
-            onDeleteDocument={(!isDeliverableApproved && onRemoveSubtask) ? () => void handleTrash() : undefined}
+            onDeleteDocument={(!isDeliverableApproved && onRemoveSubtask) ? () => setConfirmTrash(true) : undefined}
           />
         </div>
       </div>
@@ -522,6 +563,20 @@ function SubtaskRow({
       )}
       {stageDialog}
       {dueDialog}
+      <ConfirmDialog
+        open={confirmTrash}
+        onOpenChange={(open) => { if (!open && !trashing) setConfirmTrash(false) }}
+        icon={<Trash2 className="h-3.5 w-3.5" />}
+        iconVariant="red"
+        title="Move to trash"
+        subtitle={subtask.fileName}
+        description="It will be moved to the trash in the engagement's storage."
+        confirmLabel="Move to trash"
+        confirmVariant="red"
+        onCancel={() => setConfirmTrash(false)}
+        onConfirm={() => void handleTrash()}
+        loading={trashing}
+      />
     </div>
   )
 }
@@ -559,6 +614,7 @@ export function DeliverableDetailPanel({
   activityStatus,
   dueDate,
   canManage,
+  readOnly = false,
   isExternalViewer = false,
   isExternalCollaborator = false,
   roleSlug,
@@ -580,8 +636,8 @@ export function DeliverableDetailPanel({
   const [activeTab, setActiveTab] = useState<Tab>(initialTab ?? 'details')
   const preview = usePanePreview(panePreview)
 
-  // Esc goes back to the details, as the pane's × does. Claimed with preventDefault, because the pane
-  // renders its content twice and the other copy hears the same key.
+  // Esc goes back to the details, as the pane's × does. Claimed with preventDefault, because the comments
+  // pane underneath hears the same key.
   useEffect(() => {
     if (!panePreview || !preview) return
     const onKey = (e: KeyboardEvent) => {
@@ -598,6 +654,12 @@ export function DeliverableDetailPanel({
   const [savingDueDate, setSavingDueDate] = useState(false)
   const [description, setDescription] = useState('')
   const [savingDesc, setSavingDesc] = useState(false)
+  /** Why the description wasn't saved (BD-4); null once it is. */
+  const [descFailure, setDescFailure] = useState<string | null>(null)
+  /** The delivery settings and description (BD-3, BD-4): not editable until they've loaded. */
+  const [settingsLoad, setSettingsLoad] = useState<LoadState>({ state: 'loading' })
+  /** Its documents (EM-4): a failed load says so, never "No documents yet". */
+  const [docsLoad, setDocsLoad] = useState<LoadState>({ state: 'loading' })
   const descTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const [sharingOptions, setSharingOptions] = useState<SharingOptions>({
@@ -619,7 +681,7 @@ export function DeliverableDetailPanel({
   // Progress counts the documents on the Board (To do and beyond), as the deliverable's stage does.
   useEffect(() => {
     if (!subtasksLoadedRef.current) return
-    const onBoard = subtasks.filter((t) => isOnBoard(t.status ?? 'not_started'))
+    const onBoard = subtasks.filter((t) => !t.isPrivate && isOnBoard(t.status ?? 'not_started'))
     onSubtaskStatusChange?.(onBoard.length, onBoard.filter((t) => t.status === 'approved').length)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [subtasks])
@@ -642,7 +704,11 @@ export function DeliverableDetailPanel({
   const loadDetails = useCallback(async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      if (!session?.access_token) return
+      if (!session?.access_token) {
+        setSettingsLoad({ state: 'failed', reason: SESSION_ENDED })
+        setDocsLoad({ state: 'failed', reason: SESSION_ENDED })
+        return
+      }
       setLoadingSubtasks(true)
 
       // Determine which documents this persona can see based on sharing rows.
@@ -672,6 +738,9 @@ export function DeliverableDetailPanel({
           evAddWatermark: s.guest?.options?.addWatermark ?? false,
         })
         setDescription((data.sharing?.settings as Record<string, unknown>)?.description as string ?? '')
+        setSettingsLoad({ state: 'ready' })
+      } else {
+        setSettingsLoad({ state: 'failed', reason: (await failureFrom(sharingRes)).message })
       }
 
       if (subRes.ok) {
@@ -680,18 +749,23 @@ export function DeliverableDetailPanel({
         setOwnerUserId(subData.deliverable?.ownerUserId ?? null)
         subtasksLoadedRef.current = true
         setSubtasks(loaded)
+        setDocsLoad({ state: 'ready' })
         // Auto-expand first item in large pane
         if (paneSize === 'large' && loaded.length > 0) {
           setExpandedSubtaskId(loaded[0].id)
         }
+      } else {
+        setDocsLoad({ state: 'failed', reason: (await failureFrom(subRes)).message })
       }
 
       if (membersRes.ok) {
         const membersData = await membersRes.json()
         setMembers(membersData.members ?? [])
       }
-    } catch {
-      // non-critical
+    } catch (e) {
+      const reason = failureReason(e)
+      setSettingsLoad((prev) => (prev.state === 'ready' ? prev : { state: 'failed', reason }))
+      setDocsLoad((prev) => (prev.state === 'ready' ? prev : { state: 'failed', reason }))
     } finally {
       setLoadingSubtasks(false)
     }
@@ -713,25 +787,28 @@ export function DeliverableDetailPanel({
   const changeOwner = useCallback(async (next: PersonOption | null) => {
     const previous = ownerUserId
     setOwnerUserId(next?.id ?? null)
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session?.access_token) return
-    const res = await fetch(`/api/projects/${projectId}/documents/${documentId}/assignee`, {
-      method: 'PATCH',
-      headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ assigneeUserId: next?.id ?? null }),
-    }).catch(() => null)
-    if (!res?.ok) setOwnerUserId(previous)
-  }, [ownerUserId, projectId, documentId])
+    try {
+      const res = await fetch(`/api/projects/${projectId}/documents/${documentId}/assignee`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${await accessToken()}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assigneeUserId: next?.id ?? null }),
+      })
+      if (!res.ok) throw await failureFrom(res)
+    } catch (e) {
+      // P1-63: put the Lead back, and say why (it used to snap back with no word, or stay unsaved).
+      setOwnerUserId(previous)
+      addToast({ type: 'error', title: "Couldn't change the Lead", message: failureReason(e) })
+    }
+  }, [ownerUserId, projectId, documentId, addToast])
 
-  // Auto-save delivery settings on toggle change
-  const saveOptions = useCallback(async (opts: SharingOptions) => {
+  // Auto-save delivery settings on toggle change. Only the options are sent: the route keeps each
+  // role on or off as it is (AC-11).
+  const saveOptions = useCallback(async (opts: SharingOptions, previous: SharingOptions) => {
     setSavingOptions(true)
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session?.access_token) return
-      await fetch(`/api/projects/${projectId}/documents/${documentId}/sharing`, {
+      const res = await fetch(`/api/projects/${projectId}/documents/${documentId}/sharing`, {
         method: 'PUT',
-        headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+        headers: { Authorization: `Bearer ${await accessToken()}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ecOptions: { allowDownload: opts.ecAllowDownload },
           guestOptions: {
@@ -741,17 +818,25 @@ export function DeliverableDetailPanel({
           },
         }),
       })
-    } catch {
-      addToast({ type: 'error', title: 'Error', message: 'Failed to save delivery settings.' })
+      if (!res.ok) throw await failureFrom(res)
+      const data = await res.json().catch(() => ({}))
+      if (typeof data?.warning === 'string') addToast({ type: 'warning', title: 'Delivery settings saved', message: data.warning })
+    } catch (e) {
+      // BD-3: the toggle flips back, so nobody believes a download is off when it isn't.
+      setSharingOptions(previous)
+      addToast({ type: 'error', title: "Couldn't save delivery settings", message: failureReason(e) })
     } finally {
       setSavingOptions(false)
     }
   }, [projectId, documentId, addToast])
 
   const handleToggle = (key: keyof SharingOptions, value: boolean) => {
-    const next = { ...sharingOptions, [key]: value }
+    // Before the settings have loaded, the toggles show defaults: saving them would overwrite the real ones.
+    if (settingsLoad.state !== 'ready') return
+    const previous = sharingOptions
+    const next = { ...previous, [key]: value }
     setSharingOptions(next)
-    saveOptions(next)
+    void saveOptions(next, previous)
   }
 
   /**
@@ -767,6 +852,7 @@ export function DeliverableDetailPanel({
         if (!result.cancelled) addToast({ type: 'error', title: "Couldn't set due date", message: result.error })
         return undefined
       }
+      if (result.warning) addToast({ type: 'warning', title: 'Due date set', message: result.warning })
       // A fix moved its documents in: show them as they are now.
       if (result.alsoChanged.length > 0) await loadDetails()
       return result.dueDate
@@ -776,20 +862,22 @@ export function DeliverableDetailPanel({
   }
 
   const handleDescChange = (val: string) => {
+    if (settingsLoad.state !== 'ready') return
     setDescription(val)
     if (descTimerRef.current) clearTimeout(descTimerRef.current)
     descTimerRef.current = setTimeout(async () => {
       setSavingDesc(true)
       try {
-        const { data: { session } } = await supabase.auth.getSession()
-        if (!session?.access_token) return
-        await fetch(`/api/projects/${projectId}/documents/${documentId}/sharing`, {
+        const res = await fetch(`/api/projects/${projectId}/documents/${documentId}/sharing`, {
           method: 'PUT',
-          headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+          headers: { Authorization: `Bearer ${await accessToken()}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({ description: val }),
         })
-      } catch {
-        addToast({ type: 'error', title: 'Error', message: 'Failed to save description.' })
+        if (!res.ok) throw await failureFrom(res)
+        setDescFailure(null)
+      } catch (e) {
+        // BD-4: the text stays to try again, marked as not saved, with why.
+        setDescFailure(failureReason(e))
       } finally {
         setSavingDesc(false)
       }
@@ -813,11 +901,13 @@ export function DeliverableDetailPanel({
     try {
       const result = await moveStage(projectId, documentId, next)
       if (!result.ok) {
-        if (!result.cancelled) addToast({ type: 'error', title: 'Failed to update stage', message: result.error })
+        if (!result.cancelled) addToast({ type: 'error', title: stageFailureTitle(result, next), message: result.error })
         return
       }
       if (result.deliverable && result.deliverable.status !== status) followDocuments(result.deliverable.status)
-      addToast({ type: 'success', title: 'Stage updated', message: `Documents moved to ${STAGE_LABELS[next]}.` })
+      addToast(result.warning
+        ? { type: 'warning', title: stageDoneTitle(next), message: result.warning }
+        : { type: 'success', title: 'Stage updated', message: `Documents moved to ${STAGE_LABELS[next]}.` })
       await loadDetails()
     } finally {
       setMovingStatus(false)
@@ -833,6 +923,7 @@ export function DeliverableDetailPanel({
       if (!result.cancelled) addToast({ type: 'error', title: "Couldn't add it to the Board", message: result.error })
       return
     }
+    if (result.warning) addToast({ type: 'warning', title: 'Added to the Board', message: result.warning })
     if (result.deliverable && result.deliverable.status !== status) followDocuments(result.deliverable.status)
   }
 
@@ -856,14 +947,16 @@ export function DeliverableDetailPanel({
   // The deliverable's work is its documents on the Board; Not started ones wait under their own line.
   const boardSubtasks = subtasks.filter((t) => isOnBoard(t.status ?? 'not_started'))
   const notStartedSubtasks = subtasks.filter((t) => !isOnBoard(t.status ?? 'not_started'))
-  const approvedSubtasks = boardSubtasks.filter((t) => t.status === 'approved').length
+  // Internal only documents stay on the list, but don't count toward progress, as they don't toward the stage.
+  const countedSubtasks = boardSubtasks.filter((t) => !t.isPrivate)
+  const approvedSubtasks = countedSubtasks.filter((t) => t.status === 'approved').length
   // Documents due after the deliverable (approved ones left out): what the due-date rule forbids,
   // left over from before it.
   const docsDueAfter = deliverableDueDate
     ? subtasks.filter((t) => t.dueDate && t.status !== 'approved' && isLaterDay(t.dueDate, deliverableDueDate))
     : []
   const isClient = isExternalViewer || isExternalCollaborator
-  const canAddToBoard = !isClient && (roleSlug === 'eng_admin' || roleSlug === 'eng_member')
+  const canAddToBoard = !readOnly && !isClient && (roleSlug === 'eng_admin' || roleSlug === 'eng_member')
   const peopleOptions: PersonOption[] = members
     .filter((m) => !m.isAgent && (m.role === 'eng_admin' || m.role === 'eng_member'))
     .map((m) => ({ id: m.userId, name: m.name ?? m.email ?? 'Member', email: m.email, avatarUrl: m.avatarUrl }))
@@ -876,20 +969,20 @@ export function DeliverableDetailPanel({
   const showEV = true
 
   // Derive allowed transitions from the role — same rules used by the API route.
-  const allowedTransitions = roleSlug ? getAllowedTransitions(roleSlug, status) : []
+  const allowedTransitions = roleSlug && !readOnly ? getAllowedTransitions(roleSlug, status) : []
 
   const renderSubtask = (s: SubtaskRecord) => (
     <SubtaskRow
       key={s.id}
       subtask={s}
       projectId={projectId}
-      disabled={isApproved}
+      disabled={isApproved || readOnly}
       deeplinkBase={deeplinkBase}
       showExtras={showExtras}
       isMedium={paneSize === 'medium'}
       isExpanded={expandedSubtaskId === s.id}
       onToggleExpand={() => setExpandedSubtaskId((prev) => prev === s.id ? null : s.id)}
-      isDeliverableApproved={isApproved}
+      isDeliverableApproved={isApproved || readOnly}
       members={members}
       roleSlug={roleSlug}
       onDeliverableChanged={(next) => { if (next !== status) followDocuments(next) }}
@@ -986,16 +1079,16 @@ export function DeliverableDetailPanel({
           />
         </PropertyRow>
         <PropertyRow label="Progress" icon={<ListChecks />}>
-          {boardSubtasks.length > 0 ? (
+          {countedSubtasks.length > 0 ? (
             <span className="inline-flex h-7 items-center gap-2 px-1.5">
               <span className="h-1.5 w-20 overflow-hidden rounded-full bg-surface-muted">
-                <span className={cn('block h-full rounded-full', STAGE_BAR_CLASSES[laneStageOf(status)])} style={{ width: `${Math.round((approvedSubtasks / boardSubtasks.length) * 100)}%` }} />
+                <span className={cn('block h-full rounded-full', STAGE_BAR_CLASSES[laneStageOf(status)])} style={{ width: `${Math.round((approvedSubtasks / countedSubtasks.length) * 100)}%` }} />
               </span>
-              <span className="text-small tabular-nums text-fg-muted">{approvedSubtasks} of {boardSubtasks.length} documents approved</span>
+              <span className="text-small tabular-nums text-fg-muted">{approvedSubtasks} of {countedSubtasks.length} documents approved</span>
             </span>
           ) : (
             <span className="inline-flex h-7 items-center px-1.5 text-small text-fg-subtle">
-              {loadingSubtasks ? 'Loading…' : subtasks.length > 0 ? 'No documents on the Board yet' : 'No documents yet'}
+              {docsLoad.state === 'failed' ? "Couldn't load its documents" : loadingSubtasks ? 'Loading…' : subtasks.length > 0 ? 'No documents on the Board yet' : 'No documents yet'}
             </span>
           )}
         </PropertyRow>
@@ -1035,13 +1128,16 @@ export function DeliverableDetailPanel({
                 <label className={cn(FIELD_LABEL, 'flex items-center gap-1.5')}>
                   Description
                   {savingDesc && <Loader2 className="h-2.5 w-2.5 animate-spin text-fg-subtle" />}
+                  {descFailure && !savingDesc && <span className="font-normal text-danger">Not saved · {descFailure}</span>}
                 </label>
-                {canManage ? (
+                {canManage && settingsLoad.state === 'failed' ? (
+                  <LoadFailed compact what="the description" reason={settingsLoad.reason} onRetry={() => void loadDetails()} />
+                ) : canManage ? (
                   <Textarea
                     value={description}
                     onChange={(e) => handleDescChange(e.target.value)}
                     placeholder="Add a description…"
-                    disabled={isApproved}
+                    disabled={isApproved || settingsLoad.state !== 'ready'}
                     className="-mx-2 min-h-[72px] w-[calc(100%+1rem)] resize-none border-transparent bg-transparent px-2 py-1.5 text-ui shadow-none hover:bg-surface-hover focus-visible:bg-surface disabled:hover:bg-transparent"
                   />
                 ) : (
@@ -1053,8 +1149,8 @@ export function DeliverableDetailPanel({
             {/* Files / Subtasks */}
             <div className="px-4 py-4">
               {(() => {
-                const approvedCount = boardSubtasks.filter((s) => s.status === 'approved').length
-                const total = boardSubtasks.length
+                const approvedCount = countedSubtasks.filter((s) => s.status === 'approved').length
+                const total = countedSubtasks.length
                 const pct = total > 0 ? Math.round((approvedCount / total) * 100) : 0
                 return (
                   <div className="flex items-center gap-3 mb-3">
@@ -1081,6 +1177,8 @@ export function DeliverableDetailPanel({
                 <div className="flex items-center gap-1.5 py-2 text-small text-fg-subtle">
                   <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading…
                 </div>
+              ) : docsLoad.state === 'failed' ? (
+                <LoadFailed compact what="this deliverable's documents" reason={docsLoad.reason} onRetry={() => void loadDetails()} />
               ) : subtasks.length === 0 ? (
                 <p className="py-1 text-small text-fg-subtle">No files in this deliverable yet.</p>
               ) : (
@@ -1128,7 +1226,12 @@ export function DeliverableDetailPanel({
         )}
 
         {/* ── DELIVERY SETTINGS TAB ── */}
-        {activeTab === 'delivery' && canManage && (
+        {activeTab === 'delivery' && canManage && settingsLoad.state === 'failed' && (
+          <div className="px-4 py-4">
+            <LoadFailed compact what="the delivery settings" reason={settingsLoad.reason} onRetry={() => void loadDetails()} />
+          </div>
+        )}
+        {activeTab === 'delivery' && canManage && settingsLoad.state !== 'failed' && (
           <div className="divide-y divide-line">
 
             <div className="px-4 py-3">
@@ -1144,7 +1247,7 @@ export function DeliverableDetailPanel({
                   label="Allow download"
                   checked={sharingOptions.ecAllowDownload}
                   onCheckedChange={(v) => handleToggle('ecAllowDownload', v)}
-                  disabled={isApproved}
+                  disabled={isApproved || settingsLoad.state !== 'ready'}
                 />
               </div>
             )}
@@ -1156,20 +1259,20 @@ export function DeliverableDetailPanel({
                   label="Allow download"
                   checked={sharingOptions.evAllowDownload}
                   onCheckedChange={(v) => handleToggle('evAllowDownload', v)}
-                  disabled={isApproved}
+                  disabled={isApproved || settingsLoad.state !== 'ready'}
                 />
                 <ToggleRow
                   label="PDF only"
                   checked={sharingOptions.evPdfOnly}
                   onCheckedChange={(v) => handleToggle('evPdfOnly', v)}
-                  disabled={isApproved}
+                  disabled={isApproved || settingsLoad.state !== 'ready'}
                 />
                 {sharingOptions.evPdfOnly && (
                   <ToggleRow
                     label="Apply watermark"
                     checked={sharingOptions.evAddWatermark}
                     onCheckedChange={(v) => handleToggle('evAddWatermark', v)}
-                    disabled={isApproved}
+                    disabled={isApproved || settingsLoad.state !== 'ready'}
                     indent
                   />
                 )}

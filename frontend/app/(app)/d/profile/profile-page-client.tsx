@@ -17,6 +17,7 @@ import { useToast } from '@/components/ui/toast'
 import { initialsOf } from '@/lib/initials'
 import { PropertyList, PropertyRow, PROPERTY_FIELD_CLASS, PROPERTY_HINT_CLASS, SETTINGS_SECTION_HEADING_CLASS } from '@/components/ui/property-list'
 import { PushNotificationToggle } from '@/components/notifications/push-notification-toggle'
+import { failureReason } from '@/lib/files/action-failure'
 
 export function ProfilePageClient({
     displayName,
@@ -55,13 +56,23 @@ export function ProfilePageClient({
         if (!isDirty) return
         setFormError(null)
         setSaving(true)
-        const result = await updateProfileNames(firstName, lastName)
+        let result: Awaited<ReturnType<typeof updateProfileNames>>
+        try {
+            result = await updateProfileNames(firstName, lastName)
+        } catch (e) {
+            // The action threw or never arrived: say so, and give the button back. Without this,
+            // "saving" never ended.
+            setFormError(`Couldn't save your name · ${failureReason(e)}`)
+            setSaving(false)
+            return
+        }
         if ('error' in result) {
             setFormError(result.error)
             setSaving(false)
             return
         }
-        await supabase.auth.refreshSession()
+        // Saved. A failed session refresh only delays the new name in the menu; it isn't a failure.
+        await supabase.auth.refreshSession().catch(() => {})
         router.refresh()
         setSaving(false)
         addToast({ type: 'success', title: 'Saved', message: profileCopy.saveSuccess })
@@ -189,8 +200,10 @@ export function ProfilePageClient({
                                         title="Copy email"
                                         aria-label="Copy email"
                                         onClick={() => {
-                                            void navigator.clipboard.writeText(email)
-                                            addToast({ type: 'success', title: 'Copied', message: 'Email copied.' })
+                                            navigator.clipboard.writeText(email).then(
+                                                () => addToast({ type: 'success', title: 'Copied', message: 'Email copied.' }),
+                                                () => addToast({ type: 'error', title: "Couldn't copy", message: 'Your browser blocked the clipboard.' }),
+                                            )
                                         }}
                                         className="h-6 w-6 shrink-0"
                                     >

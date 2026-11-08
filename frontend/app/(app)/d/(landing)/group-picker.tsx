@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Building2, LayoutGrid, Loader2, Plus } from 'lucide-react'
-import { getUserGroups, getUserFirms, createOwnWorkspace, type UserGroupOption } from '@/lib/actions/firms'
+import { getUserGroups, createOwnWorkspace, type FirmOption, type UserGroupOption } from '@/lib/actions/firms'
 import { BRAND_NAME } from '@/config/brand'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { TooltipProvider } from '@/components/ui/tooltip'
@@ -23,6 +23,8 @@ import {
 } from '@/components/ui/dialog'
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden'
 import { Button } from '@/components/ui/button'
+import { LoadFailed } from '@/components/ui/load-failed'
+import { failureReason } from '@/lib/files/action-failure'
 
 /**
  * Group-level picker rendered by `(landing)/page.tsx` when `resolveDefaultFirmLandingPath`
@@ -53,8 +55,11 @@ export function GroupPicker() {
     const router = useRouter()
     const { user } = useAuth()
     const [groups, setGroups] = useState<UserGroupOption[]>([])
-    const [firms, setFirms] = useState<Awaited<ReturnType<typeof getUserFirms>>>([])
+    const [firms, setFirms] = useState<FirmOption[]>([])
     const [loading, setLoading] = useState(true)
+    /** Why the workspaces didn't load. Never "No workspaces yet" (with Create) after a failure. */
+    const [loadError, setLoadError] = useState<string | null>(null)
+    const [loadAttempt, setLoadAttempt] = useState(0)
     const [creating, setCreating] = useState(false)
     const [createError, setCreateError] = useState<string | null>(null)
     const [switchDialogOpen, setSwitchDialogOpen] = useState(false)
@@ -65,14 +70,28 @@ export function GroupPicker() {
     const [viewMode, setViewMode] = useViewMode('fm-workspaces-view')
 
     useEffect(() => {
+        let cancelled = false
         async function load() {
-            const [userGroups, userFirms] = await Promise.all([getUserGroups(), getUserFirms()])
-            setGroups(userGroups)
-            setFirms(userFirms)
-            setLoading(false)
+            setLoading(true)
+            setLoadError(null)
+            try {
+                const result = await getUserGroups()
+                if (cancelled) return
+                if (result.ok) {
+                    setGroups(result.data.groups)
+                    setFirms(result.data.firms)
+                } else {
+                    setLoadError(result.error)
+                }
+            } catch (e) {
+                if (!cancelled) setLoadError(failureReason(e))
+            } finally {
+                if (!cancelled) setLoading(false)
+            }
         }
         void load()
-    }, [])
+        return () => { cancelled = true }
+    }, [loadAttempt])
 
     // The active firm's group — determines which group card is "current" (no confirmation
     // needed to re-enter it) vs. a genuine switch (needs FirmSwitchDialog, same as the
@@ -84,6 +103,14 @@ export function GroupPicker() {
         return (
             <div className="flex h-full items-center justify-center">
                 <LoadingSpinner size="md" />
+            </div>
+        )
+    }
+
+    if (loadError) {
+        return (
+            <div className="flex h-full items-center justify-center">
+                <LoadFailed what="your workspaces" reason={loadError} onRetry={() => setLoadAttempt((n) => n + 1)} />
             </div>
         )
     }
@@ -129,15 +156,20 @@ export function GroupPicker() {
             if (firm) {
                 // Same as FirmSwitchDialog: update JWT/session before a hard navigation so the
                 // target route loads with fresh permissions rather than a stale prefetch.
-                await switchFirm(firm.slug)
+                const result = await switchFirm(firm.slug)
+                if (!result.ok) {
+                    setSwitchError(result.error)
+                    setIsSwitching(false)
+                    return
+                }
                 const { supabase } = await import('@/lib/supabase')
                 await supabase.auth.refreshSession()
                 const { buildUserSettingsPlus } = await import('@/lib/actions/user-settings')
                 await buildUserSettingsPlus()
             }
             window.location.href = groupFirmListPath(targetGroup.slug)
-        } catch (err: any) {
-            setSwitchError(err?.message || 'Failed to switch workspace')
+        } catch (err: unknown) {
+            setSwitchError(failureReason(err))
             setIsSwitching(false)
         }
     }
@@ -145,13 +177,17 @@ export function GroupPicker() {
     async function handleCreateOwnWorkspace() {
         setCreating(true)
         setCreateError(null)
-        const result = await createOwnWorkspace()
-        if ('path' in result) {
-            router.push(result.path)
-        } else {
+        try {
+            const result = await createOwnWorkspace()
+            if ('path' in result) {
+                router.push(result.path)
+                return
+            }
             setCreateError(result.error)
-            setCreating(false)
+        } catch (e) {
+            setCreateError(failureReason(e))
         }
+        setCreating(false)
     }
 
     return (

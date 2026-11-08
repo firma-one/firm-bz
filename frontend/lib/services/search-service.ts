@@ -674,7 +674,8 @@ export class SearchService {
             return new Set(results.map(r => r.externalId))
         } catch (error) {
             logger.error('getExternalIdsUnderRoot failed:', error as Error)
-            return new Set()
+            // An empty set would scope the search to nothing and read as "No results" (EM-6).
+            throw error
         }
     }
 
@@ -839,20 +840,31 @@ export class SearchService {
         // query never pays for an extra no-op DB round-trip.
         const looksLikeDocId = /^[a-z]{2,6}-\d+$/i.test(trimmedQuery)
 
+        // Each branch that runs may fail on its own (the embedding service down, one query timing out):
+        // the others' results still stand. When every branch that ran failed, the search couldn't run,
+        // and that's an error rather than an empty list the page would show as "No results" (EM-6).
+        const failures: unknown[] = []
+        let branchesRun = 0
+        const branch = <T,>(run: (() => Promise<T[]>) | null): Promise<T[]> => {
+            if (!run) return Promise.resolve([])
+            branchesRun++
+            return run().catch((e: unknown) => { failures.push(e); return [] as T[] })
+        }
         const [vectorResults, filenameResults, termResults, docIdResults] = await Promise.all([
-            trimmedEmbeddingQuery
-                ? SearchService.searchGlobalVector({ firmId, userId, semanticText: trimmedEmbeddingQuery, fullAccessEngagementIds, grantGatedEngagementIds, clientId, engagementId, deliverableDocumentIds, dateRange, dateField, strictDueDate, limit: 50 })
-                : SearchService.searchGlobalStructuredOnly({ firmId, userId, fullAccessEngagementIds, grantGatedEngagementIds, clientId, engagementId, deliverableDocumentIds, dateRange, dateField, strictDueDate, limit }),
-            trimmedQuery
-                ? SearchService.searchGlobalFileName({ firmId, userId, query: trimmedQuery, fullAccessEngagementIds, grantGatedEngagementIds, clientId, engagementId, deliverableDocumentIds, dateRange, dateField, strictDueDate, limit: 20 })
-                : Promise.resolve([]),
-            trimmedQuery && significantTerms.length > 0
-                ? SearchService.searchGlobalFileNameTerms({ firmId, userId, terms: significantTerms, fullAccessEngagementIds, grantGatedEngagementIds, clientId, engagementId, deliverableDocumentIds, dateRange, dateField, strictDueDate, limit: 25 })
-                : Promise.resolve([]),
-            looksLikeDocId
-                ? SearchService.searchGlobalDocId({ firmId, userId, query: trimmedQuery, fullAccessEngagementIds, grantGatedEngagementIds, clientId, engagementId, deliverableDocumentIds, dateRange, dateField, strictDueDate, limit: 10 })
-                : Promise.resolve([]),
+            branch(trimmedEmbeddingQuery
+                ? () => SearchService.searchGlobalVector({ firmId, userId, semanticText: trimmedEmbeddingQuery, fullAccessEngagementIds, grantGatedEngagementIds, clientId, engagementId, deliverableDocumentIds, dateRange, dateField, strictDueDate, limit: 50 })
+                : () => SearchService.searchGlobalStructuredOnly({ firmId, userId, fullAccessEngagementIds, grantGatedEngagementIds, clientId, engagementId, deliverableDocumentIds, dateRange, dateField, strictDueDate, limit })),
+            branch(trimmedQuery
+                ? () => SearchService.searchGlobalFileName({ firmId, userId, query: trimmedQuery, fullAccessEngagementIds, grantGatedEngagementIds, clientId, engagementId, deliverableDocumentIds, dateRange, dateField, strictDueDate, limit: 20 })
+                : null),
+            branch(trimmedQuery && significantTerms.length > 0
+                ? () => SearchService.searchGlobalFileNameTerms({ firmId, userId, terms: significantTerms, fullAccessEngagementIds, grantGatedEngagementIds, clientId, engagementId, deliverableDocumentIds, dateRange, dateField, strictDueDate, limit: 25 })
+                : null),
+            branch(looksLikeDocId
+                ? () => SearchService.searchGlobalDocId({ firmId, userId, query: trimmedQuery, fullAccessEngagementIds, grantGatedEngagementIds, clientId, engagementId, deliverableDocumentIds, dateRange, dateField, strictDueDate, limit: 10 })
+                : null),
         ])
+        if (branchesRun > 0 && failures.length === branchesRun) throw failures[0]
 
         // Merge: docId matches first (most specific/unambiguous), then vector, then filename/term
         // matches not already present, dedup by externalId.
@@ -996,7 +1008,8 @@ export class SearchService {
                 .filter(r => r.score >= MIN_SEMANTIC_SCORE)
         } catch (error) {
             logger.error('Global vector search failed:', error as Error)
-            return []
+            // searchGlobal decides: one branch failing narrows the results, all of them failing is an error.
+            throw error
         }
     }
 
@@ -1050,7 +1063,8 @@ export class SearchService {
             }))
         } catch (error) {
             logger.error('Global filename search failed:', error as Error)
-            return []
+            // searchGlobal decides: one branch failing narrows the results, all of them failing is an error.
+            throw error
         }
     }
 
@@ -1108,7 +1122,8 @@ export class SearchService {
             }))
         } catch (error) {
             logger.error('Global docId search failed:', error as Error)
-            return []
+            // searchGlobal decides: one branch failing narrows the results, all of them failing is an error.
+            throw error
         }
     }
 
@@ -1179,7 +1194,8 @@ export class SearchService {
             })
         } catch (error) {
             logger.error('Global filename-terms search failed:', error as Error)
-            return []
+            // searchGlobal decides: one branch failing narrows the results, all of them failing is an error.
+            throw error
         }
     }
 
@@ -1227,7 +1243,8 @@ export class SearchService {
             }))
         } catch (error) {
             logger.error('Global structured-only search failed:', error as Error)
-            return []
+            // searchGlobal decides: one branch failing narrows the results, all of them failing is an error.
+            throw error
         }
     }
 }

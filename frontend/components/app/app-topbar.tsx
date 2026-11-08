@@ -14,6 +14,8 @@ import Link from "next/link"
 import { Tip } from "@/components/ui/tip"
 import { formatRelativeTime } from "@/lib/utils"
 import { RemindersPanel } from "@/components/app/reminders-panel"
+import { useToast } from "@/components/ui/toast"
+import { failureFrom, failureReason } from "@/lib/files/action-failure"
 import { CommandPalette } from "@/components/app/command-palette"
 
 // --- Typewriter trigger text ---
@@ -196,8 +198,15 @@ function injectBrandCssVars(branding: OrganizationBranding | null): SessionBrand
   return payload
 }
 
+/** The answer of a write, or throws with the route's reason: these used to be fired without a check. */
+async function okOrThrow(res: Response): Promise<Response> {
+  if (!res.ok) throw await failureFrom(res)
+  return res
+}
+
 export function AppTopbar() {
   const { user } = useAuth()
+  const { addToast } = useToast()
   const pathname = usePathname()
   const [, setFirmName] = useState<string>('')
   const [branding, setBranding] = useState<OrganizationBranding | null>(null)
@@ -213,8 +222,11 @@ export function AppTopbar() {
   const [showBookmarksDropdown, setShowBookmarksDropdown] = useState(false)
   const [showNotificationsDropdown, setShowNotificationsDropdown] = useState(false)
   const [notifications, setNotifications] = useState<NotificationItem[]>([])
+  /** Why the notifications didn't load, so the list doesn't read "No notifications". */
+  const [notificationsError, setNotificationsError] = useState<string | null>(null)
   const [unreadCount, setUnreadCount] = useState(0)
   const [bookmarks, setBookmarks] = useState<BookmarkItem[]>([])
+  const [bookmarksError, setBookmarksError] = useState<string | null>(null)
   const [canBroadcast, setCanBroadcast] = useState(false)
 
   const [visibleNotificationsCount] = useState(5)
@@ -445,8 +457,12 @@ export function AppTopbar() {
       })
       const url = qs.toString() ? `/api/notifications?${qs.toString()}` : '/api/notifications'
       const res = await fetch(url, { headers: { Authorization: `Bearer ${session.access_token}` } })
-      if (!res.ok) return
+      if (!res.ok) {
+        setNotificationsError((await failureFrom(res)).message)
+        return
+      }
       const data = await res.json()
+      setNotificationsError(null)
       setNotifications(data.notifications ?? [])
       setUnreadCount(data.unreadCount ?? 0)
       setCanBroadcast(Boolean(data.canBroadcast))
@@ -455,8 +471,8 @@ export function AppTopbar() {
           (s: any) => s === 'org' || s === 'client' || s === 'project'
         )
       )
-    } catch {
-      // ignore
+    } catch (e) {
+      setNotificationsError(failureReason(e))
     }
   }, [parsePathContext])
 
@@ -465,11 +481,15 @@ export function AppTopbar() {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session?.access_token) return
       const res = await fetch('/api/bookmarks', { headers: { Authorization: `Bearer ${session.access_token}` } })
-      if (!res.ok) return
+      if (!res.ok) {
+        setBookmarksError((await failureFrom(res)).message)
+        return
+      }
       const data = await res.json()
+      setBookmarksError(null)
       setBookmarks(data.bookmarks ?? [])
-    } catch {
-      // ignore
+    } catch (e) {
+      setBookmarksError(failureReason(e))
     }
   }, [])
 
@@ -769,6 +789,15 @@ export function AppTopbar() {
                     ? bookmarks.filter((b) => `${b.label ?? ''} ${b.url ?? ''}`.toLowerCase().includes(q))
                     : bookmarks
                   const visible = filtered.slice(0, visibleBookmarksCount)
+                  if (bookmarksError && bookmarks.length === 0) {
+                    return (
+                      <div role="status" className="text-center py-6">
+                        <Bookmark className="h-8 w-8 text-[#e5e7eb] mx-auto mb-2" />
+                        <p className="text-[0.8125rem] text-[#45474c]">Couldn&apos;t load bookmarks</p>
+                        <p className="text-xs text-[#45474c]">{bookmarksError}</p>
+                      </div>
+                    )
+                  }
                   if (filtered.length === 0) {
                     return (
                       <div className="text-center py-6">
@@ -810,15 +839,15 @@ export function AppTopbar() {
                               try {
                                 const { data: { session } } = await supabase.auth.getSession()
                                 if (session?.access_token) {
-                                  await fetch('/api/bookmarks', {
+                                  await okOrThrow(await fetch('/api/bookmarks', {
                                     method: 'DELETE',
                                     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
                                     body: JSON.stringify({ id: b.id }),
-                                  })
+                                  }))
                                   loadBookmarks()
                                 }
-                              } catch {
-                                // ignore
+                              } catch (e) {
+                                addToast({ type: 'error', title: "Couldn't remove the bookmark", message: failureReason(e) })
                               }
                             }}
                           >
@@ -895,20 +924,20 @@ export function AppTopbar() {
                       try {
                         const { data: { session } } = await supabase.auth.getSession()
                         if (!session?.access_token) return
-                        await fetch('/api/notifications', {
+                        await okOrThrow(await fetch('/api/notifications', {
                           method: 'PATCH',
                           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
                           body: JSON.stringify({ markAllRead: true }),
-                        })
-                        await fetch('/api/notifications', {
+                        }))
+                        await okOrThrow(await fetch('/api/notifications', {
                           method: 'DELETE',
                           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
                           body: JSON.stringify({ readOnly: true, olderThanDays: 0 }),
-                        })
-                        loadNotifications()
-                      } catch {
-                        // ignore
+                        }))
+                      } catch (e) {
+                        addToast({ type: 'error', title: "Couldn't clear notifications", message: failureReason(e) })
                       }
+                      loadNotifications()
                     }}
                   >
                     <span className="inline-flex items-center justify-center gap-1.5">
@@ -1008,7 +1037,10 @@ export function AppTopbar() {
                             try {
                               setBroadcastSending(true)
                               const { data: { session } } = await supabase.auth.getSession()
-                              if (!session?.access_token) return
+                              if (!session?.access_token) {
+                                addToast({ type: 'error', title: "Couldn't send the broadcast", message: 'Your session has expired. Sign in again.' })
+                                return
+                              }
                               const res = await fetch('/api/notifications/broadcast', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
@@ -1025,16 +1057,18 @@ export function AppTopbar() {
                                   })(),
                                 }),
                               })
-                              if (res.ok) {
-                                setShowBroadcastComposer(false)
-                                setBroadcastText('')
-                                setBroadcastTitle('')
-                                setBroadcastScope('org')
-                                loadNotifications()
-                                if (typeof window !== 'undefined') {
-                                  window.dispatchEvent(new CustomEvent('pockett-notifications-updated'))
-                                }
+                              // The route's reason when it refuses; the composer stays open with the text.
+                              await okOrThrow(res)
+                              setShowBroadcastComposer(false)
+                              setBroadcastText('')
+                              setBroadcastTitle('')
+                              setBroadcastScope('org')
+                              loadNotifications()
+                              if (typeof window !== 'undefined') {
+                                window.dispatchEvent(new CustomEvent('pockett-notifications-updated'))
                               }
+                            } catch (e) {
+                              addToast({ type: 'error', title: "Couldn't send the broadcast", message: failureReason(e) })
                             } finally {
                               setBroadcastSending(false)
                             }
@@ -1049,7 +1083,13 @@ export function AppTopbar() {
                 ) : null}
               </div>
               <div className="p-3 space-y-2 max-h-[420px] overflow-y-auto">
-                {notifications.length === 0 ? (
+                {notificationsError && notifications.length === 0 ? (
+                  <div role="status" className="text-center py-6">
+                    <Bell className="h-8 w-8 text-[#e5e7eb] mx-auto mb-2" />
+                    <p className="text-[0.8125rem] text-[#45474c]">Couldn&apos;t load notifications</p>
+                    <p className="text-xs text-[#45474c]">{notificationsError}</p>
+                  </div>
+                ) : notifications.length === 0 ? (
                   <div className="text-center py-6">
                     <Bell className="h-8 w-8 text-[#e5e7eb] mx-auto mb-2" />
                     <p className="text-[0.8125rem] text-[#45474c]">No notifications</p>
@@ -1076,15 +1116,16 @@ export function AppTopbar() {
                         try {
                           const { data: { session } } = await supabase.auth.getSession()
                           if (session?.access_token) {
-                            await fetch('/api/notifications', {
+                            await okOrThrow(await fetch('/api/notifications', {
                               method: 'PATCH',
                               headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
                               body: JSON.stringify({ ids: [n.id] }),
-                            })
+                            }))
                             loadNotifications()
                           }
-                        } catch {
-                          // ignore
+                        } catch (e) {
+                          // Still opens what it points to; only the read mark didn't stick.
+                          addToast({ type: 'error', title: "Couldn't mark it read", message: failureReason(e) })
                         }
                         if (n.projectId && n.documentId) {
                           const url = await resolveDeeplink({ kind: 'document', projectId: n.projectId, documentId: n.documentId })
@@ -1124,14 +1165,14 @@ export function AppTopbar() {
                                     try {
                                       const { data: { session } } = await supabase.auth.getSession()
                                       if (!session?.access_token) return
-                                      await fetch('/api/notifications', {
+                                      await okOrThrow(await fetch('/api/notifications', {
                                         method: 'DELETE',
                                         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
                                         body: JSON.stringify({ ids: [n.id] }),
-                                      })
+                                      }))
                                       loadNotifications()
-                                    } catch {
-                                      // ignore
+                                    } catch (e) {
+                                      addToast({ type: 'error', title: "Couldn't clear this alert", message: failureReason(e) })
                                     }
                                   }}
                                 >

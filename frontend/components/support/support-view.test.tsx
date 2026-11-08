@@ -36,7 +36,7 @@ const source = (tickets: SupportTicket[]): SupportSource => ({
     create: vi.fn(async () => 'TKT-NEW'),
     addComment: vi.fn(),
     setStatus: vi.fn(async () => {}),
-    addFiles: vi.fn(async () => ({ attached: [], failed: 0 })),
+    addFiles: vi.fn(async () => ({ attached: [], failed: [] })),
     removeFile: vi.fn(async () => {}),
 })
 
@@ -73,5 +73,13 @@ describe('SupportView', () => {
         expect(screen.queryByRole('button', { name: /Raised by me/ })).toBeNull()
         expect(within(row).getByText(/Acme Firm/)).toBeTruthy()
         expect(within(row).getByText('Deepak').className).toContain('text-fg')
+    })
+
+    it('a failed load says so, with the reason, instead of an empty list', async () => {
+        const failing = { ...source([]), load: async () => { throw new Error('Something went wrong on our side. Try again.') } }
+        render(<SupportView firmSlug="acme" firmName="Acme Firm" myEmail="deepak@acme.com" engagements={[]} source={failing} />)
+        expect(await screen.findByText("Couldn't load requests")).toBeTruthy()
+        expect(screen.getByText('Something went wrong on our side. Try again.')).toBeTruthy()
+        expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy()
     })
 })

@@ -6,6 +6,7 @@ import { ActionList, type ActionItem, type ActionSeverity } from '@/components/d
 import { formatValue } from '@/components/dashboard/pipeline-bar'
 import { Hint } from '@/components/ui/tooltip'
 import { ShimmerBlock } from '@/components/ui/shimmer'
+import { LoadFailed } from '@/components/ui/load-failed'
 import { cn, formatRelativeTime } from '@/lib/utils'
 import { firmActionCount, type FirmActionsData } from '@/lib/insights/firm-actions'
 
@@ -107,11 +108,13 @@ function countOf(kind: Kind, a: FirmActionsData): number {
     }[kind]
 }
 
-export function FirmActions({ data, loading = false, onRefresh, links }: {
+export function FirmActions({ data, loading = false, onRefresh, links, error = null }: {
     data: FirmActionsData | null
     loading?: boolean
     onRefresh?: () => void
     links: FirmActionLinks
+    /** Why the data failed to load. With no data, shown in place of the shimmer, which would run forever. */
+    error?: string | null
 }) {
     const [view, setView] = useState<Kind | null>(null)
 
@@ -150,7 +153,9 @@ export function FirmActions({ data, loading = false, onRefresh, links }: {
                 )}
             </div>
 
-            {!data ? (
+            {!data && error && !loading ? (
+                <LoadFailed compact what="the Action Center" reason={error} onRetry={onRefresh} />
+            ) : !data ? (
                 <div className="flex flex-col gap-2" aria-busy="true">
                     <ShimmerBlock className="h-9 w-full" />
                     <ShimmerBlock className="h-9 w-full" />

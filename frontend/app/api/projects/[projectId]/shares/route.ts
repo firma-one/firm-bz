@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { resolveEngagementConnectorId } from '@/lib/connectors/resolve-client-connector'
 import { createClient } from '@/utils/supabase/server'
 import { createClient as createSupabaseAdmin } from '@supabase/supabase-js'
 import { prisma } from '@/lib/prisma'
-import { documentStage, isOnBoard, parseSettingsFromDb, flattenForLegacyUI, privateSubtreeIds } from '@/lib/sharing-settings'
-import { blockedOf, type BlockedReason } from '@/lib/files/blocked'
+import { parseSettingsFromDb, flattenForLegacyUI } from '@/lib/sharing-settings'
+import { deliverableProgress, type BlockedDocument } from '@/lib/deliverable-derivation'
 import { resolveProjectContext } from '@/lib/resolve-project-context'
 import { canViewProject, getProjectPersona } from '@/lib/permission-helpers'
 import { resolveDisplayName } from '@/lib/auth/display-name'
@@ -17,9 +18,6 @@ function getAvatarUrlFromUser(dbUser: { user_metadata?: Record<string, unknown>;
   return (firstIdentity?.avatar_url ?? firstIdentity?.picture) as string | undefined ?? null
 }
 
-/** A blocked document in a deliverable, for its Board card's "n blocked" chip (firm only). */
-interface BlockedDocument { documentId: string; docId: string | null; fileName: string; reason: BlockedReason }
-
 /**
  * GET /api/projects/[projectId]/shares
  * Returns list of share records for the project with document details, activity, comments, and access log.
@@ -32,22 +30,20 @@ export async function GET(
   try {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!user) return NextResponse.json({ error: 'Your session has ended. Sign in again.' }, { status: 401 })
 
     const { projectId } = await params
     const ctx = await resolveProjectContext(projectId)
-    if (!ctx) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
+    if (!ctx) return NextResponse.json({ error: 'This engagement was not found. It may have been deleted.' }, { status: 404 })
     const canView = await canViewProject(ctx.firmId, ctx.clientId, ctx.projectId)
-    if (!canView) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    if (!canView) return NextResponse.json({ error: "You don't have access to this engagement." }, { status: 403 })
 
     // Resolve generalFolderId from connector settings for the "General" breadcrumb fallback
     let generalFolderId: string | null = null
     try {
-      const project = await prisma.engagement.findUnique({
-        where: { id: projectId },
-        select: { slug: true, client: { select: { firm: { select: { connectorId: true } } } } },
-      })
-      const connectorId = project?.client?.firm?.connectorId
+      // The engagement's own connector (its client's), never the legacy Firm.connectorId, which new firms don't set.
+      const project = await prisma.engagement.findUnique({ where: { id: projectId }, select: { slug: true } })
+      const connectorId = await resolveEngagementConnectorId(projectId)
       const projectSlug = project?.slug
       if (connectorId && projectSlug) {
         const connector = await (prisma as any).connector.findUnique({ where: { id: connectorId }, select: { settings: true } })
@@ -213,19 +209,7 @@ parentId: share.parentId ?? (indexMetadata.parents?.[0] ?? indexMetadata.parentI
           externalId,
           projectId
         ) as { id: string; externalId: string; parentId: string | null; isFolder: boolean; fileName: string; docId: string | null; settings: unknown }[]
-        const privateIds = isFirm ? new Set<string>() : privateSubtreeIds(rows)
-        const documents = rows.filter((r) => !r.isFolder && !privateIds.has(r.externalId))
-        const onBoard = documents.filter((r) => isOnBoard(documentStage(r.settings)))
-        subtaskCounts[shareId] = {
-          total: onBoard.length,
-          approved: onBoard.filter((r) => documentStage(r.settings) === 'approved').length,
-          blocked: isFirm
-            ? documents.flatMap((r) => {
-                const flag = blockedOf(r.settings)
-                return flag ? [{ documentId: r.id, docId: r.docId ?? null, fileName: r.fileName, reason: flag.reason }] : []
-              })
-            : [],
-        }
+        subtaskCounts[shareId] = deliverableProgress(rows, isFirm)
       } catch { /* non-critical */ }
     }))
 
@@ -256,6 +240,6 @@ parentId: share.parentId ?? (indexMetadata.parents?.[0] ?? indexMetadata.parentI
     return NextResponse.json({ shares: enriched, generalFolderId })
   } catch (e) {
     console.error('GET shares error', e)
-    return NextResponse.json({ error: 'Failed to load shares' }, { status: 500 })
+    return NextResponse.json({ error: 'Something went wrong on our side. Try again.' }, { status: 500 })
   }
 }

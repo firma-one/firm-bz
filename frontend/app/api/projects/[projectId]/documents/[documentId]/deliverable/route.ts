@@ -40,6 +40,6 @@ export async function GET(
         return NextResponse.json({ deliverable })
     } catch (e) {
         console.error('GET document deliverable error', e)
-        return NextResponse.json({ error: 'Failed to find the deliverable' }, { status: 500 })
+        return NextResponse.json({ error: "Couldn't find the deliverable this file is in, on our side. Try again." }, { status: 500 })
     }
 }

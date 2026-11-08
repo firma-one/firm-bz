@@ -1,6 +1,6 @@
 import { EngagementWorkspace } from "@/components/projects/engagement-workspace"
 import type { LwCrmEngagementStatus } from "@/lib/actions/project"
-import { getFirmHierarchy, getFirmName, type HierarchyClient } from "@/lib/actions/hierarchy"
+import { getFirmHierarchy, getFirmName } from "@/lib/actions/hierarchy"
 import { getProjectPersonas } from "@/lib/actions/personas"
 import { canAccessRbacAdmin, canManageOrganization, getProjectPersona } from "@/lib/permission-helpers"
 import { getViewAsPersonaFromCookie } from "@/lib/view-as-server"
@@ -11,7 +11,8 @@ import {
 import { getSessionUser } from "@/lib/auth/session-user"
 import { getEngagementFolderIds } from "@/lib/actions/project"
 import { prisma, basePrisma } from "@/lib/prisma"
-import { notFound, redirect } from "next/navigation"
+import { notFound, redirect, unstable_rethrow } from "next/navigation"
+import { EngagementLoadFailed } from "@/components/projects/engagement-load-failed"
 import { ErrorBoundary } from "@/components/error-boundary"
 import type { ProjectPathSegments } from "@/components/projects/engagement-workspace"
 import { getAccessibleFileCountForPersona } from "@/lib/engagement-sharing-ids"
@@ -54,12 +55,10 @@ export default async function EngagementPage({ params }: PageProps) {
   }
 
   // Independent lookups, together. The hierarchy holds only engagements this user is a member of,
-  // so it stays the gate for reaching the page at all.
-  const [hierarchy, orgName, org, viewAsSlug] = await Promise.all([
-    getFirmHierarchy(firmSlug).then(
-      (clients) => ({ clients }),
-      (e: unknown) => ({ error: e }),
-    ),
+  // so it stays the gate for reaching the page at all. A lookup that failed on our side (a database
+  // blip) is not a 404 (P1-69): it says so, with Try again. A redirect from them still happens.
+  const loadLookups = () => Promise.all([
+    getFirmHierarchy(firmSlug),
     getFirmName(firmSlug),
     prisma.firm.findUnique({
       where: { slug: firmSlug },
@@ -67,12 +66,15 @@ export default async function EngagementPage({ params }: PageProps) {
     }),
     getViewAsPersonaFromCookie(),
   ])
-  if ('error' in hierarchy) {
-    const e = hierarchy.error
-    logger.warn('[EngagementPage] 404: getFirmHierarchy threw', { ...notFoundCtx, error: e instanceof Error ? e.message : String(e) })
-    notFound()
+  let lookups: Awaited<ReturnType<typeof loadLookups>>
+  try {
+    lookups = await loadLookups()
+  } catch (e) {
+    unstable_rethrow(e)
+    logger.error('[EngagementPage] lookup failed', e instanceof Error ? e : new Error(String(e)), 'EngagementPage', notFoundCtx)
+    return <EngagementLoadFailed />
   }
-  const clients: HierarchyClient[] = hierarchy.clients
+  const [clients, orgName, org, viewAsSlug] = lookups
 
   const client = clients.find(c => c.slug === clientSlug)
   if (!client) {

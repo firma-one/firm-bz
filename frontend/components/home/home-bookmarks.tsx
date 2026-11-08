@@ -1,9 +1,11 @@
 "use client"
 
 import { useState } from "react"
-import { Bookmark, Briefcase, FileText, X } from "lucide-react"
+import { AlertCircle, Bookmark, Briefcase, FileText, X } from "lucide-react"
 import { ListRow } from "@/components/ui/list-row"
 import { HomeEmptyLine, HomeSection } from "./home-section"
+import { HomeLoadNote } from "./home-load-failed"
+import { failureFrom, failureReason } from "@/lib/files/action-failure"
 import { Hint } from "@/components/ui/tooltip"
 import type { ShellFavorite } from "@/lib/actions/shell"
 
@@ -16,23 +18,37 @@ const COLLAPSED_COUNT = 8
  * engagements the viewer can see here arrive (getShellSidebarData). The section shows even when
  * empty, saying how to add one, since a hidden section can't be discovered.
  */
-export function HomeBookmarks({ bookmarks, readOnly = false }: { bookmarks: ShellFavorite[]; readOnly?: boolean }) {
+export function HomeBookmarks({
+    bookmarks,
+    readOnly = false,
+    loadFailed = false,
+}: {
+    bookmarks: ShellFavorite[]
+    readOnly?: boolean
+    /** They didn't load: never "No bookmarks yet" then. */
+    loadFailed?: boolean
+}) {
     const [items, setItems] = useState(bookmarks)
     const [removing, setRemoving] = useState<string | null>(null)
     const [expanded, setExpanded] = useState(false)
+    /** A removal that didn't happen, and why: the bookmark stays, so the line says so. */
+    const [removeError, setRemoveError] = useState<string | null>(null)
 
     async function remove(id: string) {
+        const label = items.find((b) => b.id === id)?.label ?? "the bookmark"
         setRemoving(id)
+        setRemoveError(null)
         try {
             const res = await fetch("/api/bookmarks", {
                 method: "DELETE",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ id }),
             })
-            if (res.ok) {
-                setItems((prev) => prev.filter((b) => b.id !== id))
-                window.dispatchEvent(new Event("pockett-bookmarks-updated"))
-            }
+            if (!res.ok) throw await failureFrom(res)
+            setItems((prev) => prev.filter((b) => b.id !== id))
+            window.dispatchEvent(new Event("pockett-bookmarks-updated"))
+        } catch (e) {
+            setRemoveError(`Couldn't remove ${label} · ${failureReason(e)}`)
         } finally {
             setRemoving(null)
         }
@@ -42,9 +58,16 @@ export function HomeBookmarks({ bookmarks, readOnly = false }: { bookmarks: Shel
     const hidden = items.length - shown.length
 
     return (
-        <HomeSection icon={<Bookmark />} title="Bookmarks" count={items.length}>
-            {items.length === 0 && (
+        <HomeSection icon={<Bookmark />} title="Bookmarks" count={loadFailed ? undefined : items.length}>
+            {loadFailed && <HomeLoadNote what="your bookmarks" />}
+            {!loadFailed && items.length === 0 && (
                 <HomeEmptyLine>No bookmarks yet. Bookmark a document from its ⋯ menu to keep it one click away here.</HomeEmptyLine>
+            )}
+            {removeError && (
+                <p role="alert" className="flex items-start gap-1.5 px-2 text-small text-fg-muted">
+                    <AlertCircle aria-hidden className="mt-0.5 h-3.5 w-3.5 shrink-0 text-danger" />
+                    <span>{removeError}</span>
+                </p>
             )}
             <div className="flex flex-col">
             {shown.map((b) => (

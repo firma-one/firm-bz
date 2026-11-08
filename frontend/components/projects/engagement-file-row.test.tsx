@@ -57,6 +57,21 @@ describe('the quick actions', () => {
     })
 })
 
+describe('a completed engagement', () => {
+    it('keeps Rename in its slot, off', () => {
+        renderRow({ readOnly: true })
+        const rename = screen.getByRole('button', { name: 'Rename', hidden: true })
+        expect(rename.getAttribute('aria-disabled')).toBe('true')
+        fireEvent.click(rename)
+        expect(handlers.onOpenRename).not.toHaveBeenCalled()
+    })
+
+    it("can't be dragged", () => {
+        const { container } = renderRow({ readOnly: true })
+        expect(container.querySelector('[draggable="true"]')).toBeNull()
+    })
+})
+
 describe('Rename', () => {
     it('opens the rename dialog', () => {
         renderRow()

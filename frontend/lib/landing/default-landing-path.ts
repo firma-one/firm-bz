@@ -4,6 +4,7 @@ import { createClient } from '@/utils/supabase/server'
 import { FirmService } from '@/lib/firm-service'
 import { logger } from '@/lib/logger'
 import { firmPath, groupFirmListPath } from '@/lib/navigation/firm-paths'
+import { PROVISION_ERROR_PARAM, provisionFailureReason } from '@/lib/landing/provision-error'
 
 /*
  * Landing-path resolution for an explicit userId. Server-only rather than a server action in
@@ -65,10 +66,11 @@ export async function resolveDefaultFirmLandingPath(userId: string): Promise<str
             // other two `firmPath(...)` returns below for the `?landed=returning` counterpart.
             return `${firmPath(groupSlug, firmSlug)}?landed=new`
         } catch (err) {
-            // Auto-provisioning failure (e.g. DB down) shouldn't crash landing-path resolution —
-            // fall back to the old onboarding route, which will retry provisioning on next visit.
+            // Auto-provisioning failure (e.g. DB down) shouldn't crash landing-path resolution.
+            // Onboarding says why and offers a Retry that comes back here (P1-22); it used to post
+            // to the removed create-sandbox route, so the person was stuck.
             logger.error('[resolveDefaultFirmLandingPath] Auto-provisioning failed', err as Error, undefined, { userId })
-            return '/d/onboarding'
+            return `/d/onboarding?${PROVISION_ERROR_PARAM}=${encodeURIComponent(provisionFailureReason(err))}`
         }
     }
 

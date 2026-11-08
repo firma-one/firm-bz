@@ -6,7 +6,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
  * different Drive. And a permission Drive wouldn't give up isn't forgotten.
  */
 
-const { st, revoke, logged } = vi.hoisted(() => ({
+const { st, revoke, logged, notify } = vi.hoisted(() => ({
     st: {
         clientConnector: 'client-conn' as string | null,
         firmConnector: 'firm-legacy-conn' as string | null,
@@ -17,6 +17,7 @@ const { st, revoke, logged } = vi.hoisted(() => ({
     },
     revoke: vi.fn(),
     logged: { warn: vi.fn(), error: vi.fn(), info: vi.fn(), debug: vi.fn() },
+    notify: vi.fn(async () => 1),
 }))
 
 vi.mock('./client', () => ({
@@ -24,6 +25,7 @@ vi.mock('./client', () => ({
     safeInngestSend: vi.fn(),
 }))
 vi.mock('@/lib/logger', () => ({ logger: logged }))
+vi.mock('@/lib/storage-access-notice', () => ({ notifyLeadsOfStorageAccess: notify }))
 vi.mock('@/lib/connectors/trash-undo', () => ({ TRASH_UNDO_WINDOW_SECONDS: 60, wasRestoredFromBin: vi.fn() }))
 vi.mock('@/lib/services/search-service', () => ({ SearchService: {} }))
 vi.mock('@/lib/connectors/registry', () => ({
@@ -48,11 +50,11 @@ vi.mock('@/lib/prisma', () => ({
         engagementDocument: {
             findMany: async () => [],
             // The disabled-role job reads the rows through their document.
-            findUnique: async () => ({
+            findUnique: vi.fn(async (): Promise<any> => ({
                 externalId: 'ext-1',
                 connectorId: st.shares[0]?.document.connectorId ?? null,
                 sharingUsers: st.shares.map((s) => ({ id: s.id, userId: 'u1', connectorPermissionId: s.connectorPermissionId })),
-            }),
+            })),
         },
         engagementDocumentSharingUser: {
             findMany: async (args: any) => { st.queries.push(args); return st.shares },
@@ -64,9 +66,11 @@ vi.mock('@/lib/prisma', () => ({
 import { revokeByDisabledPersona, revokeByMemberPersonaChange, revokeByRemovedMember, revokeProjectSharing } from './functions'
 
 const share = (id: string, documentConnector: string | null = null, permission: string | null = `perm-${id}`) => ({
-    id, connectorPermissionId: permission, document: { externalId: 'ext-1', connectorId: documentConnector },
+    id, userId: 'u1', connectorPermissionId: permission,
+    document: { id: `doc-${id}`, fileName: 'Budget.xlsx', isFolder: false, externalId: 'ext-1', connectorId: documentConnector },
 })
-const step = { run: async (_id: string, fn: () => unknown) => fn() }
+// Waits are instant here: the retry after one is what's tested.
+const step = { run: async (_id: string, fn: () => unknown) => fn(), sleep: async () => {} }
 const run = (fn: unknown, data: object) => (fn as { handler: (ctx: unknown) => Promise<any> }).handler({ event: { data }, step })
 
 /** Every job, with the event that fires it. */
@@ -90,6 +94,7 @@ beforeEach(() => {
     st.adapters = new Set(['client-conn', 'firm-legacy-conn', 'doc-conn'])
     revoke.mockReset()
     revoke.mockResolvedValue(true)
+    notify.mockClear()
     for (const fn of Object.values(logged)) fn.mockClear()
 })
 
@@ -134,18 +139,73 @@ describe.each(JOBS)('%s', (_name, job, event) => {
         expect(logged.error).toHaveBeenCalled()
     })
 
-    it('with truly no connector, revokes in Firma and logs what it could not do', async () => {
+    it('tries again after a wait, and is done when Drive gives it up the second time', async () => {
+        revoke.mockRejectedValueOnce(new Error('rate limited')).mockResolvedValue(true)
+        st.shares = [share('s1')]
+        await run(job, event)
+        expect(revoke).toHaveBeenCalledTimes(2)
+        // The retry clears the id it revoked.
+        expect(st.updates.at(-1)).toEqual({ where: { AND: [{ id: { in: ['s1'] } }, { id: { notIn: [] } }] }, data: { sharingPermissionStatus: 'REVOKED', connectorPermissionId: null } })
+        expect(notify).not.toHaveBeenCalled()
+    })
+
+    it("tells the engagement's Leads what still stands after the retry: the file, the person and why", async () => {
+        const { storageFailure } = await import('@/lib/connectors/storage-failure')
+        const refusal = storageFailure('reconnect', 'Google Drive')
+        revoke.mockRejectedValue(refusal)
+        st.shares = [share('s1')]
+        await run(job, event)
+        expect(revoke).toHaveBeenCalledTimes(2)
+        expect(notify).toHaveBeenCalledTimes(1)
+        expect(notify).toHaveBeenCalledWith('p1', [{
+            kind: 'revoke', userId: 'u1', itemName: 'Budget.xlsx', itemType: 'file', documentId: 'doc-s1', reason: refusal.message, key: 'perm-s1',
+        }])
+    })
+
+    it('retries only rows still revoked in Firma and holding an id', async () => {
+        revoke.mockResolvedValue(false)
+        st.shares = [share('s1')]
+        await run(job, event)
+        const retryQuery = st.queries.find((q) => q.where?.id?.in)
+        expect(retryQuery.where).toEqual({ id: { in: ['s1'] }, connectorPermissionId: { not: null }, sharingPermissionStatus: 'REVOKED' })
+    })
+
+    it('with truly no connector, revokes in Firma, keeps the id for later, and logs what it could not do', async () => {
         st.clientConnector = null
         st.firmConnector = null
         st.shares = [share('s1')]
         await run(job, event)
         expect(revoke).not.toHaveBeenCalled()
         expect(clearing().data.sharingPermissionStatus).toBe('REVOKED')
+        // Connecting the storage again lets a later revoke finish it.
+        expect(keeping()).toEqual({ where: { id: { in: ['s1'] } }, data: { sharingPermissionStatus: 'REVOKED' } })
         expect(logged.warn).toHaveBeenCalledWith(expect.stringContaining('no connector'), expect.objectContaining({ count: 1 }))
+        expect((notify.mock.calls[0] as unknown as [string, Array<{ reason: string }>])[1][0].reason).toContain('No storage is connected')
     })
 })
 
 describe('the rows a job looks at', () => {
+    it('turning a role off revokes the id the sync kept on a row it marked revoked', async () => {
+        const { prisma } = await import('@/lib/prisma')
+        vi.mocked(prisma.engagementDocument.findUnique).mockResolvedValueOnce({
+            externalId: 'ext-1', connectorId: null, settings: { share: { guest: { enabled: false } } },
+            sharingUsers: [{ id: 's1', userId: 'u1', connectorPermissionId: 'perm-s1', sharingPermissionStatus: 'REVOKED' }],
+        } as never)
+        await run(revokeByDisabledPersona, { projectId: 'p1', sharingId: 'd1', disabledPersonas: ['guest'] })
+        expect(revoke).toHaveBeenCalledWith('client-conn', 'ext-1', 'perm-s1')
+    })
+
+    it('leaves a permission granted again because the role was switched back on before the job ran', async () => {
+        const { prisma } = await import('@/lib/prisma')
+        vi.mocked(prisma.engagementDocument.findUnique).mockResolvedValueOnce({
+            externalId: 'ext-1', connectorId: null, settings: { share: { guest: { enabled: true } } },
+            sharingUsers: [{ id: 's1', userId: 'u1', connectorPermissionId: 'perm-s1', sharingPermissionStatus: 'GRANTED' }],
+        } as never)
+        const result = await run(revokeByDisabledPersona, { projectId: 'p1', sharingId: 'd1', disabledPersonas: ['guest'] })
+        expect(revoke).not.toHaveBeenCalled()
+        expect(result.message).toBe('No users to revoke')
+    })
+
     it('on closing, retries a permission an earlier revoke could not finish', async () => {
         await run(revokeProjectSharing, { projectId: 'p1' })
         expect(st.queries[0].where.OR).toContainEqual({ connectorPermissionId: { not: null } })

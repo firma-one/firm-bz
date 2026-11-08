@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireProjectManage } from '@/lib/api/engagement-auth'
+import { blockIfEngagementCompleted } from '@/lib/engagement-access'
 import { resolveEngagementConnector } from '@/lib/connectors/resolve-client-connector'
 import { getStorageAdapter } from '@/lib/connectors/registry'
 import type { IConnectorStorageAdapter } from '@/lib/connectors/types'
@@ -16,6 +17,8 @@ import {
 import { issueApprovalToken, verifyApprovalToken } from '@/lib/ai/files-agent/approval'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 import { agentCreateFolderIndexed } from '@/lib/ai/files-agent/safe-ops'
+import { SCAFFOLD_PARENT_MISSING, scaffoldFolderFailure, storageWordsFor } from '@/lib/ai/files-agent/apply-failure'
+import type { StorageProvider } from '@/lib/connectors/storage-failure'
 import { assignDocId } from '@/lib/doc-id'
 import { logger } from '@/lib/logger'
 
@@ -204,16 +207,32 @@ export async function GET(
     }
 }
 
+/** One folder that wasn't created, and why, so the panel can name it as the apply report does. */
+export interface ScaffoldFolderFailure {
+    path: string
+    name: string
+    reason: string
+}
+
 export async function POST(
     request: NextRequest,
     { params }: { params: Promise<{ projectId: string }> },
 ) {
     const { projectId } = await params
+    // Outside the try, so a failure after some folders exist still reports them rather than
+    // answering "Could not create the folders" over folders that are there.
+    let created = 0
+    let total = 0
+    const failures: ScaffoldFolderFailure[] = []
+    let provider: StorageProvider = 'Google Drive'
 
     try {
         const auth = await requireProjectManage(request, projectId)
         if (auth instanceof NextResponse) return auth
         const { user, ctx } = auth
+
+        const completed = await blockIfEngagementCompleted(projectId)
+        if (completed) return completed
 
         const body = await request.json().catch(() => null) as {
             answers?: unknown
@@ -263,6 +282,7 @@ export async function POST(
         if (!connector) {
             return NextResponse.json({ error: 'No storage connector for this engagement' }, { status: 404 })
         }
+        provider = connector.type === 'ONEDRIVE' ? 'OneDrive' : 'Google Drive'
         const adapter = await getStorageAdapter(connector.id)
 
         // Refused outright if this engagement has been scaffolded before.
@@ -299,8 +319,7 @@ export async function POST(
         // parent appears before its children, so the lookup is always populated by the time a
         // child needs it.
         const createdIds = new Map<string, string>()
-        let created = 0
-        let failed = 0
+        total = folders.length
 
         for (const folder of folders) {
             try {
@@ -310,7 +329,7 @@ export async function POST(
                 // A child whose parent failed is skipped rather than created at the root, where it
                 // would be loose clutter the user then has to clean up by hand.
                 if (!parentId) {
-                    failed += 1
+                    failures.push({ path: folder.path, name: folder.name, reason: SCAFFOLD_PARENT_MISSING })
                     continue
                 }
 
@@ -336,7 +355,9 @@ export async function POST(
 
             } catch (error) {
                 logger.warn(`[files-agent/scaffold] ${folder.path} failed: ${(error as Error).message}`)
-                failed += 1
+                // Each folder's own reason, as the apply report gives: "3 could not be created"
+                // left the person opening the Drive to find out which, and why.
+                failures.push({ path: folder.path, name: folder.name, reason: scaffoldFolderFailure(error, provider) })
             }
         }
 
@@ -348,9 +369,18 @@ export async function POST(
             )
         }
 
-        return NextResponse.json({ data: { created, failed, total: folders.length } })
+        return NextResponse.json({ data: { created, failed: failures.length, total, failures } })
     } catch (error) {
         logger.error('[files-agent/scaffold] POST failed:', error as Error)
-        return NextResponse.json({ error: 'Could not create the folders' }, { status: 500 })
+        // Some folders exist: report them, and the rest as not created, rather than a failure that
+        // reads as though nothing happened.
+        if (created > 0) {
+            return NextResponse.json({ data: { created, failed: total - created, total, failures } })
+        }
+        const reason = storageWordsFor(error, provider)
+        return NextResponse.json(
+            { error: `Couldn't create the folders. Nothing was created.${reason ? ` ${reason}` : ' Try again.'}` },
+            { status: 500 },
+        )
     }
 }

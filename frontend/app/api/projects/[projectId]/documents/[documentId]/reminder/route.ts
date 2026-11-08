@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { blockIfEngagementCompleted } from '@/lib/engagement-access'
 import { isAgentUserIdAsync } from '@/lib/ai/agent-email'
 import { createClient } from '@/utils/supabase/server'
 import { prisma } from '@/lib/prisma'
@@ -27,6 +28,9 @@ export async function POST(
 
     const canView = await canViewProject(ctx.firmId, ctx.clientId, ctx.projectId)
     if (!canView) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+    const completed = await blockIfEngagementCompleted(projectId)
+    if (completed) return completed
 
     const body = await request.json().catch(() => ({}))
     const recipientId = typeof body.recipientId === 'string' ? body.recipientId : null
@@ -77,7 +81,7 @@ export async function POST(
     return NextResponse.json({ success: true })
   } catch (e) {
     console.error('POST document reminder error', e)
-    return NextResponse.json({ error: 'Failed to set reminder' }, { status: 500 })
+    return NextResponse.json({ error: "The reminder wasn't saved on our side. Try again." }, { status: 500 })
   }
 }
 
@@ -133,7 +137,7 @@ export async function GET(
     return NextResponse.json({ reminders: existing })
   } catch (e) {
     console.error('GET document reminder error', e)
-    return NextResponse.json({ error: 'Failed to fetch reminders' }, { status: 500 })
+    return NextResponse.json({ error: "Couldn't load the reminders. Try again." }, { status: 500 })
   }
 }
 
@@ -192,6 +196,6 @@ export async function DELETE(
     return NextResponse.json({ success: true })
   } catch (e) {
     console.error('DELETE document reminder error', e)
-    return NextResponse.json({ error: 'Failed to remove reminder' }, { status: 500 })
+    return NextResponse.json({ error: "The reminder wasn't removed on our side. Try again." }, { status: 500 })
   }
 }

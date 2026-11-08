@@ -221,7 +221,15 @@ export async function getFailedMigrationFiles(migrationId: string): Promise<Firm
 // Backward-compat: maintenance mode (JSONB fast-path + DB sync)
 // ---------------------------------------------------------------------------
 
-export async function setMaintenanceMode(firmId: string, payload: FirmMaintenanceMode | null): Promise<void> {
+/**
+ * Turns a firm's maintenance on, or off. Turning it off closes the active migration record with
+ * `opts.endStatus`: `completed` unless the caller says the run failed (`failed`, `failed_partial`).
+ */
+export async function setMaintenanceMode(
+  firmId: string,
+  payload: FirmMaintenanceMode | null,
+  opts?: { endStatus?: Extract<MigrationStatus, 'completed' | 'failed' | 'failed_partial'> },
+): Promise<void> {
   const firm = await prisma.firm.findUnique({ where: { id: firmId } })
   if (!firm) return
   const prev = (firm.settings as Record<string, unknown>) || {}
@@ -247,8 +255,7 @@ export async function setMaintenanceMode(firmId: string, payload: FirmMaintenanc
     })
     const migration = await getActiveMigration(firmId)
     if (migration) {
-      const nextStatus: MigrationStatus = migration.status === 'failed_partial' ? 'failed_partial' : 'completed'
-      await updateMigrationStatus(migration.id, nextStatus, {
+      await updateMigrationStatus(migration.id, opts?.endStatus ?? 'completed', {
         maintenanceEndedAt: new Date(),
       })
     }
@@ -330,14 +337,26 @@ export async function getAllFirmMemberUserIds(firmId: string): Promise<string[]>
   return Array.from(new Set(allIds))
 }
 
-export async function sendMaintenanceWarningToFirmMembers(firmId: string, estimatedMinutes: number, graceMinutes: number = 2): Promise<void> {
+/**
+ * Emails every member of the firm before its maintenance starts. Answers how many went out, "sent to
+ * 40 of 42", which the migration job returns as its step result (visible on /system/jobs) and logs,
+ * where the misses used to be logged one by one with no total.
+ */
+export async function sendMaintenanceWarningToFirmMembers(
+  firmId: string,
+  estimatedMinutes: number,
+  graceMinutes: number = 2,
+): Promise<{ sent: number; total: number; failed: string[] }> {
   const userIds = await getAllFirmMemberUserIds(firmId)
+  let sent = 0
+  const failed: string[] = []
   for (const uid of userIds) {
     try {
       const { data } = await supabaseAdmin.auth.admin.getUserById(uid)
       const email = data.user?.email
       if (!email) {
         logger.warn(`[firm-maintenance] No email for user ${uid} — skipping warning`)
+        failed.push(uid)
         continue
       }
       await sendEmail(
@@ -353,9 +372,16 @@ export async function sendMaintenanceWarningToFirmMembers(firmId: string, estima
 <p>— The ${BRAND_NAME} team</p>`
       )
       logger.info(`[firm-maintenance] Maintenance warning sent to ${email}`)
+      sent += 1
     } catch (err) {
       logger.error(`[firm-maintenance] Failed to send warning to user ${uid}`, err as Error)
+      failed.push(uid)
     }
   }
+  const outcome = { sent, total: userIds.length, failed }
+  const line = `[firm-maintenance] Maintenance warning for firm ${firmId}: sent to ${sent} of ${userIds.length}`
+  if (failed.length > 0) logger.warn(line, { failedUserIds: failed })
+  else logger.info(line)
+  return outcome
 }
 

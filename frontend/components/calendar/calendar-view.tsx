@@ -14,6 +14,9 @@ import { Briefcase, ChevronLeft, ChevronRight, FileText, RefreshCw, FolderPlus }
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Button } from '@/components/ui/button'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { LoadFailed } from '@/components/ui/load-failed'
+import { useToast } from '@/components/ui/toast'
+import { failureReason } from '@/lib/files/action-failure'
 import { cn } from '@/lib/utils'
 import { StatusIcon } from '@/components/ui/status-icon'
 import { statusOf } from '@/lib/ui/status'
@@ -100,6 +103,9 @@ export function CalendarView({ firmSlug }: CalendarViewProps) {
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [visibleEngagementIds, setVisibleEngagementIds] = useState<Set<string>>(new Set())
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null)
+  /** Why the first load failed: the page says so, never an empty calendar (P1-68). */
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const { addToast } = useToast()
   const hasLoadedOnce = useRef(false)
   const calendarRef = useRef<FullCalendar>(null)
   // Mirrors FullCalendar's current range for the React toolbar (headerToolbar is off).
@@ -107,12 +113,16 @@ export function CalendarView({ firmSlug }: CalendarViewProps) {
   const [viewType, setViewType] = useState<string>('dayGridMonth')
   const calendarApi = () => calendarRef.current?.getApi()
 
+  // A failed refresh keeps what was on screen and says why; a failed first load says why in its place.
   const loadData = useCallback(async () => {
     if (hasLoadedOnce.current) setIsRefreshing(true)
     else setIsLoading(true)
     try {
-      const result = await getFirmCalendarData(firmSlug)
+      const answer = await getFirmCalendarData(firmSlug)
+      if (!answer.ok) throw new Error(answer.error)
+      const result = answer.data
       setData(result)
+      setLoadError(null)
       // Default all engagements visible on first load only; preserve the
       // user's toggle choices across manual refreshes, dropping any
       // engagement ids that no longer exist and keeping newly-added ones off
@@ -126,13 +136,15 @@ export function CalendarView({ firmSlug }: CalendarViewProps) {
         })
       }
       hasLoadedOnce.current = true
-    } catch {
-      setData({ engagements: [], events: [] })
+    } catch (e) {
+      const reason = failureReason(e)
+      if (hasLoadedOnce.current) addToast({ type: 'error', title: "Couldn't refresh the calendar", message: reason })
+      else setLoadError(reason)
     } finally {
       setIsLoading(false)
       setIsRefreshing(false)
     }
-  }, [firmSlug])
+  }, [firmSlug, addToast])
 
   useEffect(() => {
     loadData()
@@ -197,6 +209,10 @@ export function CalendarView({ firmSlug }: CalendarViewProps) {
       calendarRef.current?.getApi()?.today()
     }
     currentViewType.current = viewType
+  }
+
+  if (!isLoading && !data && loadError) {
+    return <LoadFailed what="the calendar" reason={loadError} onRetry={() => void loadData()} />
   }
 
   if (isLoading || !data) {

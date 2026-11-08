@@ -158,6 +158,12 @@ export interface RunResult {
     creditsSpent: number
     /** True when the turn cap stopped the run rather than the model finishing. */
     truncated: boolean
+    /**
+     * True when a model turn failed and the run stopped there. The findings and the computed
+     * missing-folder proposals are complete; the model's proposals are not (none, if the first turn
+     * failed). Reported so a review with findings and no proposals never reads as "nothing to change".
+     */
+    modelFailed: boolean
     /** What the tree looks like — reported whether or not anything is wrong. */
     summary: AnalysisSummary
     /** The same assessment as Markdown, for the chat to render in the ordinary message flow. */
@@ -223,7 +229,7 @@ export async function runFilesReview(params: {
     if (assessment.analysis.findings.length === 0) {
         return {
             findings: missing, proposals: missingProposals, dropped: 0, turnsUsed: 0,
-            creditsSpent: 0, truncated: false, summary,
+            creditsSpent: 0, truncated: false, modelFailed: false, summary,
             summaryMarkdown: assessmentMarkdown(assessment, missing.map((f) => f.missing!)),
         }
     }
@@ -236,6 +242,7 @@ export async function runFilesReview(params: {
     // replacing them.
     const proposals: Proposal[] = [...missingProposals]
     let dropped = 0
+    let modelFailed = false
 
     const messages: Array<{ role: 'user' | 'assistant'; content: any }> = [{
         role: 'user',
@@ -258,7 +265,10 @@ export async function runFilesReview(params: {
                 messages,
             })
         } catch (error) {
+            // The run stops here, and says so (`modelFailed`): breaking out quietly returned the
+            // findings with no proposals for them, which the panel read as "Nothing to change".
             logger.error('Files agent turn failed:', error as Error)
+            modelFailed = true
             break
         }
 
@@ -298,6 +308,7 @@ export async function runFilesReview(params: {
         turnsUsed: budget.turns,
         creditsSpent: budget.creditsSpent,
         truncated: budget.exhausted,
+        modelFailed,
         summary,
         summaryMarkdown: assessmentMarkdown(assessment, missing.map((f) => f.missing!)),
     }

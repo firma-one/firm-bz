@@ -3,12 +3,16 @@
 import { headers } from 'next/headers'
 import { prisma } from '@/lib/prisma'
 import { serverActionWrapper, ActionResponse } from '@/lib/server-action-wrapper'
+import { CONTACT_EMAIL } from '@/components/marketing/v2/config'
 import { sendEmail } from '@/lib/email'
 import { waitlistConfirmationEmail, referrerNotificationEmail } from '@/lib/email-templates/waitlist'
 import { getPlatformSiteOrigin } from '@/config/platform-domain'
 
 const WINDOW_SIZE = 60 * 60 * 1000 // 1 hour
 const MAX_REQUESTS = 3 // 3 requests per hour per IP
+
+/** A failure on our side, in words for a visitor: the form can't help them, so say how to reach us (P2-66). */
+const COULD_NOT_SEND = `We couldn't send this. Please email us at ${CONTACT_EMAIL}.`
 
 interface WaitlistResponse {
     message: string
@@ -59,9 +63,12 @@ export async function submitWaitlistForm(formData: FormData, token: string, camp
         const secretKey = process.env.TURNSTILE_SECRET_KEY
         if (!secretKey) {
             console.error('TURNSTILE_SECRET_KEY is not set')
-            throw new Error('Server configuration error.')
+            throw new Error(COULD_NOT_SEND)
         }
 
+        // A refused captcha keeps its own words: the throw used to sit inside this try, so the catch
+        // rewrote it to "Failed to verify captcha." (P2-66). Only a check that couldn't run is that.
+        let verifyData: { success?: boolean }
         try {
             const verifyRes = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
                 method: 'POST',
@@ -74,15 +81,14 @@ export async function submitWaitlistForm(formData: FormData, token: string, camp
                     remoteip: ip,
                 }),
             })
-
-            const verifyData = await verifyRes.json()
-            if (!verifyData.success) {
-                console.error('Turnstile verification failed:', verifyData)
-                throw new Error('Captcha validation failed.')
-            }
+            verifyData = await verifyRes.json()
         } catch (err) {
             console.error('Turnstile verify error:', err)
-            throw new Error('Failed to verify captcha.')
+            throw new Error("We couldn't check the captcha. Please try again.")
+        }
+        if (!verifyData.success) {
+            console.error('Turnstile verification failed:', verifyData)
+            throw new Error('Captcha validation failed. Please try again.')
         }
 
         // 4. Check for duplicate email

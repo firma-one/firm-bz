@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, within } from '@testing-library/react'
 
 vi.mock('next/link', () => ({ default: ({ href, children, ...rest }: any) => <a href={href} {...rest}>{children}</a> }))
+vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }))
 
 import { AgendaWeek, type AgendaDueItem, type AgendaEvent } from './agenda-week'
 
@@ -118,5 +119,16 @@ describe('AgendaWeek', () => {
         render(<AgendaWeek events={[]} dueItems={[]} calendarHref="/cal" />)
         expect(screen.getByText('Nothing overdue or on the calendar this week.')).toBeTruthy()
         expect(screen.getByRole('link', { name: /Open calendar/ }).getAttribute('href')).toBe('/cal')
+    })
+
+    it('says when it did not all load: never "Nothing overdue" then, and what did load still shows (EM-2)', () => {
+        const { unmount } = render(<AgendaWeek events={[]} loadFailed />)
+        expect(screen.getByText("Couldn't load your agenda.")).toBeTruthy()
+        expect(screen.queryByText('Nothing overdue or on the calendar this week.')).toBeNull()
+        unmount()
+
+        render(<AgendaWeek events={[event('a', 1)]} loadFailed />)
+        expect(screen.getByText('Event a')).toBeTruthy()
+        expect(screen.getByText("Couldn't load all of your agenda, so some may be missing.")).toBeTruthy()
     })
 })

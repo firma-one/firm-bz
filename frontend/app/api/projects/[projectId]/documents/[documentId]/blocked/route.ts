@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { blockIfEngagementCompleted } from '@/lib/engagement-access'
 import { createClient } from '@/utils/supabase/server'
 import { prisma } from '@/lib/prisma'
 import { resolveProjectContext } from '@/lib/resolve-project-context'
@@ -22,18 +23,21 @@ export async function PATCH(
   try {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!user) return NextResponse.json({ error: 'Your session has ended. Sign in again.' }, { status: 401 })
 
     const { projectId, documentId } = await params
     const ctx = await resolveProjectContext(projectId)
-    if (!ctx) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    if (!ctx) return NextResponse.json({ error: 'This engagement was not found, or you no longer have access.' }, { status: 404 })
 
     const canView = await canViewProject(ctx.orgId, ctx.clientId, ctx.projectId)
-    if (!canView) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    if (!canView) return NextResponse.json({ error: 'This engagement was not found, or you no longer have access.' }, { status: 404 })
 
     const role = await getProjectPersona(ctx.firmId, ctx.clientId, ctx.projectId)
     if (role !== 'eng_admin' && role !== 'eng_member')
-      return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 })
+      return NextResponse.json({ error: 'Only a Lead or a Contributor · Full Access can block a document.' }, { status: 403 })
+
+    const completed = await blockIfEngagementCompleted(projectId)
+    if (completed) return completed
 
     const body = await request.json().catch(() => ({}))
     const clearing = body?.blocked === null
@@ -46,7 +50,7 @@ export async function PATCH(
       where: { id: documentId, engagementId: projectId },
       select: { id: true, isFolder: true, fileName: true, settings: true },
     })
-    if (!doc) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    if (!doc) return NextResponse.json({ error: 'This file is no longer in this engagement. Refresh to see it as it is.' }, { status: 404 })
     if (doc.isFolder)
       return NextResponse.json({ error: 'Only a document can be blocked; a deliverable shows its blocked documents.' }, { status: 400 })
 
@@ -97,6 +101,6 @@ export async function PATCH(
     return NextResponse.json({ blocked: flag })
   } catch (e) {
     console.error('blocked PATCH error', e)
-    return NextResponse.json({ error: 'Failed to update the block' }, { status: 500 })
+    return NextResponse.json({ error: "Couldn't change the block. Something went wrong on our side. Try again." }, { status: 500 })
   }
 }

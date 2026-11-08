@@ -82,6 +82,12 @@ import { ProfileBubbleWithPopup } from '@/components/ui/profile-bubble-popup'
 import { EngagementFileRow } from '@/components/projects/engagement-file-row'
 import { FilesDropPill, FilesDropRow, FILES_DROP_ZONE_ACTIVE_CLASS } from '@/components/projects/files-drop-zone'
 import { CopyMoveDialog, CopyToEngagementDialog, RenameDialog, UploadConflictDialog, type DeliverableKind } from '@/components/projects/file-organize-dialogs'
+import { DownloadQueuePanel, TrashQueuePanel, type DownloadQueueItem, type TrashQueueItem } from '@/components/projects/file-action-panels'
+import { bulkDownloadNote, readBulkDownloadHeaders } from '@/lib/files/bulk-download-summary'
+import { deeplinkAnswer } from '@/lib/files/deeplink-answer'
+import { describeOutcome, type NotDone } from '@/lib/files/partial-outcome'
+import { LoadFailed } from '@/components/ui/load-failed'
+import { BRAND_NAME } from '@/config/brand'
 import { ENGAGEMENT_ROOT_LABEL } from '@/lib/files/engagement-root'
 import { foldBreadcrumbTrail, type TrailSlot } from '@/lib/files/breadcrumb-trail'
 import {
@@ -119,6 +125,8 @@ interface EngagementFileListProps {
     projectName?: string
     canEdit?: boolean
     canManage?: boolean
+    /** The engagement is completed: everyone reads, nobody changes anything. */
+    readOnly?: boolean
     isFirmAdmin?: boolean
     /** When true (e.g. user is eng_ext_collaborator or eng_viewer), only show files/folders that are shared to External Collaborator or Guest. */
     restrictToSharedOnly?: boolean
@@ -336,7 +344,7 @@ function FileTableSkeleton({ rows = 8 }: { rows?: number }) {
     )
 }
 
-export function EngagementFileList({ projectId, initialFolderData, connectorRootFolderId, clientConnectorId, clientConnectorType, workspaceRootLocation, rootFolderName = 'Engagement Files', orgName, clientName, projectName, canEdit = false, canManage = false, isFirmAdmin = false, restrictToSharedOnly = false, roleSlug = null, firmId, groupSlug, orgSlug, firmSandboxOnly = false, navSlot, clientSlug, connectorAccountEmail, onFileCountChange }: EngagementFileListProps) {
+export function EngagementFileList({ projectId, initialFolderData, connectorRootFolderId, clientConnectorId, clientConnectorType, workspaceRootLocation, rootFolderName = 'Engagement Files', orgName, clientName, projectName, canEdit = false, canManage = false, readOnly = false, isFirmAdmin = false, restrictToSharedOnly = false, roleSlug = null, firmId, groupSlug, orgSlug, firmSandboxOnly = false, navSlot, clientSlug, connectorAccountEmail, onFileCountChange }: EngagementFileListProps) {
     const isOneDriveClient = clientConnectorType === 'ONEDRIVE'
     /** Display name of the client's storage provider — used in user-facing copy so it never hardcodes "Google Drive". */
     const storageProviderName = isOneDriveClient ? 'OneDrive' : 'Google Drive'
@@ -549,10 +557,17 @@ export function EngagementFileList({ projectId, initialFolderData, connectorRoot
         renderPreviewRef.current = renderPreview
     })
 
+    // A second handle on the toasts, for callbacks declared above the main one.
+    const { addToast: addSharingToast } = useToast()
+    /** Retrying the share-state load from its own toast, without a dependency on itself. */
+    const fetchSharedIdsRef = useRef<() => void>(() => {})
     const fetchSharedIds = useCallback(() => {
         if (!projectId) return
         fetch(`/api/projects/${projectId}/sharing/ids`)
-            .then((r) => (r.ok ? r.json() : null))
+            .then(async (r) => {
+                if (!r.ok) throw await failureFrom(r)
+                return r.json()
+            })
             .then((data) => {
                 const ids = Array.isArray(data?.sharedExternalIds) ? data.sharedExternalIds as string[] : []
                 const ancestorIds = Array.isArray(data?.ancestorFolderIds) ? data.ancestorFolderIds as string[] : []
@@ -577,21 +592,18 @@ export function EngagementFileList({ projectId, initialFolderData, connectorRoot
                 setInternalOnlyIds(new Set(Array.isArray(data?.internalOnlyIds) ? data.internalOnlyIds as string[] : []))
                 setInternalOnlyAncestorIds(new Set(Array.isArray(data?.internalOnlyAncestorIds) ? data.internalOnlyAncestorIds as string[] : []))
             })
-            .catch(() => {
-                setSharedExternalIds(new Set())
-                setAncestorFolderIds(new Set())
-                setSharedExternalIdsForEC(new Set())
-                setAncestorFolderIdsForEC(new Set())
-                setSharedExternalIdsForGuest(new Set())
-                setAncestorFolderIdsForGuest(new Set())
-                setDescendantIds(new Set())
-                setDescendantIdsForEC(new Set())
-                setDescendantIdsForGuest(new Set())
-                setSharedByMeExternalIds(new Set())
-                setInternalOnlyIds(new Set())
-                setInternalOnlyAncestorIds(new Set())
+            .catch((e) => {
+                // The marks it had stay: emptying them made every file look unshared, with no word (P1-45).
+                logger.warn('Sharing status failed to load', { error: failureReason(e) })
+                addSharingToast({
+                    type: 'warning',
+                    title: "Couldn't load sharing status",
+                    message: `${failureReason(e)} Deliverable and Internal only marks may be out of date.`,
+                    action: { label: 'Try again', onClick: () => fetchSharedIdsRef.current() },
+                })
             })
-    }, [projectId])
+    }, [projectId, addSharingToast])
+    useEffect(() => { fetchSharedIdsRef.current = fetchSharedIds }, [fetchSharedIds])
 
     // Folder IDs state
     const [generalFolderId, setGeneralFolderId] = useState<string | null>(null)
@@ -707,7 +719,8 @@ export function EngagementFileList({ projectId, initialFolderData, connectorRoot
                 }
             } catch (error) {
                 logger.error('Failed to load project folder IDs', error instanceof Error ? error : new Error(String(error)))
-                setError('Failed to load engagement folders')
+                // A server action's thrown words don't reach the browser in production: say it plainly.
+                setError(error instanceof TypeError ? failureReason(error) : "This engagement's folders didn't load. Try again.")
             } finally {
                 setIsLoadingFolders(false)
             }
@@ -907,6 +920,8 @@ export function EngagementFileList({ projectId, initialFolderData, connectorRoot
         if (!loading) setPageReady(true)
     }, [loading])
     const [error, setError] = useState<string | null>(null)
+    /** The folder on screen is gone from the storage (moved or deleted there): its own state, not an empty folder (EM-8). */
+    const [folderGone, setFolderGone] = useState(false)
 
     // (deeplink handler effect is declared below, after navigateToItem is defined)
 
@@ -915,10 +930,15 @@ export function EngagementFileList({ projectId, initialFolderData, connectorRoot
     const handleProvisionDriveFolder = useCallback(async () => {
         setProvisioning(true)
         try {
-            await provisionEngagementDriveFolder(projectId)
+            const result = await provisionEngagementDriveFolder(projectId)
+            if (!result.ok) {
+                addToast({ type: 'error', title: 'Setup failed', message: result.error })
+                setProvisioning(false)
+                return
+            }
             window.location.reload()
         } catch (e) {
-            addToast({ type: 'error', title: 'Setup failed', message: e instanceof Error ? e.message : 'Could not set up the storage folder. Try again.' })
+            addToast({ type: 'error', title: 'Setup failed', message: failureReason(e) })
             setProvisioning(false)
         }
     }, [projectId, addToast])
@@ -1007,12 +1027,10 @@ export function EngagementFileList({ projectId, initialFolderData, connectorRoot
     }, [files])
 
     // Download queue (shown in bottom-right panel like upload queue)
-    type DownloadQueueItem = { id: string; name: string; status: 'preparing' | 'done' | 'error'; error?: string }
     const [downloadQueue, setDownloadQueue] = useState<DownloadQueueItem[]>([])
     const [isDownloadPanelOpen, setIsDownloadPanelOpen] = useState(true)
 
     // Bulk trash queue + confirmation
-    type TrashQueueItem = { id: string; name: string; connectorId: string; status: 'pending' | 'done' | 'error'; error?: string }
     const [trashQueue, setTrashQueue] = useState<TrashQueueItem[]>([])
     const [isTrashPanelOpen, setIsTrashPanelOpen] = useState(true)
     const [bulkTrashConfirmOpen, setBulkTrashConfirmOpen] = useState(false)
@@ -1039,7 +1057,8 @@ export function EngagementFileList({ projectId, initialFolderData, connectorRoot
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ externalIds: ids }),
             })
-            if (!res.ok) throw new Error('Failed to create ZIP')
+            // The route's reason ("Nothing could be added to the ZIP…"), drawn on the row (FI-6).
+            if (!res.ok) throw await failureFrom(res)
             const blob = await res.blob()
             const filename = res.headers.get('content-disposition')?.match(/filename="([^"]+)"/)?.[1] ?? 'download.zip'
             const url = URL.createObjectURL(blob)
@@ -1048,9 +1067,11 @@ export function EngagementFileList({ projectId, initialFolderData, connectorRoot
             a.download = filename
             a.click()
             URL.revokeObjectURL(url)
-            setDownloadQueue(prev => prev.map(i => i.id === queueItem.id ? { ...i, status: 'done', name: filename } : i))
-        } catch (e: any) {
-            setDownloadQueue(prev => prev.map(i => i.id === queueItem.id ? { ...i, status: 'error', error: e?.message || 'Failed' } : i))
+            // What the ZIP is short of, from the route's headers: "Downloaded 96 of 100. Not included: …" (FI-5).
+            const note = bulkDownloadNote(readBulkDownloadHeaders(res.headers))
+            setDownloadQueue(prev => prev.map(i => i.id === queueItem.id ? { ...i, status: note ? 'partial' : 'done', name: filename, note: note ?? undefined } : i))
+        } catch (e) {
+            setDownloadQueue(prev => prev.map(i => i.id === queueItem.id ? { ...i, status: 'error', error: failureReason(e) } : i))
         }
     }, [selectedFileIds, projectId])
 
@@ -1157,6 +1178,8 @@ export function EngagementFileList({ projectId, initialFolderData, connectorRoot
                             fileId: file.id, generalFolderId, confidentialFolderId, stagingFolderId,
                         })
                     }
+                    // Landing somewhere else without a word read as "it's here" (P2-07).
+                    addToast({ type: 'info', title: "Couldn't find that file's folder", message: `${file.name} may have been moved or deleted in ${storageProviderName}. This is the engagement's top folder.` })
                 }
             }
 
@@ -1164,7 +1187,7 @@ export function EngagementFileList({ projectId, initialFolderData, connectorRoot
             setHighlightedFileId(file.id)
         } catch (e) {
             logger.error('Search navigation failed', e as Error)
-            addToast({ type: 'error', title: 'Navigation failed', message: 'Could not find the file location.' })
+            addToast({ type: 'error', title: "Couldn't find that file's folder", message: failureReason(e) })
         }
     }
 
@@ -1227,7 +1250,8 @@ export function EngagementFileList({ projectId, initialFolderData, connectorRoot
                         projectRootFolderId = json.projectRootFolderId ?? null
                     }
                 } catch {
-                    // network error — will retry on next re-run
+                    // The request never got there: not a "no access" answer (P1-43).
+                    resolveStatus = 0
                 } finally {
                     deeplinkFetchInProgressRef.current = false
                 }
@@ -1243,15 +1267,36 @@ export function EngagementFileList({ projectId, initialFolderData, connectorRoot
                     setDeeplinkRerun((n) => n + 1)
                 }
 
-                deeplinkResolvedCacheRef.current[hash] = { externalId, fileName, isFolder, status: resolveStatus, path: resolvedPath, projectRootFolderId }
+                // Only a real answer is remembered: a 500 or a dropped connection must not be kept as
+                // "no access" for the rest of the visit.
+                if (deeplinkAnswer(resolveStatus, !!externalId).remember) {
+                    deeplinkResolvedCacheRef.current[hash] = { externalId, fileName, isFolder, status: resolveStatus, path: resolvedPath, projectRootFolderId }
+                }
             }
 
             if (!externalId) {
                 const transient = loading || isLoadingFolders || resolveStatus === 401
                 if (transient) return
                 setDeeplinkResolving(false)
-                addToast({ type: 'error', title: 'Link unavailable', message: 'You do not have access to this item.' })
                 lastHandledDeeplinkHashRef.current = hash
+                // "No access" only when the server said so; anything else is a failure to try again.
+                if (deeplinkAnswer(resolveStatus, false).say === 'no_access') {
+                    addToast({ type: 'error', title: 'Link unavailable', message: "You don't have access to this item, or it no longer exists." })
+                } else {
+                    addToast({
+                        type: 'error',
+                        title: "Couldn't open that link",
+                        message: 'It may be a passing problem. Try again.',
+                        action: {
+                            label: 'Try again',
+                            onClick: () => {
+                                lastHandledDeeplinkHashRef.current = ''
+                                setDeeplinkResolving(true)
+                                setDeeplinkRerun((n) => n + 1)
+                            },
+                        },
+                    })
+                }
                 return
             }
 
@@ -1464,6 +1509,7 @@ export function EngagementFileList({ projectId, initialFolderData, connectorRoot
         if (!sessionRef.current?.access_token) return
         if (!silent) setLoading(true)
         setError(null)
+        setFolderGone(false)
         try {
             const isSharedOnlyPersona = viewAsPersonaSlug === 'eng_ext_collaborator' || viewAsPersonaSlug === 'eng_viewer'
             const res = await fetch('/api/connectors/google-drive/linked-files', {
@@ -1481,8 +1527,11 @@ export function EngagementFileList({ projectId, initialFolderData, connectorRoot
                 })
             })
             if (!res.ok) {
-                const data = await res.json()
-                throw new Error(data.error || 'Failed to fetch files')
+                // The storage's words ("Google Drive refused to list this folder…", "…no longer
+                // available…"), never "Unexpected token" or "Internal Server Error" (P1-37, P2-09).
+                const data = await res.json().catch(() => null) as { error?: string; code?: string } | null
+                if (data?.code === 'not_found') setFolderGone(true)
+                throw new Error(data?.error || `The server answered ${res.status}. Try again.`)
             }
             const data = await res.json()
             const now = Date.now()
@@ -1494,9 +1543,9 @@ export function EngagementFileList({ projectId, initialFolderData, connectorRoot
             })
             setFiles(loadedFiles)
             refreshFileCount(loadedFiles)
-        } catch (err: any) {
-            logger.error(err)
-            setError(err.message)
+        } catch (err) {
+            logger.error('Folder listing failed', err instanceof Error ? err : new Error(String(err)))
+            setError(failureReason(err))
         } finally {
             if (!silent) setLoading(false)
         }
@@ -1572,6 +1621,8 @@ export function EngagementFileList({ projectId, initialFolderData, connectorRoot
         destinationFolders,
         selectedDestinationId, setSelectedDestinationId,
         loadingDestinations,
+        destinationsError,
+        retryDestinations,
         copyMoveSubmittingFolderId,
         emptyFolderIds,
         subfolderIds,
@@ -1581,6 +1632,7 @@ export function EngagementFileList({ projectId, initialFolderData, connectorRoot
         crossEngagementFirmName, setCrossEngagementFirmName,
         crossEngagementEngagements,
         crossEngagementLoading,
+        crossEngagementError,
         crossEngagementSubmitting,
         crossEngagementSelectedId, setCrossEngagementSelectedId,
         unlockConfirmFile, setUnlockConfirmFile,
@@ -1596,6 +1648,7 @@ export function EngagementFileList({ projectId, initialFolderData, connectorRoot
         openRenameModal,
         handleConfirmRename,
         handlePrivacy,
+        privacyConfirmDialog,
         handleUnlockFromBadge,
         handleUnshare,
         handleIntakeAction,
@@ -1634,15 +1687,14 @@ export function EngagementFileList({ projectId, initialFolderData, connectorRoot
                 headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
                 body: JSON.stringify({ markAsDeliverable: true, dueDate: dueDate ?? null }),
             })
-            if (!res.ok) {
-                const err = await res.json().catch(() => ({}))
-                addToast({ type: 'error', title: 'Failed', message: err.error ?? 'Could not promote the folder to a deliverable.' })
-                return
-            }
-            addToast({ type: 'success', title: 'Promoted to deliverable', message: `"${doc.name}" added to the Board.` })
+            if (!res.ok) throw await failureFrom(res)
+            const body = await res.json().catch(() => ({})) as { warning?: string }
+            addToast(body.warning
+                ? { type: 'warning', title: 'Promoted, with a problem', message: body.warning, duration: 12000 }
+                : { type: 'success', title: 'Promoted to deliverable', message: `"${doc.name}" added to the Board.` })
             await refreshShareStateAndFiles()
-        } catch {
-            addToast({ type: 'error', title: 'Error', message: 'Could not promote the folder to a deliverable.' })
+        } catch (e) {
+            addToast({ type: 'error', title: "Couldn't make it a deliverable", message: failureReason(e) })
         }
     }, [sessionRef, projectId, refreshShareStateAndFiles, addToast])
 
@@ -1656,15 +1708,15 @@ export function EngagementFileList({ projectId, initialFolderData, connectorRoot
                 headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
                 body: JSON.stringify({ untagAsDeliverable: true }),
             })
-            if (!res.ok) {
-                const err = await res.json().catch(() => ({}))
-                addToast({ type: 'error', title: 'Failed', message: err.error ?? 'Could not demote the deliverable to a folder.' })
-                return
-            }
-            addToast({ type: 'success', title: 'Demoted to folder', message: `"${doc.name}" removed from the Board.` })
+            if (!res.ok) throw await failureFrom(res)
+            // "Demoted, but 2 people still have access in storage · …": done, with what wasn't.
+            const body = await res.json().catch(() => ({})) as { warning?: string }
+            addToast(body.warning
+                ? { type: 'warning', title: 'Demoted, with a problem', message: body.warning, duration: 12000 }
+                : { type: 'success', title: 'Demoted to folder', message: `"${doc.name}" removed from the Board.` })
             await refreshShareStateAndFiles()
-        } catch {
-            addToast({ type: 'error', title: 'Error', message: 'Could not demote the deliverable to a folder.' })
+        } catch (e) {
+            addToast({ type: 'error', title: 'Demote failed', message: failureReason(e) })
         }
     }, [sessionRef, projectId, refreshShareStateAndFiles, addToast])
 
@@ -1719,18 +1771,28 @@ export function EngagementFileList({ projectId, initialFolderData, connectorRoot
         setSelectedFileIds(new Set())
         setPendingBulkTrashIds(new Set())
 
-        const queueItems: TrashQueueItem[] = filesToTrash.map(f => ({ id: f.id, name: f.name, connectorId: f.connectorId ?? '', status: 'pending' }))
+        const queueItems: TrashQueueItem[] = filesToTrash.map(f => ({
+            id: f.id, name: f.name, connectorId: f.connectorId ?? '', status: 'pending',
+            // A link has no item in storage: it's deleted as its row menu deletes it, not trashed there.
+            ...(f.documentType === 'LINK' ? { isLink: true, documentId: f.projectDocumentId ?? f.id } : {}),
+        }))
         setTrashQueue(queueItems)
         setIsTrashPanelOpen(true)
 
         for (const item of queueItems) {
             try {
-                const res = await fetch('/api/drive-action', {
-                    method: 'POST',
-                    credentials: 'include',
-                    headers: { Authorization: `Bearer ${sessionRef.current?.access_token}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'trash', fileId: item.id, connectorId: item.connectorId, projectId, fileName: item.name }),
-                })
+                const res = item.isLink
+                    ? await fetch(`/api/projects/${projectId}/documents/${item.documentId}`, {
+                        method: 'DELETE',
+                        credentials: 'include',
+                        headers: { Authorization: `Bearer ${sessionRef.current?.access_token}` },
+                    })
+                    : await fetch('/api/drive-action', {
+                        method: 'POST',
+                        credentials: 'include',
+                        headers: { Authorization: `Bearer ${sessionRef.current?.access_token}`, 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action: 'trash', fileId: item.id, connectorId: item.connectorId, projectId, fileName: item.name }),
+                    })
                 if (!res.ok) throw await failureFrom(res)
                 setTrashQueue(prev => prev.map(i => i.id === item.id ? { ...i, status: 'done' } : i))
             } catch (e) {
@@ -1747,6 +1809,7 @@ export function EngagementFileList({ projectId, initialFolderData, connectorRoot
     const canUploadHere =
         !(currentFolderId === connectorRootFolderId || (!currentFolderId && !generalFolderId && !confidentialFolderId))
         && !currentFolderIsApprovedDeliverable
+        && !readOnly
         && (canEdit || (restrictToSharedOnly && currentFolderIsDeliverable))
     /** The open folder's name, for the drop zone's "Upload … to <folder>". */
     // The open folder's name for the upload texts; at the top, the engagement root's label, not Drive's "general".
@@ -1770,13 +1833,13 @@ export function EngagementFileList({ projectId, initialFolderData, connectorRoot
         handleItemDragLeave,
         handleItemDrop,
     } = useEngagementDragDrop({
-        canEdit,
+        canEdit: canEdit && !readOnly,
         processUploads,
         handleCopyMoveToFolder,
         addToast,
         canUpload: canUploadHere,
         // External members' uploads land in their shared folder whatever the row, so only the list is a target.
-        canUploadIntoFolders: canEdit && !restrictToSharedOnly,
+        canUploadIntoFolders: canEdit && !restrictToSharedOnly && !readOnly,
         compactDragImage: NEW_DROP_ZONE,
     })
 
@@ -1924,11 +1987,9 @@ const handleRefresh = async () => {
                 })
             })
             if (!res.ok) {
-                const body = await res.json().catch(() => ({}))
-                const msg = body?.error || `Create ${createItemType} failed`
-                addToast({ type: 'error', title: 'Could not create file', message: msg })
-                setIsCreateItemOpen(false)
-                setNewItemName('')
+                // The storage's words, and the dialog stays open with what was typed (P1-36, P2-04).
+                const failure = await failureFrom(res)
+                addToast({ type: 'error', title: createItemType === 'folder' ? "Couldn't create the folder" : "Couldn't create the document", message: failure.message })
                 setLoading(false)
                 isCreatingRef.current = false
                 return
@@ -1940,10 +2001,10 @@ const handleRefresh = async () => {
             if (currentFolderId) fetchFiles(currentFolderId)
             // The new item joins the share sets (a folder inside a deliverable, a document in one).
             fetchSharedIds()
-        } catch (err: any) {
-            logger.error(err)
+        } catch (err) {
+            logger.error('Create item failed', err instanceof Error ? err : new Error(String(err)))
             isCreatingRef.current = false
-            addToast({ type: 'error', title: 'Could not create file', message: err.message })
+            addToast({ type: 'error', title: createItemType === 'folder' ? "Couldn't create the folder" : "Couldn't create the document", message: failureReason(err) })
             setLoading(false)
         }
     }
@@ -1967,12 +2028,9 @@ const handleRefresh = async () => {
                 })
             })
             if (!res.ok) {
-                const body = await res.json().catch(() => ({}))
-                const msg = body?.error || 'Create link failed'
-                addToast({ type: 'error', title: 'Could not create link', message: msg })
-                setIsCreateItemOpen(false)
-                setNewItemName('')
-                setNewItemUrl('')
+                // The dialog keeps the name and address typed, so the person can fix and resend (P2-04).
+                const failure = await failureFrom(res)
+                addToast({ type: 'error', title: "Couldn't create the link", message: failure.message })
                 setLoading(false)
                 isCreatingRef.current = false
                 return
@@ -1983,10 +2041,10 @@ const handleRefresh = async () => {
             setNewItemUrl('')
             isCreatingRef.current = false
             if (currentFolderId) fetchFiles(currentFolderId)
-        } catch (err: any) {
-            logger.error(err)
+        } catch (err) {
+            logger.error('Create link failed', err instanceof Error ? err : new Error(String(err)))
             isCreatingRef.current = false
-            addToast({ type: 'error', title: 'Could not create link', message: err.message })
+            addToast({ type: 'error', title: "Couldn't create the link", message: failureReason(err) })
             setLoading(false)
         }
     }
@@ -2011,12 +2069,13 @@ const handleRefresh = async () => {
                 headers: { Authorization: `Bearer ${sessionRef.current.access_token}` }
             })
 
-            if (!res.ok) throw new Error('Failed to get Google Access Token')
+            // Pressing Import used to do nothing at all here (P1-38): say who can import, or what to do.
+            if (!res.ok) throw new Error(res.status === 404 ? importOwnerOnly() : (await failureFrom(res)).message)
 
             const data = await res.json()
             const googleAccessToken = data.accessToken
 
-            if (!googleAccessToken) throw new Error('No Google Access Token returned')
+            if (!googleAccessToken) throw new Error('Reconnect Google Drive to import. Firm Settings has the storage connection.')
 
             // Scoped to start inside the engagement folder currently being browsed (falling back
             // to the connector root if that isn't known yet) so the user doesn't have to
@@ -2095,11 +2154,17 @@ const handleRefresh = async () => {
                 },
             })
         } catch (error) {
-            console.error('Failed to launch picker', error)
+            logger.error('Failed to launch picker', error as Error)
+            addToast({ type: 'error', title: "Couldn't open Google Drive", message: failureReason(error) })
         } finally {
             setImportLoading(false)
         }
     }
+
+    /** Import goes through the connecting account's own Google Drive: who that is, when known. */
+    const importOwnerOnly = () => connectorAccountEmail
+        ? `Only the person who connected Google Drive (${connectorAccountEmail}) can import from it.`
+        : 'Only the person who connected Google Drive for this client can import from it.'
 
     // Runs immediately once Picker confirms a selection — no separate confirmation dialog, since
     // there's no longer a copy-vs-shortcut choice to make. A toast stands in for the old modal.
@@ -2126,12 +2191,14 @@ const handleRefresh = async () => {
                 }
             }
 
-            // Fetch connection info
+            // Fetch connection info: without it the import can't run, and says why (P1-38, P2-17).
             const tokenRes = await fetch('/api/connectors/google-drive?action=token', {
                 headers: { Authorization: `Bearer ${sessionRef.current?.access_token}` }
             })
-            const tokenData = await tokenRes.json()
+            if (!tokenRes.ok) throw new Error(tokenRes.status === 404 ? importOwnerOnly() : (await failureFrom(tokenRes)).message)
+            const tokenData = await tokenRes.json().catch(() => ({})) as { connectionId?: string }
             const connectionId = tokenData.connectionId
+            if (!connectionId) throw new Error('Reconnect Google Drive to import. Firm Settings has the storage connection.')
 
             const res = await fetch('/api/connectors/google-drive/import', {
                 method: 'POST',
@@ -2142,26 +2209,33 @@ const handleRefresh = async () => {
                 body: JSON.stringify({
                     connectionId,
                     fileIds: files.map(f => f.id),
+                    // The picks' names, so what wasn't imported can be named.
+                    names: Object.fromEntries(files.map(f => [f.id, f.name])),
                     parentId: currentFolderId || 'root',
                     userToken: pickerAccessToken // Pass the user's token
                 })
             })
 
-            if (!res.ok) {
-                const d = await res.json()
-                throw new Error(d.error || 'Import failed')
-            }
+            // Nothing imported is an error, with what was refused and why (FI-3).
+            if (!res.ok) throw await failureFrom(res)
 
-            const result = await res.json() as { count: number; skipped?: number }
-            const skipped = result.skipped ?? 0
-            const message = skipped > 0
-                ? `Imported ${result.count} file${result.count !== 1 ? 's' : ''} — skipped ${skipped} already in firma.`
-                : `Imported ${result.count} file${result.count !== 1 ? 's' : ''} from Google Drive.`
-            addToast({ type: 'success', title: 'Import complete', message })
+            const result = await res.json() as { filesImported?: number; filesTotal?: number; count: number; skipped?: number; skippedOwned?: number; failed?: NotDone[] }
+            const done = result.filesImported ?? result.count
+            const total = result.filesTotal ?? done
+            const failed = result.failed ?? []
+            const skippedNotes = [
+                result.skipped ? `${result.skipped} ${result.skipped === 1 ? 'was' : 'were'} already in ${BRAND_NAME}.` : '',
+                result.skippedOwned ? `${result.skippedOwned} ${result.skippedOwned === 1 ? 'is' : 'are'} already in the connected Google Drive.` : '',
+            ].filter(Boolean).join(' ')
+            const outcome = describeOutcome({ done, total, verb: 'Imported', noun: 'file', where: 'from Google Drive', notDone: failed, notDoneLabel: 'Not imported' })
+            const message = [total > 0 || !skippedNotes ? outcome : '', skippedNotes].filter(Boolean).join(' ')
+            addToast(failed.length > 0
+                ? { type: 'warning', title: `Imported ${done} of ${total}`, message, duration: 15000 }
+                : { type: 'success', title: 'Import complete', message })
             if (currentFolderId) fetchFiles(currentFolderId, true)
-        } catch (err: any) {
-            logger.error(err)
-            addToast({ type: 'error', title: 'Import failed', message: err.message })
+        } catch (err) {
+            logger.error('Import failed', err instanceof Error ? err : new Error(String(err)))
+            addToast({ type: 'error', title: 'Import failed', message: failureReason(err) })
         } finally {
             setImportLoading(false)
         }
@@ -2558,7 +2632,7 @@ const handleRefresh = async () => {
                                     <Download className="h-3.5 w-3.5 text-fg-muted" />
                                     Download
                                 </button>
-                                {generalFolderId && canEdit && (
+                                {generalFolderId && canEdit && !readOnly && (
                                     <>
                                         <button type="button" onClick={() => handleBulkCopyMoveClick('move')} className={SELECTION_ACTION_CLASS}>
                                             <FolderInput className="h-3.5 w-3.5 text-fg-muted" />
@@ -2570,10 +2644,12 @@ const handleRefresh = async () => {
                                         </button>
                                     </>
                                 )}
+                                {!readOnly && (
                                 <button type="button" onClick={handleBulkTrashClick} className={cn(SELECTION_ACTION_CLASS, "text-danger hover:text-danger")}>
                                     <Trash2 className="h-3.5 w-3.5" />
                                     Move to trash
                                 </button>
+                                )}
                             </>
                         )}
                         <span className="flex-1" />
@@ -2586,7 +2662,7 @@ const handleRefresh = async () => {
 
                 {/* New Document button portaled into the workspace nav bar slot */}
                 {navSlot && createPortal(
-                    (!isAtProjectRoot && !currentFolderIsApprovedDeliverable && (canEdit || (restrictToSharedOnly && currentFolderIsDeliverable))) ? (
+                    (!readOnly && !isAtProjectRoot && !currentFolderIsApprovedDeliverable && (canEdit || (restrictToSharedOnly && currentFolderIsDeliverable))) ? (
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                                 <Button size="sm" title="New file or folder" disabled={loading || isLoadingFolders || isUploading || isUploadInitiating}>
@@ -2963,105 +3039,24 @@ const handleRefresh = async () => {
             {/* Content area — a Notion table: no card, the header's hairline is the only frame */}
             <div className={cn("flex-1 overflow-hidden flex flex-col relative", FILE_TABLE_CONTAINER_CLASS)}>
                 {/* Download Progress Panel — portaled to body, stacked above upload panel */}
-                {downloadQueue.length > 0 && typeof document !== 'undefined' && document.body && createPortal(
-                    <div className={cn(
-                        "fixed right-4 bg-white rounded-lg shadow-xl border border-line z-[101] flex flex-col transition-all duration-300 w-[360px]",
-                        isDownloadPanelOpen ? "h-auto max-h-[300px]" : "h-10"
-                    )}
-                    style={{ bottom: uploadQueue.length > 0 ? 'calc(1rem + 160px)' : '1rem' }}>
-                        <div
-                            className="flex items-center justify-between px-3 py-2 bg-surface-muted border-b border-line text-fg rounded-t-lg cursor-pointer"
-                            onClick={() => setIsDownloadPanelOpen(!isDownloadPanelOpen)}
-                        >
-                            <span className="text-[11px] font-medium">
-                                {downloadQueue.some(i => i.status === 'preparing')
-                                    ? 'Preparing download…'
-                                    : `Download${downloadQueue.length > 1 ? 's' : ''} complete`
-                                } {downloadQueue.filter(i => i.status === 'done').length}/{downloadQueue.length}
-                            </span>
-                            <div className="flex items-center gap-2 text-fg-muted">
-                                {isDownloadPanelOpen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
-                                <button
-                                    onClick={(e) => { e.stopPropagation(); setDownloadQueue([]) }}
-                                    className="hover:bg-surface-hover rounded p-0.5 transition-colors"
-                                >
-                                    <X className="h-3.5 w-3.5" />
-                                </button>
-                            </div>
-                        </div>
-                        {isDownloadPanelOpen && (
-                            <div className="flex-1 overflow-y-auto p-0">
-                                {downloadQueue.map((item) => (
-                                    <div key={item.id} className="flex items-center gap-2 px-3 py-2 border-b border-line last:border-0">
-                                        <Download className="h-3.5 w-3.5 flex-shrink-0 text-fg-subtle" />
-                                        <p className="text-[11px] text-fg-muted truncate flex-1">{item.name}</p>
-                                        {item.status === 'preparing' && (
-                                            <svg className="animate-spin h-3.5 w-3.5 text-fg-subtle flex-shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                                            </svg>
-                                        )}
-                                        {item.status === 'done' && <CheckCircle2 className="h-3.5 w-3.5 text-fg flex-shrink-0" />}
-                                        {item.status === 'error' && <XCircle className="h-3.5 w-3.5 text-red-500 flex-shrink-0" />}
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </div>,
-                    document.body
-                )}
+                <DownloadQueuePanel
+                    queue={downloadQueue}
+                    open={isDownloadPanelOpen}
+                    onToggle={() => setIsDownloadPanelOpen(!isDownloadPanelOpen)}
+                    onClose={() => setDownloadQueue([])}
+                    bottom={uploadQueue.length > 0 ? 'calc(1rem + 160px)' : '1rem'}
+                />
 
                 {/* Bulk Trash Progress Panel — stacks above download panel if both visible */}
-                {trashQueue.length > 0 && typeof document !== 'undefined' && document.body && createPortal(
-                    <div className={cn(
-                        "fixed right-4 bg-white rounded-lg shadow-xl border border-line z-[102] flex flex-col transition-all duration-300 w-[360px]",
-                        isTrashPanelOpen ? "h-auto max-h-[300px]" : "h-10"
-                    )}
-                    style={{ bottom: downloadQueue.length > 0
+                <TrashQueuePanel
+                    queue={trashQueue}
+                    open={isTrashPanelOpen}
+                    onToggle={() => setIsTrashPanelOpen(!isTrashPanelOpen)}
+                    onClose={() => setTrashQueue([])}
+                    bottom={downloadQueue.length > 0
                         ? uploadQueue.length > 0 ? 'calc(2rem + 160px + 44px)' : 'calc(2rem + 44px)'
-                        : uploadQueue.length > 0 ? 'calc(1rem + 160px)' : '1rem'
-                    }}>
-                        <div
-                            className="flex items-center justify-between px-3 py-2 bg-red-50 border-b border-red-100 text-fg rounded-t-lg cursor-pointer"
-                            onClick={() => setIsTrashPanelOpen(!isTrashPanelOpen)}
-                        >
-                            <span className="text-[11px] font-medium">
-                                {trashQueue.some(i => i.status === 'pending')
-                                    ? `Moving to trash… ${trashQueue.filter(i => i.status === 'done').length}/${trashQueue.length}`
-                                    : `Moved to trash ${trashQueue.filter(i => i.status === 'done').length}/${trashQueue.length}`
-                                }
-                            </span>
-                            <div className="flex items-center gap-2 text-fg-muted">
-                                {isTrashPanelOpen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
-                                <button
-                                    onClick={(e) => { e.stopPropagation(); setTrashQueue([]) }}
-                                    className="hover:bg-red-100 rounded p-0.5 transition-colors"
-                                >
-                                    <X className="h-3.5 w-3.5" />
-                                </button>
-                            </div>
-                        </div>
-                        {isTrashPanelOpen && (
-                            <div className="flex-1 overflow-y-auto p-0">
-                                {trashQueue.map((item) => (
-                                    <div key={item.id} className="flex items-center gap-2 px-3 py-2 border-b border-line last:border-0">
-                                        <Trash2 className="h-3.5 w-3.5 flex-shrink-0 text-fg-subtle" />
-                                        <p className="text-[11px] text-fg-muted truncate flex-1">{item.name}</p>
-                                        {item.status === 'pending' && (
-                                            <svg className="animate-spin h-3.5 w-3.5 text-fg-subtle flex-shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                                            </svg>
-                                        )}
-                                        {item.status === 'done' && <CheckCircle2 className="h-3.5 w-3.5 text-fg flex-shrink-0" />}
-                                        {item.status === 'error' && <span title={item.error}><XCircle className="h-3.5 w-3.5 text-red-500 flex-shrink-0" /></span>}
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </div>,
-                    document.body
-                )}
+                        : uploadQueue.length > 0 ? 'calc(1rem + 160px)' : '1rem'}
+                />
 
                 <input
                     type="file"
@@ -3141,12 +3136,25 @@ const handleRefresh = async () => {
                         // Rows shaped like the table that is coming (same grid as the header and
                         // FileRow), so nothing jumps when the files arrive.
                         <FileTableSkeleton />
-                    ) : error ? (
-                        <div className="flex flex-col items-center justify-center h-64 text-center px-3">
-                            <AlertCircle className="h-10 w-10 text-red-500 mb-3" />
-                            <p className="text-sm text-fg-muted">{error}</p>
-                            <Button variant="link" onClick={() => window.location.reload()} className="h-auto p-0 mt-2 text-fg-muted hover:text-fg text-xs">Try Refreshing</Button>
+                    ) : error && folderGone ? (
+                        // Gone in the storage: said so, with a way back, never "Folder is empty" (EM-8).
+                        <div role="alert" className="flex flex-col items-center justify-center h-64 text-center px-3">
+                            <AlertCircle className="h-10 w-10 text-fg-subtle mb-3" />
+                            <h3 className="text-sm font-medium text-fg mb-1">This folder is no longer available</h3>
+                            <p className="text-sm text-fg-muted max-w-[320px]">{error}</p>
+                            {breadcrumbs.length > 1 && (
+                                <Button variant="outline" size="sm" className="mt-3" onClick={() => handleBreadcrumbClick(breadcrumbs.length - 2, breadcrumbs[breadcrumbs.length - 2].id)}>
+                                    Back to {breadcrumbs[breadcrumbs.length - 2].isEngagementRoot ? ENGAGEMENT_ROOT_LABEL : breadcrumbs[breadcrumbs.length - 2].name}
+                                </Button>
+                            )}
                         </div>
+                    ) : error ? (
+                        <LoadFailed
+                            className="h-64"
+                            what="this folder"
+                            reason={error}
+                            onRetry={currentFolderId ? () => { void fetchFiles(currentFolderId) } : () => window.location.reload()}
+                        />
                     ) : !connectorRootFolderId && !deeplinkResolving ? (
                         clientConnectorId ? (
                         <div className="flex flex-col items-center justify-center h-64 text-center px-6">
@@ -3277,7 +3285,8 @@ const handleRefresh = async () => {
                                     assignablePeople={assignableMembers}
                                     restrictToSharedOnly={restrictToSharedOnly}
                                     viewAsPersonaSlug={viewAsPersonaSlug}
-                                    canManage={canManage && !currentFolderIsApprovedDeliverable}
+                                    canManage={canManage && !currentFolderIsApprovedDeliverable && !readOnly}
+                                    readOnly={readOnly}
                                     isInsideApprovedDeliverable={currentFolderIsApprovedDeliverable}
                                     inDeliverableFolder={listingInsideDeliverable}
                                     currentFolderType={currentFolderType}
@@ -3362,6 +3371,8 @@ const handleRefresh = async () => {
                             path={currentPath}
                             onPathClick={handleCopyMoveBreadcrumbClick}
                             loading={loadingDestinations}
+                            loadError={destinationsError}
+                            onRetryLoad={retryDestinations}
                             // A folder being moved can't be its own destination
                             folders={destinationFolders.filter(f => !copyMoveTargets.some(t => t.id === f.id))}
                             deliverableKindOf={deliverableKindOf}
@@ -3380,6 +3391,8 @@ const handleRefresh = async () => {
                             targetMimeType={crossEngagementTarget?.mimeType}
                             firmName={crossEngagementFirmName}
                             loading={crossEngagementLoading}
+                            loadError={crossEngagementError}
+                            onRetryLoad={() => { if (crossEngagementTarget) void openCrossEngagementModal(crossEngagementTarget) }}
                             engagements={crossEngagementEngagements}
                             selectedId={crossEngagementSelectedId}
                             onSelect={setCrossEngagementSelectedId}
@@ -4004,6 +4017,7 @@ const handleRefresh = async () => {
                 />
             </div>
 
+            {privacyConfirmDialog}
             {/* The agent panel is for the Engagement Lead and firm admins only: `canManage` maps to
                 `project:can_manage`, which is eng_admin-exclusive with a firm_admin fallback. The
                 route enforces the same boundary — this only decides whether to show the entry

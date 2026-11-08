@@ -1,19 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 
-const { actions, inbox, push, search } = vi.hoisted(() => ({
+const { actions, inbox, push, refresh, search } = vi.hoisted(() => ({
     actions: {
         getAllUserReminders: vi.fn(),
-        markReminderDone: vi.fn(async () => {}),
+        markReminderDone: vi.fn(async (_id: string): Promise<{ ok: true; data: undefined } | { ok: false; error: string; code?: string }> => ({ ok: true, data: undefined })),
     },
     inbox: { getNeedsYou: vi.fn() },
     push: vi.fn(),
+    refresh: vi.fn(),
     search: { value: '' },
 }))
 vi.mock('@/lib/actions/user-reminders', () => actions)
 vi.mock('@/lib/actions/inbox', () => inbox)
 vi.mock('next/navigation', () => ({
-    useRouter: () => ({ push }),
+    useRouter: () => ({ push, refresh }),
     usePathname: () => '/d/u/inbox',
     useSearchParams: () => new URLSearchParams(search.value),
 }))
@@ -41,8 +42,8 @@ const showUpdates = async () => fireEvent.click(await screen.findByRole('tab', {
 beforeEach(() => {
     vi.clearAllMocks()
     search.value = ''
-    inbox.getNeedsYou.mockResolvedValue([])
-    actions.getAllUserReminders.mockResolvedValue([
+    inbox.getNeedsYou.mockResolvedValue({ ok: true, data: [] })
+    actions.getAllUserReminders.mockResolvedValue({ ok: true, data: [
         {
             id: 'r1', entityKey: 'platform.doc_comments', entityValue: 'x', action: 'Review comment', dateKey: null, dateValue: null,
             hiddenAt: null, entityName: 'Engagement letter', entitySlug: null, firmSlug: 'acme', firmId: 'f1', ctaUrl: '/d/doc',
@@ -58,7 +59,7 @@ beforeEach(() => {
             hiddenAt: null, entityName: 'Other firm thing', entitySlug: null, firmSlug: 'b', firmId: 'f2', ctaUrl: null,
             delta: null, label: '', labelStyle: 'slate',
         },
-    ])
+    ] })
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
         if (!init || !init.method) {
             return { ok: true, json: async () => ({ notifications: [
@@ -169,12 +170,23 @@ describe('InboxView', () => {
     })
 
     it('a failed Done brings the item back and says so', async () => {
-        actions.markReminderDone.mockRejectedValueOnce(new Error('offline'))
+        actions.markReminderDone.mockRejectedValueOnce(new TypeError('Failed to fetch'))
         renderInbox([ACME])
         await screen.findByRole('heading', { level: 2, name: 'Engagement letter' })
         fireEvent.click(screen.getByRole('button', { name: 'Done' }))
         closeToast()
         expect(await screen.findByText("Couldn't mark it done")).toBeTruthy()
+        expect(screen.getByText("Couldn't reach firma. Check your connection and try again. Engagement letter is back in your Inbox.")).toBeTruthy()
+        expect(row('Engagement letter')).toBeTruthy()
+    })
+
+    it('a Done refused because the session ended says to sign in again (P2-30)', async () => {
+        actions.markReminderDone.mockResolvedValueOnce({ ok: false, code: 'unauthorized', error: 'Your session has ended. Sign in again.' })
+        renderInbox([ACME])
+        await screen.findByRole('heading', { level: 2, name: 'Engagement letter' })
+        fireEvent.click(screen.getByRole('button', { name: 'Done' }))
+        closeToast()
+        expect(await screen.findByText('Sign in again to update this. Engagement letter is back in your Inbox.')).toBeTruthy()
         expect(row('Engagement letter')).toBeTruthy()
     })
 
@@ -217,10 +229,10 @@ describe('InboxView', () => {
     })
 
     it('leads with work waiting on you, opened by its own action and never dismissed', async () => {
-        inbox.getNeedsYou.mockResolvedValue([
+        inbox.getNeedsYou.mockResolvedValue({ ok: true, data: [
             { id: 'comment:d1', kind: 'client_comment', firmId: 'f1', title: 'Draft memo', context: 'Contoso · Audit', clientName: 'Contoso', engagementName: 'Audit', href: '/d/comment', actionLabel: 'Reply', at: new Date().toISOString() },
             { id: 'review:d2', kind: 'deliverable_review', firmId: 'f2', title: 'Other firm review', context: 'Beta', href: '/d/x', actionLabel: 'Review', at: null },
-        ])
+        ] })
         renderInbox([ACME])
         await screen.findByRole('heading', { level: 2, name: 'Draft memo' }) // first, and selected
         expect(screen.queryByText('Other firm review')).toBeNull()
@@ -268,5 +280,117 @@ describe('InboxView', () => {
         await screen.findByRole('heading', { level: 2, name: 'Engagement letter' })
         fireEvent.keyDown(window, { key: 'Enter' })
         expect(push).toHaveBeenCalledWith('/d/doc')
+    })
+})
+
+/** Answers the notifications list with `list`, and every write with `write`. */
+function notificationsAnswer(list: () => Promise<unknown>, write: () => Promise<unknown> = async () => ({ ok: true, json: async () => ({ success: true }) })) {
+    fetchMock.mockImplementation(async (_url: string, init?: RequestInit) => (init?.method ? write() : list()))
+}
+
+const ONE_UNREAD = { ok: true, json: async () => ({ notifications: [
+    { id: 'n1', createdAt: new Date().toISOString(), firmId: 'f1', scope: 'FIRM', type: 'DOCUMENT_STAGING_INTAKE', priority: 'INFO', title: 'New upload from Contoso', body: 'Q3 numbers', ctaUrl: '/d/upload', readAt: null },
+    { id: 'n3', createdAt: new Date(Date.now() - 120_000).toISOString(), firmId: null, scope: 'PLATFORM', type: 'ANNOUNCEMENT', priority: 'INFO', title: 'Platform news', body: null, ctaUrl: null, readAt: null },
+] }) }
+
+describe('InboxView when a load fails (EM-1)', () => {
+    it('never says "all caught up" when nothing loaded: it says why, and Try again loads it', async () => {
+        actions.getAllUserReminders.mockResolvedValueOnce({ ok: false, code: 'internal', error: 'Something went wrong on our side. Try again.' })
+        inbox.getNeedsYou.mockResolvedValueOnce({ ok: false, code: 'internal', error: 'Something went wrong on our side. Try again.' })
+        notificationsAnswer(async () => ({ ok: false, status: 500, json: async () => ({ error: 'Something went wrong on our side. Try again.' }) }))
+        renderInbox([ACME])
+        expect(await screen.findByText("Couldn't load your Inbox")).toBeTruthy()
+        expect(screen.queryByText("You're all caught up")).toBeNull()
+
+        notificationsAnswer(async () => ONE_UNREAD)
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+        expect(await screen.findByRole('heading', { level: 2, name: 'Engagement letter' })).toBeTruthy()
+        expect(screen.queryByText("Couldn't load your Inbox")).toBeNull()
+    })
+
+    it('says what part did not load, and still shows what did', async () => {
+        inbox.getNeedsYou.mockResolvedValueOnce({ ok: false, code: 'unauthorized', error: 'Your session has ended. Sign in again.' })
+        renderInbox([ACME])
+        await screen.findByRole('heading', { level: 2, name: 'Engagement letter' }) // the reminders loaded
+        expect(screen.getByRole('alert').textContent).toContain("Couldn't load what's waiting on you · Your session has ended. Sign in again.")
+        // Updates loaded: no notice there.
+        await showUpdates()
+        expect(screen.queryByRole('alert')).toBeNull()
+    })
+
+    it('an empty view whose part failed says so, never "No updates"', async () => {
+        search.value = 'tab=updates'
+        notificationsAnswer(async () => { throw new TypeError('Failed to fetch') })
+        renderInbox([ACME])
+        expect(await screen.findByText("Couldn't load your updates")).toBeTruthy()
+        expect(screen.getByText("Couldn't reach firma. Check your connection and try again.")).toBeTruthy()
+        expect(screen.queryByText('No updates')).toBeNull()
+    })
+
+    it('a firm list that did not load says so, with Try again', async () => {
+        render(<InboxView firms={[]} firmsFailed />, { wrapper: ToastProvider })
+        expect(await screen.findByText("Couldn't load your Inbox")).toBeTruthy()
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+        expect(refresh).toHaveBeenCalled()
+        expect(actions.getAllUserReminders).not.toHaveBeenCalled()
+    })
+})
+
+describe('InboxView when a write fails', () => {
+    it('puts the unread dot back when marking read is refused, and says why (P2-26)', async () => {
+        search.value = 'tab=updates'
+        notificationsAnswer(async () => ONE_UNREAD, async () => ({ ok: false, status: 500, json: async () => ({ error: 'Something went wrong on our side. Try again.' }) }))
+        renderInbox([ACME])
+        await screen.findByRole('heading', { level: 2, name: 'New upload from Contoso' })
+        // Selecting it marks it read at once; the dot comes back when the server refuses.
+        fireEvent.click(screen.getByText('Platform news'))
+        expect(await screen.findByText("Couldn't mark it read")).toBeTruthy()
+        expect(screen.getByText('Something went wrong on our side. Try again.')).toBeTruthy()
+        expect(screen.getAllByLabelText('Unread')).toHaveLength(2)
+    })
+
+    it('puts Mark all read back when it is refused, and says why (P2-26)', async () => {
+        search.value = 'tab=updates'
+        notificationsAnswer(async () => ONE_UNREAD, async () => ({ ok: false, status: 503, json: async () => ({}) }))
+        renderInbox([ACME])
+        await screen.findByRole('heading', { level: 2, name: 'New upload from Contoso' })
+        fireEvent.click(screen.getByText('Mark all read'))
+        expect(await screen.findByText("Couldn't mark all read")).toBeTruthy()
+        expect(screen.getByText('The server answered 503. Try again.')).toBeTruthy()
+        expect(screen.getAllByLabelText('Unread')).toHaveLength(2) // both unread again
+    })
+
+    it('a refused Dismiss brings the update back and says why (P2-28)', async () => {
+        search.value = 'tab=updates'
+        notificationsAnswer(async () => ONE_UNREAD, async () => ({ ok: true, json: async () => ({ success: true }) }))
+        renderInbox([ACME])
+        await screen.findByRole('heading', { level: 2, name: 'New upload from Contoso' })
+        notificationsAnswer(async () => ONE_UNREAD, async () => ({ ok: false, status: 401, json: async () => ({ error: 'Your session has ended. Sign in again.' }) }))
+        fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
+        closeToast()
+        expect(await screen.findByText("Couldn't dismiss it")).toBeTruthy()
+        expect(screen.getByText('Your session has ended. Sign in again. New upload from Contoso is back in your Inbox.')).toBeTruthy()
+        expect(screen.getAllByText('New upload from Contoso').length).toBeGreaterThan(0) // back in the list
+    })
+})
+
+describe('InboxView: storage access not changed', () => {
+    it('reads as a problem in storage, names who, and goes to where the Lead can act', async () => {
+        search.value = 'tab=updates'
+        notificationsAnswer(async () => ({ ok: true, json: async () => ({ notifications: [
+            {
+                id: 'n-storage', createdAt: new Date().toISOString(), firmId: 'f1', scope: 'FIRM', type: 'STORAGE_ACCESS_NOT_CHANGED', priority: 'INFO',
+                title: 'Google Drive still gives ana@client.test access to General',
+                body: "Couldn't take back their access · Google Drive refused the change.",
+                ctaUrl: '/d/g/f/acme/c/contoso/e/audit/members', readAt: null, subject: 'engagement', clientName: 'Contoso', engagementName: 'Audit',
+            },
+        ] }) }))
+        renderInbox([ACME])
+        const title = await screen.findByRole('heading', { level: 2, name: 'Google Drive still gives ana@client.test access to General' })
+        expect(within(title).getByText('ana@client.test')).toBeTruthy() // who, as a member chip
+        expect(screen.getByText("Couldn't take back their access · Google Drive refused the change.")).toBeTruthy()
+        expect(screen.getByText('Access not changed in storage')).toBeTruthy()
+        fireEvent.click(screen.getByRole('button', { name: /Go to members/ }))
+        expect(push).toHaveBeenCalledWith('/d/g/f/acme/c/contoso/e/audit/members')
     })
 })

@@ -1,5 +1,6 @@
 'use client'
 
+import { failureFrom, failureReason } from "@/lib/files/action-failure"
 import { useState, useEffect } from 'react'
 import {
   Dialog,
@@ -159,18 +160,19 @@ export function DocumentShareModal({
           }),
         }
       )
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        throw new Error(err?.error || 'Failed to save')
-      }
-      addToast({ type: 'success', title: 'Saved', message: 'Share settings updated.' })
+      if (!res.ok) throw await failureFrom(res)
+      // Saved, but part of it couldn't be done in storage: a warning, not "Saved" (A2's `warning`).
+      const body = await res.json().catch(() => ({})) as { warning?: string }
+      addToast(body.warning
+        ? { type: 'warning', title: 'Saved, with a problem', message: body.warning, duration: 12000 }
+        : { type: 'success', title: 'Saved', message: 'Share settings updated.' })
       onOpenChange(false)
       onSaved?.()
     } catch (e: unknown) {
       addToast({
         type: 'error',
-        title: 'Could not save',
-        message: e instanceof Error ? e.message : 'Something went wrong.',
+        title: "Couldn't save sharing",
+        message: failureReason(e),
       })
     } finally {
       setSaving(false)

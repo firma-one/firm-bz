@@ -17,6 +17,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
+import { emailNotice } from './email-notice'
 
 type MaintenanceConfig = {
   active: boolean
@@ -35,6 +36,8 @@ export default function PlatformMaintenancePage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  /** How the people were told, after a toggle: the email count, and anything that didn't happen. */
+  const [notice, setNotice] = useState<string | null>(null)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [graceCountdown, setGraceCountdown] = useState<string | null>(null)
 
@@ -55,7 +58,7 @@ export default function PlatformMaintenancePage() {
         }
       }
     } catch {
-      if (isInitial) setError('Failed to load maintenance status')
+      if (isInitial) setError("Couldn't load the maintenance status · couldn't reach the server. Refresh to try again.")
     } finally {
       if (isInitial) setLoading(false)
     }
@@ -95,6 +98,7 @@ export default function PlatformMaintenancePage() {
   const handleConfirm = async () => {
     setSaving(true)
     setError(null)
+    setNotice(null)
     setConfirmOpen(false)
     try {
       const action = (isActive || isGrace) ? 'disable' : 'enable'
@@ -109,14 +113,17 @@ export default function PlatformMaintenancePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error((data as { error?: string }).error ?? 'Request failed')
+      const data = await res.json().catch(() => ({})) as {
+        error?: string
+        warning?: string
+        emails?: { sent: number; total: number } | null
       }
-      const updated = await fetch('/api/system/platform-maintenance').then(r => r.json())
+      if (!res.ok) throw new Error(data.error ?? `The server answered ${res.status}. Try again.`)
+      setNotice([emailNotice(action === 'enable' ? 'warning' : 'complete', data.emails), data.warning].filter(Boolean).join(' ') || null)
+      const updated = await fetch('/api/system/platform-maintenance').then(r => r.json()).catch(() => null)
       if (updated?.config) setConfig(updated.config)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong')
+      setError(err instanceof TypeError ? "Couldn't reach the server. Nothing was changed." : err instanceof Error ? err.message : 'Something went wrong. Try again.')
     } finally {
       setSaving(false)
     }
@@ -155,6 +162,9 @@ export default function PlatformMaintenancePage() {
 
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+      )}
+      {notice && (
+        <div role="status" className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700">{notice}</div>
       )}
 
       {/* Grace period banner */}

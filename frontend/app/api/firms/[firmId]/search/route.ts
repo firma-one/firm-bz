@@ -229,6 +229,6 @@ export async function GET(
         })
     } catch (error) {
         logger.error('Global search API error:', error as Error)
-        return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+        return NextResponse.json({ error: "Search couldn't run. Something went wrong on our side. Try again." }, { status: 500 })
     }
 }

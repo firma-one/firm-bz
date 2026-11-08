@@ -14,6 +14,8 @@ import { OneDriveConnector } from '@/lib/connectors/onedrive-connector'
 import { resolveOneDriveDriveBase } from './onedrive-adapter'
 import { ignoreParser } from '@/lib/ignore-parser'
 import { CONNECTOR_CACHE_TTL_MS, createShortLivedCache } from '../short-lived-cache'
+import { storageFailure, storageFailureFromResponse } from '@/lib/connectors/storage-failure'
+import { folderGoneFailure } from '@/lib/connectors/folder-gone'
 
 export interface OneDriveListedFile {
   id: string
@@ -34,7 +36,8 @@ const oneDrive = OneDriveConnector.getInstance()
 
 async function auth(connectionId: string): Promise<string> {
   const token = await oneDrive.getAccessToken(connectionId)
-  if (!token) throw new Error('Could not get OneDrive access token')
+  // No token means the connection needs renewing: said once, in the shared words.
+  if (!token) throw storageFailure('reconnect', 'OneDrive')
   return token
 }
 
@@ -162,17 +165,18 @@ export async function listOneDriveFiles(
     return isFolderUnder(connectionId, base, token, folderId, confidentialFolderId, folderPath, walkCache)
   }
 
-  const listChildren = async (): Promise<any[] | null> => {
+  const listChildren = async (): Promise<any[]> => {
     const items: any[] = []
     let url: string | undefined =
       `${base}/items/${folderId}/children?$select=id,name,file,folder,size,createdDateTime,lastModifiedDateTime,webUrl,createdBy,lastModifiedBy&$top=${limit}`
     while (url && items.length < limit) {
-      const res: Response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
-      if (res.status === 404) return null
-      if (!res.ok) {
-        const err = await res.text()
-        throw new Error(`Microsoft Graph API error: ${res.status} - ${err}`)
-      }
+      const res: Response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } }).catch(() => {
+        throw storageFailure('unreachable', 'OneDrive')
+      })
+      // A folder that's gone (moved, deleted, or out of the account's reach) is not an empty one.
+      if (res.status === 404) throw folderGoneFailure('OneDrive')
+      // 403, 429 and the rest: Graph's reason, in words.
+      if (!res.ok) throw await storageFailureFromResponse(res, 'OneDrive', 'list a folder')
       const page = await res.json()
       items.push(...(page.value || []))
       url = page['@odata.nextLink']

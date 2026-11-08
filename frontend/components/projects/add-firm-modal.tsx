@@ -11,7 +11,9 @@ import { PropertyList, PropertyRow, PROPERTY_FIELD_CLASS, PROPERTY_HINT_CLASS, P
 import { CreateDialogFooter, CreateDialogHeader, CreateDialogNotice } from "@/components/ui/create-dialog"
 import { SelectWithCustomEntry } from "@/components/ui/select-with-custom-entry"
 import { OptionalFieldsSection } from "@/components/ui/optional-fields-toggle"
-import { createFirm, updateFirm } from '@/lib/actions/firms'
+import { createFirm } from '@/lib/actions/firms'
+import { failureReason } from '@/lib/files/action-failure'
+import { useToast } from '@/components/ui/toast'
 import { firmPath } from '@/lib/navigation/firm-paths'
 
 
@@ -78,6 +80,7 @@ export function AddFirmModal({ trigger, open: controlledOpen, onOpenChange: cont
     const [notes, setNotes] = useState('')
 
     const router = useRouter()
+    const { addToast } = useToast()
 
     const isFormDisabled = creating || capBlocked
     const isDismissDisabled = creating
@@ -103,8 +106,9 @@ export function AddFirmModal({ trigger, open: controlledOpen, onOpenChange: cont
         setCreating(true)
         setError(null)
         try {
-            const newFirm = await createFirm({ name, groupSlug })
-            await updateFirm(newFirm.slug, {
+            // One call: the firm, then its details. A firm created whose details didn't save answers
+            // ok with a warning, so the person opens it to finish rather than create it twice.
+            const result = await createFirm({ name, groupSlug }, {
                 internalMemo: internalMemo.trim() || null,
                 industry: industry.trim() || null,
                 companySizeBracket: companySizeBracket || null,
@@ -113,12 +117,18 @@ export function AddFirmModal({ trigger, open: controlledOpen, onOpenChange: cont
                 billingAddress: billingAddress.trim() || null,
                 notes: notes.trim() || null,
             })
+            if (!result.ok) {
+                setError(result.error)
+                return
+            }
+            const newFirm = result.data
+            if (result.warning) addToast({ type: 'warning', title: 'Firm created', message: result.warning })
             setOpen(false)
             resetForm()
             router.push(newFirm.groupSlug ? firmPath(newFirm.groupSlug, newFirm.slug) : `/d/${newFirm.slug}`)
             router.refresh()
         } catch (err: unknown) {
-            setError(err instanceof Error ? err.message : 'Failed to create firm')
+            setError(failureReason(err))
         } finally {
             setCreating(false)
         }

@@ -9,7 +9,8 @@ import { cn } from "@/lib/utils"
 import { TICKET_KIND_LABEL, splitDescription, type TicketKind } from "@/lib/support/ticket-view"
 import { KindIcon, formatBytes } from "./support-bits"
 import { SupportDropZone } from "./support-drop-zone"
-import type { SupportStore } from "./support-store"
+import { describeFileFailures, type SupportStore } from "./support-store"
+import { failureReason } from "@/lib/files/action-failure"
 
 /*
  * New request, in the right pane beside the list (.claude/plans/app-design-refinements.md, section 14):
@@ -78,12 +79,20 @@ export function SupportNewRequestPanel({
                 { kind, description: text.trim(), clientSlug: picked?.clientSlug, engagementSlug: picked?.engagementSlug },
                 files
             )
-            if (failedFiles) addToast({ type: "error", title: `Sent, but ${failedFiles} file${failedFiles === 1 ? "" : "s"} couldn’t be attached` })
-            else addToast({ type: "success", title: `Request ${ticketNumber} sent` })
+            // Sent either way: the request exists, so this never reads "couldn't send" (a retry
+            // would file it twice). The files that didn't make it are named, with why.
+            if (failedFiles.length) {
+                addToast({
+                    type: "warning",
+                    title: `Request ${ticketNumber} sent, but ${failedFiles.length === 1 ? "a file wasn’t" : `${failedFiles.length} files weren’t`} attached`,
+                    message: `${describeFileFailures(failedFiles)}. Attach ${failedFiles.length === 1 ? "it" : "them"} from the request.`,
+                })
+            } else addToast({ type: "success", title: `Request ${ticketNumber} sent` })
             onDirtyChange(false)
             onSent(ticketNumber)
         } catch (e) {
-            setError(e instanceof Error ? e.message : "Couldn’t send the request")
+            // Only when the request itself wasn't filed, so sending again is safe.
+            setError(`Couldn’t send the request · ${failureReason(e)}`)
             setSending(false)
         }
     }

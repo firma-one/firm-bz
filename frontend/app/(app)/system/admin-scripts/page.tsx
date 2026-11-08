@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { failureFrom, failureReason } from '@/lib/files/action-failure'
 import { Terminal, Play, Loader2, CheckCircle, XCircle, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/lib/auth-context'
@@ -30,14 +31,14 @@ export default function AdminScriptsPage() {
     fetch('/api/system/admin-scripts', {
       headers: { Authorization: `Bearer ${session.access_token}` },
     })
-      .then((r) => r.ok ? r.json() : Promise.reject(r.statusText))
+      .then(async (r) => { if (!r.ok) throw await failureFrom(r); return r.json() })
       .then((data) => {
         setScripts(data.scripts)
         const initial: Record<string, ScriptState> = {}
         for (const s of data.scripts) initial[s.id] = { running: false, result: null, error: null }
         setStates(initial)
       })
-      .catch((e) => setFetchError(String(e)))
+      .catch((e) => setFetchError(`Couldn't load the scripts · ${failureReason(e)}`))
       .finally(() => setLoading(false))
   }, [session?.access_token])
 
@@ -49,11 +50,12 @@ export default function AdminScriptsPage() {
         method: 'POST',
         headers: { Authorization: `Bearer ${session.access_token}` },
       })
+      if (!res.ok) throw await failureFrom(res)
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error || res.statusText)
       setStates((prev) => ({ ...prev, [id]: { running: false, result: data, error: null } }))
     } catch (e) {
-      setStates((prev) => ({ ...prev, [id]: { running: false, result: null, error: String(e) } }))
+      // The route's words ("Couldn't run the script · …"), never "Error: …" from String(e).
+      setStates((prev) => ({ ...prev, [id]: { running: false, result: null, error: failureReason(e) } }))
     }
   }
 

@@ -7,6 +7,7 @@ import { useToast } from '@/components/ui/toast'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Button } from '@/components/ui/button'
 import { SETTINGS_SECTION_HEADING_CLASS } from '@/components/ui/property-list'
+import { failureReason } from '@/lib/files/action-failure'
 
 /**
  * "Sign out of all devices". The menu's Sign out ends this browser only, so this is the one place
@@ -23,9 +24,17 @@ export function SessionsCard() {
         try {
             await signOutEverywhere()
             window.location.href = '/signin'
-        } catch {
+        } catch (e) {
             setWorking(false)
-            addToast({ type: 'error', title: "Couldn't sign out of all devices", message: 'Please try again.' })
+            // Why, where known: the request never left, or the server couldn't end the sessions
+            // (this browser is still signed in either way, so trying again is safe).
+            addToast({
+                type: 'error',
+                title: "Couldn't sign out of all devices",
+                message: e instanceof TypeError
+                    ? failureReason(e)
+                    : "Something went wrong on our side, so you're still signed in everywhere. Try again.",
+            })
         }
     }
 

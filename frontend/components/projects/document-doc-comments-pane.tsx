@@ -30,6 +30,9 @@ import { REACTIONS, ReactionMark, type ReactionKey } from '@/components/comments
 import { DocumentIcon } from '@/components/ui/document-icon'
 import { caretOffset } from '@/lib/ui/caret-offset'
 import { canBeRemindedOfInternalNote, canWriteInternalNote } from '@/lib/comments/internal-notes'
+import { useToast } from '@/components/ui/toast'
+import { LoadFailed } from '@/components/ui/load-failed'
+import { failureFrom, failureReason } from '@/lib/files/action-failure'
 
 /*
  * Comments on a document or deliverable (.claude/plans/board-pane-comments-redesign.md). Shared
@@ -120,12 +123,16 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
   const myEmail = user?.email ?? ''
   const [messages, setMessages] = useState<CommentMessage[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  /** Why the thread didn't load; never shown as "No comments yet" (P1-71). */
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const { addToast } = useToast()
   const [newContent, setNewContent] = useState(initialDraft ?? '')
   // Opened from a document: its comments first, the whole deliverable thread a click away.
   const [focusOnly, setFocusOnly] = useState(!!focusDocId)
   const [submitting, setSubmitting] = useState(false)
   const [firmMembers, setFirmMembers] = useState<Member[]>([])
+  /** The engagement's people didn't load: "@" says so rather than offering no one (P2-21). */
+  const [membersFailed, setMembersFailed] = useState(false)
   // Writing an internal note (the firm's own, never sent to a client) rather than a reply.
   const [internalMode, setInternalMode] = useState(false)
   const [reminderModal, setReminderModal] = useState<{ messageId: string; content: string } | null>(null)
@@ -134,6 +141,8 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
   // messageId → when its reminder is due, for comments with a dated reminder (they show a bell).
   // A mention alone notifies at once and is stored as a reminder with no date: no bell for that.
   const [reminderDates, setReminderDates] = useState<Map<string, string>>(new Map())
+  /** Reminders this pane saved for comments it posted (messageId → date), merged into each refetch. */
+  const postedReminders = useRef(new Map<string, string | null>())
 
   // ── Mentions and reminders in the composer ─────────────────────────────────
   type MentionedUser = { userId: string; name: string; avatarUrl?: string | null }
@@ -162,6 +171,9 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
   const [messagesWithAnyMention, setMessagesWithAnyMention] = useState<Set<string>>(new Set())
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
+  // The engagement is completed: the thread reads, and can't be added to or changed. The server's to say,
+  // since this pane opens from several places.
+  const [readOnly, setReadOnly] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const topSentinelRef = useRef<HTMLDivElement>(null)
   const bottomSentinelRef = useRef<HTMLDivElement>(null)
@@ -201,17 +213,21 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
   }, [sortOrder, hideOlderMessages])
 
   // Engagement members: who can be mentioned, and the names and faces in the thread.
-  useEffect(() => {
-    fetch(`/api/projects/${engagementId}/members`)
-      .then((r) => r.ok ? r.json() : null)
-      .then((data) => {
-        const members: Member[] = (data?.members ?? [])
-          .filter((m: any) => m.userId && m.email)
-          .map((m: any) => ({ userId: m.userId, email: m.email, name: m.name ?? m.email.split('@')[0], role: m.role ?? '', avatarUrl: m.avatarUrl ?? null, isAgent: !!m.isAgent }))
-        setFirmMembers(members)
-      })
-      .catch(() => {})
+  const loadMembers = useCallback(async () => {
+    setMembersFailed(false)
+    try {
+      const res = await fetch(`/api/projects/${engagementId}/members`)
+      if (!res.ok) throw await failureFrom(res)
+      const data = await res.json()
+      const members: Member[] = (data?.members ?? [])
+        .filter((m: any) => m.userId && m.email)
+        .map((m: any) => ({ userId: m.userId, email: m.email, name: m.name ?? m.email.split('@')[0], role: m.role ?? '', avatarUrl: m.avatarUrl ?? null, isAgent: !!m.isAgent }))
+      setFirmMembers(members)
+    } catch {
+      setMembersFailed(true)
+    }
   }, [engagementId])
+  useEffect(() => { void loadMembers() }, [loadMembers])
 
   const memberById = useMemo(() => new Map(firmMembers.map((m) => [m.userId, m])), [firmMembers])
   const memberByEmail = useMemo(() => new Map(firmMembers.map((m) => [m.email.toLowerCase(), m])), [firmMembers])
@@ -223,19 +239,17 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
 
   const fetchMessages = useCallback(async () => {
     setLoading(true)
-    setError(null)
+    setLoadError(null)
     try {
       const res = await fetch(`/api/projects/${engagementId}/documents/${documentId}/doc-comments`)
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(data.error ?? 'Failed to load comments')
-      }
+      if (!res.ok) throw await failureFrom(res)
       const data = await res.json()
       setMessages(data.messages ?? [])
+      setReadOnly(data.readOnly === true)
       // Seen: the Discussions page drops this discussion's unread dot.
       fetch(`/api/projects/${engagementId}/documents/${documentId}/doc-comments/read`, { method: 'POST' }).catch(() => {})
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load comments')
+      setLoadError(failureReason(e))
     } finally {
       setLoading(false)
     }
@@ -273,6 +287,11 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
       const due = r.value.reminders.map((x) => x.dateValue).filter((d): d is string => Boolean(d)).sort()[0]
       if (due) dates.set(r.value.id, due)
     }
+    postedReminders.current.forEach((due, id) => {
+      if (!msgs.some((m) => m.id === id)) return
+      withMention.add(id)
+      if (due && !dates.has(id)) dates.set(id, due)
+    })
     setMessagesWithAnyMention(withMention)
     setReminderDates(dates)
   }, [engagementId, documentId])
@@ -296,8 +315,8 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
 
   useEffect(() => {
     // As the pane's × does, so its content can stop it: a preview open over the details closes instead.
-    // Claimed with preventDefault, because the pane renders its content twice and the other copy hears
-    // the same key, and a menu open in here has already taken it.
+    // Claimed with preventDefault, because a preview's own handler hears the same key, and a menu open in
+    // here has already taken it.
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || e.defaultPrevented) return
       e.preventDefault()
@@ -326,7 +345,8 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
   /** Opens, narrows or closes the mention menu from where the caret is. */
   const syncMentionQuery = useCallback((value: string, caret: number) => {
     const q = findMentionQuery(value, caret)
-    if (!q || firmMembers.length === 0) {
+    // With no one loaded, the menu still opens when the load failed: to say so.
+    if (!q || (firmMembers.length === 0 && !membersFailed)) {
       dismissedAtRef.current = null
       setMentionQuery(null)
       return
@@ -338,7 +358,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
       if (!prev || prev.query !== q.query || prev.start !== q.start) setMenuIndex(0)
       return { ...q, left }
     })
-  }, [firmMembers.length])
+  }, [firmMembers.length, membersFailed])
 
   const mentionCandidates = useMemo(() => {
     if (!mentionQuery) return []
@@ -470,6 +490,38 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
     })
   }
 
+  /**
+   * Notifies the people a posted comment mentions (now, or on the reminder date), one request each,
+   * and says who wasn't (CM-1): the comment stands either way, and "Try again" resends to them only.
+   */
+  const notifyMentioned = async (messageId: string, recipients: { userId: string; name: string }[], dateVal: string | null) => {
+    const results = await Promise.allSettled(recipients.map(async ({ userId }) => {
+      const res = await fetch(`/api/projects/${engagementId}/documents/${documentId}/doc-comments`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messageId, recipientId: userId, dateValue: dateVal }),
+      })
+      if (!res.ok) throw await failureFrom(res)
+    }))
+    const failed = recipients.filter((_, i) => results[i].status === 'rejected')
+    if (failed.length < recipients.length) {
+      // Known here, so set at once, and kept through a refetch of the reminders that was already on its way.
+      postedReminders.current.set(messageId, dateVal)
+      setMessagesWithAnyMention((prev) => new Set(prev).add(messageId))
+      if (dateVal) setReminderDates((prev) => new Map(prev).set(messageId, dateVal))
+      setTimeout(() => { void fetchMyMentions() }, 500)
+    }
+    if (failed.length === 0) return
+    const firstFailure = results.find((r): r is PromiseRejectedResult => r.status === 'rejected')
+    const names = failed.map((r) => r.name.replace(/^@/, ''))
+    addToast({
+      type: 'warning',
+      title: 'Comment posted',
+      message: `Couldn't notify ${names.join(', ')} · ${failureReason(firstFailure?.reason)}`,
+      action: { label: 'Try again', onClick: () => { void notifyMentioned(messageId, failed, dateVal) } },
+    })
+  }
+
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault()
     const content = newContent.trim()
@@ -477,6 +529,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
     const recipients = internalMode
       ? currentMentions.filter(({ userId }) => canBeRemindedOfInternalNote(memberById.get(userId)?.role))
       : currentMentions
+    const dateVal = remindAt || null
     setSubmitting(true)
     try {
       const res = await fetch(`/api/projects/${engagementId}/documents/${documentId}/doc-comments`, {
@@ -484,38 +537,21 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(internalMode ? { content, internal: true } : { content }),
       })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(data.error ?? 'Failed to add comment')
-      }
+      if (!res.ok) throw await failureFrom(res)
       const data = await res.json()
       const newMsg = data.message
       setMessages((prev) => [...prev, newMsg])
       setNewContent(initialDraft ?? '')
       setMentionQuery(null)
       setTagQuery(null)
-
-      // Notify everyone still mentioned: now, or on the reminder date.
-      if (recipients.length > 0) {
-        const dateVal = remindAt || null
-        for (const { userId } of recipients) {
-          fetch(`/api/projects/${engagementId}/documents/${documentId}/doc-comments`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ messageId: newMsg.id, recipientId: userId, dateValue: dateVal }),
-          }).catch(() => {})
-        }
-        // Known here, so set at once: the server writes reminders after it replies, and a refetch
-        // could miss them.
-        setMessagesWithAnyMention((prev) => new Set(prev).add(newMsg.id))
-        if (dateVal) setReminderDates((prev) => new Map(prev).set(newMsg.id, dateVal))
-        setTimeout(() => { void fetchMyMentions() }, 500)
-      }
       setMentionedUsers([])
       setRemindAt('')
       onChange?.()
+      // Notify everyone still mentioned: now, or on the reminder date.
+      if (recipients.length > 0) await notifyMentioned(newMsg.id, recipients, dateVal)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to add comment')
+      // What was written stays in the box, to send again.
+      addToast({ type: 'error', title: "Couldn't post your comment", message: `${failureReason(e)} It's still in the box.` })
     } finally {
       setSubmitting(false)
     }
@@ -530,15 +566,12 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'delete-comment', messageId }),
       })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(data.error ?? 'Failed to delete comment')
-      }
+      if (!res.ok) throw await failureFrom(res)
       setMessages((prev) => prev.filter((m) => m.id !== messageId))
       setDeleteConfirmId(null)
       onChange?.()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to delete comment')
+      addToast({ type: 'error', title: "Couldn't delete the comment", message: failureReason(e) })
     } finally {
       setDeleting(false)
     }
@@ -682,17 +715,23 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
     [myEmail]
   )
 
+  /** Shown at once, and taken back with the reason when it's refused or the request never arrives (P1-72). */
   const toggleReaction = useCallback(
     async (messageId: string, emojiKey: ReactionKey, action: 'add' | 'remove') => {
       updateReactionOptimistic(messageId, emojiKey, action)
-      const res = await fetch(`/api/projects/${engagementId}/documents/${documentId}/doc-comments/reactions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messageId, emojiKey, action }),
-      })
-      if (!res.ok) updateReactionOptimistic(messageId, emojiKey, action === 'add' ? 'remove' : 'add')
+      try {
+        const res = await fetch(`/api/projects/${engagementId}/documents/${documentId}/doc-comments/reactions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ messageId, emojiKey, action }),
+        })
+        if (!res.ok) throw await failureFrom(res)
+      } catch (e) {
+        updateReactionOptimistic(messageId, emojiKey, action === 'add' ? 'remove' : 'add')
+        addToast({ type: 'error', title: action === 'add' ? "Couldn't add the reaction" : "Couldn't remove the reaction", message: failureReason(e) })
+      }
     },
-    [engagementId, documentId, updateReactionOptimistic]
+    [engagementId, documentId, updateReactionOptimistic, addToast]
   )
 
   const handleReminderSubmit = async ({ selected, deselected, dateValue }: { selected: string[]; deselected: string[]; dateValue: string | null }) => {
@@ -704,21 +743,25 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ messageId: reminderModal.messageId, reminderId: existing?.reminderId, recipientId }),
-        }).then(async (res) => { if (!res.ok) throw new Error('Failed to remove reminder') })
+        }).then(async (res) => { if (!res.ok) throw await failureFrom(res) })
       }),
       ...selected.map((recipientId) =>
         fetch(`/api/projects/${engagementId}/documents/${documentId}/doc-comments`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ messageId: reminderModal.messageId, recipientId, dateValue }),
-        }).then(async (res) => {
-          if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error ?? 'Failed') }
-        })
+        }).then(async (res) => { if (!res.ok) throw await failureFrom(res) })
       ),
     ]
     const results = await Promise.allSettled(ops)
-    const failed = results.filter((r) => r.status === 'rejected')
-    if (failed.length > 0) throw new Error(`${failed.length} operation(s) failed`)
+    // Who it didn't work for, by name, and why (P1-75).
+    const people = [...deselected, ...selected]
+    const failed = people.filter((_, i) => results[i].status === 'rejected')
+    if (failed.length > 0) {
+      const first = results.find((r): r is PromiseRejectedResult => r.status === 'rejected')
+      const names = failed.map((id) => { const m = memberById.get(id); return m ? displayNameOf(m) : 'someone' })
+      throw new Error(`Couldn't update the reminder for ${names.join(', ')} · ${failureReason(first?.reason)}`)
+    }
     void refreshMessagesWithAnyMention(messages)
   }
 
@@ -750,12 +793,15 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messageId: picker.messageId, recipientId, dateValue }),
-      }).then((res) => { if (!res.ok) throw new Error('Failed') })
+      }).then(async (res) => { if (!res.ok) throw await failureFrom(res) })
     ))
-    if (picker.recipientIds.length === 0 || results.some((r) => r.status === 'rejected')) {
-      setReminderEditPicker((prev) => (prev ? { ...prev, saving: false, error: 'Couldn’t save the reminder. Try again.' } : prev))
+    const refused = results.find((r): r is PromiseRejectedResult => r.status === 'rejected')
+    if (picker.recipientIds.length === 0 || refused) {
+      const why = refused ? failureReason(refused.reason) : 'No one is mentioned to remind.'
+      setReminderEditPicker((prev) => (prev ? { ...prev, saving: false, error: `Couldn't save the reminder · ${why}` } : prev))
       return
     }
+    if (postedReminders.current.has(picker.messageId)) postedReminders.current.set(picker.messageId, dateValue)
     setReminderDates((prev) => {
       const next = new Map(prev)
       if (dateValue) next.set(picker.messageId, dateValue)
@@ -866,7 +912,9 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
     () => splitMentions(newContent, currentMentions.map((u) => u.name)),
     [newContent, currentMentions],
   )
-  const Composer = (
+  const Composer = readOnly ? (
+    <p className="shrink-0 text-small text-fg-muted">This engagement is completed, so it&apos;s read only.</p>
+  ) : (
     <form onSubmit={handleSubmit} className="flex shrink-0 flex-col gap-1.5">
       {/* Who sees it: everyone on the engagement, or the firm's team only. Stays as chosen, so a
           run of internal notes doesn't slip into a reply. */}
@@ -1087,7 +1135,14 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
             className="absolute bottom-full z-[200] mb-1.5 w-64 overflow-hidden rounded-card border border-line bg-surface p-1 shadow-popover"
             style={{ left: Math.max(0, Math.min(mentionQuery.left, (composerRef.current?.clientWidth ?? 260) - 260)) }}
           >
-            {mentionCandidates.length === 0 ? (
+            {membersFailed && firmMembers.length === 0 ? (
+              <p role="alert" className="px-2 py-1.5 text-small text-fg-muted">
+                Couldn&apos;t load the people on this engagement.{' '}
+                <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => void loadMembers()} className="font-medium text-fg hover:underline">
+                  Try again
+                </button>
+              </p>
+            ) : mentionCandidates.length === 0 ? (
               <p className="px-2 py-1.5 text-small text-fg-subtle">No one matches “{mentionQuery.query}”</p>
             ) : mentionCandidates.map((m, idx) => (
               <button
@@ -1114,7 +1169,6 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col gap-3 p-4">
       <TooltipProvider>
-        {error && <div className="shrink-0 rounded-card bg-tag-red-bg px-3 py-2 text-small text-tag-red-fg">{error}</div>}
         {focusDocId && (
           <div role="radiogroup" aria-label="Which comments" className="inline-flex shrink-0 self-start rounded-control border border-line p-0.5 text-caption">
             <button type="button" role="radio" aria-checked={focusOnly} onClick={() => setFocusOnly(true)} className={cn('rounded-[4px] px-2 py-0.5 transition-colors', focusOnly ? 'bg-surface-muted text-fg' : 'text-fg-muted hover:text-fg')}>
@@ -1136,6 +1190,8 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
               <Loader2 className="h-4 w-4 animate-spin" />
               Loading comments…
             </div>
+          ) : loadError ? (
+            <LoadFailed compact what="the comments" reason={loadError} onRetry={() => void fetchMessages()} />
           ) : visibleMessages.length === 0 ? (
             <div className="flex flex-col items-center justify-center gap-2 py-10 text-small text-fg-muted">
               <MessagesSquare className="h-6 w-6 text-fg-subtle" />
@@ -1151,7 +1207,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
                 const hasMention = messagesWithAnyMention.has(msg.id)
                 const mentionedMe = myMentionedMessageIds.has(msg.id)
                 // Delete only if: my message, last in the thread, no active reminders/mentions.
-                const canDelete = isMine && isLastMsg && !hasMention
+                const canDelete = !readOnly && isMine && isLastMsg && !hasMention
                 const isConfirmingDelete = deleteConfirmId === msg.id
                 const name = authorName(msg)
                 const reacted = REACTIONS.filter((r) => (msg.reactions?.[r.key]?.count ?? 0) > 0)
@@ -1187,7 +1243,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
                           const due = reminderDates.get(msg.id)!
                           const when = `${new Date(due) > new Date() ? 'Reminder' : 'Reminded'} ${shortDateTime(due)}`
                           // Only the comment's author changes its reminder; others see when it is.
-                          return isMine ? (
+                          return isMine && !readOnly ? (
                             <Hint label={`${when} — click to change`}>
                               <button type="button" aria-label="Edit reminder" onClick={(e) => openReminderEdit(msg, e.currentTarget)} className="inline-flex h-5 w-5 shrink-0 items-center justify-center self-center rounded-[4px] text-tag-orange-fg hover:bg-tag-orange-bg">
                                 <BellRing className="h-3 w-3" />
@@ -1215,6 +1271,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
                                 <TooltipTrigger asChild>
                                   <button
                                     type="button"
+                                    disabled={readOnly}
                                     onClick={() => void toggleReaction(msg.id, r.key, reactedByMe ? 'remove' : 'add')}
                                     className={cn('inline-flex h-6 items-center gap-1 rounded-full border px-2 text-caption tabular-nums transition-colors', reactedByMe ? 'border-action/30 bg-action/10 text-action' : 'border-line bg-surface text-fg-muted hover:bg-surface-hover')}
                                   >
@@ -1250,6 +1307,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
                         </span>
                       ) : (
                         <>
+                          {!readOnly && (
                           <DropdownMenu>
                             <Hint label="React">
                               <DropdownMenuTrigger asChild>
@@ -1278,7 +1336,8 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
                               </div>
                             </DropdownMenuContent>
                           </DropdownMenu>
-                          {isMine && hasMention && !reminderDates.has(msg.id) && (
+                          )}
+                          {!readOnly && isMine && hasMention && !reminderDates.has(msg.id) && (
                             <Hint label="Remind the people mentioned">
                               <button type="button" aria-label="Set reminder" onClick={(e) => openReminderEdit(msg, e.currentTarget)} className="flex h-6 w-6 items-center justify-center rounded-[4px] text-fg-subtle hover:bg-surface-hover hover:text-fg-muted">
                                 <BellRing className="h-3.5 w-3.5" />

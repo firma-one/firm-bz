@@ -16,6 +16,7 @@ import { GoogleDriveIcon } from "@/components/ui/google-drive-icon"
 import { GoogleSharedDriveIcon } from "@/components/ui/google-shared-drive-icon"
 import { MyDriveIcon } from "@/components/ui/my-drive-icon"
 import { useToast } from "@/components/ui/toast"
+import { failureFrom, failureReason } from "@/lib/files/action-failure"
 import { generateWorkspaceFolderName, FIRMA_PARENT_FOLDER_NAME } from "@/lib/generate-unique-workspace-folder-name"
 import {
   ArrowRightLeft,
@@ -70,6 +71,26 @@ type GoogleDriveWorkspaceRootProps = {
 
 
 const WORKSPACE_MIGRATE_DISABLED = false
+
+/**
+ * The route's estimate. Only the top level is counted, so with folders inside it is a minimum
+ * (`atLeast`); with no count at all there is no estimate, and `reason` says why.
+ */
+export type MigrationEstimate = {
+  itemCount: number | null
+  estimatedMinutes: number | null
+  atLeast?: boolean
+  reason?: string
+}
+
+export function migrationEstimateLabel(e: MigrationEstimate): string {
+  if (e.itemCount == null || e.estimatedMinutes == null) {
+    return `No time estimate · ${e.reason ?? "The files to move couldn't be counted."}`
+  }
+  return e.atLeast
+    ? `At least ~${e.estimatedMinutes} min maintenance window · ${e.itemCount} top-level items`
+    : `~${e.estimatedMinutes} min maintenance window · ${e.itemCount} items`
+}
 
 /** Numbered progress dots — current step filled dark, future steps outlined, connected by lines. */
 function StepProgress({ current, total, onStepClick }: { current: number; total: number; onStepClick?: (step: number) => void }) {
@@ -132,7 +153,7 @@ export function GoogleDriveWorkspaceRoot({
   const [wizardStep, setWizardStep] = useState<1 | 3>(1)
   const [pendingFolder, setPendingFolder] = useState<{ id: string; name: string } | null>(null)
   const [generatedFolderName, setGeneratedFolderName] = useState("")
-  const [estimate, setEstimate] = useState<{ itemCount: number; estimatedMinutes: number } | null>(null)
+  const [estimate, setEstimate] = useState<MigrationEstimate | null>(null)
   const [estimateLoading, setEstimateLoading] = useState(false)
   const [fromBreadcrumb, setFromBreadcrumb] = useState<string[] | null>(null)
   const [toBreadcrumb, setToBreadcrumb] = useState<string[] | null>(null)
@@ -215,7 +236,11 @@ export function GoogleDriveWorkspaceRoot({
         body: JSON.stringify({ action: 'estimate-migration', connectionId }),
       })
       if (res.ok) setEstimate(await res.json())
-    } catch { /* ignore */ } finally {
+      // No estimate is better than a false "about 1 minute" (P2-34): say why there isn't one.
+      else setEstimate({ itemCount: null, estimatedMinutes: null, reason: failureReason(await failureFrom(res)) })
+    } catch (e) {
+      setEstimate({ itemCount: null, estimatedMinutes: null, reason: failureReason(e) })
+    } finally {
       setEstimateLoading(false)
     }
   }, [accessToken, connectionId])
@@ -328,10 +353,8 @@ export function GoogleDriveWorkspaceRoot({
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ action: 'ensure-folder', connectionId, name: FIRMA_PARENT_FOLDER_NAME, ...(parentId && { parentId }) }),
     })
-    if (!firmaRes.ok) {
-      const err = await firmaRes.json().catch(() => ({}))
-      throw new Error((err as { error?: string }).error || `Failed to ensure ${FIRMA_PARENT_FOLDER_NAME} folder`)
-    }
+    // Each step's refusal carries Drive's reason in StorageFailure's words (P1-32).
+    if (!firmaRes.ok) throw await failureFrom(firmaRes)
     const { folderId: firmaFolderId } = await firmaRes.json()
     // Step 2: find-or-create workspace folder inside _firma (idempotent)
     const createRes = await fetch('/api/connectors/google-drive', {
@@ -339,24 +362,32 @@ export function GoogleDriveWorkspaceRoot({
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ action: 'ensure-folder', connectionId, name: folderName, parentId: firmaFolderId }),
     })
-    if (!createRes.ok) {
-      const err = await createRes.json().catch(() => ({}))
-      throw new Error((err as { error?: string }).error || 'Failed to ensure workspace folder')
-    }
+    if (!createRes.ok) throw await failureFrom(createRes)
     const { folderId } = await createRes.json()
     return { folderId, folderName }
   }
 
-  /** Sets `newRootFolderId` as the workspace root and provisions the firm/client/engagement hierarchy. */
-  const setWorkspaceRoot = async (newRootFolderId: string, token: string) => {
+  /**
+   * Sets `newRootFolderId` as the workspace root and provisions the firm/client/engagement hierarchy.
+   * Answers the route's `warning` when the root was set but a folder inside it wasn't (CN-3).
+   */
+  const setWorkspaceRoot = async (newRootFolderId: string, token: string): Promise<string | undefined> => {
     const updateRes = await fetch('/api/connectors/google-drive', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ action: 'update-root-folder', connectionId, rootFolderId: newRootFolderId, ...(firmId && { firmId }) }),
     })
-    if (!updateRes.ok) {
-      const err = await updateRes.json().catch(() => ({}))
-      throw new Error((err as { error?: string }).error || 'Failed to set workspace root')
+    if (!updateRes.ok) throw await failureFrom(updateRes)
+    const data = (await updateRes.json().catch(() => ({}))) as { warning?: string }
+    return data.warning
+  }
+
+  /** "Folder created", or "set, with a problem" when the firm's folders inside it weren't made. */
+  const toastRootSet = (folderName: string, warning: string | undefined) => {
+    if (warning) {
+      addToast({ title: 'Folder set, with a problem', message: warning, type: 'warning' })
+    } else {
+      addToast({ title: 'Folder created', message: `"${folderName}" set as your workspace root.`, type: 'success' })
     }
   }
 
@@ -365,12 +396,11 @@ export function GoogleDriveWorkspaceRoot({
     setSaving(true)
     try {
       const { folderId, folderName } = await createWorkspaceUnder(undefined, accessToken)
-      await setWorkspaceRoot(folderId, accessToken)
-      addToast({ title: 'Folder created', message: `"${folderName}" set as your workspace root.`, type: 'success' })
+      toastRootSet(folderName, await setWorkspaceRoot(folderId, accessToken))
       await onUpdated()
       closeDialog()
     } catch (e) {
-      addToast({ title: 'Could not create folder', message: e instanceof Error ? e.message : 'Try again.', type: 'error' })
+      addToast({ title: "Couldn't create folder", message: failureReason(e), type: 'error' })
     } finally {
       setSaving(false)
     }
@@ -455,18 +485,13 @@ export function GoogleDriveWorkspaceRoot({
     setSaving(true)
     try {
       const { folderId, folderName } = await createWorkspaceUnder(parent.id, accessToken)
-      await setWorkspaceRoot(folderId, accessToken)
-      addToast({
-        title: "Folder created",
-        message: `"${folderName}" set as your workspace root.`,
-        type: "success",
-      })
+      toastRootSet(folderName, await setWorkspaceRoot(folderId, accessToken))
       await onUpdated()
       closeDialog()
     } catch (e) {
       addToast({
-        title: "Could not complete",
-        message: e instanceof Error ? e.message : "Try again.",
+        title: "Couldn't create folder",
+        message: failureReason(e),
         type: "error",
       })
     } finally {
@@ -494,8 +519,8 @@ export function GoogleDriveWorkspaceRoot({
           graceMinutes,
         }),
       })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error((data as any).error || "Migration failed")
+      // The route says why it didn't start, and that nothing changed (CN-1).
+      if (!res.ok) throw await failureFrom(res)
       onMigrationStarted?.()
       closeDialog()
       // Start fast-polling immediately so the panel appears as soon as
@@ -506,8 +531,8 @@ export function GoogleDriveWorkspaceRoot({
       await onUpdated()
     } catch (e) {
       addToast({
-        title: "Could not complete",
-        message: e instanceof Error ? e.message : "Try again.",
+        title: "Migration didn't start",
+        message: failureReason(e),
         type: "error",
       })
     } finally {
@@ -1010,9 +1035,7 @@ export function GoogleDriveWorkspaceRoot({
                       <p className="text-xs text-fg-muted">Estimating migration time…</p>
                     )}
                     {rootFolderId && estimate && !estimateLoading && (
-                      <p className="text-xs text-fg-muted">
-                        ~{estimate.estimatedMinutes} min maintenance window · {estimate.itemCount} items
-                      </p>
+                      <p className="text-xs text-fg-muted">{migrationEstimateLabel(estimate)}</p>
                     )}
 
                     <GooglePickerButton
@@ -1082,9 +1105,7 @@ export function GoogleDriveWorkspaceRoot({
                   <p className="text-xs text-fg-muted">Estimating migration time…</p>
                 )}
                 {rootFolderId && estimate && !estimateLoading && (
-                  <p className="text-xs text-fg-muted">
-                    ~{estimate.estimatedMinutes} min maintenance window · {estimate.itemCount} items
-                  </p>
+                  <p className="text-xs text-fg-muted">{migrationEstimateLabel(estimate)}</p>
                 )}
 
                 <ol className="space-y-1.5 pl-4 list-decimal text-xs text-fg-muted">
@@ -1198,11 +1219,13 @@ export function GoogleDriveWorkspaceRoot({
                   <div className="w-0.5 shrink-0 rounded-full bg-[#45474c]/30 self-stretch" />
                   <div>
                     <p className="text-xs font-semibold text-fg">
-                      {estimate ? `~${estimate.estimatedMinutes} min maintenance window` : "Maintenance window required"}
+                      {estimate?.estimatedMinutes != null
+                        ? `${estimate.atLeast ? 'At least ' : ''}~${estimate.estimatedMinutes} min maintenance window`
+                        : "Maintenance window required"}
                     </p>
                     <p className="text-caption text-fg-muted mt-0.5 leading-relaxed">
-                      {estimate && estimate.itemCount > 0
-                        ? `${estimate.itemCount} items will be moved. `
+                      {estimate?.itemCount != null && estimate.itemCount > 0
+                        ? `${estimate.itemCount} ${estimate.atLeast ? 'top-level items, and what they hold,' : 'items'} will be moved. `
                         : ""}
                       All members will be emailed, and the workspace is paused for them once the lock begins.
                     </p>

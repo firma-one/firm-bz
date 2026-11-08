@@ -5,6 +5,8 @@ import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Input } from '@/components/ui/input'
 import { updateClient, deleteClient, upsertClientBrand, type LwCrmClientStatus } from '@/lib/actions/client'
+import { failureFrom, failureReason } from '@/lib/files/action-failure'
+import { LoadFailed } from '@/components/ui/load-failed'
 import { getFirmMembers } from '@/lib/actions/firm-members'
 import { useRouter } from 'next/navigation'
 import { useToast } from '@/components/ui/toast'
@@ -149,7 +151,12 @@ export function ClientSettingsForm({
     const setBrandPrimaryColorD = (v: string) => { setBrandPrimaryColor(v); setBrandDirty(true) }
     const setBrandSecondaryColorD = (v: string) => { setBrandSecondaryColor(v); setBrandDirty(true) }
     const setBrandLogoAspectRatioD = (v: '1:1' | '4:3' | '16:9') => { setBrandLogoAspectRatio(v); setBrandDirty(true) }
-    const [brandLoaded, setBrandLoaded] = useState(false)
+    // A failed brand load must not read as "uses firm branding": saving that would delete the real
+    // brand record. So the section shows the failure, and Save branding waits for a load.
+    const [brandLoad, setBrandLoad] = useState<'loading' | 'ready' | 'failed'>('loading')
+    const [brandLoadError, setBrandLoadError] = useState<string | null>(null)
+    const [brandAttempt, setBrandAttempt] = useState(0)
+    const brandLoaded = brandLoad === 'ready'
     // false = use firm branding (default); true = use custom client branding
     const [useCustomBranding, setUseCustomBranding] = useState(false)
     const [savingBrand, setSavingBrand] = useState(false)
@@ -194,18 +201,27 @@ export function ClientSettingsForm({
         getFirmMembers(firmId)
             // Agents excluded: a client owner is a person who is accountable for the
             // relationship, which is not something Brio can be.
-            .then((res) => setMemberOptions(res.members
-                .filter((m) => !(m as { isAgent?: boolean }).isAgent)
-                .map((m) => ({ userId: m.userId, label: m.user?.name || m.user?.email || m.userId }))))
+            .then((res) => setMemberOptions(res.ok
+                ? res.data.members
+                    .filter((m) => !(m as { isAgent?: boolean }).isAgent)
+                    .map((m) => ({ userId: m.userId, label: m.user?.name || m.user?.email || m.userId }))
+                : []))
             .catch(() => setMemberOptions([]))
     }, [firmId])
 
     // Load brand on mount
     useEffect(() => {
-        if (!clientId) { setBrandLoaded(true); return }
+        if (!clientId) { setBrandLoad('ready'); return }
+        let cancelled = false
+        setBrandLoad('loading')
+        setBrandLoadError(null)
         fetch(`/api/clients/${clientId}/brand`)
-            .then((r) => r.ok ? r.json() : null)
+            .then(async (r) => {
+                if (!r.ok) throw await failureFrom(r)
+                return r.json()
+            })
             .then((data) => {
+                if (cancelled) return
                 const b = data?.brand
                 if (b) {
                     setUseCustomBranding(true)
@@ -225,10 +241,15 @@ export function ClientSettingsForm({
                     setUseCustomBranding(false)
                 }
                 setBrandDirty(false)
+                setBrandLoad('ready')
             })
-            .catch(() => {})
-            .finally(() => setBrandLoaded(true))
-    }, [clientId])
+            .catch((e) => {
+                if (cancelled) return
+                setBrandLoadError(failureReason(e))
+                setBrandLoad('failed')
+            })
+        return () => { cancelled = true }
+    }, [clientId, brandAttempt])
 
     // Logo preview URL from file
     useEffect(() => {
@@ -309,12 +330,16 @@ export function ClientSettingsForm({
     }
 
     const handleSaveBrand = async () => {
-        if (!clientId) return
+        if (!clientId || !brandLoaded) return
         setSavingBrand(true)
         try {
             if (!useCustomBranding) {
                 // Toggle OFF: delete brand record (fall back to firm branding)
-                await upsertClientBrand(clientId, null)
+                const result = await upsertClientBrand(clientId, null)
+                if (!result.ok) {
+                    addToast({ type: 'error', title: "Couldn't save branding", message: result.error })
+                    return
+                }
             } else {
                 // Convert new file to base64 data URL if present
                 let logoData: string | null = null
@@ -340,7 +365,7 @@ export function ClientSettingsForm({
                     logoData = brandLogoUrl
                 }
 
-                await upsertClientBrand(clientId, {
+                const result = await upsertClientBrand(clientId, {
                     name: brandName || null,
                     subtext: brandSubtext || null,
                     logoData,
@@ -348,6 +373,10 @@ export function ClientSettingsForm({
                     primaryColor: brandPrimaryColor || null,
                     secondaryColor: brandSecondaryColor || null,
                 })
+                if (!result.ok) {
+                    addToast({ type: 'error', title: "Couldn't save branding", message: result.error })
+                    return
+                }
                 if (logoData) setBrandLogoUrl(logoData)
                 setBrandLogoFile(null)
                 setBrandLogoPreviewUrl(null)
@@ -356,7 +385,7 @@ export function ClientSettingsForm({
             addToast({ type: 'success', title: 'Branding saved', message: 'Client branding updated.' })
             window.dispatchEvent(new CustomEvent('client-branding-updated'))
         } catch (e) {
-            addToast({ type: 'error', title: 'Save failed', message: e instanceof Error ? e.message : 'Could not save branding.' })
+            addToast({ type: 'error', title: "Couldn't save branding", message: failureReason(e) })
         } finally {
             setSavingBrand(false)
         }
@@ -392,7 +421,7 @@ export function ClientSettingsForm({
     const handleSave = async () => {
         setSaving(true)
         try {
-            await updateClient(orgSlug, clientSlug, {
+            const result = await updateClient(orgSlug, clientSlug, {
                 name,
                 industry: industry || undefined,
                 status,
@@ -409,12 +438,16 @@ export function ClientSettingsForm({
                 companySizeBracket: companySizeBracket || null,
                 billingAddress: billingAddress.trim() || null,
             })
+            if (!result.ok) {
+                addToast({ type: 'error', title: "Couldn't save client", message: result.error })
+                return
+            }
             setDetailsDirty(false)
             addToast({ type: 'success', title: 'Saved', message: 'Client details updated.' })
             window.dispatchEvent(new CustomEvent('firma-reminders-updated'))
             onSaved?.()
         } catch (e: unknown) {
-            addToast({ type: 'error', title: 'Update failed', message: e instanceof Error ? e.message : 'Could not update client.' })
+            addToast({ type: 'error', title: "Couldn't save client", message: failureReason(e) })
         } finally {
             setSaving(false)
         }
@@ -423,13 +456,18 @@ export function ClientSettingsForm({
     const performDeleteClient = async () => {
         setDeleting(true)
         try {
-            await deleteClient(orgSlug, clientSlug)
-            addToast({ type: 'success', title: 'Client deleted', message: 'Client has been removed.' })
+            const result = await deleteClient(orgSlug, clientSlug)
+            if (!result.ok) {
+                addToast({ type: 'error', title: "Couldn't delete client", message: result.error })
+                return
+            }
+            if (result.warning) addToast({ type: 'warning', title: 'Client deleted', message: result.warning })
+            else addToast({ type: 'success', title: 'Client deleted', message: 'Its access in storage has been taken back.' })
             setDeleteConfirmOpen(false)
             onSaved?.()
             router.push(firmTabPath(groupSlug, orgSlug, 'clients'))
         } catch (e: unknown) {
-            addToast({ type: 'error', title: 'Delete failed', message: e instanceof Error ? e.message : 'Could not delete client.' })
+            addToast({ type: 'error', title: "Couldn't delete client", message: failureReason(e) })
         } finally {
             setDeleting(false)
         }
@@ -533,6 +571,7 @@ export function ClientSettingsForm({
                                 key={String(custom)}
                                 type="button"
                                 aria-pressed={useCustomBranding === custom}
+                                disabled={!brandLoaded}
                                 onClick={() => { setUseCustomBranding(custom); setBrandDirty(true) }}
                                 className={`rounded-[4px] px-2.5 py-1 text-small transition-colors outline-none focus-visible:ring-2 focus-visible:ring-action/30 ${useCustomBranding === custom ? 'bg-surface text-fg shadow-sm' : 'text-fg-muted hover:text-fg'}`}
                             >
@@ -542,7 +581,14 @@ export function ClientSettingsForm({
                     </div>
                 </div>
 
-                {!useCustomBranding ? (
+                {brandLoad === 'failed' ? (
+                    <LoadFailed
+                        compact
+                        what="this client's branding"
+                        reason={`${brandLoadError ?? 'Something went wrong.'} Branding can't be changed until it loads.`}
+                        onRetry={() => setBrandAttempt((n) => n + 1)}
+                    />
+                ) : !useCustomBranding ? (
                     <p className="py-2 text-small text-fg-muted">This client uses your firm&apos;s name, logo and colors. Switch to Custom to give it its own.</p>
                 ) : (
                     <PropertyList>
@@ -716,7 +762,7 @@ export function ClientSettingsForm({
                 )}
 
                 <div className="mt-4 flex items-center gap-2">
-                    <Button onClick={() => void handleSaveBrand()} disabled={savingBrand || !brandDirty} variant="greenCta">
+                    <Button onClick={() => void handleSaveBrand()} disabled={savingBrand || !brandLoaded || !brandDirty} variant="greenCta">
                         {savingBrand ? 'Saving…' : 'Save branding'}
                     </Button>
                     {/* With one color, the row's own reset does this. */}

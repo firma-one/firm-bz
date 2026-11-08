@@ -1,9 +1,9 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { ExternalLink, HelpCircle, Info, Lock, Receipt, Rows3 } from 'lucide-react'
+import { AlertCircle, ExternalLink, HelpCircle, Info, Lock, Receipt, Rows3, X } from 'lucide-react'
 import { getUserFirms } from '@/lib/actions/firms'
 import { firmPath } from '@/lib/navigation/firm-paths'
 import { validateCheckoutReturnTo } from '@/lib/billing/checkout-return-path'
@@ -11,7 +11,10 @@ import { upgradeCopy } from '@/lib/billing/upgrade-copy'
 import { BillingPolarExplainInline, BillingRefundPolicyNote, PolarBillingLogo } from '@/components/billing/billing-polar-inline'
 import { CurrentPlanSummary } from '@/components/billing/current-plan-summary'
 import { PolarPlansPicker, type BillingCurrentPlanState } from '@/components/billing/polar-plans-picker'
-import { fetchBillingCurrentPlan } from '@/lib/billing/fetch-billing-current-plan'
+import { loadBillingCurrentPlan } from '@/lib/billing/fetch-billing-current-plan'
+import { CHECKOUT_ERROR_PARAM, checkoutErrorNotice } from '@/lib/billing/checkout-error-param'
+import { failureFrom, failureReason } from '@/lib/files/action-failure'
+import { LoadFailed } from '@/components/ui/load-failed'
 import { shouldShowSandboxUpgradeMarketing } from '@/lib/billing/subscription-display'
 import { PageHeading } from '@/components/ui/page-heading'
 import { Button, buttonVariants } from '@/components/ui/button'
@@ -68,8 +71,15 @@ export function BillingPageClient({
     const [currentPlanLoading, setCurrentPlanLoading] = useState(false)
     /** False until the first fetch for the selected firm finishes (avoids a flash of "unable to load"). */
     const [currentPlanFetchCompleted, setCurrentPlanFetchCompleted] = useState(false)
+    /** Why the plan didn't load. Only shown while no plan is known: a failed refresh keeps the last one. */
+    const [currentPlanError, setCurrentPlanError] = useState<string | null>(null)
+    const [currentPlanAttempt, setCurrentPlanAttempt] = useState(0)
     const [firmManageOk, setFirmManageOk] = useState(false)
     const [firmManageChecked, setFirmManageChecked] = useState(false)
+    /** The permission check itself failed: say so, rather than bouncing off Billing as if refused. */
+    const [firmManageError, setFirmManageError] = useState<string | null>(null)
+    const [firmManageAttempt, setFirmManageAttempt] = useState(0)
+    const checkoutError = searchParams.get(CHECKOUT_ERROR_PARAM)?.trim() || null
     const [skipSubmitting, setSkipSubmitting] = useState(false)
     const [skipMessage, setSkipMessage] = useState<string | null>(null)
 
@@ -111,34 +121,38 @@ export function BillingPageClient({
         }
         setCurrentPlanFetchCompleted(false)
         setCurrentPlanLoading(true)
-        void fetchBillingCurrentPlan(selectedFirm.id)
-            .then((current) => {
-                if (!cancelled) setCurrentPlanState(current)
-            })
-            .catch(() => {
-                if (!cancelled) setCurrentPlanState(null)
-            })
-            .finally(() => {
-                if (!cancelled) {
-                    setCurrentPlanLoading(false)
-                    setCurrentPlanFetchCompleted(true)
-                }
-            })
+        void loadBillingCurrentPlan(selectedFirm.id).then((r) => {
+            if (cancelled) return
+            if (r.ok) {
+                setCurrentPlanState(r.current)
+                setCurrentPlanError(null)
+            } else {
+                setCurrentPlanState(null)
+                setCurrentPlanError(r.error)
+            }
+            setCurrentPlanLoading(false)
+            setCurrentPlanFetchCompleted(true)
+        })
         return () => {
             cancelled = true
         }
-    }, [selectedFirm?.id])
+    }, [selectedFirm?.id, currentPlanAttempt])
 
     useEffect(() => {
         const refresh = () => {
             if (document.visibilityState !== 'visible') return
             const id = selectedFirm?.id
             if (!id) return
-            void fetchBillingCurrentPlan(id)
-                .then(setCurrentPlanState)
-                .catch(() => {
-                    setCurrentPlanState(null)
-                })
+            void loadBillingCurrentPlan(id).then((r) => {
+                if (r.ok) {
+                    setCurrentPlanState(r.current)
+                    setCurrentPlanError(null)
+                    return
+                }
+                // A failed refresh (a laptop waking before the network is back) keeps the last known
+                // plan: reading it as "no plan" would offer Checkout to someone already paying.
+                setCurrentPlanError(r.error)
+            })
         }
         document.addEventListener('visibilitychange', refresh)
         window.addEventListener('focus', refresh)
@@ -182,8 +196,12 @@ export function BillingPageClient({
         }
         let cancelled = false
         setFirmManageChecked(false)
+        setFirmManageError(null)
         fetch(`/api/permissions/firm?firmId=${encodeURIComponent(selectedFirm.id)}`)
-            .then((res) => (res.ok ? res.json() : Promise.reject(new Error('perm'))))
+            .then(async (res) => {
+                if (!res.ok) throw await failureFrom(res)
+                return res.json()
+            })
             .then((data: { canManage?: boolean }) => {
                 if (cancelled) return
                 if (data?.canManage === true) {
@@ -197,24 +215,43 @@ export function BillingPageClient({
                     router.replace(returnPath)
                 }
             })
-            .catch(() => {
+            .catch((e: unknown) => {
                 if (cancelled) return
+                // The check failed, which is not a "no": show why instead of bouncing off Billing.
                 setFirmManageOk(false)
+                setFirmManageError(failureReason(e))
                 setFirmManageChecked(true)
-                if (!isOnboardingSubscribe) {
-                    router.replace(returnPath)
-                }
             })
         return () => {
             cancelled = true
         }
-    }, [loadError, firms.length, selectedFirm?.id, returnPath, router, isOnboardingSubscribe])
+    }, [loadError, firms.length, selectedFirm?.id, returnPath, router, isOnboardingSubscribe, firmManageAttempt])
+
+    const dismissCheckoutError = useCallback(() => {
+        const q = new URLSearchParams(searchParams.toString())
+        q.delete(CHECKOUT_ERROR_PARAM)
+        const tail = q.toString()
+        router.replace(tail ? `${pathname}?${tail}` : pathname, { scroll: false })
+    }, [pathname, router, searchParams])
 
     if (firms.length > 0 && selectedFirm?.id && !firmManageChecked) {
         return (
             <div className="flex min-h-[40vh] items-center justify-center gap-2 text-small text-fg-muted">
                 <LoadingSpinner size="sm" />
                 <span>Loading billing…</span>
+            </div>
+        )
+    }
+
+    if (firms.length > 0 && selectedFirm?.id && firmManageChecked && firmManageError) {
+        return (
+            <div className="relative mx-auto max-w-5xl pb-10">
+                <LoadFailed
+                    className="rounded-card border border-line"
+                    what="billing"
+                    reason={firmManageError}
+                    onRetry={() => setFirmManageAttempt((n) => n + 1)}
+                />
             </div>
         )
     }
@@ -247,13 +284,11 @@ export function BillingPageClient({
         setSkipSubmitting(true)
         try {
             const response = await fetch('/api/billing/skip-upgrade', { method: 'POST' })
-            if (!response.ok) {
-                throw new Error('Failed to skip for now')
-            }
+            if (!response.ok) throw await failureFrom(response)
             setSkipMessage('Saved. We will remind you to upgrade on future sign-ins.')
             router.replace(returnPath)
         } catch (error) {
-            setSkipMessage(error instanceof Error ? error.message : 'Could not save skip preference')
+            setSkipMessage(`Couldn't skip for now · ${failureReason(error)}`)
         } finally {
             setSkipSubmitting(false)
         }
@@ -319,6 +354,22 @@ export function BillingPageClient({
                         {skipMessage}
                     </div>
                 )}
+                {checkoutError ? (
+                    <div className={cn(NOTICE_CLASS, 'items-center')} role="alert">
+                        <AlertCircle className="h-4 w-4 shrink-0 text-danger" strokeWidth={1.75} aria-hidden />
+                        <span className="min-w-0 flex-1 text-fg">{checkoutErrorNotice(checkoutError)}</span>
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="shrink-0"
+                            onClick={dismissCheckoutError}
+                            aria-label="Dismiss"
+                        >
+                            <X className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden />
+                        </Button>
+                    </div>
+                ) : null}
             </div>
 
             {/* Current plan: one card — the billing entity is its first property row rather than a
@@ -336,6 +387,8 @@ export function BillingPageClient({
                         portalReturnPath={portalReturnPath}
                         currentPlanState={currentPlanState}
                         loading={!currentPlanFetchCompleted || currentPlanLoading}
+                        loadError={currentPlanState ? null : currentPlanError}
+                        onRetry={() => setCurrentPlanAttempt((n) => n + 1)}
                         variant="embedded"
                         entity={{
                             kind: 'Firm group',
@@ -366,6 +419,13 @@ export function BillingPageClient({
                         portalReturnPath={portalReturnPath}
                         density="default"
                         currentPlanState={currentPlanState}
+                        currentPlanStatus={
+                            !currentPlanFetchCompleted || currentPlanLoading
+                                ? 'loading'
+                                : !currentPlanState && currentPlanError
+                                  ? 'failed'
+                                  : 'ready'
+                        }
                         fallbackCanManageBilling={firmManageChecked && firmManageOk}
                         blueAccentTrial={false}
                         hideStandaloneFreePlan

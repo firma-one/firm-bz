@@ -18,12 +18,12 @@ export async function POST(
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return NextResponse.json({ error: 'Your session has expired. Sign in again.' }, { status: 401 })
     }
 
     const { content } = await request.json()
     if (!content?.trim()) {
-      return NextResponse.json({ error: 'content is required' }, { status: 400 })
+      return NextResponse.json({ error: 'Write a reply first.' }, { status: 400 })
     }
 
     const ticket = await (prisma as any).customerRequest.findUnique({
@@ -31,11 +31,11 @@ export async function POST(
       select: { id: true, comments: true, userId: true, firmId: true, description: true },
     })
     if (!ticket) {
-      return NextResponse.json({ error: 'Ticket not found' }, { status: 404 })
+      return NextResponse.json({ error: 'This request no longer exists.' }, { status: 404 })
     }
 
     if (!(await canAccessSupportTicket(user, ticket))) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      return NextResponse.json({ error: "You don't have access to this request." }, { status: 403 })
     }
 
     const newComment = {
@@ -71,7 +71,7 @@ export async function POST(
   } catch (error) {
     console.error('Failed to add comment:', error)
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to add comment' },
+      { error: 'Something went wrong on our side. Try again.' },
       { status: 500 }
     )
   }

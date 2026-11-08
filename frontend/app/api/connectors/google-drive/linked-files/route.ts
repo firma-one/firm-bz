@@ -13,11 +13,12 @@ import { safeInngestSend } from '@/lib/inngest/client'
 import { logger } from '@/lib/logger'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 import { GoogleDriveAuthError } from '@/lib/google-drive-connector'
-import { blockIfEngagementFileMutationForbidden } from '@/lib/engagement-access'
+import { blockIfEngagementCompleted, blockIfEngagementFileMutationForbidden } from '@/lib/engagement-access'
 import { resolveEngagementConnector } from '@/lib/connectors/resolve-client-connector'
 import { IndexingInterceptor } from '@/lib/services/indexing-interceptor'
 import { getLock, buildSettingsForDb } from '@/lib/sharing-settings'
 import { StorageFailure, storageFailure } from '@/lib/connectors/storage-failure'
+import { describeNotDone } from '@/lib/files/partial-outcome'
 import { blockedOf } from '@/lib/files/blocked'
 import { descriptionOf } from '@/lib/files/description'
 import { reconcileNativeDescriptions } from '@/lib/files/native-description'
@@ -438,7 +439,9 @@ export async function POST(request: NextRequest) {
                             folderId,
                             listLimit,
                             userEmail,
-                            engagementContext
+                            engagementContext,
+                            // A folder that's gone says so, rather than listing as empty (EM-8).
+                            { missingFolder: 'throw' }
                         ),
                     // All PENDING intake folders in this folder (shadow rows for EL/internal)
                     (prisma.engagementDocument as any).findMany({
@@ -678,6 +681,8 @@ export async function POST(request: NextRequest) {
                 if (!target || !(await canEditProject(target.client.firmId, target.clientId, bodyEngagementId))) {
                     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
                 }
+                const completed = await blockIfEngagementCompleted(bodyEngagementId)
+                if (completed) return completed
                 const [resolvedConnector, projectForSandbox] = await Promise.all([
                     resolveEngagementConnector(bodyEngagementId),
                     prisma.engagement.findUnique({
@@ -729,14 +734,13 @@ export async function POST(request: NextRequest) {
             let newFileId: string
             if (isGoogleFolderCreate) {
                 const accessToken = await googleDriveConnector.getAccessToken(connector.id)
-                if (!accessToken) {
-                    return NextResponse.json({ error: 'Failed to get access token' }, { status: 500 })
-                }
+                // No token: the connection needs renewing, said in the shared words (P1-36).
+                if (!accessToken) throw storageFailure('reconnect', 'Google Drive')
                 newFileId = (await googleDriveConnector.createDriveFile(accessToken, { name, mimeType: mimeTypeStr, parents: [folderId] })).id
             } else if (oneDriveTemplate) {
                 const contentAdapter = await getContentAdapter(connector.id)
                 if (!contentAdapter) {
-                    return NextResponse.json({ error: 'Connector type not supported' }, { status: 500 })
+                    return NextResponse.json({ error: "This client's storage can't create documents here. Connect Google Drive or OneDrive for this client." }, { status: 400 })
                 }
                 const templateBytes = await readFile(path.join(process.cwd(), 'lib/connectors/templates', oneDriveTemplate.file))
                 const finalName = name.toLowerCase().endsWith(oneDriveTemplate.ext) ? name : `${name}${oneDriveTemplate.ext}`
@@ -1169,35 +1173,63 @@ export async function POST(request: NextRequest) {
             const fileMeta = onOneDriveCross
                 ? await crossPermissionAdapter?.getFileMetadata(connector.id, fileId)
                 : await googleDriveConnector.getFileMetadata(connector.id, fileId)
-            const fileName = fileMeta?.name ?? fileId
+            const crossProvider = onOneDriveCross ? 'OneDrive' : 'Google Drive'
+            // Without its details there's no name to give the copy (it used to take the raw file id,
+            // and a folder was copied as a file): stop and say so (P2-11).
+            if (!fileMeta?.name) {
+                throw new StorageFailure('other', `${crossProvider} wouldn't show this item's details, so nothing was copied. Refresh the list, then try again.`)
+            }
+            const fileName = fileMeta.name
 
             if (action === 'cross-engagement-copy') {
                 const isFolder = fileMeta?.mimeType === 'application/vnd.google-apps.folder'
 
                 if (isFolder) {
-                    // recursiveCopyOneDrive returns only the copied root (Graph's copy is natively
-                    // recursive server-side, unlike Drive's, but doesn't enumerate the full copied
-                    // tree in its response) — nested items aren't individually indexed for OneDrive.
-                    // Documented gap, see plan doc's OPEN gaps list.
-                    const copiedItems = onOneDriveCross
-                        ? await recursiveCopyOneDrive(connector.id, fileId, destFolderId)
-                        : await (async () => {
-                            const accessToken = await googleDriveConnector.getAccessToken(connector.id)
-                            if (!accessToken) throw storageFailure('reconnect', 'Google Drive')
-                            return googleDriveConnector.recursiveCopy(fileId, destFolderId, accessToken)
-                        })()
-                    if (!copiedItems.length) {
-                        throw storageFailure('other', onOneDriveCross ? 'OneDrive' : 'Google Drive', "none of the folder's files could be copied")
+                    if (onOneDriveCross) {
+                        // Graph copies a folder tree in one call, server side, and doesn't list what it
+                        // made: nested items aren't individually indexed for OneDrive (documented gap,
+                        // see the plan doc's OPEN gaps list). It copies whole or throws.
+                        const copiedItems = await recursiveCopyOneDrive(connector.id, fileId, destFolderId)
+                        await IndexingInterceptor.indexBatch(request, {
+                            organizationId: targetProject.client.firmId,
+                            clientId: targetProject.clientId,
+                            projectId: targetEngagementId,
+                            files: copiedItems.map((item) => ({ externalId: item.id, fileName: item.name })),
+                            actorId: user.id,
+                        })
+                        return NextResponse.json({ success: true, count: copiedItems.length, filesCopied: null, filesTotal: null, failed: [] })
                     }
 
-                    await IndexingInterceptor.indexBatch(request, {
-                        organizationId: targetProject.client.firmId,
-                        clientId: targetProject.clientId,
-                        projectId: targetEngagementId,
-                        files: copiedItems.map((item) => ({ externalId: item.id, fileName: item.name })),
-                        actorId: user.id,
+                    const accessToken = await googleDriveConnector.getAccessToken(connector.id)
+                    if (!accessToken) throw storageFailure('reconnect', 'Google Drive')
+                    // What copied is kept and what didn't is named, with Drive's reason (FI-4).
+                    const outcome = await googleDriveConnector.recursiveCopy(fileId, destFolderId, accessToken)
+                    if (outcome.copied.length > 0) {
+                        await IndexingInterceptor.indexBatch(request, {
+                            organizationId: targetProject.client.firmId,
+                            clientId: targetProject.clientId,
+                            projectId: targetEngagementId,
+                            files: outcome.copied.map((item) => ({ externalId: item.id, fileName: item.name })),
+                            actorId: user.id,
+                        })
+                    }
+                    // Nothing copied out of something is an error, with what was refused and why.
+                    if (outcome.filesCopied === 0 && (outcome.filesTotal > 0 || outcome.failed.length > 0)) {
+                        return NextResponse.json({
+                            error: `Nothing in ${fileName} was copied. ${describeNotDone(outcome.failed)}`.trim(),
+                            code: 'nothing_copied',
+                            filesCopied: 0,
+                            filesTotal: outcome.filesTotal,
+                            failed: outcome.failed,
+                        }, { status: 502 })
+                    }
+                    return NextResponse.json({
+                        success: true,
+                        count: outcome.copied.length,
+                        filesCopied: outcome.filesCopied,
+                        filesTotal: outcome.filesTotal,
+                        failed: outcome.failed,
                     })
-                    return NextResponse.json({ success: true, count: copiedItems.length })
                 }
 
                 await assertWithinDocumentCap(targetProject.client.firmId, 1)
@@ -1335,6 +1367,6 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: error.message }, { status: 402 })
         }
         console.error('Linked Files API Error:', error)
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
+        return NextResponse.json({ error: 'Something went wrong on our side. Try again.' }, { status: 500 })
     }
 }

@@ -76,9 +76,12 @@ export function demoFilesIn(folder: DemoFolder): DemoFile[] {
  * of three or more documents that isn't approved keeps its last one Not started (off the Board),
  * and an In progress one has a document waiting on the client, so the tour shows both.
  */
-export function demoDocumentStages(status: DeliverableStatus, files: DemoFile[]): Record<string, DemoDocumentStage> {
+export function demoDocumentStages(status: DeliverableStatus, allFiles: DemoFile[]): Record<string, DemoDocumentStage> {
+    // Internal only documents don't count toward the stage, so they aren't laid out to add up to it.
+    const files = allFiles.filter((file) => !file.private)
     const offBoard = status !== 'approved' && files.length >= 3 ? 1 : 0
-    return Object.fromEntries(files.map((file, i): [string, DemoDocumentStage] => {
+    const internalOnly = allFiles.filter((file) => file.private).map((file): [string, DemoDocumentStage] => [file.id, { stage: 'not_started' }])
+    return Object.fromEntries([...internalOnly, ...files.map((file, i): [string, DemoDocumentStage] => {
         if (i >= files.length - offBoard) return [file.id, { stage: 'not_started' }]
         if (status !== 'in_progress') return [file.id, { stage: status }]
         if (i === 0) return [file.id, { stage: 'in_progress' }]
@@ -87,7 +90,7 @@ export function demoDocumentStages(status: DeliverableStatus, files: DemoFile[])
             stage: 'to_do',
             ...(i === 2 ? { blocked: { reason: 'client', note: 'Waiting on their Q3 sales export', at: '', by: '' } } : {}),
         }]
-    }))
+    })])
 }
 
 /** Every deliverable document's stage in the engagement, by file id (the Files list and the Board agree). */

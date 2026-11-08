@@ -2,6 +2,7 @@ import type { EngagementRole, EngagementStatus } from '@prisma/client'
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getSharedAndAncestorIdsForPersona, privateExternalIds } from '@/lib/engagement-sharing-ids'
+import { userFacing } from '@/lib/actions/action-result'
 
 export type EngagementMemberRow = {
   role: EngagementRole
@@ -35,12 +36,15 @@ export function isExternalEngagementRole(role: EngagementRole | null | undefined
   return role === 'eng_ext_collaborator' || role === 'eng_viewer'
 }
 
-/** After closure: all internal roles (lead + contributors) are read-only for file mutations; leads still manage lifecycle. */
+/**
+ * After closure every role is read-only for file mutations, in Firma and in Drive; leads still manage
+ * lifecycle. Removing a member is what takes their access away altogether.
+ */
 export function isEngagementMemberReadOnlyWhenCompleted(
   status: EngagementStatus | null | undefined,
   role: EngagementRole | null | undefined
 ): boolean {
-  return status === 'COMPLETED' && (role === 'eng_member' || role === 'eng_admin')
+  return status === 'COMPLETED' && !!role
 }
 
 export function isEngagementLeadRole(role: EngagementRole | null | undefined): boolean {
@@ -86,6 +90,27 @@ export async function isHiddenFromMember(
   return (await privateExternalIds(projectId)).has(documentExternalId)
 }
 
+const COMPLETED_MESSAGE = "This engagement is completed, so it's read only."
+const completedRefusal = () => NextResponse.json({ error: COMPLETED_MESSAGE }, { status: 403 })
+
+/**
+ * A completed engagement is read only for everyone: every operation that writes to it refuses, not only
+ * those on its files. Reading, opening and downloading go on, and so does what manages the engagement
+ * itself: its status, which is how it's reopened, and its members, since removing one is how access is
+ * taken away. So does anyone's own state, such as a bookmark or a comment marked read.
+ *
+ * The caller checks who's asking first, so someone with no access isn't told the status. The routes are
+ * listed in lib/engagement-access.completed.test.ts, and a new one must take a side there.
+ */
+export async function blockIfEngagementCompleted(projectId: string): Promise<NextResponse | null> {
+  return (await getEngagementStatus(projectId)) === 'COMPLETED' ? completedRefusal() : null
+}
+
+/** The same, for a server action: its words reach the person through asResult (lib/actions/action-result.ts). */
+export async function assertEngagementNotCompleted(projectId: string): Promise<void> {
+  if ((await getEngagementStatus(projectId)) === 'COMPLETED') throw userFacing(COMPLETED_MESSAGE, 'engagement_completed')
+}
+
 /** Blocks file mutations when user is not an engagement member or is read-only after closure. */
 export async function blockIfEngagementFileMutationForbidden(
   userId: string,
@@ -95,11 +120,5 @@ export async function blockIfEngagementFileMutationForbidden(
   const member = await requireEngagementMember(projectId, userId)
   if (!member) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const status = await getEngagementStatus(projectId)
-  if (isEngagementMemberReadOnlyWhenCompleted(status, member.role)) {
-    return NextResponse.json(
-      { error: 'This engagement is closed. File changes are not allowed for your role.' },
-      { status: 403 }
-    )
-  }
-  return null
+  return isEngagementMemberReadOnlyWhenCompleted(status, member.role) ? completedRefusal() : null
 }

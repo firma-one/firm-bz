@@ -26,7 +26,9 @@ import { FRESH_CHIP_CLASS, useApprovalFeedback } from '@/lib/ui/use-approval-fee
 import { LoadingAnnouncement, ShimmerBar, ShimmerBlock } from '@/components/ui/shimmer'
 import { RelativeDateTime } from '@/components/ui/relative-date-time'
 import { useToast } from '@/components/ui/toast'
+import { failureReason } from '@/lib/files/action-failure'
 import { Hint } from '@/components/ui/tooltip'
+import { LoadFailed } from '@/components/ui/load-failed'
 import {
     Dialog,
     DialogContent,
@@ -55,6 +57,8 @@ export function FirmMembersTab({ firmId, groupSlug, orgSlug, canManage = false }
     const [members, setMembers] = useState<any[]>([])
     const [invitations, setInvitations] = useState<any[]>([])
     const [isLoading, setIsLoading] = useState(true)
+    /** Why the last load failed. Never "No members yet" (with Invite beside it) after a failure. */
+    const [loadError, setLoadError] = useState<string | null>(null)
     const [isInviteModalOpen, setIsInviteModalOpen] = useState(false)
     const [actionLoading, setActionLoading] = useState<string | null>(null)
     const [inviteToRevokeId, setInviteToRevokeId] = useState<string | null>(null)
@@ -65,14 +69,21 @@ export function FirmMembersTab({ firmId, groupSlug, orgSlug, canManage = false }
     const refreshData = async () => {
         setIsLoading(true)
         try {
-            const data = await getFirmMembers(firmId)
+            const result = await getFirmMembers(firmId)
+            if (!result.ok) {
+                setLoadError(result.error)
+                return
+            }
+            const data = result.data
             setMembers([...data.members].sort((a, b) => {
                 if (a.role === b.role) return 0
                 return a.role === 'firm_admin' ? -1 : 1
             }))
             setInvitations(data.invitations)
+            setLoadError(null)
         } catch (error) {
             logger.error('Failed to fetch firm members', error instanceof Error ? error : new Error(String(error)), 'FirmMembersTab', { firmId })
+            setLoadError(failureReason(error))
         } finally {
             setIsLoading(false)
         }
@@ -85,11 +96,16 @@ export function FirmMembersTab({ firmId, groupSlug, orgSlug, canManage = false }
     const handleResendInvite = async (id: string, email: string) => {
         setActionLoading(id)
         try {
-            await resendFirmInvitation(id)
+            const result = await resendFirmInvitation(id)
+            if (!result.ok) {
+                addToast({ type: 'error', title: "Couldn't resend invitation", message: result.error })
+                refreshData()
+                return
+            }
             resendFeedback.confirm({ id, name: email, title: 'Invitation resent' })
             refreshData()
         } catch (e) {
-            addToast({ type: 'error', title: 'Failed to Send', message: 'Could not resend the invitation.' })
+            addToast({ type: 'error', title: "Couldn't resend invitation", message: failureReason(e) })
         } finally {
             setActionLoading(null)
         }
@@ -101,11 +117,15 @@ export function FirmMembersTab({ firmId, groupSlug, orgSlug, canManage = false }
         setInviteToRevokeId(null)
         setActionLoading(id)
         try {
-            await revokeFirmInvitation(id)
-            addToast({ type: 'success', title: 'Invitation Cancelled', message: 'The invitation has been revoked.' })
+            const result = await revokeFirmInvitation(id)
+            if (!result.ok) {
+                addToast({ type: 'error', title: "Couldn't cancel invitation", message: result.error })
+                return
+            }
+            addToast({ type: 'success', title: 'Invitation canceled', message: 'The invitation has been revoked.' })
             refreshData()
         } catch (e) {
-            addToast({ type: 'error', title: 'Error', message: 'Failed to revoke invitation.' })
+            addToast({ type: 'error', title: "Couldn't cancel invitation", message: failureReason(e) })
         } finally {
             setActionLoading(null)
         }
@@ -117,11 +137,16 @@ export function FirmMembersTab({ firmId, groupSlug, orgSlug, canManage = false }
         setMemberToRemove(null)
         setActionLoading(id)
         try {
-            await removeFirmMember(firmId, id)
-            addToast({ type: 'success', title: 'Member Removed', message: 'The firm member has been removed.' })
+            const result = await removeFirmMember(firmId, id)
+            if (!result.ok) {
+                addToast({ type: 'error', title: "Couldn't remove member", message: result.error })
+                return
+            }
+            if (result.warning) addToast({ type: 'warning', title: 'Member removed', message: result.warning })
+            else addToast({ type: 'success', title: 'Member removed', message: 'They no longer have access to the firm.' })
             refreshData()
         } catch (e) {
-            addToast({ type: 'error', title: 'Error', message: 'Failed to remove member.' })
+            addToast({ type: 'error', title: "Couldn't remove member", message: failureReason(e) })
         } finally {
             setActionLoading(null)
         }
@@ -138,7 +163,7 @@ export function FirmMembersTab({ firmId, groupSlug, orgSlug, canManage = false }
                 title={
                     <span className="flex min-w-0 items-center gap-2">
                         <span className="truncate">Members</span>
-                        {!isLoading && total > 0 && <span className="text-h3 font-normal tabular-nums text-fg-subtle">{total}</span>}
+                        {!isLoading && !loadError && total > 0 && <span className="text-h3 font-normal tabular-nums text-fg-subtle">{total}</span>}
                         <AccessLock label="Firm admins only — hidden from other members" className="[&_svg]:h-3.5 [&_svg]:w-3.5" />
                     </span>
                 }
@@ -160,7 +185,13 @@ export function FirmMembersTab({ firmId, groupSlug, orgSlug, canManage = false }
                 }
             />
 
-            {isLoading && total === 0 ? (
+            {loadError && !isLoading && (
+                total === 0
+                    ? <LoadFailed what="members" reason={loadError} onRetry={() => void refreshData()} />
+                    : <p role="alert" className="pb-2 text-small text-danger">Couldn&apos;t refresh members · {loadError}</p>
+            )}
+
+            {loadError && !isLoading && total === 0 ? null : isLoading && total === 0 ? (
                 <div aria-busy="true">
                     <LoadingAnnouncement label="Loading members" />
                     {[0, 1, 2].map((i) => (
@@ -244,7 +275,7 @@ export function FirmMembersTab({ firmId, groupSlug, orgSlug, canManage = false }
                                 <NotionTableCell className="hidden text-fg-subtle md:table-cell">—</NotionTableCell>
                                 <NotionTableCell><Tag color="purple">Firm admin</Tag></NotionTableCell>
                                 <NotionTableCell className="hidden sm:table-cell">
-                                    <StatusPill kind="invitation" status="PENDING" className={resendFeedback.isFresh(inv.id) ? FRESH_CHIP_CLASS : undefined} />
+                                    <StatusPill kind="invitation" status={inv.status ?? 'PENDING'} className={resendFeedback.isFresh(inv.id) ? FRESH_CHIP_CLASS : undefined} />
                                 </NotionTableCell>
                                 <NotionTableActions>
                                     {canManage && (

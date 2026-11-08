@@ -66,6 +66,11 @@ describe('getMyWork — scope', () => {
         })
     })
 
+    it('throws when its lookup fails, so Home says it did not load rather than "All caught up" (EM-2)', async () => {
+        prisma.engagement.findMany.mockRejectedValueOnce(new Error('db down'))
+        await expect(getMyWork(base)).rejects.toThrow('db down')
+    })
+
     it('queries nothing when there are no firms', async () => {
         expect(await getMyWork({ ...base, firms: [] })).toEqual({ engagements: [], needsYou: [], dueSoon: [] })
         expect(prisma.engagement.findMany).not.toHaveBeenCalled()

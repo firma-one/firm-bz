@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button"
 import { Building2 } from "lucide-react"
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
 import { switchFirm } from '@/lib/actions/firms'
+import { failureReason } from '@/lib/files/action-failure'
 import { firmPath } from '@/lib/navigation/firm-paths'
 
 interface FirmSwitchDialogProps {
@@ -47,7 +48,12 @@ export function FirmSwitchDialog({
 
         try {
             // Switch firm and rebuild permissions
-            await switchFirm(targetFirmSlug)
+            const result = await switchFirm(targetFirmSlug)
+            if (!result.ok) {
+                setError(result.error)
+                setIsLoading(false)
+                return
+            }
 
             // Force refresh the Supabase session to get the new JWT with injected metadata
             const { supabase } = await import('@/lib/supabase')
@@ -64,8 +70,8 @@ export function FirmSwitchDialog({
             // Falls back to /d (resolves via resolveDefaultFirmLandingPath) on the rare chance
             // a caller doesn't have groupSlug available — /d/f/... is no longer a valid route.
             window.location.href = groupSlug ? firmPath(groupSlug, targetFirmSlug) : '/d'
-        } catch (err: any) {
-            setError(err.message || 'Failed to switch firm')
+        } catch (err: unknown) {
+            setError(failureReason(err))
             setIsLoading(false)
         } finally {
             switchInProgressRef.current = false

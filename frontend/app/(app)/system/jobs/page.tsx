@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { failureFrom, failureReason } from '@/lib/files/action-failure'
 import { formatDistanceToNow, formatDuration, intervalToDuration } from 'date-fns'
 import { Cpu, Loader2, RotateCw, ChevronDown, ChevronRight, X, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -93,7 +94,8 @@ export default function JobsPage() {
           setResolvedFirm(null)
           return
         }
-        throw new Error(`Jobs API error: ${res.status}`)
+        // The route's reason (Inngest's own answer, or the error), not a bare status code.
+        throw await failureFrom(res)
       }
 
       const data: JobsApiResponse = await res.json()
@@ -104,7 +106,7 @@ export default function JobsPage() {
       setResolvedFirm(data.firm)
       setError(null)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch jobs')
+      setError(`Couldn't load the jobs · ${failureReason(err)}`)
     }
   }
 

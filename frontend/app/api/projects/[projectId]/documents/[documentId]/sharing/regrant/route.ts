@@ -17,6 +17,8 @@ import { isDescendantOfGrantedFolder } from '@/lib/document-sharing-access'
 import { logger } from '@/lib/logger'
 import { resolveEngagementConnectorId } from '@/lib/connectors/resolve-client-connector'
 import { GraphSharingPolicyError } from '@/lib/connectors/adapters/onedrive-permission-adapter'
+import { StorageFailure } from '@/lib/connectors/storage-failure'
+import { BRAND_NAME } from '@/config/brand'
 import {
     connectorAccountEmail,
     createStepTimer,
@@ -33,11 +35,23 @@ import {
  */
 const REUSE_STANDING_GRANT = true
 
+/** Words for a refusal, in one shape: `error` is for the person, `code` for the browser. */
+const refuse = (error: string, code: string, status: number) => NextResponse.json({ error, code }, { status })
+
+const NOT_SHARED = "This document isn't shared with you. Ask the engagement's Lead if you need it."
+
 /**
  * POST — open a document through the person's own grant. `?fresh=1` ("Email me a new access
  * link") skips the reuse and always grants again, with Google's sharing email.
- * Responds `{ success, provider, documentUrl? }`: with documentUrl the client opens it directly;
- * without it (Google, emailed) the client says to check email.
+ * Responds `{ success, provider, emailed, documentUrl? }`: with documentUrl the client opens it
+ * directly; `emailed: true` (Google's sharing email went out) is the only case the client says to
+ * check email. A refusal answers `{ error, code }`, with the reason in `error`.
+ *
+ * Decision 3 (AC-9, AC-10): for a Limited Access contributor or Reviewer, a grant storage refused, a
+ * PDF copy that couldn't be made when the firm shares only that, or a download block storage refused,
+ * refuses the open with the reason. The firm asked for those, so the original file is never handed
+ * over instead. A firm member keeps the fallback (their folder access is the authority) and is sent
+ * to the file directly, never told an email was sent.
  */
 export async function POST(
     request: NextRequest,
@@ -83,7 +97,7 @@ export async function POST(
 
         // This route grants a real Drive permission, so a private file stops here, whatever rows it has.
         if (await isHiddenFromMember(projectId, projectMember.role, document.externalId)) {
-            return NextResponse.json({ error: 'File is not accessible' }, { status: 403 })
+            return refuse(NOT_SHARED, 'not_shared', 403)
         }
 
         let sharingUser = await prisma.engagementDocumentSharingUser.findFirst({
@@ -99,7 +113,7 @@ export async function POST(
             sharingUser?.sharingPermissionStatus === DocumentSharingPermissionStatus.REVOKED &&
             engagementStatus === 'COMPLETED'
         ) {
-            return NextResponse.json({ error: 'This secure access link was revoked.' }, { status: 403 })
+            return refuse("Your access to this document was revoked. Ask the engagement's Lead if you still need it.", 'revoked', 403)
         }
 
         if (!sharingUser) {
@@ -116,7 +130,7 @@ export async function POST(
                 if (!hasDirectShare) {
                     const reachable = await isDescendantOfGrantedFolder(document.id, user.id, projectId)
                     if (!reachable) {
-                        return NextResponse.json({ error: 'File is not accessible' }, { status: 403 })
+                        return refuse(NOT_SHARED, 'not_shared', 403)
                     }
                     inheritedAccess = true
                 }
@@ -148,15 +162,12 @@ export async function POST(
         // See .claude/plans/connector-microsoft-impl.md.
         const connectorId = await resolveEngagementConnectorId(projectId, document.connectorId)
 
-        if (!connectorId) {
-            return NextResponse.json({ error: 'No active storage connection found' }, { status: 500 })
-        }
+        const NO_STORAGE = "This engagement has no storage connected, so the document can't be opened. Ask the engagement's Lead to reconnect it."
+        if (!connectorId) return refuse(NO_STORAGE, 'no_connector', 409)
 
         const permissionAdapter = await getPermissionAdapter(connectorId)
         const contentAdapter = await getContentAdapter(connectorId)
-        if (!permissionAdapter || !contentAdapter) {
-            return NextResponse.json({ error: 'No active storage connection found' }, { status: 500 })
-        }
+        if (!permissionAdapter || !contentAdapter) return refuse(NO_STORAGE, 'no_connector', 409)
 
         const connectorRecord = await prisma.connector.findUnique({
             where: { id: connectorId },
@@ -164,6 +175,7 @@ export async function POST(
         })
         const isOneDriveConnector = connectorRecord?.type === 'ONEDRIVE'
         const provider = isOneDriveConnector ? 'onedrive' : 'google'
+        const providerName = isOneDriveConnector ? 'OneDrive' : 'Google Drive'
         // On the connected account's own domain: a SharePoint tenant member (no guest invite needed)
         // or a Google Workspace account (no PIN needed).
         const accountEmail = connectorAccountEmail(connectorRecord)
@@ -197,6 +209,20 @@ export async function POST(
         // EC step below). On OneDrive that grant is a blocksDownload link, which is view-only.
         const downloadBlocked = isViewer || isExternalMember
 
+        /** Storage wouldn't block downloading for a client: the open is refused, never made without it. */
+        const downloadBlockRefused = (e: unknown) => {
+            logger.error('[regrant] download block refused, open refused', e instanceof Error ? e : new Error(String(e)), provider, {
+                projectId, documentId: document.id, role: projectMember.role,
+            })
+            timingPath = 'download-block-refused'
+            logTimings(provider)
+            return refuse(
+                `Couldn't open this document safely · ${providerName} wouldn't block downloading it.${e instanceof StorageFailure ? ` ${e.message}` : ' Try again in a moment.'}`,
+                'download_block_failed',
+                502,
+            )
+        }
+
         // Check first: a permission that still stands, for this person, with the role they should
         // have, is reused — no revoke, no new grant, no email. PDF-only sharing is left out: its
         // copy is re-exported (and re-watermarked) on every open, so it always takes the full path.
@@ -226,7 +252,7 @@ export async function POST(
                     try {
                         await contentAdapter.setCopyRestricted(connectorId, fileInfo.externalId, true)
                     } catch (e) {
-                        console.error('Failed to set copyRequiresWriterPermission on role change:', e)
+                        return downloadBlockRefused(e)
                     }
                 }
                 reusable = await permissionAdapter.patchFilePermissionRole(connectorId, fileInfo.externalId, standing!.id, role)
@@ -251,7 +277,7 @@ export async function POST(
                 }
                 if (timingPath !== 'role-changed') timingPath = 'reused'
                 logTimings(provider)
-                return NextResponse.json({ success: true, provider, documentUrl })
+                return NextResponse.json({ success: true, provider, emailed: false, documentUrl })
             }
             timingPath = 'error'
         }
@@ -270,7 +296,7 @@ export async function POST(
         }
 
         const fileName = document.fileName || 'a document'
-        const message = `POCKETT SECURE ACCESS\n\nYou have requested to open "${fileName}". For your security, your storage provider requires a one-time email verification. Please click the "Open" button below to receive your one-time passcode and access the document.`
+        const message = `${BRAND_NAME.toUpperCase()} SECURE ACCESS\n\nYou have requested to open "${fileName}". For your security, your storage provider requires a one-time email verification. Please click the "Open" button below to receive your one-time passcode and access the document.`
 
         let targetFileId = fileInfo.externalId
         // Tracks whether setCopyRestricted(true) was requested on the eventual target file, so
@@ -350,11 +376,18 @@ export async function POST(
                 // 6. Grant permission on PDF file
                 targetFileId = pdfDriveId
             } catch (pdfError) {
-                console.error('Failed to process PDF-only sharing:', pdfError)
-                // Drive PDF operations failed — fall through with original file as target.
-                // The grant may fail downstream too; the final !permissionId fallback
-                // will return success so the modal still shows for valid members.
-                targetFileId = fileInfo.externalId
+                // The firm shares only a PDF copy (watermarked, when it asked): the original is never
+                // handed over in its place. Logged for the firm; the Reviewer is told to try again.
+                logger.error('[regrant] PDF copy could not be prepared, open refused', pdfError instanceof Error ? pdfError : new Error(String(pdfError)), provider, {
+                    projectId, documentId: document.id, addWatermark: !!addWatermark,
+                })
+                timingPath = 'pdf-refused'
+                logTimings(provider)
+                return refuse(
+                    `This document couldn't be prepared.${pdfError instanceof StorageFailure ? ` ${pdfError.message}` : ' Try again in a moment.'}`,
+                    'pdf_unavailable',
+                    502,
+                )
             }
         } else {
             // Branch B: Viewer + sharePdfOnly = false -> always block Drive's native download
@@ -363,7 +396,7 @@ export async function POST(
                     await contentAdapter.setCopyRestricted(connectorId, fileInfo.externalId, true)
                     copyRestricted = true
                 } catch (e) {
-                    console.error('Failed to set copyRequiresWriterPermission:', e)
+                    return downloadBlockRefused(e)
                 }
             }
         }
@@ -374,7 +407,7 @@ export async function POST(
                 await contentAdapter.setCopyRestricted(connectorId, fileInfo.externalId, true)
                 copyRestricted = true
             } catch (e) {
-                console.error('Failed to set copyRequiresWriterPermission for EC:', e)
+                return downloadBlockRefused(e)
             }
         }
 
@@ -452,6 +485,8 @@ export async function POST(
         let permissionId: string | null = null
         // Whether Google's sharing email went out (the client then says to check email).
         let emailed = !isOneDriveConnector && !googleSilent
+        /** Why storage refused the grant, when it said. */
+        let grantRefusal: StorageFailure | null = null
         try {
             permissionId = await permissionAdapter.grantFilePermission(connectorId, targetFileId, email, role, {
                 message,
@@ -481,7 +516,9 @@ export async function POST(
                     code: 'external_sharing_blocked',
                 }, { status: 403 })
             }
-            throw grantErr
+            if (!(grantErr instanceof StorageFailure)) throw grantErr
+            grantRefusal = grantErr
+            permissionId = null
         }
 
         if (!permissionId) {
@@ -506,22 +543,42 @@ export async function POST(
         }
 
         if (!permissionId) {
-            // Any active engagement member can proceed — the Drive/Graph grant failed (or no
-            // existing permission was found), but membership is the access authority. Return
-            // success so the modal shows. The actual Graph/Drive failure reason is logged by the
-            // adapter (e.g. onedrive-permission-adapter.ts's grantItemPermission) — this line just
-            // confirms the route hit this fallback path, since it previously returned silently
-            // with no trace at all here.
-            logger.warn('[regrant] grantFilePermission returned no permissionId — falling back to membership-only access', {
-                connectorId, targetFileId, email, isOneDriveConnector,
+            logger.warn('[regrant] grantFilePermission returned no permissionId', {
+                connectorId, targetFileId, email, isOneDriveConnector, role: projectMember.role, reason: grantRefusal?.reason,
             })
+            // A client's access is the grant itself: without it there is nothing to open, so say why.
+            if (isExternalMember) {
+                timingPath = 'grant-refused'
+                logTimings(provider)
+                return refuse(
+                    `Couldn't open this document · ${providerName} refused access for ${email}.${grantRefusal ? ` ${grantRefusal.message}` : " Try again in a moment, or ask the engagement's Lead."}`,
+                    'grant_refused',
+                    grantRefusal?.status ?? 502,
+                )
+            }
+
+            // A firm member: their folder access is the authority, so the file opens directly. No
+            // email was sent, so none is mentioned.
             await prisma.engagementDocumentSharingUser.update({
                 where: { id: sharingUser.id },
                 data: { sharingPermissionStatus: DocumentSharingPermissionStatus.GRANTED, updatedBy: user.id },
             })
+            let directUrl = documentUrl && !isOneDriveConnector ? documentUrl : undefined
+            if (!directUrl) {
+                const meta = await permissionAdapter.getFilesMetadata(connectorId, [targetFileId]).catch(() => [])
+                directUrl = meta[0]?.webViewLink
+            }
+            if (!directUrl && !isOneDriveConnector) directUrl = `https://drive.google.com/open?id=${encodeURIComponent(targetFileId)}`
             timingPath = 'membership-only'
             logTimings(provider)
-            return NextResponse.json({ success: true, provider })
+            if (!directUrl) {
+                return refuse(
+                    `Couldn't open this document · ${providerName} didn't confirm access for ${email}, nor send the document's link. Open it from the engagement's folder in ${providerName}.`,
+                    'grant_refused',
+                    502,
+                )
+            }
+            return NextResponse.json({ success: true, provider, emailed: false, documentUrl: openUrlFor(directUrl) })
         }
 
         await prisma.engagementDocumentSharingUser.update({
@@ -547,15 +604,20 @@ export async function POST(
         timingPath = 'granted'
         logTimings(provider)
         if (!isOneDriveConnector) {
-            if (emailed) return NextResponse.json({ success: true, provider })
+            if (emailed) return NextResponse.json({ success: true, provider, emailed: true })
             // Shared silently: open it here. Drive's own open link stands in if the metadata read failed.
             const googleUrl = documentUrl ?? `https://drive.google.com/open?id=${encodeURIComponent(targetFileId)}`
-            return NextResponse.json({ success: true, provider, documentUrl: openUrlFor(googleUrl) })
+            return NextResponse.json({ success: true, provider, emailed: false, documentUrl: openUrlFor(googleUrl) })
         }
-        return NextResponse.json({ success: true, provider, documentUrl })
+        // OneDrive never emails: without the document's link there's nothing to open, so it's said.
+        if (!documentUrl) {
+            return refuse("Your access is ready, but OneDrive didn't send the document's link. Try again in a moment.", 'no_link', 502)
+        }
+        return NextResponse.json({ success: true, provider, emailed: false, documentUrl })
     } catch (e) {
         logTimings()
         console.error('POST regrant sharing error', e)
-        return NextResponse.json({ error: 'Failed to authenticate editor access' }, { status: 500 })
+        if (e instanceof StorageFailure) return refuse(`Couldn't open this document · ${e.message}`, e.reason, e.status)
+        return refuse("Couldn't open this document. Something went wrong on our side. Try again.", 'internal', 500)
     }
 }

@@ -30,6 +30,8 @@ import {
 import { ClientIcon } from '@/components/ui/client-icon'
 import { Button } from '@/components/ui/button'
 import { EmptyPanel } from '@/components/ui/empty-panel'
+import { LoadFailed } from '@/components/ui/load-failed'
+import { failureFrom, failureReason } from '@/lib/files/action-failure'
 import { formatSmartDateTime } from '@/lib/utils'
 import {
   DropdownMenu,
@@ -545,6 +547,8 @@ export function AuditWithFilters({
   const [projectIdsFilter, setProjectIdsFilter] = useState<string[]>([])
   const [clients, setClients] = useState<FilterOption[]>([])
   const [projects, setProjects] = useState<FilterOption[]>([])
+  /** Why the client and engagement filters didn't load: their menus would otherwise sit empty with no word. */
+  const [filtersError, setFiltersError] = useState<string | null>(null)
   const [clientSearch, setClientSearch] = useState('')
   const [projectSearch, setProjectSearch] = useState('')
   const [clientMenuOpen, setClientMenuOpen] = useState(false)
@@ -602,14 +606,16 @@ export function AuditWithFilters({
     for (const c of clientIdsFilter) url.searchParams.append('clientId', c)
 
     fetch(url.toString())
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error('Failed to load filters'))))
+      .then(async (r) => { if (!r.ok) throw await failureFrom(r); return r.json() })
       .then((data) => {
+        setFiltersError(null)
         setClients(Array.isArray(data.clients) ? data.clients : [])
         setProjects(Array.isArray(data.projects) ? data.projects : [])
       })
-      .catch(() => {
+      .catch((e) => {
         setClients([])
         setProjects([])
+        setFiltersError(failureReason(e))
       })
   }, [showClientProjectFilters, firmIdForFilters, clientIdsFilter])
 
@@ -624,10 +630,7 @@ export function AuditWithFilters({
         projectIds: showClientProjectFilters && projectIdsFilter.length ? projectIdsFilter : undefined,
       })
       const res = await fetch(url)
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(data.error ?? 'Failed to load audit')
-      }
+      if (!res.ok) throw await failureFrom(res)
       return res.json()
     },
     [
@@ -658,7 +661,8 @@ export function AuditWithFilters({
         })
         setNextCursor(data.nextCursor ?? null)
       } catch (e) {
-        setError(e instanceof Error ? e.message : 'Failed to load audit')
+        // The reason; the list shows "Couldn't load activity" over it rather than "No audit events".
+        setError(failureReason(e))
       } finally {
         setLoading(false)
         setLoadingMore(false)
@@ -1054,14 +1058,20 @@ export function AuditWithFilters({
         </div>
       </div>
 
-      {error && (
-        <div className="mb-3 rounded-card bg-tag-red-bg px-3 py-2 text-small text-tag-red-fg">
-          {error}
+      {/* With events on screen, a failed page below them is a line; with none, the list says it. */}
+      {error && events.length > 0 && (
+        <div role="alert" className="mb-3 rounded-card bg-tag-red-bg px-3 py-2 text-small text-tag-red-fg">
+          Couldn&apos;t load activity · {error}
         </div>
+      )}
+      {filtersError && (
+        <p role="status" className="mb-2 text-small text-fg-subtle">
+          Couldn&apos;t load the client and engagement filters · {filtersError}
+        </p>
       )}
 
       <div className="mb-1 flex min-h-[20px] items-center justify-between">
-        {!loading && (
+        {!loading && !(error && events.length === 0) && (
           <span className="text-caption text-fg-subtle">
             <span className="tabular-nums">{visibleEvents.length}</span> event{visibleEvents.length !== 1 ? 's' : ''} · audit history is permanent
             {nextCursor && <span className="text-fg-subtle"> · scroll to load more</span>}
@@ -1075,6 +1085,8 @@ export function AuditWithFilters({
             <Loader2 className="h-4 w-4 animate-spin" />
             Loading audit log…
           </div>
+        ) : error && events.length === 0 ? (
+          <LoadFailed compact what="activity" reason={error} onRetry={() => void load()} />
         ) : events.length === 0 ? (
           <EmptyPanel compact icon={<FolderLock />} title="No audit events" description="Nothing matches these filters yet." />
         ) : (

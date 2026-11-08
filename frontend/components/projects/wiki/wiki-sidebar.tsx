@@ -5,6 +5,8 @@ import { ChevronRight, Plus, Trash2, Pencil, GripVertical } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { WikiPage } from '@/lib/actions/engagement-wiki'
 import { updateWikiPage, reorderPages } from '@/lib/actions/engagement-wiki'
+import { useToast } from '@/components/ui/toast'
+import { failureReason } from '@/lib/files/action-failure'
 import {
     DndContext,
     MouseSensor,
@@ -88,6 +90,7 @@ function SortablePage({ page, selectedId, canEdit, onSelect, onDelete }: {
 }
 
 export function WikiSidebar({ pages, selectedId, canEdit, onSelect, onNewSection, onNewPage, onDelete, onTitleChange, onReorder }: Props) {
+    const { addToast } = useToast()
     const [expanded, setExpanded] = useState<Set<string>>(new Set())
     const [editingId, setEditingId] = useState<string | null>(null)
     const [editingTitle, setEditingTitle] = useState('')
@@ -118,7 +121,18 @@ export function WikiSidebar({ pages, selectedId, canEdit, onSelect, onNewSection
     async function commitEdit() {
         if (!editingId) return
         const title = editingTitle.trim() || 'Untitled Section'
-        await updateWikiPage(editingId, { title })
+        try {
+            const result = await updateWikiPage(editingId, { title })
+            if (!result.ok) {
+                // Stays in edit, with the typed title, so nothing is lost.
+                addToast({ type: 'error', title: "Couldn't rename the section", message: result.error })
+                return
+            }
+            if (result.warning) addToast({ type: 'warning', title: 'Section renamed', message: result.warning })
+        } catch (e) {
+            addToast({ type: 'error', title: "Couldn't rename the section", message: failureReason(e) })
+            return
+        }
         onTitleChange(editingId, title)
         setEditingId(null)
     }
@@ -142,8 +156,16 @@ export function WikiSidebar({ pages, selectedId, canEdit, onSelect, onNewSection
         const reorderedIds = new Set(reordered.map((p) => p.id))
         let i = 0
         const newPages = pages.map((p) => reorderedIds.has(p.id) ? reordered[i++] : p)
+        const before = pages
         onReorder(newPages)
+        // Moved at once; put back, with the reason, if it wasn't saved.
+        const putBack = (message: string) => {
+            onReorder(before)
+            addToast({ type: 'error', title: "Couldn't reorder pages", message })
+        }
         reorderPages(reordered.map((p) => p.id))
+            .then((result) => { if (!result.ok) putBack(result.error) })
+            .catch((e: unknown) => putBack(failureReason(e)))
     }
 
     return (

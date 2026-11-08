@@ -1,8 +1,9 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent, within } from '@testing-library/react'
 
 vi.mock('next/link', () => ({ default: ({ href, children, ...rest }: any) => <a href={href} {...rest}>{children}</a> }))
-vi.mock('next/navigation', () => ({ usePathname: () => '/d/u/home', useSearchParams: () => new URLSearchParams(), useRouter: () => ({ replace: vi.fn(), push: vi.fn() }) }))
+const { refresh } = vi.hoisted(() => ({ refresh: vi.fn() }))
+vi.mock('next/navigation', () => ({ usePathname: () => '/d/u/home', useSearchParams: () => new URLSearchParams(), useRouter: () => ({ replace: vi.fn(), push: vi.fn(), refresh }) }))
 
 import { HomeView } from './home-view'
 import type { MyWork } from '@/lib/home/my-work'
@@ -71,5 +72,44 @@ describe('HomeView', () => {
     it('shows an empty state with no firm to open', () => {
         renderHome({ firms: [], work: { engagements: [], needsYou: [], dueSoon: [] } })
         expect(screen.getByText('Nothing here yet')).toBeTruthy()
+    })
+
+    describe('when part of it did not load (EM-2)', () => {
+        const nothing: MyWork = { engagements: [], needsYou: [], dueSoon: [] }
+
+        it('says the firms did not load, never "Nothing here yet", and Try again reloads', () => {
+            renderHome({ firms: [], work: nothing, failed: { firms: true } })
+            expect(screen.getByText("Couldn't load your Home")).toBeTruthy()
+            expect(screen.queryByText('Nothing here yet')).toBeNull()
+            fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+            expect(refresh).toHaveBeenCalled()
+        })
+
+        it('never reads "All caught up", "Nothing overdue" or "No open engagements" after a failed load', () => {
+            renderHome({ work: nothing, failed: { work: true } })
+            expect(screen.getByText("Couldn't load what needs you.")).toBeTruthy()
+            expect(screen.queryByText(/All caught up/)).toBeNull()
+            expect(screen.getByText("Couldn't load your engagements.")).toBeTruthy()
+            expect(screen.queryByText(/No open engagements/)).toBeNull()
+        })
+
+        it('says the agenda did not load when the calendar failed', async () => {
+            renderHome({ failed: { calendar: true } })
+            expect(await screen.findByText("Couldn't load your agenda.")).toBeTruthy()
+            expect(screen.queryByText('Nothing overdue or on the calendar this week.')).toBeNull()
+        })
+
+        it('keeps what loaded and says some may be missing when the reminders failed', () => {
+            renderHome({ failed: { reminders: true } })
+            expect(screen.getByText('Q3 Report')).toBeTruthy()
+            const needs = screen.getByText('Q3 Report').closest('section')!
+            expect(within(needs).getByText("Couldn't load all of what needs you, so some may be missing.")).toBeTruthy()
+        })
+
+        it('says the bookmarks did not load, never "No bookmarks yet"', () => {
+            renderHome({ failed: { bookmarks: true } })
+            expect(screen.getByText("Couldn't load your bookmarks.")).toBeTruthy()
+            expect(screen.queryByText(/No bookmarks yet/)).toBeNull()
+        })
     })
 })

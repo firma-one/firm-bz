@@ -23,7 +23,7 @@ export async function POST(
     // Auth: Bearer token from Supabase
     const authHeader = request.headers.get('authorization')
     if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return NextResponse.json({ error: 'Your session has expired. Sign in again.' }, { status: 401 })
     }
 
     const token = authHeader.slice(7)
@@ -45,7 +45,7 @@ export async function POST(
       data: { user },
     } = await supabase.auth.getUser(token)
     if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return NextResponse.json({ error: 'Your session has expired. Sign in again.' }, { status: 401 })
     }
 
     const ticket = await (prisma as any).customerRequest.findUnique({
@@ -53,10 +53,10 @@ export async function POST(
       select: { userId: true, firmId: true },
     })
     if (!ticket) {
-      return NextResponse.json({ error: 'Ticket not found' }, { status: 404 })
+      return NextResponse.json({ error: 'This request no longer exists.' }, { status: 404 })
     }
     if (!(await canAccessSupportTicket(user, ticket))) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      return NextResponse.json({ error: "You don't have access to this request." }, { status: 403 })
     }
 
     // Reject clearly-oversized requests before buffering the body — formData() has to read
@@ -66,7 +66,7 @@ export async function POST(
     if (contentLength > MAX_BLOB_ATTACHMENT_BYTES * 2) {
       // *2 for multipart boundary/header overhead; the exact file.size check below is authoritative.
       return NextResponse.json(
-        { error: `File too large (max ${MAX_BLOB_ATTACHMENT_BYTES / 1024 / 1024}MB)` },
+        { error: `Too large · files can be up to ${MAX_BLOB_ATTACHMENT_BYTES / 1024 / 1024} MB.` },
         { status: 413 }
       )
     }
@@ -81,7 +81,7 @@ export async function POST(
 
     if (file.size > MAX_BLOB_ATTACHMENT_BYTES) {
       return NextResponse.json(
-        { error: `File too large (max ${MAX_BLOB_ATTACHMENT_BYTES / 1024 / 1024}MB)` },
+        { error: `Too large · files can be up to ${MAX_BLOB_ATTACHMENT_BYTES / 1024 / 1024} MB.` },
         { status: 400 }
       )
     }
@@ -109,7 +109,7 @@ export async function POST(
   } catch (error) {
     console.error('Failed to upload attachment:', error)
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to upload attachment' },
+      { error: 'Something went wrong on our side. Try again.' },
       { status: 500 }
     )
   }

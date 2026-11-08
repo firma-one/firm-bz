@@ -21,6 +21,8 @@ vi.mock('@/lib/resolve-project-context', () => ({ resolveProjectContext: async (
 vi.mock('@/lib/permission-helpers', () => ({ canViewProject: async () => true }))
 vi.mock('@/lib/file-utils', () => ({ getProjectDocumentContext: async () => ({ id: 'd1', externalId: 'ext1', clientId: 'c' }) }))
 vi.mock('@/lib/engagement-access', () => ({
+    getEngagementStatus: async () => 'ACTIVE',
+    blockIfEngagementCompleted: async () => null,
     requireEngagementMember: async () => ({ role: st.role }),
     visibleDocumentIdsFor: async () => null,
     externalMemberCanAccessDocument: async () => true,

@@ -63,6 +63,6 @@ export async function GET(
     )
   } catch (e) {
     console.error('GET project insights error', e)
-    return NextResponse.json({ error: 'Failed to load insights' }, { status: 500 })
+    return NextResponse.json({ error: "Something went wrong on our side. Try again." }, { status: 500 })
   }
 }

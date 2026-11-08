@@ -6,6 +6,7 @@ import { aiCreditStatus } from '@/lib/ai/credit-cap'
 import { aiLimitResponse } from '@/lib/ai/guarded-client'
 import { resolveGroupId } from '@/lib/billing/billing-group'
 import { runFilesReview } from '@/lib/ai/files-agent/run'
+import { ASSISTANT } from '@/lib/ai/assistant'
 import { canAffordRun, estimateRunCredits } from '@/lib/ai/files-agent/budget'
 import { buildFilesSuggestions } from '@/lib/ai/files-suggestions'
 import { ENGAGEMENT_KINDS } from '@/lib/ai/files-agent/scaffold'
@@ -235,6 +236,8 @@ export async function POST(
                 creditsSpent: result.creditsSpent,
                 dropped: result.dropped,
                 truncated: result.truncated,
+                // A model turn failed part-way: the findings stand, the suggestions are incomplete.
+                modelFailed: result.modelFailed,
                 // Always sent, findings or not: a clean review has to report what it checked.
                 summary: result.summary,
                 summaryMarkdown: result.summaryMarkdown,
@@ -245,6 +248,7 @@ export async function POST(
         const limited = aiLimitResponse(error)
         if (limited) return limited
         logger.error('[files-agent] POST failed:', error as Error)
-        return NextResponse.json({ error: 'Could not review the files' }, { status: 500 })
+        // A review reads and proposes; it changes nothing, so the person can safely try again.
+        return NextResponse.json({ error: `${ASSISTANT.name} couldn't review the files. Nothing was changed. Try again.` }, { status: 500 })
     }
 }

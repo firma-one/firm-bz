@@ -6,11 +6,12 @@ import { ClientIcon } from "@/components/ui/client-icon"
 import { format } from "date-fns"
 import { updateClient, type LwCrmClientStatus } from "@/lib/actions/client"
 import type { HierarchyClient } from "@/lib/actions/hierarchy"
-import { StatusProperty } from "@/components/ui/property-cells"
+import { StatusProperty, alreadySaid } from "@/components/ui/property-cells"
 import { HeaderProp as Prop } from "@/components/ui/header-prop"
 import { Tag } from "@/components/ui/tag"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { useToast } from "@/components/ui/toast"
+import { failureReason } from "@/lib/files/action-failure"
 
 const CLIENT_STATUSES: LwCrmClientStatus[] = ["PROSPECT", "ACTIVE", "ON_HOLD", "PAST"]
 
@@ -44,14 +45,20 @@ export function ClientHeader({
     const websiteHref = website ? (/^https?:\/\//i.test(website) ? website : `https://${website}`) : null
     const engagementCount = client.engagements.length
 
+    // Throws when it didn't save, so the status cell puts the old value back.
     async function saveStatus(next: string) {
+        let result: Awaited<ReturnType<typeof updateClient>>
         try {
-            await updateClient(firmSlug, client.slug, { status: next as LwCrmClientStatus })
-            router.refresh()
+            result = await updateClient(firmSlug, client.slug, { status: next as LwCrmClientStatus })
         } catch (e) {
-            addToast({ type: "error", title: "Couldn't update status", message: e instanceof Error ? e.message : undefined })
-            throw e
+            addToast({ type: "error", title: "Couldn't update status", message: failureReason(e) })
+            throw alreadySaid(e)
         }
+        if (!result.ok) {
+            addToast({ type: "error", title: "Couldn't update status", message: result.error })
+            throw alreadySaid(new Error(result.error))
+        }
+        router.refresh()
     }
 
     return (

@@ -12,7 +12,8 @@ import { firmPath } from '@/lib/navigation/firm-paths'
  * Only firms the caller has a FirmMember row in. A firm whose own pages are closed right now — its
  * subscription is locked (the firm layout's gate) or it is in maintenance (the proxy's gate) — is
  * reported as unavailable instead, so Home never surfaces content the firm's pages would refuse.
- * The pages call this with the user they read themselves; it is not a server action.
+ * The pages call this with the user they read themselves; it is not a server action. A failed
+ * lookup throws.
  */
 
 export type HomeFirm = { id: string; name: string; slug: string; groupSlug: string }
@@ -57,7 +58,9 @@ export async function getHomeFirms(userId: string): Promise<HomeFirms> {
         const byName = (a: HomeFirm, b: HomeFirm) => a.name.localeCompare(b.name)
         return { firms: firms.sort(byName), unavailable: unavailable.sort(byName) }
     } catch (e) {
+        // Thrown, not answered as no firms: Home and the Inbox said "Nothing here yet" and "You're all
+        // caught up" after a failed lookup (EM-1, EM-2). Each caller says it didn't load.
         logger.error('getHomeFirms failed', e as Error, 'Home', { userId })
-        return { firms: [], unavailable: [] }
+        throw e
     }
 }

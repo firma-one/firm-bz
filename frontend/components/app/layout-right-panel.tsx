@@ -187,37 +187,77 @@ export function LayoutRightPanel({
         width: dockedPosition.widthPx,
         maxWidth: dockedPosition.widthPx,
         minWidth: dockedPosition.widthPx,
-        zIndex: 45,
+        zIndex: isLarge ? 100 : 45,
       }
     : undefined
 
   const cycleMeta = CYCLE_META[paneSize]
 
+  // One copy of the content at every size: docked and full screen are the same elements, restyled. Two
+  // copies each fetched their own data and kept their own tab, scroll and draft. Moving one copy between two
+  // parents would reload an iframe and lose its scroll, so nothing moves.
   return (
-    <>
-      {/* Docked panel — visible in 'small' and 'medium' states */}
-      <div
-        ref={dockRef}
-        className={dockedPosition ? '' : 'w-full h-full flex flex-col overflow-hidden min-w-0'}
-        style={
-          dockedPosition
-            ? { ...dockedStyle, display: 'flex', flexDirection: 'column', overflow: 'hidden' }
-            : undefined
-        }
+    <div
+      ref={dockRef}
+      className={dockedPosition ? '' : 'w-full h-full flex flex-col overflow-hidden min-w-0'}
+      style={
+        dockedPosition
+          ? { ...dockedStyle, display: 'flex', flexDirection: 'column', overflow: 'hidden' }
+          : undefined
+      }
+    >
+      <aside
+        className={cn(
+          'flex shrink-0 flex-col overflow-hidden ease-out',
+          isLarge
+            ? cn('fixed inset-0 z-[100] bg-surface-subtle transition-opacity', overlayEntered ? 'opacity-100' : 'opacity-0')
+            : cn('h-full w-full bg-surface transition-all', frame === 'card' && 'rounded-card border border-line shadow-dialog')
+        )}
+        style={{
+          // Full screen has no transform: it would stop `fixed` reaching the viewport.
+          ...(isLarge ? {} : { transform: panelEntered ? 'translateX(0)' : 'translateX(100%)' }),
+          transitionDuration: `${TRANSITION_MS}ms`,
+        }}
       >
-        <aside
-          className={cn(
-            'flex h-full w-full shrink-0 flex-col overflow-hidden bg-surface transition-all ease-out',
-            frame === 'card' && 'rounded-card border border-line shadow-dialog',
-            isLarge
-              ? 'opacity-0 translate-x-1 pointer-events-none'
-              : 'opacity-100 translate-x-0'
-          )}
-          style={{
-            transform: panelEntered ? 'translateX(0)' : 'translateX(100%)',
-            transitionDuration: `${TRANSITION_MS}ms`,
-          }}
-        >
+        {isLarge ? (
+          <header
+            className={cn(
+              'mx-4 mt-4 flex shrink-0 items-center gap-1 rounded-card border border-line bg-surface px-3 transition-transform ease-out',
+              overlayEntered ? 'translate-y-0 opacity-100' : 'translate-y-2 opacity-0'
+            )}
+            style={{ height: 52, transitionDuration: `${TRANSITION_MS}ms` }}
+          >
+            {PANE_HEADER_FIRM_MARK && firm ? (
+              // The sidebar's own mark and name (components/shell/workspace-switcher.tsx), so full screen
+              // reads as the same app.
+              <div className="flex min-w-0 shrink-0 items-center gap-2 px-1 text-ui font-medium text-fg">
+                <FirmMark firm={firm} />
+                <span className="max-w-[200px] truncate">{firm.name}</span>
+              </div>
+            ) : (
+              <div className="flex min-w-0 items-center gap-3">
+                <Logo size="xl" branding={branding ?? undefined} />
+              </div>
+            )}
+            <div className="mx-2 h-6 w-px shrink-0 bg-line" />
+            <PanelTitle icon={icon} iconTooltip={iconTooltip} title={title} subtitle={subtitle} />
+            {PANE_SIZE_SWITCH ? (
+              <PaneSizeSwitch value={paneSize} onChange={setPaneSize} />
+            ) : (
+              // Cycle from large → small
+              <Hint label={CYCLE_META.large.title} side="bottom">
+                <button type="button" className={HEADER_BUTTON} onClick={() => setPaneSize(CYCLE_META.large.next)} aria-label={CYCLE_META.large.title}>
+                  <Minimize2 className="h-4 w-4" />
+                </button>
+              </Hint>
+            )}
+            <Hint label="Close" side="bottom">
+              <button type="button" className={HEADER_BUTTON} onClick={handleClose} aria-label="Close">
+                <X className="h-4 w-4" />
+              </button>
+            </Hint>
+          </header>
+        ) : (
           <header className="flex min-h-11 shrink-0 items-center gap-0.5 border-b border-line bg-surface py-1.5 pl-3 pr-1.5">
             <PanelTitle icon={icon} iconTooltip={iconTooltip} title={title} subtitle={subtitle} />
             {headerActions}
@@ -237,73 +277,21 @@ export function LayoutRightPanel({
               </button>
             </Hint>
           </header>
-          <div className={cn('flex-1 min-h-0 flex flex-col overflow-hidden', !embedContent && 'p-4 overflow-y-auto')}>
-            {children}
-          </div>
-        </aside>
-      </div>
-
-      {/* Full overlay — 'large' state */}
-      <div
-        className={cn(
-          'fixed inset-0 z-[100] flex flex-col bg-surface-subtle transition-opacity ease-out',
-          isLarge ? 'opacity-100' : 'pointer-events-none opacity-0'
         )}
-        style={{
-          visibility: isLarge ? 'visible' : 'hidden',
-          transitionDuration: `${TRANSITION_MS}ms`,
-        }}
-      >
-        <header
-          className={cn(
-            'mx-4 mt-4 flex shrink-0 items-center gap-1 rounded-card border border-line bg-surface px-3 transition-transform ease-out',
-            overlayEntered ? 'translate-y-0 opacity-100' : 'translate-y-2 opacity-0'
-          )}
-          style={{ height: 52, transitionDuration: `${TRANSITION_MS}ms` }}
-        >
-          {PANE_HEADER_FIRM_MARK && firm ? (
-            // The sidebar's own mark and name (components/shell/workspace-switcher.tsx), so full screen
-            // reads as the same app.
-            <div className="flex min-w-0 shrink-0 items-center gap-2 px-1 text-ui font-medium text-fg">
-              <FirmMark firm={firm} />
-              <span className="max-w-[200px] truncate">{firm.name}</span>
-            </div>
-          ) : (
-            <div className="flex min-w-0 items-center gap-3">
-              <Logo size="xl" branding={branding ?? undefined} />
-            </div>
-          )}
-          <div className="mx-2 h-6 w-px shrink-0 bg-line" />
-          <PanelTitle icon={icon} iconTooltip={iconTooltip} title={title} subtitle={subtitle} />
-          {PANE_SIZE_SWITCH ? (
-            <PaneSizeSwitch value={paneSize} onChange={setPaneSize} />
-          ) : (
-            // Cycle from large → small
-            <Hint label={CYCLE_META.large.title} side="bottom">
-              <button type="button" className={HEADER_BUTTON} onClick={() => setPaneSize(CYCLE_META.large.next)} aria-label={CYCLE_META.large.title}>
-                <Minimize2 className="h-4 w-4" />
-              </button>
-            </Hint>
-          )}
-          <Hint label="Close" side="bottom">
-            <button type="button" className={HEADER_BUTTON} onClick={handleClose} aria-label="Close">
-              <X className="h-4 w-4" />
-            </button>
-          </Hint>
-        </header>
 
         <div
           className={cn(
-            'mx-4 mb-4 mt-4 flex min-h-0 flex-1 flex-col overflow-hidden rounded-card border border-line bg-surface transition-all ease-out',
-            overlayEntered ? 'translate-y-0 opacity-100' : 'translate-y-2 opacity-0'
+            'flex min-h-0 flex-1 flex-col overflow-hidden',
+            isLarge && 'mx-4 mb-4 mt-4 rounded-card border border-line bg-surface transition-all ease-out',
+            isLarge && (overlayEntered ? 'translate-y-0 opacity-100' : 'translate-y-2 opacity-0')
           )}
-          style={{ transitionDuration: `${TRANSITION_MS}ms` }}
+          style={isLarge ? { transitionDuration: `${TRANSITION_MS}ms` } : undefined}
         >
-          <div className={cn('flex-1 min-h-0 flex flex-col overflow-hidden', !embedContent && 'p-6 overflow-y-auto')}>
+          <div className={cn('flex-1 min-h-0 flex flex-col overflow-hidden', !embedContent && 'overflow-y-auto', !embedContent && (isLarge ? 'p-6' : 'p-4'))}>
             {children}
           </div>
         </div>
-      </div>
-    </>
+      </aside>
+    </div>
   )
 }

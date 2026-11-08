@@ -6,9 +6,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const { st, applied, moveOpts, approvals } = vi.hoisted(() => ({
     applied: [] as { id: string; next: string; derived: boolean }[],
     moveOpts: [] as { internalOnly?: boolean }[],
-    approvals: { archived: [] as any[], recorded: [] as any[], fail: false },
+    approvals: {
+        archived: [] as any[], recorded: [] as any[], fail: false,
+        warnings: [] as string[], recordFailures: 0, restoreFails: false, undone: [] as string[], restored: [] as any[],
+    },
     st: {
         role: 'eng_admin' as string,
+        completed: false,
         rows: {} as Record<string, any>,
         inDeliverable: true,
         /** What's private to the firm, by external ID. */
@@ -18,6 +22,10 @@ const { st, applied, moveOpts, approvals } = vi.hoisted(() => ({
     },
 }))
 
+vi.mock('@/lib/engagement-access', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('@/lib/engagement-access')>()),
+    blockIfEngagementCompleted: async () => (st.completed ? Response.json({ error: "This engagement is completed, so it's read only." }, { status: 403 }) : null),
+}))
 vi.mock('@/utils/supabase/server', () => ({
     createClient: async () => ({ auth: { getUser: async () => ({ data: { user: { id: 'me' } } }) } }),
 }))
@@ -43,9 +51,14 @@ vi.mock('@/lib/files/approval-archive', () => {
             return {
                 record: { id: 'ap-1', version: { id: '3.0', label: '3.0', savedAt: '2026-10-28T10:00:00Z' }, archived: { fileId: 'copy-1', name: 'd2 · approved Version 3.0' }, approvedAt: 'x', approvedBy: 'me' },
                 lock: { type: 'finalize' },
+                warnings: approvals.warnings,
             }
         },
-        recordApproval: async (id: string, approval: any) => { approvals.recorded.push({ id, approval }) },
+        recordApproval: async (id: string, approval: any) => {
+            if (approvals.recordFailures > 0) { approvals.recordFailures--; throw new Error('connection reset') }
+            approvals.recorded.push({ id, approval })
+        },
+        undoApprovalInStorage: async (_c: string, externalId: string) => { approvals.undone.push(externalId); return true },
     }
 })
 vi.mock('@/lib/connectors/resolve-client-connector', () => ({ resolveEngagementConnectorId: async () => 'conn' }))
@@ -64,6 +77,10 @@ vi.mock('@/lib/prisma', () => ({
                 return Object.values(st.rows).find((r: any) => r.externalId === externalId) ?? null
             },
             findMany: async ({ where }: any) => where.id.in.map((id: string) => st.rows[id]),
+            update: async ({ where, data }: any) => {
+                if (approvals.restoreFails) throw new Error('connection reset')
+                approvals.restored.push({ id: where.id, settings: data.settings })
+            },
         },
         // The deliverable's documents, at any depth
         $queryRawUnsafe: async () => Object.values(st.rows).filter((r: any) => !r.isFolder).map((r: any) => ({ id: r.id })),
@@ -73,6 +90,7 @@ vi.mock('@/lib/prisma', () => ({
 vi.mock('@/lib/engagement-sharing-ids', () => ({ privateExternalIds: async () => st.privateIds }))
 
 import { PATCH } from './route'
+import { BRAND_NAME } from '@/config/brand'
 
 const row = (id: string, settings: object, isFolder = false) => ({
     id, externalId: `ext-${id}`, fileName: id, settings, createdBy: 'u1', isFolder, parentId: isFolder ? 'root' : 'ext-D',
@@ -86,6 +104,7 @@ const patch = (documentId: string, body: object) =>
 
 beforeEach(() => {
     st.role = 'eng_admin'
+    st.completed = false
     st.inDeliverable = true
     st.privateIds = new Set()
     st.members = { eng_ext_collaborator: 1, eng_viewer: 2 }
@@ -94,6 +113,11 @@ beforeEach(() => {
     approvals.archived.length = 0
     approvals.recorded.length = 0
     approvals.fail = false
+    approvals.warnings = []
+    approvals.recordFailures = 0
+    approvals.restoreFails = false
+    approvals.undone.length = 0
+    approvals.restored.length = 0
 })
 
 describe('a private document', () => {
@@ -121,6 +145,18 @@ describe('a private document', () => {
         const res = await patch('D', { status: 'in_review', confirm: true })
         expect(res.status).toBe(200)
         expect(applied.filter((a) => !a.derived).map((a) => a.id)).toEqual(['d1'])
+    })
+})
+
+describe('a completed engagement', () => {
+    it.each(['eng_admin', 'eng_member', 'eng_ext_collaborator', 'eng_viewer'])('refuses %s any move, and says why', async (role) => {
+        st.role = role
+        st.completed = true
+        setRows(deliverable('in_progress'), doc('d1', 'in_progress'))
+        const res = await patch('d1', { status: 'in_review', confirm: true })
+        expect(res.status).toBe(403)
+        expect((await res.json()).error).toBe("This engagement is completed, so it's read only.")
+        expect(applied).toEqual([])
     })
 })
 
@@ -311,5 +347,48 @@ describe('approving a document', () => {
         setRows(deliverable('in_progress', { externalCollaborator: { enabled: true } }), doc('d1', 'in_progress'), doc('d2', 'to_do'))
         await patch('d2', { status: 'in_progress' })
         expect(approvals.archived).toEqual([])
+    })
+
+    // P1-54: what storage refused that doesn't undo the approval is said.
+    it('approves, passing on what storage warned of', async () => {
+        approvedDeliverable()
+        approvals.warnings = ["Approved, but the archive copy couldn't be made read-only in Google Drive. Anyone who can edit the Archive folder can change it."]
+        const res = await patch('d2', { status: 'approved', confirm: true })
+        expect(res.status).toBe(200)
+        expect((await res.json()).warning).toBe(approvals.warnings[0])
+    })
+
+    // P1-55: storage did its part, then Firma's record failed.
+    it('tries the record once more before giving up', async () => {
+        approvedDeliverable()
+        approvals.recordFailures = 1
+        const res = await patch('d2', { status: 'approved', confirm: true })
+        expect(res.status).toBe(200)
+        expect(approvals.recorded).toHaveLength(1)
+        expect(approvals.undone).toEqual([])
+    })
+
+    it('puts the stage back and undoes storage when the record fails, and says so', async () => {
+        approvedDeliverable()
+        approvals.recordFailures = 2
+        const res = await patch('d2', { status: 'approved', confirm: true })
+        expect(res.status).toBe(500)
+        expect(await res.json()).toEqual({
+            error: `Couldn't approve this. ${BRAND_NAME} couldn't save the approval, so its lock and archive copy were undone in storage. Try again.`,
+            code: 'approval_not_recorded',
+        })
+        expect(approvals.restored).toEqual([{ id: 'd2', settings: { activity: { status: 'in_review' } } }])
+        expect(approvals.undone).toEqual(['ext-d2'])
+        // Its deliverable doesn't follow a move that didn't happen.
+        expect(applied.filter((a) => a.derived)).toEqual([])
+    })
+
+    it('says the file is approved in storage only when the stage can\'t be put back either', async () => {
+        approvedDeliverable()
+        approvals.recordFailures = 2
+        approvals.restoreFails = true
+        const res = await patch('d2', { status: 'approved', confirm: true })
+        expect((await res.json()).error).toBe(`Approved in storage, but ${BRAND_NAME} couldn't record it. The file is locked and its approved version was copied to the Archive folder. Try again in a moment.`)
+        expect(approvals.undone).toEqual([])
     })
 })

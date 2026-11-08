@@ -9,6 +9,7 @@ import { StatusPill } from "@/components/ui/status-pill"
 import { StatusIcon } from "@/components/ui/status-icon"
 import { statusOf } from "@/lib/ui/status"
 import { HomeEmptyLine, HomeSection } from "./home-section"
+import { HomeLoadNote } from "./home-load-failed"
 import { cn } from "@/lib/utils"
 import { Hint } from "@/components/ui/tooltip"
 import type { HomeEngagement } from "@/lib/home/my-work"
@@ -68,10 +69,13 @@ const STATUS_ORDER = ["ACTIVE", "PLANNED", "PAUSED", "COMPLETED"]
 export function MyEngagementsList({
     engagements,
     firmNames,
+    loadFailed = false,
 }: {
     engagements: HomeEngagement[]
     /** Firm id → name. Given only when the list spans several firms; adds "By firm". */
     firmNames?: Record<string, string>
+    /** They didn't load: never "No engagements yet" then. */
+    loadFailed?: boolean
 }) {
     const multiFirm = Boolean(firmNames)
     const [showAll, setShowAll] = useState(false)
@@ -110,7 +114,7 @@ export function MyEngagementsList({
         <HomeSection
             icon={<Briefcase />}
             title="My engagements"
-            count={visible.length}
+            count={loadFailed ? undefined : visible.length}
             actions={
                 <>
                     <div className="flex items-center gap-0.5" role="group" aria-label="Show">
@@ -127,7 +131,9 @@ export function MyEngagementsList({
                 </>
             }
         >
-            {visible.length === 0 ? (
+            {loadFailed ? (
+                <HomeLoadNote what="your engagements" />
+            ) : visible.length === 0 ? (
                 <HomeEmptyLine>
                     {showAll ? "No engagements yet." : "No open engagements."} Engagements you're a member of show up here.
                 </HomeEmptyLine>

@@ -11,6 +11,8 @@ import { InviteMemberModal } from './invite-member-modal'
 import { logger } from '@/lib/logger'
 import { PersonaUiRole } from '@/lib/persona-ui-groups'
 import { firmSettingsPath } from '@/lib/navigation/firm-paths'
+import { LoadFailed } from '@/components/ui/load-failed'
+import { failureReason } from '@/lib/files/action-failure'
 
 interface EngagementMembersTabProps {
     projectId: string
@@ -25,21 +27,36 @@ export function EngagementMembersTab({ projectId, groupSlug, orgSlug, canManage 
     const [invitations, setInvitations] = useState<any[]>([])
     const [personas, setPersonas] = useState<any[]>([])
     const [isLoading, setIsLoading] = useState(true)
+    /** Why the last load failed. Never "0 people" after a failure. */
+    const [loadError, setLoadError] = useState<string | null>(null)
     const [isInviteModalOpen, setIsInviteModalOpen] = useState(false)
     const [preselectedUiRole, setPreselectedUiRole] = useState<PersonaUiRole | null>(null)
 
     const refreshData = async () => {
         setIsLoading(true)
+        // The roles load answers no reason of its own (it throws), so it can only say it failed.
+        const personasLoad = getProjectPersonas().catch((error: unknown) => {
+            logger.error("Failed to fetch engagement roles", error instanceof Error ? error : new Error(String(error)), 'ProjectMembers', { projectId })
+            return null
+        })
         try {
-            const [membersData, personasData] = await Promise.all([
-                getProjectMembers(projectId),
-                getProjectPersonas()
-            ])
-            setMembers(membersData.members)
-            setInvitations(membersData.invitations)
+            const membersResult = await getProjectMembers(projectId)
+            const personasData = await personasLoad
+            if (!membersResult.ok) {
+                setLoadError(membersResult.error)
+                return
+            }
+            if (!personasData) {
+                setLoadError("This engagement's roles couldn't be loaded. Try again.")
+                return
+            }
+            setMembers(membersResult.data.members)
+            setInvitations(membersResult.data.invitations)
             setPersonas(personasData)
+            setLoadError(null)
         } catch (error) {
             logger.error("Failed to fetch members data", error instanceof Error ? error : new Error(String(error)), 'ProjectMembers', { projectId })
+            setLoadError(failureReason(error))
         } finally {
             setIsLoading(false)
         }
@@ -56,7 +73,7 @@ export function EngagementMembersTab({ projectId, groupSlug, orgSlug, canManage 
             {/* Toolbar: count and refresh on the left, the one primary action on the right. */}
             <div className="flex h-10 shrink-0 items-center justify-between gap-3">
                 <div className="flex items-center gap-1.5 text-small text-fg-muted">
-                    <span className="tabular-nums">{isLoading ? 'Loading…' : `${total} ${total === 1 ? 'person' : 'people'}`}</span>
+                    <span className="tabular-nums">{isLoading ? 'Loading…' : loadError && total === 0 ? "Couldn't load" : `${total} ${total === 1 ? 'person' : 'people'}`}</span>
                     <button
                         type="button"
                         onClick={refreshData}
@@ -77,7 +94,12 @@ export function EngagementMembersTab({ projectId, groupSlug, orgSlug, canManage 
             </div>
 
             <div className="flex-1 overflow-auto custom-scrollbar">
-                {isLoading ? (
+                {loadError && !isLoading && total > 0 && (
+                    <p role="alert" className="pb-2 text-small text-danger">Couldn&apos;t refresh members · {loadError}</p>
+                )}
+                {loadError && !isLoading && total === 0 ? (
+                    <LoadFailed what="members" reason={loadError} onRetry={() => void refreshData()} />
+                ) : isLoading ? (
                     <div className="flex flex-col" aria-hidden>
                         <div className="h-8 border-b border-line" />
                         {[1, 2, 3, 4, 5].map((i) => (

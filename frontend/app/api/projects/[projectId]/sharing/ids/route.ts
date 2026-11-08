@@ -71,6 +71,7 @@ export async function GET(
     })
   } catch (e) {
     console.error('GET sharing ids error', e)
-    return NextResponse.json({ error: 'Failed to load shared ids' }, { status: 500 })
+    // Read by the Files list, which keeps the marks it had and says so (P1-45).
+    return NextResponse.json({ error: "Couldn't load which files are shared. Something went wrong on our side. Try again." }, { status: 500 })
   }
 }

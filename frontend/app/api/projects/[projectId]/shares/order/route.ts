@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { blockIfEngagementCompleted } from '@/lib/engagement-access'
 import { createClient } from '@/utils/supabase/server'
 import { prisma } from '@/lib/prisma'
 import { BOARD_STAGES, buildSettingsForDb, parseSettingsFromDb, type ActivityStatus } from '@/lib/sharing-settings'
@@ -20,13 +21,16 @@ export async function PUT(
   try {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!user) return NextResponse.json({ error: 'Your session has ended. Sign in again.' }, { status: 401 })
 
     const { projectId } = await params
     const ctx = await resolveProjectContext(projectId)
-    if (!ctx) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
+    if (!ctx) return NextResponse.json({ error: 'This engagement was not found. It may have been deleted.' }, { status: 404 })
     const canManage = await canManageProject(ctx.orgId, ctx.clientId, ctx.projectId)
-    if (!canManage) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    if (!canManage) return NextResponse.json({ error: "You can't reorder this Board." }, { status: 403 })
+
+    const completed = await blockIfEngagementCompleted(projectId)
+    if (completed) return completed
 
     const body = await request.json().catch(() => ({}))
     const updates: { shareId: string; lane: ActivityStatus; orderIndex: number }[] = []
@@ -58,6 +62,6 @@ export async function PUT(
     return NextResponse.json({ ok: true, ...(skipped > 0 ? { skipped } : {}) })
   } catch (e) {
     console.error('PUT shares/order error', e)
-    return NextResponse.json({ error: 'Failed to update order' }, { status: 500 })
+    return NextResponse.json({ error: "Something went wrong on our side. Try again." }, { status: 500 })
   }
 }

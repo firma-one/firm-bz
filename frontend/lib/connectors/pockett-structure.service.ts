@@ -9,6 +9,7 @@ import { logger } from '@/lib/logger'
 import type { IConnectorStorageAdapter } from './types'
 import { METADATA_FILE_NAME, METADATA_FOLDER_NAME } from './types'
 import { generateGroupSlug } from '@/lib/slug-utils'
+import { StorageFailure } from './storage-failure'
 
 export const FOLDERS = {
   GENERAL: { name: 'General', type: 'general' },
@@ -32,6 +33,16 @@ export async function readMetaFromFolder(
   const metaFile = inner.find((f) => f.name === METADATA_FILE_NAME)
   if (!metaFile) return null
   const content = await adapter.readFileContent(connectionId, metaFile.id)
+  // The file is there but couldn't be read (the adapters answer null for a refused read). Reading
+  // that as "no settings" would set the folder up again: a duplicate folder, or meta written over
+  // (P2-35). Stop and say so instead. An empty or unparseable file is still "no settings".
+  if (content == null) {
+    logger.warn('readMetaFromFolder: meta file exists but could not be read', { connectionId, folderId, metaFileId: metaFile.id })
+    throw new StorageFailure(
+      'unreachable',
+      "Couldn't read this folder's settings from storage, so setup stopped rather than make duplicate folders. Try again in a minute."
+    )
+  }
   if (!content) return null
   try {
     return JSON.parse(content) as Record<string, unknown>
@@ -232,6 +243,8 @@ export async function getOrgFolderName(
     logger.warn(`Folder name collision detected: '${orgName}' already exists (not firma-managed). Using slug: '${orgSlug}'`, 'PockettStructure', { parentFolderId, connectionId })
     return { folderName: orgSlug, collision: true }
   } catch (e) {
+    // The storage refused the listing: stop and say so. Guessing the name could reuse someone else's folder.
+    if (e instanceof StorageFailure) throw e
     logger.error(`Error checking folder collision: ${e instanceof Error ? e.message : String(e)}`, e instanceof Error ? e : new Error(String(e)))
     // On error, default to name (safer than forcing slug)
     return { folderName: orgName, collision: false }

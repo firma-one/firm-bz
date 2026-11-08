@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
-import { prisma } from '@/lib/prisma'
 import { logger } from '@/lib/logger'
 import { createPolarClient } from '@/lib/billing/polar-client'
+import { polarFailureWords } from '@/lib/billing/polar-error-reason'
+import { userOwnsCheckout } from '@/lib/billing/checkout-ownership'
 
 function sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms))
@@ -29,7 +30,8 @@ function normalizeCheckoutId(body: unknown, reqUrl: URL): string | null {
  *
  * Resolves the paid order for this checkout via Polar, triggers invoice generation,
  * polls for the invoice PDF URL, returns `{ invoiceUrl }` for the signed-in user who
- * owns the checkout (email match or firm membership when `externalCustomerId` is the firm id).
+ * owns the checkout (email match, or membership of a firm in the checkout's billing group).
+ * Still generating answers 202 with the words in `error` and no `invoiceUrl`.
  */
 export async function POST(request: NextRequest) {
     try {
@@ -38,45 +40,33 @@ export async function POST(request: NextRequest) {
             data: { user },
         } = await supabase.auth.getUser()
         if (!user?.id) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+            return NextResponse.json({ error: 'Your session has ended. Sign in again, then try again.' }, { status: 401 })
         }
 
         const reqUrl = new URL(request.url)
         const body = await request.json().catch(() => ({}))
         const checkoutId = normalizeCheckoutId(body, reqUrl)
         if (!checkoutId) {
-            return NextResponse.json({ error: 'Missing checkoutId' }, { status: 400 })
+            return NextResponse.json({ error: 'No checkout was named, so there is no invoice to find.' }, { status: 400 })
         }
 
         const token = process.env.POLAR_ACCESS_TOKEN?.trim()
         if (!token) {
-            return NextResponse.json({ error: 'Billing is not configured.' }, { status: 503 })
+            return NextResponse.json({ error: "Billing isn't set up on this server yet." }, { status: 503 })
         }
 
         const polar = createPolarClient(token)
 
-        const checkout = await polar.checkouts.get({ id: checkoutId })
-
-        const userEmail = (user.email ?? '').trim().toLowerCase()
-        const checkoutEmail = (checkout.customerEmail ?? '').trim().toLowerCase()
-        const emailMatches = Boolean(userEmail && checkoutEmail && checkoutEmail === userEmail)
-
-        let firmMatches = false
-        const externalId = checkout.externalCustomerId?.trim()
-        if (externalId) {
-            const member = await prisma.firmMember.findFirst({
-                where: {
-                    userId: user.id,
-                    firmId: externalId,
-                    firm: { deletedAt: null },
-                },
-                select: { id: true },
-            })
-            firmMatches = Boolean(member)
+        let checkout: Awaited<ReturnType<typeof polar.checkouts.get>>
+        try {
+            checkout = await polar.checkouts.get({ id: checkoutId })
+        } catch (e) {
+            logger.warn('[checkout-invoice] checkouts.get failed', { checkoutId, message: e instanceof Error ? e.message : String(e) })
+            return NextResponse.json({ error: polarFailureWords(e) }, { status: 502 })
         }
 
-        if (!emailMatches && !firmMatches) {
-            return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+        if (!(await userOwnsCheckout(user, checkout))) {
+            return NextResponse.json({ error: "This checkout isn't yours to see." }, { status: 403 })
         }
 
         const iter = await polar.orders.list({ checkoutId, limit: 25, page: 1 })
@@ -97,7 +87,7 @@ export async function POST(request: NextRequest) {
         if (!paidOrder) {
             return NextResponse.json(
                 {
-                    error: 'Order not found for this checkout yet. Wait a few seconds and try again.',
+                    error: 'Polar is still confirming this payment. Try again in a minute.',
                     code: 'ORDER_PENDING',
                 },
                 { status: 404 }
@@ -130,8 +120,7 @@ export async function POST(request: NextRequest) {
         if (!invoiceUrl) {
             return NextResponse.json(
                 {
-                    error:
-                        'Invoice is still being generated. Try again in a minute, or open Billing & plans from the app.',
+                    error: 'Your invoice is still being generated. Find it in Billing in a minute.',
                     code: 'INVOICE_PENDING',
                 },
                 { status: 202 }
@@ -141,6 +130,6 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ invoiceUrl })
     } catch (error) {
         logger.error('checkout-invoice', error instanceof Error ? error : new Error(String(error)))
-        return NextResponse.json({ error: 'Could not load invoice' }, { status: 500 })
+        return NextResponse.json({ error: "Couldn't get the invoice just now. Find it in Billing in a minute." }, { status: 500 })
     }
 }

@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // The deliverable a document is in, where its discussion happens (2026-10-29).
 
 const { st } = vi.hoisted(() => ({
-    st: { role: 'eng_member' as string | null, visible: null as Set<string> | null },
+    st: { role: 'eng_member' as string | null, visible: null as Set<string> | null, dbFails: false },
 }))
 
 const DELIVERABLE = { id: 'deliv-1', externalId: 'f-deliv', parentId: 'root', docId: 'QSR-9', fileName: 'Market report', settings: { share: { createdAt: '2026-09-01' } } }
@@ -21,7 +21,10 @@ vi.mock('@/lib/engagement-access', () => ({
 vi.mock('@/lib/prisma', () => ({
     prisma: {
         engagementDocument: {
-            findUnique: async ({ where }: any) => (where.id === 'doc-1' ? { parentId: 'f-sub' } : where.id === 'deliv-1' ? { externalId: 'f-deliv' } : null),
+            findUnique: async ({ where }: any) => {
+                if (st.dbFails) throw new Error('Can\'t reach database server at db:5432')
+                return where.id === 'doc-1' ? { parentId: 'f-sub' } : where.id === 'deliv-1' ? { externalId: 'f-deliv' } : null
+            },
             findMany: async () => [DELIVERABLE, SUBFOLDER],
         },
     },
@@ -34,6 +37,7 @@ const get = () => GET({} as never, { params: Promise.resolve({ projectId: 'p', d
 beforeEach(() => {
     st.role = 'eng_member'
     st.visible = null
+    st.dbFails = false
 })
 
 describe('GET the deliverable a document is in', () => {
@@ -51,6 +55,15 @@ describe('GET the deliverable a document is in', () => {
         st.role = 'eng_viewer'
         st.visible = new Set(['something-else'])
         expect((await get()).status).toBe(404)
+    })
+
+    it('answers a database failure in words, so the tab can say it and offer to try again', async () => {
+        st.dbFails = true
+        const res = await get()
+        expect(res.status).toBe(500)
+        const { error } = await res.json()
+        expect(error).toMatch(/^Couldn't find the deliverable this file is in/)
+        expect(error).not.toMatch(/database server/)
     })
 
     it("doesn't name a deliverable the client can't see", async () => {

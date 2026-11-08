@@ -5,6 +5,8 @@ import { logger } from '@/lib/logger'
 import { computeDueReminders } from '@/lib/reminders/reminder-service'
 import { getHomeFirms } from '@/lib/home/home-firms'
 import { getMyWork, type NeedsYouItem } from '@/lib/home/my-work'
+import { asResult, type ActionResult } from '@/lib/actions/action-result'
+import { signedOut } from '@/lib/actions/action-reasons'
 
 /**
  * The Inbox badge and the Inbox's Needs you list (.claude/plans/app-design-refinements.md, section 13).
@@ -17,7 +19,11 @@ import { getMyWork, type NeedsYouItem } from '@/lib/home/my-work'
  */
 export type InboxCounts = { byFirm: Record<string, number>; platform: number }
 
-/** What is waiting on this user across every firm they may open. Server-only: not exported. */
+/**
+ * What is waiting on this user across every firm they may open. Server-only: not exported. A failed
+ * firm or work lookup throws; failed reminders leave their part out, since the Inbox loads them on
+ * their own and says so when they fail.
+ */
 async function needsYouFor(userId: string): Promise<NeedsYouItem[]> {
     const [{ firms }, reminders] = await Promise.all([
         getHomeFirms(userId),
@@ -27,6 +33,7 @@ async function needsYouFor(userId: string): Promise<NeedsYouItem[]> {
     return work.needsYou
 }
 
+/** The badge: a count that can't be read is no badge, never an error on every page. */
 export async function getInboxCounts(): Promise<InboxCounts> {
     const empty: InboxCounts = { byFirm: {}, platform: 0 }
     try {
@@ -45,15 +52,15 @@ export async function getInboxCounts(): Promise<InboxCounts> {
     }
 }
 
-/** The Inbox's Needs you: the signed-in user's, the same items Home lists. */
-export async function getNeedsYou(): Promise<NeedsYouItem[]> {
-    try {
+/**
+ * The Inbox's Needs you: the signed-in user's, the same items Home lists. A failed load answers
+ * `{ ok: false }` (EM-1): it used to answer `[]`, and the Inbox said "You're all caught up".
+ */
+export async function getNeedsYou(): Promise<ActionResult<NeedsYouItem[]>> {
+    return asResult('getNeedsYou', async () => {
         const supabase = await createClient()
         const { data: { user } } = await supabase.auth.getUser()
-        if (!user) return []
-        return await needsYouFor(user.id)
-    } catch (e) {
-        logger.error('getNeedsYou failed', e as Error, 'Inbox')
-        return []
-    }
+        if (!user) throw signedOut()
+        return needsYouFor(user.id)
+    })
 }

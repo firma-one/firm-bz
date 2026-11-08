@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { adminFailure } from '@/app/api/system/admin-error'
 import { createClient } from '@/utils/supabase/server'
 import { isSysAdminUser } from '@/lib/system/user-data-map'
 import { endAllSessions } from '@/lib/auth/sessions'
@@ -23,9 +24,6 @@ export async function DELETE() {
         const ended = await endAllSessions({ exceptUserId: user.id })
         return NextResponse.json({ ended })
     } catch (error) {
-        return NextResponse.json(
-            { error: error instanceof Error ? error.message : "Couldn't end sessions" },
-            { status: 500 },
-        )
+        return adminFailure('end sessions', error)
     }
 }

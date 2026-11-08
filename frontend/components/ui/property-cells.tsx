@@ -10,27 +10,58 @@ import { STAGE_PILL_CLASSES } from "@/lib/ui/status"
 import { cn } from "@/lib/utils"
 import type { StatusKind } from "@/lib/ui/status"
 import { initialsOf } from '@/lib/initials'
+import { useToast } from "@/components/ui/toast"
+import { failureReason } from "@/lib/files/action-failure"
 
 /*
  * Notion-style inline property editors (.claude/plans/ui-ux-overhaul.md, Phase 6): the value shows
  * in place; clicking opens a small popover to change it. Used in Notion tables and in the
  * properties row at the top of an entity page. `disabled` renders the value read-only.
  *
- * onChange may be async — the cell shows a spinner and keeps the old value if it throws.
+ * onChange may be async: the cell shows a spinner and keeps the old value if it throws. A save that
+ * throws is said here, once for every cell (P1-65): a toast titled for the cell (`failTitle`) with the
+ * error's words, or "Couldn't reach …" for a dropped connection. A caller that already told the person
+ * throws `alreadySaid(e)` instead, so it isn't said twice.
  */
 
-function useSaving<T>(onChange: (v: T) => unknown | Promise<unknown>) {
+const SAID = Symbol.for("property-cells.said")
+
+/** Marks an error the caller already showed, so the cell keeps the old value without a second toast. */
+export function alreadySaid(e: unknown): Error {
+    const error = e instanceof Error ? e : new Error(String(e))
+    ;(error as Error & { [SAID]?: true })[SAID] = true
+    return error
+}
+
+const wasSaid = (e: unknown) => e instanceof Error && (e as Error & { [SAID]?: true })[SAID] === true
+
+/** The toasts, when there are any: a cell rendered on its own (a test, a static page) still works. */
+function useToastIfAny() {
+    try {
+        return useToast()
+    } catch {
+        return null
+    }
+}
+
+function useSaving<T>(onChange: (v: T) => unknown | Promise<unknown>, failTitle: string) {
     const [saving, setSaving] = React.useState(false)
+    const toast = useToastIfAny()
+    const addToast = toast?.addToast
     const run = React.useCallback(
         async (v: T) => {
             setSaving(true)
             try {
                 await onChange(v)
+            } catch (e) {
+                if (wasSaid(e)) return
+                if (addToast) addToast({ type: "error", title: failTitle, message: failureReason(e) })
+                else console.error(`[property-cells] ${failTitle}`, e)
             } finally {
                 setSaving(false)
             }
         },
-        [onChange]
+        [onChange, failTitle, addToast]
     )
     return { saving, run }
 }
@@ -57,6 +88,7 @@ export function StatusProperty({
     onChange,
     disabled,
     placeholder = "Empty",
+    failTitle = "Couldn't change the status",
 }: {
     kind: StatusKind
     /** null shows the placeholder, as a document with no stage yet. */
@@ -66,9 +98,11 @@ export function StatusProperty({
     onChange: (next: string) => unknown | Promise<unknown>
     disabled?: boolean
     placeholder?: string
+    /** The toast title when a save throws: the action, "Couldn't change the stage". */
+    failTitle?: string
 }) {
     const [open, setOpen] = React.useState(false)
-    const { saving, run } = useSaving(onChange)
+    const { saving, run } = useSaving(onChange, failTitle)
     // The status language (lib/ui/status.ts). Overdue is shown on the date, not here.
     const pill = value ? <StatusPill kind={kind} status={value} /> : <span className="text-small"><Empty label={placeholder} /></span>
     if (disabled) return <span className={READ_ONLY_PILL_CLASS}>{pill}</span>
@@ -112,6 +146,7 @@ export function DateProperty({
     allowTime = false,
     compact = false,
     chip = false,
+    failTitle = "Couldn't change the date",
 }: {
     /** "yyyy-MM-dd", an ISO date-time, or null. */
     value: string | null
@@ -130,9 +165,11 @@ export function DateProperty({
      * when overdue), so an editable cell reads as a value you can change rather than plain text.
      */
     chip?: boolean
+    /** The toast title when a save throws: the action, "Couldn't set due date". */
+    failTitle?: string
 }) {
     const [open, setOpen] = React.useState(false)
-    const { saving, run } = useSaving(onChange)
+    const { saving, run } = useSaving(onChange, failTitle)
     const parts = readDue(value)
     const shown = parts && !allowTime ? { ...parts, time: null } : parts
     const overdue = highlightOverdue && !!shown && isPastDue(shown)
@@ -202,16 +239,19 @@ export function PersonProperty({
     onChange,
     disabled,
     placeholder = "Empty",
+    failTitle = "Couldn't change the assignee",
 }: {
     value: PersonOption | null
     people: PersonOption[]
     onChange: (next: PersonOption | null) => unknown | Promise<unknown>
     disabled?: boolean
     placeholder?: string
+    /** The toast title when a save throws: the action, "Couldn't change the Lead". */
+    failTitle?: string
 }) {
     const [open, setOpen] = React.useState(false)
     const [query, setQuery] = React.useState("")
-    const { saving, run } = useSaving(onChange)
+    const { saving, run } = useSaving(onChange, failTitle)
     const shown = people.filter((p) => `${p.name} ${p.email ?? ""}`.toLowerCase().includes(query.trim().toLowerCase()))
     const label = value ? (
         <>

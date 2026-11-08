@@ -2,12 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { prisma } from '@/lib/prisma'
 import { getFileInfo } from '@/lib/file-utils'
-import { unlockFileInStorage } from '@/lib/files/storage-lock'
+import { StorageNotSupportedError, unlockFileInStorage, type DowngradedPermission } from '@/lib/files/storage-lock'
+import { resolveEngagementConnectorId } from '@/lib/connectors/resolve-client-connector'
+import { StorageFailure } from '@/lib/connectors/storage-failure'
 import { approvalsOf, approvalVersionName, currentApproval } from '@/lib/files/approvals'
 import { applyStageChange } from '@/lib/files/apply-stage-change'
 import { STAGE_ROW_SELECT, applyDerivedMove, derivedMove } from '@/lib/files/deliverable-stage'
 import { deliverableOf } from '@/lib/files/deliverable-of'
-import { requireEngagementMember, isEngagementLeadRole } from '@/lib/engagement-access'
+import { requireEngagementMember, isEngagementLeadRole, blockIfEngagementCompleted } from '@/lib/engagement-access'
 import { documentStage, getLock } from '@/lib/sharing-settings'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 
@@ -15,6 +17,10 @@ import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
  * PATCH /api/projects/[projectId]/documents/[documentId]/sharing/unlock
  * Restore Drive roles recorded at lock time (Engagement Lead only). An approved document goes back
  * to To do with its approval kept and marked reopened (.claude/plans/document-approval-record.md).
+ *
+ * The lock record is the only list of who was downgraded (AP-2). When storage won't give someone
+ * their role back, or Google keeps the file read-only, the record keeps what's left and the document
+ * stays locked, answered `{ ok: true, unlocked: false, warning }`; Unlock again retries what's left.
  */
 export async function PATCH(
   _request: NextRequest,
@@ -31,6 +37,9 @@ export async function PATCH(
     if (!member || !isEngagementLeadRole(member.role)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
+
+    const completed = await blockIfEngagementCompleted(projectId)
+    if (completed) return completed
 
     const fileInfo = await getFileInfo(projectId, documentIdParam)
     if (!fileInfo)
@@ -54,22 +63,34 @@ export async function PATCH(
       return NextResponse.json({ error: 'Document is not locked' }, { status: 409 })
     }
 
-    let connectorId = existing.connectorId
-    if (!connectorId && fileInfo.organizationId) {
-      const org = await prisma.firm.findUnique({
-        where: { id: fileInfo.organizationId },
-        select: { connectorId: true },
-      })
-      connectorId = org?.connectorId ?? null
-    }
+    // The connector the document is on (its own, else its client's), as the regrant route resolves it.
+    const connectorId = await resolveEngagementConnectorId(projectId, existing.connectorId)
     if (!connectorId) {
-      return NextResponse.json({ error: 'No active storage connection' }, { status: 500 })
+      return NextResponse.json({
+        error: "No storage is connected to this engagement, so edit access can't be given back. Reconnect the storage, then try again.",
+        code: 'no_connector',
+      }, { status: 409 })
     }
 
     // The file itself: the roles recorded at lock time come back, the content is editable again.
-    await unlockFileInStorage(connectorId, fileInfo.externalId, lockData.downgraded ?? [])
+    const outcome = await unlockFileInStorage(connectorId, fileInfo.externalId, (lockData.downgraded ?? []) as DowngradedPermission[])
 
     const prevSettings = (existing.settings as Record<string, unknown>) || {}
+    if (outcome.problem) {
+      // What's left stays on record, so Unlock again can finish it; the document stays locked till then.
+      const storedLock = (prevSettings.lock as Record<string, unknown> | undefined) ?? {}
+      await prisma.engagementDocument.update({
+        where: { id: existing.id },
+        data: { settings: { ...prevSettings, lock: { ...storedLock, downgraded: outcome.notRestored } } as object, updatedAt: new Date() },
+      })
+      return NextResponse.json({
+        ok: true,
+        unlocked: false,
+        warning: `${outcome.problem} It stays locked until then. Try Unlock again.`,
+        notRestored: outcome.notRestored.map((r) => r.email ?? null),
+      })
+    }
+
     const share = (prevSettings.share as Record<string, unknown> | undefined) || {}
     // The approval that stood is reopened, not removed: the decision record keeps it, with when
     // and by whom it was reopened (.claude/plans/document-approval-record.md, section 4).
@@ -117,9 +138,11 @@ export async function PATCH(
       .meta({ fileName: existing.fileName, ...(reopened ? { approvalId: reopened.id, versionName: approvalVersionName(reopened) } : {}) })
       .fireAndForget()
 
-    return NextResponse.json({ ok: true })
+    return NextResponse.json({ ok: true, unlocked: true })
   } catch (e) {
+    if (e instanceof StorageNotSupportedError) return NextResponse.json({ error: e.message, code: 'unsupported' }, { status: 502 })
+    if (e instanceof StorageFailure) return NextResponse.json({ error: `Couldn't unlock this · ${e.message}`, code: e.reason }, { status: e.status })
     console.error('PATCH sharing/unlock error', e)
-    return NextResponse.json({ error: 'Failed to unlock' }, { status: 500 })
+    return NextResponse.json({ error: "Couldn't unlock this. Something went wrong on our side. Try again." }, { status: 500 })
   }
 }

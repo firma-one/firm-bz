@@ -48,7 +48,7 @@ describe('NewVersionPrompt', () => {
         expect(addToast).toHaveBeenCalledTimes(1)
         expect(addToast.mock.calls[0][0]).toMatchObject({
             type: 'info',
-            title: 'A new version of Firma is available',
+            title: 'A new version of firmä is available',
             message: 'Reload to get the latest. You stay signed in.',
             action: { label: 'Reload' },
         })

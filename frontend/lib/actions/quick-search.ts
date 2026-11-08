@@ -6,6 +6,7 @@ import { logger } from '@/lib/logger'
 import { clientPath, engagementDocFilePath, engagementPath } from '@/lib/navigation/firm-paths'
 import { computeGlobalSearchAccessScope } from '@/lib/services/global-search-access'
 import { getRecentVisits, type RecentVisit } from '@/lib/recents'
+import { asResult, userFacing, type ActionResult } from '@/lib/actions/action-result'
 
 /**
  * Entity search for the New UI ⌘K menu (.claude/plans/ui-ux-overhaul.md, Phase 5).
@@ -35,73 +36,76 @@ async function currentUserId(): Promise<string | null> {
     return user?.id ?? null
 }
 
-export async function quickSearch(query: string, firmSlug: string | null): Promise<QuickResult[]> {
-    try {
-        const q = typeof query === 'string' ? query.trim().slice(0, MAX_QUERY) : ''
-        if (!q) return []
-        const userId = await currentUserId()
-        if (!userId) return []
+/**
+ * A failed search answers its reason, never an empty list: "No results" would tell the person the
+ * engagement or file isn't there (EM-6).
+ */
+export async function quickSearch(query: string, firmSlug: string | null): Promise<ActionResult<QuickResult[]>> {
+    return asResult('quickSearch', () => runQuickSearch(query, firmSlug))
+}
 
-        const contains = { contains: q, mode: 'insensitive' as const }
-        const inMyFirms = { members: { some: { userId } } }
+async function runQuickSearch(query: string, firmSlug: string | null): Promise<QuickResult[]> {
+    const q = typeof query === 'string' ? query.trim().slice(0, MAX_QUERY) : ''
+    if (!q) return []
+    const userId = await currentUserId()
+    if (!userId) throw userFacing('Sign in again to search.', 'signed_out')
 
-        const [engagements, clients, currentFirm] = await Promise.all([
-            prisma.engagement.findMany({
-                where: { isDeleted: false, name: contains, members: { some: { userId } }, client: { firm: inMyFirms } },
-                select: {
-                    id: true, name: true, slug: true,
-                    client: { select: { name: true, slug: true, firm: { select: { id: true, name: true, slug: true, group: { select: { slug: true } } } } } },
-                },
-                orderBy: { updatedAt: 'desc' },
-                take: 8,
-            }),
-            prisma.client.findMany({
-                where: {
-                    name: contains,
-                    firm: inMyFirms,
-                    OR: [
-                        { members: { some: { userId } } },
-                        { engagements: { some: { isDeleted: false, members: { some: { userId } } } } },
-                    ],
-                },
-                select: { id: true, name: true, slug: true, firm: { select: { id: true, name: true, slug: true, group: { select: { slug: true } } } } },
-                orderBy: { name: 'asc' },
-                take: 6,
-            }),
-            firmSlug ? prisma.firm.findUnique({ where: { slug: firmSlug }, select: { id: true, slug: true, group: { select: { slug: true } } } }) : null,
-        ])
+    const contains = { contains: q, mode: 'insensitive' as const }
+    const inMyFirms = { members: { some: { userId } } }
 
-        const results: QuickResult[] = []
-        const otherFirm = (id: string, name: string) => (currentFirm && currentFirm.id !== id ? ` · ${name}` : '')
+    const [engagements, clients, currentFirm] = await Promise.all([
+        prisma.engagement.findMany({
+            where: { isDeleted: false, name: contains, members: { some: { userId } }, client: { firm: inMyFirms } },
+            select: {
+                id: true, name: true, slug: true,
+                client: { select: { name: true, slug: true, firm: { select: { id: true, name: true, slug: true, group: { select: { slug: true } } } } } },
+            },
+            orderBy: { updatedAt: 'desc' },
+            take: 8,
+        }),
+        prisma.client.findMany({
+            where: {
+                name: contains,
+                firm: inMyFirms,
+                OR: [
+                    { members: { some: { userId } } },
+                    { engagements: { some: { isDeleted: false, members: { some: { userId } } } } },
+                ],
+            },
+            select: { id: true, name: true, slug: true, firm: { select: { id: true, name: true, slug: true, group: { select: { slug: true } } } } },
+            orderBy: { name: 'asc' },
+            take: 6,
+        }),
+        firmSlug ? prisma.firm.findUnique({ where: { slug: firmSlug }, select: { id: true, slug: true, group: { select: { slug: true } } } }) : null,
+    ])
 
-        for (const e of engagements) {
-            const f = e.client.firm
-            results.push({
-                id: `engagement:${e.id}`,
-                kind: 'engagement',
-                title: e.name,
-                context: `${e.client.name}${otherFirm(f.id, f.name)}`,
-                href: engagementPath(f.group.slug, f.slug, e.client.slug, e.slug),
-            })
-        }
-        for (const c of clients) {
-            results.push({
-                id: `client:${c.id}`,
-                kind: 'client',
-                title: c.name,
-                context: `Client${otherFirm(c.firm.id, c.firm.name)}`,
-                href: clientPath(c.firm.group.slug, c.firm.slug, c.slug),
-            })
-        }
+    const results: QuickResult[] = []
+    const otherFirm = (id: string, name: string) => (currentFirm && currentFirm.id !== id ? ` · ${name}` : '')
 
-        if (currentFirm && q.length >= 2) {
-            results.push(...(await searchFiles(userId, currentFirm.id, currentFirm.group.slug, currentFirm.slug, q)))
-        }
-        return results
-    } catch (e) {
-        logger.error('quickSearch failed', e as Error, 'QuickSearch')
-        return []
+    for (const e of engagements) {
+        const f = e.client.firm
+        results.push({
+            id: `engagement:${e.id}`,
+            kind: 'engagement',
+            title: e.name,
+            context: `${e.client.name}${otherFirm(f.id, f.name)}`,
+            href: engagementPath(f.group.slug, f.slug, e.client.slug, e.slug),
+        })
     }
+    for (const c of clients) {
+        results.push({
+            id: `client:${c.id}`,
+            kind: 'client',
+            title: c.name,
+            context: `Client${otherFirm(c.firm.id, c.firm.name)}`,
+            href: clientPath(c.firm.group.slug, c.firm.slug, c.slug),
+        })
+    }
+
+    if (currentFirm && q.length >= 2) {
+        results.push(...(await searchFiles(userId, currentFirm.id, currentFirm.group.slug, currentFirm.slug, q)))
+    }
+    return results
 }
 
 async function searchFiles(userId: string, firmId: string, groupSlug: string, firmSlug: string, q: string): Promise<QuickResult[]> {

@@ -6,6 +6,8 @@ import { requireEngagementMember, isExternalEngagementRole } from '@/lib/engagem
 import { resolveEngagementConnectorId } from '@/lib/connectors/resolve-client-connector'
 import { googleDriveConnector } from '@/lib/google-drive-connector'
 import { getContentAdapter } from '@/lib/connectors/registry'
+import { contentFailure, NO_STORAGE_MESSAGE, providerOf } from '@/lib/connectors/content-failure'
+import type { StorageProvider } from '@/lib/connectors/storage-failure'
 
 /**
  * GET /api/projects/[projectId]/documents/[documentId]/versions
@@ -27,6 +29,7 @@ export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ projectId: string; documentId: string }> }
 ) {
+  let provider: StorageProvider = 'Google Drive'
   try {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
@@ -49,9 +52,10 @@ export async function GET(
     }
 
     const connectorId = await resolveEngagementConnectorId(projectId, fileInfo.connectorId)
-    if (!connectorId) return NextResponse.json({ error: 'No active storage connector' }, { status: 500 })
+    if (!connectorId) return NextResponse.json({ error: NO_STORAGE_MESSAGE, code: 'no_storage' }, { status: 409 })
 
     const connector = await prisma.connector.findUnique({ where: { id: connectorId }, select: { type: true } })
+    provider = providerOf(connector?.type)
     if (connector?.type === 'GOOGLE_DRIVE') {
       const revisions = await googleDriveConnector.getRevisions(connectorId, fileInfo.externalId)
       return NextResponse.json({ revisions })
@@ -66,6 +70,9 @@ export async function GET(
     return NextResponse.json({ revisions })
   } catch (e) {
     console.error('versions error', e)
-    return NextResponse.json({ error: 'Failed to load versions' }, { status: 500 })
+    // The storage's reason, for the Versions and Activity tabs to show with Retry (P2-02, P2-10).
+    const failure = contentFailure(e, provider)
+    if (failure) return NextResponse.json({ error: failure.message, code: failure.reason }, { status: failure.status })
+    return NextResponse.json({ error: `${provider} wouldn't list this file's versions. Try again.` }, { status: 502 })
   }
 }

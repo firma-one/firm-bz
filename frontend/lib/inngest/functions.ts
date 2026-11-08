@@ -3,13 +3,16 @@ import { prisma } from "@/lib/prisma";
 import { googleDriveConnector } from "@/lib/google-drive-connector";
 import { isDocumentPrivate } from "@/lib/sharing-settings";
 import { getPermissionAdapter, getMigrationAdapter, getConnectorInstance } from "@/lib/connectors/registry";
-import { markSharesRevoked, revokeSharePermissions, SHARE_TO_REVOKE_SELECT } from "@/lib/connectors/revoke-share-permissions";
-import { setFirmFolderAccess } from "@/lib/connectors/firm-folder-access";
+import { markSharesRevoked, revokeSharePermissions, SHARE_TO_REVOKE_SELECT, type RevokeOutcome, type ShareToRevoke } from "@/lib/connectors/revoke-share-permissions";
+import { revokeMemberFolderAccess, setFirmFolderAccess, type FolderAccessFailure } from "@/lib/connectors/firm-folder-access";
+import { setMemberFileAccess, type FileAccessFailure } from "@/lib/connectors/member-file-access";
+import { StorageFailure } from "@/lib/connectors/storage-failure";
+import { notifyLeadsOfStorageAccess, type StorageAccessProblem } from "@/lib/storage-access-notice";
 import { TRASH_UNDO_WINDOW_SECONDS, wasRestoredFromBin } from "@/lib/connectors/trash-undo";
 import { parseSettingsFromDb } from "@/lib/sharing-settings";
 import { logger } from "@/lib/logger";
 import { DocumentSharingPermissionStatus, Prisma } from "@prisma/client";
-import { grantEngagementDriveFolderAccess } from "@/lib/grant-engagement-drive-folder-access";
+import { engagementFoldersFor, grantEngagementDriveFolderAccess, type EngagementFolderName, type FolderGrantOutcome } from "@/lib/grant-engagement-drive-folder-access";
 import { safeInngestSend } from "./client";
 import { clientPath } from "@/lib/navigation/firm-paths";
 import {
@@ -226,20 +229,23 @@ export const scanAndIndexProject = inngest.createFunction(
             const queue = [...rootFolderIds]
             const visited = new Set<string>()
             const adapter = await getPermissionAdapter(connectorId)
-            if (!adapter) return files
+            // A storage type with no file access can't be indexed: nothing to retry.
+            if (!adapter) {
+                logger.warn('scan-and-index-project: connector has no permission adapter, nothing indexed', 'Inngest', { connectorId, projectId })
+                return files
+            }
 
+            // A read that fails throws, so this step fails and Inngest retries it. Skipping it left the
+            // folder's files missing from search for good, with nothing to say so (P2-38). A folder
+            // that's gone lists as empty on both storages, and doesn't fail the step.
             for (const folderId of rootFolderIds) {
-                try {
-                    const meta = await adapter.getFileMetadata(connectorId, folderId)
-                    if (meta?.name) {
-                        files.push({
-                            externalId: folderId,
-                            fileName: meta.name,
-                            parentId: meta.parents?.[0] ?? null,
-                        })
-                    }
-                } catch {
-                    // skip
+                const meta = await adapter.getFileMetadata(connectorId, folderId)
+                if (meta?.name) {
+                    files.push({
+                        externalId: folderId,
+                        fileName: meta.name,
+                        parentId: meta.parents?.[0] ?? null,
+                    })
                 }
             }
 
@@ -248,17 +254,13 @@ export const scanAndIndexProject = inngest.createFunction(
                 if (visited.has(folderId)) continue
                 visited.add(folderId)
 
-                try {
-                    const children = await adapter.listFiles(connectorId, folderId, 500)
-                    for (const child of children) {
-                        if (!child.id || !child.name) continue
-                        files.push({ externalId: child.id, fileName: child.name, parentId: folderId })
-                        if (child.mimeType === 'application/vnd.google-apps.folder') {
-                            queue.push(child.id)
-                        }
+                const children = await adapter.listFiles(connectorId, folderId, 500)
+                for (const child of children) {
+                    if (!child.id || !child.name) continue
+                    files.push({ externalId: child.id, fileName: child.name, parentId: folderId })
+                    if (child.mimeType === 'application/vnd.google-apps.folder') {
+                        queue.push(child.id)
                     }
-                } catch {
-                    // skip
                 }
             }
 
@@ -469,15 +471,159 @@ export const seedSandboxDeliverables = inngest.createFunction(
 
 
 /**
+ * How long a job waits before trying again what storage refused once: long enough for a rate limit or a
+ * blip to pass, short enough that the Leads hear soon when it didn't.
+ */
+const STORAGE_RETRY_WAIT = "1m";
+
+/** The step tools these helpers use, as Inngest passes them to a function. */
+type JobStep = {
+    run: <T>(id: string, fn: () => Promise<T> | T) => Promise<any>;
+    sleep: (id: string, duration: string) => Promise<unknown>;
+};
+
+/** A sharing row, with what the notice to the Leads names. */
+const SHARE_NOTICE_SELECT = {
+    id: true,
+    userId: true,
+    connectorPermissionId: true,
+    document: { select: { id: true, fileName: true, isFolder: true } },
+} as const;
+
+/** The file permissions still standing on these rows, as problems for the Leads' notice. */
+async function shareProblems(rowIds: string[], reasons: Record<string, string>): Promise<StorageAccessProblem[]> {
+    if (rowIds.length === 0) return [];
+    const rows = await prisma.engagementDocumentSharingUser.findMany({ where: { id: { in: rowIds } }, select: SHARE_NOTICE_SELECT });
+    return rows.map((row) => ({
+        kind: "revoke" as const,
+        userId: row.userId,
+        itemName: row.document?.fileName || "a file",
+        itemType: row.document?.isFolder ? "folder" as const : "file" as const,
+        documentId: row.document?.id ?? null,
+        reason: reasons[row.id] ?? "The storage refused to remove it.",
+        key: row.connectorPermissionId ?? row.id,
+    }));
+}
+
+/**
+ * Takes back the rows' storage permissions and marks them revoked in Firma. What storage refuses is tried
+ * once more after a wait; what still stands keeps its permission id (markSharesRevoked), so a later
+ * revoke retries it, and the engagement's Leads are told what, who and why.
+ */
+async function revokeSharesWithRetry(
+    step: JobStep,
+    engagementId: string,
+    shares: ShareToRevoke[],
+    where: Prisma.EngagementDocumentSharingUserWhereInput,
+): Promise<RevokeOutcome> {
+    const first: RevokeOutcome = await step.run("revoke-permissions", () => revokeSharePermissions(engagementId, shares));
+    await step.run("mark-shares-revoked", () => markSharesRevoked(where, first.failed));
+    if (first.failed.length === 0) return first;
+
+    await step.sleep("wait-before-retrying-revoke", STORAGE_RETRY_WAIT);
+    // Only rows still revoked in Firma: one granted again meanwhile was granted on purpose.
+    const again: ShareToRevoke[] = await step.run("find-shares-to-retry", () => prisma.engagementDocumentSharingUser.findMany({
+        where: {
+            id: { in: first.failed },
+            connectorPermissionId: { not: null },
+            sharingPermissionStatus: DocumentSharingPermissionStatus.REVOKED,
+        },
+        select: SHARE_TO_REVOKE_SELECT,
+    }));
+    if (again.length === 0) return { ...first, failed: [], reasons: {} };
+
+    const second: RevokeOutcome = await step.run("retry-revoke-permissions", () => revokeSharePermissions(engagementId, again));
+    await step.run("mark-retried-shares-revoked", () => markSharesRevoked({ id: { in: again.map((s) => s.id) } }, second.failed));
+    if (second.failed.length > 0) {
+        await step.run("tell-leads-access-stands", async () =>
+            notifyLeadsOfStorageAccess(engagementId, await shareProblems(second.failed, second.reasons)));
+    }
+    return { revoked: first.revoked + second.revoked, failed: second.failed, unreachable: second.unreachable, reasons: second.reasons };
+}
+
+/** A person's address, for the folder calls that work by email. */
+async function emailOfUser(userId: string): Promise<string | null> {
+    const rows = await prisma.$queryRaw<Array<{ email: string | null }>>(
+        Prisma.sql`SELECT email FROM auth.users WHERE id = ${userId}::uuid`
+    );
+    return rows[0]?.email ?? null;
+}
+
+/**
+ * Takes back folder grants a member's role no longer has, once more after a wait for what storage refused,
+ * then tells the Leads what still stands.
+ */
+async function revokeFoldersWithRetry(
+    step: JobStep,
+    engagementId: string,
+    userId: string,
+    folders: EngagementFolderName[],
+): Promise<{ revoked: EngagementFolderName[]; failures: FolderAccessFailure[] }> {
+    const email: string | null = await step.run("find-member-email", () => emailOfUser(userId));
+    if (!email) return { revoked: [], failures: [] };
+
+    const first = await step.run("revoke-folder-access", () => revokeMemberFolderAccess(engagementId, { userId, email }, folders));
+    if (first.failures.length === 0) return first;
+
+    await step.sleep("wait-before-retrying-folders", STORAGE_RETRY_WAIT);
+    const second = await step.run("retry-revoke-folder-access", () =>
+        revokeMemberFolderAccess(engagementId, { userId, email }, first.failures.map((f: FolderAccessFailure) => f.folder)));
+    if (second.failures.length > 0) {
+        await step.run("tell-leads-folder-access-stands", () => notifyLeadsOfStorageAccess(engagementId, second.failures.map((f: FolderAccessFailure) => ({
+            kind: "folder_revoke" as const,
+            userId,
+            itemName: f.folder,
+            itemType: "folder" as const,
+            reason: f.reason,
+            key: f.folderId || f.folder,
+        }))));
+    }
+    return { revoked: [...first.revoked, ...second.revoked], failures: second.failures };
+}
+
+/**
+ * What a member's rows on trashed documents still hold, taken back before the rows go. Nothing can retry
+ * it once the rows are deleted, so what storage refuses is logged with the file and the person, and the
+ * Leads are told: restoring the item in storage would bring that access back with it.
+ */
+async function revokeTrashedDocumentShares(docIds: string[]): Promise<void> {
+    const shares = await prisma.engagementDocumentSharingUser.findMany({
+        where: { projectDocumentId: { in: docIds }, connectorPermissionId: { not: null } },
+        select: {
+            id: true,
+            engagementId: true,
+            connectorPermissionId: true,
+            document: { select: { externalId: true, connectorId: true } },
+        },
+    });
+    const byEngagement = new Map<string, typeof shares>();
+    for (const share of shares) byEngagement.set(share.engagementId, [...(byEngagement.get(share.engagementId) ?? []), share]);
+
+    for (const [engagementId, group] of Array.from(byEngagement.entries())) {
+        const outcome = await revokeSharePermissions(engagementId, group);
+        if (outcome.failed.length === 0) continue;
+        const problems = (await shareProblems(outcome.failed, outcome.reasons))
+            // The documents are about to be deleted: the notice can't link to them.
+            .map((p) => ({ ...p, documentId: null }));
+        logger.warn("Trash cleanup could not take back storage access", {
+            engagementId,
+            stillStanding: problems.map((p) => ({ file: p.itemName, userId: p.userId, reason: p.reason })),
+        });
+        await notifyLeadsOfStorageAccess(engagementId, problems);
+    }
+}
+
+/**
  * Reconciliation for file deletion (V2)
  */
 export const reconcileFileDeletion = inngest.createFunction(
     { id: "reconcile-file-deletion", triggers: [{ event: "file.delete.requested" }], concurrency: SEARCH_INDEX_CONCURRENCY },
     async ({ event, step }) => {
-        const { organizationId, externalId, connectorPermissionId, connectorId: trashedVia, undoable } = event.data
+        const { organizationId, externalId, connectorId: trashedVia, undoable } = event.data
 
         // Moved to the trash from the Files list: wait out the Undo window, and keep everything if
-        // the file came back out of the trash meanwhile.
+        // the file came back out of the trash meanwhile. A check storage couldn't answer fails the
+        // step, and Inngest tries it again later: the records stay until there's an answer.
         if (undoable && trashedVia) {
             await step.sleep("undo-window", `${TRASH_UNDO_WINDOW_SECONDS}s`)
             const restored = await step.run("check-still-in-bin", () => wasRestoredFromBin(trashedVia, externalId))
@@ -496,32 +642,18 @@ export const reconcileFileDeletion = inngest.createFunction(
             })
             if (docs.length === 0) return
 
+            const docIds = docs.map((d) => d.id)
+
+            // Every permission a row still holds, through the connector it was granted on.
+            await revokeTrashedDocumentShares(docIds)
+
+            // Trash system PDF copies (guest sharePdfOnly) — one per doc, if present
             const connectorId = docs[0].connectorId ?? (await prisma.firm.findUnique({
                 where: { id: organizationId },
                 select: { connectorId: true },
             }))?.connectorId
-
-            const docIds = docs.map((d) => d.id)
-
-            // Revoke all outstanding connector permissions for these docs
-            if (connectorId) {
-                const adapter = await getPermissionAdapter(connectorId)
-                if (!adapter) return
-                const sharingUsers = await prisma.engagementDocumentSharingUser.findMany({
-                    where: {
-                        projectDocumentId: { in: docIds },
-                        sharingPermissionStatus: DocumentSharingPermissionStatus.GRANTED,
-                        connectorPermissionId: { not: null },
-                    },
-                    select: { connectorPermissionId: true },
-                })
-                await Promise.allSettled(
-                    sharingUsers
-                        .filter((s) => s.connectorPermissionId)
-                        .map((s) => adapter.revokePermission(connectorId, externalId, s.connectorPermissionId!))
-                )
-
-                // Trash system PDF copies (guest sharePdfOnly) — one per doc, if present
+            const adapter = connectorId ? await getPermissionAdapter(connectorId) : null
+            if (connectorId && adapter) {
                 await Promise.allSettled(
                     docs
                         .map((d) => parseSettingsFromDb(d.settings)?.share?.guest?.options?.sharedPdfDriveId)
@@ -583,29 +715,8 @@ export const reconcileFolderDeletion = inngest.createFunction(
             })
             if (!doc) return
 
-            const connectorId = doc.connectorId ?? (await prisma.firm.findUnique({
-                where: { id: organizationId },
-                select: { connectorId: true },
-            }))?.connectorId
-
-            // Revoke all outstanding connector permissions
-            if (connectorId) {
-                const adapter = await getPermissionAdapter(connectorId)
-                if (!adapter) return
-                const sharingUsers = await prisma.engagementDocumentSharingUser.findMany({
-                    where: {
-                        projectDocumentId: doc.id,
-                        sharingPermissionStatus: DocumentSharingPermissionStatus.GRANTED,
-                        connectorPermissionId: { not: null },
-                    },
-                    select: { connectorPermissionId: true },
-                })
-                await Promise.allSettled(
-                    sharingUsers
-                        .filter((s) => s.connectorPermissionId)
-                        .map((s) => adapter.revokePermission(connectorId, externalId, s.connectorPermissionId!))
-                )
-            }
+            // Every permission a row still holds, through the connector it was granted on.
+            await revokeTrashedDocumentShares([doc.id])
 
             // Delete sharing user records (must happen before document delete to avoid FK violation)
             await prisma.engagementDocumentSharingUser.deleteMany({
@@ -648,13 +759,11 @@ export const revokeProjectSharing = inngest.createFunction(
             });
         });
 
-        const revokeResults = await step.run("revoke-permissions", () => revokeSharePermissions(projectId, shares));
+        const revokeResults: RevokeOutcome = shares.length > 0
+            ? await revokeSharesWithRetry(step, projectId, shares, { engagementId: projectId })
+            : { revoked: 0, failed: [], unreachable: 0, reasons: {} };
 
-        if (shares.length > 0) {
-            await step.run("mark-shares-revoked", () => markSharesRevoked({ engagementId: projectId }, revokeResults.failed));
-        }
-
-        await step.run("downgrade-internal-member-folder-access", () => setFirmFolderAccess(projectId, 'read_only'));
+        const folderAccess = await step.run("downgrade-internal-member-folder-access", () => setFirmFolderAccess(projectId, 'read_only'));
 
         await step.run("clear-share-configs", async () => {
             const documents = await prisma.engagementDocument.findMany({
@@ -688,26 +797,74 @@ export const revokeProjectSharing = inngest.createFunction(
             return { cleared: documents.length };
         });
 
-        return { message: "Revoked project permissions", results: revokeResults, projectId };
+        return { message: "Revoked project permissions", results: revokeResults, folderAccess, projectId };
     }
 );
 
+/** Folder failures as problems for the Leads' notice, for Completed and reopen. */
+function folderAccessProblems(kind: "read_only" | "restore", failures: FolderAccessFailure[]): StorageAccessProblem[] {
+    return failures.map((f) => ({ kind, userId: f.userId, itemName: f.folder, itemType: "folder" as const, reason: f.reason, key: f.folderId }));
+}
+
+function fileAccessProblems(kind: "read_only" | "restore", failures: FileAccessFailure[]): StorageAccessProblem[] {
+    return failures.map((f) => ({ kind, userId: f.userId, itemName: f.fileName, itemType: "file" as const, documentId: f.documentId, reason: f.reason, key: f.permissionId }));
+}
+
 /**
- * An engagement marked Completed is read-only for the firm in Drive too, and reopening it gives write back.
- * What this does for the firm only: clients' access doesn't change with the status.
+ * A status change's access change, tried once more after a wait if storage refused any of it (both
+ * helpers skip what's already right), then reported to the Leads.
+ */
+async function changeAccessWithRetry<F>(
+    step: JobStep,
+    projectId: string,
+    label: string,
+    change: () => Promise<{ changed: number; failed: number; failures: F[] }>,
+    problems: (failures: F[]) => StorageAccessProblem[],
+) {
+    const first = await step.run(label, change);
+    if (first.failed === 0) return first;
+    await step.sleep(`wait-before-retrying-${label}`, STORAGE_RETRY_WAIT);
+    const second = await step.run(`retry-${label}`, change);
+    if (second.failed > 0) {
+        await step.run(`tell-leads-${label}`, () => notifyLeadsOfStorageAccess(projectId, problems(second.failures)));
+    }
+    return second;
+}
+
+/**
+ * An engagement marked Completed is read-only in Drive too, and reopening it gives write back. These two
+ * are the firm's folders; the permissions on the files themselves, for any role, are the pair below.
  */
 export const restrictFirmFoldersOnCompletion = inngest.createFunction(
     { id: "restrict-firm-folders-on-completion", triggers: [{ event: "engagement.completed" }] },
-    async ({ event, step }) => step.run("downgrade-firm-folder-access", () => setFirmFolderAccess(event.data.projectId, 'read_only'))
+    async ({ event, step }) => changeAccessWithRetry(step, event.data.projectId, "downgrade-firm-folder-access",
+        () => setFirmFolderAccess(event.data.projectId, 'read_only'), (f) => folderAccessProblems("read_only", f))
 );
 
 export const restoreFirmFoldersOnReopen = inngest.createFunction(
     { id: "restore-firm-folders-on-reopen", triggers: [{ event: "engagement.reopened" }] },
-    async ({ event, step }) => step.run("restore-firm-folder-access", () => setFirmFolderAccess(event.data.projectId, 'restore'))
+    async ({ event, step }) => changeAccessWithRetry(step, event.data.projectId, "restore-firm-folder-access",
+        () => setFirmFolderAccess(event.data.projectId, 'restore'), (f) => folderAccessProblems("restore", f))
+);
+
+/** The permissions a secure open granted on the files themselves: see setMemberFileAccess. */
+export const restrictMemberFilesOnCompletion = inngest.createFunction(
+    { id: "restrict-member-files-on-completion", triggers: [{ event: "engagement.completed" }] },
+    async ({ event, step }) => changeAccessWithRetry(step, event.data.projectId, "downgrade-member-file-access",
+        () => setMemberFileAccess(event.data.projectId, 'read_only'), (f) => fileAccessProblems("read_only", f)),
+);
+
+export const restoreMemberFilesOnReopen = inngest.createFunction(
+    { id: "restore-member-files-on-reopen", triggers: [{ event: "engagement.reopened" }] },
+    async ({ event, step }) => changeAccessWithRetry(step, event.data.projectId, "restore-member-file-access",
+        () => setMemberFileAccess(event.data.projectId, 'restore'), (f) => fileAccessProblems("restore", f)),
 );
 
 /**
  * Revoke permissions when sharing settings updated (V2)
+ *
+ * The rows were marked revoked when the role was switched off, and kept their permission ids for this
+ * (lib/sync-document-sharing.ts): the id is what's revoked here.
  */
 export const revokeByDisabledPersona = inngest.createFunction(
     { id: "revoke-by-disabled-persona", triggers: [{ event: "sharing.settings.updated" }] },
@@ -722,6 +879,10 @@ export const revokeByDisabledPersona = inngest.createFunction(
 
             if (!doc) return [];
 
+            // Switched back on before this ran, and granted again by the sync: that permission is wanted.
+            const share = (doc.settings as { share?: { guest?: { enabled?: boolean }; externalCollaborator?: { enabled?: boolean } } } | null)?.share;
+            const onNow = { eng_viewer: share?.guest?.enabled === true, eng_ext_collaborator: share?.externalCollaborator?.enabled === true };
+
             const usersForRevocation = [];
             for (const user of doc.sharingUsers) {
                 const projectMember = await prisma.engagementMember.findFirst({
@@ -732,8 +893,11 @@ export const revokeByDisabledPersona = inngest.createFunction(
                 const shouldRevoke =
                     (disabledPersonas.includes('guest') && personaSlug === 'eng_viewer') ||
                     (disabledPersonas.includes('externalCollaborator') && personaSlug === 'eng_ext_collaborator');
+                const grantedAgain = user.sharingPermissionStatus !== DocumentSharingPermissionStatus.REVOKED
+                    && (personaSlug === 'eng_viewer' || personaSlug === 'eng_ext_collaborator')
+                    && onNow[personaSlug];
 
-                if (shouldRevoke && user.connectorPermissionId) {
+                if (shouldRevoke && user.connectorPermissionId && !grantedAgain) {
                     usersForRevocation.push({
                         id: user.id,
                         connectorPermissionId: user.connectorPermissionId,
@@ -746,9 +910,7 @@ export const revokeByDisabledPersona = inngest.createFunction(
 
         if (usersToRevoke.length === 0) return { message: "No users to revoke" };
 
-        const revokeResults = await step.run("revoke-permissions", () => revokeSharePermissions(projectId, usersToRevoke));
-
-        await step.run("cleanup-db", () => markSharesRevoked({ id: { in: usersToRevoke.map((u: { id: string }) => u.id) } }, revokeResults.failed));
+        const revokeResults = await revokeSharesWithRetry(step, projectId, usersToRevoke, { id: { in: usersToRevoke.map((u: { id: string }) => u.id) } });
 
         return { message: "Revoked disabled personas", results: revokeResults };
     }
@@ -756,8 +918,11 @@ export const revokeByDisabledPersona = inngest.createFunction(
 
 /**
  * Revoke document-level Drive permissions when an EC/EV member is removed from a project.
- * Folder-level revocation is handled synchronously in removeMember(); this handles
- * per-document connectorPermissionId entries written by the regrant flow.
+ *
+ * Nothing sends `project.member.removed`: removeMember (lib/actions/members.ts) takes access back itself,
+ * file and folder, before the member's rows go, and reports what storage refused. Its event is
+ * `engagement.member.removed`, which only cleans up reminders. Kept registered, unsent, so an event
+ * already queued under this name still runs.
  */
 export const revokeByRemovedMember = inngest.createFunction(
     { id: "revoke-by-removed-member", triggers: [{ event: "project.member.removed" }] },
@@ -783,51 +948,81 @@ export const revokeByRemovedMember = inngest.createFunction(
 
         if (sharesToRevoke.length === 0) return { message: "No shares to revoke" };
 
-        const revokeResults = await step.run("revoke-drive-permissions", () => revokeSharePermissions(projectId, sharesToRevoke));
+        const revokeResults = await revokeSharesWithRetry(step, projectId, sharesToRevoke, { id: { in: sharesToRevoke.map((s: { id: string }) => s.id) } });
 
-        await step.run("cleanup-db", () => markSharesRevoked({ id: { in: sharesToRevoke.map((s: { id: string }) => s.id) } }, revokeResults.failed));
-
-        return { message: "Revoked for removed member", revokedCount: sharesToRevoke.length };
+        return { message: "Revoked for removed member", revokedCount: revokeResults.revoked, results: revokeResults };
     }
 );
 
 /**
- * Revoke permissions due to persona change (V2)
+ * A role change changes storage access to match the new role.
+ *
+ * Folders: a Lead has General, Confidential and Staging; a Contributor · Full Access, General; a
+ * Contributor · Limited Access or Reviewer, none (they get access file by file). Lowering takes back the
+ * folders the new role doesn't have. Raising is the grant job's (project.member.added).
+ *
+ * Files: a client role's per-file permissions are all taken back when the role changes, as before, and
+ * so are a firm member's when they become a client role: the next secure open grants what the new role
+ * may have.
+ *
+ * Goes by the role they hold when it runs, not only the event's: changed back meanwhile, nothing is taken.
  */
 export const revokeByMemberPersonaChange = inngest.createFunction(
     { id: "revoke-by-member-persona-change", triggers: [{ event: "project.member.persona.updated" }] },
     async ({ event, step }) => {
-        const { projectId, userId, oldPersonaSlug } = event.data;
+        const { projectId, userId, oldPersonaSlug, newPersonaSlug } = event.data;
 
-        const revokablePersonas = ['eng_viewer', 'eng_ext_collaborator'];
-        const shouldRevoke = oldPersonaSlug && revokablePersonas.includes(oldPersonaSlug);
+        const isClientRole = (slug: string | null | undefined) => slug === 'eng_viewer' || slug === 'eng_ext_collaborator';
+        if (!oldPersonaSlug) return { message: "No revocation needed" };
 
-        if (!shouldRevoke) return { message: "No revocation needed" };
-
-        const sharesToRevoke = await step.run("find-shares-to-revoke", async () => {
-            return prisma.engagementDocumentSharingUser.findMany({
-                where: { engagementId: projectId, userId, connectorPermissionId: { not: null } },
-                select: SHARE_TO_REVOKE_SELECT,
-            });
+        const currentRole: string | null = await step.run("find-current-role", async () => {
+            const member = await prisma.engagementMember.findFirst({ where: { engagementId: projectId, userId }, select: { role: true } });
+            return member?.role ?? null;
         });
+        // Removed meanwhile: removeMember took their access back.
+        if (!currentRole) return { message: "No longer a member" };
 
-        if (sharesToRevoke.length === 0) return { message: "No shares found" };
+        // Without the new role in the event, only the client-role file rule applies.
+        const kept = new Set(engagementFoldersFor(currentRole));
+        const lostFolders = newPersonaSlug ? engagementFoldersFor(oldPersonaSlug).filter((f) => !kept.has(f)) : [];
+        const revokeFiles = isClientRole(oldPersonaSlug) || (!!newPersonaSlug && isClientRole(currentRole));
 
-        const revokeResults = await step.run("revoke-permissions", () => revokeSharePermissions(projectId, sharesToRevoke));
+        if (lostFolders.length === 0 && !revokeFiles) return { message: "No revocation needed" };
 
-        await step.run("cleanup-db", () => markSharesRevoked({ id: { in: sharesToRevoke.map((s: { id: string }) => s.id) } }, revokeResults.failed));
+        let fileResults: RevokeOutcome | null = null;
+        if (revokeFiles) {
+            const sharesToRevoke = await step.run("find-shares-to-revoke", async () => {
+                return prisma.engagementDocumentSharingUser.findMany({
+                    where: { engagementId: projectId, userId, connectorPermissionId: { not: null } },
+                    select: SHARE_TO_REVOKE_SELECT,
+                });
+            });
+            if (sharesToRevoke.length > 0) {
+                fileResults = await revokeSharesWithRetry(step, projectId, sharesToRevoke, { id: { in: sharesToRevoke.map((s: { id: string }) => s.id) } });
+            }
+        }
 
-        return { message: "Revoked for persona change", results: revokeResults };
+        const folderResults = lostFolders.length > 0 ? await revokeFoldersWithRetry(step, projectId, userId, lostFolders) : null;
+
+        if (!fileResults && !folderResults) return { message: "No shares found" };
+        return { message: "Revoked for persona change", results: fileResults, folders: folderResults };
     }
 );
 
+/** A document to share with a new client member, as the grant step reads it. */
+type DocToGrant = { id: string; externalId: string | null; fileName: string | null };
+
 /**
  * Grant permissions for new member (V2)
+ *
+ * Folder access for a Lead or Contributor · Full Access, and the documents already shared with a client
+ * role. What storage refuses is tried once more after a wait, then the Leads are told; the job's answer
+ * says what was shared, never `granted: true` for a grant that didn't happen.
  */
 export const grantPermissionsForNewMember = inngest.createFunction(
     { id: "grant-permissions-for-new-member", triggers: [{ event: "project.member.added" }] },
     async ({ event, step }) => {
-        const { projectId, organizationId, userId, email, personaSlug } = event.data;
+        const { projectId, userId, email, personaSlug } = event.data;
 
         const connectorId = await step.run("fetch-connector", async () => {
             const { resolveEngagementConnectorId } = await import('@/lib/connectors/resolve-client-connector')
@@ -836,8 +1031,8 @@ export const grantPermissionsForNewMember = inngest.createFunction(
 
         if (!connectorId) return { message: "No connector" };
 
-        const folderGrant = await step.run("grant-folder-access", async () => {
-            if (!email) return { granted: false, reason: "no_email" };
+        const grantFolders = async (only?: EngagementFolderName[]): Promise<FolderGrantOutcome> => {
+            if (!email) return { granted: [], failed: [], skipped: "no_email" };
             const engagement = await prisma.engagement.findFirst({
                 where: { id: projectId, isDeleted: false },
                 select: {
@@ -847,8 +1042,8 @@ export const grantPermissionsForNewMember = inngest.createFunction(
                     client: { select: { slug: true, name: true } },
                 },
             });
-            if (!engagement?.connectorRootFolderId) return { granted: false, reason: "no_connector_root" };
-            await grantEngagementDriveFolderAccess({
+            if (!engagement?.connectorRootFolderId) return { granted: [], failed: [], skipped: "no_connector_root" };
+            return grantEngagementDriveFolderAccess({
                 connectorId,
                 engagementSlug: engagement.slug,
                 email,
@@ -857,11 +1052,37 @@ export const grantPermissionsForNewMember = inngest.createFunction(
                 clientSlug: engagement.client.slug,
                 clientName: engagement.client.name,
                 projectFolderId: engagement.connectorRootFolderId,
+                only,
             });
-            return { granted: true };
-        });
+        };
 
-        const documentsToGrant = await step.run("find-sharings-to-grant", async () => {
+        let folderGrant: FolderGrantOutcome = await step.run("grant-folder-access", () => grantFolders());
+        if (folderGrant.failed.length > 0) {
+            await step.sleep("wait-before-retrying-folder-grant", STORAGE_RETRY_WAIT);
+            const retried: FolderGrantOutcome = await step.run("retry-folder-access", () =>
+                grantFolders(folderGrant.failed.map((f) => f.folder)));
+            folderGrant = { granted: [...folderGrant.granted, ...retried.granted], failed: retried.failed, skipped: retried.skipped };
+            if (folderGrant.failed.length > 0) {
+                const failed = folderGrant.failed;
+                await step.run("tell-leads-folder-grant", () => notifyLeadsOfStorageAccess(projectId, failed.map((f) => ({
+                    kind: "grant" as const,
+                    userId,
+                    itemName: f.folder,
+                    itemType: "folder" as const,
+                    reason: f.reason,
+                    key: f.folderId,
+                }))));
+            }
+        }
+        // `granted` only when every folder the role has was shared.
+        const folders = {
+            granted: folderGrant.failed.length === 0 && !folderGrant.skipped,
+            folders: folderGrant.granted,
+            failed: folderGrant.failed,
+            ...(folderGrant.skipped ? { reason: folderGrant.skipped } : {}),
+        };
+
+        const documentsToGrant: DocToGrant[] = await step.run("find-sharings-to-grant", async () => {
             const docs = await prisma.engagementDocument.findMany({
                 where: { engagementId: projectId },
                 include: {
@@ -883,46 +1104,67 @@ export const grantPermissionsForNewMember = inngest.createFunction(
                 if (isExternalCollaborator) return ecEnabled;
                 if (isGuest) return guestEnabled;
                 return false;
-            });
+            }).map((doc: { id: string; externalId: string | null; fileName: string | null }) => ({ id: doc.id, externalId: doc.externalId, fileName: doc.fileName }));
         });
 
         if (documentsToGrant.length === 0) {
-            return { message: "Folder access only (no per-document shares)", folderGrant, docShares: 0 };
+            return { message: "Folder access only (no per-document shares)", folderGrant: folders, docShares: 0 };
         }
 
         const role: "editor" | "viewer" = personaSlug === "eng_viewer" ? "viewer" : "editor";
 
-        const grantResults = await step.run("grant-permissions", async () => {
+        const grantDocs = async (docs: DocToGrant[]) => {
             const adapter = await getPermissionAdapter(connectorId)
-            if (!adapter) return { successCount: 0 }
+            if (!adapter) return { successCount: 0, failed: docs.map((d) => ({ ...d, reason: "No storage is connected to this client any more." })) }
             let successCount = 0;
-            for (const doc of documentsToGrant) {
+            const failed: Array<DocToGrant & { reason: string }> = [];
+            for (const doc of docs) {
+                const externalId = doc.externalId;
+                if (!externalId) continue;
                 try {
-                    const externalId = doc.externalId;
-                    if (!externalId) continue;
-
                     const permissionId = await adapter.grantFolderPermission(connectorId, externalId, email, role);
-
-                    if (permissionId) {
-                        await prisma.engagementDocumentSharingUser.create({
-                            data: {
-                                engagementId: projectId,
-                                projectDocumentId: doc.id,
-                                userId,
-                                connectorPermissionId: permissionId,
-                                sharingPermissionStatus: DocumentSharingPermissionStatus.GRANTED,
-                            },
-                        });
-                        successCount++;
+                    if (!permissionId) {
+                        failed.push({ ...doc, reason: "The storage didn't confirm the share." });
+                        continue;
                     }
+                    await prisma.engagementDocumentSharingUser.create({
+                        data: {
+                            engagementId: projectId,
+                            projectDocumentId: doc.id,
+                            userId,
+                            connectorPermissionId: permissionId,
+                            sharingPermissionStatus: DocumentSharingPermissionStatus.GRANTED,
+                        },
+                    });
+                    successCount++;
                 } catch (e) {
                     logger.error("Failed to grant permission in Inngest (V2)", e as Error);
+                    failed.push({ ...doc, reason: e instanceof StorageFailure ? e.message : "Couldn't reach the storage." });
                 }
             }
-            return { successCount };
-        });
+            return { successCount, failed };
+        };
 
-        return { message: "Granted permissions for new member", folderGrant, results: grantResults };
+        let grantResults = await step.run("grant-permissions", () => grantDocs(documentsToGrant));
+        if (grantResults.failed.length > 0) {
+            await step.sleep("wait-before-retrying-document-grants", STORAGE_RETRY_WAIT);
+            const retried = await step.run("retry-grant-permissions", () => grantDocs(grantResults.failed));
+            grantResults = { successCount: grantResults.successCount + retried.successCount, failed: retried.failed };
+            if (grantResults.failed.length > 0) {
+                const failed = grantResults.failed;
+                await step.run("tell-leads-document-grants", () => notifyLeadsOfStorageAccess(projectId, failed.map((d: DocToGrant & { reason: string }) => ({
+                    kind: "grant" as const,
+                    userId,
+                    itemName: d.fileName || "a file",
+                    itemType: "file" as const,
+                    documentId: d.id,
+                    reason: d.reason,
+                    key: d.externalId ?? d.id,
+                }))));
+            }
+        }
+
+        return { message: "Granted permissions for new member", folderGrant: folders, results: grantResults };
     }
 );
 
@@ -932,16 +1174,15 @@ export const migrateWorkspaceRoot = inngest.createFunction(
         name: 'Migrate workspace root folder',
         retries: 2,
         triggers: [{ event: 'workspace.migrate.requested' }],
+        // The run gave up: it's recorded as failed. Clearing maintenance closes the active migration, so
+        // it's told the status to close it with; it used to mark it completed, and `failed` was then never
+        // written because nothing was active any more. One write at a time: each reads and rewrites the
+        // firm's settings, and run together one lost the other's change.
         onFailure: async ({ error, event }: { error: Error; event: { data: { event: { data: { firmId: string; newRootFolderId: string; oldRootFolderId: string; startedAt?: string } } } } }) => {
             const { firmId } = event.data.event.data
-            await Promise.all([
-                setMaintenanceMode(firmId, null),
-                setMigrationPending(firmId, null),
-            ])
-            const migration = await getActiveMigration(firmId)
-            if (migration) {
-                await updateMigrationStatus(migration.id, 'failed')
-            }
+            logger.error('Workspace move gave up', error, 'MigrateWorkspace', { firmId })
+            await setMaintenanceMode(firmId, null, { endStatus: 'failed' })
+            await setMigrationPending(firmId, null)
         },
     },
     async ({ event, step }: { event: { data: { connectionId: string; newRootFolderId: string; oldRootFolderId: string; firmId: string; initiatingUserId: string; estimatedMinutes: number; organizationId?: string; startedAt?: string; graceMinutes?: number } }; step: any }) => {
@@ -982,18 +1223,18 @@ export const migrateWorkspaceRoot = inngest.createFunction(
                 logger.info('Migration cancelled during grace period — aborting lock', 'MigrateWorkspace', { firmId })
                 return
             }
-            await Promise.all([
-                setMaintenanceMode(firmId, {
-                    active: true,
-                    startedAt: new Date().toISOString(),
-                    expiresAt: new Date(Date.now() + Math.max(estimatedMinutes * 4, 30) * 60_000).toISOString(),
-                    estimatedMinutes,
-                    initiatedBy: initiatingUserId,
-                    reason: 'workspace_migration',
-                }),
-                setMigrationPending(firmId, null),
-                ...(migration ? [updateMigrationStatus(migration.id, 'in_progress')] : []),
-            ])
+            // One at a time: both rewrite the firm's settings, and run together one could drop the
+            // other's change (the lock itself, or the pending banner's removal).
+            await setMaintenanceMode(firmId, {
+                active: true,
+                startedAt: new Date().toISOString(),
+                expiresAt: new Date(Date.now() + Math.max(estimatedMinutes * 4, 30) * 60_000).toISOString(),
+                estimatedMinutes,
+                initiatedBy: initiatingUserId,
+                reason: 'workspace_migration',
+            })
+            await setMigrationPending(firmId, null)
+            await updateMigrationStatus(migration.id, 'in_progress')
             // No sign-out: the maintenance page already holds the firm's routes until the migration ends.
         })
 
@@ -1056,12 +1297,10 @@ export const migrateWorkspaceRoot = inngest.createFunction(
         // on next access or via a dedicated reindex trigger.
 
         await step.run('unlock-workspace', async () => {
-            const migration = await getActiveMigration(firmId)
             const finalStatus = allFailures.length > 0 ? 'failed_partial' : 'completed'
-            await Promise.all([
-                setMaintenanceMode(firmId, null),
-                ...(migration ? [updateMigrationStatus(migration.id, finalStatus)] : []),
-            ])
+            // Clearing maintenance closes the active migration with this status. Writing the status
+            // alongside it raced: whichever landed last won, and a partial move could read completed.
+            await setMaintenanceMode(firmId, null, { endStatus: finalStatus })
             if (allFailures.length > 0) {
                 const firm = await prisma.firm.findUnique({ where: { id: firmId } })
                 if (firm) {

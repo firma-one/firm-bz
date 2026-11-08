@@ -65,6 +65,7 @@ import { useToast } from "@/components/ui/toast"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { useDownloadProgress } from "@/lib/download-progress-context"
+import { failureFrom, failureReason } from "@/lib/files/action-failure"
 import { SetupReminderModal } from "@/components/ui/setup-reminder-modal"
 import { useAuth } from "@/lib/auth-context"
 
@@ -77,6 +78,39 @@ const COMPACT_MENU_CLASS =
 
 const VERSION_LOCK_TOOLTIP =
   'Finalize locks the document — all collaborators become view-only. Return to Draft restores each collaborator\'s prior access level based on their role and sharing settings.'
+
+/**
+ * What a reminder for several people did, by name: "Reminder set for Ana. Couldn't set it for Raj ·
+ * Reminders cannot be assigned to an assistant." (P1-75), in place of "1 operation(s) failed."
+ */
+export function reminderOutcomeText(
+  outcomes: { userId: string; kind: 'set' | 'remove'; error: string | null }[],
+  members: { userId: string; name?: string | null; email?: string | null }[],
+): string {
+  const nameOf = (id: string) => {
+    const m = members.find((x) => x.userId === id)
+    return m?.name || m?.email || 'someone'
+  }
+  const names = (list: typeof outcomes) => list.map((o) => nameOf(o.userId)).join(', ')
+  const parts: string[] = []
+  const set = outcomes.filter((o) => !o.error && o.kind === 'set')
+  const removed = outcomes.filter((o) => !o.error && o.kind === 'remove')
+  if (set.length) parts.push(`Reminder set for ${names(set)}.`)
+  if (removed.length) parts.push(`Removed for ${names(removed)}.`)
+  // Grouped by reason, so one cause reads once.
+  const byReason = new Map<string, typeof outcomes>()
+  for (const o of outcomes) if (o.error) byReason.set(o.error, [...(byReason.get(o.error) ?? []), o])
+  for (const [reason, list] of Array.from(byReason.entries())) {
+    const setting = list.filter((o) => o.kind === 'set')
+    const removing = list.filter((o) => o.kind === 'remove')
+    const who = [
+      setting.length ? `set it for ${names(setting)}` : '',
+      removing.length ? `remove it for ${names(removing)}` : '',
+    ].filter(Boolean).join(' or ')
+    parts.push(`Couldn't ${who} · ${reason.replace(/\.$/, '')}.`)
+  }
+  return parts.join(' ')
+}
 
 interface DocumentActionMenuProps {
   document: any
@@ -236,9 +270,14 @@ export function DocumentActionMenu({
   // Handle copy name
   const handleCopyName = (e: React.MouseEvent, text: string) => {
     e.stopPropagation()
-    navigator.clipboard.writeText(text)
-    setHasCopiedName(true)
-    setTimeout(() => setHasCopiedName(false), 2000)
+    // "Copied" only once the clipboard took it: a browser can refuse (P2-08).
+    Promise.resolve()
+      .then(() => navigator.clipboard.writeText(text))
+      .then(() => {
+        setHasCopiedName(true)
+        setTimeout(() => setHasCopiedName(false), 2000)
+      })
+      .catch(() => addToast({ type: 'error', title: "Couldn't copy", message: 'The browser refused the clipboard. Select the name and copy it instead.' }))
   }
 
   // Handle due date selection — empty string means clear
@@ -265,12 +304,14 @@ export function DocumentActionMenu({
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('pockett-notifications-updated'))
       }
-      addToast({ type: 'success', title: 'Saved', message: dateTime ? 'Due date updated.' : 'Due date cleared.' })
+      // Saved, but its reminders or notices couldn't all follow: say so (P1-62).
+      if (result.warning) addToast({ type: 'warning', title: 'Due date set', message: result.warning })
+      else addToast({ type: 'success', title: 'Saved', message: dateTime ? 'Due date updated.' : 'Due date cleared.' })
     } catch (error) {
       addToast({
         type: 'error',
-        title: 'Failed',
-        message: error instanceof Error ? error.message : 'Failed to update due date.',
+        title: "Couldn't set the due date",
+        message: failureReason(error),
       })
     }
   }
@@ -308,17 +349,14 @@ export function DocumentActionMenu({
         `/api/projects/${projectId}/documents/${encodeURIComponent(docId)}/sharing/finalize`,
         { method: 'PATCH', headers: { Authorization: `Bearer ${session.access_token}` } }
       )
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        throw new Error(typeof err?.error === 'string' ? err.error : 'Failed to finalize')
-      }
+      if (!res.ok) throw await failureFrom(res)
       addToast({ type: 'success', title: 'Version locked', message: 'Others can only view this file until you unlock it.' })
       onShareSaved?.()
     } catch (error) {
       addToast({
         type: 'error',
         title: 'Lock failed',
-        message: error instanceof Error ? error.message : 'Could not lock document version.',
+        message: failureReason(error),
       })
     } finally {
       finalizeLockInFlightRef.current = false
@@ -344,17 +382,20 @@ export function DocumentActionMenu({
         `/api/projects/${projectId}/documents/${encodeURIComponent(docId)}/sharing/unlock`,
         { method: 'PATCH', headers: { Authorization: `Bearer ${session.access_token}` } }
       )
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        throw new Error(typeof err?.error === 'string' ? err.error : 'Failed to unlock')
+      if (!res.ok) throw await failureFrom(res)
+      const body = await res.json().catch(() => ({})) as { unlocked?: boolean; warning?: string }
+      if (body.unlocked === false) {
+        // Storage refused to give someone their edit access back: it stays locked, and says why.
+        addToast({ type: 'warning', title: 'Still locked', message: body.warning || 'It stays locked until edit access is back. Try Unlock again.', duration: 12000 })
+      } else {
+        addToast({ type: 'success', title: 'Unlocked', message: 'Edit access restored. An approved document goes back to To do; its approval stays on record.' })
       }
-      addToast({ type: 'success', title: 'Unlocked', message: 'Edit access restored. An approved document goes back to To do; its approval stays on record.' })
       onShareSaved?.()
     } catch (error) {
       addToast({
         type: 'error',
         title: 'Unlock failed',
-        message: error instanceof Error ? error.message : 'Could not unlock document.',
+        message: failureReason(error),
       })
     } finally {
       finalizeLockInFlightRef.current = false
@@ -383,17 +424,14 @@ export function DocumentActionMenu({
         `/api/projects/${projectId}/documents/${encodeURIComponent(docId)}/sharing/accept`,
         { method: 'PATCH', headers: { Authorization: `Bearer ${session.access_token}` } }
       )
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        throw new Error(typeof err?.error === 'string' ? err.error : 'Failed to accept')
-      }
+      if (!res.ok) throw await failureFrom(res)
       addToast({ type: 'success', title: 'Document accepted', message: 'The document has been accepted and is now locked.' })
       onShareSaved?.()
     } catch (error) {
       addToast({
         type: 'error',
         title: 'Accept failed',
-        message: error instanceof Error ? error.message : 'Could not accept document.',
+        message: failureReason(error),
       })
     } finally {
       finalizeLockInFlightRef.current = false
@@ -419,16 +457,17 @@ export function DocumentActionMenu({
   const handleDownload = async (doc: any) => {
     if (doc.mimeType?.includes('folder')) return
 
+    const filename: string = doc.name
     try {
       const { getSession } = await import('@/lib/supabase')
       const session = await getSession()
 
+      // Nothing at all used to happen without a session (P1-41).
       if (!session) {
-        console.error('No session found for download')
+        updateTask(addTask(filename), { status: 'error', error: 'Your session has ended. Sign in again, then retry.' })
         return
       }
 
-      const filename: string = doc.name
       const effectiveProjectId = doc.projectId ?? projectId
 
       if (effectiveProjectId && doc.id) {
@@ -439,7 +478,8 @@ export function DocumentActionMenu({
         try {
           const res = await fetch(downloadUrl)
           if (!res.ok) {
-            updateTask(taskId, { status: 'error', error: res.status === 403 ? 'Download not permitted' : 'Download failed' })
+            // The route's reason: "Download not permitted", or the storage's ("…needs renewing").
+            updateTask(taskId, { status: 'error', error: (await failureFrom(res)).message })
             return
           }
           const blob = await res.blob()
@@ -453,7 +493,7 @@ export function DocumentActionMenu({
           window.document.body.removeChild(a)
           setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000)
         } catch (err) {
-          updateTask(taskId, { status: 'error', error: 'Download failed' })
+          updateTask(taskId, { status: 'error', error: failureReason(err) })
           console.error('Share download error:', err)
         }
       } else {
@@ -465,6 +505,7 @@ export function DocumentActionMenu({
       }
     } catch (error) {
       console.error('Download error:', error)
+      updateTask(addTask(filename), { status: 'error', error: failureReason(error) })
     }
   }
 
@@ -1028,7 +1069,7 @@ export function DocumentActionMenu({
                           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
                           body: JSON.stringify({ id: existingBookmarkId }),
                         })
-                        if (!res.ok) throw new Error('Failed to remove bookmark')
+                        if (!res.ok) throw await failureFrom(res)
                         setExistingBookmarkId(null)
                         if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('pockett-bookmarks-updated'))
                         addToast({ type: 'success', title: 'Removed', message: 'Bookmark removed.' })
@@ -1047,17 +1088,14 @@ export function DocumentActionMenu({
                             },
                           }),
                         })
-                        if (!res.ok) {
-                          const err = await res.json().catch(() => ({}))
-                          throw new Error(err.error ?? 'Failed to bookmark')
-                        }
+                        if (!res.ok) throw await failureFrom(res)
                         const data = await res.json()
                         setExistingBookmarkId(data.bookmark?.id ?? null)
                         if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('pockett-bookmarks-updated'))
                         addToast({ type: 'success', title: 'Bookmarked', message: 'Saved to your bookmarks.' })
                       }
                     } catch (e) {
-                      addToast({ type: 'error', title: 'Failed', message: e instanceof Error ? e.message : 'Failed to update bookmark.' })
+                      addToast({ type: 'error', title: existingBookmarkId ? "Couldn't remove the bookmark" : "Couldn't add the bookmark", message: failureReason(e) })
                     }
                   }}
                   className="flex items-center gap-2 px-2 py-1 text-small data-[disabled]:opacity-50 data-[disabled]:pointer-events-none"
@@ -1441,27 +1479,24 @@ export function DocumentActionMenu({
           }
           const docId = (document as any).projectDocumentId || document.id
           const authHeader = { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` }
-          const ops: Promise<void>[] = [
-            ...deselected.map((userId) => {
-              const existing = existingDocReminders.get(userId)
-              return fetch(`/api/projects/${projectId}/documents/${encodeURIComponent(docId)}/reminder`, {
-                method: 'DELETE', headers: authHeader,
-                body: JSON.stringify({ reminderId: existing?.reminderId, recipientId: userId }),
-              }).then(async (res) => { if (!res.ok) throw new Error('Failed to remove') })
-            }),
-            ...selected.map((recipientId) =>
-              fetch(`/api/projects/${projectId}/documents/${encodeURIComponent(docId)}/reminder`, {
-                method: 'POST', headers: authHeader,
-                body: JSON.stringify({ recipientId, dateValue }),
-              }).then(async (res) => {
-                if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error ?? 'Failed') }
-              })
-            ),
-          ]
-          const results = await Promise.allSettled(ops)
-          const failed = results.filter((r) => r.status === 'rejected')
+          const send = (userId: string, kind: 'set' | 'remove', init: RequestInit) =>
+            fetch(`/api/projects/${projectId}/documents/${encodeURIComponent(docId)}/reminder`, init)
+              .then(async (res) => { if (!res.ok) throw await failureFrom(res) })
+              .then(() => ({ userId, kind, error: null as string | null }), (e) => ({ userId, kind, error: failureReason(e) }))
+          const outcomes = await Promise.all([
+            ...deselected.map((userId) => send(userId, 'remove', {
+              method: 'DELETE', headers: authHeader,
+              body: JSON.stringify({ reminderId: existingDocReminders.get(userId)?.reminderId, recipientId: userId }),
+            })),
+            ...selected.map((recipientId) => send(recipientId, 'set', {
+              method: 'POST', headers: authHeader,
+              body: JSON.stringify({ recipientId, dateValue }),
+            })),
+          ])
+          const failed = outcomes.filter((o) => o.error)
           if (failed.length > 0) {
-            addToast({ type: 'error', title: 'Partial failure', message: `${failed.length} operation(s) failed.` })
+            // Who it worked for, who it didn't, and why (P1-75).
+            addToast({ type: 'error', title: failed.length === outcomes.length ? "Couldn't set the reminder" : 'Reminder partly set', message: reminderOutcomeText(outcomes, reminderMembers), duration: 12000 })
             throw new Error('partial failure')
           }
           setExistingDocReminders(new Map())

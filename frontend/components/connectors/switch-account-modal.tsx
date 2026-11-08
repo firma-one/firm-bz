@@ -26,6 +26,8 @@ interface SwitchAccountModalProps {
   onConfirm: (selectedEmail: string) => void
   /** Which OAuth provider this switch redirects to — controls title/copy/button text. Defaults to Google for existing callers. */
   provider?: 'Google' | 'Microsoft'
+  /** Why the admin list didn't load, when it didn't. */
+  loadError?: string | null
 }
 
 /** Circular avatar with initials fallback */
@@ -53,6 +55,7 @@ export function SwitchAccountModal({
   loading,
   onConfirm,
   provider = 'Google',
+  loadError = null,
 }: SwitchAccountModalProps) {
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
 
@@ -80,8 +83,14 @@ export function SwitchAccountModal({
 
         {/* Admin list */}
         <div className="flex flex-col gap-1 overflow-y-auto border border-line rounded p-1 max-h-[200px]">
-          {admins.length === 0 && (
-            <p className="text-xs text-fg-subtle text-center py-4">No firm administrators found.</p>
+          {/* The list always holds at least the connected account, so empty means it didn't load
+              (P2-34): say that rather than "No firm administrators found." */}
+          {(loadError || admins.length === 0) && (
+            <p role="alert" className="text-xs text-fg-subtle text-center py-4">
+              {loadError
+                ? `Couldn't load the firm's admins · ${loadError}`
+                : "Couldn't load the firm's admins. Close this and try again."}
+            </p>
           )}
           {admins.map((admin) => {
             const isCurrent = admin.userId === currentUserId

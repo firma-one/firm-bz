@@ -51,4 +51,12 @@ describe('HomeBookmarks', () => {
         expect(screen.queryByText(/No bookmarks yet/)).toBeNull()
         window.removeEventListener('pockett-bookmarks-updated', updated)
     })
+
+    it('keeps a bookmark whose removal was refused, and says why', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 401, json: async () => ({ error: 'Your session has ended. Sign in again.' }) }))
+        render(<HomeBookmarks bookmarks={[bookmark('1')]} />)
+        fireEvent.click(screen.getByRole('button', { name: 'Remove Bookmark 1 from bookmarks' }))
+        expect(await screen.findByText("Couldn't remove Bookmark 1 · Your session has ended. Sign in again.")).toBeTruthy()
+        expect(screen.getByText('Bookmark 1')).toBeTruthy()
+    })
 })

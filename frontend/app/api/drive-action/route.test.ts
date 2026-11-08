@@ -17,6 +17,7 @@ const { who, state, adapter } = vi.hoisted(() => ({
         getFileMetadata: vi.fn(async (..._args: unknown[]): Promise<any> => ({ mimeType: 'application/pdf' })),
         revokePermission: vi.fn(async () => true),
         updatePermissionExpiry: vi.fn(async () => true),
+        getDuplicateFiles: vi.fn(async (): Promise<any[]> => []),
     },
 }))
 
@@ -196,5 +197,39 @@ describe('restore (Undo on "Moved to trash")', () => {
         state.canEdit = true
         adapter.restoreFile = undefined
         expect((await call({ action: 'restore', fileId: 'file', projectId: 'e1' })).status).toBe(400)
+    })
+})
+
+describe('after a trash, and a refused restore', () => {
+    it('answers success when the item is in the trash but its details then fail to load, and still cleans up the right kind', async () => {
+        state.canEdit = true
+        adapter.getFileMetadata.mockRejectedValueOnce(new Error('Graph 503'))
+        vi.mocked(prisma.engagementDocument.findFirst).mockResolvedValueOnce({ isFolder: true } as never)
+        const res = await call({ action: 'trash', fileId: 'file', projectId: 'e1' })
+        expect(res.status).toBe(200)
+        expect(safeInngestSend).toHaveBeenCalledWith('folder.delete.requested', expect.objectContaining({ externalId: 'file' }))
+    })
+
+    it("carries the storage's reason when a restore is refused", async () => {
+        state.canEdit = true
+        adapter.getFileMetadata.mockImplementation(async (_c: unknown, id: unknown) => (id === 'file' ? { id: 'file', trashed: true, parents: ['folder'] } : { id: 'folder', trashed: false }))
+        adapter.restoreFile = vi.fn(async () => { throw storageFailure('no_permission', 'Google Drive') })
+        const res = await call({ action: 'restore', fileId: 'file', projectId: 'e1' })
+        expect(res.status).toBe(403)
+        expect((await res.json()).error).toBe(`Couldn’t restore it · ${storageFailure('no_permission', 'Google Drive').message}`)
+    })
+})
+
+// P2-37: a duplicate search the storage refused says why, rather than reading as "no duplicates".
+describe('a storage refusal', () => {
+    it("answers the storage's reason and status", async () => {
+        state.manageable.add('firm-conn')
+        const { storageFailure } = await import('@/lib/connectors/storage-failure')
+        adapter.getDuplicateFiles.mockRejectedValueOnce(storageFailure('reconnect', 'Google Drive'))
+        const res = await call({ action: 'duplicate_search' })
+        expect(res.status).toBe(502)
+        const body = await res.json()
+        expect(body.code).toBe('reconnect')
+        expect(body.error).toMatch(/Reconnect/)
     })
 })

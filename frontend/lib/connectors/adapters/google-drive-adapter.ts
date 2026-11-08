@@ -3,7 +3,9 @@
  * Used by the Pockett structure service for folder structure and meta.json operations.
  */
 
-import { METADATA_FOLDER_NAME, type IConnectorStorageAdapter } from '../types'
+import { METADATA_FOLDER_NAME, type IConnectorStorageAdapter, type FolderRestrictOutcome } from '../types'
+import { logger } from '@/lib/logger'
+import { storageFailureFromResponse } from '@/lib/connectors/storage-failure'
 
 const DRIVE_FOLDER_MIME = 'application/vnd.google-apps.folder'
 const DRIVE_API = 'https://www.googleapis.com/drive/v3'
@@ -39,7 +41,8 @@ async function searchFoldersByName(token: string, parentFolderId: string, name: 
     `${DRIVE_API}/files?q=${encodeURIComponent(q)}&fields=files(id,createdTime)&orderBy=createdTime asc&${DRIVE_OPTS}`,
     { headers: { Authorization: `Bearer ${token}` } }
   )
-  if (!res.ok) return []
+  // A refused read isn't "no such folder": answering [] made findOrCreateFolder create a duplicate (P2-35).
+  if (!res.ok) throw await storageFailureFromResponse(res, 'Google Drive', `look for the folder ${name}`)
   const data = await res.json()
   return (data.files || []).map((f: DriveFolderRow) => ({ id: f.id, createdTime: f.createdTime }))
 }
@@ -68,7 +71,8 @@ export function createGoogleDriveAdapter(getAccessToken: GetAccessToken): IConne
         `${DRIVE_API}/files?q=${encodeURIComponent(q)}&fields=files(id,name,mimeType,appProperties)&${DRIVE_OPTS}`,
         { headers: { Authorization: `Bearer ${token}` } }
       )
-      if (!res.ok) return []
+      // An empty folder answers []; a refused listing says why, so setup stops instead of making duplicates (P2-35).
+      if (!res.ok) throw await storageFailureFromResponse(res, 'Google Drive', 'list a folder')
       const data = await res.json()
       return (data.files || []).map((f: { id: string; name: string; mimeType?: string; appProperties?: Record<string, string> }) => ({
         id: f.id,
@@ -280,24 +284,47 @@ export function createGoogleDriveAdapter(getAccessToken: GetAccessToken): IConne
       return res.status === 200
     },
 
-    async restrictFolderToOwnerOnly(connectionId: string, folderId: string): Promise<void> {
+    /**
+     * Folder setup restricts each folder it makes; it reads no answer, so a refusal is logged and answered
+     * here rather than thrown. Permissions inherited from a shared drive are left: Drive won't remove them
+     * on the folder, and they're the drive's members, not anyone Firma shared with.
+     */
+    async restrictFolderToOwnerOnly(connectionId: string, folderId: string): Promise<FolderRestrictOutcome> {
       const token = await auth(connectionId)
+      const outcome: FolderRestrictOutcome = { removed: 0, remaining: [] }
       const listRes = await fetch(
-        `${DRIVE_API}/files/${folderId}/permissions?fields=permissions(id,role,type,emailAddress)&${DRIVE_OPTS}`,
+        `${DRIVE_API}/files/${folderId}/permissions?fields=permissions(id,role,type,emailAddress,permissionDetails(inherited))&${DRIVE_OPTS}`,
         { headers: { Authorization: `Bearer ${token}` } }
       )
-      if (!listRes.ok) return
+      if (!listRes.ok) {
+        logger.warn('Google Drive would not list a folder\'s permissions to restrict it', { folderId, status: listRes.status })
+        outcome.reason = `Google Drive wouldn't list who has access (HTTP ${listRes.status}).`
+        return outcome
+      }
       const listData = await listRes.json()
-      const permissions = listData.permissions || []
-      const toRemove = permissions.filter((p: { role: string }) => p.role !== 'owner')
+      const permissions = (listData.permissions || []) as Array<{ id: string; role?: string; type?: string; emailAddress?: string; permissionDetails?: { inherited?: boolean }[] }>
+      const toRemove = permissions.filter((p) => {
+        const inheritedOnly = Array.isArray(p.permissionDetails) && p.permissionDetails.length > 0 && p.permissionDetails.every((d) => d.inherited === true)
+        return p.role !== 'owner' && !inheritedOnly
+      })
       await Promise.all(
-        toRemove.map((p: { id: string }) =>
-          fetch(`${DRIVE_API}/files/${folderId}/permissions/${p.id}?${DRIVE_OPTS}`, {
+        toRemove.map(async (p) => {
+          const res = await fetch(`${DRIVE_API}/files/${folderId}/permissions/${p.id}?${DRIVE_OPTS}`, {
             method: 'DELETE',
             headers: { Authorization: `Bearer ${token}` }
-          })
-        )
+          }).catch(() => null)
+          if (res && (res.ok || res.status === 404)) {
+            outcome.removed++
+          } else {
+            outcome.remaining.push(p.emailAddress ?? (p.type === 'anyone' ? 'anyone with the link' : 'someone'))
+            outcome.reason ??= res ? `Google Drive refused to remove a permission (HTTP ${res.status}).` : "Couldn't reach Google Drive."
+          }
+        })
       )
+      if (outcome.remaining.length > 0) {
+        logger.warn('Google Drive kept some permissions on a folder restricted to its owner', { folderId, remaining: outcome.remaining.length })
+      }
+      return outcome
     },
 
     async search(connectionId: string, query: string): Promise<Array<{ id: string; name: string }>> {
@@ -306,7 +333,8 @@ export function createGoogleDriveAdapter(getAccessToken: GetAccessToken): IConne
         `${DRIVE_API}/files?q=${encodeURIComponent(query)}&fields=files(id,name)&${DRIVE_OPTS}`,
         { headers: { Authorization: `Bearer ${token}` } }
       )
-      if (!res.ok) return []
+      // A refused search isn't "nothing found": detection would report no existing structure (P2-35).
+      if (!res.ok) throw await storageFailureFromResponse(res, 'Google Drive', 'search for folders')
       const data = await res.json()
       return (data.files || []).map((f: { id: string; name: string }) => ({ id: f.id, name: f.name }))
     }
@@ -322,7 +350,8 @@ async function listFolderChildrenInternal(
     `${DRIVE_API}/files?q=${encodeURIComponent(q)}&fields=files(id,name,mimeType,appProperties)&${DRIVE_OPTS}`,
     { headers: { Authorization: `Bearer ${token}` } }
   )
-  if (!res.ok) return []
+  // writeFile looks for the file it replaces here: a refused listing would write a second copy.
+  if (!res.ok) throw await storageFailureFromResponse(res, 'Google Drive', 'list a folder')
   const data = await res.json()
   return (data.files || []).map((f: { id: string; name: string; mimeType?: string; appProperties?: Record<string, string> }) => ({
     id: f.id,

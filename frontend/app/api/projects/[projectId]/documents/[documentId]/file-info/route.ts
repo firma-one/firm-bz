@@ -9,6 +9,7 @@ import { getViewAsPersonaFromCookie } from '@/lib/view-as-server'
 import { getSharedAndAncestorIdsForPersona } from '@/lib/engagement-sharing-ids'
 import { requireEngagementMember, getEngagementStatus, isExternalEngagementRole } from '@/lib/engagement-access'
 import { isDocumentFinalized } from '@/lib/sharing-settings'
+import { logger } from '@/lib/logger'
 
 function notFound() {
   return NextResponse.json({ error: 'Not found' }, { status: 404 })
@@ -72,6 +73,7 @@ export async function GET(
       versionLocked: docRow ? isDocumentFinalized(docRow.settings) : false,
     })
   } catch (e) {
-    return NextResponse.json({ error: 'Failed to resolve file info' }, { status: 500 })
+    logger.error('file-info failed', e as Error)
+    return NextResponse.json({ error: "Couldn't open that link. Try again." }, { status: 500 })
   }
 }

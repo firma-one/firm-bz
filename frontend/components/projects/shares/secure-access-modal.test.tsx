@@ -77,4 +77,9 @@ describe('SecureAccessModal', () => {
             unmount()
         }
     })
+
+    it('never says an email was sent unless asked to (no mode given)', () => {
+        render(<SecureAccessModal isOpen onClose={vi.fn()} email="jo@client.com" fileName="f" />)
+        expect(screen.queryByRole('dialog', { name: 'Check your email' })).toBeNull()
+    })
 })

@@ -11,6 +11,7 @@ import { ClientIcon } from '@/components/ui/client-icon'
 import { DocumentIcon } from '@/components/ui/document-icon'
 import { DeliverableIcon } from '@/components/ui/deliverable-icon'
 import { CreateDialogFooter, CreateDialogHeader } from '@/components/ui/create-dialog'
+import { LoadFailed } from '@/components/ui/load-failed'
 import { cn } from '@/lib/utils'
 import type { DriveFile } from '@/lib/types'
 
@@ -125,6 +126,9 @@ export interface CopyMoveDialogProps {
     path: { id: string; name: string }[]
     onPathClick: (index: number) => void
     loading: boolean
+    /** Why the folders didn't load: shown with Try again, and nothing can be moved or copied until they do (EM-7). */
+    loadError?: string | null
+    onRetryLoad?: () => void
     folders: DriveFile[]
     emptyFolderIds: Set<string>
     /** Folders known to have subfolders (the look-ahead's answer): only these show an arrow. */
@@ -150,7 +154,7 @@ function PickerFolderIcon({ kind, className }: { kind: DeliverableKind; classNam
 
 /** Move/Copy to folder: browse the root's folders and move or copy into one, or into the root itself. */
 export function CopyMoveDialog({
-    open, onOpenChange, action, targetName, targetMimeType, targetCount = 1, keepBoth, onKeepBothChange, path, onPathClick, loading, folders,
+    open, onOpenChange, action, targetName, targetMimeType, targetCount = 1, keepBoth, onKeepBothChange, path, onPathClick, loading, loadError, onRetryLoad, folders,
     emptyFolderIds, subfolderIds, checkingFolderId, submittingFolderId, onOpenFolder, onSubmit, onCancel, deliverableKindOf,
 }: CopyMoveDialogProps) {
     const verb = action === 'copy' ? 'Copy' : 'Move'
@@ -203,8 +207,8 @@ export function CopyMoveDialog({
                                         </div>
                                     ))}
                                 </nav>
-                                {/* Into the root itself — only at the root (General/Confidential/Staging) level */}
-                                {path.length === 1 && root && (
+                                {/* Into the root itself — only at the root (General/Confidential/Staging) level, once its folders loaded */}
+                                {path.length === 1 && root && !loadError && !loading && (
                                     <Button
                                         type="button"
                                         variant="ghost"
@@ -223,6 +227,9 @@ export function CopyMoveDialog({
                         <div className={cn(LIST_CLASS, 'divide-y divide-line')}>
                             {loading ? (
                                 <ListLoading />
+                            ) : loadError ? (
+                                // A failed list is never "No subfolders here", which invited the move (EM-7).
+                                <LoadFailed compact what="folders" reason={loadError} onRetry={onRetryLoad} />
                             ) : folders.length === 0 ? (
                                 <ListEmpty>No subfolders here. Use the path above to go back, or {action} into this folder.</ListEmpty>
                             ) : (
@@ -316,6 +323,9 @@ export interface CopyToEngagementDialogProps {
     targetMimeType?: string
     firmName: string | null
     loading: boolean
+    /** Why the engagements didn't load, in place of "No other engagements available" (P1-46). */
+    loadError?: string | null
+    onRetryLoad?: () => void
     engagements: { id: string; name: string; clientId: string; clientName: string }[]
     selectedId: string | null
     onSelect: (id: string) => void
@@ -326,7 +336,7 @@ export interface CopyToEngagementDialogProps {
 
 /** Copy to another engagement: the firm's engagements by client; the copy lands in that engagement's General folder. */
 export function CopyToEngagementDialog({
-    open, onOpenChange, targetName, targetMimeType, firmName, loading, engagements, selectedId, onSelect, submitting, onSubmit, onCancel,
+    open, onOpenChange, targetName, targetMimeType, firmName, loading, loadError, onRetryLoad, engagements, selectedId, onSelect, submitting, onSubmit, onCancel,
 }: CopyToEngagementDialogProps) {
     const groups = Object.values(
         engagements.reduce<Record<string, { clientName: string; engagements: typeof engagements }>>((acc, e) => {
@@ -348,6 +358,8 @@ export function CopyToEngagementDialog({
                         <div className={cn(LIST_CLASS, 'p-1')} role="listbox" aria-label="Engagements">
                             {loading ? (
                                 <ListLoading />
+                            ) : loadError ? (
+                                <LoadFailed compact what="engagements" reason={loadError} onRetry={onRetryLoad} />
                             ) : engagements.length === 0 ? (
                                 <ListEmpty>No other engagements available.</ListEmpty>
                             ) : (

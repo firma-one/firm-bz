@@ -39,7 +39,7 @@ vi.mock('@/lib/permission-helpers', () => ({
 }))
 vi.mock('@/lib/system/admin-check', () => ({ isSystemAdminEmail: (e?: string | null) => !!e && admin.emails.includes(e) }))
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
-vi.mock('next/navigation', () => ({ redirect: vi.fn() }))
+vi.mock('next/navigation', () => ({ redirect: vi.fn(), unstable_rethrow: vi.fn() }))
 vi.mock('@/lib/logger', () => ({ logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() } }))
 vi.mock('@/lib/audit', () => ({
     audit: () => { const b: any = { scope: () => b, firm: () => b, actor: () => b, meta: () => b, client: () => b, fireAndForget: () => {} }; return b },
@@ -73,40 +73,40 @@ beforeEach(() => {
 })
 
 describe('client connector and brand actions require client manage rights', () => {
-    it('refuses a caller who cannot manage the client', async () => {
-        await expect(getConnectorSiblingClients('c1')).rejects.toThrow('Unauthorized')
-        await expect(upsertClientBrand('c1', { name: 'X' })).rejects.toThrow('Unauthorized')
-        await expect(removeClientConnector({ clientId: 'c1' })).rejects.toThrow('Unauthorized')
+    it('refuses a caller who cannot manage the client, in words the browser can show', async () => {
+        expect(await upsertClientBrand('c1', { name: 'X' })).toEqual({ ok: false, code: 'forbidden', error: "You don't have permission to change this client's branding." })
+        expect(await getConnectorSiblingClients('c1')).toMatchObject({ ok: false, code: 'forbidden' })
+        expect(await removeClientConnector({ clientId: 'c1' })).toMatchObject({ ok: false, code: 'forbidden' })
         expect(prisma.brand.create).not.toHaveBeenCalled()
         expect(prisma.connector.delete).not.toHaveBeenCalled()
     })
 
     it('checks rights on the client\'s own firm', async () => {
-        await expect(upsertClientBrand('c1', null)).rejects.toThrow()
+        expect(await upsertClientBrand('c1', null)).toMatchObject({ ok: false })
         const { canManageClient } = await import('@/lib/permission-helpers')
         expect(canManageClient).toHaveBeenCalledWith('f1', 'c1')
     })
 
     it('allows a client manager', async () => {
         perms.manageClient = true
-        await expect(upsertClientBrand('c1', { name: 'Brand' })).resolves.toBeUndefined()
+        expect(await upsertClientBrand('c1', { name: 'Brand' })).toEqual({ ok: true, data: undefined })
         expect(prisma.brand.create).toHaveBeenCalled()
     })
 
     it('refuses signed-out callers', async () => {
         auth.user = null
-        await expect(getConnectorSiblingClients('c1')).rejects.toThrow('Unauthorized')
+        expect(await getConnectorSiblingClients('c1')).toMatchObject({ ok: false, code: 'unauthorized', error: 'Your session has ended. Sign in again.' })
     })
 })
 
 describe('firm Storage-settings connector actions require firm manage rights', () => {
     it('refuses a firm member who is not a manager', async () => {
-        await expect(getFirmConnectors('f1')).rejects.toThrow('Unauthorized')
-        await expect(getFirmAllClients('f1')).rejects.toThrow('Unauthorized')
-        await expect(disconnectFirmConnector({ connectorId: 'conn-1', firmId: 'f1' })).rejects.toThrow('Unauthorized')
-        await expect(renameFirmConnector({ connectorId: 'conn-1', firmId: 'f1', name: 'X' })).rejects.toThrow('Unauthorized')
-        await expect(removeFirmConnector({ connectorId: 'conn-1' })).rejects.toThrow('Unauthorized')
-        await expect(detachConnectorFromClient({ clientId: 'c1', firmId: 'f1' })).rejects.toThrow('Unauthorized')
+        expect(await getFirmConnectors('f1')).toMatchObject({ ok: false, code: 'forbidden' })
+        expect(await getFirmAllClients('f1')).toMatchObject({ ok: false, code: 'forbidden' })
+        expect(await disconnectFirmConnector({ connectorId: 'conn-1', firmId: 'f1' })).toMatchObject({ ok: false, code: 'forbidden' })
+        expect(await renameFirmConnector({ connectorId: 'conn-1', firmId: 'f1', name: 'X' })).toMatchObject({ ok: false, code: 'forbidden' })
+        expect(await removeFirmConnector({ connectorId: 'conn-1' })).toMatchObject({ ok: false, code: 'forbidden' })
+        expect(await detachConnectorFromClient({ clientId: 'c1', firmId: 'f1' })).toMatchObject({ ok: false, code: 'forbidden' })
         expect(prisma.connector.update).not.toHaveBeenCalled()
         expect(prisma.connector.delete).not.toHaveBeenCalled()
         expect(prisma.client.update).not.toHaveBeenCalled()
@@ -114,7 +114,7 @@ describe('firm Storage-settings connector actions require firm manage rights', (
 
     it('checks the firm that owns the connector, not just the firmId the caller passes', async () => {
         perms.manageFirm = true
-        await expect(disconnectFirmConnector({ connectorId: 'conn-1', firmId: 'f-other' })).rejects.toThrow('Unauthorized')
+        expect(await disconnectFirmConnector({ connectorId: 'conn-1', firmId: 'f-other' })).toMatchObject({ ok: false, code: 'forbidden' })
         const { canManageOrganization } = await import('@/lib/permission-helpers')
         await disconnectFirmConnector({ connectorId: 'conn-1', firmId: 'f1' })
         expect(canManageOrganization).toHaveBeenCalledWith('f1')
@@ -123,14 +123,14 @@ describe('firm Storage-settings connector actions require firm manage rights', (
 
     it('allows a firm manager', async () => {
         perms.manageFirm = true
-        await expect(getFirmConnectors('f1')).resolves.toEqual([])
-        await expect(renameFirmConnector({ connectorId: 'conn-1', firmId: 'f1', name: 'Shared drive' })).resolves.toBeUndefined()
+        expect(await getFirmConnectors('f1')).toEqual({ ok: true, data: [] })
+        expect(await renameFirmConnector({ connectorId: 'conn-1', firmId: 'f1', name: 'Shared drive' })).toEqual({ ok: true, data: undefined })
     })
 
     it('refuses signed-out callers', async () => {
         auth.user = null
         perms.manageFirm = true
-        await expect(getFirmAllClients('f1')).rejects.toThrow('Unauthorized')
+        expect(await getFirmAllClients('f1')).toMatchObject({ ok: false, code: 'unauthorized', error: 'Your session has ended. Sign in again.' })
     })
 })
 

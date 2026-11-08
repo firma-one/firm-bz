@@ -4,6 +4,7 @@ import React from 'react'
 import { CalendarClock } from 'lucide-react'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { formatFullDate } from '@/lib/utils'
+import { failureReason } from '@/lib/files/action-failure'
 import { FIX_FOR, dueLabel, type DueConflict, type DueFix } from '@/lib/files/due-date-rule'
 
 /**
@@ -15,10 +16,15 @@ import { FIX_FOR, dueLabel, type DueConflict, type DueFix } from '@/lib/files/du
  * deliverable pane's own Due and its documents'.
  */
 
+/**
+ * A save's answer. `warning` is "saved, but…" (its reminders or notices couldn't all follow). A failed
+ * save says why; when the engagement's date moved anyway and couldn't be put back, `engagementDueDate`
+ * says where it is now.
+ */
 export type DueSaveResult =
-    | { ok: true; dueDate: string | null; alsoChanged: { id: string; dueDate: string }[]; engagementDueDate: string | null }
+    | { ok: true; dueDate: string | null; alsoChanged: { id: string; dueDate: string }[]; engagementDueDate: string | null; warning?: string }
     | { ok: false; cancelled: true }
-    | { ok: false; cancelled?: false; error: string }
+    | { ok: false; cancelled?: false; error: string; engagementDueDate?: string }
 
 type Choice = 'fix' | 'alternative' | 'cancel'
 
@@ -49,8 +55,10 @@ export function useDueDateSave() {
         const fixes: DueFix[] = []
         // A fix can lead to one more conflict (moving a deliverable past its engagement): ask again.
         for (let round = 0; round < 4; round++) {
-            const res = await patchDue(projectId, documentId, value, fixes).catch(() => null)
-            const data = await res?.json().catch(() => ({}))
+            let dropped: unknown = null
+            const res = await patchDue(projectId, documentId, value, fixes).catch((e: unknown) => { dropped = e; return null })
+            if (!res) return { ok: false, error: failureReason(dropped ?? new TypeError('fetch failed')) }
+            const data = await res.json().catch(() => ({}))
             if (res?.status === 409 && data?.needsResolution) {
                 const conflict = data.needsResolution as DueConflict
                 const choice = await new Promise<Choice>((answer) => setPending({ conflict, answer }))
@@ -60,10 +68,22 @@ export function useDueDateSave() {
                 else value = alternativeDate(conflict)
                 continue
             }
-            if (!res?.ok) return { ok: false, error: data?.error ?? 'Failed to update due date' }
-            return { ok: true, dueDate: data?.dueDate ?? value, alsoChanged: data?.alsoChanged ?? [], engagementDueDate: data?.engagementDueDate ?? null }
+            if (!res.ok) {
+                return {
+                    ok: false,
+                    error: typeof data?.error === 'string' && data.error ? data.error : `The server answered ${res.status}. Try again.`,
+                    ...(typeof data?.engagementDueDate === 'string' ? { engagementDueDate: data.engagementDueDate } : {}),
+                }
+            }
+            return {
+                ok: true,
+                dueDate: data?.dueDate ?? value,
+                alsoChanged: data?.alsoChanged ?? [],
+                engagementDueDate: data?.engagementDueDate ?? null,
+                ...(typeof data?.warning === 'string' && data.warning ? { warning: data.warning } : {}),
+            }
         }
-        return { ok: false, error: 'Failed to update due date' }
+        return { ok: false, error: "Couldn't set the due date. Its dates kept conflicting. Try again." }
     }, [])
 
     const conflict = pending?.conflict

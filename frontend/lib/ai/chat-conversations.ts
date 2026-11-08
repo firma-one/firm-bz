@@ -39,6 +39,8 @@ export interface StoredMessage {
     at: number
     answerId?: string
     stopped?: boolean
+    /** The answer broke off part-way (the model failed, or the connection dropped). */
+    cutOff?: boolean
 }
 
 export interface Conversation {

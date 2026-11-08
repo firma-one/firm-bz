@@ -19,6 +19,8 @@ import { firmTabPath } from '@/lib/navigation/firm-paths'
 import { ClientHeader } from './client-header'
 import { AccessLock } from '@/components/ui/access-lock'
 import { EmptyPanel } from '@/components/ui/empty-panel'
+import { PermissionsNotice, fetchFirmPermissions } from './permissions-notice'
+import { failureReason } from '@/lib/files/action-failure'
 
 function PendingBar() {
     return (
@@ -50,6 +52,9 @@ export function ClientProjectView({ clients, groupSlug, firmSlug, firmName, firm
     const [isFirmOwner, setIsFirmOwner] = useState(false)
     const [isPendingRefresh, startRefresh] = useTransition()
     const [pendingTab, setPendingTab] = useState<string | null>(null)
+    /** Why the permissions didn't load, when they didn't, so Settings vanishing doesn't read as "no access". */
+    const [permissionsError, setPermissionsError] = useState<string | null>(null)
+    const [permissionsTick, setPermissionsTick] = useState(0)
 
     const tabParam = searchParams.get('tab') || 'projects'
     const currentTab =
@@ -82,14 +87,18 @@ export function ClientProjectView({ clients, groupSlug, firmSlug, firmName, firm
         const slug = selectedClientSlug || (clients.length > 0 ? clients[0].slug : '')
         const client = clients.find(c => c.slug === slug)
         if (!resolvedFirmId || !client?.id) return
-        fetch(`/api/permissions/firm?firmId=${resolvedFirmId}&clientId=${client.id}`)
-            .then(res => res.json())
-            .then(data => {
+        fetchFirmPermissions(`/api/permissions/firm?firmId=${resolvedFirmId}&clientId=${client.id}`)
+            .then((data: Record<string, any>) => {
+                setPermissionsError(null)
                 setCanManageClient(data.canManageClient ?? false)
                 setIsFirmOwner(data.isFirmOwner ?? false)
             })
-            .catch(() => { setCanManageClient(false); setIsFirmOwner(false) })
-    }, [firmId, clients, selectedClientSlug])
+            .catch((err) => {
+                setCanManageClient(false)
+                setIsFirmOwner(false)
+                setPermissionsError(failureReason(err))
+            })
+    }, [firmId, clients, selectedClientSlug, permissionsTick])
 
     useEffect(() => {
         getIsOrgInternal(firmSlug).then(setIsFirmInternal)
@@ -126,6 +135,9 @@ export function ClientProjectView({ clients, groupSlug, firmSlug, firmName, firm
                 {selectedClient ? (
                     <>
                         <ClientHeader client={selectedClient} firmSlug={firmSlug} canManage={canManageClient} />
+                        {permissionsError && (
+                            <PermissionsNotice reason={permissionsError} onRetry={() => setPermissionsTick((t) => t + 1)} />
+                        )}
 
                         <Tabs value={currentTab} onValueChange={handleTabChange} className="flex-1 flex flex-col min-h-0">
                             {/* Underline tabs (Linear/Notion); the page action sits at the right end of the row. */}

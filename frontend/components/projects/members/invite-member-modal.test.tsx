@@ -1,8 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 
-const { inviteMember } = vi.hoisted(() => ({ inviteMember: vi.fn(async () => {}) }))
+const { inviteMember, toast } = vi.hoisted(() => ({
+    inviteMember: vi.fn(async (..._args: unknown[]): Promise<unknown> => ({ ok: true, data: { added: false } })),
+    toast: { addToast: vi.fn() },
+}))
 vi.mock('@/lib/actions/invitations', () => ({ inviteMember }))
+vi.mock('@/components/ui/toast', () => ({ useToast: () => toast }))
 
 import { InviteMemberModal } from './invite-member-modal'
 
@@ -95,12 +99,32 @@ describe('InviteMemberModal', () => {
         )
     })
 
-    it('shows the server error in the notice', async () => {
-        inviteMember.mockRejectedValueOnce(new Error('Already a member'))
+    it("shows the action's reason in the notice (answered, since a thrown one arrives as #441)", async () => {
+        inviteMember.mockResolvedValueOnce({ ok: false, code: 'already_joined', error: 'This person has already joined the engagement' })
+        const { onSuccess } = renderModal('reviewer')
+        fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'pat@acme.test' } })
+        await waitFor(() => expect((sendButton() as HTMLButtonElement).disabled).toBe(false))
+        fireEvent.click(sendButton())
+        expect((await screen.findByRole('alert')).textContent).toContain('This person has already joined the engagement')
+        expect(onSuccess).not.toHaveBeenCalled()
+    })
+
+    it('says the request never got there when the connection drops', async () => {
+        inviteMember.mockRejectedValueOnce(new TypeError('Failed to fetch'))
         renderModal('reviewer')
         fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'pat@acme.test' } })
         await waitFor(() => expect((sendButton() as HTMLButtonElement).disabled).toBe(false))
         fireEvent.click(sendButton())
-        expect((await screen.findByRole('alert')).textContent).toContain('Already a member')
+        expect((await screen.findByRole('alert')).textContent).toContain('Check your connection')
+    })
+
+    it('tells the inviter when the invitation was saved but its email did not go (P1-15)', async () => {
+        inviteMember.mockResolvedValueOnce({ ok: true, data: { added: false }, warning: "Invitation saved, but the email to pat@acme.test wasn't sent. Use Resend to try again." })
+        const { onSuccess } = renderModal('reviewer')
+        fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'pat@acme.test' } })
+        await waitFor(() => expect((sendButton() as HTMLButtonElement).disabled).toBe(false))
+        fireEvent.click(sendButton())
+        await waitFor(() => expect(onSuccess).toHaveBeenCalled())
+        expect(toast.addToast).toHaveBeenCalledWith({ type: 'warning', title: 'Invitation not emailed', message: "Invitation saved, but the email to pat@acme.test wasn't sent. Use Resend to try again." })
     })
 })

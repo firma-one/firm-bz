@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { logger } from '@/lib/logger'
 import { AlertCircle, Home, RefreshCw, Copy } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { CRASH_TITLE, crashReference, sendCrashReport } from '@/components/support/crash-report'
 
 /**
  * Global error handler for app router
@@ -31,7 +32,9 @@ export default function Error({
     const [feedback, setFeedback] = useState('')
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [isSubmitted, setIsSubmitted] = useState(false)
+    const [submitError, setSubmitError] = useState<string | null>(null)
     const [copied, setCopied] = useState(false)
+    const reference = crashReference(error.digest)
 
     const errorDetailsText = `${error.message}${error.digest ? `\nDigest: ${error.digest}` : ''}${error.stack ? `\n\n${error.stack}` : ''}`
 
@@ -49,50 +52,17 @@ export default function Error({
         if (!feedback.trim()) return
 
         setIsSubmitting(true)
-        try {
-            // Dynamically import to avoid server-action-in-client-component issues if any, 
-            // though standard import works if action is 'use server'.
-            const { submitErrorTicket } = await import('@/app/actions/submit-ticket')
-
-            await submitErrorTicket({
-                description: feedback,
-                type: 'BUG',
-                errorDetails: {
-                    message: error.message,
-                    stack: error.stack,
-                    digest: error.digest,
-                    url: window.location.href
-                },
-                metadata: {
-                    userAgent: window.navigator.userAgent,
-                    screen: {
-                        width: window.screen.width,
-                        height: window.screen.height
-                    }
-                },
-                // Extract Slugs from URL
-                // Pattern: /o/:orgSlug/c/:clientSlug/p/:projectSlug
-                // or just some of them
-                ...(() => {
-                    const path = window.location.pathname
-                    // Simple regex extraction
-                    const orgMatch = path.match(/\/o\/([^\/]+)/)
-                    const clientMatch = path.match(/\/c\/([^\/]+)/)
-                    const projectMatch = path.match(/\/p\/([^\/]+)/)
-
-                    return {
-                        orgSlug: orgMatch ? orgMatch[1] : undefined,
-                        clientSlug: clientMatch ? clientMatch[1] : undefined,
-                        projectSlug: projectMatch ? projectMatch[1] : undefined
-                    }
-                })()
-            })
-            setIsSubmitted(true)
-        } catch (err) {
-            console.error('Failed to submit feedback', err)
-        } finally {
-            setIsSubmitting(false)
-        }
+        setSubmitError(null)
+        // The firm comes from today's URL (crash-report.ts), and a report that didn't arrive says
+        // so: the action answers { success: false } rather than throwing.
+        const sent = await sendCrashReport({
+            feedback,
+            error: { message: error.message, stack: error.stack, digest: error.digest },
+            context: 'GlobalError',
+        })
+        if (sent.ok) setIsSubmitted(true)
+        else setSubmitError(sent.message)
+        setIsSubmitting(false)
     }
 
     return (
@@ -104,12 +74,16 @@ export default function Error({
                     </div>
 
                     <h1 className="text-2xl font-bold text-gray-900 mb-2">
-                        Something went wrong
+                        {CRASH_TITLE}
                     </h1>
 
-                    <p className="text-gray-600 mb-8 max-w-sm">
-                        We encountered an unexpected error. Please help us fix it by checking the details below.
+                    <p className="text-gray-600 max-w-sm">
+                        Try again, or go home. If it keeps happening, tell us what you were doing below.
                     </p>
+                    {reference && (
+                        <p className="mt-2 font-mono text-xs text-gray-500">{reference}</p>
+                    )}
+                    <div className="mb-8" />
 
                     {/* Feedback Form */}
                     {!isSubmitted ? (
@@ -123,6 +97,9 @@ export default function Error({
                                 placeholder="E.g., I clicked the 'Save' button..."
                                 className="w-full h-24 p-3 text-sm border-gray-300 rounded-md focus:ring-gray-500 focus:border-gray-500"
                             />
+                            {submitError && (
+                                <p role="alert" className="mt-2 text-sm text-red-700">{submitError}</p>
+                            )}
                             <div className="mt-3 flex justify-end">
                                 <Button
                                     onClick={handleSubmit}

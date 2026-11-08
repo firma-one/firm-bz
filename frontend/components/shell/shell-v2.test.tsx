@@ -226,3 +226,27 @@ describe('HeaderBar breadcrumbs', () => {
         }
     })
 })
+
+describe('SidebarV2 when its data fails to load', () => {
+    it('says the engagements couldn’t load, not "No active engagements yet."', () => {
+        setShell({ data: null, loadFailed: true })
+        render(<SidebarV2 />)
+        expect(screen.getByText(/Couldn't load your engagements\./)).toBeTruthy()
+        expect(screen.queryByText('No active engagements yet.')).toBeNull()
+        screen.getAllByRole('button', { name: 'Try again' })[0].click()
+        expect(shell.refresh).toHaveBeenCalled()
+    })
+
+    it('says the permissions couldn’t load, where admin items would be', () => {
+        setShell({ canManage: false, permissionsError: 'Something went wrong on our side.' })
+        render(<SidebarV2 />)
+        expect(screen.getByText(/Couldn't load your permissions\./)).toBeTruthy()
+        expect(screen.queryByText('Settings')).toBeNull()
+    })
+
+    it('an empty list that did load still reads as empty', () => {
+        setShell({}, { clients: [] })
+        render(<SidebarV2 />)
+        expect(screen.getByText('No active engagements yet.')).toBeTruthy()
+    })
+})

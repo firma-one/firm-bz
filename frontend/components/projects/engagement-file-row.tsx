@@ -1,5 +1,6 @@
 'use client'
 
+import { failureFrom, failureReason } from '@/lib/files/action-failure'
 import React from 'react'
 import {
     Folder,
@@ -141,6 +142,8 @@ export interface EngagementFileRowProps {
     isMoveTarget?: boolean
     /** When true, the current folder is an approved deliverable — disable all write operations. */
     isInsideApprovedDeliverable?: boolean
+    /** The engagement is completed: the row reads, and its actions are off. */
+    readOnly?: boolean
     /** The folder being listed is a deliverable or inside one, so this row is inside one too. */
     inDeliverableFolder?: boolean
     /** The viewer's engagement role: decides which stages they may move a row to (as on the Board). */
@@ -214,6 +217,7 @@ export function EngagementFileRow({
     isUploadTarget = false,
     isMoveTarget = false,
     isInsideApprovedDeliverable = false,
+    readOnly = false,
     inDeliverableFolder = false,
     roleSlug = null,
     assignablePeople = [],
@@ -237,7 +241,7 @@ export function EngagementFileRow({
 
     const locked = file.lock?.type === 'finalize'
     const isFolderApproved = isFolder && file.isDeliverable && (file as any).deliverableStatus === 'approved'
-    const canMutateFile = canEdit && !locked && !isIntakeRow && !isInsideApprovedDeliverable && !isFolderApproved
+    const canMutateFile = canEdit && !readOnly && !locked && !isIntakeRow && !isInsideApprovedDeliverable && !isFolderApproved
     const canOrganizeTree = canManage && !locked && !isIntakeRow && !isFolderApproved && !isInsideApprovedDeliverable
     // A deliverable folder's due date is the deliverable's (the Board's); other folders have none.
     const canEditDueDate = canManage && (!isFolder || !!file.isDeliverable) && !isFolderApproved && !locked && !isIntakeRow
@@ -256,10 +260,10 @@ export function EngagementFileRow({
     React.useEffect(() => { setSavedDue(file.dueDate ?? null) }, [file.dueDate])
     const missingDue = isTracked && needsDueDate(shownStage, savedDue)
     // Changeable in place on tracked rows, until the deliverable is approved; the role decides which moves.
-    const canEditStatus = isTracked && !!roleSlug && !!file.projectDocumentId && !isIntakeRow && !isFolderApproved && !isInsideApprovedDeliverable
+    const canEditStatus = !readOnly && isTracked && !!roleSlug && !!file.projectDocumentId && !isIntakeRow && !isFolderApproved && !isInsideApprovedDeliverable
     // As the Due column has it: a plain folder only organizes, so it has no assignee. Leads, as the assignee route allows.
     const hasAssignee = !isFolder || !!file.isDeliverable
-    const canEditAssignee = hasAssignee && isProjectLead && !isEC && !isGuest && !!file.projectDocumentId
+    const canEditAssignee = !readOnly && hasAssignee && isProjectLead && !isEC && !isGuest && !!file.projectDocumentId
         && !locked && !isIntakeRow && !isFolderApproved && !isInsideApprovedDeliverable
     const isIndexing = !isFolder && !!file.projectDocumentId && file.indexingStatus === 'PROCESSING'
     // Row tools appear on hover or keyboard focus, and stay while the row is in use.
@@ -277,9 +281,9 @@ export function EngagementFileRow({
                 tracked: isTracked,
                 canEditDue: canEditDueDate,
                 // Assignee and description, as on a deliverable: leads, until it's approved or finalized.
-                canManage: isProjectLead && !locked && !isIntakeRow && !isInsideApprovedDeliverable,
+                canManage: !readOnly && isProjectLead && !locked && !isIntakeRow && !isInsideApprovedDeliverable,
                 // Blocked is the firm's own, on a document, until its deliverable is approved.
-                canBlock: !isEC && !isGuest && (roleSlug === 'eng_admin' || roleSlug === 'eng_member')
+                canBlock: !readOnly && !isEC && !isGuest && (roleSlug === 'eng_admin' || roleSlug === 'eng_member')
                     && !isFolder && !!file.projectDocumentId && !locked && !isIntakeRow && !isInsideApprovedDeliverable,
                 onSaved: onShareSaved,
             },
@@ -287,7 +291,9 @@ export function EngagementFileRow({
     }
 
     // Rename and Open on the strip follow the ⋮ menu's rules, and say why when they're off.
-    const renameOffReason = locked
+    const renameOffReason = readOnly
+        ? "This engagement is completed, so it's read only"
+        : locked
         ? "Finalized documents can't be renamed"
         : (isFolderApproved || isInsideApprovedDeliverable) ? 'Approved deliverables cannot be reorganized' : null
     const openOffReason = isInsideApprovedDeliverable ? 'Use the preview panel to view this document' : null
@@ -296,14 +302,16 @@ export function EngagementFileRow({
     async function handleRemoveBookmark(e: React.MouseEvent) {
         e.stopPropagation()
         try {
-            await fetch('/api/bookmarks', {
+            const res = await fetch('/api/bookmarks', {
                 method: 'DELETE',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ id: bookmarkId }),
             })
+            // A refusal used to pass without a word: fetch only throws when the request never got there (P2-06).
+            if (!res.ok) throw await failureFrom(res)
             window.dispatchEvent(new CustomEvent('pockett-bookmarks-updated'))
-        } catch {
-            onAddToast({ type: 'error', title: 'Error', message: 'Failed to remove bookmark.' })
+        } catch (err) {
+            onAddToast({ type: 'error', title: "Couldn't remove the bookmark", message: failureReason(err) })
         }
     }
 
@@ -318,7 +326,7 @@ export function EngagementFileRow({
             key={file.id}
             id={`file-row-${file.id}`}
             data-file-id={file.id}
-            draggable={canEdit && !loading}
+            draggable={canEdit && !readOnly && !loading}
             onDragStart={(e) => onDragStart(e, file)}
             onDragEnd={onDragEnd}
             onDragOver={(e) => onDragOver(e, file)}
@@ -697,17 +705,17 @@ export function EngagementFileRow({
                             projectId={projectId}
                             orgSlug={orgSlug}
                             onShareSaved={onShareSaved}
-                            onMarkAsDeliverable={onMarkAsDeliverable}
-                            onUntagAsDeliverable={(isInsideApprovedDeliverable || isFolderApproved) ? undefined : onUntagAsDeliverable}
+                            onMarkAsDeliverable={readOnly ? undefined : onMarkAsDeliverable}
+                            onUntagAsDeliverable={(readOnly || isInsideApprovedDeliverable || isFolderApproved) ? undefined : onUntagAsDeliverable}
                             canManage={canOrganizeTree}
                             currentFolderType={currentFolderType}
                             onOpenCommentPane={(docId) => onOpenCommentPane(docId)}
                             onOpenInfoPane={(docId) => onOpenInfoPane(docId)}
                             onOpenDetails={openDetails}
-                            onRenameDocument={canEdit && !locked && !isIntakeRow ? (doc) => onOpenRename(doc as DriveFile) : undefined}
-                            onDuplicateDocument={canEdit && !locked && !isIntakeRow ? (doc) => onDuplicate(doc as DriveFile) : undefined}
-                            onCopyDocument={generalFolderId && canEdit && !locked && !isIntakeRow ? (doc) => onOpenCopyMove(doc as DriveFile, 'copy') : undefined}
-                            onMoveDocument={generalFolderId && canEdit && !locked && !isIntakeRow ? (doc) => onOpenCopyMove(doc as DriveFile, 'move') : undefined}
+                            onRenameDocument={canEdit && !readOnly && !locked && !isIntakeRow ? (doc) => onOpenRename(doc as DriveFile) : undefined}
+                            onDuplicateDocument={canEdit && !readOnly && !locked && !isIntakeRow ? (doc) => onDuplicate(doc as DriveFile) : undefined}
+                            onCopyDocument={generalFolderId && canEdit && !readOnly && !locked && !isIntakeRow ? (doc) => onOpenCopyMove(doc as DriveFile, 'copy') : undefined}
+                            onMoveDocument={generalFolderId && canEdit && !readOnly && !locked && !isIntakeRow ? (doc) => onOpenCopyMove(doc as DriveFile, 'move') : undefined}
                             onCrossEngagementCopy={isProjectLead && canMutateFile ? (doc) => onOpenCrossEngagement(doc as DriveFile) : undefined}
                             onDeleteDocument={canMutateFile ? (doc) => onTrash(doc as DriveFile) : undefined}
                             onMakePrivate={canManage && !locked && !isIntakeRow && !file.isPrivate && isInsideDeliverable ? () => onPrivacy(file, true) : undefined}
@@ -757,6 +765,7 @@ export function EngagementFileRow({
                         // A fix moved its deliverable or its documents too: the list shows them as they are now.
                         onOthersChanged={onShareSaved}
                         onError={(message) => onAddToast({ type: 'error', title: "Couldn't set due date", message })}
+                        onWarning={(message) => onAddToast({ type: 'warning', title: 'Due date set', message })}
                     />
                 ) : (
                     // Inset as the editable picker's button is, so a locked row's Due lines up with the others.

@@ -5,11 +5,13 @@ import { getActiveSubscriptionForGroup } from '@/lib/billing/active-billing-subs
 import { resolveGroupId } from '@/lib/billing/billing-group'
 import { validateCheckoutReturnTo } from '@/lib/billing/checkout-return-path'
 import { createPolarClient } from '@/lib/billing/polar-client'
+import { polarFailure, polarFailureWords } from '@/lib/billing/polar-error-reason'
+import { logger } from '@/lib/logger'
 
 export async function POST(request: NextRequest) {
     const accessToken = process.env.POLAR_ACCESS_TOKEN?.trim()
     if (!accessToken) {
-        return NextResponse.json({ error: 'Polar is not configured.' }, { status: 503 })
+        return NextResponse.json({ error: "Billing isn't set up on this server yet." }, { status: 503 })
     }
 
     const supabase = await createClient()
@@ -17,7 +19,7 @@ export async function POST(request: NextRequest) {
         data: { session },
     } = await supabase.auth.getSession()
     if (!session?.user?.id) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+        return NextResponse.json({ error: 'Your session has ended. Sign in again, then try again.' }, { status: 401 })
     }
 
     const body = await request.json().catch(() => ({}))
@@ -38,7 +40,7 @@ export async function POST(request: NextRequest) {
     })
     if (!adminMembership) {
         return NextResponse.json(
-            { error: 'Only firm admins can open the billing portal for this workspace.' },
+            { error: 'Only a firm admin can manage billing for this workspace. Ask an admin for access.' },
             { status: 403 }
         )
     }
@@ -61,21 +63,26 @@ export async function POST(request: NextRequest) {
     }
 
     const polar = createPolarClient(accessToken)
-    const customerSession = await polar.customerSessions
-        .create({
+    try {
+        const customerSession = await polar.customerSessions.create({
             externalCustomerId: groupId,
             returnUrl,
         })
-        .catch(() => null)
-    if (!customerSession) {
-        if (!activeSub?.polarCustomerId) {
+        return NextResponse.json({ url: customerSession.customerPortalUrl })
+    } catch (e) {
+        const failure = polarFailure(e)
+        logger.error('Customer portal: Polar refused a customer session', e instanceof Error ? e : new Error(String(e)), 'billing', {
+            groupId,
+            status: failure.status,
+            detail: failure.detail,
+        })
+        // Only a "not found" from Polar means there is no customer yet; an outage is not that.
+        if (failure.kind === 'not_found' && !activeSub?.polarCustomerId) {
             return NextResponse.json(
-                { error: 'No Polar customer on file yet. Complete checkout first, then try again.' },
+                { error: 'This workspace has no paid plan with Polar yet. Choose a plan first', code: 'no_customer' },
                 { status: 409 }
             )
         }
-        return NextResponse.json({ error: 'Could not open billing portal right now.' }, { status: 502 })
+        return NextResponse.json({ error: polarFailureWords(e) }, { status: 502 })
     }
-
-    return NextResponse.json({ url: customerSession.customerPortalUrl })
 }

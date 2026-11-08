@@ -75,6 +75,10 @@ import { fetchWithTimeout, AI_TIMEOUT_MS } from '@/lib/ai/fetch-timeout'
 import { Brio } from '@/components/ui/brio'
 import { BrioByline } from '@/components/ui/brio-byline'
 import { useToast } from '@/components/ui/toast'
+import { failureReason } from '@/lib/files/action-failure'
+import { LoadFailed } from '@/components/ui/load-failed'
+import { shareReportText, type ShareReportOutcome } from '@/lib/insights/share-report-outcome'
+import { BRIO_SUMMARY_FAILED, BRIO_UNREACHABLE_RETRY } from '@/lib/ai/brio-failure'
 import { StreamingText } from '@/components/ui/streaming-text'
 import { BrioSections } from '@/components/ui/brio-sections'
 import { findUnfilledSections } from '@/lib/ai/summary-sections'
@@ -1162,6 +1166,42 @@ function DocActivitySection({ data, engagementBase }: { data: EngagementInsights
             )}
         </div>
     )
+}
+
+/** The capture library's errors are its internals; this is what a person reads when the PDF can't be drawn (P2-13). */
+export const PDF_CAPTURE_FAILED = "The report couldn't be drawn in this browser. Try again, or reload the page."
+
+/** The auth guards' bare words, which are never shown as they are. */
+const BARE_ANSWERS = new Set(['Unauthorized', 'Forbidden', 'Project not found', 'Not found'])
+
+async function errorWords(res: Response): Promise<string | null> {
+    const body = await res.json().catch(() => null) as { error?: unknown } | null
+    const said = typeof body?.error === 'string' ? body.error.trim() : ''
+    return said && !BARE_ANSWERS.has(said) ? said : null
+}
+
+/** Why the Overview didn't load (P1-66). */
+export async function overviewFailureText(res: Response): Promise<string> {
+    if (res.status === 401) return 'Sign in again to see it.'
+    const said = await errorWords(res)
+    if (said) return said
+    if (res.status === 403) return "You don't have access to this engagement's overview."
+    if (res.status === 404) return 'This engagement was deleted or moved.'
+    return `The server answered ${res.status}. Try again.`
+}
+
+/**
+ * Why Brio couldn't write the summary. Out of AI credits (429) is the limit's own words: trying again
+ * can't help then (P1-77).
+ */
+export async function summaryFailureNote(res: Response): Promise<string> {
+    if (res.status === 503) return `${ASSISTANT.name} is not configured.`
+    if (res.status === 401) return `Sign in again to ask ${ASSISTANT.name} for a summary.`
+    const said = await errorWords(res)
+    if (said) return said
+    if (res.status === 403) return `You can't ask ${ASSISTANT.name} for a summary on this engagement.`
+    if (res.status === 404) return 'This engagement was deleted or moved.'
+    return BRIO_SUMMARY_FAILED
 }
 
 /** The Summary card's header actions: 28px icon buttons (app-design-refinements.md, section 6). */
@@ -2369,6 +2409,11 @@ export function EngagementInsightsDashboard({
     const { session } = useAuth()
     const [data, setData] = useState<EngagementInsightsResponse | null>(null)
     const [loading, setLoading] = useState(true)
+    /** Why the Overview didn't load, or null. Never shown as zero counts or "nothing overdue" (P1-66). */
+    const [loadError, setLoadError] = useState<string | null>(null)
+    /** Whether an Overview is on screen, read by the load's catch without re-running the load. */
+    const loadedRef = useRef(false)
+    useEffect(() => { loadedRef.current = data !== null }, [data])
     const [refreshTick, setRefreshTick] = useState(0)
     const [shareState, setShareState] = useState<'idle' | 'capturing' | 'confirm' | 'sending' | 'sent' | 'error'>('idle')
     const [shareError, setShareError] = useState<string | null>(null)
@@ -2378,6 +2423,8 @@ export function EngagementInsightsDashboard({
     /** Which summary was last copied ('draft' | 'published'), so only that button confirms. */
     const [summaryCopied, setSummaryCopied] = useState<string | null>(null)
     const { addToast } = useToast()
+    const toastRef = useRef(addToast)
+    useEffect(() => { toastRef.current = addToast }, [addToast])
     // The publisher shown in the byline until the refetch after publishing brings the stored one.
     const myDisplayName = (session?.user?.user_metadata?.full_name as string | undefined)
         ?? session?.user?.email?.split('@')[0] ?? null
@@ -2532,6 +2579,8 @@ export function EngagementInsightsDashboard({
             setTimeout(() => setDlState('idle'), 2500)
         } catch {
             setDlState('idle')
+            // The capture library's own errors are its internals, so the words are ours (P2-13).
+            addToast({ type: 'error', title: "Couldn't create the PDF", message: PDF_CAPTURE_FAILED })
         }
     }
 
@@ -2539,8 +2588,16 @@ export function EngagementInsightsDashboard({
         if (!session?.access_token) return
         setShareState('capturing')
         setShareError(null)
+        let pdf: Awaited<ReturnType<typeof captureHealthCard>>
         try {
-            const pdf = await captureHealthCard()
+            pdf = await captureHealthCard()
+        } catch {
+            setShareError(PDF_CAPTURE_FAILED)
+            setShareState('error')
+            addToast({ type: 'error', title: "Couldn't create the PDF", message: PDF_CAPTURE_FAILED })
+            return
+        }
+        try {
 
             const buf = pdf.output('arraybuffer') as ArrayBuffer
             const bytes = new Uint8Array(buf)
@@ -2556,13 +2613,23 @@ export function EngagementInsightsDashboard({
                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
                 body: JSON.stringify({ pdfBase64, pageUrl }),
             })
-            const json = await res.json().catch(() => ({}))
-            if (!res.ok) throw new Error(json?.error ?? `Server error ${res.status}`)
+            const json = await res.json().catch(() => ({})) as Partial<ShareReportOutcome> & { error?: string }
+            if (!res.ok) throw new Error(json?.error ?? `The server answered ${res.status}. Try again.`)
+            // What the sends really did (OT-3): all of them, or "Sent to 3 of 5. Couldn't reach Ana, Raj."
+            const said = shareReportText({ sent: json.sent ?? 0, total: json.total ?? json.sent ?? 0, failed: json.failed ?? [] })
+            addToast(said)
+            if (said.type === 'error') {
+                setShareError(said.message)
+                setShareState('error')
+                return
+            }
             setShareState('sent')
             setTimeout(() => setShareState('idle'), 3000)
         } catch (e) {
-            setShareError(e instanceof Error ? e.message : 'Something went wrong')
+            const reason = failureReason(e)
+            setShareError(reason)
             setShareState('error')
+            addToast({ type: 'error', title: 'Report not sent', message: reason })
         }
     }
 
@@ -2572,7 +2639,12 @@ export function EngagementInsightsDashboard({
         fetch(`/api/projects/${projectId}/insights`, {
             headers: { Authorization: `Bearer ${session.access_token}` },
         })
-            .then((r) => r.json())
+            .then(async (r) => {
+                // An error answer is not the Overview's data: read as data it rendered zero counts, or
+                // threw into the error boundary (P1-66).
+                if (!r.ok) throw new Error(await overviewFailureText(r))
+                return r.json()
+            })
             .then((d) => {
                 // Drafts are one-off: written, reviewed, then published or discarded in one sitting.
                 // One found on the first load was left by a review that never finished (a closed
@@ -2583,9 +2655,15 @@ export function EngagementInsightsDashboard({
                     d = { ...d, insightsSummaryDraft: null, insightsSummaryDraftStale: false }
                 }
                 draftsSweptRef.current = true
+                setLoadError(null)
                 setData(d); setSummaryDraft(d?.insightsSummary ?? ''); setAiDraftEdit(d?.insightsSummaryDraft?.content ?? '')
             })
-            .catch((e) => console.error('Failed to load engagement insights', e))
+            .catch((e) => {
+                const reason = failureReason(e)
+                setLoadError(reason)
+                // A refresh that fails keeps what's on screen, and says so.
+                if (loadedRef.current) toastRef.current({ type: 'error', title: "Couldn't refresh this overview", message: reason })
+            })
             .finally(() => setLoading(false))
     }, [projectId, session?.access_token, refreshTick])
 
@@ -2593,7 +2671,11 @@ export function EngagementInsightsDashboard({
         setSummarySaving(true)
         try {
             const text = summaryDraft.trim() || null
-            await updateEngagementInsightsSummary(projectId, text)
+            const result = await updateEngagementInsightsSummary(projectId, text)
+            if (!result.ok) {
+                addToast({ type: 'error', title: text ? 'Not published' : "Couldn't remove the summary", message: result.error })
+                return
+            }
             // A hand-written summary clears the fingerprint server-side, so it can never be stale.
             setData((prev) => prev ? {
                 ...prev,
@@ -2609,6 +2691,8 @@ export function EngagementInsightsDashboard({
                 : { type: 'success', title: 'Summary removed' })
             setSummaryEditing(false)
             setRefreshTick((t) => t + 1)
+        } catch (e) {
+            addToast({ type: 'error', title: summaryDraft.trim() ? 'Not published' : "Couldn't remove the summary", message: failureReason(e) })
         } finally {
             setSummarySaving(false)
         }
@@ -2623,8 +2707,8 @@ export function EngagementInsightsDashboard({
     const paneOpen = useSyncExternalStore(summaryReviewStore.subscribe, summaryReviewStore.isOpen, () => false)
     const clearPaneRef = useRef(rightPane.clearPane)
     useEffect(() => { clearPaneRef.current = rightPane.clearPane }, [rightPane.clearPane])
-    // Preview (sections, with the lead's own as text boxes) or Markdown. Kept here so both of the
-    // pane's copies show the same view, and back to Preview for each new draft.
+    // Preview (sections, with the lead's own as text boxes) or Markdown. Kept here so the pane and the
+    // page show the same view, and back to Preview for each new draft.
     const [reviewMode, setReviewMode] = useState<ReviewMode>('preview')
     const draftGeneratedAt = data?.insightsSummaryDraft?.generatedAt ?? null
     useEffect(() => { setReviewMode('preview') }, [draftGeneratedAt])
@@ -2659,7 +2743,8 @@ export function EngagementInsightsDashboard({
         setData((prev) => prev ? { ...prev, insightsSummaryDraft: null, insightsSummaryDraftStale: false } : prev)
         setAiDraftEdit('')
         setAiGenerateNote(null)
-        try { await dismissEngagementAiSummary(projectId) } catch { /* swept on the next load */ }
+        // Its answer isn't read on purpose: a draft left behind is swept on the next load.
+        try { void (await dismissEngagementAiSummary(projectId)) } catch { /* swept on the next load */ }
     }, [projectId])
 
     // Closing the pane (its ×) discards the draft. If the lead has typed in it, ask first.
@@ -2754,9 +2839,7 @@ export function EngagementInsightsDashboard({
                 abort.signal,
             )
             if (!res.ok) {
-                setAiGenerateNote(res.status === 503
-                    ? `${ASSISTANT.name} is not configured.`
-                    : `${ASSISTANT.name} could not write a summary. Try again.`)
+                setAiGenerateNote(await summaryFailureNote(res))
                 return
             }
             if (!res.body) throw new Error('No stream')
@@ -2780,7 +2863,7 @@ export function EngagementInsightsDashboard({
 
                 for (const raw of lines) {
                     if (!raw.trim()) continue
-                    const evt = JSON.parse(raw) as { type: string; text?: string; content?: string; generatedAt?: string }
+                    const evt = JSON.parse(raw) as { type: string; text?: string; content?: string; generatedAt?: string; message?: string }
 
                     if (evt.type === 'delta' && evt.text) {
                         pending += evt.text
@@ -2797,7 +2880,7 @@ export function EngagementInsightsDashboard({
                         completed = { content: evt.content, generatedAt: evt.generatedAt! }
                     } else if (evt.type === 'error') {
                         noted = true
-                        setAiGenerateNote(`${ASSISTANT.name} could not write a summary. Try again.`)
+                        setAiGenerateNote(evt.message || BRIO_SUMMARY_FAILED)
                     }
                 }
             }
@@ -2823,9 +2906,9 @@ export function EngagementInsightsDashboard({
                 // (half a client-facing document is worse than none), but it has to be said.
                 setAiGenerateNote(`${ASSISTANT.name} was interrupted before finishing. Nothing was saved — try again.`)
             }
-        } catch {
+        } catch (e) {
             // Stopped because its pane was closed: discarding it was the point, so no error.
-            if (!abort.signal.aborted) setAiGenerateNote(`${ASSISTANT.name} could not write a summary. Try again.`)
+            if (!abort.signal.aborted) setAiGenerateNote(e instanceof TypeError ? BRIO_UNREACHABLE_RETRY : BRIO_SUMMARY_FAILED)
         } finally {
             finished = true
             cancelAnimationFrame(raf)
@@ -2839,7 +2922,12 @@ export function EngagementInsightsDashboard({
         if (!content) return
         setAiDraftAction('publish')
         try {
-            await approveEngagementAiSummary(projectId, content)
+            const result = await approveEngagementAiSummary(projectId, content)
+            if (!result.ok) {
+                // "Complete these sections before publishing: Next steps", among others.
+                addToast({ type: 'error', title: 'Not published', message: result.error })
+                return
+            }
             // Optimistic update for immediate feedback...
             setData((prev) => prev ? {
                 ...prev,
@@ -2856,6 +2944,8 @@ export function EngagementInsightsDashboard({
             addToast({ type: 'success', title: 'Summary published', message: 'Visible to everyone on the engagement and in exports.' })
             setAiGenerateNote(null)
             setRefreshTick((t) => t + 1)
+        } catch (e) {
+            addToast({ type: 'error', title: 'Not published', message: failureReason(e) })
         } finally {
             setAiDraftAction(null)
         }
@@ -2864,9 +2954,15 @@ export function EngagementInsightsDashboard({
     const handleAiSummaryDismiss = async () => {
         setAiDraftAction('dismiss')
         try {
-            await dismissEngagementAiSummary(projectId)
+            const result = await dismissEngagementAiSummary(projectId)
+            if (!result.ok) {
+                addToast({ type: 'error', title: "Couldn't discard the draft", message: result.error })
+                return
+            }
             setData((prev) => prev ? { ...prev, insightsSummaryDraft: null } : prev)
             setAiGenerateNote(null)
+        } catch (e) {
+            addToast({ type: 'error', title: "Couldn't discard the draft", message: failureReason(e) })
         } finally {
             setAiDraftAction(null)
         }
@@ -2902,6 +2998,14 @@ export function EngagementInsightsDashboard({
     useLayoutEffect(() => {
         summaryReviewStore.set(reviewing ? reviewProps : null)
     })
+
+    // A failed load is never zero counts and "nothing overdue" (P1-66). A failed refresh keeps the
+    // Overview on screen and says so in a toast (the load's catch).
+    if (loadError && !data && !loading) {
+        return (
+            <LoadFailed className="py-16" what="this overview" reason={loadError} onRetry={() => setRefreshTick((t) => t + 1)} />
+        )
+    }
 
     return (
         <TooltipProvider delayDuration={150}>
@@ -3017,7 +3121,7 @@ export function EngagementInsightsDashboard({
                                             </button>
                                         </TooltipTrigger>
                                         <TooltipContent side="bottom" className="text-xs">
-                                            {shareState === 'error' ? (shareError ?? 'Something went wrong — try again') : `Email health report PDF to ${memberCount} team member${memberCount === 1 ? '' : 's'}`}
+                                            {shareState === 'error' ? (shareError ?? 'Something went wrong. Try again.') : `Email health report PDF to ${memberCount} team member${memberCount === 1 ? '' : 's'}`}
                                         </TooltipContent>
                                     </Tooltip>
                                 </div>

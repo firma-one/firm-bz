@@ -31,6 +31,7 @@ import { Label } from "@/components/ui/label"
 import { removeMember, revokeInvitation, updateMemberPersona } from '@/lib/actions/members'
 import { resendInvitation } from '@/lib/actions/invitations'
 import { useToast } from "@/components/ui/toast"
+import { failureReason } from '@/lib/files/action-failure'
 import { roleDescription, PERSONA_UI_GROUPS, PersonaUiRole, PersonaUiSubRole, SUB_ROLE_LABEL, getPersonaUiGroup, resolvePersonaSlug } from '@/lib/persona-ui-groups'
 import { initialsOf } from '@/lib/initials'
 
@@ -89,13 +90,18 @@ export function MemberList({ members, invitations, personas, onRefresh, canManag
         if (!editingMember || !selectedPersonaId) return
         setActionLoading("DIALOG_UPDATING")
         try {
-            await updateMemberPersona(editingMember.id, selectedPersonaId)
-            addToast({ type: 'success', title: 'Role Updated', message: 'Member role has been updated.' })
+            const result = await updateMemberPersona(editingMember.id, selectedPersonaId)
+            if (!result.ok) {
+                addToast({ type: 'error', title: "Couldn't change role", message: result.error })
+                return
+            }
+            if (result.warning) addToast({ type: 'warning', title: 'Role changed', message: result.warning })
+            else addToast({ type: 'success', title: 'Role changed', message: 'Their access in storage is updated in the background.' })
             onRefresh()
             setEditingMember(null)
-        } catch (e: any) {
+        } catch (e) {
             console.error(e)
-            addToast({ type: 'error', title: 'Update Failed', message: e.message || 'Could not update role.' })
+            addToast({ type: 'error', title: "Couldn't change role", message: failureReason(e) })
         } finally {
             setActionLoading(null)
         }
@@ -107,12 +113,17 @@ export function MemberList({ members, invitations, personas, onRefresh, canManag
         setMemberIdToRemove(null)
         setActionLoading(id)
         try {
-            await removeMember(id)
-            addToast({ type: 'success', title: 'Member Removed', message: 'User access has been revoked.' })
+            const result = await removeMember(id)
+            if (!result.ok) {
+                addToast({ type: 'error', title: "Couldn't remove member", message: result.error })
+                return
+            }
+            if (result.warning) addToast({ type: 'warning', title: 'Member removed', message: result.warning })
+            else addToast({ type: 'success', title: 'Member removed', message: 'Their access has been taken back.' })
             onRefresh()
         } catch (e) {
             console.error(e)
-            addToast({ type: 'error', title: 'Error', message: 'Failed to remove member.' })
+            addToast({ type: 'error', title: "Couldn't remove member", message: failureReason(e) })
         } finally {
             setActionLoading(null)
         }
@@ -124,12 +135,16 @@ export function MemberList({ members, invitations, personas, onRefresh, canManag
         setInviteIdToRevoke(null)
         setActionLoading(id)
         try {
-            await revokeInvitation(id)
-            addToast({ type: 'success', title: 'Invitation Cancelled', message: 'The invitation has been successfully revoked.' })
+            const result = await revokeInvitation(id)
+            if (!result.ok) {
+                addToast({ type: 'error', title: "Couldn't cancel invitation", message: result.error })
+                return
+            }
+            addToast({ type: 'success', title: 'Invitation canceled', message: 'The invitation has been revoked.' })
             onRefresh()
         } catch (e) {
             console.error(e)
-            addToast({ type: 'error', title: 'Error', message: 'Failed to revoke invitation.' })
+            addToast({ type: 'error', title: "Couldn't cancel invitation", message: failureReason(e) })
         } finally {
             setActionLoading(null)
         }
@@ -138,13 +153,19 @@ export function MemberList({ members, invitations, personas, onRefresh, canManag
     const handleResendInvite = async (id: string, email: string) => {
         setActionLoading(id)
         try {
-            await resendInvitation(id)
+            const result = await resendInvitation(id)
+            if (!result.ok) {
+                // The row now reads Email failed, so the refresh agrees with the toast.
+                addToast({ type: 'error', title: "Couldn't resend invitation", message: result.error })
+                onRefresh()
+                return
+            }
             // The toast, and the row's status pill fading in (the shared state-change feedback).
             resendFeedback.confirm({ id, name: email, title: 'Invitation resent' })
             onRefresh()
         } catch (e) {
             console.error(e)
-            addToast({ type: 'error', title: 'Failed to Send', message: 'Could not resend the invitation.' })
+            addToast({ type: 'error', title: "Couldn't resend invitation", message: failureReason(e) })
         } finally {
             setActionLoading(null)
         }

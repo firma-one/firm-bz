@@ -8,6 +8,7 @@ import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 import { createClient as createCookieClient } from '@/utils/supabase/server'
 import { peekOAuthState, safeNextPath, verifyOAuthState } from '@/lib/connectors/oauth-state'
 import { getManageableConnector, isClientManager, isFirmAdmin } from '@/lib/connectors/connector-access'
+import { oauthErrorDetail, oauthProviderErrorCode } from '@/lib/connectors/oauth-provider-error'
 
 const oneDriveConnector = OneDriveConnector.getInstance()
 
@@ -55,9 +56,11 @@ function resolveOAuthFailureRedirectPath(state: string | null): string {
   return next.split('#')[0] || '/d/onboarding'
 }
 
-function appPathWithError(appPath: string, errorCode: string): string {
+function appPathWithError(appPath: string, errorCode: string, detail?: string | null): string {
   const u = new URL(appPath, 'http://oauth-callback.local')
   u.searchParams.set('error', errorCode)
+  // The provider's own sentence (P2-31), for the page that reads the error.
+  if (detail) u.searchParams.set('error_description', detail)
   return u.pathname + u.search
 }
 
@@ -68,6 +71,7 @@ function appPathWithError(appPath: string, errorCode: string): string {
 function popupHtml(payload: {
   ok: boolean
   error?: string
+  errorDescription?: string | null
   connectionId?: string
   organizationId?: string
   email?: string
@@ -79,7 +83,7 @@ function popupHtml(payload: {
   var payload = ${payloadStr};
   var targetOrigin = window.location.origin;
   if (window.opener && !window.opener.closed) {
-    window.opener.postMessage({ type: 'onedrive_oauth', ok: payload.ok, error: payload.error, connectionId: payload.connectionId, organizationId: payload.organizationId, email: payload.email, nonce: payload.nonce }, targetOrigin);
+    window.opener.postMessage({ type: 'onedrive_oauth', ok: payload.ok, error: payload.error, errorDescription: payload.errorDescription, connectionId: payload.connectionId, organizationId: payload.organizationId, email: payload.email, nonce: payload.nonce }, targetOrigin);
   }
   window.close();
 })();
@@ -101,16 +105,21 @@ export async function GET(request: NextRequest) {
           headers: { 'Content-Type': 'text/html; charset=utf-8' },
         })
       }
-      return NextResponse.redirect(getRedirectUrl('/d?error=onedrive_not_enabled'))
+      return NextResponse.redirect(getRedirectUrl(appPathWithError(resolveOAuthFailureRedirectPath(state), 'not_enabled')))
     }
 
     if (error) {
+      // Microsoft's own reason: "your admin needs to approve this app" (AADSTS65001/90094) used to
+      // read as "cancelled or denied" (P2-31).
+      const providerCode = oauthProviderErrorCode(error, searchParams.get('error_description'))
+      const providerDetail = oauthErrorDetail(searchParams.get('error_description'))
+      logger.warn('OneDrive OAuth callback: Microsoft answered an error', { error, providerCode, detail: providerDetail })
       if (isPopup) {
-        return new NextResponse(popupHtml({ ok: false, error: 'oauth_error', nonce: stateNonce }), {
+        return new NextResponse(popupHtml({ ok: false, error: providerCode, errorDescription: providerDetail, nonce: stateNonce }), {
           headers: { 'Content-Type': 'text/html; charset=utf-8' },
         })
       }
-      return NextResponse.redirect(getRedirectUrl(appPathWithError(resolveOAuthFailureRedirectPath(state), 'oauth_error')))
+      return NextResponse.redirect(getRedirectUrl(appPathWithError(resolveOAuthFailureRedirectPath(state), providerCode, providerDetail)))
     }
 
     if (!code) {
@@ -154,7 +163,7 @@ export async function GET(request: NextRequest) {
           headers: { 'Content-Type': 'text/html; charset=utf-8' },
         })
       }
-      return NextResponse.redirect(getRedirectUrl('/d?error=oauth_not_configured'))
+      return NextResponse.redirect(getRedirectUrl(appPathWithError(resolveOAuthFailureRedirectPath(state), 'oauth_not_configured')))
     }
 
     const tokenBody = new URLSearchParams({
@@ -187,12 +196,18 @@ export async function GET(request: NextRequest) {
     if (!tokenResponse.ok) {
       const txt = await tokenResponse.text()
       logger.error('OneDrive token exchange failed', new Error(txt))
+      // Microsoft words consent problems here too (invalid_grant + AADSTS65001).
+      let tokenErr: { error?: string; error_description?: string } = {}
+      try { tokenErr = JSON.parse(txt) } catch { /* not JSON */ }
+      const mapped = oauthProviderErrorCode(tokenErr.error, tokenErr.error_description)
+      const tokenCode = mapped === 'oauth_error' ? 'token_exchange_failed' : mapped
+      const tokenDetail = oauthErrorDetail(tokenErr.error_description)
       if (isPopup) {
-        return new NextResponse(popupHtml({ ok: false, error: 'token_exchange_failed', nonce: stateNonce }), {
+        return new NextResponse(popupHtml({ ok: false, error: tokenCode, errorDescription: tokenDetail, nonce: stateNonce }), {
           headers: { 'Content-Type': 'text/html; charset=utf-8' },
         })
       }
-      return NextResponse.redirect(getRedirectUrl(appPathWithError(oauthFailureBase, 'token_exchange_failed')))
+      return NextResponse.redirect(getRedirectUrl(appPathWithError(oauthFailureBase, tokenCode, tokenDetail)))
     }
 
     const tokens = await tokenResponse.json()
@@ -343,6 +358,13 @@ export async function GET(request: NextRequest) {
         }
       }
 
+      // What the replaced connector was, so a failed save below can put it back (P2-33).
+      const replacedBefore = replaceConnectorId
+        ? await prisma.connector.findUnique({
+            where: { id: replaceConnectorId },
+            select: { status: true, accessToken: true, refreshToken: true, tokenExpiresAt: true, firmId: true },
+          })
+        : null
       if (replaceConnectorId) {
         try {
           await prisma.connector.update({
@@ -357,7 +379,9 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      const connector = await oneDriveConnector.storeConnection(
+      let connector: Awaited<ReturnType<typeof oneDriveConnector.storeConnection>>
+      try {
+        connector = await oneDriveConnector.storeConnection(
         organization?.id,
         userId,
         userInfo.id,
@@ -375,6 +399,22 @@ export async function GET(request: NextRequest) {
         accountTypeMismatch,
         detectedIsPersonalAccount
       )
+      } catch (storeErr) {
+        if (!replaceConnectorId || !replacedBefore) throw storeErr
+        logger.error('OneDrive reconnect: saving the new sign-in failed; restoring the connection', storeErr instanceof Error ? storeErr : new Error(String(storeErr)), `connectorId:${replaceConnectorId}`)
+        try {
+          await prisma.connector.update({ where: { id: replaceConnectorId }, data: replacedBefore })
+        } catch (restoreErr) {
+          logger.error('OneDrive reconnect: restoring the connection failed', restoreErr instanceof Error ? restoreErr : new Error(String(restoreErr)), `connectorId:${replaceConnectorId}`)
+          throw storeErr
+        }
+        if (isPopup) {
+          return new NextResponse(popupHtml({ ok: false, error: 'reconnect_failed', nonce: stateNonce }), {
+            headers: { 'Content-Type': 'text/html; charset=utf-8' },
+          })
+        }
+        return NextResponse.redirect(getRedirectUrl(appPathWithError(oauthFailureBase, 'reconnect_failed')))
+      }
 
       // No auto-folder-creation here — unlike Google, OAuth alone never creates a workspace
       // folder for OneDrive. The user must explicitly click "Choose folder" > Personal (which
@@ -421,6 +461,6 @@ export async function GET(request: NextRequest) {
         headers: { 'Content-Type': 'text/html; charset=utf-8' },
       })
     }
-    return NextResponse.redirect(getRedirectUrl('/d?error=callback_error'))
+    return NextResponse.redirect(getRedirectUrl(appPathWithError(resolveOAuthFailureRedirectPath(new URL(request.url).searchParams.get('state')), 'callback_error')))
   }
 }

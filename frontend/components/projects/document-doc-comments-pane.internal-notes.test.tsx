@@ -7,6 +7,7 @@ vi.mock('@/lib/auth-context', () => ({
     useAuth: () => ({ user: { id: 'me', email: 'me@firm.com', user_metadata: {} } }),
 }))
 vi.mock('@/lib/right-pane-context', () => ({ useRightPane: () => ({ clearPane: vi.fn() }) }))
+vi.mock('@/components/ui/toast', () => ({ useToast: () => ({ addToast: vi.fn() }) }))
 
 import { DocumentDocCommentsPane } from './document-doc-comments-pane'
 

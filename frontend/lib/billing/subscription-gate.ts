@@ -1,5 +1,6 @@
 import { getFirmRowForBillingGate } from '@/lib/billing/billing-group'
 import { logger } from '@/lib/logger'
+import { userFacing } from '@/lib/actions/action-result'
 import { SubscriptionRevokedError } from '@/lib/errors/api-error'
 
 export type PlanTier = 'free' | 'pro' | 'enterprise'
@@ -71,7 +72,7 @@ export async function debugUpgradeOrg(organizationId: string) {
 export async function requireAccess(organizationId: string, feature: string) {
     const ok = await checkFeatureAccess(organizationId, feature)
     if (!ok) {
-        throw new Error('Upgrade required')
+        throw userFacing('Upgrade required', 'upgrade_required')
     }
 }
 

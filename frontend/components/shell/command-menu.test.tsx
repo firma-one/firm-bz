@@ -26,9 +26,9 @@ beforeEach(() => {
     search.getCommandRecents.mockResolvedValue([
         { id: 'r1', entityType: 'engagement', entityId: 'e1', path: '/d/g/f/acme/c/c1/e/fy26/files', title: 'FY26 Audit', context: 'Contoso', visitedAt: '2026-10-14T10:00:00Z' },
     ])
-    search.quickSearch.mockResolvedValue([
+    search.quickSearch.mockResolvedValue({ ok: true, data: [
         { id: 'client:c1', kind: 'client', title: 'Contoso', context: 'Client', href: '/d/g/f/acme/c/contoso' },
-    ])
+    ] })
 })
 
 describe('CommandMenu', () => {
@@ -50,6 +50,26 @@ describe('CommandMenu', () => {
         expect(search.quickSearch).toHaveBeenCalledWith('con', 'acme')
         fireEvent.keyDown(input, { key: 'Enter' })
         expect(push).toHaveBeenCalledWith('/d/g/f/acme/c/contoso')
+    })
+
+    it('says a failed search failed, with its reason and a retry, never "No results" (EM-6)', async () => {
+        search.quickSearch.mockResolvedValueOnce({ ok: false, error: 'Something went wrong on our side. Try again.' })
+        render(<CommandMenu onToggleSidebar={() => {}} onShowShortcuts={() => {}} />)
+        fireEvent.keyDown(document, { key: 'k', metaKey: true })
+        const input = await screen.findByLabelText('Search')
+        fireEvent.change(input, { target: { value: 'zzqx' } })
+        expect(await screen.findByText(/Search couldn.t run · Something went wrong on our side/)).toBeTruthy()
+        expect(screen.queryByText(/No results for/)).toBeNull()
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+        await waitFor(() => expect(search.quickSearch).toHaveBeenCalledTimes(2))
+    })
+
+    it('says a dropped request could not reach the server', async () => {
+        search.quickSearch.mockRejectedValueOnce(new TypeError('Failed to fetch'))
+        render(<CommandMenu onToggleSidebar={() => {}} onShowShortcuts={() => {}} />)
+        fireEvent.keyDown(document, { key: 'k', metaKey: true })
+        fireEvent.change(await screen.findByLabelText('Search'), { target: { value: 'con' } })
+        expect(await screen.findByText(/Couldn.t reach firma/)).toBeTruthy()
     })
 
     it('offers firm admin destinations to admins', async () => {

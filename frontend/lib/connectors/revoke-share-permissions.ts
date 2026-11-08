@@ -2,6 +2,7 @@ import { DocumentSharingPermissionStatus, type Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { getPermissionAdapter } from '@/lib/connectors/registry'
 import { resolveEngagementConnectorId } from '@/lib/connectors/resolve-client-connector'
+import { StorageFailure } from '@/lib/connectors/storage-failure'
 import { logger } from '@/lib/logger'
 
 /**
@@ -13,6 +14,8 @@ import { logger } from '@/lib/logger'
  *
  * A permission Drive wouldn't give up stays on its row: the row is revoked in Firma all the same, but
  * keeps its id, so the permission isn't forgotten while it still stands and a later revoke retries it.
+ * That includes one with no connector left to revoke it through: connecting the storage again lets a
+ * later revoke finish it.
  */
 
 /** What a revoke reads from a sharing row. */
@@ -30,16 +33,20 @@ export interface ShareToRevoke {
 
 export interface RevokeOutcome {
     revoked: number
-    /** The rows whose permission still stands in Drive. */
+    /** The rows whose permission still stands in Drive, including those with no connector left. Their ids stay. */
     failed: string[]
-    /** Permissions with no connector left to revoke them through: nothing more can be done. */
+    /** Of those, the permissions with no connector left to revoke them through. */
     unreachable: number
+    /** Why each failed row's permission still stands, by row id, in words for people. */
+    reasons: Record<string, string>
 }
 
 const BATCH_SIZE = 10
 
+export const NO_CONNECTOR_REASON = 'No storage is connected to this client any more. Connect it again so the access can be taken back.'
+
 export async function revokeSharePermissions(engagementId: string, shares: ShareToRevoke[]): Promise<RevokeOutcome> {
-    const outcome: RevokeOutcome = { revoked: 0, failed: [], unreachable: 0 }
+    const outcome: RevokeOutcome = { revoked: 0, failed: [], unreachable: 0, reasons: {} }
 
     const byConnector = new Map<string | null, ShareToRevoke[]>()
     for (const share of shares) {
@@ -52,15 +59,24 @@ export async function revokeSharePermissions(engagementId: string, shares: Share
         const adapter = connectorId ? await getPermissionAdapter(connectorId) : null
         if (!connectorId || !adapter) {
             outcome.unreachable += group.length
+            for (const share of group) {
+                outcome.failed.push(share.id)
+                outcome.reasons[share.id] = NO_CONNECTOR_REASON
+            }
             continue
         }
         for (let i = 0; i < group.length; i += BATCH_SIZE) {
             await Promise.all(group.slice(i, i + BATCH_SIZE).map(async (share) => {
-                const gone = await adapter
-                    .revokePermission(connectorId, share.document!.externalId, share.connectorPermissionId!)
-                    .catch(() => false)
-                if (gone) outcome.revoked++
-                else outcome.failed.push(share.id)
+                try {
+                    if (await adapter.revokePermission(connectorId, share.document!.externalId, share.connectorPermissionId!)) {
+                        outcome.revoked++
+                        return
+                    }
+                    outcome.reasons[share.id] = 'The storage refused to remove it.'
+                } catch (e) {
+                    outcome.reasons[share.id] = e instanceof StorageFailure ? e.message : "Couldn't reach the storage."
+                }
+                outcome.failed.push(share.id)
             }))
         }
     }
@@ -68,8 +84,12 @@ export async function revokeSharePermissions(engagementId: string, shares: Share
     if (outcome.unreachable > 0) {
         logger.warn('Drive permissions could not be revoked: no connector', { engagementId, count: outcome.unreachable })
     }
-    if (outcome.failed.length > 0) {
-        logger.error('Drive permissions could not be revoked', new Error('revokePermission failed'), undefined, { engagementId, count: outcome.failed.length })
+    if (outcome.failed.length > outcome.unreachable) {
+        logger.error('Drive permissions could not be revoked', new Error('revokePermission failed'), undefined, {
+            engagementId,
+            count: outcome.failed.length - outcome.unreachable,
+            reason: Object.values(outcome.reasons)[0],
+        })
     }
     return outcome
 }

@@ -588,6 +588,7 @@ export async function GET(
     return NextResponse.json(response)
   } catch (e) {
     console.error('GET firm insights error', e)
-    return NextResponse.json({ error: 'Failed to load insights' }, { status: 500 })
+    // The browser shows this as the reason under "Couldn't load this overview".
+    return NextResponse.json({ error: 'Something went wrong on our side. Try again.' }, { status: 500 })
   }
 }

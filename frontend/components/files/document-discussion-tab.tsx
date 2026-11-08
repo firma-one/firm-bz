@@ -4,6 +4,8 @@ import { useEffect, useState } from "react"
 import { MessagesSquare } from "lucide-react"
 import { DocumentDocCommentsPane, type TaggableDocument } from "@/components/projects/document-doc-comments-pane"
 import { DeliverableIcon } from "@/components/ui/deliverable-icon"
+import { LoadFailed } from "@/components/ui/load-failed"
+import { failureFrom, failureReason } from "@/lib/files/action-failure"
 
 /**
  * A document's Discussions tab in the Details pane. Discussion happens on the deliverable, with its
@@ -31,17 +33,29 @@ export function DocumentDiscussionTab({ projectId, documentId, docId, orgSlug, i
     isExternalUser?: boolean
 }) {
     const [deliverable, setDeliverable] = useState<DeliverableRef | null | undefined>(undefined)
+    /** Why finding the deliverable failed: never read as "this file isn't in one" (P1-73). */
+    const [failed, setFailed] = useState<string | null>(null)
+    const [attempt, setAttempt] = useState(0)
     const [taggable, setTaggable] = useState<TaggableDocument[]>([])
 
     useEffect(() => {
         let cancelled = false
+        setDeliverable(undefined)
+        setFailed(null)
         ;(async () => {
-            const res = await fetch(`/api/projects/${projectId}/documents/${encodeURIComponent(documentId)}/deliverable`)
-            const found: DeliverableRef | null = res.ok ? ((await res.json()).deliverable ?? null) : null
+            let found: DeliverableRef | null
+            try {
+                const res = await fetch(`/api/projects/${projectId}/documents/${encodeURIComponent(documentId)}/deliverable`)
+                if (!res.ok) throw await failureFrom(res)
+                found = (await res.json()).deliverable ?? null
+            } catch (e) {
+                if (!cancelled) setFailed(failureReason(e))
+                return
+            }
             if (cancelled) return
             setDeliverable(found)
             // The "#" menu lists the deliverable's documents. Only the firm's view loads it: the list
-            // isn't narrowed to what a client may see.
+            // isn't narrowed to what a client may see. Without it the thread still works, untagged.
             if (found && !isExternalUser) {
                 const sub = await fetch(`/api/projects/${projectId}/documents/${found.id}/subtasks`)
                 if (!sub.ok || cancelled) return
@@ -50,9 +64,13 @@ export function DocumentDiscussionTab({ projectId, documentId, docId, orgSlug, i
                     setTaggable(subtasks.map((t) => ({ documentId: t.documentId, docId: t.docId, fileName: t.fileName, mimeType: t.mimeType, breadcrumb: t.breadcrumb })))
                 }
             }
-        })().catch(() => { if (!cancelled) setDeliverable(null) })
+        })().catch(() => {})
         return () => { cancelled = true }
-    }, [projectId, documentId, isExternalUser])
+    }, [projectId, documentId, isExternalUser, attempt])
+
+    if (failed) {
+        return <LoadFailed compact what="this discussion" reason={failed} onRetry={() => setAttempt((n) => n + 1)} />
+    }
 
     if (deliverable === undefined) {
         return <div className="m-4 h-16 animate-pulse rounded-card bg-surface-muted" />

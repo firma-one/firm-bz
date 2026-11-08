@@ -5,6 +5,7 @@ import React, {
   useContext,
   useCallback,
   useEffect,
+  useState,
   useSyncExternalStore,
   type ReactNode,
 } from 'react'
@@ -12,6 +13,8 @@ import { useAuth } from '@/lib/auth-context'
 import { useRightPane } from '@/lib/right-pane-context'
 import { logger } from '@/lib/logger'
 import type { DriveFile } from '@/lib/types'
+import { failureReason } from '@/lib/files/action-failure'
+import { searchFailureFrom } from '@/components/search/search-failed'
 import {
   getProjectSearchState,
   setProjectSearchState,
@@ -56,6 +59,10 @@ type EngagementSearchContextValue = {
   clearRecentSearches: () => void
   /** When search is scoped, e.g. "General", "Confidential", "Staging". */
   searchRootLabel: string | null
+  /** Why the last search couldn't run, or null. A failed search is never shown as "No results" (EM-6). */
+  searchError: string | null
+  /** Runs the current search again. */
+  retrySearch: () => void
 }
 
 const EngagementSearchContext = createContext<EngagementSearchContextValue | null>(null)
@@ -90,6 +97,10 @@ export function EngagementSearchProvider({
   const { searchQuery, searchResults, isSearching, recentSearches } = store
   const searchRootFolderId = rightPane.searchRoot?.searchRootFolderId ?? searchRootFolderIdProp ?? null
   const searchRootLabel = rightPane.searchRoot?.searchRootLabel ?? searchRootLabelProp ?? null
+
+  const [searchError, setSearchError] = useState<string | null>(null)
+  const [retryCount, setRetryCount] = useState(0)
+  const retrySearch = useCallback(() => setRetryCount((n) => n + 1), [])
 
   const closeSearchPanel = useCallback(() => {
     rightPane.clearPane()
@@ -135,35 +146,34 @@ export function EngagementSearchProvider({
           const res = await fetch(`/api/projects/${projectId}/search?${params}`, {
             headers: { Authorization: `Bearer ${session?.access_token}` },
           })
-          if (res.ok) {
-            const data = await res.json()
-            setProjectSearchState(
-              projectId,
-              { searchResults: data.files || [] },
-              () => getRecentSearches(projectId)
-            )
-            pushRecentSearch(projectId, searchQuery.trim())
-            setProjectSearchState(
-              projectId,
-              { recentSearches: getRecentSearches(projectId) },
-              () => getRecentSearches(projectId)
-            )
-          } else {
-            logger.error('Search API failed', new Error(await res.text()))
-            setProjectSearchState(projectId, { searchResults: [] }, () => getRecentSearches(projectId))
-          }
+          if (!res.ok) throw await searchFailureFrom(res)
+          const data = await res.json()
+          setSearchError(null)
+          setProjectSearchState(
+            projectId,
+            { searchResults: data.files || [] },
+            () => getRecentSearches(projectId)
+          )
+          pushRecentSearch(projectId, searchQuery.trim())
+          setProjectSearchState(
+            projectId,
+            { recentSearches: getRecentSearches(projectId) },
+            () => getRecentSearches(projectId)
+          )
         } catch (e) {
           logger.error('Search failed', e as Error)
+          setSearchError(failureReason(e))
           setProjectSearchState(projectId, { searchResults: [] }, () => getRecentSearches(projectId))
         } finally {
           setProjectSearchState(projectId, { isSearching: false }, () => getRecentSearches(projectId))
         }
       } else {
+        setSearchError(null)
         setProjectSearchState(projectId, { searchResults: [] }, () => getRecentSearches(projectId))
       }
     }, DEBOUNCE_MS)
     return () => clearTimeout(timer)
-  }, [searchQuery, projectId, session?.access_token, viewAsPersonaSlug, searchRootFolderId])
+  }, [searchQuery, projectId, session?.access_token, viewAsPersonaSlug, searchRootFolderId, retryCount])
 
   const value: EngagementSearchContextValue = {
     searchQuery,
@@ -180,6 +190,8 @@ export function EngagementSearchProvider({
     addRecentSearch,
     clearRecentSearches,
     searchRootLabel,
+    searchError,
+    retrySearch,
   }
 
   return (
@@ -204,6 +216,8 @@ export function useEngagementSearch(): EngagementSearchContextValue {
       addRecentSearch: () => {},
       clearRecentSearches: () => {},
       searchRootLabel: null,
+      searchError: null,
+      retrySearch: () => {},
     }
   }
   return ctx

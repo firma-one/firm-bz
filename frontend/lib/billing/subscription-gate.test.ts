@@ -106,3 +106,20 @@ describe('checkFirmSubscriptionAccess', () => {
         expect(await checkFirmSubscriptionAccess('firm-1')).toBe(false)
     })
 })
+
+describe('requireAccess', () => {
+    beforeEach(() => {
+        vi.resetAllMocks()
+        process.env.ENFORCE_BILLING_GATES = 'true'
+    })
+
+    it('throws a UserFacingError (code upgrade_required) that asResult passes through', async () => {
+        const { requireAccess } = await import('./subscription-gate')
+        const { UserFacingError } = await import('@/lib/actions/action-result')
+        mockGetFirmRow.mockResolvedValue(null)
+        const err = await requireAccess('firm-1', 'feature').catch((e) => e)
+        expect(err).toBeInstanceOf(UserFacingError)
+        expect(err.code).toBe('upgrade_required')
+        expect(err.message).toBe('Upgrade required')
+    })
+})

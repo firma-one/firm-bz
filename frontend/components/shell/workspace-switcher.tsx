@@ -45,13 +45,16 @@ export function useSwitchFirm() {
         if (firm.slug === firmSlug || switching) return
         setSwitching(firm.slug)
         try {
-            await switchFirm(firm.slug)
-            const { supabase } = await import("@/lib/supabase")
-            await supabase.auth.refreshSession()
-            const { buildUserSettingsPlus } = await import("@/lib/actions/user-settings")
-            await buildUserSettingsPlus()
+            // The firm page itself re-checks membership (and says why it won't open); navigate regardless.
+            const result = await switchFirm(firm.slug)
+            if (result.ok) {
+                const { supabase } = await import("@/lib/supabase")
+                await supabase.auth.refreshSession()
+                const { buildUserSettingsPlus } = await import("@/lib/actions/user-settings")
+                await buildUserSettingsPlus()
+            }
         } catch {
-            // The firm page itself re-checks membership; navigate regardless.
+            // Likewise: the firm page re-checks.
         }
         window.location.href = firm.groupSlug ? firmPath(firm.groupSlug, firm.slug) : "/d"
     }

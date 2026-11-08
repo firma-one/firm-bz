@@ -7,6 +7,8 @@ import { sendEmail } from '@/lib/email'
 import { BRAND_NAME } from '@/config/brand'
 import { renderEmail, ctaButton, emailFootnote, emailHeading, emailText, escHtml, EMAIL_COLORS, EMAIL_FONTS } from '@/lib/email-templates/base'
 import { prisma } from '@/lib/prisma'
+import { authErrorWords } from '@/lib/actions/auth-error-words'
+import { logger } from '@/lib/logger'
 import { serverActionWrapper, type ActionResponse } from '@/lib/server-action-wrapper'
 import { isSystemAdminEmail } from '@/lib/system/admin-check'
 import { createAdminClient } from '@/utils/supabase/admin'
@@ -124,7 +126,10 @@ async function sendInviteEmailAndGenerateLink(input: {
     },
   })
 
-  if (error) throw new Error(error.message)
+  if (error) {
+    logger.error('[system-admin-signup] Supabase refused to generate the signup link', error)
+    throw new Error(authErrorWords(error, "Couldn't create the signup link. Try again in a moment."))
+  }
 
   const actionLink = data?.properties?.action_link
   if (!actionLink) throw new Error('Failed to generate signup confirmation link')

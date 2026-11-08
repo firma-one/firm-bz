@@ -138,11 +138,14 @@ export async function sendPlatformMaintenanceNotification(
   logger.info(`Created platform maintenance ${type} notification for ${members.length} users`, 'PlatformMaintenance')
 }
 
+/** How many of the maintenance emails went out, so the admin is told "Sent to 40 of 42". */
+export type MaintenanceEmailOutcome = { sent: number; total: number }
+
 export async function sendPlatformMaintenanceEmail(
   type: 'on' | 'off',
   config: PlatformMaintenanceConfig,
   users: { email: string }[]
-): Promise<void> {
+): Promise<MaintenanceEmailOutcome> {
   const subject = type === 'on'
     ? `${BRAND_NAME} — Scheduled Maintenance`
     : `${BRAND_NAME} — Maintenance Complete`
@@ -167,8 +170,38 @@ export async function sendPlatformMaintenanceEmail(
        <p>Thank you for your patience.</p>`
 
   const results = await Promise.allSettled(users.map(u => sendEmail(u.email, subject, html)))
-  const failed = results.filter(r => r.status === 'rejected').length
-  if (failed > 0) {
-    logger.warn(`${failed}/${users.length} platform maintenance emails failed to send`, 'PlatformMaintenance')
+  const failedTo = users.filter((_, i) => results[i].status === 'rejected').map((u) => u.email)
+  if (failedTo.length > 0) {
+    logger.warn(`${failedTo.length}/${users.length} platform maintenance emails failed to send`, 'PlatformMaintenance', { failedTo })
+  }
+  return { sent: users.length - failedTo.length, total: users.length }
+}
+
+/**
+ * Emails everyone but the system admins and posts the in-app notice. Answers how many emails went
+ * out (null when the list of people couldn't be read, with the reason), so the admin page can say
+ * "Sent to 40 of 42" instead of nothing.
+ */
+export async function notifyPlatformMaintenance(
+  type: 'on' | 'off',
+  config: PlatformMaintenanceConfig,
+): Promise<{ emails: MaintenanceEmailOutcome | null; problem: string | null }> {
+  let users: { id: string; email: string }[]
+  try {
+    users = await getAllNonAdminUserEmails()
+  } catch (error) {
+    logger.error('Platform maintenance: could not list users to email', error as Error, 'PlatformMaintenance')
+    return { emails: null, problem: "Couldn't read the list of people to email, so no email went out." }
+  }
+  const [emails, notice] = await Promise.allSettled([
+    sendPlatformMaintenanceEmail(type, config, users),
+    sendPlatformMaintenanceNotification(type, config),
+  ])
+  if (notice.status === 'rejected') {
+    logger.error('Platform maintenance: in-app notice failed', notice.reason as Error, 'PlatformMaintenance')
+  }
+  return {
+    emails: emails.status === 'fulfilled' ? emails.value : { sent: 0, total: users.length },
+    problem: notice.status === 'rejected' ? "The in-app notice wasn't posted." : null,
   }
 }

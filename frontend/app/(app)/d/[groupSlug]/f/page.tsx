@@ -12,6 +12,7 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { Button } from '@/components/ui/button'
 import { PageHeading } from '@/components/ui/page-heading'
 import { EmptyPanel } from '@/components/ui/empty-panel'
+import { LoadFailed } from '@/components/ui/load-failed'
 import { Tag } from '@/components/ui/tag'
 import { WorkspaceCard } from '@/components/projects/workspace-card'
 import { WorkspaceTable } from '@/components/projects/workspace-table'
@@ -29,6 +30,9 @@ export default function WorkspacePickerPage() {
     const [isGroupAdmin, setIsGroupAdmin] = useState(false)
     const [addFirmOpen, setAddFirmOpen] = useState(false)
     const [loading, setLoading] = useState(true)
+    /** getUserFirms throws on a failed load (it used to answer [], read as "no firms"). */
+    const [loadFailed, setLoadFailed] = useState(false)
+    const [loadAttempt, setLoadAttempt] = useState(0)
     const [joiningId, setJoiningId] = useState<string | null>(null)
     const [joinError, setJoinError] = useState<string | null>(null)
     const [switchDialogOpen, setSwitchDialogOpen] = useState(false)
@@ -40,11 +44,22 @@ export default function WorkspacePickerPage() {
 
     useEffect(() => {
         async function load() {
-            const [userFirms, opts, isAdmin] = await Promise.all([
-                getUserFirms(),
-                getDomainOnboardingOptionsForCurrentUser(),
-                getIsGroupAdmin(groupSlug),
-            ])
+            setLoading(true)
+            setLoadFailed(false)
+            let loaded: [FirmOption[], DomainOnboardingOptions | null, boolean]
+            try {
+                loaded = await Promise.all([
+                    getUserFirms(),
+                    getDomainOnboardingOptionsForCurrentUser(),
+                    getIsGroupAdmin(groupSlug),
+                ])
+            } catch {
+                // A thrown action's words don't reach the browser: LoadFailed says it plainly.
+                setLoadFailed(true)
+                setLoading(false)
+                return
+            }
+            const [userFirms, opts, isAdmin] = loaded
             // getUserFirms() returns every firm the user belongs to across ALL groups — this
             // page is scoped to one group (groupSlug), so it must filter down to that group's
             // firms. Without this, a user with firms in multiple groups sees them all mixed
@@ -55,12 +70,20 @@ export default function WorkspacePickerPage() {
             setLoading(false)
         }
         void load()
-    }, [groupSlug])
+    }, [groupSlug, loadAttempt])
 
     if (loading) {
         return (
             <div className="flex h-full items-center justify-center">
                 <LoadingSpinner size="md" />
+            </div>
+        )
+    }
+
+    if (loadFailed) {
+        return (
+            <div className="flex h-full items-center justify-center">
+                <LoadFailed what="your firms" onRetry={() => setLoadAttempt((n) => n + 1)} />
             </div>
         )
     }

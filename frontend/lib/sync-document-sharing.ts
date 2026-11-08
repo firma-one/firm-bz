@@ -8,6 +8,12 @@ import { logger } from '@/lib/logger'
  * Manages DB rows only — Drive permission grants/revokes belong to the regrant
  * flow triggered by ActionMenu > OPEN (sharing.settings.updated Inngest event).
  *
+ * A row marked REVOKED keeps its `connectorPermissionId`: the permission still stands in storage until
+ * the revoke job (revokeByDisabledPersona) takes it back, and that job finds it by this id. Clearing it
+ * here left the job nothing to revoke, so the access stood with no record of it. Only the job clears
+ * the id, once storage confirms. A REVOKED row with an id grants nothing in Firma: every reader of
+ * access checks the status.
+ *
  * Rules:
  * - Both disabled  → mark all GRANTED rows REVOKED
  * - EC enabled     → upsert GRANTED rows for all eng_ext_collaborator members
@@ -54,7 +60,6 @@ export async function syncDocumentSharingUsers(projectDocumentId: string, actorI
           },
           data: {
             sharingPermissionStatus: DocumentSharingPermissionStatus.REVOKED,
-            connectorPermissionId: null,
             ...(actorId ? { updatedBy: actorId } : {}),
           },
         })
@@ -92,11 +97,12 @@ export async function syncDocumentSharingUsers(projectDocumentId: string, actorI
       if ((existing?.sharingPermissionStatus as string) === 'INHERITED') continue
 
       if (existing) {
+        // Its permission id, if any, is kept: one a revoke couldn't take back still stands, and the
+        // next secure open reuses it rather than granting again.
         await prisma.engagementDocumentSharingUser.update({
           where: { id: existing.id },
           data: {
             sharingPermissionStatus: DocumentSharingPermissionStatus.GRANTED,
-            connectorPermissionId: null,
             ...(actorId ? { updatedBy: actorId } : {}),
           },
         })
@@ -128,7 +134,6 @@ export async function syncDocumentSharingUsers(projectDocumentId: string, actorI
         where: { id: row.id },
         data: {
           sharingPermissionStatus: DocumentSharingPermissionStatus.REVOKED,
-          connectorPermissionId: null,
           ...(actorId ? { updatedBy: actorId } : {}),
         },
       })

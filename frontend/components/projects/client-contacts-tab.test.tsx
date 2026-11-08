@@ -5,9 +5,9 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 const { actions, toast } = vi.hoisted(() => ({
     actions: {
         list: vi.fn(),
-        create: vi.fn(async () => ({})),
-        update: vi.fn(async () => ({})),
-        remove: vi.fn(async () => ({})),
+        create: vi.fn(async (..._args: unknown[]): Promise<unknown> => ({ ok: true, data: undefined })),
+        update: vi.fn(async (..._args: unknown[]): Promise<unknown> => ({ ok: true, data: undefined })),
+        remove: vi.fn(async (..._args: unknown[]): Promise<unknown> => ({ ok: true, data: undefined })),
     },
     toast: { addToast: vi.fn() },
 }))
@@ -25,9 +25,9 @@ const render = () => rtlRender(<TooltipProvider><ClientContactsTab orgSlug="acme
 
 beforeEach(() => {
     vi.clearAllMocks()
-    actions.list.mockResolvedValue([
+    actions.list.mockResolvedValue({ ok: true, data: [
         { id: 'c1', name: 'Ana Lopez', email: 'ana@ds.com', phone: null, title: 'CFO', notes: null, tags: ['billing'] },
-    ])
+    ] })
 })
 
 describe('ClientContactsTab — the contact dialog', () => {
@@ -65,4 +65,34 @@ describe('ClientContactsTab — the contact dialog', () => {
         fireEvent.click(screen.getByRole('button', { name: /New contact/ }))
         expect((screen.getByRole('button', { name: 'Create' }) as HTMLButtonElement).disabled).toBe(true)
     })
+
+    it('shows the plan limit in the toast, not "Failed" (P1-07)', async () => {
+        actions.create.mockResolvedValueOnce({ ok: false, code: 'plan_limit', error: 'Your plan allows 25 contacts. Upgrade to add more.' })
+        render()
+        await screen.findByText('Ana Lopez')
+        fireEvent.click(screen.getByRole('button', { name: /New contact/ }))
+        fireEvent.change(screen.getByLabelText(/Name/), { target: { value: 'Ben Cho' } })
+        fireEvent.click(screen.getByRole('button', { name: 'Create' }))
+        await waitFor(() => expect(toast.addToast).toHaveBeenCalledWith({ type: 'error', title: "Couldn't add contact", message: 'Your plan allows 25 contacts. Upgrade to add more.' }))
+        // The dialog stays, with what was typed.
+        expect(screen.getByRole('dialog', { name: 'New contact' })).toBeTruthy()
+    })
 })
+
+describe('ClientContactsTab — a failed load (P1-07)', () => {
+    it('says the contacts did not load, never "No contacts yet"', async () => {
+        actions.list.mockResolvedValue({ ok: false, code: 'forbidden', error: "You don't have permission to see this client's contacts." })
+        render()
+        expect(await screen.findByText("Couldn't load contacts")).toBeTruthy()
+        expect(screen.getByText("You don't have permission to see this client's contacts.")).toBeTruthy()
+        expect(screen.queryByText('No contacts yet')).toBeNull()
+    })
+
+    it('tries again from the failure', async () => {
+        actions.list.mockResolvedValueOnce({ ok: false, code: 'internal', error: 'Something went wrong on our side. Try again.' })
+        render()
+        fireEvent.click(await screen.findByRole('button', { name: 'Try again' }))
+        expect(await screen.findByText('Ana Lopez')).toBeTruthy()
+    })
+})
+

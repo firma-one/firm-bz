@@ -28,6 +28,9 @@ import {
     startGoogleDriveOAuthPopup,
     googleDriveOAuthPopupFailureMessage,
 } from '@/lib/google-drive-popup-oauth'
+import { SERVER_UNREACHABLE } from '@/app/(app)/signin/auth-failure-words'
+import { failureReason } from '@/lib/files/action-failure'
+import { PROVISION_ERROR_PARAM } from '@/lib/landing/provision-error'
 import { BillingPageClient } from '@/components/billing/billing-page-client'
 import { clearCheckoutIntent } from '@/lib/marketing/checkout-intent'
 import { Checkbox } from "@/components/ui/checkbox"
@@ -322,6 +325,8 @@ const OnboardingContent = () => {
 
     // State
     const [step, setStep] = useState<number | null>(null) // Start null to show loader
+    /** Paid, but saving that onboarding moved past billing failed: say so, with a way on (P2-51). */
+    const [paidButStuck, setPaidButStuck] = useState<string | null>(null)
     const [isLoading, setIsLoading] = useState(true) // Global loading for initial check
     const [isSubmitting, setIsSubmitting] = useState(false) // For form submission
     const [error, setError] = useState<string | null>(null)
@@ -471,8 +476,8 @@ const OnboardingContent = () => {
                     setIsConnected(true)
                     await applyPopupSuccess()
                 },
-                onMessageFailure(code) {
-                    setError(googleDriveOAuthPopupFailureMessage(code))
+                onMessageFailure(code, detail) {
+                    setError(googleDriveOAuthPopupFailureMessage(code, detail))
                 },
                 onTimeout() {
                     setError('Timed out waiting for Google sign-in. Please try again.')
@@ -567,53 +572,14 @@ const OnboardingContent = () => {
         setCreatingSandbox(true)
         setError(null)
 
-        const firmNameForSession = sandboxFirmName || SANDBOX_FIRM_NAME_FALLBACK
-        sessionStorage.setItem(ONBOARDING_CREATING_STORAGE_KEY, JSON.stringify({
-            type: 'sandbox',
-            firmName: firmNameForSession,
-            startedAt: Date.now()
-        }))
-
-        try {
-            const token = await getAccessToken()
-            if (!token) {
-                clearOnboardingCreatingSession()
-                setError('Session expired. Please sign in again.')
-                return
-            }
-
-            const res = await fetch('/api/onboarding/create-sandbox', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                body: JSON.stringify({ sandboxFirmName: firmNameForSession }),
-            })
-
-            clearOnboardingCreatingSession()
-
-            if (!res.ok) {
-                const err = await res.json().catch(() => ({}))
-                throw new Error(err.error || 'Failed to create sandbox workspace')
-            }
-
-            setStep(2)
-
-            supabase.auth.refreshSession().catch((err) => logger.warn('Session refresh after sandbox shell', err))
-            buildUserSettingsPlus().catch((err) => logger.warn('Cache rebuild after sandbox shell', err))
-        } catch (err: unknown) {
-            clearOnboardingCreatingSession()
-            const msg = err instanceof Error ? err.message : 'Error creating sandbox workspace'
-            const isNetworkError = /failed to fetch|network error|load failed/i.test(msg)
-            setError(
-                isNetworkError
-                    ? 'Connection error. Please ensure the database is running (e.g. supabase start for local dev) and try again.'
-                    : msg
-            )
-            logger.error('Error preparing sandbox shell during onboarding', err as Error)
-        } finally {
-            shellPrepareInFlightRef.current = false
-            setCreatingSandbox(false)
-        }
-    }, [sandboxFirmName])
+        // `/api/onboarding/create-sandbox` was removed with the sandbox firm (#97), so this step's
+        // Retry could never work (P1-22). A first firm is now provisioned by `/d` itself
+        // (resolveDefaultFirmLandingPath → autoProvisionFirstFirm), which lands in the new firm, or
+        // sends back here with the reason in `?provision_error=` when it can't. Going there IS the
+        // retry. Kept as a function so the step and its Retry button stay as they were.
+        clearOnboardingCreatingSession()
+        window.location.href = '/d'
+    }, [])
 
     const skipSubscribeGoToDrive = useCallback(async () => {
         try {
@@ -629,13 +595,13 @@ const OnboardingContent = () => {
             })
             if (!res.ok) {
                 const err = await res.json().catch(() => ({}))
-                throw new Error((err as { error?: string }).error || 'Failed to save progress')
+                throw new Error((err as { error?: string }).error || `Couldn't save your progress (${res.status}). Try again.`)
             }
             markStepSkipped(2)
             setError(null)
             void handleFinish()
         } catch (e: unknown) {
-            setError(e instanceof Error ? e.message : 'Failed to continue')
+            setError(`Couldn't skip for now · ${failureReason(e)}`)
         }
     }, [markStepSkipped, handleFinish])
 
@@ -648,12 +614,21 @@ const OnboardingContent = () => {
         router.replace('/d/onboarding', { scroll: false })
     }, [isLoading, afterCheckoutParam, router])
 
+    // Back from `/d` because provisioning the first firm failed: say why, and leave Retry to the
+    // person rather than going round again on our own.
+    const provisionError = searchParams.get(PROVISION_ERROR_PARAM)?.trim() || null
+    useEffect(() => {
+        if (!provisionError || step !== 1) return
+        setError(`We couldn't set up your workspace · ${provisionError}`)
+    }, [provisionError, step])
+
     // Auto-run shell creation when onboarding lands on step 1 (no countdown / no progress substeps).
     useEffect(() => {
         if (isLoading || step !== 1) return
+        if (provisionError) return
         if (!sandboxFirmName?.trim()) return
         void handlePrepareSandboxShell()
-    }, [isLoading, step, sandboxFirmName, handlePrepareSandboxShell])
+    }, [isLoading, step, sandboxFirmName, handlePrepareSandboxShell, provisionError])
 
     /** Stage 1b — after Drive: attach connector, enqueue Inngest (clients, engagements, Drive tree, documents). */
     const handleAttachConnectorAndProvisionSandbox = useCallback(async () => {
@@ -683,21 +658,9 @@ const OnboardingContent = () => {
                 return
             }
 
-            const res = await fetch('/api/onboarding/create-sandbox', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                body: JSON.stringify({
-                    connectionId,
-                    sandboxFirmName: firmNameForSession,
-                }),
-            })
-
+            // Nothing sets step 4 any more, and `/api/onboarding/create-sandbox` is gone (#97): the
+            // connector is linked when it's stored. Finish rather than post to a missing route.
             clearOnboardingCreatingSession()
-
-            if (!res.ok) {
-                const err = await res.json().catch(() => ({}))
-                throw new Error(err.error || 'Failed to start sandbox provisioning')
-            }
 
             setCreatingSandbox(false)
             setFinalizeTerminalSteps(buildFinalizeTerminalSteps(firmNameForSession))
@@ -709,13 +672,8 @@ const OnboardingContent = () => {
         } catch (err: unknown) {
             clearOnboardingCreatingSession()
             driveProvisionStartedRef.current = false
-            const msg = err instanceof Error ? err.message : 'Error starting sandbox provisioning'
-            const isNetworkError = /failed to fetch|network error|load failed/i.test(msg)
-            setError(
-                isNetworkError
-                    ? 'Connection error. Please ensure the database is running (e.g. supabase start for local dev) and try again.'
-                    : msg
-            )
+            // Developer wording ("ensure the database is running") never reaches a person (P2-54).
+            setError(err instanceof TypeError ? SERVER_UNREACHABLE : failureReason(err))
             logger.error('Error attaching connector / provisioning sandbox', err as Error)
         } finally {
             setCreatingSandbox(false)
@@ -838,8 +796,10 @@ const OnboardingContent = () => {
                         void handleFinish()
                     }
                 } else if (errorParam) {
-                    // Drive error param from legacy flow — just go to dashboard
-                    void handleFinish()
+                    // Back from a storage sign-in that failed: say why (P2-32) instead of going on
+                    // to the dashboard as though it had worked. The screen's button goes on.
+                    setError(`Connecting storage didn't finish · ${googleDriveOAuthPopupFailureMessage(errorParam, searchParams.get('error_description'))}`)
+                    setStep(-1)
                 } else {
                     // 2. Normal load: Fetch connector status first so we have rootFolderId even when no org yet
                     // (callback ensures default workspace root in My Drive — see DEFAULT_WORKSPACE_FOLDER_NAME in google-drive-connector.ts — and sets rootFolderId; we must not show "My Drive vs Shared Drive")
@@ -1000,9 +960,11 @@ const OnboardingContent = () => {
                                             } else {
                                                 const err = await persistRes.json().catch(() => ({}))
                                                 logger.warn('Onboarding: after_checkout ui-progress failed', err)
+                                                setPaidButStuck(`Your payment went through. We couldn't move you on · ${(err as { error?: string }).error || `the server answered ${persistRes.status}.`}`)
                                             }
                                         } catch (e) {
                                             logger.warn('Onboarding: after_checkout ui-progress error', e as Error)
+                                            setPaidButStuck(`Your payment went through. We couldn't move you on · ${failureReason(e)}`)
                                         }
                                     }
 
@@ -1295,12 +1257,14 @@ const OnboardingContent = () => {
                         setConnectionDetails(data)
                         setConnectedEmail(data.email)
                         setIsConnected(true)
+                        // Connected, but the client's folders weren't made: say so (CN-3).
+                        if (typeof data.warning === 'string' && data.warning) setError(data.warning)
                     } else {
-                        const err = await res.json()
-                        setError(err.error || 'Failed to finalize connection')
+                        const err = await res.json().catch(() => ({}))
+                        setError(`Connecting Google Drive didn't finish · ${err.error || `the server answered ${res.status}.`}`)
                     }
                 } catch (err: any) {
-                    setError(err.message || 'An error occurred while connecting')
+                    setError(`Connecting Google Drive didn't finish · ${failureReason(err)}`)
                     logger.error("Error finalizing connection", err as Error)
                 } finally {
                     setIsSubmitting(false)
@@ -1323,6 +1287,7 @@ const OnboardingContent = () => {
                 <div className="flex h-full w-full justify-center overflow-y-auto px-4 pb-12 pt-8 sm:px-8 sm:pt-12">
                     <div className={`w-full ${step === 2 ? 'max-w-5xl' : step === 3 ? 'max-w-3xl' : 'max-w-xl'}`}>
                         {/* Onboarding Already Completed — redirect guard */}
+                        {step === -1 && error && <ErrorNotice className="mb-4">{error}</ErrorNotice>}
                         {step === -1 && (
                             <AlreadyCompletedScreen onGoToDashboard={() => void handleFinish()} />
                         )}
@@ -1763,6 +1728,14 @@ const OnboardingContent = () => {
                         {step === 2 && (
                             <div className="animate-in fade-in duration-200">
                                 {error && <ErrorNotice className="mb-4">{error}</ErrorNotice>}
+                                {paidButStuck && (
+                                    <div className="mb-4 flex flex-col items-start gap-3">
+                                        <ErrorNotice className="w-full">{paidButStuck}</ErrorNotice>
+                                        <Button variant="greenCta" size="sm" onClick={() => void handleFinish()}>
+                                            Continue
+                                        </Button>
+                                    </div>
+                                )}
                                 <BillingPageClient
                                     variant="onboardingSubscribe"
                                     onSkipToConnectDrive={() => void skipSubscribeGoToDrive()}

@@ -10,6 +10,10 @@ const { st, calls } = vi.hoisted(() => ({
         copyId: 'copy-1',
         copyFailure: null as Error | null,
         versions: [] as any[],
+        lockFailure: null as Error | null,
+        readOnlyAnswer: true as boolean,
+        restrictFailure: null as Error | null,
+        undoProblem: null as string | null,
     },
     calls: {
         locked: [] as string[],
@@ -18,6 +22,7 @@ const { st, calls } = vi.hoisted(() => ({
         copies: [] as any[],
         readOnly: [] as string[],
         settingsWritten: [] as any[],
+        trashed: [] as string[],
     },
 }))
 
@@ -32,17 +37,28 @@ vi.mock('@/lib/prisma', () => ({
     },
 }))
 vi.mock('./storage-lock', () => ({
-    lockFileInStorage: async (_c: string, id: string) => { calls.locked.push(id); return [{ permissionId: 'p1', previousRole: 'editor' }] },
-    unlockFileInStorage: async (_c: string, id: string) => { calls.unlocked.push(id) },
+    StorageNotSupportedError: class extends Error {},
+    lockFileInStorage: async (_c: string, id: string) => {
+        calls.locked.push(id)
+        if (st.lockFailure) throw st.lockFailure
+        return [{ permissionId: 'p1', previousRole: 'editor' }]
+    },
+    unlockFileInStorage: async (_c: string, id: string) => {
+        calls.unlocked.push(id)
+        return { notRestored: [], stillReadOnly: false, problem: st.undoProblem }
+    },
 }))
 vi.mock('@/lib/connectors/registry', () => ({
     getStorageAdapter: async () => ({
         fileExists: async (_c: string, id: string) => id === 'archive-existing',
         getFileParent: async () => 'engagement-folder',
         findOrCreateFolder: async (_c: string, parent: string, name: string) => { calls.folders.push(`${parent}/${name}`); return `${name}-id` },
-        restrictFolderToOwnerOnly: async () => {},
+        restrictFolderToOwnerOnly: async () => { if (st.restrictFailure) throw st.restrictFailure },
     }),
-    getPermissionAdapter: async () => ({ setFileContentReadOnly: async (_c: string, id: string) => { calls.readOnly.push(id); return true } }),
+    getPermissionAdapter: async () => ({
+        setFileContentReadOnly: async (_c: string, id: string) => { calls.readOnly.push(id); return st.readOnlyAnswer },
+        trashFile: async (_c: string, id: string) => { calls.trashed.push(id) },
+    }),
     getContentAdapter: async () => ({ listVersions: async () => st.versions }),
 }))
 vi.mock('@/lib/connectors/adapters/onedrive-file-ops', () => ({
@@ -55,8 +71,8 @@ vi.mock('@/lib/google-drive-connector', () => ({
     },
 }))
 
-import { ApprovalStorageError, archiveApprovedVersion } from './approval-archive'
-import { storageFailure } from '@/lib/connectors/storage-failure'
+import { ApprovalStorageError, archiveApprovedVersion, undoApprovalInStorage } from './approval-archive'
+import { StorageFailure, storageFailure } from '@/lib/connectors/storage-failure'
 
 const input = (settings: unknown = {}) => ({
     connectorId: 'conn',
@@ -72,6 +88,10 @@ beforeEach(() => {
     st.copyId = 'copy-1'
     st.copyFailure = null
     st.versions = []
+    st.lockFailure = null
+    st.readOnlyAnswer = true
+    st.restrictFailure = null
+    st.undoProblem = null
     for (const k of Object.keys(calls) as (keyof typeof calls)[]) calls[k].length = 0
     vi.stubGlobal('fetch', vi.fn(async () => ({
         ok: true,
@@ -145,5 +165,61 @@ describe('archiveApprovedVersion', () => {
         await archiveApprovedVersion(input({ lock: { type: 'finalize' } })).catch(() => {})
         expect(calls.locked).toEqual([])
         expect(calls.unlocked).toEqual([])
+    })
+
+    // AP-1: a lock storage refuses refuses the approval, with who can still edit.
+    it('refuses with the lock refusal, making no copy', async () => {
+        st.lockFailure = new StorageFailure('other', "Couldn't lock this in Google Drive. ana@client.com can still edit it · Google Drive refused the change. Try again in a moment.")
+        const err = await archiveApprovedVersion(input()).catch((e) => e)
+        expect(err).toBeInstanceOf(ApprovalStorageError)
+        expect(err.message).toBe("Couldn't lock this in Google Drive. ana@client.com can still edit it · Google Drive refused the change. Try again in a moment. It wasn't approved.")
+        expect(calls.copies).toEqual([])
+    })
+
+    it("says who couldn't be given edit access back when undoing the lock", async () => {
+        st.copyFailure = new Error('socket hang up')
+        st.undoProblem = "Couldn't restore edit access for ana@client.com in Google Drive · Google Drive refused the change. Try again in a moment."
+        const err = await archiveApprovedVersion(input()).catch((e) => e)
+        expect(err.message).toBe("Couldn't reach Google Drive to archive the approved version. Try again, or reconnect the storage. Couldn't restore edit access for ana@client.com in Google Drive · Google Drive refused the change. Try again in a moment.")
+    })
+
+    // P1-54: what keeps the copy from drifting is reported when storage refuses it.
+    it('approves with a warning when Google won\'t make the archive copy read-only', async () => {
+        st.readOnlyAnswer = false
+        const { warnings } = await archiveApprovedVersion(input())
+        expect(warnings).toEqual(["Approved, but the archive copy couldn't be made read-only in Google Drive. Anyone who can edit the Archive folder can change it."])
+    })
+
+    it("doesn't ask OneDrive for read-only content, which it doesn't have", async () => {
+        st.type = 'ONEDRIVE'
+        st.readOnlyAnswer = false
+        const { warnings } = await archiveApprovedVersion(input())
+        expect(calls.readOnly).toEqual([])
+        expect(warnings).toEqual([])
+    })
+
+    it("warns when the Archive folder can't be made owner-only", async () => {
+        st.restrictFailure = new Error('403')
+        const { warnings } = await archiveApprovedVersion(input())
+        expect(warnings).toEqual(["The Archive folder couldn't be made owner-only in Google Drive, so people with access to the engagement's folder can open the archive copy."])
+    })
+})
+
+describe('undoApprovalInStorage', () => {
+    const approval = {
+        record: { id: 'ap', version: { id: 'v', savedAt: 'x' }, archived: { fileId: 'copy-1', name: 'n' }, approvedAt: 'x', approvedBy: 'u' },
+        lock: { type: 'finalize' as const, downgraded: [{ permissionId: 'p1', previousRole: 'editor' }] },
+        warnings: [],
+    }
+
+    it('lifts the lock and trashes the archive copy', async () => {
+        expect(await undoApprovalInStorage('conn', 'file-1', approval)).toBe(true)
+        expect(calls.unlocked).toEqual(['file-1'])
+        expect(calls.trashed).toEqual(['copy-1'])
+    })
+
+    it('says when it could not all be undone', async () => {
+        st.undoProblem = 'still a viewer'
+        expect(await undoApprovalInStorage('conn', 'file-1', approval)).toBe(false)
     })
 })

@@ -11,6 +11,8 @@ import { PropertyList, PropertyRow, PROPERTY_FIELD_CLASS, PROPERTY_HINT_CLASS } 
 import { CreateDialogFooter, CreateDialogHeader, CreateDialogNotice } from '@/components/ui/create-dialog'
 import { cn } from '@/lib/utils'
 import { inviteMember } from '@/lib/actions/invitations'
+import { useToast } from '@/components/ui/toast'
+import { failureReason } from '@/lib/files/action-failure'
 import { InviteeNameFields } from '@/components/projects/members/invitee-name-fields'
 import { roleDescription, PersonaUiRole, PersonaUiSubRole, SUB_ROLE_LABEL, resolvePersonaSlug } from '@/lib/persona-ui-groups'
 
@@ -43,6 +45,7 @@ export function InviteMemberModal({ projectId, open, onOpenChange, personas, pre
     const [subRole, setSubRole] = useState<PersonaUiSubRole>('internal')
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [error, setError] = useState('')
+    const { addToast } = useToast()
 
     const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
 
@@ -114,11 +117,20 @@ export function InviteMemberModal({ projectId, open, onOpenChange, personas, pre
         setIsSubmitting(true)
 
         try {
-            await inviteMember(projectId, email, selectedPersonaId, { firstName, lastName })
+            const result = await inviteMember(projectId, email, selectedPersonaId, { firstName, lastName })
+            if (!result.ok) {
+                setError(result.error)
+                return
+            }
+            // Saved, but its email didn't go: the row reads Email failed (with Resend), or the person
+            // was added and has to be told by whoever invited them.
+            if (result.warning) {
+                addToast({ type: 'warning', title: result.data.added ? 'Added, not emailed' : 'Invitation not emailed', message: result.warning })
+            }
             onSuccess()
             onOpenChange(false)
-        } catch (err: any) {
-            setError(err.message || 'Failed to send invitation')
+        } catch (err: unknown) {
+            setError(failureReason(err))
         } finally {
             setIsSubmitting(false)
         }

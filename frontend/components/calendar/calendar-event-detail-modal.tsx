@@ -4,8 +4,9 @@ import { useEffect, useState } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import {
-  Building2, Briefcase, FileText, ArrowUpRight, CalendarDays, User, AlarmClock,
+  Building2, Briefcase, FileText, ArrowUpRight, CalendarDays, User, AlarmClock, AlertCircle,
 } from 'lucide-react'
+import { failureFrom, failureReason } from '@/lib/files/action-failure'
 import { DeliverableIcon } from '@/components/ui/deliverable-icon'
 import { UserAvatarWithTooltip } from '@/components/ui/user-avatar-with-tooltip'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -173,6 +174,9 @@ export function CalendarEventDetailModal({ event, onClose }: CalendarEventDetail
   const [siblings, setSiblings] = useState<SiblingDocument[] | null>(null)
   const [deliverableDetail, setDeliverableDetail] = useState<DeliverableDetail | null>(null)
   const [isLoadingSiblings, setIsLoadingSiblings] = useState(false)
+  /** Why the deliverable's documents didn't load: said in their place, never "No documents" (P1-68). */
+  const [siblingsError, setSiblingsError] = useState<string | null>(null)
+  const [reloadKey, setReloadKey] = useState(0)
 
   // The deliverable folder's document id, whether this event IS the
   // deliverable or is a document nested inside one.
@@ -181,13 +185,17 @@ export function CalendarEventDetailModal({ event, onClose }: CalendarEventDetail
   useEffect(() => {
     setSiblings(null)
     setDeliverableDetail(null)
+    setSiblingsError(null)
     if (!deliverableDocId || !event || !session?.access_token) return
     let cancelled = false
     setIsLoadingSiblings(true)
     fetch(`/api/projects/${event.engagementId}/documents/${deliverableDocId}/subtasks`, {
       headers: { Authorization: `Bearer ${session.access_token}` },
     })
-      .then((res) => (res.ok ? res.json() : { subtasks: [], deliverable: null }))
+      .then(async (res) => {
+        if (!res.ok) throw await failureFrom(res)
+        return res.json()
+      })
       .then((data) => {
         if (cancelled) return
         setSiblings((data.subtasks ?? []).map((s: any) => ({
@@ -202,10 +210,10 @@ export function CalendarEventDetailModal({ event, onClose }: CalendarEventDetail
         })))
         setDeliverableDetail(data.deliverable ?? null)
       })
-      .catch(() => { if (!cancelled) { setSiblings([]); setDeliverableDetail(null) } })
+      .catch((e) => { if (!cancelled) { setSiblings(null); setDeliverableDetail(null); setSiblingsError(failureReason(e)) } })
       .finally(() => { if (!cancelled) setIsLoadingSiblings(false) })
     return () => { cancelled = true }
-  }, [deliverableDocId, event?.engagementId, session?.access_token])
+  }, [deliverableDocId, event?.engagementId, session?.access_token, reloadKey])
 
   if (!event) return null
   const color = getEngagementTagColor(event.engagementId)
@@ -322,6 +330,19 @@ export function CalendarEventDetailModal({ event, onClose }: CalendarEventDetail
                       <DocumentRowSkeleton />
                       <DocumentRowSkeleton />
                     </div>
+                  )}
+                  {!isLoadingSiblings && siblingsError && (
+                    <p role="alert" className="flex flex-wrap items-center gap-x-1.5 gap-y-1 py-1 text-xs text-fg-muted">
+                      <AlertCircle aria-hidden className="h-3.5 w-3.5 shrink-0 text-danger" />
+                      <span>Couldn&apos;t load its documents · {siblingsError}</span>
+                      <button
+                        type="button"
+                        onClick={() => setReloadKey((k) => k + 1)}
+                        className="font-medium text-action hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action/30"
+                      >
+                        Try again
+                      </button>
+                    </p>
                   )}
                   {!isLoadingSiblings && siblings && siblings.length === 0 && (
                     <p className="text-xs text-fg-subtle italic py-1">No documents in this deliverable.</p>

@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server'
+import { adminFailure } from '@/app/api/system/admin-error'
 import { prisma } from '@/lib/prisma'
 import { createClient } from '@/utils/supabase/server'
 import { isSysAdminUser } from '@/lib/system/user-data-map'
 import { DELETION_REQUEST_KIND } from '@/lib/account/deletion-plan'
-import { logger } from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 
@@ -57,7 +57,6 @@ export async function GET() {
             },
         })
     } catch (error) {
-        logger.error('[system/account-deletion] failed:', error as Error)
-        return NextResponse.json({ error: 'Could not list requests' }, { status: 500 })
+        return adminFailure('list the deletion requests', error)
     }
 }

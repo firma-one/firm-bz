@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { FirmActions, type FirmActionLinks } from './firm-actions'
 import type { FirmActionsData } from '@/lib/insights/firm-actions'
@@ -79,5 +79,21 @@ describe('FirmActions', () => {
         expect(past.getAttribute('href')).toBe('/c/northwind/settings')
         expect(past.textContent).toContain('16 days past')
         expect(screen.getByRole('link', { name: /Tailspin/ }).textContent).toContain('No expected close')
+    })
+})
+
+describe('FirmActions when the data fails to load', () => {
+    it('says it couldn’t load, with the reason and a retry, instead of a shimmer that never ends', () => {
+        const retry = vi.fn()
+        render(<FirmActions data={null} links={LINKS} error="Something went wrong on our side. Try again." onRefresh={retry} />)
+        expect(screen.getByText("Couldn't load the Action Center")).toBeTruthy()
+        expect(screen.getByText('Something went wrong on our side. Try again.')).toBeTruthy()
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+        expect(retry).toHaveBeenCalled()
+    })
+
+    it('still shows the shimmer while a load is running', () => {
+        render(<FirmActions data={null} links={LINKS} loading error={null} />)
+        expect(screen.queryByText(/Couldn't load/)).toBeNull()
     })
 })

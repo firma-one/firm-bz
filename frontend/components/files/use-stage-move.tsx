@@ -4,6 +4,7 @@ import React from 'react'
 import { Eye, CheckCircle2 } from 'lucide-react'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { statusOf } from '@/lib/ui/status'
+import { failureReason } from '@/lib/files/action-failure'
 import type { ActivityStatus } from '@/lib/sharing-settings'
 
 /**
@@ -13,7 +14,8 @@ import type { ActivityStatus } from '@/lib/sharing-settings'
  * and this asks, then resends with `confirm: true`.
  *
  * Used wherever a document's stage changes: the Files Status cell, the Details pane, the deliverable
- * pane's documents, and a client's action on a whole deliverable.
+ * pane's documents, and a client's action on a whole deliverable. Marking a document internal only asks
+ * the same way, since what's internal only doesn't count toward its deliverable's stage.
  */
 
 export interface StageConfirmation {
@@ -27,10 +29,27 @@ export interface StageConfirmation {
     approves: boolean
 }
 
+/**
+ * A move's answer. `warning` is "done, but…": the move stood and part of it couldn't be done (its
+ * deliverable stayed, storage refused part of an approval). `code` names a refusal the caller may
+ * title differently: `approval_storage` and `approval_not_recorded` (the approval was refused or put
+ * back), `stage_access` (clients couldn't be given access, so nothing moved).
+ */
 export type StageMoveResult =
-    | { ok: true; deliverable: { id: string; status: ActivityStatus } | null }
+    | { ok: true; deliverable: { id: string; status: ActivityStatus } | null; warning?: string }
     | { ok: false; cancelled: true }
-    | { ok: false; cancelled?: false; error: string }
+    | { ok: false; cancelled?: false; error: string; code?: string }
+
+/** The toast title for a refused move: an approval says so, everything else is the stage. */
+export function stageFailureTitle(result: { code?: string }, to?: ActivityStatus): string {
+    if (result.code === 'approval_storage' || result.code === 'approval_not_recorded' || to === 'approved') return "Couldn't approve"
+    return "Couldn't change the stage"
+}
+
+/** The title for a move that stood: shown on a warning toast when part of it couldn't be done. */
+export function stageDoneTitle(to?: ActivityStatus): string {
+    return to === 'approved' ? 'Approved' : 'Stage updated'
+}
 
 async function patchStage(projectId: string, documentId: string, status: ActivityStatus, confirm: boolean) {
     const { getSession } = await import('@/lib/supabase')
@@ -46,24 +65,44 @@ export function useStageMove() {
     const [pending, setPending] = React.useState<{ confirmation: StageConfirmation; answer: (yes: boolean) => void } | null>(null)
     const [sending, setSending] = React.useState(false)
 
-    const move = React.useCallback(async (projectId: string, documentId: string, status: ActivityStatus): Promise<StageMoveResult> => {
-        let res = await patchStage(projectId, documentId, status, false).catch(() => null)
+    /** Sends a request that may answer 409 `needsConfirmation`, asks, and resends with `confirm` when agreed. */
+    const send = React.useCallback(async (request: (confirm: boolean) => Promise<Response>): Promise<StageMoveResult> => {
+        // A request that never got there (or a session lookup that threw) is the reason itself.
+        let dropped: unknown = null
+        const attempt = (confirm: boolean) => request(confirm).catch((e: unknown) => { dropped = e; return null })
+        let res = await attempt(false)
         let data = await res?.json().catch(() => ({}))
         if (res?.status === 409 && data?.needsConfirmation) {
             const yes = await new Promise<boolean>((answer) => setPending({ confirmation: data.needsConfirmation, answer }))
             if (!yes) return { ok: false, cancelled: true }
             setSending(true)
             try {
-                res = await patchStage(projectId, documentId, status, true).catch(() => null)
+                res = await attempt(true)
                 data = await res?.json().catch(() => ({}))
             } finally {
                 setSending(false)
                 setPending(null)
             }
         }
-        if (!res?.ok) return { ok: false, error: data?.error ?? 'Please try again.' }
-        return { ok: true, deliverable: data?.deliverable ?? null }
+        if (!res) return { ok: false, error: failureReason(dropped ?? new TypeError('fetch failed')) }
+        if (!res.ok) {
+            return {
+                ok: false,
+                error: typeof data?.error === 'string' && data.error ? data.error : `The server answered ${res.status}. Try again.`,
+                ...(typeof data?.code === 'string' ? { code: data.code } : {}),
+            }
+        }
+        return {
+            ok: true,
+            deliverable: data?.deliverable ?? null,
+            ...(typeof data?.warning === 'string' && data.warning ? { warning: data.warning } : {}),
+        }
     }, [])
+
+    const move = React.useCallback(
+        (projectId: string, documentId: string, status: ActivityStatus) => send((confirm) => patchStage(projectId, documentId, status, confirm)),
+        [send],
+    )
 
     const dialog = (
         <StageConfirmDialog
@@ -75,7 +114,7 @@ export function useStageMove() {
         />
     )
 
-    return { move, dialog }
+    return { move, send, dialog }
 }
 
 /** The question itself, shared with /tour's Files (components/demo/demo-file-list.tsx). */
@@ -133,7 +172,7 @@ export function StageConfirmationText({ confirmation }: { confirmation: StageCon
     return (
         <div className="space-y-2">
             <p>
-                A deliverable follows its documents, so this move takes{' '}
+                A deliverable follows its documents, so this takes{' '}
                 <span className="font-semibold text-fg">{deliverableLabel(confirmation)}</span> to{' '}
                 {statusOf('deliverable', confirmation.to).label}.
             </p>

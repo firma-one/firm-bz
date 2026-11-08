@@ -11,6 +11,7 @@ import { SharePointIcon } from '@/components/ui/sharepoint-icon'
 import { useAuth } from '@/lib/auth-context'
 import { useRouter } from 'next/navigation'
 import { firmSettingsPath } from '@/lib/navigation/firm-paths'
+import { failureFrom, failureReason } from '@/lib/files/action-failure'
 
 type ClientDriveSectionProps = {
   connectorId: string | null
@@ -34,46 +35,51 @@ export function ClientDriveSection({
   const [isActive, setIsActive] = useState(false)
   const [provider, setProvider] = useState<'google_drive' | 'onedrive'>('google_drive')
   const [workspaceRootLocation, setWorkspaceRootLocation] = useState<string | null>(null)
+  /** The check itself failed: never shown as a green, connected (or disconnected) row (P2-36). */
+  const [checkFailed, setCheckFailed] = useState<string | null>(null)
 
   const hasLoadedRef = useRef(false)
 
   const loadConnectorData = useCallback(async () => {
     if (!connectorId || !session?.access_token) return
     setIsLoadingData(true)
+    setCheckFailed(null)
     try {
       const headers = { Authorization: `Bearer ${session.access_token}` }
       const googleRes = await fetch(
         `/api/connectors/google-drive?action=status&connectionId=${encodeURIComponent(connectorId)}`,
         { headers }
       )
-      if (googleRes.ok) {
-        const data = await googleRes.json()
-        if (data.connector) {
-          setProvider('google_drive')
-          setName(data.connector.name ?? '')
-          setEmail(data.connector.email ?? '')
-          setIsActive(!!data.isConnected)
-          setIsLoadingData(false)
-          return
-        }
+      if (!googleRes.ok) throw await failureFrom(googleRes)
+      const googleData = await googleRes.json()
+      if (googleData.connector) {
+        setProvider('google_drive')
+        setName(googleData.connector.name ?? '')
+        setEmail(googleData.connector.email ?? '')
+        setIsActive(!!googleData.isConnected)
+        setIsLoadingData(false)
+        return
       }
       // Not a Google Drive connector (or not found under this user) — try OneDrive.
       const oneDriveRes = await fetch(
         `/api/connectors/onedrive?action=status&connectionId=${encodeURIComponent(connectorId)}`,
         { headers }
       )
-      if (oneDriveRes.ok) {
-        const data = await oneDriveRes.json()
-        if (data.connector) {
-          setProvider('onedrive')
-          setName(data.connector.name ?? '')
-          setEmail(data.connector.email ?? '')
-          setIsActive(!!data.isConnected)
-          setWorkspaceRootLocation(data.connector.workspaceRootLocation ?? null)
-        }
+      if (!oneDriveRes.ok) throw await failureFrom(oneDriveRes)
+      const data = await oneDriveRes.json()
+      if (data.connector) {
+        setProvider('onedrive')
+        setName(data.connector.name ?? '')
+        setEmail(data.connector.email ?? '')
+        setIsActive(!!data.isConnected)
+        setWorkspaceRootLocation(data.connector.workspaceRootLocation ?? null)
+      } else {
+        // Neither provider answered for it: the status routes only see connectors the signed-in
+        // person owns, so this is "unknown", not "disconnected".
+        setCheckFailed('It was connected by someone else. Open Firm Settings to see it.')
       }
-    } catch {
-      // non-fatal
+    } catch (e) {
+      setCheckFailed(failureReason(e))
     } finally {
       setIsLoadingData(false)
     }
@@ -105,7 +111,23 @@ export function ClientDriveSection({
 
   return (
     <div>
-      {connectorId ? (
+      {connectorId && checkFailed ? (
+        <div role="alert" className="rounded border border-line bg-surface px-4 py-3 flex items-center gap-3">
+          <StatusIcon stage="problem" size={13} />
+          <p className="min-w-0 flex-1 text-xs text-fg-muted">
+            Couldn&apos;t check the connection · {checkFailed}
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 px-2 text-xs border-line bg-surface text-fg-muted hover:bg-surface-hover hover:text-fg shrink-0 rounded"
+            onClick={() => void loadConnectorData()}
+          >
+            Try again
+          </Button>
+        </div>
+      ) : connectorId ? (
         <div className="rounded border border-line bg-surface px-4 py-3 flex items-center gap-3">
           <div className="h-8 w-8 shrink-0 bg-surface border border-line rounded flex items-center justify-center p-1.5">
             {provider === 'onedrive'
@@ -120,7 +142,7 @@ export function ClientDriveSection({
             {/* Connection health in the status language: Done when connected, Needs fixing when not. */}
             <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-fg-muted">
               <StatusIcon stage={isActive ? 'done' : 'problem'} size={13} />
-              <span className="truncate">{isActive ? (email || 'Connected') : 'Disconnected — reconnect in Firm Settings'}</span>
+              <span className="truncate">{isActive ? (email || 'Connected') : 'Disconnected · reconnect in Firm Settings'}</span>
             </p>
           </div>
           <Button

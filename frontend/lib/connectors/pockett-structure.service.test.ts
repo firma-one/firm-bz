@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
-import { detectExistingStructure } from './pockett-structure.service'
+import { detectExistingStructure, getOrgFolderName } from './pockett-structure.service'
+import { storageFailure } from './storage-failure'
 import { METADATA_FOLDER_NAME, type IConnectorStorageAdapter } from './types'
 
 function createMockAdapter(overrides: Partial<IConnectorStorageAdapter> = {}): IConnectorStorageAdapter {
@@ -82,6 +83,39 @@ describe('pockett-structure.service', () => {
       })
       const result = await detectExistingStructure('conn-1', 'parent-1', adapter)
       expect(result).toEqual({ detected: false })
+    })
+  })
+})
+
+describe('readMetaFromFolder (P2-35)', () => {
+  it('stops with a StorageFailure when the meta file is there but cannot be read, instead of reading it as "none"', async () => {
+    const { readMetaFromFolder } = await import('./pockett-structure.service')
+    const { StorageFailure } = await import('./storage-failure')
+    const adapter = createMockAdapter({
+      listFolderChildren: vi.fn()
+        .mockResolvedValueOnce([{ id: 'dot-id', name: METADATA_FOLDER_NAME }])
+        .mockResolvedValueOnce([{ id: 'meta-id', name: 'meta.json' }]),
+      readFileContent: vi.fn().mockResolvedValue(null),
+    })
+    await expect(readMetaFromFolder(adapter, 'conn-1', 'folder-1')).rejects.toBeInstanceOf(StorageFailure)
+  })
+
+  it('still answers null when there is no meta file at all', async () => {
+    const { readMetaFromFolder } = await import('./pockett-structure.service')
+    const adapter = createMockAdapter({ listFolderChildren: vi.fn().mockResolvedValue([]) })
+    await expect(readMetaFromFolder(adapter, 'conn-1', 'folder-1')).resolves.toBeNull()
+  })
+
+  describe('getOrgFolderName', () => {
+    it('stops when the storage refuses the listing, rather than guess a name', async () => {
+      const refusal = storageFailure('no_permission', 'Google Drive')
+      const adapter = createMockAdapter({ listFolderChildren: vi.fn().mockRejectedValue(refusal) })
+      await expect(getOrgFolderName(adapter, 'conn-1', 'parent-1', 'Acme', 'acme')).rejects.toBe(refusal)
+    })
+
+    it('still answers the name when the listing has no collision', async () => {
+      const adapter = createMockAdapter({ listFolderChildren: vi.fn().mockResolvedValue([{ id: 'x', name: 'Other' }]) })
+      await expect(getOrgFolderName(adapter, 'conn-1', 'parent-1', 'Acme', 'acme')).resolves.toEqual({ folderName: 'Acme', collision: false })
     })
   })
 })

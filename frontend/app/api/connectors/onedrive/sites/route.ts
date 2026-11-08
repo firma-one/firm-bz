@@ -7,6 +7,9 @@ import { ensureAppFolderStructure, setupFirmFolder } from '@/lib/connectors/pock
 import { generateWorkspaceFolderName } from '@/lib/generate-unique-workspace-folder-name'
 import { prisma } from '@/lib/prisma'
 import { logger } from '@/lib/logger'
+import { findFirmForConnector } from '@/lib/connectors/connector-firm'
+import { folderStepFailure, reconnectFailure, storageFailureResponse } from '@/lib/connectors/folder-step-failure'
+import { storageFailureFromResponse } from '@/lib/connectors/storage-failure'
 
 const oneDriveConnector = OneDriveConnector.getInstance()
 
@@ -42,7 +45,7 @@ export async function GET(request: NextRequest) {
   }
 
   const token = await oneDriveConnector.getAccessToken(connectionId)
-  if (!token) return NextResponse.json({ error: 'Could not obtain access token' }, { status: 500 })
+  if (!token) return storageFailureResponse(reconnectFailure('OneDrive'))
 
   // Graph's /sites?search= endpoint is a keyword-search index, but empirically (confirmed
   // 2026-08-06 against a real tenant) a literal `*` query does return the tenant's full site
@@ -77,9 +80,9 @@ export async function GET(request: NextRequest) {
       headers: { Authorization: `Bearer ${token}` },
     })
     if (!res.ok) {
-      const err = await res.text()
-      logger.error(`Graph sites request failed: ${res.status} - ${err}`, new Error(`HTTP ${res.status}`))
-      return NextResponse.json({ error: 'Failed to list SharePoint sites', detail: err }, { status: 502 })
+      // Microsoft's own reason (often "your admin needs to approve…"), in StorageFailure's words.
+      const f = await storageFailureFromResponse(res, 'OneDrive', 'list SharePoint sites')
+      return NextResponse.json({ error: f.message, code: f.reason }, { status: f.status })
     }
     const data = await res.json()
     const sites = (data.value || [])
@@ -92,7 +95,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ sites })
   } catch (e) {
     logger.error('Failed to list SharePoint sites', e instanceof Error ? e : new Error(String(e)))
-    return NextResponse.json({ error: 'Failed to list SharePoint sites' }, { status: 502 })
+    const f = folderStepFailure(e, 'OneDrive')
+    return NextResponse.json({ error: f.message, code: f.reason }, { status: f.status })
   }
 }
 
@@ -123,8 +127,26 @@ export async function POST(request: NextRequest) {
   }
 
   const token = await oneDriveConnector.getAccessToken(connectionId)
-  if (!token) return NextResponse.json({ error: 'Could not obtain access token' }, { status: 500 })
+  if (!token) return storageFailureResponse(reconnectFailure('OneDrive'))
 
+  /** Nothing about the current folder changed, and Microsoft's reason for why the site can't be used
+   * (the dialog's toast title names the site: "Couldn't use Finance Site"). */
+  const siteRefused = (reason: string, status: number, code?: string) =>
+    NextResponse.json(
+      { error: `${reason.replace(/\.?$/, '.')} Your current folder is unchanged.`, ...(code ? { code } : {}) },
+      { status }
+    )
+
+  // What the connector pointed at before, to put back if the new site's folder can't be made: the
+  // adapter has to read the new site from the database to create folders in it (CN-2).
+  const previous = {
+    workspaceRootLocation: connector.workspaceRootLocation,
+    workspaceRootSharedStorageId: connector.workspaceRootSharedStorageId,
+    workspaceRootSharedStorageName: connector.workspaceRootSharedStorageName,
+    workspaceRootSharedStorageWebUrl: connector.workspaceRootSharedStorageWebUrl,
+  }
+
+  let siteWritten = false
   try {
     // Resolve the site's default drive id — that's what workspaceRootSharedStorageId stores
     // (mirrors Google Drive's shared-drive-id semantics).
@@ -132,9 +154,8 @@ export async function POST(request: NextRequest) {
       headers: { Authorization: `Bearer ${token}` },
     })
     if (!driveRes.ok) {
-      const err = await driveRes.text()
-      logger.error(`Failed to resolve drive for site ${siteId}: ${driveRes.status} - ${err}`, new Error(`HTTP ${driveRes.status}`))
-      return NextResponse.json({ error: 'Failed to resolve site drive' }, { status: 502 })
+      const f = await storageFailureFromResponse(driveRes, 'OneDrive', `open the drive of site ${siteId}`)
+      return siteRefused(f.message, f.status, f.reason)
     }
     const driveData = await driveRes.json()
 
@@ -144,9 +165,8 @@ export async function POST(request: NextRequest) {
       headers: { Authorization: `Bearer ${token}` },
     })
     if (!driveRootRes.ok) {
-      const err = await driveRootRes.text()
-      logger.error(`Failed to resolve drive root for site ${siteId}: ${driveRootRes.status} - ${err}`, new Error(`HTTP ${driveRootRes.status}`))
-      return NextResponse.json({ error: 'Failed to resolve site drive root' }, { status: 502 })
+      const f = await storageFailureFromResponse(driveRootRes, 'OneDrive', `open the drive root of site ${siteId}`)
+      return siteRefused(f.message, f.status, f.reason)
     }
     const driveRootData = await driveRootRes.json()
     const driveRootId: string = driveRootData.id
@@ -165,6 +185,7 @@ export async function POST(request: NextRequest) {
         workspaceRootSharedStorageName: siteName ?? null,
       },
     })
+    siteWritten = true
 
     // Auto-create _firma/<workspace folder> inside the site's drive root — same two-level
     // nesting as Personal OneDrive's createPersonalFolder (idempotent _firma parent, then a
@@ -173,9 +194,28 @@ export async function POST(request: NextRequest) {
     // (confirmed 2026-08-06 spike). Keeps the app's content isolated under _firma rather than
     // using the whole site drive as the root.
     const adapter = createOneDriveAdapter(async () => token)
-    const firmaFolderId = await adapter.findOrCreateFolder(connectionId, driveRootId, '_firma')
-    const workspaceFolderName = generateWorkspaceFolderName()
-    const rootFolderId = await adapter.findOrCreateFolder(connectionId, firmaFolderId, workspaceFolderName)
+    let rootFolderId: string
+    try {
+      const firmaFolderId = await adapter.findOrCreateFolder(connectionId, driveRootId, '_firma')
+      const workspaceFolderName = generateWorkspaceFolderName()
+      rootFolderId = await adapter.findOrCreateFolder(connectionId, firmaFolderId, workspaceFolderName)
+    } catch (folderErr) {
+      // Put the old site back: pointing at the new site's drive with the old root id would stop
+      // every existing file resolving.
+      logger.error('onedrive site select: workspace folder could not be created; restoring the previous site', folderErr instanceof Error ? folderErr : new Error(String(folderErr)), `connectorId:${connectionId}`)
+      try {
+        await prisma.connector.update({ where: { id: connectionId }, data: previous })
+      } catch (restoreErr) {
+        logger.error('onedrive site select: restoring the previous site failed', restoreErr instanceof Error ? restoreErr : new Error(String(restoreErr)), `connectorId:${connectionId}`)
+        const f = folderStepFailure(folderErr, 'OneDrive')
+        return NextResponse.json(
+          { error: `${f.message} Choose your workspace folder again before going on.`, code: f.reason },
+          { status: f.status }
+        )
+      }
+      const f = folderStepFailure(folderErr, 'OneDrive')
+      return siteRefused(f.message, f.status, f.reason)
+    }
 
     // Resolve the exact workspace folder's own webUrl — the Open button should land here, not on
     // the document library home. Graph computes this server-side (correct encoding/locale/library
@@ -223,13 +263,10 @@ export async function POST(request: NextRequest) {
 
     // Provision firm/client/engagement folder hierarchy in the newly selected site — same
     // logic as the Personal (update-root-folder) path, see that route for the pattern this
-    // mirrors.
+    // mirrors. The site is set either way; a failure answers success with a `warning` (CN-3).
+    let siteWarning: string | undefined
     try {
-      let org = await prisma.firm.findFirst({ where: { connectorId: connectionId } })
-      if (!org) {
-        const linkedClient = await prisma.client.findFirst({ where: { connectorId: connectionId }, select: { firmId: true } })
-        if (linkedClient) org = await prisma.firm.findUnique({ where: { id: linkedClient.firmId } })
-      }
+      let org = await findFirmForConnector(connectionId)
       // Caller-supplied hint: only follow it into a firm the caller administers.
       if (!org && hintFirmId && (await isFirmAdmin(user.id, hintFirmId))) {
         org = await prisma.firm.findUnique({ where: { id: hintFirmId } })
@@ -246,6 +283,7 @@ export async function POST(request: NextRequest) {
             where: { clientId: linkedClient.id, isDeleted: false, connectorRootFolderId: null },
             select: { id: true, name: true, slug: true },
           })
+          const engagementFailures: string[] = []
           for (const eng of engagements) {
             try {
               const engResult = await ensureAppFolderStructure(
@@ -260,18 +298,34 @@ export async function POST(request: NextRequest) {
               }
             } catch (engErr) {
               logger.error('onedrive site select: failed to provision engagement', engErr instanceof Error ? engErr : new Error(String(engErr)), `engagementId:${eng.id}`)
+              engagementFailures.push(`${eng.name} (${folderStepFailure(engErr, 'OneDrive').message})`)
             }
+          }
+          if (engagementFailures.length > 0) {
+            siteWarning = `Site set, but ${engagementFailures.length} of ${engagements.length} engagement folders couldn't be created · ${engagementFailures.join('; ')}`
           }
         }
       }
     } catch (provErr) {
       logger.error('onedrive site select: provisioning failed', provErr instanceof Error ? provErr : new Error(String(provErr)))
-      // Non-fatal — folder structure can be retried via Migrate
+      siteWarning = `Site set, but the firm's folders couldn't be created inside it · ${folderStepFailure(provErr, 'OneDrive').message}`
     }
 
-    return NextResponse.json({ success: true, driveId: driveData.id })
+    return NextResponse.json({ success: true, driveId: driveData.id, ...(siteWarning ? { warning: siteWarning } : {}) })
   } catch (e) {
     logger.error('SharePoint site selection failed', e instanceof Error ? e : new Error(String(e)))
-    return NextResponse.json({ error: 'Site selection failed' }, { status: 500 })
+    const f = folderStepFailure(e, 'OneDrive')
+    if (siteWritten) {
+      try {
+        await prisma.connector.update({ where: { id: connectionId }, data: previous })
+      } catch (restoreErr) {
+        logger.error('onedrive site select: restoring the previous site failed', restoreErr instanceof Error ? restoreErr : new Error(String(restoreErr)), `connectorId:${connectionId}`)
+        return NextResponse.json(
+          { error: `${f.message} Choose your workspace folder again before going on.`, code: f.reason },
+          { status: f.status }
+        )
+      }
+    }
+    return siteRefused(f.message, f.status, f.reason)
   }
 }

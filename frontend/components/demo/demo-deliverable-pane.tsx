@@ -11,6 +11,7 @@ import { STAGE_BAR_CLASSES, STATUS, type LaneStage } from '@/lib/ui/status'
 import { DemoFolder } from '@/lib/demo/static-demo-data'
 import { DemoDeliverable, demoDocumentStages, demoFilesIn, type DemoDocumentStage } from '@/lib/demo/demo-deliverables'
 import { BlockedTag } from '@/components/files/blocked-tag'
+import { PrivateMark } from '@/components/files/private-mark'
 import { Hint } from '@/components/ui/tooltip'
 import { DemoDeliverableComments } from './demo-deliverable-comments'
 
@@ -32,18 +33,19 @@ const TABS: { id: Tab; label: string; icon: React.ComponentType<{ className?: st
     { id: 'delivery', label: 'Settings', icon: SettingsIcon },
 ]
 
-function collectSubtasks(folder: DemoFolder): { id: string; docId: string; name: string; type: string }[] {
-    return demoFilesIn(folder).map((f) => ({ id: f.id, docId: f.docId, name: f.name, type: f.type }))
+function collectSubtasks(folder: DemoFolder): { id: string; docId: string; name: string; type: string; private?: boolean }[] {
+    return demoFilesIn(folder).map((f) => ({ id: f.id, docId: f.docId, name: f.name, type: f.type, private: f.private }))
 }
 
 /** One of the deliverable's documents: its ID, name, stage and (the firm's own) Blocked tag. */
-function SubtaskLine({ subtask, stage }: { subtask: { id: string; docId: string; name: string; type: string }; stage?: DemoDocumentStage }) {
+function SubtaskLine({ subtask, stage }: { subtask: { id: string; docId: string; name: string; type: string; private?: boolean }; stage?: DemoDocumentStage }) {
     return (
         <div className="group py-2 px-4 hover:bg-[#f9f9fb] transition-colors">
             <div className="flex items-center gap-2.5">
                 <DocumentIcon mimeType={MIME_BY_TYPE[subtask.type] ?? 'application/octet-stream'} className="h-3.5 w-3.5 shrink-0" size={14} />
                 <span className="font-mono text-xs font-bold text-[#45474c] shrink-0">{subtask.docId}</span>
                 <span className="flex-1 min-w-0 truncate text-xs text-[#1b1b1d]">{subtask.name}</span>
+                {subtask.private && <PrivateMark />}
                 {stage?.blocked && <BlockedTag blocked={stage.blocked} />}
                 {stage && <StatusPill kind="deliverable" status={stage.stage} className="shrink-0" />}
             </div>

@@ -4,6 +4,7 @@ import React, { Component, ReactNode } from 'react'
 import { logger } from '@/lib/logger'
 import { AlertCircle, RefreshCw, Copy, Send } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { CRASH_TITLE, sendCrashReport } from '@/components/support/crash-report'
 
 interface Props {
     children: ReactNode
@@ -19,6 +20,8 @@ interface State {
     feedback: string
     isSubmitting: boolean
     reportSubmitted: boolean
+    /** Why the report didn't arrive, when it didn't. */
+    reportError: string | null
     /** Incremented on "Try again" so children remount and get a fresh tree. */
     resetKey: number
 }
@@ -37,6 +40,7 @@ export class ErrorBoundary extends Component<Props, State> {
             feedback: '',
             isSubmitting: false,
             reportSubmitted: false,
+            reportError: null,
             resetKey: 0,
         }
     }
@@ -49,6 +53,7 @@ export class ErrorBoundary extends Component<Props, State> {
             feedback: '',
             isSubmitting: false,
             reportSubmitted: false,
+            reportError: null,
         }
     }
 
@@ -95,53 +100,22 @@ export class ErrorBoundary extends Component<Props, State> {
         }
     }
 
-    extractSlugsFromPath = (): {
-        orgSlug?: string
-        clientSlug?: string
-        projectSlug?: string
-    } => {
-        if (typeof window === 'undefined') return {}
-        const path = window.location.pathname
-        const orgMatch = path.match(/\/o\/([^/]+)/)
-        const clientMatch = path.match(/\/c\/([^/]+)/)
-        const projectMatch = path.match(/\/p\/([^/]+)/)
-        return {
-            orgSlug: orgMatch ? orgMatch[1] : undefined,
-            clientSlug: clientMatch ? clientMatch[1] : undefined,
-            projectSlug: projectMatch ? projectMatch[1] : undefined,
-        }
-    }
-
     handleSubmitReport = async () => {
         const { error, feedback } = this.state
         if (!error || !feedback.trim()) return
 
-        this.setState({ isSubmitting: true })
-        try {
-            const { submitErrorTicket } = await import('@/app/actions/submit-ticket')
-            await submitErrorTicket({
-                description: feedback.trim(),
-                type: 'BUG',
-                errorDetails: {
-                    message: error.message,
-                    stack: error.stack,
-                    url: typeof window !== 'undefined' ? window.location.href : undefined,
-                    context: this.props.context,
-                },
-                metadata: {
-                    userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : undefined,
-                    screen:
-                        typeof window !== 'undefined'
-                            ? { width: window.screen.width, height: window.screen.height }
-                            : undefined,
-                },
-                ...this.extractSlugsFromPath(),
-            })
-            this.setState({ reportSubmitted: true })
-        } catch (err) {
-            logger.error('Failed to submit error report', err as Error, 'ErrorBoundary')
-        } finally {
-            this.setState({ isSubmitting: false })
+        this.setState({ isSubmitting: true, reportError: null })
+        // The firm comes from today's URL (crash-report.ts); a report that didn't arrive says so.
+        const sent = await sendCrashReport({
+            feedback,
+            error: { message: error.message, stack: error.stack },
+            context: this.props.context,
+        })
+        if (sent.ok) {
+            this.setState({ reportSubmitted: true, isSubmitting: false })
+        } else {
+            logger.warn('Error report was not sent', 'ErrorBoundary')
+            this.setState({ reportError: sent.message, isSubmitting: false })
         }
     }
 
@@ -153,7 +127,7 @@ export class ErrorBoundary extends Component<Props, State> {
             }
 
             // Default fallback UI
-            const { reportSubmitted, feedback, isSubmitting } = this.state
+            const { reportSubmitted, reportError, feedback, isSubmitting } = this.state
             return (
                 <div className="flex items-center justify-center min-h-[400px] p-6">
                     <div className="max-w-lg w-full bg-white rounded-lg border border-red-200 p-6 shadow-sm">
@@ -163,11 +137,11 @@ export class ErrorBoundary extends Component<Props, State> {
                             </div>
                             <div className="flex-1 min-w-0">
                                 <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                                    Something went wrong
+                                    {CRASH_TITLE}
                                 </h3>
                                 <p className="text-sm text-gray-600 mb-4">
-                                    We encountered an error while rendering this section.
-                                    You can try again or report it so we look into it on priority.
+                                    This part of the page stopped working. Try again, or tell us what
+                                    you were doing so we can fix it.
                                 </p>
 
                                 {/* Report this error */}
@@ -186,6 +160,9 @@ export class ErrorBoundary extends Component<Props, State> {
                                             className="w-full h-20 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm placeholder:text-gray-400 focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
                                             disabled={isSubmitting}
                                         />
+                                        {reportError && (
+                                            <p role="alert" className="mt-2 text-xs text-red-700">{reportError}</p>
+                                        )}
                                         <div className="mt-3 flex justify-end">
                                             <Button
                                                 onClick={this.handleSubmitReport}

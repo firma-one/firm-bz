@@ -77,3 +77,27 @@ describe('getPlatformMaintenanceConfig caching', () => {
         expect(prisma.platformConfig.findUnique).toHaveBeenCalledTimes(1)
     })
 })
+
+describe('maintenance emails report how many went out', () => {
+    const config = { active: true, gracePeriod: false, graceEndsAt: null, scheduledFrom: null, scheduledTo: null, message: null, enabledAt: null, disabledAt: null, enabledBy: null }
+
+    it('sendPlatformMaintenanceEmail answers "sent to 2 of 3" rather than only logging', async () => {
+        const { sendEmail } = await import('@/lib/email')
+        vi.mocked(sendEmail).mockImplementation(async (to: string) => {
+            if (to === 'b@x.test') throw new Error('SMTP 550')
+            return undefined as never
+        })
+        const { sendPlatformMaintenanceEmail } = await import('./platform-maintenance')
+        const out = await sendPlatformMaintenanceEmail('on', config, [{ email: 'a@x.test' }, { email: 'b@x.test' }, { email: 'c@x.test' }])
+        expect(out).toEqual({ sent: 2, total: 3 })
+    })
+
+    it('notifyPlatformMaintenance says when the list of people couldn’t be read, instead of nothing', async () => {
+        const { createAdminClient } = await import('@/utils/supabase/admin')
+        vi.mocked(createAdminClient).mockImplementation(() => { throw new Error('service role key missing') })
+        const { notifyPlatformMaintenance } = await import('./platform-maintenance')
+        const out = await notifyPlatformMaintenance('on', config)
+        expect(out.emails).toBeNull()
+        expect(out.problem).toBe("Couldn't read the list of people to email, so no email went out.")
+    })
+})
