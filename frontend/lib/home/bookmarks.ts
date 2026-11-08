@@ -73,7 +73,8 @@ export async function getHomeBookmarks(userId: string, firms: HomeFirm[]): Promi
         }
         return out
     } catch (e) {
+        // Thrown, not answered as none: Home said "No bookmarks yet" after a failed load.
         logger.error('getHomeBookmarks failed', e as Error, 'Home', { userId })
-        return []
+        throw e
     }
 }

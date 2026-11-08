@@ -7,6 +7,8 @@ import {
   getConnectorMeta,
   getStorageAdapter,
 } from './registry'
+import { OneDriveConnector } from './onedrive-connector'
+import { StorageFailure } from './storage-failure'
 
 const mockFindUnique = vi.fn()
 
@@ -209,6 +211,27 @@ describe('connector registry', () => {
       expect(typeof adapter.listTopLevelChildren).toBe('function')
       expect(typeof adapter.moveBatch).toBe('function')
       expect(typeof adapter.persistWorkspaceRootLocation).toBe('function')
+    })
+
+    // P2-37: a refused listing isn't an empty workspace folder, or the migration moves nothing and reads as complete.
+    it('ONEDRIVE listings throw the reason when Graph refuses them', async () => {
+      mockFindUnique.mockResolvedValue({ id: 'conn-3', type: ConnectorType.ONEDRIVE, workspaceRootLocation: 'PERSONAL' })
+      vi.mocked(OneDriveConnector.getInstance().getAccessToken).mockResolvedValue('token')
+      const refusal = () => new Response(JSON.stringify({ error: { code: 'accessDenied', message: 'Access denied' } }), { status: 403 })
+      const fetchMock = vi.fn().mockImplementation(async () => refusal())
+      vi.stubGlobal('fetch', fetchMock)
+      try {
+        const adapter = await getMigrationAdapter('conn-3')
+        const withNames = await adapter.listTopLevelChildrenWithNames('conn-3', 'root-1').catch((e) => e)
+        expect(withNames).toBeInstanceOf(StorageFailure)
+        expect(withNames.reason).toBe('no_permission')
+        await expect(adapter.listTopLevelChildren('conn-3', 'root-1')).rejects.toBeInstanceOf(StorageFailure)
+        fetchMock.mockImplementation(async () => new Response(JSON.stringify({ value: [] }), { status: 200 }))
+        await expect(adapter.listTopLevelChildrenWithNames('conn-3', 'root-1')).resolves.toEqual([])
+      } finally {
+        vi.unstubAllGlobals()
+        vi.mocked(OneDriveConnector.getInstance().getAccessToken).mockResolvedValue(null)
+      }
     })
   })
 

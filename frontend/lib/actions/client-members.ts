@@ -13,21 +13,31 @@ import { canManageClient } from '@/lib/permission-helpers'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 import { getAvatarUrlFromSupabaseUser } from '@/lib/supabase-user-helpers'
 import { normalizeInviteeName, type InviteeName } from '@/lib/auth/invite-names'
+import { asResult, userFacing, type ActionResult } from '@/lib/actions/action-result'
+import { asResultWithWarning, gone, notAllowed, signedOut } from '@/lib/actions/action-reasons'
+import { inviteEmailFailed } from '@/lib/actions/invite-email-words'
 
 const supabaseAdmin = createSupabaseAdmin(
     process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:54321',
     process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-export async function getClientMembers(clientId: string) {
+export type ClientMembersData = Awaited<ReturnType<typeof getClientMembersOrThrow>>
+
+/** The client's members and open invitations. A failed load answers its reason, never an empty list. */
+export async function getClientMembers(clientId: string): Promise<ActionResult<ClientMembersData>> {
+    return asResult('getClientMembers', () => getClientMembersOrThrow(clientId))
+}
+
+async function getClientMembersOrThrow(clientId: string) {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('Unauthorized')
+    if (!user) throw signedOut()
 
     // Members and invitations of a client: its managers only, on the client's own firm. This only
     // checked sign-in. (.claude/plans/access-gates.md, P0 #12)
     const owning = await prisma.client.findUnique({ where: { id: clientId }, select: { firmId: true } })
-    if (!owning || !(await canManageClient(owning.firmId, clientId))) throw new Error('Insufficient permissions')
+    if (!owning || !(await canManageClient(owning.firmId, clientId))) throw notAllowed("see this client's members")
 
     const members = await prisma.clientMember.findMany({
         where: { clientId },
@@ -57,10 +67,13 @@ export async function getClientMembers(clientId: string) {
                         avatarUrl: getAvatarUrlFromSupabaseUser(dbUser)
                     }
                 }
-            } catch {
+            } catch (error) {
+                // Marked as a failed lookup, not passed off as a person called "Unknown User".
+                logger.error('Could not look up a client member', error as Error)
                 return {
                     ...m,
-                    user: { email: 'Unknown', name: 'Unknown User', avatarUrl: null }
+                    lookupFailed: true as const,
+                    user: { email: '', name: "Couldn't load this member's details", avatarUrl: null }
                 }
             }
         })
@@ -69,24 +82,35 @@ export async function getClientMembers(clientId: string) {
     return { members: enrichedMembers, invitations }
 }
 
-export async function inviteClientMember(firmId: string, clientId: string, email: string, invitee?: InviteeName) {
+/**
+ * Invites a client administrator. The invitation is saved first; when its email can't be sent the
+ * answer is still ok, with a `warning` that says so, and the row reads Email failed so Resend is offered.
+ */
+export async function inviteClientMember(firmId: string, clientId: string, email: string, invitee?: InviteeName): Promise<ActionResult> {
+    return asResultWithWarning('inviteClientMember', async () => {
+        const warning = await inviteClientMemberOrThrow(firmId, clientId, email, invitee)
+        return { data: undefined, ...(warning ? { warning } : {}) }
+    })
+}
+
+async function inviteClientMemberOrThrow(firmId: string, clientId: string, email: string, invitee?: InviteeName): Promise<string | undefined> {
     const inviteeName = normalizeInviteeName(invitee)
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('Unauthorized')
+    if (!user) throw signedOut()
 
     const client = await prisma.client.findUnique({
         where: { id: clientId },
         include: { firm: { select: { sandboxOnly: true, name: true } } }
     })
-    if (!client) throw new Error('Client not found')
+    if (!client) throw gone('This client was deleted.')
     // Check against the client's own firm, never the firmId the caller sent — a firm admin of
     // any firm used to pass for a foreign client. (.claude/plans/access-gates.md, P0 #8)
-    if (firmId && firmId !== client.firmId) throw new Error('Client not found')
+    if (firmId && firmId !== client.firmId) throw gone('This client was deleted.')
     const canManage = await canManageClient(client.firmId, clientId)
-    if (!canManage) throw new Error('Insufficient permissions to invite client members')
+    if (!canManage) throw notAllowed('invite members to this client')
     if (client.firm?.sandboxOnly) {
-        throw new Error('Inviting members is restricted for Sandbox firms. Upgrade to invite teammates.')
+        throw userFacing('Inviting members is restricted for Sandbox firms. Upgrade to invite teammates.', 'upgrade_required')
     }
 
     const persona = await prisma.persona.findUnique({
@@ -97,18 +121,20 @@ export async function inviteClientMember(firmId: string, clientId: string, email
     const normalizedEmail = email.trim().toLowerCase()
 
     const allMembers = await prisma.clientMember.findMany({ where: { clientId }, select: { userId: true } })
+    // A lookup that fails must not let a duplicate through as "not a member" (P2-45): refuse instead.
     const memberEmails = await Promise.all(
         allMembers.map(async (m) => {
-            try {
-                const { data: { user: u } } = await supabaseAdmin.auth.admin.getUserById(m.userId)
-                return u?.email?.toLowerCase() ?? null
-            } catch {
-                return null
+            const { data, error } = await supabaseAdmin.auth.admin.getUserById(m.userId)
+            // 404: the account is gone, so it holds no address to match.
+            if (error && error.status !== 404) {
+                logger.error('Could not look up a client member while checking an invite', error)
+                throw userFacing("Couldn't check whether this person is already a member. Try again.", 'lookup_failed')
             }
+            return data.user?.email?.toLowerCase() ?? null
         })
     )
     if (memberEmails.includes(normalizedEmail)) {
-        throw new Error('A member with this email is already in the client')
+        throw userFacing('A member with this email is already in this client', 'already_member')
     }
 
     const token = crypto.randomUUID()
@@ -119,17 +145,19 @@ export async function inviteClientMember(firmId: string, clientId: string, email
         where: { clientId_email: { clientId, email: normalizedEmail } }
     })
 
+    let invitationId: string
     if (existing) {
         if (existing.status === InvitationStatus.JOINED) {
-            throw new Error('This user has already joined the client')
+            throw userFacing('This person has already joined this client', 'already_joined')
         }
         await prisma.clientInvitation.update({
             // A re-invite without a name leaves the one already on the row alone.
             where: { id: existing.id },
             data: { status: 'PENDING', token, expireAt, updatedBy: user.id, ...(inviteeName ?? {}) }
         })
+        invitationId = existing.id
     } else {
-        await prisma.clientInvitation.create({
+        const created = await prisma.clientInvitation.create({
             data: {
                 clientId,
                 email: normalizedEmail,
@@ -143,17 +171,26 @@ export async function inviteClientMember(firmId: string, clientId: string, email
                 updatedBy: user.id,
             }
         })
+        invitationId = created.id
     }
 
     await maybeProvisionInviteeAccount(normalizedEmail, inviteeName)
 
     const inviteUrl = `${process.env.NEXT_PUBLIC_APP_URL}/invite/${token}`
-    const { subject, html } = renderInviteEmail({
-        firmName: client.firm?.name ?? '',
-        clientName: client.name,
-        inviteUrl,
-    })
-    await sendEmail(normalizedEmail, subject, html)
+    let warning: string | undefined
+    try {
+        const { subject, html } = renderInviteEmail({
+            firmName: client.firm?.name ?? '',
+            clientName: client.name,
+            inviteUrl,
+        })
+        await sendEmail(normalizedEmail, subject, html)
+    } catch (err) {
+        logger.error('Client invitation email failed', err instanceof Error ? err : new Error(String(err)), 'Email', { to: normalizedEmail })
+        await prisma.clientInvitation.update({ where: { id: invitationId }, data: { status: InvitationStatus.ERROR } })
+            .catch((e) => logger.error('Could not mark the client invitation Email failed', e as Error))
+        warning = inviteEmailFailed(normalizedEmail, 'saved')
+    }
 
     audit(AUDIT_EVENT.CLIENT_MEMBER_INVITED)
         .scope(AUDIT_SCOPE.CLIENT)
@@ -163,23 +200,33 @@ export async function inviteClientMember(firmId: string, clientId: string, email
         .fireAndForget()
 
     revalidatePath('/d/[groupSlug]/f/[firmSlug]/c/[clientSlug]', 'layout')
+    return warning
 }
 
-export async function resendClientInvitation(invitationId: string) {
+/**
+ * Sends a client invitation again. Its whole job is the email, so an email that can't be sent is the
+ * answer's error (and the row reads Email failed), never "Invitation resent".
+ */
+export async function resendClientInvitation(invitationId: string): Promise<ActionResult> {
+    return asResult('resendClientInvitation', () => resendClientInvitationOrThrow(invitationId))
+}
+
+async function resendClientInvitationOrThrow(invitationId: string): Promise<void> {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('Unauthorized')
+    if (!user) throw signedOut()
 
     const invite = await prisma.clientInvitation.findUnique({
         where: { id: invitationId },
         include: { client: { select: { firmId: true, name: true, firm: { select: { name: true } } } } }
     })
-    if (!invite) throw new Error('Invitation not found')
-    if (invite.status === InvitationStatus.JOINED) throw new Error('User has already joined')
-    if (invite.status === InvitationStatus.ACCEPTED) throw new Error('User is currently accepting this invitation — please wait')
+    if (!invite) throw gone('This invitation was withdrawn.')
 
+    // Who may manage the client first, so its invitations' states aren't told to anyone else.
     const canManage = await canManageClient(invite.client.firmId, invite.clientId)
-    if (!canManage) throw new Error('Insufficient permissions')
+    if (!canManage) throw notAllowed("resend this client's invitations")
+    if (invite.status === InvitationStatus.JOINED) throw userFacing('This person has already joined this client.', 'already_joined')
+    if (invite.status === InvitationStatus.ACCEPTED) throw userFacing('This person is accepting the invitation right now. Wait a moment, then refresh.', 'mid_accept')
 
     const token = crypto.randomUUID()
     const expireAt = new Date()
@@ -205,24 +252,30 @@ export async function resendClientInvitation(invitationId: string) {
         await prisma.clientInvitation.update({
             where: { id: invitationId },
             data: { status: InvitationStatus.ERROR, updatedAt: new Date() }
-        })
+        }).catch((e) => logger.error('Could not mark the client invitation Email failed', e as Error))
+        revalidatePath('/d/[groupSlug]/f/[firmSlug]/c/[clientSlug]', 'layout')
+        throw userFacing(inviteEmailFailed(invite.email, 'resend'), 'email_failed')
     }
     revalidatePath('/d/[groupSlug]/f/[firmSlug]/c/[clientSlug]', 'layout')
 }
 
-export async function revokeClientInvitation(invitationId: string) {
+export async function revokeClientInvitation(invitationId: string): Promise<ActionResult> {
+    return asResult('revokeClientInvitation', () => revokeClientInvitationOrThrow(invitationId))
+}
+
+async function revokeClientInvitationOrThrow(invitationId: string): Promise<void> {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('Unauthorized')
+    if (!user) throw signedOut()
 
     const invite = await prisma.clientInvitation.findUnique({
         where: { id: invitationId },
         include: { client: { select: { firmId: true } } }
     })
-    if (!invite) throw new Error('Invitation not found')
+    if (!invite) throw gone('This invitation was already withdrawn.')
 
     const canManage = await canManageClient(invite.client.firmId, invite.clientId)
-    if (!canManage) throw new Error('Insufficient permissions')
+    if (!canManage) throw notAllowed("withdraw this client's invitations")
 
     await prisma.clientInvitation.delete({ where: { id: invitationId } })
     revalidatePath('/d/[groupSlug]/f/[firmSlug]/c/[clientSlug]', 'layout')

@@ -20,6 +20,7 @@ import { HomeBookmarks } from "./home-bookmarks"
 import { LandingArrival } from "@/components/app/landing-arrival"
 import { FirmFilter, UnavailableFirmsNote } from "./firm-filter"
 import { HomeEmptyLine, HomeSection } from "./home-section"
+import { HomeLoadFailed, HomeLoadNote, type HomeLoadProblems } from "./home-load-failed"
 
 /**
  * The cross-firm Home at `/d/u/home` (.claude/plans/cross-firm-home-inbox.md): Needs you, Continue,
@@ -91,11 +92,13 @@ function ContinueSection({ recents, label }: { recents: RecentVisit[]; label: La
     )
 }
 
-function NeedsYouSection({ items, label }: { items: NeedsYouItem[]; label: Label }) {
+function NeedsYouSection({ items, label, loadFailed }: { items: NeedsYouItem[]; label: Label; loadFailed?: boolean }) {
     return (
-        <HomeSection icon={<Inbox />} title="Needs you" count={items.length}>
+        <HomeSection icon={<Inbox />} title="Needs you" count={loadFailed && items.length === 0 ? undefined : items.length}>
             {items.length === 0 ? (
-                <HomeEmptyLine>All caught up. Approvals, comments, changes requested and mentions show up here.</HomeEmptyLine>
+                loadFailed
+                    ? <HomeLoadNote what="what needs you" />
+                    : <HomeEmptyLine>All caught up. Approvals, comments, changes requested and mentions show up here.</HomeEmptyLine>
             ) : (
                 <div className="flex flex-col">
                 {items.map((item) => (
@@ -118,6 +121,7 @@ function NeedsYouSection({ items, label }: { items: NeedsYouItem[]; label: Label
                         }
                     />
                 ))}
+                {loadFailed && <HomeLoadNote what="what needs you" partial />}
                 </div>
             )}
         </HomeSection>
@@ -135,6 +139,7 @@ export function HomeView({
     bookmarks,
     calendarHref: calendarHrefOverride,
     readOnly = false,
+    failed = {},
 }: {
     firstName: string | null
     /** Every firm the viewer may open — the filter's options. */
@@ -150,6 +155,8 @@ export function HomeView({
     calendarHref?: string
     /** No write actions: bookmarks can't be removed (the public demo). */
     readOnly?: boolean
+    /** What didn't load: each part says so in place of its empty line (EM-2). */
+    failed?: HomeLoadProblems
 }) {
     const shownFirms = selectedFirm ? [selectedFirm] : firms
     const multiFirm = shownFirms.length > 1
@@ -211,7 +218,9 @@ export function HomeView({
                 <UnavailableFirmsNote firms={unavailable} />
             </PageHeading>
 
-            {firms.length === 0 ? (
+            {failed.firms ? (
+                <HomeLoadFailed />
+            ) : firms.length === 0 ? (
                 <EmptyPanel
                     icon={<Home />}
                     title="Nothing here yet"
@@ -221,19 +230,29 @@ export function HomeView({
                 <>
                     {/* First, always: what is waiting on you. The order never changes with the day's state. */}
                     <div data-demo-tour="home-needs-you">
-                        <NeedsYouSection items={work.needsYou} label={label} />
+                        <NeedsYouSection items={work.needsYou} label={label} loadFailed={failed.work || failed.reminders} />
                     </div>
 
                     <ContinueSection recents={recents} label={label} />
 
-                    <AgendaWeek events={agendaEvents} dueItems={dueItems} calendarHref={calendarHref} />
+                    <AgendaWeek
+                        events={agendaEvents}
+                        dueItems={dueItems}
+                        calendarHref={calendarHref}
+                        loadFailed={failed.calendar || failed.work || failed.reminders}
+                    />
 
                     <MyEngagementsList
                         engagements={work.engagements}
                         firmNames={multiFirm ? Object.fromEntries(firmName) : undefined}
+                        loadFailed={failed.work}
                     />
 
-                    <HomeBookmarks bookmarks={bookmarks.map((b) => ({ ...b, context: label(b.firmId, b.context) }))} readOnly={readOnly} />
+                    <HomeBookmarks
+                        bookmarks={bookmarks.map((b) => ({ ...b, context: label(b.firmId, b.context) }))}
+                        readOnly={readOnly}
+                        loadFailed={failed.bookmarks}
+                    />
                 </>
             )}
         </div>

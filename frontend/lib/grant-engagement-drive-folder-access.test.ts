@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { grantEngagementDriveFolderAccess } from './grant-engagement-drive-folder-access'
+import { storageFailure } from '@/lib/connectors/storage-failure'
 
 // ── Mocks ──────────────────────────────────────────────────────────────────
 
@@ -108,13 +109,38 @@ describe('grantEngagementDriveFolderAccess', () => {
 
   // ── Error resilience ──────────────────────────────────────────────────────
 
-  it('does not throw when grantFolderPermission rejects (already-exists idempotency)', async () => {
-    mockGrantFolderPermission.mockRejectedValue(new Error('already has permission'))
-    await expect(
-      grantEngagementDriveFolderAccess({
-        connectorId: 'conn-1', engagementSlug: 'eng', email: 'user@firm.com', role: 'eng_member',
-      })
-    ).resolves.toBeUndefined()
+  it('reports a folder storage refused, with why, instead of only logging it', async () => {
+    const refusal = storageFailure('no_permission', 'Google Drive')
+    mockGrantFolderPermission.mockResolvedValueOnce('perm-1').mockRejectedValueOnce(refusal)
+    const outcome = await grantEngagementDriveFolderAccess({
+      connectorId: 'conn-1', engagementSlug: 'eng', email: 'admin@firm.com', role: 'eng_admin',
+    })
+    expect(outcome.granted).toEqual(['General', 'Staging'])
+    expect(outcome.failed).toEqual([{ folder: 'Confidential', folderId: 'conf-1', reason: refusal.message }])
+  })
+
+  it('never throws, even when storage fails outright', async () => {
+    mockGrantFolderPermission.mockRejectedValue(new Error('socket hang up'))
+    const outcome = await grantEngagementDriveFolderAccess({
+      connectorId: 'conn-1', engagementSlug: 'eng', email: 'user@firm.com', role: 'eng_member',
+    })
+    expect(outcome.granted).toEqual([])
+    expect(outcome.failed).toHaveLength(1)
+  })
+
+  it('retries only the folders it is asked to', async () => {
+    await grantEngagementDriveFolderAccess({
+      connectorId: 'conn-1', engagementSlug: 'eng', email: 'admin@firm.com', role: 'eng_admin', only: ['Staging'],
+    })
+    expect(mockGrantFolderPermission).toHaveBeenCalledTimes(1)
+    expect(mockGrantFolderPermission).toHaveBeenCalledWith('conn-1', 'stag-1', 'admin@firm.com', 'editor', { notify: false })
+  })
+
+  it('answers why nothing was tried, for a client role', async () => {
+    const outcome = await grantEngagementDriveFolderAccess({
+      connectorId: 'conn-1', engagementSlug: 'eng', email: 'client@example.com', role: 'eng_viewer',
+    })
+    expect(outcome).toEqual({ granted: [], failed: [], skipped: 'no_folder_access' })
   })
 
   // ── Adapter contract: passes correct opts to getEngagementFolderIds ───────

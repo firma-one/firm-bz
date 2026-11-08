@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { adminFailure } from '@/app/api/system/admin-error'
 import { createClient } from '@/utils/supabase/server'
 import { prisma } from '@/lib/prisma'
 import { SearchService } from '@/lib/services/search-service'
@@ -132,7 +133,6 @@ export async function POST(request: NextRequest) {
         logger.info(`System reindex completed for firm ${firmId}: ${totalIndexed} files across ${results.length} engagements`)
         return NextResponse.json({ data: { totalIndexed, engagements: results } })
     } catch (error) {
-        logger.error('System reindex API error:', error as Error)
-        return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+        return adminFailure('reindex the firm', error)
     }
 }

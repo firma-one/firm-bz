@@ -3,6 +3,8 @@
 import { useState, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { logger } from '@/lib/logger'
+import { failureReason } from '@/lib/files/action-failure'
+import { regrantRefusalReason } from '@/lib/files/regrant-refusal'
 
 export interface SecureOpenDocumentInput {
   /** Document id for regrant API (search index id or externalId). */
@@ -36,8 +38,9 @@ export interface SecureOpenModalData {
  * 'opened' — Google Drive, opened directly (the permission stood, or it's a known Google account
  *   shared silently): stays open with "Email me a new access link", for a visitor whose 7 days
  *   are up or who landed on Google's "You need access" page.
- * 'email' — Google Drive: grant succeeded, Google's own OTP is delivered via email — the modal
- *   stays open with "check your inbox" copy until the user dismisses it.
+ * 'email' — Google Drive: grant succeeded, and the route says Google's sharing email went out
+ *   (`emailed: true`) — the modal stays open with "check your inbox" copy until the user dismisses
+ *   it. Never shown on anything else: a grant with no email and no link is an error (AC-10).
  * 'blocked' — grant succeeded but the browser refused the new tab (see handleSecureOpen). The
  *   modal stays open with a link the user clicks themselves, which always succeeds because the
  *   click carries its own user activation.
@@ -145,7 +148,7 @@ export function useSecureOpenDocument({
         const { data: { session } } = await supabase.auth.getSession()
         if (!session?.access_token) {
           closeHoldingTab(holdingTab)
-          setRegrantError('Session expired. Please refresh and try again.')
+          setRegrantError('Your session has ended. Refresh the page and sign in again.')
           setSecureModalMode('error')
           return
         }
@@ -183,17 +186,9 @@ export function useSecureOpenDocument({
           // warn, not debug — logger.debug is a no-op outside development, which made this
           // branch invisible in production exactly when it mattered.
           logger.warn('Regrant failed', logContext, { documentId: doc.documentId, status, code: errBody.code, elapsedMs })
-          if (errBody.code === 'external_sharing_blocked' && errBody.error) {
-            // Tenant-level SharePoint external sharing policy blocked this specific recipient —
-            // confirmed live 2026-08-14 (works for internal-domain recipients on the same tenant,
-            // fails for external). Not something the app can retry around; surface the specific,
-            // actionable message from regrant/route.ts instead of the generic 403 copy.
-            setRegrantError(errBody.error)
-          } else if (status === 403) {
-            setRegrantError('Your access to this document has been revoked. Please contact your engagement lead.')
-          } else {
-            setRegrantError('Unable to open this document. Please try again or contact support.')
-          }
+          // The route's own words: a refused grant, a PDF copy that couldn't be made, SharePoint's
+          // external sharing policy, a revoke. Each says what happened and what to do.
+          setRegrantError(regrantRefusalReason(status, errBody))
           setSecureModalMode('error')
           return
         }
@@ -248,10 +243,19 @@ export function useSecureOpenDocument({
           return
         }
 
+        closeHoldingTab(holdingTab)
+        // No link, and no email either: there's nothing to open, so it's said rather than "check
+        // your email" (AC-10). Only the route knows whether Google's sharing email went out.
+        if (body.emailed !== true) {
+          logger.warn('Regrant answered with no link and no email', logContext, { documentId: doc.documentId, provider: body.provider })
+          setRegrantError("Couldn't open this document · storage didn't send a link to open it. Try again in a moment.")
+          setSecureModalMode('error')
+          return
+        }
+
         // Google Drive, shared by email: Google's own OTP is delivered via this email, so "check
         // your inbox" is the actual verification mechanism, not just a notification. Modal stays
         // open until the user dismisses it.
-        closeHoldingTab(holdingTab)
         const { data: { user } } = await supabase.auth.getUser()
         const email = user?.email || user?.user_metadata?.email || 'your email'
 
@@ -274,8 +278,8 @@ export function useSecureOpenDocument({
         )
         setRegrantError(
           isTimeout
-            ? 'The request timed out. Please check your connection and try again.'
-            : 'Unable to open this document. Please try again or contact support.'
+            ? 'Opening this document is taking too long. Check your connection and try again.'
+            : failureReason(e)
         )
         setSecureModalMode('error')
       } finally {

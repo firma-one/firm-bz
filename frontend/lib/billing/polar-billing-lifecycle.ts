@@ -5,6 +5,7 @@ import { ensureGroupFreePlan } from '@/lib/billing/polar-free-plan'
 import { upsertFollowUpReminder } from '@/lib/reminders/reminder-service'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { createPolarClient } from '@/lib/billing/polar-client'
+import { PolarWebhookRetryError } from '@/lib/billing/polar-webhook-retry'
 
 function polarClient(): Polar | null {
     const token = process.env.POLAR_ACCESS_TOKEN?.trim()
@@ -22,7 +23,14 @@ export async function revokeAllOtherPolarSubscriptions(params: {
 }): Promise<void> {
     const polar = polarClient()
     if (!polar) {
-        logger.warn('[polar-billing-lifecycle] Skipping subscription revoke: POLAR_ACCESS_TOKEN missing')
+        // Configuration, not a passing failure: a retry can't fix it, but someone must hear of it,
+        // since a duplicate or free subscription can keep running at Polar.
+        logger.error(
+            '[polar-billing-lifecycle] Cannot revoke duplicate subscriptions: POLAR_ACCESS_TOKEN missing',
+            new Error('POLAR_ACCESS_TOKEN missing'),
+            'billing',
+            { groupId: params.groupId, keepSubscriptionId: params.keepSubscriptionId }
+        )
         return
     }
 
@@ -30,14 +38,19 @@ export async function revokeAllOtherPolarSubscriptions(params: {
     try {
         state = await polar.customers.getStateExternal({ externalId: params.groupId })
     } catch (e) {
-        logger.warn('[polar-billing-lifecycle] getStateExternal failed; cannot revoke subscriptions', {
+        const err = new PolarWebhookRetryError(
+            `Couldn't read Polar subscriptions for group ${params.groupId}, so duplicates weren't revoked`
+        )
+        logger.error('[polar-billing-lifecycle] getStateExternal failed; cannot revoke subscriptions', err, 'billing', {
             groupId: params.groupId,
+            keepSubscriptionId: params.keepSubscriptionId,
             message: e instanceof Error ? e.message : String(e),
         })
-        return
+        throw err
     }
 
     const active = state.activeSubscriptions ?? []
+    const failed: string[] = []
     for (const sub of active) {
         if (sub.id === params.keepSubscriptionId) continue
         try {
@@ -49,13 +62,22 @@ export async function revokeAllOtherPolarSubscriptions(params: {
                 keptSubscriptionId: params.keepSubscriptionId,
             })
         } catch (e) {
+            // Already gone is what we wanted.
+            if ((e as { name?: unknown } | null)?.name === 'AlreadyCanceledSubscription') continue
+            failed.push(sub.id)
             logger.error(
                 '[polar-billing-lifecycle] Failed to revoke Polar subscription',
                 e instanceof Error ? e : new Error(String(e)),
-                undefined,
+                'billing',
                 { groupId: params.groupId, subscriptionId: sub.id }
             )
         }
+    }
+    if (failed.length > 0) {
+        // Fail the webhook so Polar delivers it again; the sync before this is idempotent.
+        throw new PolarWebhookRetryError(
+            `Couldn't revoke ${failed.length} duplicate Polar subscription(s) for group ${params.groupId}: ${failed.join(', ')}`
+        )
     }
 }
 
@@ -94,9 +116,12 @@ export async function resyncGroupFreePlanAfterPaidSubscriptionEnd(groupId: strin
         logger.error(
             '[polar-billing-lifecycle] Failed to resync free plan after paid subscription ended',
             e instanceof Error ? e : new Error(String(e)),
-            undefined,
+            'billing',
             { groupId }
         )
+        // Fail the webhook so Polar delivers it again: otherwise the group is left with no plan
+        // until some other event happens to arrive.
+        throw new PolarWebhookRetryError(`Couldn't restore the free plan for group ${groupId}`)
     }
 }
 

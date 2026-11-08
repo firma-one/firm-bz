@@ -9,6 +9,8 @@ import { Tag } from "@/components/ui/tag"
 import { RelativeDateTime } from "@/components/ui/relative-date-time"
 import { useDownloadProgress } from "@/lib/download-progress-context"
 import { useDocumentVersions } from "@/components/files/use-document-versions"
+import { LoadFailed } from "@/components/ui/load-failed"
+import { failureFrom, failureReason } from "@/lib/files/action-failure"
 
 /**
  * The Details pane's Versions tab: a compact timeline, newest first — each version under the
@@ -75,7 +77,7 @@ export function DocumentVersionsTimeline({ document, projectId, approvals = [] }
     approvals?: ApprovalRecord[]
 }) {
     const { addTask, updateTask } = useDownloadProgress()
-    const { revisions, loading, error, unsupported } = useDocumentVersions(document?.id, projectId)
+    const { revisions, loading, error, unsupported, reload } = useDocumentVersions(document?.id, projectId)
     const rows = versionRows(revisions)
 
     // Through the engagement's download route, which checks membership. The current version is the
@@ -88,7 +90,8 @@ export function DocumentVersionsTimeline({ document, projectId, approvals = [] }
                 `/api/projects/${projectId}/documents/${encodeURIComponent(document.id)}/download-share${row.current ? '' : `?revisionId=${encodeURIComponent(row.id)}`}`
             )
             if (!res.ok) {
-                updateTask(taskId, { status: 'error', error: res.status === 403 ? 'Download not permitted' : 'Download failed' })
+                // The route's reason ("…needs renewing", "Download not permitted") on the tray (P1-41).
+                updateTask(taskId, { status: 'error', error: (await failureFrom(res)).message })
                 return
             }
             const blobUrl = URL.createObjectURL(await res.blob())
@@ -100,8 +103,8 @@ export function DocumentVersionsTimeline({ document, projectId, approvals = [] }
             a.click()
             window.document.body.removeChild(a)
             setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000)
-        } catch {
-            updateTask(taskId, { status: 'error', error: 'Download failed' })
+        } catch (e) {
+            updateTask(taskId, { status: 'error', error: failureReason(e) })
         }
     }
 
@@ -118,15 +121,15 @@ export function DocumentVersionsTimeline({ document, projectId, approvals = [] }
         )
     }
 
-    if (error || rows.length === 0) {
-        const Icon = error ? AlertCircle : Clock
+    // The storage's reason, with Retry: a refusal isn't "No versions yet" (P2-02, P2-10).
+    if (error) return <LoadFailed compact what="version history" reason={error} onRetry={reload} />
+
+    if (rows.length === 0) {
         return (
             <div className="flex flex-col items-center justify-center gap-3 py-12 text-center">
-                <Icon className="h-5 w-5 text-fg-subtle" />
+                <Clock className="h-5 w-5 text-fg-subtle" />
                 <p className="text-xs text-fg-muted">
-                    {error ? 'Failed to load version history'
-                        : unsupported ? "Version history isn't available for this storage yet."
-                        : 'No versions yet.'}
+                    {unsupported ? "Version history isn't available for this storage yet." : 'No versions yet.'}
                 </p>
             </div>
         )

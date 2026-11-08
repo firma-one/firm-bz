@@ -8,6 +8,20 @@ import { formatFullDate } from "@/lib/utils"
 export const INBOX_CHANGED_EVENT = "firma:inbox-changed"
 
 /**
+ * Why a reminder's Done, Hide or Show didn't happen, from its action's answer (P2-30). A session that
+ * has ended is the one thing the person can fix themselves.
+ */
+export function reminderActionReason(result: { error: string; code?: string }): string {
+    return result.code === "unauthorized" ? "Sign in again to update this." : result.error
+}
+
+/**
+ * A background job couldn't change someone's access in storage (lib/storage-access-notice.ts): its
+ * title says who and what ("Google Drive still lets ana@client.com open Budget.xlsx"), its body why.
+ */
+export const STORAGE_ACCESS_NOTICE_TYPE = "STORAGE_ACCESS_NOT_CHANGED"
+
+/**
  * The New UI Inbox's one item shape, merged from two sources (.claude/plans/ui-ux-overhaul.md,
  * Phase 4): the caller's notifications (plus platform-wide ones) and their own reminders (review
  * requests, @mentions, due dates), in the firms the Inbox shows — every firm the caller may open,
@@ -132,6 +146,12 @@ const NOTIFICATION_ENTITY: Record<string, InboxEntity> = {
     PROJECT_DUE_DATE_SET: "engagement",
     CLIENT_FOLLOWUP_DUE: "client",
     SUPPORT_REPLY: "comment",
+    [STORAGE_ACCESS_NOTICE_TYPE]: "storage",
+}
+
+/** A type's label where humanizing it wouldn't read well. */
+const NOTIFICATION_LABEL: Record<string, string> = {
+    [STORAGE_ACCESS_NOTICE_TYPE]: "Access not changed in storage",
 }
 
 /**
@@ -143,6 +163,18 @@ const NOTIFICATION_STAGE: Record<string, StatusStage> = {
     DOCUMENT_ACCEPTED_BY_CLIENT: "done",
     ENGAGEMENT_INVITE_ACCEPTED: "done",
     DOCUMENT_REJECTED: "problem",
+    [STORAGE_ACCESS_NOTICE_TYPE]: "problem",
+}
+
+/**
+ * The storage notice's open button: it's drawn with storage's icon, but it goes to the file it names,
+ * or to the engagement's Members or Files, where the Lead can see who has access.
+ */
+function storageNoticeOpenLabel(n: ApiNotification): string {
+    if (n.subject === "document" || n.subject === "deliverable") return openLabel(n.subject)
+    if (n.ctaUrl && /\/members(?:[?#]|$)/.test(n.ctaUrl)) return openLabel("member")
+    if (n.ctaUrl && /\/files(?:[?#]|$)/.test(n.ctaUrl)) return "Go to files"
+    return openLabel("engagement")
 }
 
 /**
@@ -207,7 +239,7 @@ export function notificationToItem(n: ApiNotification): InboxItem {
         place,
         mentions,
         body: n.body ? readableDates(n.body) : null,
-        label: humanizeType(n.type),
+        label: NOTIFICATION_LABEL[n.type] ?? humanizeType(n.type),
         href: n.ctaUrl,
         at: n.createdAt,
         unread: n.readAt === null,
@@ -216,7 +248,7 @@ export function notificationToItem(n: ApiNotification): InboxItem {
         dueStyle: null,
         stage: NOTIFICATION_STAGE[n.type] ?? null,
         entity,
-        actionLabel: openLabel(entity),
+        actionLabel: n.type === STORAGE_ACCESS_NOTICE_TYPE ? storageNoticeOpenLabel(n) : openLabel(entity),
     }
 }
 

@@ -1,19 +1,22 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 
-const { pane } = vi.hoisted(() => ({
+const { pane, addToast, tasks } = vi.hoisted(() => ({
   pane: {
     setContent: vi.fn(), clearPane: vi.fn(), setTitle: vi.fn(), setHeaderIcon: vi.fn(),
     setHeaderSubtitle: vi.fn(), setHeaderActions: vi.fn(), setExpanded: vi.fn(),
   },
+  addToast: vi.fn(),
+  tasks: { addTask: vi.fn(() => 'task-1'), updateTask: vi.fn() },
 }))
 
-vi.mock('@/components/ui/toast', () => ({ useToast: () => ({ addToast: vi.fn() }) }))
+vi.mock('@/components/ui/toast', () => ({ useToast: () => ({ addToast }) }))
 vi.mock('@/lib/right-pane-context', () => ({ useRightPane: () => pane }))
-vi.mock('@/lib/download-progress-context', () => ({ useDownloadProgress: () => ({ addTask: vi.fn(), updateTask: vi.fn() }) }))
+vi.mock('@/lib/download-progress-context', () => ({ useDownloadProgress: () => tasks }))
+vi.mock('@/lib/supabase', () => ({ getSession: async () => ({ access_token: 't' }) }))
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: { id: 'me', email: 'me@firm.com' } }) }))
 
-import { DocumentActionMenu } from './document-action-menu'
+import { DocumentActionMenu, reminderOutcomeText } from './document-action-menu'
 
 const FILE = { id: 'f1', name: 'podcast-ep04.jpg', mimeType: 'image/jpeg', documentType: 'FILE' } as any
 
@@ -27,6 +30,8 @@ async function openMenu() {
 
 beforeEach(() => {
   Object.values(pane).forEach((fn) => fn.mockReset())
+  addToast.mockReset()
+  tasks.updateTask.mockReset()
 })
 
 describe('DocumentActionMenu — Details as one tabbed pane', () => {
@@ -71,5 +76,39 @@ describe('DocumentActionMenu — items that open a dialog', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
     expect(document.body.style.pointerEvents).toBe('')
+  })
+})
+
+describe('DocumentActionMenu — failures say why', () => {
+  it("a refused download carries the route's reason to the Downloads tray", async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => url === '/api/bookmarks'
+      ? new Response(JSON.stringify({ bookmarks: [] }))
+      : new Response(JSON.stringify({ error: 'The connection to Google Drive needs renewing. Reconnect the storage, then try again.', code: 'reconnect' }), { status: 502 })))
+    render(<DocumentActionMenu document={FILE} projectId="e1" />)
+    await openMenu()
+    fireEvent.click(screen.getByRole('menuitem', { name: /^Download/ }))
+    await waitFor(() => expect(tasks.updateTask).toHaveBeenCalledWith('task-1', {
+      status: 'error',
+      error: 'The connection to Google Drive needs renewing. Reconnect the storage, then try again.',
+    }))
+    vi.unstubAllGlobals()
+  })
+
+  it('Copy name says so when the browser refuses the clipboard, instead of "Copied"', async () => {
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText: vi.fn(async () => { throw new Error('denied') }) }, configurable: true })
+    render(<DocumentActionMenu document={FILE} projectId="e1" />)
+    await openMenu()
+    fireEvent.click(screen.getByRole('button', { name: 'Copy name' }))
+    await waitFor(() => expect(addToast).toHaveBeenCalledWith(expect.objectContaining({ type: 'error', title: "Couldn't copy" })))
+  })
+})
+
+describe('reminderOutcomeText', () => {
+  it('names who it worked for, and who it did not and why', () => {
+    const members = [{ userId: 'a', name: 'Ana' }, { userId: 'r', name: 'Raj' }]
+    expect(reminderOutcomeText([
+      { userId: 'a', kind: 'set', error: null },
+      { userId: 'r', kind: 'set', error: 'Reminders cannot be assigned to an assistant' },
+    ], members)).toBe("Reminder set for Ana. Couldn't set it for Raj · Reminders cannot be assigned to an assistant.")
   })
 })

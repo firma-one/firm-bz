@@ -15,6 +15,8 @@ import { OptionalFieldsSection } from "@/components/ui/optional-fields-toggle"
 import { createClient, type LwCrmClientStatus } from '@/lib/actions/client'
 import { DateTimePicker } from '@/components/ui/date-time-picker'
 import { firmTabPath } from '@/lib/navigation/firm-paths'
+import { failureReason } from '@/lib/files/action-failure'
+import { useToast } from '@/components/ui/toast'
 
 interface AddClientModalProps {
     groupSlug: string
@@ -52,6 +54,7 @@ export function AddClientModal({ groupSlug, orgSlug, firmId, trigger, onSaved }:
     const [showOptional, setShowOptional] = useState(false)
 
     const router = useRouter()
+    const { addToast } = useToast()
 
     useEffect(() => {
         let mounted = true
@@ -139,7 +142,7 @@ export function AddClientModal({ groupSlug, orgSlug, firmId, trigger, onSaved }:
         setError(null)
 
         try {
-            await createClient(orgSlug, {
+            const result = await createClient(orgSlug, {
                 name,
                 industry: industry || undefined,
                 status,
@@ -155,6 +158,11 @@ export function AddClientModal({ groupSlug, orgSlug, firmId, trigger, onSaved }:
                 companySizeBracket: companySizeBracket || null,
                 billingAddress: billingAddress.trim() || null,
             })
+            if (!result.ok) {
+                setError(result.error)
+                return
+            }
+            if (result.warning) addToast({ type: 'warning', title: 'Client added', message: result.warning })
             setOpen(false)
             setName('')
             setIndustry('')
@@ -177,9 +185,8 @@ export function AddClientModal({ groupSlug, orgSlug, firmId, trigger, onSaved }:
             window.dispatchEvent(new CustomEvent('firma-reminders-updated'))
             router.push(firmTabPath(groupSlug, orgSlug, 'clients'), { scroll: false })
             onSaved?.()
-        } catch (error: any) {
-            console.error(error)
-            setError(error.message || "Failed to create client")
+        } catch (error: unknown) {
+            setError(failureReason(error))
         } finally {
             setIsLoading(false)
         }

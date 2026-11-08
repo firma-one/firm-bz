@@ -2,16 +2,32 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { prisma } from '@/lib/prisma'
 import type { StoredPushSubscription } from '@/lib/push'
+import { logger } from '@/lib/logger'
+
+/** The profile's push switch shows these words as they are (OT-1, P2-29). */
+const SIGNED_OUT = 'Your session has ended. Sign in again.'
+
+/** A failed save answers in words, so the switch can say why it stayed as it was. */
+function inWords(name: string, handler: (request: NextRequest) => Promise<NextResponse>) {
+  return async (request: NextRequest): Promise<NextResponse> => {
+    try {
+      return await handler(request)
+    } catch (e) {
+      logger.error(`/api/push/subscribe ${name} failed`, e instanceof Error ? e : new Error(String(e)), 'Push')
+      return NextResponse.json({ error: 'Something went wrong on our side. Try again.' }, { status: 500 })
+    }
+  }
+}
 
 /**
  * POST /api/push/subscribe
  * Body: { endpoint: string, keys: { p256dh: string, auth: string } }
  * Stores a new push subscription for the current user (one entry per device/browser).
  */
-export async function POST(request: NextRequest) {
+async function store(request: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!user) return NextResponse.json({ error: SIGNED_OUT }, { status: 401 })
 
   const body = await request.json().catch(() => ({}))
   const endpoint = typeof body.endpoint === 'string' ? body.endpoint : null
@@ -65,10 +81,10 @@ export async function POST(request: NextRequest) {
  * Body: { endpoint: string }
  * Removes a push subscription for the current user (e.g. when they revoke permission).
  */
-export async function DELETE(request: NextRequest) {
+async function remove(request: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!user) return NextResponse.json({ error: SIGNED_OUT }, { status: 401 })
 
   const body = await request.json().catch(() => ({}))
   const endpoint = typeof body.endpoint === 'string' ? body.endpoint : null
@@ -92,3 +108,6 @@ export async function DELETE(request: NextRequest) {
 
   return NextResponse.json({ ok: true })
 }
+
+export const POST = inWords('POST', store)
+export const DELETE = inWords('DELETE', remove)

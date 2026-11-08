@@ -1,7 +1,7 @@
 import 'server-only'
 import { DocumentSharingPermissionStatus, EngagementRole } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { safeInngestSend } from '@/lib/inngest/client'
+import { takeBackClientAccess, type TakeBackOutcome } from '@/lib/files/take-back-client-access'
 import { STAGE_ROLE_MAP } from '@/lib/deliverable-stage-roles'
 import { deliverableOf } from '@/lib/files/deliverable-of'
 import { syncDocumentSharingUsers } from '@/lib/sync-document-sharing'
@@ -85,23 +85,19 @@ export async function whyPrivacyRefused(
 
 /**
  * Takes the document, and all it holds, back from clients: their sharing rows are revoked, and any
- * Drive permission a secure open granted them is taken back by the same job that does so when a role
- * is switched off (it keeps the permission ids until it has used them).
+ * storage permission a secure open granted them is revoked here, in the request (AC-12). It used to be
+ * left to an event, which can be dropped, and a retry found "already internal only" and stopped.
+ *
+ * Safe to run again: a permission storage wouldn't give up keeps its id, so running this on a document
+ * already internal only finishes the job. Says how many people still have access when it couldn't.
  */
 export async function withdrawClientAccess(
     engagementId: string,
-    firmId: string,
     doc: PrivacyRow,
     rows: PrivacyRow[],
     actorUserId: string,
-): Promise<void> {
-    const subtree = subtreeOf(rows, doc)
-    const ids = subtree.map((r) => r.id)
-    const holding = await prisma.engagementDocumentSharingUser.findMany({
-        where: { projectDocumentId: { in: ids }, connectorPermissionId: { not: null }, member: { role: { in: CLIENT_ROLES } } },
-        select: { projectDocumentId: true },
-        distinct: ['projectDocumentId'],
-    })
+): Promise<TakeBackOutcome> {
+    const ids = subtreeOf(rows, doc).map((r) => r.id)
     await prisma.engagementDocumentSharingUser.updateMany({
         where: {
             projectDocumentId: { in: ids },
@@ -110,19 +106,9 @@ export async function withdrawClientAccess(
         },
         data: { sharingPermissionStatus: DocumentSharingPermissionStatus.REVOKED, updatedBy: actorUserId },
     })
-    for (const { projectDocumentId } of holding) {
-        const row = subtree.find((r) => r.id === projectDocumentId)
-        if (!row) continue
-        await safeInngestSend('sharing.settings.updated', {
-            projectId: engagementId,
-            organizationId: firmId,
-            documentId: row.externalId,
-            sharingId: row.id,
-            disabledPersonas: ['guest', 'externalCollaborator'],
-            timestamp: new Date().toISOString(),
-            userId: actorUserId,
-        })
-    }
+    // Every client row still holding a permission id, whatever its status: a retry takes back what an
+    // earlier try couldn't.
+    return takeBackClientAccess(engagementId, { projectDocumentId: { in: ids } })
 }
 
 /**

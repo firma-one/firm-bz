@@ -85,8 +85,9 @@ export interface ProjectMemberAddedEvent {
 }
 
 /**
- * Fired when an EC/EV member is removed from a project.
- * Triggers revocation of their document-level Drive permissions.
+ * Not sent by anything: removeMember takes the member's storage access back itself, before their rows
+ * go, and sends `engagement.member.removed` (reminder cleanup) instead. revokeByRemovedMember still
+ * listens for this, so an event already queued under the name runs.
  */
 export interface ProjectMemberRemovedEvent {
   type: 'project.member.removed'

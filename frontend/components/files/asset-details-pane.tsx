@@ -21,6 +21,8 @@ import { Tag } from "@/components/ui/tag"
 import { DocumentVersionsTimeline } from "@/components/files/document-versions-timeline"
 import { DocumentActivityFeed } from "@/components/files/document-activity-feed"
 import { cn, formatFileSize, formatFullDate, formatSmartDateTime, getFileTypeLabel } from "@/lib/utils"
+import { LoadFailed } from "@/components/ui/load-failed"
+import { failureFrom, failureReason } from "@/lib/files/action-failure"
 import type { useRightPane } from "@/lib/right-pane-context"
 import type { EngagementRoleSlug } from "@/lib/deliverable-stage-roles"
 import type { ActivityStatus } from "@/lib/sharing-settings"
@@ -124,6 +126,13 @@ function WhoWhen({ name, avatarUrl, at }: { name?: string | null; avatarUrl?: st
 /** What the fields and the Details tab load for a document: its assignee and description (in its settings), and the engagement's people. */
 interface AssetRecord {
     canLoad: boolean
+    /**
+     * Loaded, failed (with why), or still loading. Fields edit only once it's loaded: after a failed
+     * load the blank description and "No assignee" aren't the file's, and typing would save over
+     * the real ones (FI-7).
+     */
+    state: 'loading' | 'ready' | 'failed'
+    error: string | null
     members: Member[]
     assigneeId: string | null
     setAssigneeId: (id: string | null) => void
@@ -142,10 +151,14 @@ function useAssetRecord(projectId: string | undefined, recordId: string | undefi
     const [description, setDescription] = useState('')
     const [approvals, setApprovals] = useState<ApprovalRecord[]>([])
     const [loads, setLoads] = useState(0)
+    const [state, setState] = useState<AssetRecord['state']>('loading')
+    const [error, setError] = useState<string | null>(null)
 
     useEffect(() => {
         if (!canLoad) return
         let cancelled = false
+        setState('loading')
+        setError(null)
         ;(async () => {
             const headers = await authHeaders()
             const [sharingRes, membersRes] = await Promise.all([
@@ -153,22 +166,26 @@ function useAssetRecord(projectId: string | undefined, recordId: string | undefi
                 fetch(`/api/projects/${projectId}/members`, { headers }),
             ])
             if (cancelled) return
-            if (sharingRes.ok) {
-                const settings = (await sharingRes.json()).sharing?.settings ?? {}
-                if (cancelled) return
-                setAssigneeId(typeof settings.assigneeUserId === 'string' ? settings.assigneeUserId : null)
-                setDescription(typeof settings.description === 'string' ? settings.description : '')
-                setApprovals(approvalsOf(settings))
-            }
-            if (membersRes.ok) {
-                const data = await membersRes.json()
-                if (!cancelled) setMembers(data.members ?? [])
-            }
-        })().catch(() => {})
+            // Both, or it's a failed load: without the people, a set assignee reads as "No assignee".
+            if (!sharingRes.ok) throw await failureFrom(sharingRes)
+            if (!membersRes.ok) throw await failureFrom(membersRes)
+            const settings = (await sharingRes.json()).sharing?.settings ?? {}
+            const data = await membersRes.json()
+            if (cancelled) return
+            setAssigneeId(typeof settings.assigneeUserId === 'string' ? settings.assigneeUserId : null)
+            setDescription(typeof settings.description === 'string' ? settings.description : '')
+            setApprovals(approvalsOf(settings))
+            setMembers(data.members ?? [])
+            setState('ready')
+        })().catch((e) => {
+            if (cancelled) return
+            setError(failureReason(e))
+            setState('failed')
+        })
         return () => { cancelled = true }
     }, [canLoad, projectId, recordId, loads])
 
-    return { canLoad, members, assigneeId, setAssigneeId, description, setDescription, approvals, reload: () => setLoads((n) => n + 1) }
+    return { canLoad, state, error, members, assigneeId, setAssigneeId, description, setDescription, approvals, reload: () => setLoads((n) => n + 1) }
 }
 
 /** The shared fields at the top of the pane, as the Board's pane lists a deliverable's. */
@@ -178,7 +195,8 @@ function AssetFields({ document, projectId, recordId, editing, record }: { docum
     const { members, assigneeId, setAssigneeId } = record
     const people = assignablePeople(members)
     const assignee = assigneeId ? members.find((m) => m.userId === assigneeId) : undefined
-    const canManage = !!editing?.canManage && record.canLoad
+    // Editable only once the record has loaded: never over values it couldn't read.
+    const canManage = !!editing?.canManage && record.canLoad && record.state === 'ready'
     const tracked = !!editing?.tracked
     const emptyLabel = tracked ? 'Not set' : '—'
     // From the row's type, not isDeliverable: a folder (a deliverable's stage only reads) or a document.
@@ -240,7 +258,7 @@ function AssetFields({ document, projectId, recordId, editing, record }: { docum
                         projectId={projectId}
                         documentId={recordId}
                         value={document.blocked ?? null}
-                        canEdit={!!editing?.canBlock && record.canLoad}
+                        canEdit={!!editing?.canBlock && record.canLoad && record.state === 'ready'}
                         onSaved={(next) => {
                             document.blocked = next
                             editing?.onSaved?.()
@@ -255,7 +273,8 @@ function AssetFields({ document, projectId, recordId, editing, record }: { docum
                     people={people}
                     onChange={changeAssignee}
                     disabled={!canManage}
-                    placeholder="No assignee"
+                    // Not "No assignee" for one it couldn't read.
+                    placeholder={record.state === 'failed' ? 'Not loaded' : record.state === 'loading' && record.canLoad ? '…' : 'No assignee'}
                 />
             </PropertyRow>
             <PropertyRow label="Due" icon={<CalendarClock />}>
@@ -273,6 +292,7 @@ function AssetFields({ document, projectId, recordId, editing, record }: { docum
                         }}
                         onOthersChanged={editing.onSaved}
                         onError={(message) => addToast({ type: 'error', title: "Couldn't set due date", message })}
+                        onWarning={(message) => addToast({ type: 'warning', title: 'Due date set', message })}
                     />
                 ) : (
                     <span className={cn('px-1.5', !validDate(document.dueDate) && 'text-fg-subtle')}>
@@ -316,7 +336,7 @@ export function DescriptionHint() {
 function AssetDetailsSections({ projectId, recordId, editing, record }: { projectId?: string; recordId?: string; editing?: AssetDetailsEditing; record: AssetRecord }) {
     const { addToast } = useToast()
     const { description, setDescription } = record
-    const canManage = !!editing?.canManage && record.canLoad
+    const canManage = !!editing?.canManage && record.canLoad && record.state === 'ready'
     // Saved as you type, so the label says where that stands: saving, then saved for a moment.
     const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle')
     const descriptionTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -339,19 +359,22 @@ function AssetDetailsSections({ projectId, recordId, editing, record }: { projec
                     headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
                     body: JSON.stringify({ description: value }),
                 })
-                if (!res.ok) throw new Error(String(res.status))
+                if (!res.ok) throw await failureFrom(res)
                 setSaveState('saved')
                 savedTimer.current = setTimeout(() => setSaveState('idle'), 2000)
-            } catch {
+            } catch (e) {
                 setSaveState('failed')
-                addToast({ type: 'error', title: "Couldn't save the description", message: 'Please try again.' })
+                addToast({ type: 'error', title: "Couldn't save the description", message: failureReason(e) })
             }
         }, 800)
     }
 
     return (
         <div className="divide-y divide-line">
-            <div className="px-4 py-4">
+            {record.state === 'failed' && (
+                <LoadFailed compact what="this file's details" reason={record.error} onRetry={record.reload} className="px-4 py-4" />
+            )}
+            {record.state !== 'failed' && <div className="px-4 py-4">
                 <div className={FIELD_LABEL}>
                     Description
                     <DescriptionHint />
@@ -370,10 +393,10 @@ function AssetDetailsSections({ projectId, recordId, editing, record }: { projec
                     />
                 ) : (
                     <p className={cn('whitespace-pre-wrap text-ui leading-relaxed', description ? 'text-fg' : 'text-fg-subtle')}>
-                        {description || 'No description'}
+                        {description || (record.state === 'loading' && record.canLoad ? '…' : 'No description')}
                     </p>
                 )}
-            </div>
+            </div>}
 
             {/* The decision record: every approval, newest first, reopened ones too */}
             {record.approvals.length > 0 && (

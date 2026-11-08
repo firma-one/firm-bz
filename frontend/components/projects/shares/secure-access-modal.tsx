@@ -29,7 +29,8 @@ interface SecureAccessModalProps {
      *  (OneDrive/SharePoint — auto-closes) | 'opened' (Google, opened directly — stays open with
      *  "Email me a new access link") | 'email' (Google — stays open) | 'blocked' (the browser
      *  refused the new tab; user clicks the link themselves) | 'error'. Falls back to the old
-     *  isLoading/error boolean props' behavior when omitted. */
+     *  isLoading/error boolean props' behavior when omitted, but never to 'email': "Check your
+     *  email" says an email was sent, so it's shown only when the route said so (AC-10). */
     mode?: SecureOpenModalMode
     isLoading?: boolean
     error?: string | null
@@ -63,7 +64,6 @@ export function SecureAccessModal({
     firmId,
     documentUrl,
     mode,
-    isLoading,
     error,
     onRequestNewLink,
 }: SecureAccessModalProps) {
@@ -94,7 +94,7 @@ export function SecureAccessModal({
         }
     }, [isOpen])
 
-    const effectiveMode: SecureOpenModalMode = mode ?? (error ? 'error' : isLoading ? 'loading' : 'email')
+    const effectiveMode: SecureOpenModalMode = mode ?? (error ? 'error' : 'loading')
     const isBusy = effectiveMode === 'loading' || effectiveMode === 'opening'
     const heading = HEADINGS[effectiveMode]
 

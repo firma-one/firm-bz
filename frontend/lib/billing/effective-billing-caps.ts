@@ -1,5 +1,7 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+// Plan limits are words for people: they pass through asResult to the browser (lib/actions/action-result.ts).
+import { userFacing } from '@/lib/actions/action-result'
 import {
     getActiveSubscriptionForGroup,
     subscriptionAccessStatusLabel,
@@ -180,8 +182,9 @@ export async function assertWithinActiveEngagementCap(workspaceFirmId: string): 
         },
     })
     if (count >= cap) {
-        throw new Error(
-            `Your plan allows ${cap} active engagement${cap === 1 ? '' : 's'}. Close or complete one to add another, upgrade, or contact support for a higher limit.`
+        throw userFacing(
+            `Your plan allows ${cap} active engagement${cap === 1 ? '' : 's'}. Close or complete one to add another, upgrade, or contact support for a higher limit.`,
+            'plan_limit'
         )
     }
 }
@@ -198,8 +201,9 @@ export async function assertWithinFirmGroupCap(groupId: string): Promise<void> {
 
     const n = await countBillableFirmsInBillingGroup(groupId)
     if (n >= cap) {
-        throw new Error(
-            `Your plan allows ${cap} firm workspace${cap === 1 ? '' : 's'}. Upgrade or contact support to add more.`
+        throw userFacing(
+            `Your plan allows ${cap} firm workspace${cap === 1 ? '' : 's'}. Upgrade or contact support to add more.`,
+            'plan_limit'
         )
     }
 }
@@ -219,8 +223,9 @@ export async function assertWithinClientCap(firmId: string): Promise<void> {
         where: { firmId: { in: groupFirmIds }, deletedAt: null },
     })
     if (count >= cap) {
-        throw new Error(
-            `Your plan allows ${cap} client${cap === 1 ? '' : 's'}. Upgrade to add more.`
+        throw userFacing(
+            `Your plan allows ${cap} client${cap === 1 ? '' : 's'}. Upgrade to add more.`,
+            'plan_limit'
         )
     }
 }
@@ -240,8 +245,9 @@ export async function assertWithinClientContactCap(firmId: string): Promise<void
         where: { firmId: { in: groupFirmIds } },
     })
     if (count >= cap) {
-        throw new Error(
-            `Your plan allows ${cap} client contact${cap === 1 ? '' : 's'} across all clients. Upgrade to add more.`
+        throw userFacing(
+            `Your plan allows ${cap} client contact${cap === 1 ? '' : 's'} across all clients. Upgrade to add more.`,
+            'plan_limit'
         )
     }
 }
@@ -269,8 +275,9 @@ export async function assertWithinDeliverableCap(firmId: string): Promise<void> 
     )
     const count = result[0]?.count ?? 0
     if (count >= cap) {
-        throw new Error(
-            `Your plan allows ${cap} deliverable${cap === 1 ? '' : 's'}. Upgrade to add more.`
+        throw userFacing(
+            `Your plan allows ${cap} deliverable${cap === 1 ? '' : 's'}. Upgrade to add more.`,
+            'plan_limit'
         )
     }
 }
@@ -294,8 +301,9 @@ export async function assertWithinDocumentCap(firmId: string, batchSize = 1): Pr
         where: { firmId: { in: groupFirmIds }, isFolder: false },
     })
     if (count + batchSize > cap) {
-        throw new Error(
-            `Your plan allows ${cap} file${cap === 1 ? '' : 's'} and folder${cap === 1 ? '' : 's'}. You have ${count} indexed. Upgrade to add more.`
+        throw userFacing(
+            `Your plan allows ${cap} file${cap === 1 ? '' : 's'} and folder${cap === 1 ? '' : 's'}. You have ${count} indexed. Upgrade to add more.`,
+            'plan_limit'
         )
     }
 }

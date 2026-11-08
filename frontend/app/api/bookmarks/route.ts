@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { prisma } from '@/lib/prisma'
+import { logger } from '@/lib/logger'
 
 type Bookmark = {
   id: string
@@ -106,19 +107,25 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({ success: true, bookmark: next })
 }
 
+/** Removes one bookmark. Its refusals are read on Home ("Couldn't remove Letter.pdf · …"), so they're in words. */
 export async function DELETE(request: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!user) return NextResponse.json({ error: 'Your session has ended. Sign in again.' }, { status: 401 })
 
   const body = await request.json().catch(() => ({}))
   const id = body?.id as string | undefined
   if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
 
-  const row = await getOrCreate(user.id)
-  const existing = Array.isArray(row.bookmarks) ? (row.bookmarks as any[]) : []
-  const updated = existing.filter((b) => b?.id !== id)
-  await prisma.userPersonalization.update({ where: { userId: user.id }, data: { bookmarks: updated as any } })
+  try {
+    const row = await getOrCreate(user.id)
+    const existing = Array.isArray(row.bookmarks) ? (row.bookmarks as any[]) : []
+    const updated = existing.filter((b) => b?.id !== id)
+    await prisma.userPersonalization.update({ where: { userId: user.id }, data: { bookmarks: updated as any } })
+  } catch (e) {
+    logger.error('Removing a bookmark failed', e as Error, 'Bookmarks', { userId: user.id })
+    return NextResponse.json({ error: 'Something went wrong on our side. Try again.' }, { status: 500 })
+  }
 
   return NextResponse.json({ success: true })
 }

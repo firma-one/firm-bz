@@ -46,6 +46,9 @@ import { useAuth } from '@/lib/auth-context'
 import { useRouter } from 'next/navigation'
 import { useToast } from '@/components/ui/toast'
 import type { FirmConnectorRecord, FirmClientRecord } from '@/lib/actions/firms'
+import { LoadFailed } from '@/components/ui/load-failed'
+import { failureFrom, failureReason } from '@/lib/files/action-failure'
+import { attachAllToast, type AttachOutcome } from '@/components/connectors/attach-all-toast'
 import {
   initiateOneDriveOAuthPopup,
   startOneDriveOAuthPopup,
@@ -69,6 +72,29 @@ type DriveRoot = {
   detectedIsPersonalAccount?: boolean | null
 } | null
 
+/** The OneDrive Test's words for an answer that wasn't a success. */
+function oneDriveTestFailure(httpStatus: number, data: { error?: string; status?: number }): string {
+  if (data.error) return data.error
+  const graph = data.status ?? httpStatus
+  if (graph === 401) return 'Microsoft rejected the saved sign-in. Reconnect this account.'
+  if (graph === 403) return "Microsoft refused access to this drive. Reconnect with an account that can open it."
+  if (graph === 404) return "Microsoft couldn't find this drive. It may have been removed; reconnect to choose another."
+  if (graph === 429) return 'Microsoft is limiting requests right now. Try again in a minute.'
+  return `Microsoft answered ${graph}. Try again in a moment.`
+}
+
+/** The Location row when the connection's status didn't load: the reason, with Retry. */
+function LocationLoadFailed({ reason, onRetry }: { reason: string; onRetry: () => void }) {
+  return (
+    <div className="relative z-10 pl-12 pr-4 py-3 border-t border-line">
+      <p role="alert" className="text-small text-danger">
+        Couldn&apos;t load this connection&apos;s location · {reason}{' '}
+        <button type="button" onClick={onRetry} className="font-medium underline underline-offset-2">Try again</button>
+      </p>
+    </div>
+  )
+}
+
 type FirmDriveSectionProps = {
   firmId: string
   orgSlug: string
@@ -83,8 +109,12 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
   const { user, session } = useAuth()
 
   const [isLoadingData, setIsLoadingData] = useState(true)
+  /** Why the connectors or clients didn't load. Never an empty panel that invites a second connection. */
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [connectors, setConnectors] = useState<FirmConnectorRecord[]>([])
   const [statusMap, setStatusMap] = useState<Record<string, DriveRoot>>({})
+  /** Per connector: why its location (status) didn't load, shown in place of the Location row. */
+  const [statusErrors, setStatusErrors] = useState<Record<string, string>>({})
 
   // "Connect new account" form
   const [friendlyName, setFriendlyName] = useState('')
@@ -117,6 +147,7 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
   // Switch account
   const [switchTarget, setSwitchTarget] = useState<FirmConnectorRecord | null>(null)
   const [firmAdmins, setFirmAdmins] = useState<FirmAdmin[]>([])
+  const [firmAdminsError, setFirmAdminsError] = useState<string | null>(null)
   const [switchModalOpen, setSwitchModalOpen] = useState(false)
 
   const [addNewOpen, setAddNewOpen] = useState(false)
@@ -150,18 +181,31 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
     try {
       const { getFirmConnectors, getFirmAllClients } = await import('@/lib/actions/firms')
       const [data, clients] = await Promise.all([getFirmConnectors(firmId), getFirmAllClients(firmId)])
-      setConnectors(data)
-      setAllClients(clients)
-      onConnectorsLoaded?.(data.length)
+      if (!data.ok) { setLoadError(data.error); return }
+      if (!clients.ok) { setLoadError(clients.error); return }
+      setConnectors(data.data)
+      setAllClients(clients.data)
+      setLoadError(null)
+      onConnectorsLoaded?.(data.data.length)
     } catch (e) {
-      addToast({ type: 'error', title: 'Failed to load connectors', message: 'Could not fetch storage connectors.' })
+      setLoadError(failureReason(e))
     } finally {
       setIsLoadingData(false)
     }
-  }, [firmId, addToast])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [firmId])
 
   const loadConnectorsRef = useRef(loadConnectors)
   useEffect(() => { loadConnectorsRef.current = loadConnectors }, [loadConnectors])
+
+  const setStatusError = useCallback((connectorId: string, reason: string | null) => {
+    setStatusErrors(prev => {
+      const next = { ...prev }
+      if (reason) next[connectorId] = reason
+      else delete next[connectorId]
+      return next
+    })
+  }, [])
 
   const loadStatus = useCallback(async (connectorId: string) => {
     if (!session?.access_token) return
@@ -170,8 +214,9 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
         `/api/connectors/google-drive?action=status&connectionId=${encodeURIComponent(connectorId)}`,
         { headers: { Authorization: `Bearer ${session.access_token}` } }
       )
-      if (!res.ok) return
+      if (!res.ok) throw await failureFrom(res)
       const data = await res.json()
+      setStatusError(connectorId, null)
       if (data.connector) {
         setStatusMap(prev => ({
           ...prev,
@@ -186,10 +231,11 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
           },
         }))
       }
-    } catch {
-      // non-fatal
+    } catch (e) {
+      // Not shown as "no folder chosen": the Location row says it didn't load, with Retry.
+      setStatusError(connectorId, failureReason(e))
     }
-  }, [session?.access_token])
+  }, [session?.access_token, setStatusError])
 
   useEffect(() => {
     if (!hasLoadedRef.current) {
@@ -234,7 +280,8 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
           ...(declaredAccountType && { declaredAccountType }),
         }),
       })
-      if (!resp.ok) throw new Error('Failed to initiate Google sign-in')
+      // The route's reason, not a bare "Failed to initiate".
+      if (!resp.ok) throw await failureFrom(resp)
       const { authUrl, nonce } = await resp.json()
 
       startGoogleDriveOAuthPopup(authUrl, nonce ?? null, {
@@ -253,8 +300,8 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
           setFriendlyNameTouched(false)
           await loadConnectorsRef.current()
         },
-        onMessageFailure: (code) => {
-          addToast({ type: 'error', title: 'Connection failed', message: googleDriveOAuthPopupFailureMessage(code) })
+        onMessageFailure: (code, detail) => {
+          addToast({ type: 'error', title: 'Connection failed', message: googleDriveOAuthPopupFailureMessage(code, detail) })
         },
         onTimeout: () => {
           addToast({ type: 'error', title: 'Sign-in timed out', message: 'Timed out waiting for Google. Please try again.' })
@@ -263,7 +310,7 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
       }, { priorConnectorIds })
     } catch (e) {
       setLoading(false)
-      addToast({ type: 'error', title: 'Connection failed', message: e instanceof Error ? e.message : 'Could not start Google sign-in.' })
+      addToast({ type: 'error', title: 'Connection failed', message: failureReason(e) })
     }
   // loadConnectorsRef.current is used inside callbacks (not loadConnectors directly) so it's not a dep
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -290,8 +337,9 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
         `/api/connectors/onedrive?action=status&connectionId=${encodeURIComponent(connectorId)}`,
         { headers: { Authorization: `Bearer ${session.access_token}` } }
       )
-      if (!res.ok) return
+      if (!res.ok) throw await failureFrom(res)
       const data = await res.json()
+      setStatusError(connectorId, null)
       if (data.connector) {
         setOneDriveStatusMap(prev => ({
           ...prev,
@@ -307,10 +355,10 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
           },
         }))
       }
-    } catch {
-      // non-fatal
+    } catch (e) {
+      setStatusError(connectorId, failureReason(e))
     }
-  }, [session?.access_token])
+  }, [session?.access_token, setStatusError])
 
   useEffect(() => {
     for (const c of connectors) {
@@ -358,8 +406,8 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
           setOneDriveFriendlyNameTouched(false)
           await loadConnectorsRef.current()
         },
-        onMessageFailure: (code) => {
-          addToast({ type: 'error', title: 'Connection failed', message: oneDriveOAuthPopupFailureMessage(code) })
+        onMessageFailure: (code, detail) => {
+          addToast({ type: 'error', title: 'Connection failed', message: oneDriveOAuthPopupFailureMessage(code, detail) })
         },
         onTimeout: () => {
           addToast({ type: 'error', title: 'Sign-in timed out', message: 'Timed out waiting for Microsoft. Please try again.' })
@@ -368,7 +416,7 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
       }, { priorConnectorIds })
     } catch (e) {
       setOneDriveLoading(false)
-      addToast({ type: 'error', title: 'Connection failed', message: e instanceof Error ? e.message : 'Could not start Microsoft sign-in.' })
+      addToast({ type: 'error', title: 'Connection failed', message: failureReason(e) })
     }
   // loadConnectorsRef.current is used inside callbacks (not loadConnectors directly) so it's not a dep
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -402,19 +450,27 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
   const handleOneDriveDisconnect = async (connector: FirmConnectorRecord) => {
     try {
       const { disconnectFirmConnector } = await import('@/lib/actions/firms')
-      await disconnectFirmConnector({ connectorId: connector.id, firmId })
+      const result = await disconnectFirmConnector({ connectorId: connector.id, firmId })
+      if (!result.ok) {
+        addToast({ type: 'error', title: "Couldn't disconnect", message: result.error })
+        return
+      }
       setConnectors(prev => prev.map(c => c.id === connector.id ? { ...c, status: 'REVOKED' } : c))
       addToast({ type: 'success', title: 'Disconnected', message: 'OneDrive/SharePoint disconnected. Reconnect or Remove below.' })
       router.refresh()
     } catch (e) {
-      addToast({ type: 'error', title: 'Disconnect failed', message: e instanceof Error ? e.message : 'Could not disconnect.' })
+      addToast({ type: 'error', title: "Couldn't disconnect", message: failureReason(e) })
     }
   }
 
   const handleOneDriveRemove = async (connector: FirmConnectorRecord) => {
     try {
       const { removeFirmConnector } = await import('@/lib/actions/firms')
-      await removeFirmConnector({ connectorId: connector.id, firmId })
+      const result = await removeFirmConnector({ connectorId: connector.id, firmId })
+      if (!result.ok) {
+        addToast({ type: 'error', title: "Couldn't remove the connection", message: result.error })
+        return
+      }
       // Clear the local attachment too, matching handleRemove: without this the clients keep
       // rendering as attached to a connector that no longer exists until router.refresh() lands.
       const removedClientIds = new Set(connector.attachedClients.map(c => c.id))
@@ -424,26 +480,34 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
       addToast({ type: 'success', title: 'Removed', message: 'Connector deleted.' })
       router.refresh()
     } catch (e) {
-      addToast({ type: 'error', title: 'Remove failed', message: e instanceof Error ? e.message : 'Could not remove connector.' })
+      addToast({ type: 'error', title: "Couldn't remove the connection", message: failureReason(e) })
     }
   }
 
   const handleDisconnect = async (connector: FirmConnectorRecord) => {
     try {
       const { disconnectFirmConnector } = await import('@/lib/actions/firms')
-      await disconnectFirmConnector({ connectorId: connector.id, firmId })
+      const result = await disconnectFirmConnector({ connectorId: connector.id, firmId })
+      if (!result.ok) {
+        addToast({ type: 'error', title: "Couldn't disconnect", message: result.error })
+        return
+      }
       setConnectors(prev => prev.map(c => c.id === connector.id ? { ...c, status: 'REVOKED' } : c))
       addToast({ type: 'success', title: 'Disconnected', message: 'Google Drive disconnected. Reconnect or Remove below.' })
       router.refresh()
     } catch (e) {
-      addToast({ type: 'error', title: 'Disconnect failed', message: e instanceof Error ? e.message : 'Could not disconnect.' })
+      addToast({ type: 'error', title: "Couldn't disconnect", message: failureReason(e) })
     }
   }
 
   const handleRemove = async (connector: FirmConnectorRecord) => {
     try {
       const { removeFirmConnector } = await import('@/lib/actions/firms')
-      await removeFirmConnector({ connectorId: connector.id, firmId })
+      const result = await removeFirmConnector({ connectorId: connector.id, firmId })
+      if (!result.ok) {
+        addToast({ type: 'error', title: "Couldn't remove the connection", message: result.error })
+        return
+      }
       const removedClientIds = new Set(connector.attachedClients.map(c => c.id))
       setAllClients(prev => prev.map(c => removedClientIds.has(c.id) ? { ...c, connectorId: null } : c))
       setConnectors(prev => prev.filter(c => c.id !== connector.id))
@@ -451,7 +515,7 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
       addToast({ type: 'success', title: 'Removed', message: 'Connector deleted.' })
       router.refresh()
     } catch (e) {
-      addToast({ type: 'error', title: 'Remove failed', message: e instanceof Error ? e.message : 'Could not remove connector.' })
+      addToast({ type: 'error', title: "Couldn't remove the connection", message: failureReason(e) })
     }
   }
 
@@ -460,11 +524,15 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
     setSavingName(true)
     try {
       const { renameFirmConnector } = await import('@/lib/actions/firms')
-      await renameFirmConnector({ connectorId, firmId, name: editNameValue.trim() })
+      const result = await renameFirmConnector({ connectorId, firmId, name: editNameValue.trim() })
+      if (!result.ok) {
+        addToast({ type: 'error', title: "Couldn't rename the connection", message: result.error })
+        return
+      }
       setConnectors(prev => prev.map(c => c.id === connectorId ? { ...c, name: editNameValue.trim() } : c))
       setEditingId(null)
     } catch (e) {
-      addToast({ type: 'error', title: 'Rename failed', message: e instanceof Error ? e.message : 'Could not save name.' })
+      addToast({ type: 'error', title: "Couldn't rename the connection", message: failureReason(e) })
     } finally {
       setSavingName(false)
     }
@@ -478,10 +546,11 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'test', connectionId: connector.id }),
       })
-      if (!res.ok) throw new Error('Test failed')
+      // The route's reason (a StorageFailure's words when Drive refused), not a bare "Test failed".
+      if (!res.ok) throw await failureFrom(res)
       addToast({ type: 'success', title: 'Connection verified', message: `${connector.name || 'Google Drive'} is working.` })
-    } catch {
-      addToast({ type: 'error', title: 'Test failed', message: 'Could not verify connection.' })
+    } catch (e) {
+      addToast({ type: 'error', title: 'Test failed', message: failureReason(e) })
     } finally {
       setTestingId(null)
     }
@@ -495,14 +564,14 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'test', connectionId: connector.id }),
       })
-      const data = await res.json().catch(() => ({}))
+      const data = await res.json().catch(() => ({})) as { success?: boolean; error?: string; status?: number }
       if (res.ok && data.success) {
         addToast({ type: 'success', title: 'Connection verified', message: `${connector.name || 'OneDrive'} is working.` })
       } else {
-        addToast({ type: 'error', title: 'Test failed', message: 'Could not verify connection.' })
+        addToast({ type: 'error', title: 'Test failed', message: oneDriveTestFailure(res.status, data) })
       }
-    } catch {
-      addToast({ type: 'error', title: 'Test failed', message: 'Could not verify connection.' })
+    } catch (e) {
+      addToast({ type: 'error', title: 'Test failed', message: failureReason(e) })
     } finally {
       setTestingId(null)
     }
@@ -511,16 +580,18 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
   const handleOpenSwitchModal = async (connector: FirmConnectorRecord) => {
     if (!session?.access_token) return
     setSwitchTarget(connector)
+    setFirmAdminsError(null)
     try {
       const res = await fetch(`/api/firms/${firmId}/admins`, {
         headers: { Authorization: `Bearer ${session.access_token}` },
       })
-      if (res.ok) {
-        const data = await res.json()
-        setFirmAdmins(data.admins ?? [])
-      }
-    } catch {
-      // non-fatal — modal opens with empty list
+      if (!res.ok) throw await failureFrom(res)
+      const data = await res.json()
+      setFirmAdmins(data.admins ?? [])
+    } catch (e) {
+      // The modal still opens, and says the list didn't load rather than "No firm administrators found."
+      setFirmAdmins([])
+      setFirmAdminsError(failureReason(e))
     }
     setSwitchModalOpen(true)
   }
@@ -541,7 +612,12 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
     }
   }
 
-  const handleAttachClient = async (connectorId: string, clientId: string) => {
+  /**
+   * Links a client to this connector. The answer is the link: "attached, but its folder couldn't be set
+   * up" arrives as the result's warning (with the support ticket's number), so the client shows as
+   * attached either way. `quiet` leaves the toast to Attach all, which reports them together.
+   */
+  const handleAttachClient = async (connectorId: string, clientId: string, opts?: { quiet?: boolean }): Promise<AttachOutcome> => {
     setAttachingClientId(clientId)
     const linkClientLocally = () => {
       setAllClients(prev => prev.map(c => c.id === clientId ? { ...c, connectorId } : c))
@@ -555,41 +631,44 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
         return c
       }))
     }
+    const say = (toast: Parameters<typeof addToast>[0]) => { if (!opts?.quiet) addToast(toast) }
     try {
       const { shareConnectorWithClient } = await import('@/lib/actions/client')
-      await shareConnectorWithClient({ clientId, connectorId })
-      linkClientLocally()
-      addToast({ type: 'success', title: 'Attached', message: 'Client linked to this connector.' })
-    } catch (e) {
-      const { ClientLinkedFolderFailedError } = await import('@/lib/actions/client-errors')
-      if (e instanceof ClientLinkedFolderFailedError) {
-        // The client link (Client.connectorId) succeeded before Drive folder provisioning threw
-        // — reflect that in local state too, or the UI would show the client as unattached when
-        // it's actually attached with a broken folder, a second misleading state on top of the
-        // one this whole fix exists to close (see .claude/plans/connector-microsoft-impl.md,
-        // 2026-08-07).
-        linkClientLocally()
-        addToast({ type: 'warning', title: 'Attached with a problem', message: e.message })
-      } else {
-        addToast({ type: 'error', title: 'Attach failed', message: e instanceof Error ? e.message : 'Could not link client.' })
+      const result = await shareConnectorWithClient({ clientId, connectorId })
+      if (!result.ok) {
+        say({ type: 'error', title: "Couldn't attach the client", message: result.error })
+        return { attached: false, reason: result.error }
       }
+      linkClientLocally()
+      if (result.warning) {
+        say({ type: 'warning', title: 'Attached with a problem', message: result.warning })
+        return { attached: true, warning: result.warning }
+      }
+      say({ type: 'success', title: 'Attached', message: 'Client linked to this connector.' })
+      return { attached: true }
+    } catch (e) {
+      const reason = failureReason(e)
+      say({ type: 'error', title: "Couldn't attach the client", message: reason })
+      return { attached: false, reason }
     } finally {
       setAttachingClientId(null)
     }
   }
 
-  /** Attaches every client not yet attached to any connector to this one, sequentially reusing
-   * handleAttachClient's toast/local-state logic. A firm connector attached to zero (or few)
-   * clients stores nothing for the rest — this closes that gap in one click instead of N. */
+  /** Attaches every client not yet attached to any connector to this one, sequentially, and reports
+   * what really attached: "Attached 4 of 5. Not attached: Beta · {why}". Nothing attached is an error.
+   * A firm connector attached to zero (or few) clients stores nothing for the rest — this closes that
+   * gap in one click instead of N. */
   const handleAttachAllClients = async (connectorId: string) => {
     const unattached = allClients.filter(c => !c.connectorId)
     if (unattached.length === 0) return
     setAttachingAllConnectorId(connectorId)
     try {
+      const outcomes: { name: string; outcome: AttachOutcome }[] = []
       for (const client of unattached) {
-        await handleAttachClient(connectorId, client.id)
+        outcomes.push({ name: client.name, outcome: await handleAttachClient(connectorId, client.id, { quiet: true }) })
       }
-      addToast({ type: 'success', title: 'Attached', message: `Attached ${unattached.length} client${unattached.length === 1 ? '' : 's'} to this connector.` })
+      addToast(attachAllToast(outcomes))
     } finally {
       setAttachingAllConnectorId(null)
     }
@@ -599,7 +678,11 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
     setDetachingClientId(clientId)
     try {
       const { detachConnectorFromClient } = await import('@/lib/actions/firms')
-      await detachConnectorFromClient({ clientId, firmId })
+      const result = await detachConnectorFromClient({ clientId, firmId })
+      if (!result.ok) {
+        addToast({ type: 'error', title: "Couldn't detach the client", message: result.error })
+        return
+      }
       setAllClients(prev => prev.map(c => c.id === clientId ? { ...c, connectorId: null } : c))
       setConnectors(prev => prev.map(c =>
         c.id === connectorId
@@ -608,7 +691,7 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
       ))
       addToast({ type: 'success', title: 'Detached', message: 'Client unlinked from this connector.' })
     } catch (e) {
-      addToast({ type: 'error', title: 'Detach failed', message: e instanceof Error ? e.message : 'Could not unlink client.' })
+      addToast({ type: 'error', title: "Couldn't detach the client", message: failureReason(e) })
     } finally {
       setDetachingClientId(null)
     }
@@ -648,6 +731,18 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
           </div>
         ))}
       </div>
+    )
+  }
+
+  // A failed load is said, with Retry, and offers no Connect form: an empty panel with only that form
+  // reads as "nothing connected" and invites a second connection.
+  if (loadError) {
+    return (
+      <LoadFailed
+        what="storage connections"
+        reason={loadError}
+        onRetry={() => void loadConnectors()}
+      />
     )
   }
 
@@ -837,6 +932,9 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
                   )}
 
                   {/* Workspace root — shown once status is loaded regardless of connection state; GoogleDriveWorkspaceRoot masks/disables itself internally when there's no live accessToken */}
+                  {driveRoot === null && statusErrors[connector.id] && (
+                    <LocationLoadFailed reason={statusErrors[connector.id]} onRetry={() => void loadStatus(connector.id)} />
+                  )}
                   {driveRoot !== null && (
                     <div className="relative z-10 pl-12 pr-4 py-3 border-t border-line">
                       <GoogleDriveWorkspaceRoot
@@ -1057,6 +1155,9 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
                   )}
 
                   {/* Workspace root — shown once status is loaded regardless of connection state; OneDriveWorkspaceRoot masks/disables itself internally when disconnected */}
+                  {oneDriveRoot === null && statusErrors[connector.id] && (
+                    <LocationLoadFailed reason={statusErrors[connector.id]} onRetry={() => void loadOneDriveStatus(connector.id)} />
+                  )}
                   {oneDriveRoot !== null && (
                     <div className="relative z-10 pl-12 pr-4 py-3 border-t border-line">
                       <OneDriveWorkspaceRoot
@@ -1259,6 +1360,7 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
           open={switchModalOpen}
           onClose={() => setSwitchModalOpen(false)}
           admins={firmAdmins}
+          loadError={firmAdminsError}
           currentUserId={user?.id}
           loading={switchTarget?.type === 'ONEDRIVE' ? oneDriveLoading : loading}
           onConfirm={handleSwitchAccount}
@@ -1308,7 +1410,7 @@ type ConnectorClientAttachSectionProps = {
   attachingClientId: string | null
   detachingClientId: string | null
   attachingAllConnectorId: string | null
-  onAttach: (connectorId: string, clientId: string) => void | Promise<void>
+  onAttach: (connectorId: string, clientId: string) => void | Promise<unknown>
   onDetach: (connectorId: string, clientId: string) => void | Promise<void>
   onAttachAll: (connectorId: string) => void | Promise<void>
 }

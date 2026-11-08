@@ -5,6 +5,8 @@ import { supabase } from "@/lib/supabase"
 import { submitErrorTicket } from "@/app/actions/submit-ticket"
 import { uploadSupportAttachment, type AttachmentMeta } from "@/lib/support-attachment-upload"
 import { toSupportTicket, type SupportComment, type SupportTicket, type TicketKind, type TicketStatus } from "@/lib/support/ticket-view"
+import { failureFrom, failureReason } from "@/lib/files/action-failure"
+import { PLATFORM_SUPPORT_EMAIL } from "@/config/platform-emails"
 
 /*
  * The Support page's requests (.claude/plans/app-design-refinements.md, section 14), in one store the
@@ -22,15 +24,28 @@ export type NewRequest = {
     engagementSlug?: string
 }
 
+/** A file that wasn't attached, and why: the upload's own reason, or the save's. */
+export type FileFailure = { name: string; reason: string }
+
+/**
+ * Where the Support page reads and writes. Every method throws an Error whose message is the
+ * reason, in a person's words (the route's, or "Couldn't reach Firma…"); the panels put the action
+ * in front of it ("Couldn't send your reply").
+ */
 export type SupportSource = {
     load: () => Promise<SupportTicket[]>
-    /** Files a request and returns its number; throws with a message to show when it fails. */
+    /** Files a request and returns its number. */
     create: (input: NewRequest) => Promise<string>
     addComment: (ticketNumber: string, content: string) => Promise<SupportComment>
     setStatus: (ticketNumber: string, status: TicketStatus) => Promise<void>
-    /** Uploads and attaches; returns what was attached and how many failed. */
-    addFiles: (ticketNumber: string, files: File[]) => Promise<{ attached: AttachmentMeta[]; failed: number }>
+    /** Uploads and attaches; returns what was attached, and each file that wasn't, with why. */
+    addFiles: (ticketNumber: string, files: File[]) => Promise<{ attached: AttachmentMeta[]; failed: FileFailure[] }>
     removeFile: (ticketNumber: string, attachmentId: string) => Promise<void>
+}
+
+/** "Budget.xlsx (File too large (max 8MB))", for a toast. */
+export function describeFileFailures(failed: FileFailure[]): string {
+    return failed.map((f) => `${f.name} (${f.reason})`).join(", ")
 }
 
 async function bearer(): Promise<string> {
@@ -47,7 +62,7 @@ export function liveSupportSource(firmSlug: string | null): SupportSource {
     return {
         load: async () => {
             const res = await fetch(firmSlug ? `/api/support/requests?firmSlug=${encodeURIComponent(firmSlug)}` : "/api/support/requests?all=1")
-            if (!res.ok) throw new Error("Couldn’t load requests")
+            if (!res.ok) throw await failureFrom(res)
             const rows = (await res.json()) as Record<string, unknown>[]
             return rows.map(toSupportTicket)
         },
@@ -64,7 +79,10 @@ export function liveSupportSource(firmSlug: string | null): SupportSource {
                     screen: typeof window !== "undefined" ? { width: window.screen.width, height: window.screen.height } : undefined,
                 },
             })
-            if (!result.success || !result.ticketNumber) throw new Error(result.message || "Couldn’t send the request")
+            // The action's own message ("Failed to submit ticket") says nothing; nothing was filed.
+            if (!result.success || !result.ticketNumber) {
+                throw new Error(`It wasn't saved on our side. Try again, or email ${PLATFORM_SUPPORT_EMAIL}.`)
+            }
             return result.ticketNumber
         },
         addComment: async (ticketNumber, content) => {
@@ -73,7 +91,7 @@ export function liveSupportSource(firmSlug: string | null): SupportSource {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ content }),
             })
-            if (!res.ok) throw new Error("Couldn’t send your reply")
+            if (!res.ok) throw await failureFrom(res)
             const { comment } = await res.json()
             // The API says whether it counts as Firma's (a team member outside the request's firm).
             return toSupportTicket({ ticketNumber, description: "", createdAt: comment.createdAt, comments: [comment] }).comments[0]
@@ -84,22 +102,28 @@ export function liveSupportSource(firmSlug: string | null): SupportSource {
                 headers: { Authorization: `Bearer ${await bearer()}`, "Content-Type": "application/json" },
                 body: JSON.stringify({ status }),
             })
-            if (!res.ok) throw new Error("Couldn’t change the status")
+            if (!res.ok) throw await failureFrom(res)
         },
         addFiles: async (ticketNumber, files) => {
             const token = await bearer()
             const results = await Promise.all(files.map((f) => uploadSupportAttachment(token, ticketNumber, f)))
             const attached = results.filter((r) => r.success && r.meta).map((r) => r.meta!)
+            // Each file's own reason, not a count: "too large" is something the person can fix.
+            const failed: FileFailure[] = results.flatMap((r, i) =>
+                r.success && r.meta ? [] : [{ name: files[i].name, reason: r.error || "The upload didn't finish." }])
             if (attached.length > 0) {
                 const res = await fetch(`/api/support/requests/${encodeURIComponent(ticketNumber)}/attachments`, {
                     method: "PATCH",
                     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
                     body: JSON.stringify({ attachments: attached }),
-                })
-                // Uploaded but not saved to the request: still a failure to the person.
-                if (!res.ok) return { attached: [], failed: files.length }
+                }).catch((e: unknown) => e)
+                // Uploaded but not saved to the request: still a failure to the person, with why.
+                if (!(res instanceof Response) || !res.ok) {
+                    const reason = res instanceof Response ? (await failureFrom(res)).message : failureReason(res)
+                    return { attached: [], failed: [...failed, ...attached.map((a) => ({ name: a.originalName, reason }))] }
+                }
             }
-            return { attached, failed: files.length - attached.length }
+            return { attached, failed }
         },
         removeFile: async (ticketNumber, attachmentId) => {
             const res = await fetch(`/api/support/requests/${encodeURIComponent(ticketNumber)}/attachments`, {
@@ -107,7 +131,7 @@ export function liveSupportSource(firmSlug: string | null): SupportSource {
                 headers: { Authorization: `Bearer ${await bearer()}`, "Content-Type": "application/json" },
                 body: JSON.stringify({ attachmentId }),
             })
-            if (!res.ok) throw new Error("Couldn’t remove the file")
+            if (!res.ok) throw await failureFrom(res)
         },
     }
 }
@@ -147,10 +171,13 @@ export class SupportStore {
     }
 
     async load() {
+        // A retry after a failed load shows the spinner, not the failure, while it runs.
+        if (this.state.error) this.set({ loading: true, error: null })
         try {
             this.set({ tickets: await this.source.load(), loading: false, error: null })
         } catch (e) {
-            this.set({ loading: false, error: e instanceof Error ? e.message : "Couldn’t load requests" })
+            // The reason, for "Couldn't load requests · …".
+            this.set({ loading: false, error: failureReason(e) })
         }
     }
 
@@ -158,12 +185,26 @@ export class SupportStore {
         if (title !== this.state.draft) this.set({ draft: title })
     }
 
-    /** Files it, attaches its files, and reloads so it appears in the table. */
-    async create(input: NewRequest, files: File[]): Promise<{ ticketNumber: string; failedFiles: number }> {
+    /**
+     * Files it, attaches its files, and reloads so it appears in the table.
+     *
+     * Throws only when the request itself wasn't filed. Once it exists, nothing after that throws:
+     * a failed attach comes back in `failedFiles`, so the person is told the request was sent
+     * rather than "couldn't send", which a retry would turn into a duplicate.
+     */
+    async create(input: NewRequest, files: File[]): Promise<{ ticketNumber: string; failedFiles: FileFailure[] }> {
         const ticketNumber = await this.source.create(input)
-        const { failed } = files.length ? await this.source.addFiles(ticketNumber, files) : { failed: 0 }
+        let failedFiles: FileFailure[] = []
+        if (files.length) {
+            try {
+                failedFiles = (await this.source.addFiles(ticketNumber, files)).failed
+            } catch (e) {
+                const reason = failureReason(e)
+                failedFiles = files.map((f) => ({ name: f.name, reason }))
+            }
+        }
         await this.load()
-        return { ticketNumber, failedFiles: failed }
+        return { ticketNumber, failedFiles }
     }
 
     /** Optimistic: the pill changes at once and goes back if the save fails. */
@@ -183,7 +224,8 @@ export class SupportStore {
         this.patch(ticketNumber, (t) => ({ ...t, comments: [...t.comments, comment], updatedAt: comment.createdAt }))
     }
 
-    async addFiles(ticketNumber: string, files: File[]) {
+    /** Attaches what it can; returns each file that wasn't, with why. */
+    async addFiles(ticketNumber: string, files: File[]): Promise<FileFailure[]> {
         const { attached, failed } = await this.source.addFiles(ticketNumber, files)
         if (attached.length) this.patch(ticketNumber, (t) => ({ ...t, attachments: [...t.attachments, ...attached] }))
         return failed

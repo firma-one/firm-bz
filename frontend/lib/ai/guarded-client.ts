@@ -3,6 +3,7 @@ import type Anthropic from '@anthropic-ai/sdk'
 import { getAnthropic } from './client'
 import { assertWithinAiCreditCap, AiCreditLimitError } from './credit-cap'
 import { recordAiUsage, type AiFeature } from './usage'
+import { logger } from '@/lib/logger'
 
 export { AiCreditLimitError }
 
@@ -74,4 +75,16 @@ export function aiLimitResponse(error: unknown): Response | null {
         { error: error.message, kind: error.kind, limit: error.limit, used: error.used },
         { status: 429 },
     )
+}
+
+/**
+ * The answer for a Brio route's outer catch: the limit's own words when credits ran out (429),
+ * otherwise `words` (Brio's failure, lib/ai/brio-failure.ts) with a 500, logged under `logContext`.
+ * Never the error's own text, which may be a provider's or a database's internals.
+ */
+export function aiFailureResponse(error: unknown, words: string, logContext: string): Response {
+    const limited = aiLimitResponse(error)
+    if (limited) return limited
+    logger.error(logContext, error as Error)
+    return Response.json({ error: words }, { status: 500 })
 }

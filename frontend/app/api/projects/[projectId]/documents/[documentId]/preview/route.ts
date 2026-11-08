@@ -6,6 +6,8 @@ import { isHiddenFromMember, requireEngagementMember } from '@/lib/engagement-ac
 import { resolveEngagementConnectorId } from '@/lib/connectors/resolve-client-connector'
 import { getContentAdapter } from '@/lib/connectors/registry'
 import { ConnectorContentError } from '@/lib/connectors/types'
+import { contentFailure, NO_STORAGE_MESSAGE, providerOf } from '@/lib/connectors/content-failure'
+import { BRAND_NAME } from '@/config/brand'
 import { logger } from '@/lib/logger'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 
@@ -54,6 +56,26 @@ function previewMessageHtml({ icon, title, body }: { icon: string; title: string
     })
 }
 
+/**
+ * A preview that failed, in words a person can act on. The panes draw some files in an iframe
+ * pointed straight at this route, where a JSON answer showed as raw text in the pane
+ * (`{"error":"Failed to fetch document content from storage"}`, P1-39). So a request from a frame
+ * or a page gets the "Preview not available" card, with a Reload link; a fetch still gets JSON
+ * (`{ error, code }`), which the panes read and draw as the same card.
+ */
+function previewFailure(request: NextRequest, status: number, message: string, code?: string): NextResponse {
+    const dest = request.headers.get('sec-fetch-dest')
+    if (dest === 'iframe' || dest === 'document' || dest === 'frame') {
+        const res = previewMessageHtml({
+            icon: '⚠️',
+            title: 'Preview not available',
+            body: `${escapeHtml(message)}<br/><br/><a href="" style="color:#0f766e;font-weight:500">Reload</a>`,
+        })
+        return new NextResponse(res.body, { status, headers: res.headers })
+    }
+    return NextResponse.json({ error: message, ...(code ? { code } : {}) }, { status })
+}
+
 /** The file's *type* has no inline representation at all. */
 function unsupportedPreviewHtml(mimeType: string): NextResponse {
     return previewMessageHtml({
@@ -85,7 +107,7 @@ export async function GET(
         const { data: { user } } = await supabase.auth.getUser()
 
         if (!user) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+            return previewFailure(request, 401, 'Your session has ended. Sign in again, then reload.', 'signed_out')
         }
 
         const { projectId, documentId: documentIdParam } = await params
@@ -93,38 +115,39 @@ export async function GET(
         // 1. Resolve file info (organizationId + Google Drive externalId)
         const fileInfo = await getFileInfo(projectId, documentIdParam)
         if (!fileInfo) {
-            return NextResponse.json({ error: 'Document not found' }, { status: 404 })
+            return previewFailure(request, 404, `This file isn't in ${BRAND_NAME} any more. Refresh the list.`, 'not_found')
         }
         if (fileInfo.documentType === 'LINK') {
-            return NextResponse.json({ error: 'This document is a link and cannot be previewed' }, { status: 400 })
+            return previewFailure(request, 400, 'This is a link, so there is nothing to preview. Open the link instead.')
         }
         const engagementClientId = await prisma.engagement.findUnique({ where: { id: projectId }, select: { clientId: true } }).then((e) => e?.clientId ?? undefined)
 
         // 2. Permission check — engagement membership is the access gate for preview.
         const member = await requireEngagementMember(projectId, user.id)
         if (!member || (await isHiddenFromMember(projectId, member.role, fileInfo.externalId))) {
-            return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+            return previewFailure(request, 403, "You don't have access to this file.", 'no_access')
         }
 
         // 3. Find the connector that indexed this file (preferred for access), falling
         //    back to any active connector for the org.
         const connectorId = await resolveEngagementConnectorId(projectId, fileInfo.connectorId)
         if (!connectorId) {
-            return NextResponse.json({ error: 'No active storage connector found' }, { status: 404 })
+            return previewFailure(request, 404, NO_STORAGE_MESSAGE, 'no_storage')
         }
         const connector = await prisma.connector.findFirst({
             where: { id: connectorId, status: 'ACTIVE' }
         })
         if (!connector) {
-            return NextResponse.json({ error: 'No active storage connector found' }, { status: 404 })
+            return previewFailure(request, 404, NO_STORAGE_MESSAGE, 'no_storage')
         }
+        const provider = providerOf(connector.type)
 
         // 4. Resolve the best inline-previewable representation of the file. This hides all
         //    Drive-specific indirection (shortcuts, .gdoc/.gsheet stubs, PDF export/conversion
         //    decisions) behind the content adapter — see getPreviewableContent for details.
         const contentAdapter = await getContentAdapter(connector.id)
         if (!contentAdapter) {
-            return NextResponse.json({ error: 'No content adapter available for connector' }, { status: 400 })
+            return previewFailure(request, 400, NO_STORAGE_MESSAGE, 'no_storage')
         }
 
         let content: {
@@ -147,27 +170,20 @@ export async function GET(
             content = await contentAdapter.getPreviewableContent(connector.id, fileInfo.externalId, { preferNative, range })
         } catch (err) {
             if (err instanceof ConnectorContentError) {
-                if (err.code === 'not_found') {
-                    return NextResponse.json({
-                        error: 'File not found in storage',
-                        details: 'The file may have been deleted or the linked account no longer has access.',
-                    }, { status: 404 })
-                }
-                if (err.code === 'forbidden') {
-                    return NextResponse.json({
-                        error: 'Access denied to storage file',
-                        details: 'The account linked to Pockett does not have permission to view this file.',
-                    }, { status: 403 })
-                }
                 if (err.code === 'conversion_failed') {
                     return conversionFailedHtml(err.detail)
                 }
-                return unsupportedPreviewHtml(err.mimeType ?? 'unknown')
+                if (err.code !== 'not_found' && err.code !== 'forbidden') {
+                    return unsupportedPreviewHtml(err.mimeType ?? 'unknown')
+                }
             }
+            // Gone, refused, a connection that needs renewing, or the storage not answering: said in
+            // the storage's terms (StorageFailure's words), never as its raw answer.
+            const failure = contentFailure(err, provider)!
             logger.error(`Preview content fetch failed for ${fileInfo.externalId}: ${err}`, undefined, 'PreviewProxy', {
-                projectId, documentId: documentIdParam
+                projectId, documentId: documentIdParam, reason: failure.reason,
             })
-            return NextResponse.json({ error: 'Failed to fetch document content from storage' }, { status: 502 })
+            return previewFailure(request, failure.status, failure.message, failure.reason)
         }
 
         const headers = new Headers()
@@ -212,6 +228,6 @@ export async function GET(
 
     } catch (error) {
         logger.error('Preview proxy error:', error as Error)
-        return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+        return previewFailure(request, 500, 'Something went wrong on our side. Reload to try again.')
     }
 }

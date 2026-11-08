@@ -11,6 +11,7 @@ import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 import { createClient as createCookieClient } from '@/utils/supabase/server'
 import { peekOAuthState, safeNextPath, verifyOAuthState } from '@/lib/connectors/oauth-state'
 import { getManageableConnector, isClientManager, isFirmAdmin } from '@/lib/connectors/connector-access'
+import { oauthErrorDetail, oauthProviderErrorCode } from '@/lib/connectors/oauth-provider-error'
 
 const supabase = createClient(
   config.supabase.url,
@@ -42,9 +43,11 @@ function resolveOAuthFailureRedirectPath(state: string | null): string {
   return next.split('#')[0] || '/d/onboarding'
 }
 
-function appPathWithError(appPath: string, errorCode: string): string {
+function appPathWithError(appPath: string, errorCode: string, detail?: string | null): string {
   const u = new URL(appPath, 'http://oauth-callback.local')
   u.searchParams.set('error', errorCode)
+  // The provider's own sentence (P2-31), for the page that reads the error.
+  if (detail) u.searchParams.set('error_description', detail)
   return u.pathname + u.search
 }
 
@@ -72,14 +75,14 @@ function isPersonalGoogleAccount(idToken: string | undefined): boolean {
  * Matches the parent window when both run on the same deployment (avoids NEXT_PUBLIC_APP_URL drift).
  * Requires window.opener — do not open the auth popup with noopener/noreferrer.
  */
-function popupHtml(payload: { ok: boolean; error?: string; connectionId?: string; organizationId?: string; email?: string; nonce?: string }) {
+function popupHtml(payload: { ok: boolean; error?: string; errorDescription?: string | null; connectionId?: string; organizationId?: string; email?: string; nonce?: string }) {
   const payloadStr = JSON.stringify(payload).replace(/</g, '\\u003c').replace(/>/g, '\\u003e')
   return `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body><script>
 (function() {
   var payload = ${payloadStr};
   var targetOrigin = window.location.origin;
   if (window.opener && !window.opener.closed) {
-    window.opener.postMessage({ type: 'google_drive_oauth', ok: payload.ok, error: payload.error, connectionId: payload.connectionId, organizationId: payload.organizationId, email: payload.email, nonce: payload.nonce }, targetOrigin);
+    window.opener.postMessage({ type: 'google_drive_oauth', ok: payload.ok, error: payload.error, errorDescription: payload.errorDescription, connectionId: payload.connectionId, organizationId: payload.organizationId, email: payload.email, nonce: payload.nonce }, targetOrigin);
   }
   window.close();
 })();
@@ -96,11 +99,17 @@ export async function GET(request: NextRequest) {
     const isPopup = stateFlow === 'popup'
 
     if (error) {
+      // Google's own reason ("admin_policy_enforced", or its error_description) rather than
+      // "cancelled or denied" for everything (P2-31).
+      const providerCode = oauthProviderErrorCode(error, searchParams.get('error_description'))
+      const providerDetail = oauthErrorDetail(searchParams.get('error_description'))
+      logger.warn('Google Drive OAuth callback: Google answered an error', { error, providerCode, detail: providerDetail })
       if (isPopup) {
-        const html = popupHtml({ ok: false, error: 'oauth_error', nonce: stateNonce })
+        const html = popupHtml({ ok: false, error: providerCode, errorDescription: providerDetail, nonce: stateNonce })
         return new NextResponse(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } })
       }
-      return NextResponse.redirect(getRedirectUrl('/d?error=oauth_error'))
+      // Back where the flow started, which reads the error (P2-32); `/d` read nothing.
+      return NextResponse.redirect(getRedirectUrl(appPathWithError(resolveOAuthFailureRedirectPath(state), providerCode, providerDetail)))
     }
 
     if (!code) {
@@ -143,7 +152,7 @@ export async function GET(request: NextRequest) {
         const html = popupHtml({ ok: false, error: 'oauth_not_configured', nonce: stateNonce })
         return new NextResponse(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } })
       }
-      return NextResponse.redirect(getRedirectUrl('/d?error=oauth_not_configured'))
+      return NextResponse.redirect(getRedirectUrl(appPathWithError(resolveOAuthFailureRedirectPath(state), 'oauth_not_configured')))
     }
     const redirectUri = config.googleDrive.redirectUri
 
@@ -196,11 +205,16 @@ export async function GET(request: NextRequest) {
     if (!tokenResponse.ok) {
       const txt = await tokenResponse.text()
       logger.error('Token exchange failed', new Error(txt))
+      let tokenErr: { error?: string; error_description?: string } = {}
+      try { tokenErr = JSON.parse(txt) } catch { /* not JSON */ }
+      const mapped = oauthProviderErrorCode(tokenErr.error, tokenErr.error_description)
+      const tokenCode = mapped === 'oauth_error' ? 'token_exchange_failed' : mapped
+      const tokenDetail = oauthErrorDetail(tokenErr.error_description)
       if (isPopup) {
-        const html = popupHtml({ ok: false, error: 'token_exchange_failed', nonce: stateNonce })
+        const html = popupHtml({ ok: false, error: tokenCode, errorDescription: tokenDetail, nonce: stateNonce })
         return new NextResponse(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } })
       }
-      return NextResponse.redirect(getRedirectUrl(appPathWithError(oauthFailureBase, 'token_exchange_failed')))
+      return NextResponse.redirect(getRedirectUrl(appPathWithError(oauthFailureBase, tokenCode, tokenDetail)))
     }
 
     const tokens = await tokenResponse.json()
@@ -413,6 +427,14 @@ export async function GET(request: NextRequest) {
         }
       }
 
+      // What the replaced connector was, so a failed save below can put it back: it is revoked
+      // first, and a reconnect that then failed used to leave it gone from the list (P2-33).
+      const replacedBefore = replaceConnectorId
+        ? await prisma.connector.findUnique({
+            where: { id: replaceConnectorId },
+            select: { status: true, accessToken: true, refreshToken: true, tokenExpiresAt: true, firmId: true },
+          })
+        : null
       if (replaceConnectorId) {
         try {
           await prisma.connector.update({
@@ -434,7 +456,9 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      const connector = await googleDriveConnector.storeConnection(
+      let connector: Awaited<ReturnType<typeof googleDriveConnector.storeConnection>>
+      try {
+        connector = await googleDriveConnector.storeConnection(
         organization?.id, // Might be undefined
         userId,          // Supabase user ID (owner of the connector)
         userInfo.id,     // Google's unique account ID (externalAccountId)
@@ -451,6 +475,21 @@ export async function GET(request: NextRequest) {
         accountTypeMismatch,
         detectedIsPersonalAccount,
       )
+      } catch (storeErr) {
+        if (!replaceConnectorId || !replacedBefore) throw storeErr
+        logger.error('Google Drive reconnect: saving the new sign-in failed; restoring the connection', storeErr instanceof Error ? storeErr : new Error(String(storeErr)), `connectorId:${replaceConnectorId}`)
+        try {
+          await prisma.connector.update({ where: { id: replaceConnectorId }, data: replacedBefore })
+        } catch (restoreErr) {
+          logger.error('Google Drive reconnect: restoring the connection failed', restoreErr instanceof Error ? restoreErr : new Error(String(restoreErr)), `connectorId:${replaceConnectorId}`)
+          throw storeErr
+        }
+        if (isPopup) {
+          const html = popupHtml({ ok: false, error: 'reconnect_failed', nonce: stateNonce })
+          return new NextResponse(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } })
+        }
+        return NextResponse.redirect(getRedirectUrl(appPathWithError(oauthFailureBase, 'reconnect_failed')))
+      }
 
       const auditBuilder = audit(AUDIT_EVENT.STORAGE_CONNECTOR_ATTACHED)
         .scope(clientId ? AUDIT_SCOPE.CLIENT : AUDIT_SCOPE.FIRM)
@@ -624,6 +663,6 @@ export async function GET(request: NextRequest) {
       const html = popupHtml({ ok: false, error: 'callback_error', nonce: errNonce })
       return new NextResponse(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } })
     }
-    return NextResponse.redirect(getRedirectUrl('/d?error=callback_error'))
+    return NextResponse.redirect(getRedirectUrl(appPathWithError(resolveOAuthFailureRedirectPath(new URL(request.url).searchParams.get('state')), 'callback_error')))
   }
 }

@@ -26,6 +26,8 @@ import { LandingArrival } from '@/components/app/landing-arrival'
 import { HowThisWorksLink } from '@/components/ui/how-this-works-link'
 import { useOptionalShellData } from '@/components/shell/shell-data-context'
 import type { TourNodeId } from '@/lib/demo/tour-chapters'
+import { PermissionsNotice, fetchFirmPermissions } from './permissions-notice'
+import { failureReason } from '@/lib/files/action-failure'
 
 interface FirmClientsViewProps {
     clients: ClientSummary[]
@@ -76,6 +78,9 @@ export function FirmClientsView({ clients, groupSlug, orgSlug, orgId, firmSandbo
     // defaults to 'clients' (since canViewOrgAudit starts false) then jumps to 'analytics'
     // once permissions load, a visible flash on every landing.
     const [permissionsLoading, setPermissionsLoading] = useState(true)
+    /** Why the permissions didn't load, when they didn't; the admin pages are hidden until they do. */
+    const [permissionsError, setPermissionsError] = useState<string | null>(null)
+    const [permissionsTick, setPermissionsTick] = useState(0)
 
     const tabParam = searchParams.get('tab') || 'analytics'
     const currentTab =
@@ -119,11 +124,11 @@ export function FirmClientsView({ clients, groupSlug, orgSlug, orgId, firmSandbo
             setPermissionsLoading(false)
             return
         }
-        fetch(
+        fetchFirmPermissions(
             `/api/permissions/firm?firmId=${encodeURIComponent(organizationId)}&firmSlug=${encodeURIComponent(orgSlug)}`
         )
-            .then(res => res.json())
-            .then(data => {
+            .then((data: Record<string, any>) => {
+                setPermissionsError(null)
                 setCanCreateClient(data.canManageClients ?? false)
                 // Firm admin / owner can see Settings tab (show in Sandbox too; form is read-only there).
                 const isFirmOwner = data.isFirmOwner ?? data.isOrgOwner ?? false
@@ -135,9 +140,11 @@ export function FirmClientsView({ clients, groupSlug, orgSlug, orgId, firmSandbo
                 setCanCreateClient(false)
                 setCanViewOrgSettings(false)
                 setCanViewOrgAudit(false)
+                // Said, rather than reading as "no access" (see permissions-notice.tsx).
+                setPermissionsError(failureReason(err))
             })
             .finally(() => setPermissionsLoading(false))
-    }, [orgId, clients])
+    }, [orgId, clients, permissionsTick])
 
     // Correct the URL only for a user who genuinely cannot view Analytics.
     //
@@ -145,14 +152,15 @@ export function FirmClientsView({ clients, groupSlug, orgSlug, orgId, firmSandbo
     // this effect fired on mount — before /api/permissions/firm resolved — and rewrote
     // ?tab=analytics to ?tab=clients for everyone, firm admins included, on every refresh.
     useEffect(() => {
-        if (permissionsLoading) return
+        // Not when they failed to load: an admin's ?tab=analytics would be rewritten for good.
+        if (permissionsLoading || permissionsError) return
         const tab = searchParams.get('tab')
         if (tab === 'analytics' && !canViewOrgAudit) {
             const params = new URLSearchParams(searchParams.toString())
             params.set('tab', 'clients')
             router.replace(`${pathname}?${params.toString()}`, { scroll: false })
         }
-    }, [canViewOrgAudit, permissionsLoading])
+    }, [canViewOrgAudit, permissionsLoading, permissionsError])
 
     const handleViewModeChange = (mode: 'grid' | 'list') => {
         setViewMode(mode)
@@ -244,6 +252,9 @@ export function FirmClientsView({ clients, groupSlug, orgSlug, orgId, firmSandbo
                 </div>
             ) : (
             <Tabs value={currentTab} onValueChange={handleTabChange} className="flex-1 flex flex-col min-h-0 print:block print:flex-none animate-in fade-in duration-200 ease-out">
+                {permissionsError && (
+                    <PermissionsNotice reason={permissionsError} onRetry={() => setPermissionsTick((t) => t + 1)} />
+                )}
                 {heading}
 
                 {/* Room for the client cards' ring and shadow (4px at the sides, 8px below), which a scroll box clips */}

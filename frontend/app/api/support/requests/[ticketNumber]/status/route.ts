@@ -11,7 +11,7 @@ export async function PATCH(
   try {
     const authHeader = request.headers.get('authorization')
     if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return NextResponse.json({ error: 'Your session has expired. Sign in again.' }, { status: 401 })
     }
 
     const token = authHeader.slice(7)
@@ -30,7 +30,7 @@ export async function PATCH(
 
     const { data: { user } } = await supabase.auth.getUser(token)
     if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return NextResponse.json({ error: 'Your session has expired. Sign in again.' }, { status: 401 })
     }
 
     const { status } = await request.json()
@@ -51,10 +51,10 @@ export async function PATCH(
       select: { userId: true, firmId: true },
     })
     if (!existing) {
-      return NextResponse.json({ error: 'Ticket not found' }, { status: 404 })
+      return NextResponse.json({ error: 'This request no longer exists.' }, { status: 404 })
     }
     if (!(await canAccessSupportTicket(user, existing))) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      return NextResponse.json({ error: "You don't have access to this request." }, { status: 403 })
     }
 
     const ticket = await (prisma as any).customerRequest.update({
@@ -67,7 +67,7 @@ export async function PATCH(
   } catch (error) {
     console.error('Failed to update ticket status:', error)
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to update status' },
+      { error: 'Something went wrong on our side. Try again.' },
       { status: 500 }
     )
   }

@@ -8,6 +8,7 @@ import { useAuth } from '@/lib/auth-context'
 import { checkEmailExists, sendOTPWithTurnstile } from '@/app/actions/send-otp'
 import { sendEvent, ANALYTICS_EVENTS } from '@/lib/analytics'
 import { resolvePostAuthTarget, AUTO_RESOLVE_TARGET } from '@/lib/auth/post-auth-target'
+import { authCallbackErrorMessage, authRequestFailure } from './auth-failure-words'
 
 /**
  * The address last *successfully* signed in with on this browser, used to prefill the field.
@@ -77,6 +78,19 @@ export function useSignInFlow() {
     checkSession()
   }, [router])
 
+  // Back from Google or Microsoft without a session: `/auth/callback` says so with
+  // `?error=auth_code_error`, which used to leave a blank form (P1-19). Read once, then dropped.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const message = authCallbackErrorMessage(params.get('error'), params.get('error_description'))
+    if (!message) return
+    setError(message)
+    params.delete('error')
+    params.delete('error_description')
+    const rest = params.toString()
+    window.history.replaceState(null, '', `${window.location.pathname}${rest ? `?${rest}` : ''}${window.location.hash}`)
+  }, [])
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     // `#email=` is preferred over `?email=` by anything that can choose, because a fragment is
@@ -125,7 +139,17 @@ export function useSignInFlow() {
       setCheckLoading(true)
       setError('')
       setNoAccountMessage('')
-      const existsResult = await checkEmailExists(email, token)
+      let existsResult: Awaited<ReturnType<typeof checkEmailExists>>
+      try {
+        existsResult = await checkEmailExists(email, token)
+      } catch (e) {
+        // A rejected request used to leave "Checking…" spinning forever (P1-20).
+        setError(authRequestFailure(e))
+        setCheckLoading(false)
+        setTurnstileToken(null)
+        setShowTurnstile(false)
+        return
+      }
       if (!existsResult.success) {
         setError(existsResult.error || 'Failed to verify email')
         setCheckLoading(false)
@@ -152,7 +176,17 @@ export function useSignInFlow() {
     async (token: string) => {
       setLoading(true)
       setError('')
-      const result = await sendOTPWithTurnstile(email, token)
+      let result: Awaited<ReturnType<typeof sendOTPWithTurnstile>>
+      try {
+        result = await sendOTPWithTurnstile(email, token)
+      } catch (e) {
+        // A rejected request used to leave "Sending code…" spinning forever (P1-20).
+        setError(authRequestFailure(e))
+        setLoading(false)
+        setTurnstileToken(null)
+        setShowTurnstile(false)
+        return
+      }
       if (!result.success) {
         setError(result.error || 'Failed to send verification code')
         setLoading(false)
@@ -254,7 +288,18 @@ export function useSignInFlow() {
         return
       }
 
-      const result = await AuthService.verifyOTP(email, codeToVerify)
+      let result: Awaited<ReturnType<typeof AuthService.verifyOTP>>
+      let session: Awaited<ReturnType<typeof supabase.auth.getSession>>['data']['session'] = null
+      try {
+        result = await AuthService.verifyOTP(email, codeToVerify)
+        if (result.success) {
+          session = (await supabase.auth.getSession()).data.session
+        }
+      } catch (e) {
+        setError(authRequestFailure(e))
+        setLoading(false)
+        return
+      }
 
       if (!result.success) {
         setError(result.error || 'Invalid verification code')
@@ -262,9 +307,6 @@ export function useSignInFlow() {
         return
       }
 
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
       if (session) {
         // Signed in for real, so this address is worth prefilling next time.
         rememberEmail(email)

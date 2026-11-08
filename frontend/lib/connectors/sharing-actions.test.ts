@@ -120,34 +120,29 @@ describe('shareConnectorWithClient', () => {
     expect(mockConnectorUpdate).not.toHaveBeenCalled()
   })
 
+  // Refusals are answered, not thrown: a thrown reason reaches the browser as "Minified React error #441".
   it('rejects cross-firm share: connector.firmId must match client.firmId', async () => {
     mockClientFindUnique.mockResolvedValue(makeClient({ firmId: 'firm-1' }))
     mockConnectorFindUnique.mockResolvedValue(makeConnector({ firmId: 'firm-OTHER' }))
 
     const { shareConnectorWithClient } = await import('@/lib/actions/client')
-    await expect(
-      shareConnectorWithClient({ clientId: 'client-1', connectorId: 'conn-1' })
-    ).rejects.toThrow()
+    expect(await shareConnectorWithClient({ clientId: 'client-1', connectorId: 'conn-1' })).toMatchObject({ ok: false, code: 'forbidden' })
   })
 
-  it('throws when connector is not found', async () => {
+  it('refuses when connector is not found', async () => {
     mockClientFindUnique.mockResolvedValue(makeClient())
     mockConnectorFindUnique.mockResolvedValue(null)
 
     const { shareConnectorWithClient } = await import('@/lib/actions/client')
-    await expect(
-      shareConnectorWithClient({ clientId: 'client-1', connectorId: 'missing' })
-    ).rejects.toThrow()
+    expect(await shareConnectorWithClient({ clientId: 'client-1', connectorId: 'missing' })).toMatchObject({ ok: false, code: 'not_found' })
   })
 
-  it('throws when client is not found', async () => {
+  it('refuses when client is not found', async () => {
     mockClientFindUnique.mockResolvedValue(null)
     mockConnectorFindUnique.mockResolvedValue(makeConnector())
 
     const { shareConnectorWithClient } = await import('@/lib/actions/client')
-    await expect(
-      shareConnectorWithClient({ clientId: 'missing', connectorId: 'conn-1' })
-    ).rejects.toThrow()
+    expect(await shareConnectorWithClient({ clientId: 'missing', connectorId: 'conn-1' })).toMatchObject({ ok: false, code: 'not_found' })
   })
 })
 
@@ -193,17 +188,17 @@ describe('disconnectClientConnector', () => {
     expect(mockClientUpdateMany).not.toHaveBeenCalled()
   })
 
-  it('throws when client has no connector (nothing to disconnect)', async () => {
+  it('refuses when client has no connector (nothing to disconnect)', async () => {
     mockClientFindUnique.mockResolvedValue(makeClient({ connectorId: null }))
 
     const { disconnectClientConnector } = await import('@/lib/actions/client')
-    await expect(disconnectClientConnector({ clientId: 'client-1' })).rejects.toThrow()
+    expect(await disconnectClientConnector({ clientId: 'client-1' })).toMatchObject({ ok: false, code: 'no_connector' })
   })
 
-  it('throws when client is not found', async () => {
+  it('refuses when client is not found', async () => {
     mockClientFindUnique.mockResolvedValue(null)
 
     const { disconnectClientConnector } = await import('@/lib/actions/client')
-    await expect(disconnectClientConnector({ clientId: 'missing' })).rejects.toThrow()
+    expect(await disconnectClientConnector({ clientId: 'missing' })).toMatchObject({ ok: false, code: 'not_found' })
   })
 })

@@ -8,6 +8,8 @@ import { PropertyList, PropertyRow, PROPERTY_FIELD_CLASS, PROPERTY_HINT_CLASS } 
 import { CreateDialogFooter, CreateDialogHeader, CreateDialogNotice } from '@/components/ui/create-dialog'
 import { inviteFirmMember } from '@/lib/actions/firm-members'
 import { InviteeNameFields } from '@/components/projects/members/invitee-name-fields'
+import { useToast } from '@/components/ui/toast'
+import { failureReason } from '@/lib/files/action-failure'
 
 interface FirmInviteModalProps {
     firmId: string
@@ -22,20 +24,27 @@ export function FirmInviteModal({ firmId, open, onOpenChange, onSuccess }: FirmI
     const [lastName, setLastName] = useState('')
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [error, setError] = useState('')
+    const { addToast } = useToast()
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
         setError('')
         setIsSubmitting(true)
         try {
-            await inviteFirmMember(firmId, email, { firstName, lastName })
+            const result = await inviteFirmMember(firmId, email, { firstName, lastName })
+            if (!result.ok) {
+                setError(result.error)
+                return
+            }
+            // Saved, but its email didn't go: the row reads Email failed, with Resend.
+            if (result.warning) addToast({ type: 'warning', title: 'Invitation not emailed', message: result.warning })
             onSuccess()
             onOpenChange(false)
             setEmail('')
             setFirstName('')
             setLastName('')
         } catch (err: unknown) {
-            setError(err instanceof Error ? err.message : 'Failed to send invitation')
+            setError(failureReason(err))
         } finally {
             setIsSubmitting(false)
         }

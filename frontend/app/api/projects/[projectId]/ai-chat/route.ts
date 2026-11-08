@@ -6,7 +6,8 @@ import { canViewProject, canViewProjectInternalTabs } from '@/lib/permission-hel
 import { logger } from '@/lib/logger'
 import { getAnthropic, isAiConfigured, AI_MODEL } from '@/lib/ai/client'
 import { recordAiUsage } from '@/lib/ai/usage'
-import { getGuardedAnthropic, meterAiCall, aiLimitResponse } from '@/lib/ai/guarded-client'
+import { getGuardedAnthropic, meterAiCall, aiFailureResponse } from '@/lib/ai/guarded-client'
+import { BRIO_ANSWER_FAILED, BRIO_DATA_UNREADABLE } from '@/lib/ai/brio-failure'
 import {
     CHAT_SYSTEM_PROMPT,
     buildEngagementContext,
@@ -128,7 +129,7 @@ export async function POST(
         })
         if (!insightsRes.ok) {
             logger.error(`AI chat: insights fetch failed with ${insightsRes.status}`)
-            return NextResponse.json({ error: 'Could not load engagement data' }, { status: 502 })
+            return NextResponse.json({ error: BRIO_DATA_UNREADABLE }, { status: 502 })
         }
         const insights = await insightsRes.json() as EngagementInsightsResponse
 
@@ -263,7 +264,9 @@ export async function POST(
                     // with no envelope to carry an error flag, so a clean close is byte-identical
                     // to a complete answer — the client would present a truncated answer about an
                     // engagement as an authoritative one. `error()` surfaces as a read failure the
-                    // caller already catches, keeping whatever streamed but marking the turn failed.
+                    // caller already catches, keeping whatever streamed but marking the turn failed:
+                    // the panel marks the partial answer as cut off, in Brio's words
+                    // (BRIO_ANSWER_CUT_OFF), not the browser's "network error".
                     controller.error(error)
                     return
                 }
@@ -278,9 +281,8 @@ export async function POST(
             },
         })
     } catch (error) {
-        const limited = aiLimitResponse(error)
-        if (limited) return limited
-        logger.error('AI chat error:', error as Error)
-        return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+        // Before the stream: out of credits answers the limit's own words; anything else, the model
+        // or the snapshot failing, is Brio's failure rather than "Internal server error".
+        return aiFailureResponse(error, BRIO_ANSWER_FAILED, 'AI chat error:')
     }
 }

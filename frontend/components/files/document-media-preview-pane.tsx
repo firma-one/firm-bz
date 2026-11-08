@@ -2,6 +2,7 @@
 
 import { useMemo } from 'react'
 import { documentName, type PreviewKind } from '@/lib/preview-kinds'
+import { PreviewUnavailable, useMediaFailure } from '@/components/files/preview-unavailable'
 
 interface DocumentMediaPreviewPaneProps {
     document: any
@@ -25,6 +26,8 @@ export function DocumentMediaPreviewPane({ document, projectId, kind }: Document
         if (!effectiveProjectId || !documentId) return null
         return `/api/projects/${effectiveProjectId}/documents/${encodeURIComponent(documentId)}/preview?native=1`
     }, [effectiveProjectId, documentId])
+    // A refused file used to leave a black pane with dead controls (P1-40).
+    const media = useMediaFailure(src)
 
     if (!src) {
         return (
@@ -34,13 +37,15 @@ export function DocumentMediaPreviewPane({ document, projectId, kind }: Document
         )
     }
 
+    if (media.failed) return <PreviewUnavailable reason={media.reason} onReload={media.reload} dark />
+
     if (kind === 'audio') {
         return (
             <div className="flex-1 min-h-0 flex flex-col items-center justify-center gap-3 bg-[#f3f4f6] p-6">
                 <p className="text-xs text-slate-500 text-center break-words max-w-full">
                     {documentName(document) || 'Audio'}
                 </p>
-                <audio src={src} controls controlsList="nodownload" className="w-full max-w-md" />
+                <audio key={media.attempt} src={src} controls controlsList="nodownload" onError={media.fail} className="w-full max-w-md" />
             </div>
         )
     }
@@ -48,7 +53,9 @@ export function DocumentMediaPreviewPane({ document, projectId, kind }: Document
     return (
         <div className="flex-1 min-h-0 flex items-center justify-center bg-black">
             <video
+                key={media.attempt}
                 src={src}
+                onError={media.fail}
                 controls
                 controlsList="nodownload"
                 playsInline

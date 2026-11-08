@@ -290,3 +290,38 @@ describe('Google Drive OAuth callback — state must be ours and the caller\'s',
     expect(location(res)).not.toContain('evil.example')
   })
 })
+
+describe('Google Drive OAuth callback — failures say why', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockStoreConnection.mockResolvedValue({ id: 'new-conn', settings: {} })
+    mockConnectorUpdate.mockResolvedValue({})
+    mockFirmMemberFindUnique.mockResolvedValue({ firm: { id: 'firm-1' } })
+    mockFirmMemberFindFirst.mockResolvedValue(null)
+    session.userId = 'user-1'
+    Object.assign(rights, { firmAdmin: true, clientManager: true, connectorManager: true })
+  })
+
+  it("carries Google's reason back to where the flow started, not to /d (P2-31, P2-32)", async () => {
+    const { GET } = await import('./callback/route')
+    const url = new URL('http://localhost/api/connectors/google-drive/callback')
+    url.searchParams.set('error', 'admin_policy_enforced')
+    url.searchParams.set('error_description', 'Your administrator has blocked this app')
+    url.searchParams.set('state', makeState())
+    const res = await GET(new NextRequest(url))
+    const loc = new URL(res.headers.get('location') ?? '', 'http://localhost')
+    expect(loc.pathname).toBe('/d/f/acme/connectors')
+    expect(loc.searchParams.get('error')).toBe('admin_policy_blocked')
+    expect(loc.searchParams.get('error_description')).toBe('Your administrator has blocked this app')
+  })
+
+  it('puts the replaced connection back when saving the reconnect fails (P2-33)', async () => {
+    const before = { status: 'ACTIVE', accessToken: 'old-at', refreshToken: 'old-rt', tokenExpiresAt: null, firmId: 'firm-1' }
+    mockConnectorFindUnique.mockResolvedValue(before)
+    mockStoreConnection.mockRejectedValueOnce(new Error('db down'))
+    const res = await callCallback(makeState({ replaceConnectorId: 'old-conn-id' }))
+    expect(res.headers.get('location')).toContain('error=reconnect_failed')
+    const restore = mockConnectorUpdate.mock.calls.find(([arg]) => arg?.where?.id === 'old-conn-id' && arg?.data?.status === 'ACTIVE')
+    expect(restore?.[0].data).toEqual(before)
+  })
+})

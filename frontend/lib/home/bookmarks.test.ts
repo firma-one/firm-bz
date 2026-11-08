@@ -47,6 +47,11 @@ describe('getHomeBookmarks', () => {
         })
     })
 
+    it('throws when the read fails, so Home says so rather than "No bookmarks yet"', async () => {
+        prisma.userPersonalization.findUnique.mockRejectedValueOnce(new Error('db down'))
+        await expect(getHomeBookmarks('u1', [ACME])).rejects.toThrow('db down')
+    })
+
     it('reads nothing without firms or bookmarks', async () => {
         expect(await getHomeBookmarks('u1', [])).toEqual([])
         expect(prisma.userPersonalization.findUnique).not.toHaveBeenCalled()

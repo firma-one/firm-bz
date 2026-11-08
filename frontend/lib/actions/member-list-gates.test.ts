@@ -60,29 +60,31 @@ beforeEach(() => {
 
 describe('getFirmMembers', () => {
     it('refuses a stranger, a guest and a signed-out caller', async () => {
-        await expect(getFirmMembers('f1')).rejects.toThrow('Insufficient permissions')
+        expect(await getFirmMembers('f1')).toMatchObject({ ok: false, code: 'forbidden' })
         auth.user = null
-        await expect(getFirmMembers('f1')).rejects.toThrow('Unauthorized')
+        expect(await getFirmMembers('f1')).toMatchObject({ ok: false, code: 'unauthorized' })
     })
 
     it('gives a Client Partner the people for the owner picker, without invitations', async () => {
         db.clientPartner = true
         const res = await getFirmMembers('f1')
-        expect(res.members).toHaveLength(1)
-        expect(res.invitations).toEqual([])
+        if (!res.ok) throw new Error(res.error)
+        expect(res.data.members).toHaveLength(1)
+        expect(res.data.invitations).toEqual([])
     })
 
     it('gives a firm admin the invitations, never the invite token', async () => {
         db.firmAdmin = true
         const res = await getFirmMembers('f1')
-        expect(res.invitations).toHaveLength(1)
+        if (!res.ok) throw new Error(res.error)
+        expect(res.data.invitations).toHaveLength(1)
         expect(JSON.stringify(res)).not.toContain('SECRET-TOKEN')
     })
 })
 
 describe('getClientMembers', () => {
     it('is for the client\'s managers only, and never returns invite tokens', async () => {
-        await expect(getClientMembers('c1')).rejects.toThrow('Insufficient permissions')
+        expect(await getClientMembers('c1')).toMatchObject({ ok: false, code: 'forbidden' })
         perms.manageClient = true
         expect(JSON.stringify(await getClientMembers('c1'))).not.toContain('SECRET-TOKEN')
     })
@@ -92,7 +94,7 @@ describe('inviteClientMember', () => {
     it('checks the client\'s own firm, not the firmId the caller sends', async () => {
         perms.manageClient = true
         db.clientFirm = 'victim-firm'
-        await expect(inviteClientMember('attacker-firm', 'victim-client', 'me@evil.test')).rejects.toThrow('Client not found')
+        expect(await inviteClientMember('attacker-firm', 'victim-client', 'me@evil.test')).toMatchObject({ ok: false, code: 'not_found' })
         const { canManageClient } = await import('@/lib/permission-helpers')
         expect(canManageClient).not.toHaveBeenCalledWith('attacker-firm', expect.anything())
     })

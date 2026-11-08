@@ -12,7 +12,7 @@ export async function PATCH(
     // Auth: Bearer token from Supabase
     const authHeader = request.headers.get('authorization')
     if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return NextResponse.json({ error: 'Your session has expired. Sign in again.' }, { status: 401 })
     }
 
     const token = authHeader.slice(7)
@@ -34,7 +34,7 @@ export async function PATCH(
       data: { user },
     } = await supabase.auth.getUser(token)
     if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return NextResponse.json({ error: 'Your session has expired. Sign in again.' }, { status: 401 })
     }
 
     // Parse request body
@@ -50,11 +50,11 @@ export async function PATCH(
     })
 
     if (!ticket) {
-      return NextResponse.json({ error: 'Ticket not found' }, { status: 404 })
+      return NextResponse.json({ error: 'This request no longer exists.' }, { status: 404 })
     }
 
     if (!(await canAccessSupportTicket(user, ticket))) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      return NextResponse.json({ error: "You don't have access to this request." }, { status: 403 })
     }
 
     // Merge new attachments with existing (supports retries)
@@ -71,7 +71,7 @@ export async function PATCH(
   } catch (error) {
     console.error('Failed to update ticket attachments:', error)
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to update attachments' },
+      { error: 'Something went wrong on our side. Try again.' },
       { status: 500 }
     )
   }
@@ -86,7 +86,7 @@ export async function DELETE(
   try {
     const authHeader = request.headers.get('authorization')
     if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return NextResponse.json({ error: 'Your session has expired. Sign in again.' }, { status: 401 })
     }
 
     const token = authHeader.slice(7)
@@ -98,7 +98,7 @@ export async function DELETE(
 
     const { data: { user } } = await supabase.auth.getUser(token)
     if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return NextResponse.json({ error: 'Your session has expired. Sign in again.' }, { status: 401 })
     }
 
     const { attachmentId } = await request.json()
@@ -111,11 +111,11 @@ export async function DELETE(
       select: { id: true, attachments: true, userId: true, firmId: true },
     })
     if (!ticket) {
-      return NextResponse.json({ error: 'Ticket not found' }, { status: 404 })
+      return NextResponse.json({ error: 'This request no longer exists.' }, { status: 404 })
     }
 
     if (!(await canAccessSupportTicket(user, ticket))) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      return NextResponse.json({ error: "You don't have access to this request." }, { status: 403 })
     }
 
     const existingAttachments: any[] = Array.isArray(ticket.attachments) ? ticket.attachments : []
@@ -130,7 +130,7 @@ export async function DELETE(
   } catch (error) {
     console.error('Failed to remove ticket attachment:', error)
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to remove attachment' },
+      { error: 'Something went wrong on our side. Try again.' },
       { status: 500 }
     )
   }

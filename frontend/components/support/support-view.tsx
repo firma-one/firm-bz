@@ -13,6 +13,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/compon
 import { Hint } from "@/components/ui/tooltip"
 import { RelativeDateTime } from "@/components/ui/relative-date-time"
 import { useToast } from "@/components/ui/toast"
+import { LoadFailed } from "@/components/ui/load-failed"
 import { useRightPane } from "@/lib/right-pane-context"
 import { cn } from "@/lib/utils"
 import { TICKET_KIND_LABEL, inView, lastUpdate, wherePath, type SupportSide, type SupportTicket, type SupportView as View, type TicketKind } from "@/lib/support/ticket-view"
@@ -134,8 +135,12 @@ export function SupportView({
                             type="button"
                             aria-label="Copy link to this request"
                             onClick={() => {
-                                void navigator.clipboard.writeText(linkTo(ticketNumber))
-                                addToast({ type: "success", title: "Link copied" })
+                                // Said once the clipboard has it, not before: a blocked clipboard
+                                // otherwise read as "Link copied" with nothing to paste.
+                                navigator.clipboard.writeText(linkTo(ticketNumber)).then(
+                                    () => addToast({ type: "success", title: "Link copied" }),
+                                    () => addToast({ type: "error", title: "Couldn’t copy the link", message: "Your browser blocked the clipboard. Copy the address from the address bar instead." }),
+                                )
                             }}
                             className="flex h-7 w-7 items-center justify-center rounded-control text-fg-muted hover:bg-surface-hover hover:text-fg"
                         >
@@ -318,7 +323,7 @@ export function SupportView({
             {loading ? (
                 <div className="flex items-center justify-center py-16 text-fg-subtle"><Loader2 className="h-5 w-5 animate-spin" /></div>
             ) : error ? (
-                <p className="px-2 py-6 text-small text-danger">{error}</p>
+                <LoadFailed what="requests" reason={error} onRetry={() => void store.load()} />
             ) : (
                 // Columns give way as the table narrows (the right pane takes room too): Where first, then
                 // Raised by and Type; the request, its status and whose turn it is always stay.

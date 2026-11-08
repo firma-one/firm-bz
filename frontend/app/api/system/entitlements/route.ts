@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { adminFailure } from '@/app/api/system/admin-error'
 import { createClient } from '@/utils/supabase/server'
 import { isSysAdminUser } from '@/lib/system/user-data-map'
-import { logger } from '@/lib/logger'
 import {
     readEntitlementView,
     resyncGroupEntitlements,
@@ -71,8 +71,7 @@ export async function GET(request: NextRequest) {
         const view = await readEntitlementView(groupId)
         return NextResponse.json({ view, overridable: OVERRIDABLE_ENTITLEMENTS })
     } catch (error) {
-        logger.error('[system/entitlements] GET failed:', error as Error)
-        return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+        return adminFailure('load the entitlements', error)
     }
 }
 
@@ -91,13 +90,9 @@ export async function POST(request: NextRequest) {
         const view = await readEntitlementView(groupId)
         return NextResponse.json({ resync, view })
     } catch (error) {
-        logger.error('[system/entitlements] resync failed:', error as Error)
         // The Polar message is useful to an admin here (bad product id, revoked token), and this
         // route is system-admin only, so it is surfaced rather than swallowed.
-        return NextResponse.json(
-            { error: error instanceof Error ? error.message : 'Resync failed' },
-            { status: 500 },
-        )
+        return adminFailure('resync from Polar', error)
     }
 }
 
@@ -149,10 +144,6 @@ export async function PUT(request: NextRequest) {
         })
         return NextResponse.json({ view, resync })
     } catch (error) {
-        logger.error('[system/entitlements] override save failed:', error as Error)
-        return NextResponse.json(
-            { error: error instanceof Error ? error.message : 'Could not save overrides' },
-            { status: 400 },
-        )
+        return adminFailure('save the overrides', error, 400)
     }
 }

@@ -36,7 +36,7 @@
             "03__Regulatory_&_Legal_Sign-Off_Pack": { "name": "03__Regulatory_&_Legal_Sign-Off_Pack", "files": [
               { "name": "Claims Substantiation Review.pdf", "type": "pdf" },
               { "name": "Legal Sign-Off Memo.docx", "type": "docx" },
-              { "name": "Compliance Checklist.xlsx", "type": "xlsx" }
+              { "name": "Compliance Checklist.xlsx", "type": "xlsx", "private": true }
             ]},
             "04__Launch_Readiness_Kit": { "name": "04__Launch_Readiness_Kit", "files": [
               { "name": "Launch Runbook.pdf", "type": "pdf" },

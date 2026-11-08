@@ -3,6 +3,7 @@ import { createClient } from '@/utils/supabase/server'
 import { prisma } from '@/lib/prisma'
 import { resolveProjectContext } from '@/lib/resolve-project-context'
 import { canManageProject } from '@/lib/permission-helpers'
+import { blockIfEngagementCompleted } from '@/lib/engagement-access'
 import { getPermissionAdapter } from '@/lib/connectors/registry'
 import { assertFirmSubscriptionAccess } from '@/lib/billing/subscription-gate'
 import { SubscriptionRevokedError } from '@/lib/errors/api-error'
@@ -24,6 +25,9 @@ export async function DELETE(
 
     const canManage = await canManageProject(ctx.firmId, ctx.clientId, ctx.projectId)
     if (!canManage) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+    const completed = await blockIfEngagementCompleted(ctx.projectId)
+    if (completed) return completed
 
     await assertFirmSubscriptionAccess(ctx.firmId)
 

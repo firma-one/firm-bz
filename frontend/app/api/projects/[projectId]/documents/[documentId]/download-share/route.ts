@@ -9,6 +9,8 @@ import { applyDiagonalWatermark } from '@/lib/watermark-pdf'
 import { resolveEngagementConnectorId } from '@/lib/connectors/resolve-client-connector'
 import { getContentAdapter, getPermissionAdapter } from '@/lib/connectors/registry'
 import { googleDriveConnector } from '@/lib/google-drive-connector'
+import { contentFailure, NO_STORAGE_MESSAGE, providerOf } from '@/lib/connectors/content-failure'
+import type { StorageProvider } from '@/lib/connectors/storage-failure'
 
 /** A provider version id (Drive's revision ids; Graph's "3.0", and personal OneDrive's "!" ids). It goes into the provider's URL path, so nothing else gets through. */
 const REVISION_ID = /^[A-Za-z0-9_.!-]+$/
@@ -26,6 +28,8 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ projectId: string; documentId: string }> }
 ) {
+  // Named in the reasons a failed download gives: set once the document's storage is known.
+  let provider: StorageProvider = 'Google Drive'
   try {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
@@ -76,7 +80,9 @@ export async function GET(
     }
 
     const connectorId = await resolveEngagementConnectorId(projectId, document.connectorId)
-    if (!connectorId) return NextResponse.json({ error: 'No active storage connector' }, { status: 500 })
+    if (!connectorId) return NextResponse.json({ error: NO_STORAGE_MESSAGE, code: 'no_storage' }, { status: 409 })
+    const connector = await prisma.connector.findUnique({ where: { id: connectorId }, select: { type: true } })
+    provider = providerOf(connector?.type)
 
     // An earlier version, from the Version history pane. Internal roles only: a client may download
     // what was shared with them, and an earlier version never was. Google's revisions, and Graph's
@@ -85,7 +91,6 @@ export async function GET(
     if (revisionId) {
       if (isGuest || isEC) return NextResponse.json({ error: 'Download not permitted' }, { status: 403 })
       if (!REVISION_ID.test(revisionId)) return NextResponse.json({ error: 'Invalid version' }, { status: 400 })
-      const connector = await prisma.connector.findUnique({ where: { id: connectorId }, select: { type: true } })
       let version: { stream: ReadableStream | Buffer; mimeType?: string; size?: string; name?: string }
       if (connector?.type === 'GOOGLE_DRIVE') {
         version = await googleDriveConnector.downloadFile(connectorId, fileInfo.externalId, revisionId)
@@ -119,7 +124,7 @@ export async function GET(
     const contentAdapter = await getContentAdapter(connectorId)
     const permissionAdapter = await getPermissionAdapter(connectorId)
     if (!contentAdapter || !permissionAdapter) {
-      return NextResponse.json({ error: 'No content adapter available for connector' }, { status: 500 })
+      return NextResponse.json({ error: NO_STORAGE_MESSAGE, code: 'no_storage' }, { status: 409 })
     }
     const guestOptions = settings.share?.guest?.options ?? {}
     const sharePdfOnly = isGuest && guestOptions.sharePdfOnly
@@ -173,7 +178,9 @@ export async function GET(
       // Upload beside the original file and store the ID for future opens
       const originalMeta = await permissionAdapter.getFileMetadata(connectorId, fileInfo.externalId)
       const parentFolderId = originalMeta?.parents?.[0]
-      if (!parentFolderId) return NextResponse.json({ error: 'Could not resolve parent folder for shared PDF' }, { status: 500 })
+      if (!parentFolderId) {
+        return NextResponse.json({ error: `Couldn't prepare the PDF copy: ${provider} wouldn't say which folder the file is in. Try again.` }, { status: 502 })
+      }
       const baseName = (document.fileName ?? 'document').replace(/\.[^.]+$/, '')
       const pdfFileName = `${baseName}.pdf`
       const created = await contentAdapter.createFile(connectorId, parentFolderId, pdfFileName, pdfBuffer, 'application/pdf')
@@ -259,6 +266,10 @@ export async function GET(
     return new NextResponse(body, { status: 200, headers })
   } catch (e) {
     console.error('download-share error', e)
-    return NextResponse.json({ error: 'Failed to download file' }, { status: 500 })
+    // The storage's reason (gone, refused, a connection that needs renewing), so the Downloads tray
+    // can say "Download failed · …" instead of only that it failed (P1-41).
+    const failure = contentFailure(e, provider)
+    if (failure) return NextResponse.json({ error: failure.message, code: failure.reason }, { status: failure.status })
+    return NextResponse.json({ error: `${provider} couldn't make this file into a download. Try again, or open it in ${provider}.` }, { status: 502 })
   }
 }

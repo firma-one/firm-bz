@@ -12,7 +12,8 @@ import { TICKET_STATUSES, wherePath, type SupportSide, type SupportTicket } from
 import type { AttachmentMeta } from "@/lib/support-attachment-upload"
 import { KindTag, SupportAvatar, formatBytes } from "./support-bits"
 import { SupportDropZone } from "./support-drop-zone"
-import { useSupportState, type SupportStore } from "./support-store"
+import { describeFileFailures, useSupportState, type SupportStore } from "./support-store"
+import { failureReason } from "@/lib/files/action-failure"
 
 /*
  * One request in the right pane (.claude/plans/app-design-refinements.md, section 14): its properties,
@@ -89,7 +90,8 @@ export function SupportRequestPanel({
             await store.addComment(ticket.ticketNumber, text)
             setReply("")
         } catch (e) {
-            addToast({ type: "error", title: e instanceof Error ? e.message : "Couldn’t send your reply" })
+            // The reply stays in the box, so nothing typed is lost.
+            addToast({ type: "error", title: "Couldn’t send your reply", message: failureReason(e) })
         } finally {
             setSending(false)
         }
@@ -99,10 +101,18 @@ export function SupportRequestPanel({
         setUploading(true)
         try {
             const failed = await store.addFiles(ticket.ticketNumber, files)
-            if (failed) addToast({ type: "error", title: `${failed} file${failed === 1 ? "" : "s"} couldn’t be attached` })
-            else setShowDrop(false)
+            if (failed.length) {
+                const attached = files.length - failed.length
+                addToast({
+                    type: attached > 0 ? "warning" : "error",
+                    title: attached > 0
+                        ? `Attached ${attached} of ${files.length} files`
+                        : `Couldn’t attach ${failed.length === 1 ? "the file" : "the files"}`,
+                    message: describeFileFailures(failed),
+                })
+            } else setShowDrop(false)
         } catch (e) {
-            addToast({ type: "error", title: e instanceof Error ? e.message : "Couldn’t attach the files" })
+            addToast({ type: "error", title: "Couldn’t attach the files", message: failureReason(e) })
         } finally {
             setUploading(false)
         }
@@ -121,7 +131,7 @@ export function SupportRequestPanel({
                             options={TICKET_STATUSES}
                             onChange={(next) =>
                                 store.setStatus(ticket.ticketNumber, next as SupportTicket["status"]).catch((e) =>
-                                    addToast({ type: "error", title: e instanceof Error ? e.message : "Couldn’t change the status" })
+                                    addToast({ type: "error", title: "Couldn’t change the status", message: failureReason(e) })
                                 )
                             }
                         />

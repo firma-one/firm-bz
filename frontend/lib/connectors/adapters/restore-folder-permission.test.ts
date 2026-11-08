@@ -80,8 +80,8 @@ describe('on Google Drive', () => {
         expect(writes()[0].body).toMatchObject({ role: 'writer', emailAddress: 'Sam@Firm.test' })
     })
 
-    it('says so when Drive refuses', async () => {
+    it('says why when Drive refuses', async () => {
         vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 403 })))
-        expect(await restore()).toBe(false)
+        await expect(restore()).rejects.toMatchObject({ name: 'StorageFailure', reason: 'no_permission' })
     })
 })

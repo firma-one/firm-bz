@@ -5,14 +5,20 @@ import { prisma } from "@/lib/prisma"
 import { isAgentUser } from "@/lib/ai/files-agent/agent-identity"
 import { createClient as createSupabaseAdmin } from '@supabase/supabase-js'
 import { revalidatePath } from "next/cache"
-import { InvitationStatus, DocumentSharingPermissionStatus } from '@prisma/client'
+import { InvitationStatus } from '@prisma/client'
 import { logger } from '@/lib/logger'
-import { googleDriveConnector } from '@/lib/google-drive-connector'
 import { safeInngestSend } from '@/lib/inngest/client'
+import { asResult, userFacing, type ActionResult } from '@/lib/actions/action-result'
+import { revokeSharePermissions, SHARE_TO_REVOKE_SELECT } from '@/lib/connectors/revoke-share-permissions'
+import { revokeMemberFolderAccess, type FolderAccessFailure } from '@/lib/connectors/firm-folder-access'
+import { engagementFoldersFor } from '@/lib/grant-engagement-drive-folder-access'
+import { accessStillStanding, storageProviderName } from '@/lib/storage-access-notice'
+import { BRAND_NAME } from '@/config/brand'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 import { removeRemindersByEntity } from '@/lib/reminders/reminder-service'
 import { getAvatarUrlFromSupabaseUser } from '@/lib/supabase-user-helpers'
 import { requireEngagementManager, isEngagementPersonaSlug } from '@/lib/permissions/require-engagement-manager'
+import { gone, notAllowed, requireEngagementManagerTo, signedOut } from '@/lib/actions/action-reasons'
 
 // Admin Client for fetching user details
 const supabaseAdmin = createSupabaseAdmin(
@@ -20,20 +26,27 @@ const supabaseAdmin = createSupabaseAdmin(
     process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-export async function getProjectMembers(projectId: string) {
+export type ProjectMembersData = Awaited<ReturnType<typeof getProjectMembersOrThrow>>
+
+/** The engagement's members and open invitations. A failed load answers its reason, never an empty list. */
+export async function getProjectMembers(projectId: string): Promise<ActionResult<ProjectMembersData>> {
+    return asResult('getProjectMembers', () => getProjectMembersOrThrow(projectId))
+}
+
+async function getProjectMembersOrThrow(projectId: string) {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error("Unauthorized")
+    if (!user) throw signedOut()
 
     // Names, emails and pending invites: the same people who see the Members tab.
     const engagement = await prisma.engagement.findFirst({
         where: { id: projectId, isDeleted: false },
         select: { clientId: true, client: { select: { firmId: true } } },
     })
-    if (!engagement) throw new Error("Engagement not found")
+    if (!engagement) throw gone('This engagement was deleted.')
     const { canViewProjectInternalTabs } = await import('@/lib/permission-helpers')
     if (!(await canViewProjectInternalTabs(engagement.client.firmId, engagement.clientId, projectId))) {
-        throw new Error("Insufficient permissions")
+        throw notAllowed("see this engagement's members")
     }
 
     // 1. Fetch Members (engagement = project in UI)
@@ -65,9 +78,12 @@ export async function getProjectMembers(projectId: string) {
                 }
             }
         } catch (e) {
+            // Marked as a failed lookup, not passed off as a person called "Unknown User".
+            logger.error('Could not look up an engagement member', e as Error)
             return {
                 ...m,
-                user: { email: 'Unknown', name: 'Unknown User' }
+                lookupFailed: true as const,
+                user: { email: '', name: "Couldn't load this member's details" }
             }
         }
     }))
@@ -159,270 +175,318 @@ export async function getProjectMemberSummaries(projectIds: string[]): Promise<R
     return result
 }
 
-export async function removeMember(memberId: string) {
+/**
+ * The engagement-manager gate, in words a person can read: thrown from a server action, its own
+ * message never reaches the browser (see action-result.ts).
+ */
+async function requireMemberManager(engagementId: string) {
     try {
-        const supabase = await createClient()
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) throw new Error("Unauthorized")
+        return await requireEngagementManager(engagementId)
+    } catch (e) {
+        const message = e instanceof Error ? e.message : ''
+        if (message === 'Unauthorized') throw userFacing('Your session has ended. Sign in again.', 'unauthorized')
+        if (message === 'Engagement not found') throw userFacing('This engagement no longer exists.', 'not_found')
+        if (message === 'Insufficient permissions') throw userFacing("You don't have permission to change this engagement's members.", 'forbidden')
+        throw e
+    }
+}
 
-        const member = await prisma.engagementMember.findUnique({
-            where: { id: memberId },
-            include: {
-                engagement: {
-                    select: {
-                        id: true,
-                        connectorRootFolderId: true,
-                        client: {
-                            select: {
-                                firmId: true,
-                            }
+/**
+ * Removes a member from an engagement, and their access in storage with it: the permissions a secure
+ * open granted them on files, and their grants on the engagement's General, Confidential and Staging
+ * folders (where Firma shares them, not the engagement's root), on Google Drive and OneDrive.
+ *
+ * Storage is asked first, and once more for what it refused, because removing the member drops their
+ * sharing rows and with them the permission ids. What still stands after that is answered as the
+ * result's `warning`: "Removed in Firma, but Google Drive still gives them access to General · {why}".
+ */
+export async function removeMember(memberId: string): Promise<ActionResult> {
+    const result = await asResult('removeMember', () => removeMemberAndAccess(memberId))
+    if (!result.ok) return result
+    return { ok: true, data: undefined, ...(result.data.warning ? { warning: result.data.warning } : {}) }
+}
+
+async function removeMemberAndAccess(memberId: string): Promise<{ warning?: string }> {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) throw userFacing('Your session has ended. Sign in again.', 'unauthorized')
+
+    const member = await prisma.engagementMember.findUnique({
+        where: { id: memberId },
+        include: {
+            engagement: {
+                select: {
+                    id: true,
+                    connectorRootFolderId: true,
+                    client: {
+                        select: {
+                            firmId: true,
                         }
                     }
                 }
             }
-        })
-
-        if (!member) throw new Error("Member not found")
-        await requireEngagementManager(member.engagementId)
-
-        // Fetch member email once — reused for Drive revocation and invitation supersede
-        let memberEmail: string | undefined
-        try {
-            const { data: { user: memberUser } } = await supabaseAdmin.auth.admin.getUserById(member.userId)
-            memberEmail = memberUser?.email
-        } catch (error) {
-            logger.error('Error fetching member user for removal', error as Error)
         }
+    })
 
-        // Resolve via the canonical client-first-then-firm-fallback chain, not a hand-rolled
-        // firm.connectorId read — Client.connectorId is the authoritative, newer field
-        // (Firm.connectorId is a legacy fallback for clients not yet backfilled). See
-        // resolve-client-connector.ts and .claude/plans/connector-microsoft-impl.md, item 19.
-        const { resolveEngagementConnectorId } = await import('@/lib/connectors/resolve-client-connector')
-        const connectorId = await resolveEngagementConnectorId(member.engagementId)
+    if (!member) throw userFacing('This person is no longer on the engagement. Refresh the list.', 'not_found')
+    await requireMemberManager(member.engagementId)
 
-        // Revoke document-level connector permissions BEFORE deleting the member row.
-        // The FK cascade will drop sharing rows (and their connectorPermissionId) when
-        // the member is deleted — so we must read and revoke them first.
-        if (connectorId) {
-            try {
-                const { getPermissionAdapter } = await import('@/lib/connectors/registry')
-                const adapter = await getPermissionAdapter(connectorId)
-                if (adapter) {
-                    const sharingRows = await prisma.engagementDocumentSharingUser.findMany({
-                        where: {
-                            engagementId: member.engagementId,
-                            userId: member.userId,
-                            sharingPermissionStatus: DocumentSharingPermissionStatus.GRANTED,
-                            connectorPermissionId: { not: null },
-                        },
-                        select: { connectorPermissionId: true, document: { select: { externalId: true } } },
-                    })
-                    await Promise.allSettled(
-                        sharingRows
-                            .filter((s) => s.connectorPermissionId && s.document?.externalId)
-                            .map((s) => adapter.revokePermission(connectorId, s.document!.externalId, s.connectorPermissionId!))
-                    )
-                }
-            } catch (error) {
-                logger.error('Error revoking document-level connector permissions on member removal', error as Error)
-            }
-        }
-
-        // Revoke folder-level connector access — Google-only safety net (explicit per-email
-        // folder revoke); OneDrive's per-document revokePermission above already handles the
-        // main revocation path since Graph has no folder-level revoke-by-email equivalent.
-        if (member.engagement.connectorRootFolderId && memberEmail) {
-            try {
-                if (connectorId) {
-                    const connector = await prisma.connector.findUnique({ where: { id: connectorId }, select: { type: true } })
-                    if (connector?.type === 'GOOGLE_DRIVE') {
-                        await googleDriveConnector.revokeFolderPermissionByEmail(
-                            connectorId,
-                            member.engagement.connectorRootFolderId,
-                            memberEmail
-                        )
-                    }
-                }
-            } catch (error) {
-                logger.error('Error revoking Drive folder access', error as Error)
-            }
-        }
-
-        // Entra ID guest tenancy revocation (deleting the guest's directory object entirely) was
-        // considered but is deliberately OUT OF SCOPE — removal from an engagement only revokes
-        // that engagement's document/folder access (above), never touches the underlying Entra
-        // guest identity. See .claude/plans/connector-microsoft-impl.md, item 19, Part 3.
-
-        // Atomic: delete engagement member + conditionally cascade to firmMember.
-        // EC/EV guests get a firmMember row on accept but are not true firm members —
-        // remove it if they have no other engagements. firm_admins are never cascaded.
-        // The FK cascade on engagement_document_sharing_users drops their sharing rows here.
-        const firmId = member.engagement.client.firmId
-        await prisma.$transaction(async (tx) => {
-            await tx.engagementMember.delete({ where: { id: memberId } })
-
-            const firmMembership = await tx.firmMember.findFirst({
-                where: { userId: member.userId, firmId },
-                select: { role: true },
-            })
-            const isActualFirmAdmin = firmMembership?.role === 'firm_admin'
-            if (!isActualFirmAdmin) {
-                const remainingEngagements = await tx.engagementMember.count({
-                    where: {
-                        userId: member.userId,
-                        engagement: { client: { firmId } },
-                    },
-                })
-                if (remainingEngagements === 0) {
-                    await tx.firmMember.deleteMany({
-                        where: { userId: member.userId, firmId },
-                    })
-                }
-            }
-        })
-
-        // Mark invitation as SUPERSEDED so the member can be re-invited
-        if (memberEmail) {
-            try {
-                await prisma.engagementInvitation.updateMany({
-                    where: { engagementId: member.engagementId, email: memberEmail, status: InvitationStatus.JOINED },
-                    data: { status: InvitationStatus.SUPERSEDED },
-                })
-            } catch (error) {
-                logger.error('Error superseding invitation on member removal', error as Error)
-            }
-        }
-
-        audit(AUDIT_EVENT.ENGAGEMENT_MEMBER_REMOVED)
-            .scope(AUDIT_SCOPE.ENGAGEMENT)
-            .firm(member.engagement.client.firmId)
-            .engagement(member.engagementId)
-            .actor(user.id)
-            .meta({ removedUserId: member.userId })
-            .fireAndForget()
-
-        const { invalidateUserSettingsPlus } = await import('@/lib/permissions/invalidate-user-settings')
-        await invalidateUserSettingsPlus(member.userId)
-
-        // Async: reminder cleanup + session sign-out via Inngest (retried on failure)
-        await safeInngestSend('engagement.member.removed', {
-            engagementId: member.engagementId,
-            userId: member.userId,
-            timestamp: new Date().toISOString(),
-        })
-
-        revalidatePath('/d/[groupSlug]/f/[firmSlug]/c/[clientSlug]/e/[engagementSlug]', 'layout')
+    // Fetch member email once — reused for folder revocation and invitation supersede
+    let memberEmail: string | undefined
+    try {
+        const { data: { user: memberUser } } = await supabaseAdmin.auth.admin.getUserById(member.userId)
+        memberEmail = memberUser?.email
     } catch (error) {
-        logger.error('Failed to remove member', error as Error)
-        throw error
+        logger.error('Error fetching member user for removal', error as Error)
     }
+
+    // 1. File permissions, BEFORE the member row goes: the FK cascade drops their sharing rows, and the
+    //    permission ids with them. Any row still holding an id, whatever its status: a REVOKED row with
+    //    one is a revoke that didn't finish. Through the connector each was granted on.
+    const shares = await prisma.engagementDocumentSharingUser.findMany({
+        where: { engagementId: member.engagementId, userId: member.userId, connectorPermissionId: { not: null } },
+        select: { ...SHARE_TO_REVOKE_SELECT, document: { select: { externalId: true, connectorId: true, fileName: true } } },
+    })
+    const fileOutcome = await revokeSharePermissions(member.engagementId, shares)
+    let filesStanding = fileOutcome.failed
+    let fileReasons = fileOutcome.reasons
+    if (fileOutcome.failed.length > fileOutcome.unreachable) {
+        const again = await revokeSharePermissions(member.engagementId, shares.filter((s) => fileOutcome.failed.includes(s.id)))
+        filesStanding = again.failed
+        fileReasons = again.reasons
+    }
+
+    // 2. Folder grants on General, Confidential and Staging, on both storages.
+    let folderFailures: FolderAccessFailure[] = []
+    if (memberEmail) {
+        const folders = await revokeMemberFolderAccess(member.engagementId, { userId: member.userId, email: memberEmail })
+        folderFailures = folders.failures
+        if (folderFailures.length > 0) {
+            const again = await revokeMemberFolderAccess(member.engagementId, { userId: member.userId, email: memberEmail }, folderFailures.map((f) => f.folder))
+            folderFailures = again.failures
+        }
+    }
+
+    // Entra ID guest tenancy revocation (deleting the guest's directory object entirely) was
+    // considered but is deliberately OUT OF SCOPE — removal from an engagement only revokes
+    // that engagement's document/folder access (above), never touches the underlying Entra
+    // guest identity. See .claude/plans/connector-microsoft-impl.md, item 19, Part 3.
+
+    // Atomic: delete engagement member + conditionally cascade to firmMember.
+    // EC/EV guests get a firmMember row on accept but are not true firm members —
+    // remove it if they have no other engagements. firm_admins are never cascaded.
+    // The FK cascade on engagement_document_sharing_users drops their sharing rows here.
+    const firmId = member.engagement.client.firmId
+    await prisma.$transaction(async (tx) => {
+        await tx.engagementMember.delete({ where: { id: memberId } })
+
+        const firmMembership = await tx.firmMember.findFirst({
+            where: { userId: member.userId, firmId },
+            select: { role: true },
+        })
+        const isActualFirmAdmin = firmMembership?.role === 'firm_admin'
+        if (!isActualFirmAdmin) {
+            const remainingEngagements = await tx.engagementMember.count({
+                where: {
+                    userId: member.userId,
+                    engagement: { client: { firmId } },
+                },
+            })
+            if (remainingEngagements === 0) {
+                await tx.firmMember.deleteMany({
+                    where: { userId: member.userId, firmId },
+                })
+            }
+        }
+    })
+
+    // Mark invitation as SUPERSEDED so the member can be re-invited
+    if (memberEmail) {
+        try {
+            await prisma.engagementInvitation.updateMany({
+                where: { engagementId: member.engagementId, email: memberEmail, status: InvitationStatus.JOINED },
+                data: { status: InvitationStatus.SUPERSEDED },
+            })
+        } catch (error) {
+            logger.error('Error superseding invitation on member removal', error as Error)
+        }
+    }
+
+    audit(AUDIT_EVENT.ENGAGEMENT_MEMBER_REMOVED)
+        .scope(AUDIT_SCOPE.ENGAGEMENT)
+        .firm(member.engagement.client.firmId)
+        .engagement(member.engagementId)
+        .actor(user.id)
+        .meta({ removedUserId: member.userId })
+        .fireAndForget()
+
+    const { invalidateUserSettingsPlus } = await import('@/lib/permissions/invalidate-user-settings')
+    await invalidateUserSettingsPlus(member.userId)
+
+    // Async: reminder cleanup via Inngest (retried on failure). Access was taken back above.
+    await safeInngestSend('engagement.member.removed', {
+        engagementId: member.engagementId,
+        userId: member.userId,
+        timestamp: new Date().toISOString(),
+    })
+
+    revalidatePath('/d/[groupSlug]/f/[firmSlug]/c/[clientSlug]/e/[engagementSlug]', 'layout')
+
+    // What storage still allows, in the result: the toast is the only place the person hears it.
+    const fileNames = shares.filter((s) => filesStanding.includes(s.id)).map((s) => s.document?.fileName || 'a file')
+    if (fileNames.length === 0 && folderFailures.length === 0) {
+        if (!memberEmail && member.engagement.connectorRootFolderId) {
+            return { warning: `Removed in ${BRAND_NAME}, but their address couldn't be looked up, so their folder access in storage wasn't checked.` }
+        }
+        return {}
+    }
+    const warning = accessStillStanding({
+        done: `Removed in ${BRAND_NAME}`,
+        provider: await storageProviderName(member.engagementId),
+        folders: folderFailures.map((f) => f.folder),
+        files: fileNames,
+        reason: folderFailures[0]?.reason ?? fileReasons[filesStanding[0]],
+    })
+    logger.warn('Member removed, but storage still gives them access', { engagementId: member.engagementId, files: fileNames.length, folders: folderFailures.length })
+    return warning ? { warning } : {}
 }
 
-export async function revokeInvitation(invitationId: string) {
-    try {
+export async function revokeInvitation(invitationId: string): Promise<ActionResult> {
+    return asResult('revokeInvitation', async () => {
         const supabase = await createClient()
         const { data: { user } } = await supabase.auth.getUser()
-        if (!user) throw new Error("Unauthorized")
+        if (!user) throw signedOut()
 
         const invite = await prisma.engagementInvitation.findUnique({
             where: { id: invitationId },
             select: { createdBy: true, engagementId: true },
         })
-        if (!invite) throw new Error("Invitation not found")
+        if (!invite) throw gone('This invitation was already withdrawn.')
 
         // The engagement's lead, a client manager or a firm admin. This used to accept firm
         // managers only — and skipped the check entirely when the engagement lookup came back empty.
-        await requireEngagementManager(invite.engagementId)
+        await requireEngagementManagerTo(invite.engagementId, "withdraw this engagement's invitations")
 
         await prisma.engagementInvitation.delete({ where: { id: invitationId } })
         if (invite?.createdBy) {
             await removeRemindersByEntity(invite.createdBy, 'platform.engagement_invitations.id', invitationId).catch(() => {})
         }
         revalidatePath('/d/[groupSlug]/f/[firmSlug]/c/[clientSlug]/e/[engagementSlug]', 'layout')
-    } catch (error) {
-        logger.error('Failed to revoke invitation', error as Error)
-        throw error
-    }
+    })
 }
 
-export async function updateMemberPersona(memberId: string, personaId: string) {
+/**
+ * Changes a member's role, and their storage access to match it.
+ *
+ * Lowering takes back at once the folder grants the new role doesn't have (Lead to Contributor · Full
+ * Access: Confidential and Staging; to Contributor · Limited Access or Reviewer: all three), and says in
+ * the result's `warning` what storage refused. The revoke job (project.member.persona.updated) does the
+ * same after it, with the per-file permissions, retries and tells the Leads; the grant job
+ * (project.member.added) shares what a raised role gains. When either can't be started, the warning
+ * says so.
+ */
+export async function updateMemberPersona(memberId: string, personaId: string): Promise<ActionResult> {
+    const result = await asResult('updateMemberPersona', () => changeMemberRole(memberId, personaId))
+    if (!result.ok) return result
+    return { ok: true, data: undefined, ...(result.data.warning ? { warning: result.data.warning } : {}) }
+}
+
+async function changeMemberRole(memberId: string, personaId: string): Promise<{ warning?: string }> {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) throw userFacing('Your session has ended. Sign in again.', 'unauthorized')
+
+    const member = await prisma.engagementMember.findUnique({
+        where: { id: memberId },
+        include: { engagement: { include: { client: true } } }
+    })
+    if (!member) throw userFacing('This person is no longer on the engagement. Refresh the list.', 'not_found')
+    await requireMemberManager(member.engagementId)
+
+    const newPersona = await prisma.persona.findUnique({
+        where: { id: personaId }
+    })
+    if (!newPersona) throw userFacing("That role isn't available any more. Refresh and choose again.", 'not_found')
+    if (!isEngagementPersonaSlug(newPersona.slug)) throw userFacing("That role can't be given on an engagement. Choose another.", 'invalid_role')
+
+    const oldPersonaSlug = member.role ?? null
+    const newPersonaSlug = newPersona.slug
+
+    await prisma.engagementMember.update({
+        where: { id: memberId },
+        data: { role: newPersonaSlug }
+    })
+
+    // No sign-out: the new role applies on the person's next request (its cache is invalidated
+    // below), so ending their sign-ins would add nothing but an interruption.
+
+    const timestamp = new Date().toISOString()
+
+    const revokeStarted = await safeInngestSend('project.member.persona.updated', {
+        projectId: member.engagementId,
+        organizationId: member.engagement.client.firmId,
+        memberId,
+        userId: member.userId,
+        oldPersonaId: null,
+        newPersonaId: personaId,
+        oldPersonaSlug,
+        newPersonaSlug,
+        timestamp,
+        changedBy: user.id
+    })
+
+    let memberEmail: string | undefined
     try {
-        const supabase = await createClient()
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) throw new Error("Unauthorized")
+        const { data: { user: memberUser } } = await supabaseAdmin.auth.admin.getUserById(member.userId)
+        memberEmail = memberUser?.email || memberUser?.user_metadata?.email
+    } catch (error) {
+        logger.error('Error fetching member user for a role change', error as Error)
+    }
 
-        const member = await prisma.engagementMember.findUnique({
-            where: { id: memberId },
-            include: { engagement: { include: { client: true } } }
-        })
-        if (!member) throw new Error("Member not found")
-        await requireEngagementManager(member.engagementId)
-
-        const newPersona = await prisma.persona.findUnique({
-            where: { id: personaId }
-        })
-        if (!newPersona) throw new Error("Persona not found")
-        if (!isEngagementPersonaSlug(newPersona.slug)) throw new Error("Not an engagement role")
-
-        const oldPersonaSlug = member.role ?? null
-        const newPersonaSlug = newPersona.slug
-
-        await prisma.engagementMember.update({
-            where: { id: memberId },
-            data: { role: newPersonaSlug }
-        })
-
-        // No sign-out: the new role applies on the person's next request (its cache is invalidated
-        // below), so ending their sign-ins would add nothing but an interruption.
-
-        const timestamp = new Date().toISOString()
-
-        await safeInngestSend('project.member.persona.updated', {
+    let grantStarted = true
+    const accessGrantingPersonas = ['eng_viewer', 'eng_ext_collaborator', 'eng_member', 'eng_admin']
+    if (accessGrantingPersonas.includes(newPersonaSlug) && memberEmail) {
+        grantStarted = await safeInngestSend('project.member.added', {
             projectId: member.engagementId,
             organizationId: member.engagement.client.firmId,
             memberId,
             userId: member.userId,
-            oldPersonaId: null,
-            newPersonaId: personaId,
-            oldPersonaSlug,
-            newPersonaSlug,
-            timestamp,
-            changedBy: user.id
+            email: memberEmail,
+            personaSlug: newPersonaSlug,
+            timestamp
         })
-
-        const accessGrantingPersonas = ['eng_viewer', 'eng_ext_collaborator', 'eng_member', 'eng_admin']
-        if (accessGrantingPersonas.includes(newPersonaSlug)) {
-            const { data: { user: memberUser } } = await supabaseAdmin.auth.admin.getUserById(member.userId)
-            const memberEmail = memberUser?.email || memberUser?.user_metadata?.email
-
-            if (memberEmail) {
-                await safeInngestSend('project.member.added', {
-                    projectId: member.engagementId,
-                    organizationId: member.engagement.client.firmId,
-                    memberId,
-                    userId: member.userId,
-                    email: memberEmail,
-                    personaSlug: newPersonaSlug,
-                    timestamp
-                })
-            }
-        }
-
-        audit(AUDIT_EVENT.ENGAGEMENT_MEMBER_ROLE_CHANGED)
-            .scope(AUDIT_SCOPE.ENGAGEMENT)
-            .firm(member.engagement.client.firmId)
-            .engagement(member.engagementId)
-            .actor(user.id)
-            .meta({ memberId, userId: member.userId, oldRole: oldPersonaSlug, newRole: newPersonaSlug })
-            .fireAndForget()
-
-        const { invalidateUserSettingsPlus } = await import('@/lib/permissions/invalidate-user-settings')
-        await invalidateUserSettingsPlus(member.userId)
-
-        return { success: true }
-    } catch (error) {
-        logger.error('Failed to update member persona', error as Error)
-        throw error
     }
+
+    // Folder grants the new role doesn't have, taken back now, so the answer can say what still stands.
+    const kept = new Set(engagementFoldersFor(newPersonaSlug))
+    const lost = engagementFoldersFor(oldPersonaSlug).filter((folder) => !kept.has(folder))
+    let folderFailures: FolderAccessFailure[] = []
+    if (lost.length > 0 && memberEmail) {
+        folderFailures = (await revokeMemberFolderAccess(member.engagementId, { userId: member.userId, email: memberEmail }, lost)).failures
+    }
+
+    audit(AUDIT_EVENT.ENGAGEMENT_MEMBER_ROLE_CHANGED)
+        .scope(AUDIT_SCOPE.ENGAGEMENT)
+        .firm(member.engagement.client.firmId)
+        .engagement(member.engagementId)
+        .actor(user.id)
+        .meta({ memberId, userId: member.userId, oldRole: oldPersonaSlug, newRole: newPersonaSlug })
+        .fireAndForget()
+
+    const { invalidateUserSettingsPlus } = await import('@/lib/permissions/invalidate-user-settings')
+    await invalidateUserSettingsPlus(member.userId)
+
+    if (folderFailures.length > 0) {
+        const warning = accessStillStanding({
+            done: `Role updated in ${BRAND_NAME}`,
+            provider: await storageProviderName(member.engagementId),
+            folders: folderFailures.map((f) => f.folder),
+            reason: folderFailures[0].reason,
+        })
+        if (warning) return { warning }
+    }
+    if (!revokeStarted || !grantStarted) {
+        return { warning: `Role updated in ${BRAND_NAME}, but updating their access in storage didn't start. Save the role again to retry.` }
+    }
+    return {}
 }

@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 
 import Logo from '@/components/Logo'
@@ -12,8 +12,77 @@ import { upgradeCopy } from '@/lib/billing/upgrade-copy'
 import { cn } from '@/lib/utils'
 import { clearCheckoutIntent, readCheckoutIntent } from '@/lib/marketing/checkout-intent'
 import { supabase } from '@/lib/supabase'
+import { failureFrom, failureReason } from '@/lib/files/action-failure'
 
 const REDIRECT_SECONDS = 5
+/** How often, and for how long, the page asks whether the plan is active before saying it isn't yet. */
+const ACTIVATION_POLL_MS = 3000
+const ACTIVATION_WAIT_MS = 60_000
+
+/**
+ * Where this checkout stands. `checking` until our own plan row shows it (Polar can take the money
+ * before its webhook lands, or the webhook can match no group); `unknown` when there is no checkout id
+ * to ask about.
+ */
+export type ActivationState = 'checking' | 'awaiting_payment' | 'active' | 'stalled' | 'not_paid' | 'unknown'
+
+type StatusAnswer = { state?: 'active' | 'activating' | 'awaiting_payment' | 'not_paid'; error?: string }
+
+/** Ask `/api/billing/checkout-status` until the plan is active, Polar says it wasn't paid, or time runs out. */
+export function useCheckoutActivation(checkoutId: string | undefined): {
+    state: ActivationState
+    /** True when the page's "it isn't active yet" report reached us (so "have been alerted" is true). */
+    reported: boolean
+} {
+    const [state, setState] = useState<ActivationState>(checkoutId ? 'checking' : 'unknown')
+    const [reported, setReported] = useState(false)
+    const startedAt = useRef<number>(0)
+
+    useEffect(() => {
+        if (!checkoutId) {
+            setState('unknown')
+            return
+        }
+        let cancelled = false
+        let timer: number | null = null
+        startedAt.current = Date.now()
+        setState('checking')
+
+        const ask = async (final: boolean): Promise<StatusAnswer | null> => {
+            try {
+                const res = await fetch(
+                    `/api/billing/checkout-status?checkoutId=${encodeURIComponent(checkoutId)}${final ? '&final=1' : ''}`,
+                    { cache: 'no-store', credentials: 'same-origin' }
+                )
+                if (!res.ok) return null
+                return (await res.json().catch(() => null)) as StatusAnswer | null
+            } catch {
+                return null
+            }
+        }
+
+        const tick = async () => {
+            const timedOut = Date.now() - startedAt.current >= ACTIVATION_WAIT_MS
+            const answer = await ask(timedOut)
+            if (cancelled) return
+            if (answer?.state === 'active') return setState('active')
+            if (answer?.state === 'not_paid') return setState('not_paid')
+            if (timedOut) {
+                setReported(answer?.state === 'activating')
+                return setState(answer?.state === 'awaiting_payment' ? 'awaiting_payment' : 'stalled')
+            }
+            if (answer?.state === 'awaiting_payment') setState('awaiting_payment')
+            timer = window.setTimeout(() => void tick(), ACTIVATION_POLL_MS)
+        }
+        void tick()
+        return () => {
+            cancelled = true
+            if (timer != null) window.clearTimeout(timer)
+        }
+    }, [checkoutId])
+
+    return { state, reported }
+}
 
 export type SuccessRedirectMode = 'default' | 'onboardingAfterCheckout'
 
@@ -44,6 +113,55 @@ function useResolvedCheckoutId(prop?: string): string | undefined {
     }, [prop, queryKey, searchParams])
 }
 
+/** What the card says for each state. "You're all set" only once the plan is active. */
+export function activationCopy(
+    state: ActivationState,
+    opts: { isOnboarding: boolean; checkoutId?: string; reported: boolean }
+): { title: string; body: string; icon: string; waiting: boolean } {
+    const ref = opts.checkoutId ? ` · reference ${opts.checkoutId}` : ''
+    switch (state) {
+        case 'checking':
+            return { title: 'Payment received', body: 'Activating your plan…', icon: '✓', waiting: true }
+        case 'awaiting_payment':
+            return {
+                title: 'Waiting for Polar',
+                body: 'Polar, our payment provider, is still confirming your payment. This page updates when it does.',
+                icon: '…',
+                waiting: true,
+            }
+        case 'active':
+            return {
+                title: "You're all set",
+                body: `Thanks for subscribing. ${opts.isOnboarding ? 'Continuing setup in a moment.' : 'Taking you back in a moment.'}`,
+                icon: '✓',
+                waiting: false,
+            }
+        case 'stalled':
+            return {
+                title: 'Payment received',
+                body: opts.reported
+                    ? `We couldn't activate your plan yet and have been alerted${ref}.`
+                    : `We couldn't confirm your plan yet. Check Billing in a minute, or contact support${ref}.`,
+                icon: '!',
+                waiting: false,
+            }
+        case 'not_paid':
+            return {
+                title: "Checkout didn't finish",
+                body: "Polar didn't take a payment, so you have not been charged. Pick a plan again from Billing.",
+                icon: '!',
+                waiting: false,
+            }
+        case 'unknown':
+            return {
+                title: 'Checkout finished',
+                body: 'Billing shows your plan as soon as Polar confirms the payment.',
+                icon: '✓',
+                waiting: false,
+            }
+    }
+}
+
 export function SuccessRedirectCard({
     checkoutId,
     mode = 'default',
@@ -62,7 +180,15 @@ export function SuccessRedirectCard({
     const [secondsLeft, setSecondsLeft] = useState(isOnboarding ? ONBOARDING_REDIRECT_SECONDS : REDIRECT_SECONDS)
     const [invoiceLoading, setInvoiceLoading] = useState(false)
     const [invoiceError, setInvoiceError] = useState<string | null>(null)
+    /** The invoice link, in case the browser blocked opening it in a new tab after the wait. */
+    const [invoiceLink, setInvoiceLink] = useState<string | null>(null)
     const [continueOnboardingPending, setContinueOnboardingPending] = useState(false)
+    /** Saving onboarding progress failed after paying: say so, and let Continue go on regardless. */
+    const [progressError, setProgressError] = useState<string | null>(null)
+    const activation = useCheckoutActivation(resolvedCheckoutId)
+    /** Only count down to the redirect once there is something true to say ("You're all set"). */
+    const countdownRunning =
+        (activation.state === 'active' || activation.state === 'unknown') && !invoiceLoading && !progressError
 
     /** Client-resolved: `firma.checkoutIntent` drives hiding the billing link until Continue clears it. */
     const [onboardingCtasResolved, setOnboardingCtasResolved] = useState(false)
@@ -93,21 +219,22 @@ export function SuccessRedirectCard({
     }, [pathname, router, searchParams])
 
     useEffect(() => {
+        if (!countdownRunning) return
         const intervalId = window.setInterval(() => {
             setSecondsLeft((prev) => Math.max(0, prev - 1))
         }, 1000)
         return () => window.clearInterval(intervalId)
-    }, [])
+    }, [countdownRunning])
 
     useEffect(() => {
-        if (secondsLeft !== 0) return
+        if (secondsLeft !== 0 || !countdownRunning) return
         if (isOnboarding) {
             clearCheckoutIntent()
             router.push(continueOnboardingHref)
         } else {
             router.push(primaryHref)
         }
-    }, [secondsLeft, isOnboarding, primaryHref, continueOnboardingHref, router])
+    }, [secondsLeft, countdownRunning, isOnboarding, primaryHref, continueOnboardingHref, router])
 
     const progressPercent = useMemo(() => {
         const redirectSeconds = isOnboarding ? ONBOARDING_REDIRECT_SECONDS : REDIRECT_SECONDS
@@ -116,7 +243,13 @@ export function SuccessRedirectCard({
     }, [secondsLeft, isOnboarding])
 
     const persistOnboardingThenContinue = useCallback(async () => {
+        // A second press after a failed save goes on regardless: the payment is what matters.
+        if (progressError) {
+            router.push(continueOnboardingHref)
+            return
+        }
         setContinueOnboardingPending(true)
+        let failed: string | null = null
         try {
             await supabase.auth.getUser()
             const {
@@ -132,21 +265,25 @@ export function SuccessRedirectCard({
                     },
                     body: JSON.stringify({ action: 'continue_to_connect' }),
                 })
-                if (!res.ok) {
-                    const err = (await res.json().catch(() => ({}))) as { error?: string }
-                    console.warn('Onboarding ui-progress after checkout:', err?.error ?? res.status)
-                }
+                if (!res.ok) failed = failureReason(await failureFrom(res))
             }
+        } catch (e) {
+            failed = failureReason(e)
         } finally {
             setContinueOnboardingPending(false)
         }
+        if (failed) {
+            setProgressError(`Your payment went through. We couldn't move you on · ${failed}`)
+            return
+        }
         router.push(continueOnboardingHref)
-    }, [continueOnboardingHref, router])
+    }, [continueOnboardingHref, router, progressError])
 
     const downloadInvoice = useCallback(async () => {
         const id = resolvedCheckoutId
         if (!id) return
         setInvoiceError(null)
+        setInvoiceLink(null)
         setInvoiceLoading(true)
         try {
             const res = await fetch('/api/billing/checkout-invoice', {
@@ -157,18 +294,31 @@ export function SuccessRedirectCard({
             })
             const data = (await res.json().catch(() => ({}))) as { error?: string; invoiceUrl?: string }
             if (!res.ok) {
-                setInvoiceError(data.error || 'Could not load invoice')
+                setInvoiceError(data.error || `Couldn't get the invoice (${res.status}). Find it in Billing in a minute.`)
                 return
             }
-            if (data.invoiceUrl) {
-                window.open(data.invoiceUrl, '_blank', 'noopener,noreferrer')
+            // Still generating answers 202 with the words in `error` and no link.
+            if (!data.invoiceUrl) {
+                setInvoiceError(data.error || 'Your invoice is still being generated. Find it in Billing in a minute.')
+                return
             }
+            // Opened after a wait, the new tab may be blocked (and with noopener `open` can't tell us):
+            // keep a link to press as well.
+            window.open(data.invoiceUrl, '_blank', 'noopener,noreferrer')
+            setInvoiceLink(data.invoiceUrl)
+        } catch (e) {
+            setInvoiceError(failureReason(e))
         } finally {
             setInvoiceLoading(false)
         }
     }, [resolvedCheckoutId])
 
     const hasCheckoutId = Boolean(resolvedCheckoutId)
+    const copy = activationCopy(activation.state, {
+        isOnboarding,
+        checkoutId: resolvedCheckoutId,
+        reported: activation.reported,
+    })
     const invoiceButtonClass = cn(
         buttonVariants({ variant: 'outline' }),
         'inline-flex h-10 min-w-[12rem] shrink-0 items-center justify-center gap-2 rounded-lg border-slate-200 bg-white px-4 text-sm font-semibold text-slate-800 disabled:opacity-60 sm:h-11'
@@ -224,18 +374,29 @@ export function SuccessRedirectCard({
                     </div>
 
                     <div className="relative z-10 mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-slate-200/80 bg-gradient-to-br from-slate-100 to-slate-50 text-slate-900">
-                        <span className="text-2xl" aria-hidden>
-                            ✓
-                        </span>
+                        {copy.waiting ? (
+                            <Loader2 className="h-6 w-6 animate-spin text-slate-500" aria-hidden />
+                        ) : (
+                            <span className="text-2xl" aria-hidden>
+                                {copy.icon}
+                            </span>
+                        )}
                     </div>
 
-                    <h1 className="relative z-10 text-2xl font-semibold tracking-tight text-slate-900">You&apos;re all set</h1>
-                    <p className="relative z-10 mt-2 text-sm leading-relaxed text-slate-600">
-                        Thanks for subscribing. {isOnboarding ? 'Continuing setup in a moment.' : "We'll take you back automatically when your workspace is ready."}
-                    </p>
-                    <p className="relative z-10 mt-3 text-sm font-medium text-slate-700">
-                        Redirecting in <span className="tabular-nums">{secondsLeft}s</span>
-                    </p>
+                    <div role="status" aria-live="polite">
+                        <h1 className="relative z-10 text-2xl font-semibold tracking-tight text-slate-900">{copy.title}</h1>
+                        <p className="relative z-10 mt-2 text-sm leading-relaxed text-slate-600">{copy.body}</p>
+                    </div>
+                    {countdownRunning ? (
+                        <p className="relative z-10 mt-3 text-sm font-medium text-slate-700">
+                            Redirecting in <span className="tabular-nums">{secondsLeft}s</span>
+                        </p>
+                    ) : null}
+                    {progressError ? (
+                        <p role="alert" className="relative z-10 mx-auto mt-3 max-w-md text-sm text-amber-900">
+                            {progressError}
+                        </p>
+                    ) : null}
 
                     <div className="relative z-10 mx-auto mt-5 max-w-md border-t border-slate-100 pt-5 text-left">
                         <p className="text-xs leading-relaxed text-slate-600">
@@ -326,8 +487,17 @@ export function SuccessRedirectCard({
                         )}
                     </div>
                     {invoiceError ? (
-                        <p className="relative z-10 mt-3 max-w-md text-center text-xs text-amber-900 sm:mx-auto">
+                        <p role="alert" className="relative z-10 mt-3 max-w-md text-center text-xs text-amber-900 sm:mx-auto">
                             {invoiceError}
+                        </p>
+                    ) : null}
+                    {invoiceLink ? (
+                        <p className="relative z-10 mt-3 max-w-md text-center text-xs text-slate-600 sm:mx-auto">
+                            If the invoice didn&apos;t open,{' '}
+                            <a href={invoiceLink} target="_blank" rel="noopener noreferrer" className="font-medium underline">
+                                open it here
+                            </a>
+                            .
                         </p>
                     ) : null}
                 </div>

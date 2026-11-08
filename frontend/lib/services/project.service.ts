@@ -4,6 +4,7 @@ import { logger } from '@/lib/logger'
 import { resolveClientConnector } from '@/lib/connectors/resolve-client-connector'
 import { getStorageAdapter } from '@/lib/connectors/registry'
 import { ensureAppFolderStructure } from '@/lib/connectors/pockett-structure.service'
+import { userFacingOf } from '@/lib/actions/action-result'
 
 /**
  * Service for managing projects in the V2 Platform schema.
@@ -11,7 +12,11 @@ import { ensureAppFolderStructure } from '@/lib/connectors/pockett-structure.ser
  */
 export const projectService = {
     /**
-     * Create a new project and ensure default members (Creator + Firm Owner)
+     * Create a new project and ensure default members (Creator + Firm Owner).
+     *
+     * The engagement stands without its storage folder (Set up storage folder in Files makes it later),
+     * but the answer's `storageNote` says when it wasn't made, for the caller to pass on: it used to be
+     * logged only, so the person met an engagement with no Files.
      */
     async createProject(
         firmId: string,
@@ -104,6 +109,7 @@ export const projectService = {
 
         // 4. Create Drive Folder Structure (V2 - Automated); skip when building sandbox in one batch (Option B)
         let folderStructure: { projectId?: string; generalFolderId?: string } | null = null
+        let storageNote: string | undefined
         if (!skipDriveStructure) {
         try {
             const { connectorId } = await resolveClientConnector(clientId)
@@ -134,6 +140,8 @@ export const projectService = {
                             data: { connectorRootFolderId: fs.projectId }
                         })
                         result.connectorRootFolderId = fs.projectId
+                    } else {
+                        storageNote = "The engagement was created, but its folder in storage wasn't. Use Set up storage folder in Files."
                     }
                     folderStructure = {
                         projectId: fs.projectId,
@@ -143,9 +151,11 @@ export const projectService = {
             }
         } catch (e) {
             logger.error("Failed to create/register Google Drive folders in projectService", e as Error)
+            const why = userFacingOf(e)?.message
+            storageNote = `The engagement was created, but its folder in storage couldn't be set up${why ? ` · ${why}` : ''}. Use Set up storage folder in Files.`
         }
         }
 
-        return { project: result, folderStructure }
+        return { project: result, folderStructure, ...(storageNote ? { storageNote } : {}) }
     },
 }

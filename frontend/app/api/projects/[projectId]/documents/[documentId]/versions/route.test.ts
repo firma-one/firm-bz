@@ -95,3 +95,22 @@ describe('GET document versions', () => {
         expect(await res.json()).toEqual({ revisions: [], unsupported: true })
     })
 })
+
+describe('GET document versions when the storage refuses', () => {
+    it("answers the refusal's words, not 'no versions' or 'Failed to load versions'", async () => {
+        const { StorageFailure } = await import('@/lib/connectors/storage-failure')
+        drive.getRevisions.mockRejectedValueOnce(new StorageFailure('no_permission', "Google Drive won't show versions for this file to the account connected to this client."))
+        const res = await get()
+        expect(res.status).toBe(403)
+        expect(await res.json()).toEqual({ error: "Google Drive won't show versions for this file to the account connected to this client.", code: 'no_permission' })
+    })
+
+    it('a OneDrive file that is gone says so', async () => {
+        st.connectorType = 'ONEDRIVE'
+        const { ConnectorContentError } = await import('@/lib/connectors/types')
+        adapter.listVersions = vi.fn().mockRejectedValue(new ConnectorContentError('not_found', 'File ext1 not found'))
+        const res = await get()
+        expect(res.status).toBe(404)
+        expect((await res.json()).code).toBe('not_found')
+    })
+})

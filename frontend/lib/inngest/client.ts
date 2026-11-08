@@ -13,21 +13,24 @@ export const inngest = new Inngest({
 
 /**
  * Safely send an Inngest event — never throws.
- * Errors are logged but never propagated, so a background job failure
- * never breaks the user-facing action that triggered it.
+ *
+ * Answers whether the event was sent: `true` once Inngest has it, `false` when it couldn't be reached
+ * (logged here). A background job that a person is waiting on, such as taking access back, should read
+ * the answer and say the follow-up didn't start; indexing and other best-effort jobs can ignore it.
  */
 export async function safeInngestSend(
     name: string,
     data: Record<string, any>
-): Promise<void> {
+): Promise<boolean> {
     try {
         await inngest.send({
             name,
             data
         })
+        return true
     } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error)
         logger.error(`Failed to send Inngest event '${name}': ${errorMsg}`)
-        // Intentionally swallowed — Inngest events are fire-and-forget background tasks
+        return false
     }
 }

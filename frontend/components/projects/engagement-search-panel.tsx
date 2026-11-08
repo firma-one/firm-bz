@@ -8,6 +8,7 @@ import { DocumentActionMenu } from '@/components/ui/document-action-menu'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { FilterMenuLabel, FilterMenuRow, FilterPill } from '@/components/ui/filter-pill'
 import { EmptyPanel } from '@/components/ui/empty-panel'
+import { SearchFailed } from '@/components/search/search-failed'
 import { ShimmerBar, ShimmerBlock, LoadingAnnouncement } from '@/components/ui/shimmer'
 import { Tag } from '@/components/ui/tag'
 import { formatRelativeTime, formatDateTimeWithTZ, cn } from '@/lib/utils'
@@ -129,6 +130,8 @@ export function EngagementSearchPanel({
     recentSearches,
     clearRecentSearches,
     searchRootLabel,
+    searchError,
+    retrySearch,
   } = useEngagementSearch()
   const [highlightedIndex, setHighlightedIndex] = useState(-1)
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all')
@@ -551,6 +554,8 @@ export function EngagementSearchPanel({
                     </div>
                   ))}
                 </div>
+              ) : searchError && !isSearching ? (
+                <SearchFailed compact reason={searchError} onRetry={retrySearch} />
               ) : searchResults.length === 0 ? (
                 <EmptyPanel
                   compact

@@ -7,7 +7,8 @@ import { logger } from '@/lib/logger'
 import { isAiConfigured } from '@/lib/ai/client'
 import { briefFingerprint, generateFirmBrief, isBriefFresh, streamFirmBrief, type FirmBrief } from '@/lib/ai/firm-brief'
 import { assertWithinAiCreditCap, AiCreditLimitError } from '@/lib/ai/credit-cap'
-import { aiLimitResponse } from '@/lib/ai/guarded-client'
+import { aiFailureResponse, aiLimitResponse } from '@/lib/ai/guarded-client'
+import { BRIO_BRIEF_FAILED, BRIO_DATA_UNREADABLE } from '@/lib/ai/brio-failure'
 import type { FirmInsightsResponse } from '../insights/route'
 
 async function authorize(request: NextRequest, firmId: string) {
@@ -66,7 +67,7 @@ async function streamRewrite(request: NextRequest, firmId: string, userId?: stri
         throw error
     }
     const insights = await loadInsights(request, firmId)
-    if (!insights) return NextResponse.json({ error: 'Brief generation failed' }, { status: 502 })
+    if (!insights) return NextResponse.json({ error: BRIO_DATA_UNREADABLE }, { status: 502 })
 
     const encoder = new TextEncoder()
     const line = (o: unknown) => encoder.encode(JSON.stringify(o) + '\n')
@@ -82,7 +83,7 @@ async function streamRewrite(request: NextRequest, firmId: string, userId?: stri
                 }, abort.signal)
                 if (abort.signal.aborted) return
                 if (!content) {
-                    controller.enqueue(line({ type: 'error', message: 'Brief generation failed' }))
+                    controller.enqueue(line({ type: 'error', message: BRIO_BRIEF_FAILED }))
                     return
                 }
                 // Settings read again here, not at the start: the stream takes seconds, and the
@@ -97,7 +98,7 @@ async function streamRewrite(request: NextRequest, firmId: string, userId?: stri
             } catch (error) {
                 if (abort.signal.aborted) return
                 logger.error('AI brief stream error:', error as Error)
-                controller.enqueue(line({ type: 'error', message: 'Brief generation failed' }))
+                controller.enqueue(line({ type: 'error', message: BRIO_BRIEF_FAILED }))
             } finally {
                 try { controller.close() } catch { /* already closed by the client leaving */ }
             }
@@ -113,6 +114,11 @@ async function streamRewrite(request: NextRequest, firmId: string, userId?: stri
     })
 }
 
+/** A new brief, or why there isn't one, in words for the card (and the status to answer it with). */
+type Regenerated =
+    | { brief: FirmBrief; reason?: undefined; status?: undefined }
+    | { brief: null; reason: string; status: number }
+
 /**
  * Regenerates and persists. The insights payload is fetched over HTTP rather than by calling the
  * route handler directly — the handler reads auth from cookies, so it cannot be invoked as a
@@ -125,32 +131,32 @@ async function regenerate(
     userId?: string,
     /** Already loaded by the caller (GET compares them with the cached brief first). */
     loaded?: FirmInsightsResponse | null,
-): Promise<FirmBrief | null> {
+): Promise<Regenerated> {
     // Gated here, not at the route entry: a cached brief serves without a model call, so reading
-    // one must not consume credits. Returns null on breach, which callers already treat as
-    // "no brief available" — the same path as an AI failure.
+    // one must not consume credits. On a breach the limit's own words come back, so a card with
+    // no brief to fall back on says why rather than vanishing.
     try {
         await assertWithinAiCreditCap({ firmId, feature: 'brief' })
     } catch (error) {
         if (error instanceof AiCreditLimitError) {
             logger.info(`AI brief skipped for firm ${firmId}: ${error.kind} limit reached`)
-            return null
+            return { brief: null, reason: error.message, status: 429 }
         }
         throw error
     }
 
     const insights = loaded ?? await loadInsights(request, firmId)
-    if (!insights) return null
+    if (!insights) return { brief: null, reason: BRIO_DATA_UNREADABLE, status: 502 }
 
     const content = await generateFirmBrief(insights, { firmId, userId })
-    if (!content) return null
+    if (!content) return { brief: null, reason: BRIO_BRIEF_FAILED, status: 502 }
 
     const brief: FirmBrief = { content, generatedAt: new Date().toISOString(), fingerprint: briefFingerprint(insights) }
     await prisma.firm.update({
         where: { id: firmId },
         data: { settings: { ...existingSettings, aiBrief: brief } as never },
     })
-    return brief
+    return { brief }
 }
 
 /**
@@ -174,11 +180,13 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         }
 
         const fresh = await regenerate(request, firmId, settings, auth.userId, insights)
-        // Fall back to the stale brief rather than showing nothing when generation fails.
-        return NextResponse.json({ brief: fresh ?? brief, configured: true })
+        if (fresh.brief) return NextResponse.json({ brief: fresh.brief, configured: true })
+        // Fall back to the stale brief rather than showing nothing when generation fails. With none
+        // to fall back on, say why (the credit limit, or Brio's failure), so the card doesn't vanish.
+        return NextResponse.json(brief ? { brief, configured: true } : { brief: null, configured: true, reason: fresh.reason })
     } catch (error) {
         logger.error('AI brief GET error:', error as Error)
-        return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+        return NextResponse.json({ error: 'Something went wrong on our side. Try again.' }, { status: 500 })
     }
 }
 
@@ -195,11 +203,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
         const { settings } = await readCachedBrief(firmId)
         const fresh = await regenerate(request, firmId, settings, auth.userId)
-        if (!fresh) return NextResponse.json({ error: 'Brief generation failed' }, { status: 502 })
+        if (!fresh.brief) return NextResponse.json({ error: fresh.reason }, { status: fresh.status })
 
-        return NextResponse.json({ brief: fresh, configured: true })
+        return NextResponse.json({ brief: fresh.brief, configured: true })
     } catch (error) {
-        logger.error('AI brief POST error:', error as Error)
-        return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+        return aiFailureResponse(error, BRIO_BRIEF_FAILED, 'AI brief POST error:')
     }
 }

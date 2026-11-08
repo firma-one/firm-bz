@@ -49,7 +49,7 @@ function demoSource(): SupportSource {
                 reader.readAsDataURL(f)
             })))
             update(ticketNumber, (t) => ({ ...t, attachments: [...t.attachments, ...attached] }))
-            return { attached, failed: 0 }
+            return { attached, failed: [] }
         },
         removeFile: async (ticketNumber, attachmentId) => update(ticketNumber, (t) => ({ ...t, attachments: t.attachments.filter((a) => a.attachmentId !== attachmentId) })),
     }

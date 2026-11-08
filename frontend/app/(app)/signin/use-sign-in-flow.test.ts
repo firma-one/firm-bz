@@ -13,7 +13,8 @@ vi.mock('@/lib/auth-context', () => ({
     useAuth: () => ({ signInWithGoogle: vi.fn(), signInWithMicrosoft: vi.fn() }),
 }))
 vi.mock('@/lib/auth-service', () => ({ AuthService: { verifyOTP: vi.fn() } }))
-vi.mock('@/app/actions/send-otp', () => ({ checkEmailExists: vi.fn(), sendOTPWithTurnstile: vi.fn() }))
+const actions = vi.hoisted(() => ({ checkEmailExists: vi.fn(), sendOTPWithTurnstile: vi.fn() }))
+vi.mock('@/app/actions/send-otp', () => actions)
 vi.mock('@/lib/analytics', () => ({ sendEvent: vi.fn(), ANALYTICS_EVENTS: { LOGIN: 'login' } }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }))
 
@@ -78,5 +79,37 @@ describe('sign-in email prefill', () => {
         expect(result.current.prefilledFromMemory).toBe(false)
         // The invitee has not signed in yet, so the remembered address is left as it was.
         expect(localStorage.getItem(SIGNIN_EMAIL_KEY)).toBe('old@firmaone.com')
+    })
+})
+
+describe('sign-in failures say why', () => {
+    it('reads ?error=auth_code_error from the OAuth callback and drops it from the address (P1-19)', async () => {
+        window.history.replaceState(null, '', '/signin?error=auth_code_error&next=%2Fd')
+        const { result } = renderHook(() => useSignInFlow())
+        await waitFor(() => expect(result.current.error).toMatch(/^Google or Microsoft sign-in didn't finish/))
+        expect(window.location.search).toBe('?next=%2Fd')
+    })
+
+    it('stops "Checking…" and says so when the email check is rejected (P1-20)', async () => {
+        actions.checkEmailExists.mockRejectedValueOnce(new TypeError('Failed to fetch'))
+        const { result } = renderHook(() => useSignInFlow())
+        act(() => result.current.setEmail('a@b.test'))
+        act(() => result.current.handleInitiateCheck())
+        await act(async () => {
+            result.current.handleTurnstileSuccess('tok')
+        })
+        await waitFor(() => expect(result.current.checkLoading).toBe(false))
+        expect(result.current.error).toMatch(/Check your connection/)
+    })
+
+    it('stops "Sending code…" when sending the code is rejected (P1-20)', async () => {
+        actions.sendOTPWithTurnstile.mockRejectedValueOnce(new TypeError('Failed to fetch'))
+        const { result } = renderHook(() => useSignInFlow())
+        act(() => result.current.setEmail('a@b.test'))
+        await act(async () => {
+            await result.current.sendOTPWithToken('tok')
+        })
+        expect(result.current.loading).toBe(false)
+        expect(result.current.error).toMatch(/Check your connection/)
     })
 })

@@ -8,7 +8,7 @@ import type { EngagementRoleSlug } from '@/lib/deliverable-stage-roles'
 import { EngagementFileList, type EngagementFolderData } from './engagement-file-list'
 import { type BreadcrumbItem } from '@/lib/files-folder-session'
 import { EngagementSettingsForm } from './engagement-settings-form'
-import { LayoutGrid, List } from 'lucide-react'
+import { LayoutGrid, List, Lock } from 'lucide-react'
 import { usePathname, useRouter } from 'next/navigation'
 import { EngagementMembersTab } from './members/engagement-members-tab'
 import { EngagementSharesTab } from './shares/engagement-shares-tab'
@@ -141,6 +141,8 @@ export function EngagementWorkspace({
     const { viewAsPersonaSlug } = useViewAs()
     // External roles (EC/EV) — including internal users previewing via "view as".
     // Drives the Overview tab: externals get only the deliverables analytics section.
+    // Read only for everyone, as the server enforces. Settings and Members stay: they're how it's reopened and who has access.
+    const completed = engagementStatus === 'COMPLETED'
     const isExternalPersona = restrictToSharedOnly || viewAsPersonaSlug === 'eng_ext_collaborator' || viewAsPersonaSlug === 'eng_viewer'
     const [liveFileCount, setLiveFileCount] = useState<number | undefined>(fileCount)
     useEffect(() => { setLiveFileCount(fileCount) }, [fileCount])
@@ -288,6 +290,12 @@ export function EngagementWorkspace({
                 {/* Only mount the active tab's content so Files tree is not rendered when on Shares/others (performance). */}
                 {/* Shares gets its own layout (toolbar on bg + content card); all other tabs share the card wrapper */}
                 {/* Files and Shares render breadcrumb/toolbar on bg; content card is owned by the component */}
+                {completed && currentTab !== 'settings' && (
+                    <div className="mb-3 flex shrink-0 items-center gap-2 rounded-card bg-surface-subtle px-3 py-2 text-small text-fg-muted">
+                        <Lock className="h-3.5 w-3.5 shrink-0 text-fg-subtle" aria-hidden />
+                        This engagement is completed, so it&apos;s read only.{canManage ? ' Change its status in Settings to make changes.' : ''}
+                    </div>
+                )}
                 {(currentTab === 'files' || currentTab === 'shares' || currentTab === 'board') ? (
                     <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
                         {currentTab === 'files' && (
@@ -306,6 +314,7 @@ export function EngagementWorkspace({
                                         projectName={projectName}
                                         canEdit={canEdit}
                                         canManage={canManage}
+                                        readOnly={completed}
                                         isFirmAdmin={isFirmAdmin}
                                         restrictToSharedOnly={restrictToSharedOnly}
                                         roleSlug={roleSlug as EngagementRoleSlug | undefined}
@@ -326,7 +335,8 @@ export function EngagementWorkspace({
                                 <EngagementSharesTab
                                     projectId={projectId}
                                     clientConnectorType={clientConnectorType}
-                                    canManage={canManage}
+                                    canManage={canManage && !completed}
+                                    readOnly={completed}
                                     restrictToSharedOnly={restrictToSharedOnly}
                                     isExternalViewer={isExternalViewer}
                                     roleSlug={roleSlug as any}
@@ -347,7 +357,8 @@ export function EngagementWorkspace({
                                 <EngagementSharesTab
                                     projectId={projectId}
                                     clientConnectorType={clientConnectorType}
-                                    canManage={canManage}
+                                    canManage={canManage && !completed}
+                                    readOnly={completed}
                                     restrictToSharedOnly={restrictToSharedOnly}
                                     isExternalViewer={isExternalViewer}
                                     roleSlug={roleSlug as any}
@@ -399,7 +410,7 @@ export function EngagementWorkspace({
                                 orgSlug={orgSlug}
                                 clientSlug={clientSlug}
                                 engagementSlug={engagementSlug}
-                                isFirmAdmin={isFirmAdmin}
+                                isFirmAdmin={isFirmAdmin && !completed}
                                 firmName={orgName}
                                 clientName={clientName}
                                 engagementName={projectName}
@@ -413,6 +424,7 @@ export function EngagementWorkspace({
                             <ErrorBoundary context="ProjectComments">
                                 <EngagementCommentsTab
                                     projectId={projectId}
+                                    readOnly={completed}
                                     orgSlug={orgSlug}
                                     boardUrl={`${projectBase(groupSlug, orgSlug, clientSlug, projectSlug, useEngagement)}/board`}
                                 />
@@ -439,7 +451,7 @@ export function EngagementWorkspace({
                                 <EngagementWikiTab
                                     engagementId={projectId}
                                     firmId={firmId ?? ''}
-                                    canEdit={canEdit}
+                                    canEdit={canEdit && !completed}
                                     initialPageSlug={pathSegments?.wikiPageSlug ?? null}
                                     base={base}
                                 />

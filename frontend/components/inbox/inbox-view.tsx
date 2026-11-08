@@ -3,13 +3,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { formatDistanceToNowStrict, format } from "date-fns"
-import { AlarmClock, ArrowLeft, ArrowRight, Bell, Check, CheckCheck, ChevronRight, ExternalLink, Inbox as InboxIcon, Loader2 } from "lucide-react"
+import { AlarmClock, AlertCircle, ArrowLeft, ArrowRight, Bell, Check, CheckCheck, ChevronRight, ExternalLink, Inbox as InboxIcon, Loader2 } from "lucide-react"
 import { ENTITY_ICON } from "@/components/ui/entity-icon"
 import { getAllUserReminders, markReminderDone, type ReminderWithContext } from "@/lib/actions/user-reminders"
 import { getNeedsYou } from "@/lib/actions/inbox"
 import type { NeedsYouItem } from "@/lib/home/my-work"
 import { Button } from "@/components/ui/button"
 import { EmptyPanel } from "@/components/ui/empty-panel"
+import { LoadFailed } from "@/components/ui/load-failed"
 import { PageHeading } from "@/components/ui/page-heading"
 import { Tag } from "@/components/ui/tag"
 import { Hint } from "@/components/ui/tooltip"
@@ -20,7 +21,9 @@ import { cn, formatFullDate } from "@/lib/utils"
 import type { TagColor } from "@/lib/ui/status-colors"
 import { FirmFilter, UnavailableFirmsNote } from "@/components/home/firm-filter"
 import type { UnavailableFirm } from "@/lib/home/home-firms"
-import { needsYouLists, sortNotifications, INBOX_CHANGED_EVENT, type ApiNotification, type InboxItem, type InboxMention } from "./inbox-items"
+import type { ActionResult } from "@/lib/actions/action-result"
+import { failureFrom, failureReason } from "@/lib/files/action-failure"
+import { needsYouLists, reminderActionReason, sortNotifications, INBOX_CHANGED_EVENT, type ApiNotification, type InboxItem, type InboxMention } from "./inbox-items"
 
 function notifyChanged() {
     window.dispatchEvent(new Event(INBOX_CHANGED_EVENT))
@@ -167,10 +170,31 @@ type Section = { id: string; title: string; icon: React.ReactNode; items: InboxI
 
 type InboxFirm = { id: string; slug: string; name: string }
 
-/** Where the Inbox reads and writes. The app uses the live one; the public demo passes static data. */
+/** The Inbox's three loads. Each can fail on its own; what did load still shows (EM-1). */
+export type InboxPart = "reminders" | "notifications" | "needsYou"
+
+/** What each part is, as it reads after "Couldn't load". */
+const PART_WORDS: Record<InboxPart, string> = {
+    needsYou: "what's waiting on you",
+    reminders: "your reminders",
+    notifications: "your updates",
+}
+
+/**
+ * Where the Inbox reads and writes. The app uses the live one; the public demo passes static data.
+ * A write that didn't happen throws an Error with the reason, in words for people.
+ */
 export type InboxSource = {
-    /** `needsYou` is Home's list (lib/home/my-work.ts): approvals, client comments, changes requested, review or undated reminders. */
-    load: () => Promise<{ reminders: ReminderWithContext[]; notifications: ApiNotification[]; needsYou: NeedsYouItem[] }>
+    /**
+     * `needsYou` is Home's list (lib/home/my-work.ts): approvals, client comments, changes requested,
+     * review or undated reminders. `failed` names the parts that didn't load, with why; their lists are empty.
+     */
+    load: () => Promise<{
+        reminders: ReminderWithContext[]
+        notifications: ApiNotification[]
+        needsYou: NeedsYouItem[]
+        failed?: Partial<Record<InboxPart, string>>
+    }>
     markRead: (notificationId: string) => Promise<void>
     /** Done on an update: it leaves the Inbox. */
     dismiss: (notificationId: string) => Promise<void>
@@ -180,23 +204,51 @@ export type InboxSource = {
     markAllRead: (firmId: string | null) => Promise<void>
 }
 
+/** A part's value, or why it didn't load. */
+async function loadPart<T>(load: () => Promise<T>): Promise<{ ok: true; value: T } | { ok: false; reason: string }> {
+    try {
+        return { ok: true, value: await load() }
+    } catch (e) {
+        return { ok: false, reason: failureReason(e) }
+    }
+}
+
+/** An action's value, or its words as the error. */
+function valueOf<T>(result: ActionResult<T>): T {
+    if (!result.ok) throw new Error(result.error)
+    return result.data
+}
+
 const LIVE_SOURCE: InboxSource = {
     load: async () => {
-        const [reminders, res, needsYou] = await Promise.all([
-            getAllUserReminders().catch(() => [] as ReminderWithContext[]),
-            fetch("/api/notifications?firms=all")
-                .then((r) => (r.ok ? r.json() : { notifications: [] }))
-                .catch(() => ({ notifications: [] })),
-            getNeedsYou().catch(() => [] as NeedsYouItem[]),
+        const [reminders, notifications, needsYou] = await Promise.all([
+            loadPart(async () => valueOf(await getAllUserReminders())),
+            loadPart(async () => {
+                const res = await fetch("/api/notifications?firms=all")
+                if (!res.ok) throw await failureFrom(res)
+                const data = await res.json()
+                return (data.notifications ?? []) as ApiNotification[]
+            }),
+            loadPart(async () => valueOf(await getNeedsYou())),
         ])
-        return { reminders, notifications: (res.notifications ?? []) as ApiNotification[], needsYou }
+        const failed: Partial<Record<InboxPart, string>> = {}
+        if (!reminders.ok) failed.reminders = reminders.reason
+        if (!notifications.ok) failed.notifications = notifications.reason
+        if (!needsYou.ok) failed.needsYou = needsYou.reason
+        return {
+            reminders: reminders.ok ? reminders.value : [],
+            notifications: notifications.ok ? notifications.value : [],
+            needsYou: needsYou.ok ? needsYou.value : [],
+            failed,
+        }
     },
     markRead: async (id) => {
-        await fetch("/api/notifications", {
+        const res = await fetch("/api/notifications", {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ ids: [id] }),
-        }).catch(() => {})
+        })
+        if (!res.ok) throw await failureFrom(res)
     },
     dismiss: async (id) => {
         const res = await fetch("/api/notifications?firms=all", {
@@ -206,16 +258,42 @@ const LIVE_SOURCE: InboxSource = {
             // Done can be committed as the tab closes (see the pagehide flush), so let it finish.
             keepalive: true,
         })
-        if (!res.ok) throw new Error(`Dismiss failed: ${res.status}`)
+        if (!res.ok) throw await failureFrom(res)
     },
-    markDone: (id) => markReminderDone(id),
+    markDone: async (id) => {
+        const result = await markReminderDone(id)
+        if (!result.ok) throw new Error(reminderActionReason(result))
+    },
     markAllRead: async (firmId) => {
-        await fetch(firmId ? `/api/notifications?firmId=${encodeURIComponent(firmId)}` : "/api/notifications?firms=all", {
+        const res = await fetch(firmId ? `/api/notifications?firmId=${encodeURIComponent(firmId)}` : "/api/notifications?firms=all", {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ markAllRead: true }),
-        }).catch(() => {})
+        })
+        if (!res.ok) throw await failureFrom(res)
     },
+}
+
+/** "your reminders and your updates" */
+function andList(items: string[]): string {
+    return items.length <= 1 ? items[0] ?? "" : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`
+}
+
+/** A reason as the end of a sentence. */
+const sentence = (text: string) => (/[.!?]$/.test(text.trim()) ? text.trim() : `${text.trim()}.`)
+
+/** Above the list when part of it didn't load: what's missing, why, and Try again. */
+function InboxLoadNotice({ what, reason, onRetry, busy }: { what: string; reason: string; onRetry: () => void; busy: boolean }) {
+    return (
+        <div role="alert" className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-card border border-line bg-surface-subtle px-3 py-2 text-small text-fg-muted">
+            <AlertCircle aria-hidden className="h-3.5 w-3.5 shrink-0 text-danger" />
+            <span className="min-w-0 flex-1">Couldn&apos;t load {what} · {reason}</span>
+            <Button size="sm" variant="ghost" onClick={onRetry} disabled={busy}>
+                {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                Try again
+            </Button>
+        </div>
+    )
 }
 
 /**
@@ -236,10 +314,13 @@ export function InboxView({
     firms,
     unavailable = [],
     source = LIVE_SOURCE,
+    firmsFailed = false,
 }: {
     firms: InboxFirm[]
     unavailable?: UnavailableFirm[]
     source?: InboxSource
+    /** The firm list didn't load (the page's getHomeFirms): the Inbox can't say what's in it. */
+    firmsFailed?: boolean
 }) {
     const router = useRouter()
     const searchParams = useSearchParams()
@@ -262,6 +343,9 @@ export function InboxView({
     const [notifications, setNotifications] = useState<ApiNotification[]>([])
     const [work, setWork] = useState<NeedsYouItem[]>([])
     const [loading, setLoading] = useState(true)
+    /** The parts that didn't load, with why. Never read as "nothing there" (EM-1). */
+    const [failed, setFailed] = useState<Partial<Record<InboxPart, string>>>({})
+    const [reloading, setReloading] = useState(false)
     const [selectedKey, setSelectedKey] = useState<string | null>(null)
     const [showDetailOnMobile, setShowDetailOnMobile] = useState(false)
     /**
@@ -277,17 +361,39 @@ export function InboxView({
 
     const listRef = useRef<HTMLDivElement>(null)
 
+    // A part that fails again on a retry keeps what it showed before.
     const load = useCallback(async () => {
-        const data = await source.load()
-        setReminders(data.reminders)
-        setNotifications(data.notifications)
-        setWork(data.needsYou)
-        setLoading(false)
+        try {
+            const data = await source.load()
+            const nowFailed = data.failed ?? {}
+            if (!nowFailed.reminders) setReminders(data.reminders)
+            if (!nowFailed.notifications) setNotifications(data.notifications)
+            if (!nowFailed.needsYou) setWork(data.needsYou)
+            setFailed(nowFailed)
+        } catch (e) {
+            const reason = failureReason(e)
+            setFailed({ reminders: reason, notifications: reason, needsYou: reason })
+        } finally {
+            setLoading(false)
+        }
     }, [source])
 
-    useEffect(() => {
-        void load()
+    const retry = useCallback(async () => {
+        setReloading(true)
+        try {
+            await load()
+        } finally {
+            setReloading(false)
+        }
     }, [load])
+
+    useEffect(() => {
+        if (firmsFailed) {
+            setLoading(false)
+            return
+        }
+        void load()
+    }, [load, firmsFailed])
 
     const shownReminders = useMemo(() => reminders.filter((r) => !pending.has(`r:${r.id}`)), [reminders, pending])
     const lists = useMemo(() => needsYouLists(shownIds, work, shownReminders), [shownIds, work, shownReminders])
@@ -315,17 +421,29 @@ export function InboxView({
     const flat = useMemo(() => sections.flatMap((sec) => sec.items), [sections])
     const selected = flat.find((i) => i.key === selectedKey) ?? null
 
+    // What didn't load: all of it, or this view's parts (Needs you: its items and reminders; Updates: notifications).
+    const allFailed = !!(failed.needsYou && failed.reminders && failed.notifications)
+    const tabFailed = (tab === "updates" ? (["notifications"] as const) : (["needsYou", "reminders"] as const)).filter((p) => failed[p])
+    const tabFailedWhat = andList(tabFailed.map((p) => PART_WORDS[p]))
+    const tabFailedReason = Array.from(new Set(tabFailed.map((p) => failed[p] as string))).join(" ")
+
     // Keep a selection on desktop so the detail pane is never empty while there is something to show.
     useEffect(() => {
         if (!loading && !selected && flat.length > 0) setSelectedKey(flat[0].key)
     }, [loading, selected, flat])
 
+    // Marked at once; put back, with why, if the server didn't keep it (P2-26).
     const markRead = useCallback(async (item: InboxItem) => {
         if (item.source !== "notification" || !item.unread) return
         setNotifications((prev) => prev.map((n) => (n.id === item.sourceId ? { ...n, readAt: new Date().toISOString() } : n)))
-        await source.markRead(item.sourceId)
-        notifyChanged()
-    }, [source])
+        try {
+            await source.markRead(item.sourceId)
+            notifyChanged()
+        } catch (e) {
+            setNotifications((prev) => prev.map((n) => (n.id === item.sourceId ? { ...n, readAt: null } : n)))
+            addToast({ type: "error", title: "Couldn't mark it read", message: failureReason(e) })
+        }
+    }, [source, addToast])
 
     const select = useCallback(
         (item: InboxItem) => {
@@ -382,11 +500,11 @@ export function InboxView({
                     setNotifications((prev) => prev.filter((n) => n.id !== item.sourceId))
                 }
                 notifyChanged()
-            } catch {
+            } catch (e) {
                 addToast({
                     type: "error",
                     title: item.source === "notification" ? "Couldn't dismiss it" : "Couldn't mark it done",
-                    message: `${item.title} is back in your Inbox.`,
+                    message: `${sentence(failureReason(e))} ${item.title} is back in your Inbox.`,
                 })
             } finally {
                 unpend(item.key)
@@ -429,15 +547,21 @@ export function InboxView({
         return () => window.removeEventListener("pagehide", flush)
     }, [commitDone])
 
-    // Marks what the list shows: every firm, or only the picked one's.
+    // Marks what the list shows: every firm, or only the picked one's. Put back, with why, if it didn't stick.
     const markAllRead = useCallback(async () => {
         const now = new Date().toISOString()
-        setNotifications((prev) =>
-            prev.map((n) => (n.readAt || (selectedFirm && n.firmId !== selectedFirm.id) ? n : { ...n, readAt: now }))
+        const marked = new Set(
+            notifications.filter((n) => !n.readAt && !(selectedFirm && n.firmId !== selectedFirm.id)).map((n) => n.id)
         )
-        await source.markAllRead(selectedFirm?.id ?? null)
-        notifyChanged()
-    }, [selectedFirm, source])
+        setNotifications((prev) => prev.map((n) => (marked.has(n.id) ? { ...n, readAt: now } : n)))
+        try {
+            await source.markAllRead(selectedFirm?.id ?? null)
+            notifyChanged()
+        } catch (e) {
+            setNotifications((prev) => prev.map((n) => (marked.has(n.id) && n.readAt === now ? { ...n, readAt: null } : n)))
+            addToast({ type: "error", title: "Couldn't mark all read", message: failureReason(e) })
+        }
+    }, [notifications, selectedFirm, source, addToast])
 
     // The shell's "G then <letter>" navigation shares h/i/… with this list; a key straight after G
     // belongs to the shell, not the Inbox.
@@ -533,21 +657,33 @@ export function InboxView({
                 ))}
             </div>
 
-            {loading ? (
+            {firmsFailed ? (
+                <LoadFailed what="your Inbox" onRetry={() => router.refresh()} />
+            ) : loading ? (
                 <div className="flex flex-1 items-center justify-center py-16 text-fg-subtle">
                     <Loader2 className="h-5 w-5 animate-spin" />
                 </div>
+            ) : allFailed ? (
+                <LoadFailed what="your Inbox" reason={failed.needsYou} onRetry={() => void retry()} />
             ) : flat.length === 0 ? (
-                <EmptyPanel
-                    icon={<InboxIcon />}
-                    title={tab === "updates" ? "No updates" : "You're all caught up"}
-                    description={
-                        tab === "updates"
-                            ? "Notifications about your engagements land here."
-                            : "Approvals, comments, changes requested, review requests and your reminders show up here."
-                    }
-                />
+                tabFailed.length > 0 ? (
+                    <LoadFailed what={tabFailedWhat} reason={tabFailedReason} onRetry={() => void retry()} />
+                ) : (
+                    <EmptyPanel
+                        icon={<InboxIcon />}
+                        title={tab === "updates" ? "No updates" : "You're all caught up"}
+                        description={
+                            tab === "updates"
+                                ? "Notifications about your engagements land here."
+                                : "Approvals, comments, changes requested, review requests and your reminders show up here."
+                        }
+                    />
+                )
             ) : (
+                <>
+                {tabFailed.length > 0 && (
+                    <InboxLoadNotice what={tabFailedWhat} reason={tabFailedReason} onRetry={() => void retry()} busy={reloading} />
+                )}
                 <div className="flex min-h-[28rem] flex-1 overflow-hidden rounded-card border border-line">
                     {/* List */}
                     <div
@@ -642,6 +778,7 @@ export function InboxView({
                         )}
                     </div>
                 </div>
+                </>
             )}
         </div>
     )

@@ -264,8 +264,9 @@ export async function joinEngagementForUser(
 /**
  * Immediate-join path for an invitee who is already a registered user: creates the
  * membership rows synchronously, then sends a direct "added to engagement" email
- * instead of the accept-invite flow. Email failures are logged only — the membership
- * already exists regardless of whether the notification lands.
+ * instead of the accept-invite flow. The membership already exists regardless of whether the
+ * notification lands, so a failed email doesn't fail the join: it's answered as `emailed: false`,
+ * for the inviter to be told (they're the only one who can let the person know).
  */
 export async function provisionAndNotifyExistingUser(
     existingUserId: string,
@@ -276,7 +277,7 @@ export async function provisionAndNotifyExistingUser(
         name: string
         client: { slug: string; name: string; firm: { name: string; slug: string } }
     }
-): Promise<{ redirectUrl: string; newEngagementMemberCreated: boolean }> {
+): Promise<{ redirectUrl: string; newEngagementMemberCreated: boolean; emailed: boolean }> {
     const result = await joinEngagementForUser(existingUserId, normalizedEmail, invite)
 
     // Carry the recipient's address so the sign-in page can prefill it. This user is already a
@@ -301,7 +302,8 @@ export async function provisionAndNotifyExistingUser(
         await sendEmail(normalizedEmail, subject, html)
     } catch (err) {
         logger.error('Added-to-engagement email failed', err instanceof Error ? err : new Error(String(err)), 'Email', { to: normalizedEmail })
+        return { ...result, emailed: false }
     }
 
-    return result
+    return { ...result, emailed: true }
 }

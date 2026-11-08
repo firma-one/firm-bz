@@ -8,6 +8,7 @@ import { BRAND_NAME } from '@/config/brand'
 import { Wrench, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { firmPath } from '@/lib/navigation/firm-paths'
+import { failureFrom, failureReason } from '@/lib/files/action-failure'
 
 export default function MaintenancePage() {
   const { groupSlug, firmSlug } = useParams<{ groupSlug: string; firmSlug: string }>()
@@ -17,6 +18,7 @@ export default function MaintenancePage() {
 
   const [firmId, setFirmId] = useState<string | null>(null)
   const [forceUnlocking, setForceUnlocking] = useState(false)
+  const [unlockError, setUnlockError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!accessToken) return
@@ -49,8 +51,9 @@ export default function MaintenancePage() {
   const handleForceUnlock = async () => {
     if (!firmId || !accessToken) return
     setForceUnlocking(true)
+    setUnlockError(null)
     try {
-      await fetch('/api/firm/maintenance', {
+      const res = await fetch('/api/firm/maintenance', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -58,8 +61,12 @@ export default function MaintenancePage() {
         },
         body: JSON.stringify({ action: 'force-unlock', firmId }),
       })
+      // Only move on once it really unlocked: otherwise the person lands back here, none the wiser.
+      if (!res.ok) throw await failureFrom(res)
       router.push(`${firmPath(groupSlug, firmSlug)}/connectors`)
-    } catch { /* ignore */ } finally {
+    } catch (e) {
+      setUnlockError(`Couldn't unlock · ${failureReason(e)}`)
+    } finally {
       setForceUnlocking(false)
     }
   }
@@ -103,6 +110,11 @@ export default function MaintenancePage() {
             </Button>
           )}
         </div>
+        {unlockError && (
+          <p role="alert" className="text-sm text-red-600">
+            {unlockError}
+          </p>
+        )}
         <p className="text-xs text-slate-400">
           If this takes longer than expected, contact your workspace administrator.
         </p>

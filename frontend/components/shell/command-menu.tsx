@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
 import {
+    AlertCircle,
     BarChart3,
     Briefcase,
     Building2,
@@ -26,6 +27,7 @@ import { getCommandRecents, quickSearch, type QuickResult } from "@/lib/actions/
 import type { RecentVisit } from "@/lib/recents"
 import { firmPath, firmTabPath } from "@/lib/navigation/firm-paths"
 import { cn } from "@/lib/utils"
+import { failureReason } from "@/lib/files/action-failure"
 import { useShellData } from "./shell-data-context"
 import { useSwitchFirm } from "./workspace-switcher"
 
@@ -68,6 +70,9 @@ export function CommandMenu({ onToggleSidebar, onShowShortcuts }: { onToggleSide
     const [recents, setRecents] = useState<RecentVisit[]>([])
     const [results, setResults] = useState<QuickResult[]>([])
     const [searching, setSearching] = useState(false)
+    /** Why the last search couldn't run. A failed search is never shown as "No results" (EM-6). */
+    const [searchError, setSearchError] = useState<string | null>(null)
+    const [retryCount, setRetryCount] = useState(0)
     const [active, setActive] = useState(0)
     const listRef = useRef<HTMLDivElement>(null)
     const searchSeq = useRef(0)
@@ -92,6 +97,7 @@ export function CommandMenu({ onToggleSidebar, onShowShortcuts }: { onToggleSide
         if (!open) return
         setQuery("")
         setResults([])
+        setSearchError(null)
         setActive(0)
         void getCommandRecents(firmSlug).then(setRecents).catch(() => setRecents([]))
     }, [open, firmSlug])
@@ -100,6 +106,7 @@ export function CommandMenu({ onToggleSidebar, onShowShortcuts }: { onToggleSide
         const q = query.trim()
         if (!q) {
             setResults([])
+            setSearchError(null)
             setSearching(false)
             return
         }
@@ -107,12 +114,20 @@ export function CommandMenu({ onToggleSidebar, onShowShortcuts }: { onToggleSide
         setSearching(true)
         const t = setTimeout(() => {
             void quickSearch(q, firmSlug)
-                .then((r) => { if (seq === searchSeq.current) setResults(r) })
-                .catch(() => { if (seq === searchSeq.current) setResults([]) })
+                .then((r) => {
+                    if (seq !== searchSeq.current) return
+                    setResults(r.ok ? r.data : [])
+                    setSearchError(r.ok ? null : r.error)
+                })
+                .catch((e) => {
+                    if (seq !== searchSeq.current) return
+                    setResults([])
+                    setSearchError(failureReason(e))
+                })
                 .finally(() => { if (seq === searchSeq.current) setSearching(false) })
         }, SEARCH_DEBOUNCE_MS)
         return () => clearTimeout(t)
-    }, [query, firmSlug])
+    }, [query, firmSlug, retryCount])
 
     const go = useCallback(
         (href: string) => {
@@ -230,10 +245,26 @@ export function CommandMenu({ onToggleSidebar, onShowShortcuts }: { onToggleSide
                     {searching && <Loader2 className="h-4 w-4 shrink-0 animate-spin text-fg-subtle" />}
                 </div>
                 <div ref={listRef} id="command-menu-list" role="listbox" className="max-h-[min(60vh,28rem)] overflow-y-auto p-1.5">
+                    {/* Matching commands still show below; the search's own results are what's missing. */}
+                    {searchError && query.trim() && !searching && (
+                        <div role="alert" className="flex items-start gap-2 px-2 pb-1.5 pt-2 text-small text-fg-muted">
+                            <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-danger" />
+                            <span className="min-w-0 flex-1">Search couldn&apos;t run · {searchError}</span>
+                            <button
+                                type="button"
+                                onClick={() => setRetryCount((n) => n + 1)}
+                                className="shrink-0 font-medium text-action hover:text-action-hover"
+                            >
+                                Try again
+                            </button>
+                        </div>
+                    )}
                     {items.length === 0 ? (
+                        searchError && !searching ? null : (
                         <p className="px-3 py-8 text-center text-small text-fg-muted">
                             {searching ? "Searching…" : `No results for "${query.trim()}"`}
                         </p>
+                        )
                     ) : (
                         items.map((item, i) => {
                             const header = item.section !== lastSection ? item.section : null

@@ -6,11 +6,12 @@ import { useRouter } from "next/navigation"
 import { Briefcase, CalendarDays, Flag, Users } from "lucide-react"
 import { ClientIcon } from "@/components/ui/client-icon"
 import { updateProject, type LwCrmEngagementStatus } from "@/lib/actions/project"
-import { DateProperty, PersonAvatar, StatusProperty, type PersonOption } from "@/components/ui/property-cells"
+import { DateProperty, PersonAvatar, StatusProperty, alreadySaid, type PersonOption } from "@/components/ui/property-cells"
 import { Tag } from "@/components/ui/tag"
 import { Hint } from "@/components/ui/tooltip"
 import { HeaderProp as Prop } from "@/components/ui/header-prop"
 import { useToast } from "@/components/ui/toast"
+import { failureFrom, failureReason } from "@/lib/files/action-failure"
 import { clientPath } from "@/lib/navigation/firm-paths"
 import { HowThisWorksLink } from "@/components/ui/how-this-works-link"
 import type { TourNodeId } from "@/lib/demo/tour-chapters"
@@ -76,29 +77,44 @@ export function EngagementHeader({
     const router = useRouter()
     const { addToast } = useToast()
     const [members, setMembers] = useState<Member[] | null>(() => membersCache.get(projectId) ?? null)
+    /** The people didn't load: never shown as "No lead", and never cached as an empty list. */
+    const [peopleFailed, setPeopleFailed] = useState(false)
 
     useEffect(() => {
         if (!showPeople || !fetchPeople) return
         let cancelled = false
         fetch(`/api/projects/${projectId}/members`)
-            .then((r) => (r.ok ? r.json() : { members: [] }))
+            .then(async (r) => {
+                if (!r.ok) throw await failureFrom(r)
+                return r.json()
+            })
             .then((d) => {
                 const list = ((d.members ?? []) as Member[]).filter((m) => !m.isAgent)
                 membersCache.set(projectId, list)
-                if (!cancelled) setMembers(list)
+                if (!cancelled) {
+                    setMembers(list)
+                    setPeopleFailed(false)
+                }
             })
-            .catch(() => { if (!cancelled) setMembers([]) })
+            // Keep whatever was shown (the cached list, if any) rather than an empty one.
+            .catch(() => { if (!cancelled) setPeopleFailed(true) })
         return () => { cancelled = true }
     }, [projectId, showPeople, fetchPeople])
 
+    // Throws when it didn't save, so the property puts the old value back.
     async function save(data: Parameters<typeof updateProject>[1], what: string) {
+        let result: Awaited<ReturnType<typeof updateProject>>
         try {
-            await updateProject(projectId, data, orgSlug, clientSlug)
-            router.refresh()
+            result = await updateProject(projectId, data, orgSlug, clientSlug)
         } catch (e) {
-            addToast({ type: "error", title: `Couldn't update ${what}`, message: e instanceof Error ? e.message : undefined })
-            throw e
+            addToast({ type: "error", title: `Couldn't update ${what}`, message: failureReason(e) })
+            throw alreadySaid(e)
         }
+        if (!result.ok) {
+            addToast({ type: "error", title: `Couldn't update ${what}`, message: result.error })
+            throw alreadySaid(new Error(result.error))
+        }
+        router.refresh()
     }
 
     const leads: PersonOption[] = (members ?? []).filter((m) => m.role === "eng_admin").map((m) => ({ id: m.userId, name: m.name, avatarUrl: m.avatarUrl }))
@@ -150,7 +166,9 @@ export function EngagementHeader({
                 {showPeople && (
                     <Prop label={leads.length > 1 ? "Leads" : leads.length === 1 ? `Lead · ${leads[0].name}` : "Lead"}>
                         <span className="inline-flex h-7 items-center gap-1.5 px-1.5 text-small text-fg">
-                            {members === null ? (
+                            {members === null && peopleFailed ? (
+                                <span className="text-fg-subtle" title="Couldn't load this engagement's members. Reload to try again.">Couldn&apos;t load</span>
+                            ) : members === null ? (
                                 <span className="text-fg-subtle">…</span>
                             ) : leads.length === 0 ? (
                                 <span className="text-fg-subtle">No lead</span>

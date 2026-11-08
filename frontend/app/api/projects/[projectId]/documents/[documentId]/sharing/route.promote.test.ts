@@ -4,10 +4,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // and saving a description refreshes its vector and the storage's own field.
 
 const { st, calls } = vi.hoisted(() => ({
-    st: { inside: null as null | { id: string; docId: string | null; name: string }, nested: [] as { id: string }[] },
+    st: { inside: null as null | { id: string; docId: string | null; name: string }, nested: [] as { id: string }[], members: [] as { userId: string }[], failUpsert: false },
     calls: { updates: 0, refreshed: [] as string[], native: [] as unknown[][] },
 }))
 
+vi.mock('@/lib/engagement-access', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('@/lib/engagement-access')>()),
+    blockIfEngagementCompleted: async () => null,
+}))
 vi.mock('@/utils/supabase/server', () => ({
     createClient: async () => ({ auth: { getUser: async () => ({ data: { user: { id: 'me' } } }) } }),
 }))
@@ -38,8 +42,8 @@ vi.mock('@/lib/prisma', () => ({
             findUnique: async () => ({ id: 'F', settings: {} }),
         },
         engagement: { findUnique: async () => ({ name: 'E', firmId: 'f' }) },
-        engagementMember: { findMany: async () => [] },
-        engagementDocumentSharingUser: { upsert: async () => ({}) },
+        engagementMember: { findMany: async () => st.members },
+        engagementDocumentSharingUser: { upsert: async () => { if (st.failUpsert) throw new Error('connection reset'); return {} } },
         $queryRawUnsafe: async (query: string) => (query.includes(`settings->'share'->>'createdAt' IS NOT NULL`) ? st.nested : []),
     },
 }))
@@ -51,6 +55,8 @@ const put = (body: object) => PUT({ json: async () => body } as any, { params: P
 beforeEach(() => {
     st.inside = null
     st.nested = []
+    st.members = []
+    st.failUpsert = false
     calls.updates = 0
     calls.refreshed = []
     calls.native = []
@@ -76,6 +82,16 @@ describe('promoting a folder to a deliverable', () => {
         const res = await put({ markAsDeliverable: true })
         expect(res.status).toBe(200)
         expect(calls.updates).toBe(1)
+    })
+
+    // P1-59: the settings are what put it on the Board, so they're written last.
+    it("isn't put on the Board when its members' rows fail partway, and says what failed", async () => {
+        st.members = [{ userId: 'lead' }]
+        st.failUpsert = true
+        const res = await put({ markAsDeliverable: true })
+        expect(res.status).toBe(500)
+        expect((await res.json()).error).toBe("Couldn't promote this folder. Something went wrong on our side. Try again.")
+        expect(calls.updates).toBe(0)
     })
 })
 

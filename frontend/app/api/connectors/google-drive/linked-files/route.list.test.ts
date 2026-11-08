@@ -80,7 +80,7 @@ vi.mock('@/lib/audit', () => ({
 }))
 vi.mock('@/lib/engagement-access', () => ({ blockIfEngagementFileMutationForbidden: vi.fn() }))
 vi.mock('@/lib/connectors/resolve-client-connector', () => ({ resolveEngagementConnector: vi.fn() }))
-vi.mock('@/lib/services/indexing-interceptor', () => ({ IndexingInterceptor: {} }))
+vi.mock('@/lib/services/indexing-interceptor', () => ({ IndexingInterceptor: { indexBatch: vi.fn() } }))
 vi.mock('@/lib/sharing-settings', () => ({ getLock: () => null, isDocumentPrivate: () => false, buildSettingsForDb: vi.fn() }))
 vi.mock('@/lib/files/blocked', () => ({ blockedOf: () => null }))
 vi.mock('@/lib/files/description', () => ({ descriptionOf: () => null }))
@@ -148,6 +148,28 @@ describe('linked-files list — access', () => {
     it('refuses signed out', async () => {
         state.user = null
         expect((await list({ projectId: 'e1' })).status).toBe(401)
+    })
+})
+
+describe('linked-files list — a folder that is gone or refused', () => {
+    it('says the folder is no longer available, rather than listing it as empty', async () => {
+        const { folderGoneFailure } = await import('@/lib/connectors/folder-gone')
+        oneDrive.listOneDriveFiles.mockRejectedValueOnce(folderGoneFailure('OneDrive'))
+        const res = await list({ projectId: 'e1' })
+        expect(res.status).toBe(404)
+        expect(await res.json()).toEqual({
+            error: 'This folder is no longer available in OneDrive. It may have been moved or deleted there.',
+            code: 'not_found',
+        })
+    })
+
+    it('asks Google for that answer too, and passes on its refusal words', async () => {
+        state.engagement = engagementOn('GOOGLE_DRIVE', 'eng_admin')
+        drive.listFiles.mockRejectedValueOnce(storageFailure('busy', 'Google Drive'))
+        const res = await list({ projectId: 'e1' })
+        expect(drive.listFiles).toHaveBeenCalledWith('conn1', 'F', 100, 'u1@firm.test', expect.anything(), { missingFolder: 'throw' })
+        expect(res.status).toBe(503)
+        expect((await res.json()).code).toBe('busy')
     })
 })
 
@@ -231,6 +253,7 @@ describe('linked-files duplicate, copy and move', () => {
     ] as const)('on %s', (type, provider, calls) => {
         it.each(ACTIONS)('%s answers why when the storage refuses, and indexes nothing', async (action, extra, kind) => {
             await connectedTo(type)
+            if (action.startsWith('cross-engagement') && type === 'GOOGLE_DRIVE') drive.getFileMetadata.mockResolvedValueOnce({ name: 'Plan.docx' } as never)
             const failure = storageFailure('locked', provider)
             calls[kind].mockRejectedValueOnce(failure)
             const res = await act(action, extra)
@@ -241,6 +264,8 @@ describe('linked-files duplicate, copy and move', () => {
 
         it.each(ACTIONS)('%s still works when the storage agrees', async (action, extra, kind) => {
             await connectedTo(type)
+            // Another engagement's copy is named from the item's own details.
+            if (action.startsWith('cross-engagement') && type === 'GOOGLE_DRIVE') drive.getFileMetadata.mockResolvedValueOnce({ name: 'Plan.docx' } as never)
             calls[kind].mockResolvedValueOnce({ id: 'NEW' })
             const res = await act(action, extra)
             expect(res.status).toBe(200)
@@ -262,14 +287,45 @@ describe('linked-files duplicate, copy and move', () => {
             expect(drive.recursiveCopy).not.toHaveBeenCalled()
         })
 
-        it('says so when nothing in the folder could be copied', async () => {
+        it('says so when nothing in the folder could be copied, naming what and why', async () => {
             await connectedTo('GOOGLE_DRIVE')
             drive.getFileMetadata.mockResolvedValueOnce(FOLDER as never)
             drive.getAccessToken.mockResolvedValueOnce('token')
-            drive.recursiveCopy.mockResolvedValueOnce([])
+            drive.recursiveCopy.mockResolvedValueOnce({
+                copied: [{ id: 'NF', name: 'Reports', originalId: 'F1', isFolder: true }],
+                failed: [{ name: 'Budget.xlsx', reason: 'Google Drive has this locked.' }],
+                filesTotal: 1, filesCopied: 0,
+            })
             const res = await copyFolder()
             expect(res.status).toBe(502)
-            expect(await res.json()).toEqual({ error: "Google Drive refused the change: none of the folder's files could be copied", code: 'other' })
+            expect(await res.json()).toMatchObject({
+                error: 'Nothing in Reports was copied. Budget.xlsx · Google Drive has this locked.',
+                code: 'nothing_copied',
+                filesTotal: 1,
+            })
+        })
+
+        it('keeps what copied and answers X of Y with what was not copied', async () => {
+            await connectedTo('GOOGLE_DRIVE')
+            drive.getFileMetadata.mockResolvedValueOnce(FOLDER as never)
+            drive.getAccessToken.mockResolvedValueOnce('token')
+            drive.recursiveCopy.mockResolvedValueOnce({
+                copied: [{ id: 'NF', name: 'Reports', originalId: 'F1', isFolder: true }, { id: 'N2', name: 'Q3.pdf', originalId: 'x', isFolder: false }],
+                failed: [{ name: 'Budget.xlsx', reason: 'Google Drive has this locked.' }],
+                filesTotal: 2, filesCopied: 1,
+            })
+            const res = await copyFolder()
+            expect(res.status).toBe(200)
+            expect(await res.json()).toMatchObject({ success: true, filesCopied: 1, filesTotal: 2, failed: [{ name: 'Budget.xlsx' }] })
+        })
+
+        it("stops with the reason when the item's details can't be read, rather than naming the copy by its id", async () => {
+            await connectedTo('GOOGLE_DRIVE')
+            drive.getFileMetadata.mockResolvedValueOnce(null)
+            const res = await copyFolder()
+            expect(res.status).toBe(502)
+            expect((await res.json()).error).toContain("wouldn't show this item's details")
+            expect(drive.copyFile).not.toHaveBeenCalled()
         })
 
         it("answers OneDrive's reason", async () => {

@@ -8,7 +8,7 @@ import { sendEmail } from '@/lib/email'
 import { renderReminderEmail } from '@/lib/email-templates/reminder'
 import { safeInngestSend } from '@/lib/inngest/client'
 import { parseSettingsFromDb } from '@/lib/sharing-settings'
-import { isExternalEngagementRole } from '@/lib/engagement-access'
+import { isExternalEngagementRole, blockIfEngagementCompleted } from '@/lib/engagement-access'
 import { privateExternalIds } from '@/lib/engagement-sharing-ids'
 import { formatFullDate } from '@/lib/utils'
 import { documentLink } from '@/lib/notification-links'
@@ -34,17 +34,20 @@ export async function PATCH(
   try {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!user) return NextResponse.json({ error: 'Your session has ended. Sign in again.' }, { status: 401 })
 
     const { projectId, documentId } = await params
     const ctx = await resolveProjectContext(projectId)
-    if (!ctx) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    if (!ctx) return NextResponse.json({ error: 'This engagement was not found, or you no longer have access.' }, { status: 404 })
 
     const canView = await canViewProject(ctx.orgId, ctx.clientId, ctx.projectId)
-    if (!canView) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    if (!canView) return NextResponse.json({ error: 'This engagement was not found, or you no longer have access.' }, { status: 404 })
 
     const canManage = await canViewProjectSettings(ctx.orgId, ctx.clientId, ctx.projectId)
-    if (!canManage) return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 })
+    if (!canManage) return NextResponse.json({ error: 'Only a Lead can change due dates.' }, { status: 403 })
+
+    const completed = await blockIfEngagementCompleted(projectId)
+    if (completed) return completed
 
     const body = await request.json().catch(() => ({}))
     const dueDateRaw = body?.dueDate as string | null | undefined
@@ -55,20 +58,54 @@ export async function PATCH(
       where: { id: documentId, engagementId: projectId },
       select: DOC_SELECT,
     })
-    if (!doc) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    if (!doc) return NextResponse.json({ error: 'This file is no longer in this engagement. Refresh to see it as it is.' }, { status: 404 })
 
     const plan = await planDueDate(projectId, doc, dueDate, fixes)
     if (plan.conflict) return NextResponse.json({ needsResolution: plan.conflict }, { status: 409 })
 
+    // Every row whose date changes: this one, then the others the chosen fix moves (its deliverable, or its documents).
+    const rows: { row: DueRow; next: Date | null }[] = [{ row: doc, next: dueDate }]
+    for (const change of plan.documents) {
+      const row = await prisma.engagementDocument.findFirst({ where: { id: change.id, engagementId: projectId }, select: DOC_SELECT })
+      if (row) rows.push({ row, next: change.due })
+    }
+
     // The engagement first: a deliverable moved past it would otherwise be refused by its own rule.
+    let engagementBefore: { dueDate: Date | null } | null = null
     if (plan.engagementDue) {
       const eng = await prisma.engagement.findUnique({
         where: { id: projectId },
-        select: { client: { select: { slug: true, firm: { select: { slug: true } } } } },
+        select: { dueDate: true, client: { select: { slug: true, firm: { select: { slug: true } } } } },
       })
-      await updateEngagement(projectId, { dueDate: plan.engagementDue.toISOString() }, eng?.client?.firm?.slug ?? '', eng?.client?.slug ?? '')
+      engagementBefore = { dueDate: eng?.dueDate ?? null }
+      const moved = await updateEngagement(projectId, { dueDate: plan.engagementDue.toISOString() }, eng?.client?.firm?.slug ?? '', eng?.client?.slug ?? '')
+      if (!moved.ok) {
+        const status = moved.code === 'forbidden' ? 403 : moved.code === 'not_found' ? 404 : moved.code === 'internal' ? 500 : 409
+        return NextResponse.json({ error: moved.error, code: moved.code }, { status })
+      }
     }
 
+    // The dates themselves together (P1-62): all of them move, or none do.
+    try {
+      await prisma.$transaction(rows.map(({ row, next }) => prisma.engagementDocument.update({ where: { id: row.id }, data: { dueDate: next } })))
+    } catch (e) {
+      console.error('due-date PATCH: dates not saved', e)
+      if (!engagementBefore || !plan.engagementDue) {
+        return NextResponse.json({ error: "Couldn't set the due date. Something went wrong on our side, and nothing changed. Try again." }, { status: 500 })
+      }
+      // The engagement already moved: put it back, or say that it moved.
+      const putBack = await prisma.engagement
+        .update({ where: { id: projectId }, data: { dueDate: engagementBefore.dueDate } })
+        .then(() => true, () => false)
+      return NextResponse.json({
+        error: putBack
+          ? "Couldn't set the due date. Something went wrong on our side, and nothing changed. Try again."
+          : `Couldn't set the due date. The engagement's due date moved to ${formatFullDate(plan.engagementDue)}, but ${doc.fileName} didn't. Try again.`,
+        ...(putBack ? {} : { engagementDueDate: plan.engagementDue.toISOString() }),
+      }, { status: 500 })
+    }
+
+    // What follows a saved date: notices and reminders. The dates stand either way; what didn't follow is said.
     const members = await prisma.engagementMember.findMany({
       where: { engagementId: projectId },
       select: { userId: true, role: true },
@@ -77,18 +114,15 @@ export async function PATCH(
     // A private file's date is the firm's own: its notice names the file, so no client gets one.
     const firmUserIds = members.filter((m) => !isExternalEngagementRole(m.role)).map((m) => m.userId)
     const privateIds = await privateExternalIds(projectId)
-    const setDue = (row: DueRow, next: Date | null) => applyDueDate(row, next, {
-      projectId,
-      clientId: ctx.clientId,
-      actorUserId: user.id,
-      memberUserIds: privateIds.has(row.externalId) ? firmUserIds : memberUserIds,
-    })
-
-    await setDue(doc, dueDate)
-    // The other dates the chosen fix moves: its deliverable, or its documents.
-    for (const change of plan.documents) {
-      const row = await prisma.engagementDocument.findFirst({ where: { id: change.id, engagementId: projectId }, select: DOC_SELECT })
-      if (row) await setDue(row, change.due)
+    const notFollowed: string[] = []
+    for (const { row, next } of rows) {
+      const done = await followDueDate(row, next, {
+        projectId,
+        clientId: ctx.clientId,
+        actorUserId: user.id,
+        memberUserIds: privateIds.has(row.externalId) ? firmUserIds : memberUserIds,
+      }).catch((e) => { console.error('due-date PATCH: follow-up failed', row.id, e); return false })
+      if (!done) notFollowed.push(row.fileName)
     }
 
     return NextResponse.json({
@@ -96,10 +130,13 @@ export async function PATCH(
       dueDate: dueDate ? dueDate.toISOString() : null,
       ...(plan.documents.length > 0 ? { alsoChanged: plan.documents.map((d) => ({ id: d.id, dueDate: d.due.toISOString() })) } : {}),
       ...(plan.engagementDue ? { engagementDueDate: plan.engagementDue.toISOString() } : {}),
+      ...(notFollowed.length > 0
+        ? { warning: `Due date saved, but its reminders and notices for ${notFollowed.join(', ')} couldn't all be updated. Set the date again to retry.` }
+        : {}),
     })
   } catch (e) {
     console.error('due-date PATCH error', e)
-    return NextResponse.json({ error: 'Failed to update due date' }, { status: 500 })
+    return NextResponse.json({ error: "Couldn't set the due date. Something went wrong on our side. Try again." }, { status: 500 })
   }
 }
 
@@ -114,24 +151,23 @@ type DueRow = {
   clientId: string | null
 }
 
-/** One row's new due date, with what follows a change: stale notices retracted, new ones sent, reminders rescheduled. */
-async function applyDueDate(
+/**
+ * What follows a row's saved due date: stale notices retracted, new ones sent, reminders rescheduled.
+ * Answers false when a reminder couldn't be cancelled or scheduled; throws when a notice write fails.
+ */
+async function followDueDate(
   doc: DueRow,
   dueDate: Date | null,
   ctx: { projectId: string; clientId: string; actorUserId: string; memberUserIds: string[] },
-) {
+): Promise<boolean> {
   const { projectId, actorUserId, memberUserIds } = ctx
-  await prisma.engagementDocument.update({
-    where: { id: doc.id },
-    data: { dueDate },
-  })
 
   const isDeliverableFolder = doc.isFolder && (() => {
     try { return !!(parseSettingsFromDb(doc.settings as any).share?.createdAt) } catch { return false }
   })()
 
   // Always cancel any existing scheduled reminder for this document
-  await safeInngestSend('deliverable.due_date.cancelled', { documentId: doc.id })
+  let followed = await safeInngestSend('deliverable.due_date.cancelled', { documentId: doc.id })
 
   // If the due date was cleared or changed, retract any already-delivered
   // due-date / reminder notifications for this document so members don't see
@@ -149,7 +185,7 @@ async function applyDueDate(
     })
   }
 
-  if (!dueDate) return
+  if (!dueDate) return followed
 
   // Where the notification and the deliverable's reminders link to: its card on the Board, or
   // the document in Files.
@@ -191,7 +227,7 @@ async function applyDueDate(
     const boardUrl = docUrl
 
     // Schedule 24h + 1h reminders via Inngest for deliverable folders
-    await safeInngestSend('deliverable.due_date.set', {
+    followed = (await safeInngestSend('deliverable.due_date.set', {
       documentId: doc.id,
       documentName: doc.fileName,
       dueDate: dueDate.toISOString(),
@@ -200,7 +236,7 @@ async function applyDueDate(
       clientId: doc.clientId ?? ctx.clientId,
       engagementId: projectId,
       boardUrl,
-    })
+    })) && followed
   } else {
     // Non-deliverable: immediate email if within 24h (existing behavior)
     const hours = (dueDate.getTime() - Date.now()) / (1000 * 60 * 60)
@@ -221,4 +257,5 @@ async function applyDueDate(
       }))
     }
   }
+  return followed
 }

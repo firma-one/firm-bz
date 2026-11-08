@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import { userFacing } from '@/lib/actions/action-result'
 import { countBillableFirmsInBillingGroup } from '@/lib/billing/billing-group'
 import {
     anchorUsesSandboxCapDefaults,
@@ -151,7 +152,7 @@ export async function getFirmCreationGateReasonForGroup(userId: string, groupSlu
 export async function requireNonSandboxFirmCreationAccess(userId: string): Promise<void> {
     const ok = await canCreateNonSandboxFirm(userId)
     if (!ok) {
-        throw new Error('Upgrade to Standard to create a new firm outside the Free Sandbox.')
+        throw userFacing('Upgrade to Standard to create a new firm outside the Free Sandbox.', 'upgrade_required')
     }
 }
 

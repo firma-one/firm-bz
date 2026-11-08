@@ -124,6 +124,8 @@ export function SetupReminderModal({
   const [dateValue, setDateValue] = useState<string>('')
   const [submitting, setSubmitting] = useState(false)
   const [success, setSuccess] = useState(false)
+  /** Why the save failed, shown in the modal, which stays open with the choices as they were. */
+  const [submitError, setSubmitError] = useState<string | null>(null)
 
   useEffect(() => { setMounted(true) }, [])
 
@@ -137,6 +139,7 @@ export function SetupReminderModal({
     setDateValue(firstDate)
     setInitialDate(firstDate)
     setSuccess(false)
+    setSubmitError(null)
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleMember = (userId: string) => {
@@ -174,6 +177,7 @@ export function SetupReminderModal({
   const handleSubmit = async () => {
     if (submitting) return
     setSubmitting(true)
+    setSubmitError(null)
     try {
       const deselected = Array.from(existingReminders.keys()).filter((id) => !selectedIds.has(id))
       await onSubmit({
@@ -181,12 +185,19 @@ export function SetupReminderModal({
         deselected,
         dateValue: dateValue || null,
       })
-      setSuccess(true)
-      await new Promise((r) => setTimeout(r, 1200))
-      handleClose()
-    } finally {
+    } catch (e) {
+      // try/finally alone let the rejection escape: the modal sat there with nothing said. The
+      // caller's reason when it gave one, and the choices stay as they were to try again.
+      setSubmitError(e instanceof TypeError
+        ? "Couldn't save the reminder · couldn't reach the server. Check your connection and try again."
+        : `Couldn't save the reminder${e instanceof Error && e.message ? ` · ${e.message}` : '. Try again.'}`)
       setSubmitting(false)
+      return
     }
+    setSuccess(true)
+    await new Promise((r) => setTimeout(r, 1200))
+    handleClose()
+    setSubmitting(false)
   }
 
   const hasChanges =
@@ -337,6 +348,9 @@ export function SetupReminderModal({
 
               {hint && (
                 <p className="text-[11px] text-slate-400 leading-relaxed">{hint}</p>
+              )}
+              {submitError && (
+                <p role="alert" className="text-[11px] leading-relaxed text-danger">{submitError}</p>
               )}
             </div>
 

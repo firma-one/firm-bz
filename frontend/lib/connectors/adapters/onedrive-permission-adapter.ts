@@ -25,8 +25,8 @@ import { OneDriveConnector } from '@/lib/connectors/onedrive-connector'
 import { resolveOneDriveDriveBase } from './onedrive-adapter'
 import { prisma } from '@/lib/prisma'
 import { logger } from '@/lib/logger'
-import { storageFailure, storageFailureFromResponse } from '@/lib/connectors/storage-failure'
-import type { IConnectorPermissionAdapter, EngagementFolderIds, ConnectorRole, ConnectorFileMetadata } from '../types'
+import { storageFailure, storageFailureFromResponse, type StorageFailure } from '@/lib/connectors/storage-failure'
+import type { IConnectorPermissionAdapter, EngagementFolderIds, ConnectorRole, ConnectorFileMetadata, FolderRestrictOutcome, TrashState } from '../types'
 
 const oneDrive = OneDriveConnector.getInstance()
 const GRAPH_BETA = 'https://graph.microsoft.com/beta'
@@ -69,6 +69,96 @@ async function auth(connectionId: string): Promise<string> {
   return token
 }
 
+/** A token and the drive's base URL, for a call someone waits on: not getting them means reconnecting. */
+async function connect(connectionId: string): Promise<[string, string]> {
+  try {
+    return await Promise.all([auth(connectionId), resolveOneDriveDriveBase(connectionId)])
+  } catch (error) {
+    logger.error('Failed to get a OneDrive connection', error as Error)
+    throw storageFailure('reconnect', 'OneDrive')
+  }
+}
+
+async function reach(url: string, init: RequestInit): Promise<Response> {
+  try {
+    return await fetch(url, init)
+  } catch (error) {
+    logger.error('Failed to reach OneDrive', error as Error)
+    throw storageFailure('unreachable', 'OneDrive')
+  }
+}
+
+/** A Graph permission, in the shapes this adapter reads. */
+type GraphPermission = {
+  id: string
+  roles?: string[]
+  /** Set when the permission comes from a parent: it can't be changed or removed on this item. */
+  inheritedFrom?: unknown
+  link?: { scope?: string; type?: string }
+  grantedToV2?: { user?: { email?: string }; siteUser?: { email?: string } }
+  grantedToIdentitiesV2?: Array<{ user?: { email?: string }; siteUser?: { email?: string } }>
+}
+
+/**
+ * The addresses a permission is for. Direct /invite grants fill grantedToV2; link grants (our
+ * createLink(blocksDownload) path) fill grantedToIdentitiesV2; a SharePoint site user's address can sit
+ * on siteUser instead of user.
+ */
+function emailsOf(p: GraphPermission): string[] {
+  const all = [
+    p.grantedToV2?.user?.email,
+    p.grantedToV2?.siteUser?.email,
+    ...(p.grantedToIdentitiesV2 ?? []).flatMap((g) => [g.user?.email, g.siteUser?.email]),
+  ]
+  return all.filter((e): e is string => !!e).map((e) => e.toLowerCase())
+}
+
+function describeGraphPermission(p: GraphPermission): string {
+  const email = emailsOf(p)[0]
+  if (email) return email
+  if (p.link?.scope === 'anonymous') return 'anyone with the link'
+  if (p.link?.scope === 'organization') return 'everyone in the organization with the link'
+  return 'someone'
+}
+
+/** An item's permissions. Throws a StorageFailure when Graph won't list them. */
+async function listItemPermissions(token: string, base: string, itemId: string, action: string): Promise<GraphPermission[]> {
+  const res = await reach(`${base}/items/${itemId}/permissions`, { headers: { Authorization: `Bearer ${token}` } })
+  if (!res.ok) throw await storageFailureFromResponse(res, 'OneDrive', action)
+  const data = await res.json()
+  return (data.value || []) as GraphPermission[]
+}
+
+/** The permission `email` holds on the item itself, if any: not one inherited from a parent. */
+function directPermissionOf(permissions: GraphPermission[], email: string): GraphPermission | undefined {
+  const wanted = email.toLowerCase()
+  return permissions.find((p) => !p.inheritedFrom && emailsOf(p).includes(wanted))
+}
+
+/**
+ * Shares a folder with someone, for a member's folder access. Unlike a file grant, a refusal throws a
+ * StorageFailure saying why: the caller reports it to the engagement's Leads.
+ */
+async function grantFolderItemPermission(connectionId: string, folderId: string, email: string, role: ConnectorRole): Promise<string | null> {
+  const [token, base] = await connect(connectionId)
+  const res = await reach(`${base}/items/${folderId}/invite`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    // No Graph email, as for files (see grantItemPermission): Firma's own emails tell the person.
+    body: JSON.stringify({ recipients: [{ email }], roles: [toGraphRole(role)], sendInvitation: false, requireSignIn: true }),
+  })
+  if (!res.ok) {
+    const code = await res.clone().json().then((b: { error?: { code?: string } }) => b?.error?.code).catch(() => undefined)
+    if (code === 'sharingFailed') {
+      logger.warn('[onedrive-permission-adapter] folder share refused by the tenant\'s sharing policy', { connectionId, folderId })
+      throw storageFailure('other', 'OneDrive', "this organization's sharing settings don't allow sharing with that address")
+    }
+    throw await storageFailureFromResponse(res, 'OneDrive', 'share a folder')
+  }
+  const data = await res.json()
+  return data.value?.[0]?.id ?? null
+}
+
 /**
  * Graph's DELETE moves the item to the drive's recycle bin: there's no "trashed" flag to set. 404 means
  * it's already gone, which counts as done. Anything else throws a StorageFailure saying why.
@@ -94,55 +184,102 @@ async function moveToRecycleBin(connectionId: string, fileId: string): Promise<v
 
 export function createOneDrivePermissionAdapter(): IConnectorPermissionAdapter {
   return {
-    async grantFolderPermission(connectionId, folderId, email, role, opts) {
-      return grantItemPermission(connectionId, folderId, email, role, opts)
+    // Throws a StorageFailure saying why when Graph refuses (a file grant still answers null: see grantItemPermission).
+    async grantFolderPermission(connectionId, folderId, email, role) {
+      return grantFolderItemPermission(connectionId, folderId, email, role)
     },
 
     async revokePermission(connectionId, fileId, permissionId) {
-      const [token, base] = await Promise.all([auth(connectionId), resolveOneDriveDriveBase(connectionId)])
-      const res = await fetch(`${base}/items/${fileId}/permissions/${permissionId}`, {
+      const [token, base] = await connect(connectionId)
+      const res = await reach(`${base}/items/${fileId}/permissions/${permissionId}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       })
-      return res.ok || res.status === 404
+      // Already gone counts as revoked.
+      if (res.ok || res.status === 404) return true
+      throw await storageFailureFromResponse(res, 'OneDrive', 'remove a permission')
+    },
+
+    // Graph has no revoke-by-email: find their permission on the folder, then delete it.
+    async revokeFolderPermissionByEmail(connectionId, folderId, email) {
+      const [token, base] = await connect(connectionId)
+      const permissions = await listItemPermissions(token, base, folderId, "list a folder's permissions")
+      const wanted = email.toLowerCase()
+      for (const perm of permissions.filter((p) => !p.inheritedFrom && emailsOf(p).includes(wanted))) {
+        const res = await reach(`${base}/items/${folderId}/permissions/${perm.id}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (!res.ok && res.status !== 404) throw await storageFailureFromResponse(res, 'OneDrive', 'remove a folder permission')
+      }
+    },
+
+    async restrictFolderToOwnerOnly(connectionId, folderId): Promise<FolderRestrictOutcome> {
+      const [token, base] = await connect(connectionId)
+      const permissions = await listItemPermissions(token, base, folderId, "list a folder's permissions")
+      const outcome: FolderRestrictOutcome = { removed: 0, remaining: [] }
+      await Promise.all(
+        permissions
+          .filter((p) => !p.inheritedFrom && !p.roles?.includes('owner'))
+          .map(async (p) => {
+            let failure: StorageFailure | null = null
+            try {
+              const res = await reach(`${base}/items/${folderId}/permissions/${p.id}`, {
+                method: 'DELETE',
+                headers: { Authorization: `Bearer ${token}` },
+              })
+              if (!res.ok && res.status !== 404) failure = await storageFailureFromResponse(res, 'OneDrive', 'remove a permission')
+            } catch (e) {
+              failure = e as StorageFailure
+            }
+            if (!failure) {
+              outcome.removed++
+              return
+            }
+            outcome.remaining.push(describeGraphPermission(p))
+            outcome.reason ??= failure.message
+          })
+      )
+      return outcome
+    },
+
+    async getTrashState(connectionId, fileId): Promise<TrashState> {
+      const [token, base] = await connect(connectionId)
+      const res = await reach(`${base}/items/${fileId}?$select=id,deleted`, { headers: { Authorization: `Bearer ${token}` } })
+      // A recycled item and one deleted for good both answer 404 here.
+      if (res.status === 404) return 'gone'
+      if (!res.ok) throw await storageFailureFromResponse(res, 'OneDrive', 'check an item in the trash')
+      const data = await res.json() as { deleted?: unknown }
+      return data.deleted ? 'trashed' : 'restored'
     },
 
     async downgradeFolderUserPermissionToReader(connectionId, folderId, email) {
-      const [token, base] = await Promise.all([auth(connectionId), resolveOneDriveDriveBase(connectionId)])
-      const listRes = await fetch(`${base}/items/${folderId}/permissions`, { headers: { Authorization: `Bearer ${token}` } })
-      if (!listRes.ok) return false
-      const data = await listRes.json()
-      const perm = (data.value || []).find(
-        (p: { grantedToV2?: { user?: { email?: string } } }) =>
-          p.grantedToV2?.user?.email?.toLowerCase() === email.toLowerCase()
-      )
-      if (!perm) return false
-      const patchRes = await fetch(`${base}/items/${folderId}/permissions/${perm.id}`, {
+      const [token, base] = await connect(connectionId)
+      const perm = directPermissionOf(await listItemPermissions(token, base, folderId, "list a folder's permissions"), email)
+      // Nothing of theirs to lower here, or the owner's, which can't be: nothing to do, as on Google Drive.
+      if (!perm || perm.roles?.includes('owner') || !perm.roles?.includes('write')) return true
+      const patchRes = await reach(`${base}/items/${folderId}/permissions/${perm.id}`, {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ roles: ['read'] }),
       })
-      return patchRes.ok
+      if (!patchRes.ok) throw await storageFailureFromResponse(patchRes, 'OneDrive', 'make a folder read only')
+      return true
     },
 
     async upgradeFolderUserPermissionToEditor(connectionId, folderId, email) {
-      const [token, base] = await Promise.all([auth(connectionId), resolveOneDriveDriveBase(connectionId)])
-      const listRes = await fetch(`${base}/items/${folderId}/permissions`, { headers: { Authorization: `Bearer ${token}` } })
-      if (!listRes.ok) return false
-      const data = await listRes.json()
-      const perm = (data.value || []).find(
-        (p: { grantedToV2?: { user?: { email?: string } } }) =>
-          p.grantedToV2?.user?.email?.toLowerCase() === email.toLowerCase()
-      ) as { id: string; roles?: string[] } | undefined
-      if (!perm) return !!(await grantItemPermission(connectionId, folderId, email, 'editor', { notify: false }))
+      const [token, base] = await connect(connectionId)
+      const perm = directPermissionOf(await listItemPermissions(token, base, folderId, "list a folder's permissions"), email)
+      if (!perm) return !!(await grantFolderItemPermission(connectionId, folderId, email, 'editor'))
       // Only a reader is raised: an owner or editor keeps what they have.
       if (perm.roles?.some((role) => role !== 'read')) return true
-      const patchRes = await fetch(`${base}/items/${folderId}/permissions/${perm.id}`, {
+      const patchRes = await reach(`${base}/items/${folderId}/permissions/${perm.id}`, {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ roles: ['write'] }),
       })
-      return patchRes.ok
+      if (!patchRes.ok) throw await storageFailureFromResponse(patchRes, 'OneDrive', 'give edit access to a folder')
+      return true
     },
 
     async getEngagementFolderIds(connectionId, engagementSlug, _opts): Promise<EngagementFolderIds> {
@@ -180,7 +317,10 @@ export function createOneDrivePermissionAdapter(): IConnectorPermissionAdapter {
       const res = await fetch(`${base}/items/${folderId}/children?$select=id,name,file,folder${top}`, {
         headers: { Authorization: `Bearer ${token}` },
       })
-      if (!res.ok) return []
+      // A folder that's gone lists as empty, as on Google Drive. Any other refusal says why: answering []
+      // let the search index quietly miss the folder's files, with nothing to retry it (P2-38).
+      if (res.status === 404) return []
+      if (!res.ok) throw await storageFailureFromResponse(res, 'OneDrive', 'list a folder')
       const data = await res.json()
       // mimeType uses Google's folder-mimeType sentinel so provider-agnostic callers that sniff
       // it (e.g. recursive folder walks) keep working — Graph's `file` facet is absent on folders.
@@ -214,10 +354,11 @@ export function createOneDrivePermissionAdapter(): IConnectorPermissionAdapter {
       return grantItemPermission(connectionId, fileId, email, role, opts)
     },
 
+    // Throws a StorageFailure when Graph won't list them, so an empty array really means none.
     async listFilePermissions(connectionId, fileId) {
-      const [token, base] = await Promise.all([auth(connectionId), resolveOneDriveDriveBase(connectionId)])
-      const res = await fetch(`${base}/items/${fileId}/permissions`, { headers: { Authorization: `Bearer ${token}` } })
-      if (!res.ok) return []
+      const [token, base] = await connect(connectionId)
+      const res = await reach(`${base}/items/${fileId}/permissions`, { headers: { Authorization: `Bearer ${token}` } })
+      if (!res.ok) throw await storageFailureFromResponse(res, 'OneDrive', "list a file's permissions")
       const data = await res.json()
       return (data.value || []).map((p: {
         id: string
@@ -289,7 +430,8 @@ export function createOneDrivePermissionAdapter(): IConnectorPermissionAdapter {
           ? `${base}/items/${folderId}/search(q='${encodedQuery}')?${select}&$top=${limit}`
           : `${base}/root/search(q='${encodedQuery}')?${select}&$top=${limit}`
         const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
-        if (!res.ok) return []
+        // A refusal is a failure, as on Google Drive: answering [] would read as "no results".
+        if (!res.ok) throw await storageFailureFromResponse(res, 'OneDrive', 'search')
         const data = await res.json()
         return (data.value || []) as Array<{
           id: string; name: string; file?: { mimeType?: string }; folder?: unknown
@@ -336,7 +478,8 @@ export function createOneDrivePermissionAdapter(): IConnectorPermissionAdapter {
         `${base}/recent?$select=id,name,file,folder,size,lastModifiedDateTime,webUrl,parentReference`,
         { headers: { Authorization: `Bearer ${token}` } }
       )
-      if (!res.ok) return []
+      // A refused read isn't "none found" (P2-37).
+      if (!res.ok) throw await storageFailureFromResponse(res, 'OneDrive', 'list recent files')
       const data = await res.json()
       const files = ((data.value || []) as Array<{
         id: string; name: string; file?: { hashes?: { quickXorHash?: string }; mimeType?: string }; folder?: unknown
@@ -381,7 +524,8 @@ export function createOneDrivePermissionAdapter(): IConnectorPermissionAdapter {
         `${base}/recent?$select=id,name,file,folder,size,lastModifiedDateTime,webUrl,parentReference`,
         { headers: { Authorization: `Bearer ${token}` } }
       )
-      if (!res.ok) return []
+      // A refused read isn't "none found" (P2-37).
+      if (!res.ok) throw await storageFailureFromResponse(res, 'OneDrive', 'list recent files')
       const data = await res.json()
       const sixMonthsAgo = new Date()
       sixMonthsAgo.setDate(sixMonthsAgo.getDate() - 180)

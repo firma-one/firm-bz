@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { blockIfEngagementCompleted } from '@/lib/engagement-access'
 import { createClient } from '@/utils/supabase/server'
 import { prisma } from '@/lib/prisma'
 import { resolveProjectContext } from '@/lib/resolve-project-context'
@@ -6,7 +7,8 @@ import { canManageProject } from '@/lib/permission-helpers'
 import { logger } from '@/lib/logger'
 import { getAnthropic, isAiConfigured, AI_MODEL } from '@/lib/ai/client'
 import { recordAiUsage } from '@/lib/ai/usage'
-import { getGuardedAnthropic, meterAiCall, aiLimitResponse } from '@/lib/ai/guarded-client'
+import { getGuardedAnthropic, meterAiCall, aiFailureResponse } from '@/lib/ai/guarded-client'
+import { BRIO_SUMMARY_FAILED } from '@/lib/ai/brio-failure'
 import { computeEngagementInsights } from '@/lib/insights/engagement-insights'
 import { buildEngagementContext } from '@/lib/ai/engagement-chat'
 import { SUMMARY_SYSTEM_PROMPT, fingerprintInsights, readInsightsSummary } from '@/lib/ai/engagement-summary'
@@ -39,6 +41,9 @@ export async function POST(
         if (!(await canManageProject(ctx.firmId, ctx.clientId, ctx.projectId))) {
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
         }
+
+        const completed = await blockIfEngagementCompleted(projectId)
+        if (completed) return completed
 
         if (!isAiConfigured()) {
             return NextResponse.json({ error: 'AI is not configured' }, { status: 503 })
@@ -127,7 +132,7 @@ export async function POST(
                     if (cancelled) return
                     const content = full.trim()
                     if (!content) {
-                        controller.enqueue(line({ type: 'error', message: 'Empty response' }))
+                        controller.enqueue(line({ type: 'error', message: BRIO_SUMMARY_FAILED }))
                         return
                     }
 
@@ -161,10 +166,11 @@ export async function POST(
                 } catch (error) {
                     // Stopped on purpose: the abort surfaces here as an error, but it is not one.
                     if (cancelled) return
-        const limited = aiLimitResponse(error)
-        if (limited) return limited
+                    // The credit gate runs before the stream (getGuardedAnthropic above), so a
+                    // limit never lands here; the outer catch answers it. This is the model or the
+                    // save failing part-way, and nothing was saved.
                     logger.error('AI summary stream error:', error as Error)
-                    controller.enqueue(line({ type: 'error', message: 'Generation failed' }))
+                    controller.enqueue(line({ type: 'error', message: BRIO_SUMMARY_FAILED }))
                 } finally {
                     try { controller.close() } catch { /* already closed by the client leaving */ }
                 }
@@ -179,7 +185,8 @@ export async function POST(
             headers: { 'Content-Type': 'application/x-ndjson', 'Cache-Control': 'no-store' },
         })
     } catch (error) {
-        logger.error('AI summary error:', error as Error)
-        return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+        // Out of credits: the gate throws before the stream, so this is where its words are
+        // answered (429, the limit's own message), as chat does. Trying again can't help then.
+        return aiFailureResponse(error, BRIO_SUMMARY_FAILED, 'AI summary error:')
     }
 }

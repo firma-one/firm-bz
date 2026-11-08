@@ -291,7 +291,7 @@ export function SidebarV2({
     const pathname = usePathname() ?? ""
     const searchParams = useSearchParams()
     const tab = searchParams?.get("tab") ?? null
-    const { data, loading, firmSlug, groupSlug, canManage, firms, inboxTotal } = useShellData()
+    const { data, loading, loadFailed, permissionsError, refresh, firmSlug, groupSlug, canManage, firms, inboxTotal } = useShellData()
 
     const base = firmSlug && groupSlug ? firmPath(groupSlug, firmSlug) : null
 
@@ -385,6 +385,13 @@ export function SidebarV2({
                             <Skeleton className="h-4 w-1/2" />
                             <Skeleton className="h-4 w-2/3" />
                         </div>
+                    ) : loadFailed && !data ? (
+                        // Not "No active engagements yet": the list didn't load, and saying it's
+                        // empty would send a person looking for engagements that are there.
+                        <p role="status" className="px-2 py-1 text-small text-fg-subtle">
+                            Couldn&apos;t load your engagements.{' '}
+                            <button type="button" onClick={refresh} className="font-medium text-fg-muted underline-offset-2 hover:underline">Try again</button>
+                        </p>
                     ) : shownClients.length === 0 ? (
                         <p className="px-2 py-1 text-small text-fg-subtle">No active engagements yet.</p>
                     ) : (
@@ -427,6 +434,14 @@ export function SidebarV2({
                         {canManage && <SidebarItem href={firmTabPath(groupSlug!, firmSlug!, "members")} icon={<Users />} label="Members" active={tab === "members"} trailing={<AccessLock label="Firm admins only — hidden from other members" side="right" />} />}
                         {canManage && <SidebarItem href={firmTabPath(groupSlug!, firmSlug!, "audit")} icon={<ClipboardList />} label="Audit" active={tab === "audit"} trailing={<AccessLock label="Firm admins only — hidden from other members" side="right" />} />}
                         {canManage && <SidebarItem href={firmTabPath(groupSlug!, firmSlug!, "settings")} icon={<Settings />} label="Settings" active={tab === "settings"} trailing={<AccessLock label="Firm admins only — hidden from other members" side="right" />} />}
+                        {/* Members, Audit and Settings hide when the permissions didn't load; say so,
+                            so an admin doesn't read it as having lost access. */}
+                        {permissionsError && !canManage && (
+                            <p role="status" title={permissionsError} className="px-2 py-1 text-small text-fg-subtle">
+                                Couldn&apos;t load your permissions.{' '}
+                                <button type="button" onClick={refresh} className="font-medium text-fg-muted underline-offset-2 hover:underline">Try again</button>
+                            </p>
+                        )}
                     </SidebarSection>
                 )}
             </div>

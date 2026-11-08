@@ -255,6 +255,9 @@ export function AiCreditsRow({ usage }: { usage: BillingPlanUsage | null | undef
 type Props = {
     currentPlanState: BillingCurrentPlanState | null
     loading: boolean
+    /** Why the plan didn't load, when it didn't. A failed load is never shown as "no plan". */
+    loadError?: string | null
+    onRetry?: () => void
     /** `embedded` = inside workspace card (tighter chrome, dashboard-neutral). */
     variant?: 'default' | 'embedded'
     /** When set with `portalReturnPath`, billing admins can open Polar customer portal from this card. */
@@ -270,6 +273,8 @@ type Props = {
 export function CurrentPlanSummary({
     currentPlanState,
     loading,
+    loadError,
+    onRetry,
     variant = 'embedded',
     firmId,
     portalReturnPath,
@@ -319,6 +324,22 @@ export function CurrentPlanSummary({
                         </div>
                     ))}
                 </div>
+            </div>
+        )
+    }
+
+    if (!currentPlanState && loadError) {
+        return (
+            <div className={shell} role="alert">
+                {heading}
+                <p className="mt-1 text-small text-fg-muted">
+                    Couldn&apos;t load your plan · {loadError}
+                </p>
+                {onRetry ? (
+                    <Button type="button" variant="outline" size="sm" className="mt-3" onClick={onRetry}>
+                        Try again
+                    </Button>
+                ) : null}
             </div>
         )
     }

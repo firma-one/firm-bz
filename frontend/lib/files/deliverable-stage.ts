@@ -2,6 +2,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { documentStage, type ActivityStatus } from '@/lib/sharing-settings'
 import { deriveDeliverableStage } from '@/lib/deliverable-derivation'
+import { privateExternalIds } from '@/lib/engagement-sharing-ids'
 import { accessWidenedBy, applyStageChange, currentStageOf, type StageMoveContext, type StageRow } from './apply-stage-change'
 
 /**
@@ -62,14 +63,18 @@ export interface DerivedMove {
 
 /**
  * Where the deliverable would go were `changes` (document id → stage) made to its documents. Null
- * when it would stay where it is.
+ * when it would stay where it is. Internal only documents don't count; `internalOnlyIds` is what they'd
+ * be were a mark about to change, and otherwise they're as they stand.
  */
 export async function derivedMove(
     engagementId: string,
     deliverable: StageRow,
     changes: ReadonlyMap<string, ActivityStatus>,
+    internalOnlyIds?: ReadonlySet<string>,
 ): Promise<DerivedMove | null> {
-    const documents = await deliverableDocuments(engagementId, deliverable.externalId)
+    const hidden = internalOnlyIds ?? await privateExternalIds(engagementId)
+    const documents = (await deliverableDocuments(engagementId, deliverable.externalId))
+        .filter((d) => !hidden.has(d.externalId))
     const to = deriveDeliverableStage(documents.map((d) => changes.get(d.id) ?? documentStage(d.settings)))
     const from = currentStageOf(deliverable)
     if (to === from) return null

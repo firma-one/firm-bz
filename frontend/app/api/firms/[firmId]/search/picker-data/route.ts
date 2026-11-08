@@ -65,6 +65,7 @@ export async function GET(
         })
     } catch (error) {
         logger.error('Global search picker-data API error:', error as Error)
-        return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+        // An error, never an empty list: the filter menus would read "Nothing available" (P2-62).
+        return NextResponse.json({ error: "Couldn't load the filter options. Something went wrong on our side. Try again." }, { status: 500 })
     }
 }

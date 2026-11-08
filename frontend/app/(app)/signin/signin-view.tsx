@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, type CSSProperties } from 'react'
+import { useEffect, useRef, type CSSProperties } from 'react'
 import Link from 'next/link'
 import { BRAND_NAME } from '@/config/brand'
 import { KineticFloatingEmailField } from '@/components/signup/kinetic-floating-email-field'
@@ -20,6 +20,7 @@ import {
 } from '@/components/marketing/v2/auth/auth-ui'
 import { enabledOAuthProviders, OAUTH_PROVIDER_LABEL, signInMethodsHint } from '@/lib/auth/oauth-providers'
 import { useSignInFlow } from './use-sign-in-flow'
+import { TURNSTILE_BLOCKED, TURNSTILE_RETRYING, turnstileErrorStep } from './auth-failure-words'
 
 /** Turnstile on the white card: light theme, full card width (min 300 px per Cloudflare). */
 const TURNSTILE_OPTIONS = { theme: 'light', size: 'flexible' } as const
@@ -64,6 +65,13 @@ export function SigninView({ microsoftSignInEnabled = false }: { microsoftSignIn
     handleInitiateCheck,
     handleTurnstileSuccess,
   } = useSignInFlow()
+
+  // Each time the check is shown again (Continue, Resend code), it gets its full set of retries.
+  useEffect(() => {
+    if (!showTurnstile) return
+    emailTurnstileErrorCount.current = 0
+    otpTurnstileErrorCount.current = 0
+  }, [showTurnstile])
 
   const canChooseMethod = !noAccountMessage && emailVerified
   const providers = enabledOAuthProviders(microsoftSignInEnabled)
@@ -133,10 +141,15 @@ export function SigninView({ microsoftSignInEnabled = false }: { microsoftSignIn
                 }}
                 onError={() => {
                   emailTurnstileErrorCount.current += 1
-                  if (emailTurnstileErrorCount.current > 1) {
-                    setError('Captcha verification failed. Retrying…')
-                  }
+                  const next = turnstileErrorStep(emailTurnstileErrorCount.current)
                   setTurnstileToken(null)
+                  if (next === 'stop') {
+                    // A way out of the loop: stop, say what to do; Continue shows it again.
+                    setShowTurnstile(false)
+                    setError(TURNSTILE_BLOCKED)
+                    return
+                  }
+                  if (next === 'retry_with_notice') setError(TURNSTILE_RETRYING)
                   emailTurnstileRef.current?.reset()
                 }}
                 onExpire={() => {
@@ -274,10 +287,15 @@ export function SigninView({ microsoftSignInEnabled = false }: { microsoftSignIn
                 }}
                 onError={() => {
                   otpTurnstileErrorCount.current += 1
-                  if (otpTurnstileErrorCount.current > 1) {
-                    setError('Captcha verification failed. Retrying…')
-                  }
+                  const next = turnstileErrorStep(otpTurnstileErrorCount.current)
                   setTurnstileToken(null)
+                  if (next === 'stop') {
+                    // Stop and say what to do; Resend code shows it again.
+                    setShowTurnstile(false)
+                    setError(TURNSTILE_BLOCKED.replace('press Continue', 'press Resend code'))
+                    return
+                  }
+                  if (next === 'retry_with_notice') setError(TURNSTILE_RETRYING)
                   otpTurnstileRef.current?.reset()
                 }}
                 onExpire={() => {

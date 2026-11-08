@@ -16,6 +16,7 @@ import { createOneDrivePermissionAdapter } from './adapters/onedrive-permission-
 import { createOneDriveContentAdapter } from './adapters/onedrive-content-adapter'
 import { GoogleDriveConnector } from '@/lib/google-drive-connector'
 import { getOneDriveConnectorInstance, OneDriveConnector } from './onedrive-connector'
+import { storageFailureFromResponse } from './storage-failure'
 
 /** Unified connection DTO for API/UI (any provider). */
 export interface ConnectorConnection {
@@ -280,7 +281,8 @@ function createOneDriveMigrationAdapter(): IConnectorMigrationAdapter {
     async listTopLevelChildren(connectionId, parentFolderId) {
       const [token, base] = await Promise.all([auth(connectionId), driveBase(connectionId)])
       const res = await fetch(`${base}/items/${parentFolderId}/children?$select=id`, { headers: { Authorization: `Bearer ${token}` } })
-      if (!res.ok) return []
+      // A refused listing isn't an empty root: the migration would move nothing and read as complete (P2-37).
+      if (!res.ok) throw await storageFailureFromResponse(res, 'OneDrive', 'list the workspace folder')
       const data = await res.json()
       return (data.value || []).map((f: { id: string }) => f.id)
     },
@@ -288,7 +290,7 @@ function createOneDriveMigrationAdapter(): IConnectorMigrationAdapter {
     async listTopLevelChildrenWithNames(connectionId, parentFolderId) {
       const [token, base] = await Promise.all([auth(connectionId), driveBase(connectionId)])
       const res = await fetch(`${base}/items/${parentFolderId}/children?$select=id,name`, { headers: { Authorization: `Bearer ${token}` } })
-      if (!res.ok) return []
+      if (!res.ok) throw await storageFailureFromResponse(res, 'OneDrive', 'list the workspace folder')
       const data = await res.json()
       return (data.value || []).map((f: { id: string; name: string }) => ({ id: f.id, name: f.name }))
     },

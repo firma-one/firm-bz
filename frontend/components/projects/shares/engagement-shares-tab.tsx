@@ -46,6 +46,8 @@ import { STAGE_BAR_CLASSES, STAGE_LANE_CLASSES, STATUS, type LaneStage } from '@
 import { FRESH_CHIP_CLASS, useApprovalFeedback } from '@/lib/ui/use-approval-feedback'
 import { SecureAccessModal } from './secure-access-modal'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { LoadFailed } from '@/components/ui/load-failed'
+import { failureFrom, failureReason } from '@/lib/files/action-failure'
 import { supabase } from '@/lib/supabase'
 import { useSecureOpenDocument } from '@/lib/use-secure-open-document'
 import { logger } from '@/lib/logger'
@@ -122,6 +124,8 @@ export type FilesBreadcrumbItem = { id: string; name: string; clickable?: boolea
 interface EngagementSharesTabProps {
   projectId: string
   canManage?: boolean
+  /** The engagement is completed: nobody moves or changes anything. */
+  readOnly?: boolean
   /** True for external personas (EC, EV) — hides internal-only UI like Drive Actions. */
   restrictToSharedOnly?: boolean
   /** True only for External Viewer (eng_viewer) — shows Accept Document option. */
@@ -1505,9 +1509,19 @@ function ShareCard({
 
 type SharesViewMode = 'grid' | 'list' | 'board'
 
+/** The toast title for a refused intake action, named for what was tried. */
+export function intakeFailureTitle(action: string): string {
+  const folder = action.endsWith('-folder')
+  if (action.startsWith('approve')) return folder ? "Couldn't approve the folder" : "Couldn't approve the file"
+  if (action.startsWith('reject')) return folder ? "Couldn't reject the folder" : "Couldn't reject the file"
+  if (action.startsWith('withdraw')) return folder ? "Couldn't withdraw the folder" : "Couldn't withdraw the upload"
+  return "Couldn't do that"
+}
+
 export function EngagementSharesTab({
   projectId,
   canManage = false,
+  readOnly = false,
   restrictToSharedOnly = false,
   isExternalViewer = false,
   roleSlug,
@@ -1525,6 +1539,10 @@ export function EngagementSharesTab({
   const [shares, setShares] = useState<ShareRecord[]>([])
   const [generalFolderId, setGeneralFolderId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  /** Why the Board didn't load (EM-3): never shown as "No deliverables yet". */
+  const [loadFailure, setLoadFailure] = useState<string | null>(null)
+  /** The Board has loaded once: a failed refresh after that keeps the cards and says so. */
+  const loadedRef = React.useRef(false)
   const [finalizingId, setFinalizingId] = useState<string | null>(null)
   const [detailShareId, setDetailShareId] = useState<string | null>(null)
   const [activeId, setActiveId] = useState<string | null>(null)
@@ -1579,23 +1597,25 @@ export function EngagementSharesTab({
     setIsLoading(true)
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      if (!session?.access_token) {
-        setIsLoading(false)
-        return
-      }
+      if (!session?.access_token) throw new Error('Your session has ended. Sign in again to see the Board.')
       const response = await fetch(`/api/projects/${projectId}/shares`, {
         headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
       })
-      if (!response.ok) throw new Error('Failed to fetch shares')
+      if (!response.ok) throw await failureFrom(response)
       const data = await response.json()
       setShares(data.shares || [])
       setGeneralFolderId(data.generalFolderId ?? null)
+      setLoadFailure(null)
+      loadedRef.current = true
     } catch (error) {
       logger.error('Failed to fetch shares data', error instanceof Error ? error : new Error(String(error)), 'ProjectShares', { projectId })
+      // A failed load is never an empty Board. Once it has loaded, the cards stay and the toast says why.
+      if (loadedRef.current) addToast({ type: 'error', title: "Couldn't refresh the Board", message: failureReason(error) })
+      else setLoadFailure(failureReason(error))
     } finally {
       setIsLoading(false)
     }
-  }, [projectId])
+  }, [projectId, addToast])
 
   useEffect(() => {
     refreshData()
@@ -1613,18 +1633,19 @@ export function EngagementSharesTab({
   ) => {
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      if (!session?.access_token) return
+      if (!session?.access_token) throw new Error('Your session has ended. Sign in again to move cards.')
       const res = await fetch(`/api/projects/${projectId}/shares/order`, {
         method: 'PUT',
         headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ to_do: toDo, in_progress: inProgress, in_review: inReview, approved }),
       })
-      if (!res.ok) throw new Error(`Order save failed: ${res.status}`)
+      if (!res.ok) throw await failureFrom(res)
       onSuccess?.()
     } catch (e) {
       logger.error('Failed to save order', e instanceof Error ? e : new Error(String(e)), 'ProjectShares', {})
       rollback()
-      addToast({ type: 'error', title: 'Move failed', message: 'Could not save the new position. The board has been restored.' })
+      // P2-22: the reason, then that nothing moved.
+      addToast({ type: 'error', title: 'Move failed', message: `${failureReason(e)} The Board has been put back.` })
     } finally {
       onComplete()
     }
@@ -1652,7 +1673,7 @@ export function EngagementSharesTab({
   const handleUntagAsDeliverable = useCallback(async (doc: { id: string }) => {
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      if (!session?.access_token) return
+      if (!session?.access_token) throw new Error('Your session has ended. Sign in again to demote it.')
       const res = await fetch(
         `/api/projects/${projectId}/documents/${encodeURIComponent(doc.id)}/sharing`,
         {
@@ -1661,17 +1682,18 @@ export function EngagementSharesTab({
           body: JSON.stringify({ untagAsDeliverable: true }),
         }
       )
-      if (!res.ok) {
-        logger.error('Untag as deliverable failed', new Error(`${res.status}`), 'ProjectShares', { documentId: doc.id })
-        addToast({ type: 'error', title: 'Demote failed', message: 'Could not demote the deliverable to a folder. Please try again.' })
-        return
-      }
+      // P1-64: the server's words, as the Files view shows for the same call.
+      if (!res.ok) throw await failureFrom(res)
+      const data = await res.json().catch(() => ({})) as { warning?: unknown }
       setShares((prev) => prev.filter((s) => s.documentId !== doc.id))
       if (openDeliverableId === doc.id) setOpenDeliverableId(null)
-      addToast({ type: 'success', title: 'Demoted to folder', message: 'It is a plain folder again and off the Board.' })
+      // Demoted, but part of taking clients' access back couldn't be done: say what.
+      addToast(typeof data.warning === 'string' && data.warning
+        ? { type: 'warning', title: 'Demoted to folder', message: data.warning, duration: 12000 }
+        : { type: 'success', title: 'Demoted to folder', message: 'It is a plain folder again and off the Board.' })
     } catch (e) {
       logger.error('Untag as deliverable error', e instanceof Error ? e : new Error(String(e)), 'ProjectShares', { documentId: doc.id })
-      addToast({ type: 'error', title: 'Demote failed', message: 'Could not demote the deliverable to a folder. Please try again.' })
+      addToast({ type: 'error', title: 'Demote failed', message: failureReason(e) })
     }
   }, [projectId, addToast, openDeliverableId])
 
@@ -1680,15 +1702,18 @@ export function EngagementSharesTab({
     setIntakeActionInProgress(documentId)
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      const res = await fetch(`/api/projects/${projectId}/documents/${encodeURIComponent(documentId)}/intake`, {
-        method: 'PATCH',
-        headers: { Authorization: `Bearer ${session?.access_token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action }),
-      })
-      if (!res.ok) {
-        const errText = await res.text()
-        logger.error('Intake action failed', new Error(errText), 'SharesTab', { documentId, action })
-        addToast({ type: 'error', title: 'Action failed', message: 'Could not complete the intake action. Please try again.' })
+      let res: Response
+      try {
+        res = await fetch(`/api/projects/${projectId}/documents/${encodeURIComponent(documentId)}/intake`, {
+          method: 'PATCH',
+          headers: { Authorization: `Bearer ${session?.access_token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action }),
+        })
+        if (!res.ok) throw await failureFrom(res)
+      } catch (e) {
+        // The route refuses with why (a trash storage refused keeps the row); a dropped request says so.
+        logger.error('Intake action failed', e instanceof Error ? e : new Error(String(e)), 'SharesTab', { documentId, action })
+        addToast({ type: 'error', title: intakeFailureTitle(action), message: failureReason(e) })
         return
       }
       await refreshData()
@@ -1800,6 +1825,7 @@ export function EngagementSharesTab({
           activityStatus={share.activity?.status ?? 'to_do'}
           dueDate={share.dueDate ?? null}
           canManage={canManage ?? false}
+          readOnly={readOnly}
           isExternalViewer={isExternalViewer}
           isExternalCollaborator={restrictToSharedOnly && !isExternalViewer}
           roleSlug={roleSlug}
@@ -1842,7 +1868,7 @@ export function EngagementSharesTab({
       // After setContent, which clears any guard: with a preview open, × goes back to the details.
       rightPane.setBeforeClose(() => !panePreview.close())
     },
-    [rightPane, projectId, canManage, isExternalViewer, orgSlug, roleSlug, restrictToSharedOnly, handleSecureOpen, deeplinkBase, storageOpenLabel]
+    [rightPane, projectId, canManage, readOnly, isExternalViewer, orgSlug, roleSlug, restrictToSharedOnly, handleSecureOpen, deeplinkBase, storageOpenLabel]
   )
 
   // Capture the hash at mount so re-renders don't lose it before shares load
@@ -2246,6 +2272,8 @@ export function EngagementSharesTab({
             <div className="flex items-center justify-center min-h-[200px]">
               <LoadingSpinner size="md" className="min-h-0" />
             </div>
+          ) : loadFailure ? (
+            <LoadFailed what="the Board" reason={loadFailure} onRetry={() => { void refreshData() }} className="mx-2" />
           ) : filteredShares.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 text-fg-muted bg-white/60 rounded-2xl border border-slate-200/60 mx-2">
               <Share2 className="h-11 w-11 mb-3 text-fg-subtle" />

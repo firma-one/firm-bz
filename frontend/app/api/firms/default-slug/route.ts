@@ -20,8 +20,13 @@ export async function GET() {
         : false
 
     return NextResponse.json({ slug, onboardingComplete, isFirmAdmin })
-  } catch {
-    return NextResponse.json({ slug: null, onboardingComplete: false }, { status: 200 })
+  } catch (e) {
+    // A failed lookup is not "onboarding not complete" (P2-54): answer an error the caller can tell apart.
+    console.error('[firms/default-slug] lookup failed', e)
+    return NextResponse.json(
+      { slug: null, onboardingComplete: false, error: "Couldn't load your workspace. Try again in a minute." },
+      { status: 500 }
+    )
   }
 }
 

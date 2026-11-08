@@ -7,6 +7,7 @@ import { ASSISTANT } from '@/lib/ai/assistant'
 import { Brio } from '@/components/ui/brio'
 import { RelativeDateTime } from '@/components/ui/relative-date-time'
 import { fetchWithTimeout, AI_TIMEOUT_MS, AiTimeoutError, AiAbortedError } from '@/lib/ai/fetch-timeout'
+import { BRIO_ANSWER_CUT_OFF, BRIO_ANSWER_FAILED, BRIO_UNREACHABLE_RETRY } from '@/lib/ai/brio-failure'
 import { StreamingText } from '@/components/ui/streaming-text'
 import { ChatMarkdown } from '@/components/ui/chat-markdown'
 import {
@@ -56,6 +57,12 @@ interface Message {
      * and so it cannot be rated: a thumbs-down on half an answer would poison the efficacy data.
      */
     stopped?: boolean
+    /**
+     * Set when the stream broke off before the answer was finished: the model failed part-way, or
+     * the connection dropped. Kept and marked like a stopped answer, in Brio's words rather than the
+     * browser's "network error", and not rateable for the same reason.
+     */
+    cutOff?: boolean
 }
 
 /**
@@ -724,6 +731,12 @@ export function EngagementAiChat({
 
         const controller = new AbortController()
         abortRef.current = controller
+        // Where the turn got to, so a failure says the right thing: the request never left
+        // ('request'), the server refused it ('response', its own words), or the answer broke off
+        // part-way ('stream').
+        let phase: 'request' | 'response' | 'stream' = 'request'
+        // Whether any of the answer arrived, read here rather than from state, which updates later.
+        let received = false
 
         try {
             const res = await fetchWithTimeout(`/api/projects/${projectId}/ai-chat`, {
@@ -735,13 +748,16 @@ export function EngagementAiChat({
                 body: JSON.stringify({ question: trimmed, history, scope }),
             }, AI_TIMEOUT_MS.stream, controller.signal)
 
+            phase = 'response'
             if (!res.ok) {
                 if (res.status === 503) setUnavailable(true)
                 const detail = await res.json().catch(() => null)
-                throw new Error(detail?.error ?? 'Could not get an answer')
+                // The route's own words: the credit limit, or Brio's failure.
+                throw new Error(detail?.error ?? BRIO_ANSWER_FAILED)
             }
-            if (!res.body) throw new Error('No response stream')
+            if (!res.body) throw new Error(BRIO_ANSWER_FAILED)
 
+            phase = 'stream'
             const reader = res.body.getReader()
             const decoder = new TextDecoder()
 
@@ -755,6 +771,7 @@ export function EngagementAiChat({
                 const { done, value } = await reader.read()
                 if (done) break
                 const chunk = decoder.decode(value, { stream: true })
+                if (chunk) received = true
                 setMessages((prev) => {
                     const next = [...prev]
                     next[next.length - 1] = {
@@ -780,10 +797,28 @@ export function EngagementAiChat({
             }
             // A timeout gets its own wording: "Could not get an answer" reads like a refusal,
             // when in fact nothing came back in time and retrying is worthwhile.
+            if (e instanceof AiTimeoutError) {
+                setError(`${ASSISTANT.name} took too long to answer. Try asking again.`)
+                setMessages((prev) => (prev[prev.length - 1]?.content === '' ? prev.slice(0, -1) : prev))
+                return
+            }
+            // The stream broke off: the route fails it on a model error, and a dropped connection
+            // reads the same. Whatever arrived is kept and marked cut off, in Brio's words; the
+            // browser's own text ("network error") would read like the person's Wi-Fi.
+            if (phase === 'stream') {
+                setMessages((prev) => {
+                    const last = prev[prev.length - 1]
+                    if (!last || last.role !== 'assistant') return prev
+                    if (!last.content) return prev.slice(0, -1)
+                    return [...prev.slice(0, -1), { ...last, cutOff: true }]
+                })
+                if (!received) setError(BRIO_ANSWER_FAILED)
+                return
+            }
             setError(
-                e instanceof AiTimeoutError
-                    ? `${ASSISTANT.name} took too long to answer. Try asking again.`
-                    : e instanceof Error ? e.message : 'Something went wrong',
+                phase === 'request' && e instanceof TypeError
+                    ? BRIO_UNREACHABLE_RETRY
+                    : e instanceof Error && e.message ? e.message : BRIO_ANSWER_FAILED,
             )
             // Drop the empty assistant placeholder so a failed turn leaves no blank bubble.
             setMessages((prev) => (prev[prev.length - 1]?.content === '' ? prev.slice(0, -1) : prev))
@@ -1479,6 +1514,11 @@ export function EngagementAiChat({
                                     Stopped — this answer is incomplete.
                                 </p>
                             )}
+                            {m.cutOff && (
+                                <p role="status" className="mt-1 text-caption italic text-fg-subtle">
+                                    {BRIO_ANSWER_CUT_OFF}
+                                </p>
+                            )}
                             {/* What the answer drew on (item 7), so a reader can judge its reach. */}
                             {m.role === 'assistant' && m.content && settled && based.length > 0 && (
                                 <p className="mt-1.5 text-caption text-fg-subtle">Based on {based.join(' · ')}</p>
@@ -1492,7 +1532,7 @@ export function EngagementAiChat({
                                     copied={copiedIndex === i}
                                     rating={ratings[i]}
                                     disabled={streaming}
-                                    rateable={!m.stopped}
+                                    rateable={!m.stopped && !m.cutOff}
                                     onCopy={() => void copyAnswer(i, m.content)}
                                     onRetry={() => retry(i)}
                                     onRate={(helpful, reason) => void rate(i, helpful, reason)}

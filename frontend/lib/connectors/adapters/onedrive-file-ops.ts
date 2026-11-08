@@ -21,7 +21,7 @@ const COPY_POLL_MS = 1000
 
 async function auth(connectionId: string): Promise<string> {
   const token = await oneDrive.getAccessToken(connectionId)
-  if (!token) throw new Error('Could not get OneDrive access token')
+  if (!token) throw storageFailure('reconnect', 'OneDrive')
   return token
 }
 
@@ -100,6 +100,7 @@ export async function copyOneDriveFile(
   // Poll the copy-progress monitor (unauthenticated, no bearer token needed — same
   // pre-authorized-URL convention as the upload session and resumable-upload URLs).
   const maxAttempts = 30
+  let completed = false
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const statusRes = await call(monitorUrl)
     if (statusRes.ok) {
@@ -107,6 +108,7 @@ export async function copyOneDriveFile(
       if (status.status === 'completed') {
         const resourceId: string | undefined = status.resourceId
         if (resourceId) return { id: resourceId }
+        completed = true
         break // fall through to name-match lookup below
       }
       if (status.status === 'failed') {
@@ -117,6 +119,11 @@ export async function copyOneDriveFile(
     }
     await new Promise((r) => setTimeout(r, COPY_POLL_MS))
   }
+
+  // Still running after 30 seconds. A same-named item in the destination may be this copy half
+  // done or an older one of that name, so it isn't called done (P1-47): OneDrive's own words say
+  // to look again in a minute.
+  if (!completed) throw storageFailure('timed_out', 'OneDrive')
 
   // Fallback: resolve by name in the destination folder (copy completed but resourceId
   // wasn't in the final status payload).

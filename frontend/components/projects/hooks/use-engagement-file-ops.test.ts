@@ -115,7 +115,7 @@ describe('a failed action says why', () => {
         everyAction(offline)
         const { result } = setup()
         await run(result)
-        expect(addToast).toHaveBeenLastCalledWith({ type: 'error', title, message: "Couldn't reach Firma. Check your connection and try again." })
+        expect(addToast).toHaveBeenLastCalledWith({ type: 'error', title, message: "Couldn't reach firma. Check your connection and try again." })
     })
 })
 
@@ -279,7 +279,7 @@ describe('Move/Copy to folder — one item or the selection', () => {
         const { result } = setupWithRemoval()
         act(() => { result.current.openCopyMoveModal(A, 'move') })
         await act(async () => { await result.current.handleCopyMoveToFolder('dest') })
-        expect(addToast).toHaveBeenLastCalledWith(expect.objectContaining({ title: 'Move failed', message: "Couldn't reach Firma. Check your connection and try again." }))
+        expect(addToast).toHaveBeenLastCalledWith(expect.objectContaining({ title: 'Move failed', message: "Couldn't reach firma. Check your connection and try again." }))
     })
 
     it('does nothing to items moved into the folder they are already in', async () => {
@@ -301,5 +301,93 @@ describe('Move/Copy to folder — one item or the selection', () => {
         expect(moves().map((r: any) => [r.action, r.fileId])).toEqual([['copy', 'a'], ['copy', 'b']])
         expect(onItemRemoved).not.toHaveBeenCalled()
         expect(addToast).toHaveBeenLastCalledWith(expect.objectContaining({ type: 'success', title: 'Copied', message: '2 items copied' }))
+    })
+})
+
+describe('answers that only partly worked, or that failed to load', () => {
+    const answer = (status: number, body: unknown) => ({ ok: status < 400, status, json: async () => body, clone() { return this } }) as unknown as Response
+    const respond = (fn: (url: string, init?: RequestInit) => Response) => vi.mocked(fetch).mockImplementation(async (url: any, init?: any) => fn(String(url), init))
+
+    it('an Unlock that leaves it locked says so, as a warning, not "Unlocked"', async () => {
+        respond(() => answer(200, { ok: true, unlocked: false, warning: "Google Drive wouldn't give ana@client.com edit access back. It stays locked until then. Try Unlock again." }))
+        const { result } = setup()
+        await act(async () => { await result.current.handleUnlockFromBadge({ ...FILE, projectDocumentId: 'd1' }) })
+        expect(addToast).toHaveBeenLastCalledWith(expect.objectContaining({ type: 'warning', title: 'Still locked', message: expect.stringContaining('It stays locked') }))
+        expect(addToast.mock.calls.some(([t]) => t.title === 'Returned to Draft')).toBe(false)
+    })
+
+    it('a refused Unlock names the action and says why', async () => {
+        respond(() => answer(502, { error: "Couldn't unlock this · The connection to Google Drive needs renewing." }))
+        const { result } = setup()
+        await act(async () => { await result.current.handleUnlockFromBadge({ ...FILE, projectDocumentId: 'd1' }) })
+        expect(addToast).toHaveBeenLastCalledWith({ type: 'error', title: 'Return to draft failed', message: "Couldn't unlock this · The connection to Google Drive needs renewing." })
+    })
+
+    it('a refused Reject keeps the row and never says "has been removed"', async () => {
+        respond(() => answer(409, { error: 'Google Drive has this locked.', code: 'locked' }))
+        const { result } = setup()
+        await act(async () => { await result.current.handleIntakeAction({ ...FILE, projectDocumentId: 'd1' }, 'reject') })
+        expect(addToast).toHaveBeenLastCalledWith({ type: 'error', title: 'Reject failed', message: 'Google Drive has this locked.' })
+        expect(addToast.mock.calls.some(([t]) => /has been removed/.test(t.message ?? ''))).toBe(false)
+    })
+
+    it('an approve of something no longer waiting says what to do', async () => {
+        respond(() => answer(409, { error: 'Document is not pending intake' }))
+        const { result } = setup()
+        await act(async () => { await result.current.handleIntakeAction({ ...FILE, projectDocumentId: 'd1' }, 'approve') })
+        expect(addToast).toHaveBeenLastCalledWith({ type: 'error', title: 'Approve failed', message: "It's no longer waiting for review. Refresh the list." })
+    })
+
+    it("Internal only's warning shows as a warning", async () => {
+        respond(() => answer(200, { ok: true, warning: 'Internal only is set, but ana@client.com still has access in Google Drive.' }))
+        const { result } = setup()
+        await act(async () => { await result.current.handlePrivacy({ ...FILE, projectDocumentId: 'd1' }, true) })
+        expect(addToast).toHaveBeenLastCalledWith(expect.objectContaining({ type: 'warning', message: 'Internal only is set, but ana@client.com still has access in Google Drive.' }))
+    })
+
+    it("the Move/Copy picker says why its folders didn't load, and Try again loads them", async () => {
+        respond(() => answer(503, { error: 'Google Drive is busy right now. Try again in a minute.', code: 'busy' }))
+        const { result } = setup()
+        await act(async () => { result.current.openCopyMoveModal(FILE, 'move') })
+        await act(async () => { await vi.runAllTimersAsync() })
+        expect(result.current.destinationsError).toBe('Google Drive is busy right now. Try again in a minute.')
+
+        respond(() => answer(200, { files: [{ id: 'sub', name: 'Sub', mimeType: 'application/vnd.google-apps.folder' }] }))
+        await act(async () => { result.current.retryDestinations() })
+        await act(async () => { await vi.runAllTimersAsync() })
+        expect(result.current.destinationsError).toBeNull()
+        expect(result.current.destinationFolders.map((f) => f.id)).toEqual(['sub'])
+    })
+
+    it('the copy-to-engagement list says why it did not load, instead of "No other engagements"', async () => {
+        respond(() => answer(500, { error: 'Something went wrong on our side. Try again.' }))
+        const { result } = setup()
+        await act(async () => { await result.current.openCrossEngagementModal(FILE) })
+        expect(result.current.crossEngagementError).toBe('Something went wrong on our side. Try again.')
+    })
+
+    it('a folder copied only in part says X of Y to where, and what was not copied', async () => {
+        respond((url) => url.endsWith('/engagements')
+            ? answer(200, { engagements: [{ id: 'e2', name: 'Acme Audit', clientId: 'c', clientName: 'Acme' }] })
+            : url.startsWith('/api/billing') ? answer(200, { allowed: true })
+            : answer(200, { success: true, filesCopied: 12, filesTotal: 15, failed: [{ name: 'Budget.xlsx', reason: 'Google Drive has this locked.' }] }))
+        const { result } = setup()
+        await act(async () => { await result.current.openCrossEngagementModal(FILE) })
+        act(() => { result.current.setCrossEngagementSelectedId('e2') })
+        await act(async () => { await result.current.handleCrossEngagementSubmit() })
+        expect(addToast).toHaveBeenLastCalledWith(expect.objectContaining({
+            type: 'warning',
+            title: 'Copied 12 of 15',
+            message: 'Copied 12 of 15 files to Acme Audit. Not copied: Budget.xlsx · Google Drive has this locked.',
+        }))
+    })
+
+    it("OneDrive still copying after 30 seconds isn't called done or failed", async () => {
+        respond((url) => url.startsWith('/api/billing') ? answer(200, { allowed: true })
+            : answer(504, { error: 'OneDrive is taking longer than expected. Refresh in a minute to see if it finished.', code: 'timed_out' }))
+        const { result } = setup()
+        act(() => { result.current.setCrossEngagementTarget(FILE); result.current.setCrossEngagementSelectedId('e2') })
+        await act(async () => { await result.current.handleCrossEngagementSubmit() })
+        expect(addToast).toHaveBeenLastCalledWith(expect.objectContaining({ type: 'info', title: 'Copy still running' }))
     })
 })

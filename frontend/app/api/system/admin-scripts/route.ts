@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { adminFailure } from '@/app/api/system/admin-error'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { isSysAdminUser } from '@/lib/system/user-data-map'
 import { adminScripts } from '@/lib/admin-scripts'
@@ -25,6 +26,6 @@ export async function GET(request: NextRequest) {
       scripts: adminScripts.map(({ id, name, description }) => ({ id, name, description })),
     })
   } catch (error) {
-    return NextResponse.json({ error: 'Failed to list scripts' }, { status: 500 })
+    return adminFailure('list the scripts', error)
   }
 }

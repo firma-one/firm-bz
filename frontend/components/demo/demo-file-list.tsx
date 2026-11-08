@@ -571,11 +571,13 @@ export function DemoFileList({
         .map((f) => demoDocumentStages(deliverableStatusByFolderId![f.id], demoFilesIn(f)))) as Record<string, DemoDocumentStage>, [folders, deliverableStatusByFolderId])
     const documentStage = (fileId: string): ActivityStatus | null => statusOverrides[fileId] ?? documentStages[fileId]?.stage ?? null
     /** As in the app: a deliverable's stage is worked out from its documents' (lib/deliverable-derivation.ts). */
+    // As in the app: Internal only documents don't count toward the deliverable's stage.
+    const countsTowardStage = (file: DemoFile) => !file.private || madePublic.has(file.id)
     const deliverableStage = (folder: DemoFolder): DeliverableStatus | undefined => {
         const given = deliverableStatusByFolderId?.[folder.id]
         if (!given) return undefined
         const files = demoFilesIn(folder)
-        return files.length === 0 ? given : deriveDeliverableStage(files.map((f) => documentStage(f.id) ?? 'not_started')) as DeliverableStatus
+        return files.length === 0 ? given : deriveDeliverableStage(files.filter(countsTowardStage).map((f) => documentStage(f.id) ?? 'not_started')) as DeliverableStatus
     }
     const statusFor = (entry: Entry): ActivityStatus | null =>
         entry.kind === 'folder' ? deliverableStage(entry.folder) ?? null : documentStage(entry.file.id)
@@ -591,24 +593,15 @@ export function DemoFileList({
     // As in the app, a deliverable's sharing only ever widens: a role its furthest stage opened keeps its access
     // when the deliverable falls back. Each one's furthest stage on the tour.
     const [furthest, setFurthest] = useState<Record<string, ActivityStatus>>({})
-    // A document's move; its deliverable follows, and the toast says so when it does.
-    const setStatus = (entry: Entry, next: ActivityStatus) => {
-        if (entry.kind !== 'file') return
-        const file = entry.file
+    // A change that takes the open deliverable to `after`: agreed first when that matters, as the app asks.
+    const commitOrAsk = (before: DeliverableStatus | undefined, after: ActivityStatus | undefined, change: () => void) => {
         const deliverable = path[0]
-        const before = deliverable ? deliverableStage(deliverable) : undefined
-        const after = deliverable && before
-            ? deriveDeliverableStage(demoFilesIn(deliverable).map((f) => (f.id === file.id ? next : documentStage(f.id) ?? 'not_started')))
-            : undefined
         // The furthest it has been: where the tour started it, or further.
         const started = deliverable ? furthest[deliverable.id] ?? deliverableStatusByFolderId?.[deliverable.id] : undefined
         const peak = before && started ? (STAGE_ORDER[started] > STAGE_ORDER[before] ? started : before) : before
         const commit = () => {
-            setStatusOverrides((prev) => ({ ...prev, [file.id]: next }))
             if (deliverable && peak && after && STAGE_ORDER[after] > STAGE_ORDER[peak]) setFurthest((prev) => ({ ...prev, [deliverable.id]: after }))
-            if (next === 'approved') setApprovedAt((prev) => ({ ...prev, [file.id]: new Date().toISOString() }))
-            const followed = after && after !== before ? ` · ${shownName(deliverable)} moves to ${statusOf('deliverable', after).label}` : ''
-            addToast({ type: 'success', title: next === 'approved' ? 'Approved' : 'Stage updated', message: `${file.name} · ${statusOf('deliverable', next).label}${followed}` })
+            change()
         }
         if (deliverable && before && peak && after && after !== before) {
             // Who'd see its documents for the first time: the roles the new stage opens that no earlier one did, as the app counts them.
@@ -627,6 +620,36 @@ export function DemoFileList({
             }
         }
         commit()
+    }
+
+    // Removing the mark: the document counts toward its deliverable's stage again, which can move it.
+    const makePublic = (file: DemoFile) => {
+        const deliverable = path[0]
+        const before = deliverable ? deliverableStage(deliverable) : undefined
+        const after = deliverable && before
+            ? deriveDeliverableStage(demoFilesIn(deliverable).filter((f) => f.id === file.id || countsTowardStage(f)).map((f) => documentStage(f.id) ?? 'not_started'))
+            : undefined
+        commitOrAsk(before, after, () => {
+            setMadePublic((prev) => new Set(prev).add(file.id))
+            addToast({ type: 'success', title: `${file.name} is no longer internal only` })
+        })
+    }
+
+    // A document's move; its deliverable follows, and the toast says so when it does.
+    const setStatus = (entry: Entry, next: ActivityStatus) => {
+        if (entry.kind !== 'file') return
+        const file = entry.file
+        const deliverable = path[0]
+        const before = deliverable ? deliverableStage(deliverable) : undefined
+        const after = deliverable && before
+            ? deriveDeliverableStage(demoFilesIn(deliverable).filter(countsTowardStage).map((f) => (f.id === file.id ? next : documentStage(f.id) ?? 'not_started')))
+            : undefined
+        commitOrAsk(before, after, () => {
+            setStatusOverrides((prev) => ({ ...prev, [file.id]: next }))
+            if (next === 'approved') setApprovedAt((prev) => ({ ...prev, [file.id]: new Date().toISOString() }))
+            const followed = after && after !== before ? ` · ${shownName(deliverable)} moves to ${statusOf('deliverable', after).label}` : ''
+            addToast({ type: 'success', title: next === 'approved' ? 'Approved' : 'Stage updated', message: `${file.name} · ${statusOf('deliverable', next).label}${followed}` })
+        })
     }
 
     const here = path.length > 0 ? path[path.length - 1] : null
@@ -1029,10 +1052,7 @@ export function DemoFileList({
                                 blocked={entry.kind === 'file' && insideDeliverable ? blockedOf(id) ?? undefined : undefined}
                                 onOpenDetails={entry.kind === 'file' ? () => openDetails(entry.file) : undefined}
                                 isPrivate={entry.kind === 'file' && !!entry.file.private && !madePublic.has(id)}
-                                onMakePublic={() => {
-                                    setMadePublic((prev) => new Set(prev).add(id))
-                                    addToast({ type: 'success', title: `${name} is no longer internal only` })
-                                }}
+                                onMakePublic={() => { if (entry.kind === 'file') makePublic(entry.file) }}
                                 dueDate={id in dueOverrides ? dueOverrides[id] : entry.kind === 'folder' ? deliverableDueByFolderId?.[id] : null}
                                 onSetDue={(next) => setDue(entry, next)}
                                 tracked={entry.kind === 'file' || !!deliverableStatusByFolderId?.[id]}

@@ -10,7 +10,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const { prisma, auth, perms } = vi.hoisted(() => {
     const fn = <T,>(v: T) => vi.fn(async () => v)
     const prisma = {
-        engagement: { findFirst: fn<any>(null), findMany: fn<any[]>([]) },
+        engagement: { findFirst: fn<any>(null), findMany: fn<any[]>([]), findUnique: fn<any>(null) },
         engagementMember: { findUnique: fn<any>(null), findMany: fn<any[]>([]), findFirst: fn<any>(null), update: fn<any>({}), delete: fn<any>({}), count: fn(0) },
         engagementInvitation: { findUnique: fn<any>(null), findMany: fn<any[]>([]), update: fn<any>({}), updateMany: fn<any>({}), delete: fn<any>({}), create: fn<any>({}), findUniqueOrThrow: fn<any>({}) },
         engagementDocumentSharingUser: { findMany: fn<any[]>([]) },
@@ -44,7 +44,7 @@ vi.mock('@/lib/audit', () => ({
     AUDIT_SCOPE: new Proxy({}, { get: (_t, k) => k }),
 }))
 vi.mock('@/lib/google-drive-connector', () => ({ googleDriveConnector: { revokeFolderPermissionByEmail: vi.fn() } }))
-vi.mock('@/lib/inngest/client', () => ({ safeInngestSend: vi.fn() }))
+vi.mock('@/lib/inngest/client', () => ({ safeInngestSend: vi.fn(async () => true) }))
 vi.mock('@/lib/reminders/reminder-service', () => ({ removeRemindersByEntity: vi.fn(async () => {}), upsertFollowUpReminder: vi.fn(async () => {}) }))
 vi.mock('@/lib/supabase-user-helpers', () => ({ getAvatarUrlFromSupabaseUser: () => null }))
 vi.mock('@/lib/ai/files-agent/agent-identity', () => ({ isAgentUser: () => false }))
@@ -81,11 +81,14 @@ beforeEach(() => {
 
 describe('member and invitation writes need manage rights on the engagement', () => {
     it('refuses a member who cannot manage it, and writes nothing', async () => {
-        await expect(inviteMember('e1', 'me@evil.test', 'p-admin')).rejects.toThrow('Insufficient permissions')
-        await expect(resendInvitation('i1')).rejects.toThrow('Insufficient permissions')
-        await expect(revokeInvitation('i1')).rejects.toThrow('Insufficient permissions')
-        await expect(updateMemberPersona('m2', 'p-admin')).rejects.toThrow('Insufficient permissions')
-        await expect(removeMember('m2')).rejects.toThrow('Insufficient permissions')
+        // Every one answers with words a person can read, as a result (a thrown reason never reaches
+        // the browser in a production build).
+        expect(await inviteMember('e1', 'me@evil.test', 'p-admin')).toEqual({ ok: false, code: 'forbidden', error: "You don't have permission to invite members to this engagement." })
+        expect(await resendInvitation('i1')).toEqual({ ok: false, code: 'forbidden', error: "You don't have permission to resend this engagement's invitations." })
+        expect(await revokeInvitation('i1')).toEqual({ ok: false, code: 'forbidden', error: "You don't have permission to withdraw this engagement's invitations." })
+        const refused = { ok: false, error: "You don't have permission to change this engagement's members.", code: 'forbidden' }
+        expect(await updateMemberPersona('m2', 'p-admin')).toEqual(refused)
+        expect(await removeMember('m2')).toEqual(refused)
 
         expect(prisma.engagementInvitation.create).not.toHaveBeenCalled()
         expect(prisma.engagementInvitation.update).not.toHaveBeenCalled()
@@ -97,40 +100,40 @@ describe('member and invitation writes need manage rights on the engagement', ()
 
     it('refuses a signed-out caller', async () => {
         auth.user = null
-        await expect(inviteMember('e1', 'me@evil.test', 'p-admin')).rejects.toThrow('Unauthorized')
-        await expect(resendInvitation('i1')).rejects.toThrow('Unauthorized')
-        await expect(revokeInvitation('i1')).rejects.toThrow('Unauthorized')
-        await expect(updateMemberPersona('m2', 'p-admin')).rejects.toThrow('Unauthorized')
-        await expect(removeMember('m2')).rejects.toThrow('Unauthorized')
+        expect(await inviteMember('e1', 'me@evil.test', 'p-admin')).toMatchObject({ ok: false, code: 'unauthorized' })
+        expect(await resendInvitation('i1')).toMatchObject({ ok: false, code: 'unauthorized' })
+        expect(await revokeInvitation('i1')).toMatchObject({ ok: false, code: 'unauthorized' })
+        expect(await updateMemberPersona('m2', 'p-admin')).toMatchObject({ ok: false, code: 'unauthorized' })
+        expect(await removeMember('m2')).toMatchObject({ ok: false, code: 'unauthorized' })
     })
 
     it('checks the engagement the member or invitation belongs to, not one the caller names', async () => {
         const { canManageProject } = await import('@/lib/permission-helpers')
-        await expect(removeMember('m2')).rejects.toThrow()
+        expect(await removeMember('m2')).toMatchObject({ ok: false })
         expect(canManageProject).toHaveBeenCalledWith('f1', 'c1', 'e1')
         expect(prisma.engagement.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'e1', isDeleted: false } }))
     })
 
     it('lets a manager change a role, remove a member and revoke or resend an invitation', async () => {
         perms.manage = true
-        await expect(updateMemberPersona('m2', 'p-admin')).resolves.toEqual({ success: true })
+        expect(await updateMemberPersona('m2', 'p-admin')).toEqual({ ok: true, data: undefined })
         expect(prisma.engagementMember.update).toHaveBeenCalledWith({ where: { id: 'm2' }, data: { role: 'eng_admin' } })
 
-        await removeMember('m2')
+        expect(await removeMember('m2')).toEqual({ ok: true, data: undefined })
         expect(prisma.engagementMember.delete).toHaveBeenCalledWith({ where: { id: 'm2' } })
 
-        await revokeInvitation('i1')
+        expect(await revokeInvitation('i1')).toEqual({ ok: true, data: undefined })
         expect(prisma.engagementInvitation.delete).toHaveBeenCalledWith({ where: { id: 'i1' } })
 
-        await resendInvitation('i1')
+        expect(await resendInvitation('i1')).toEqual({ ok: true, data: undefined })
         expect(prisma.engagementInvitation.update).toHaveBeenCalled()
     })
 
     it('never hands out a firm or system persona, even for a manager', async () => {
         perms.manage = true
         prisma.persona.findUnique.mockResolvedValue({ id: 'p-firm', slug: 'firm_admin' })
-        await expect(updateMemberPersona('m2', 'p-firm')).rejects.toThrow('Not an engagement role')
-        await expect(inviteMember('e1', 'new@client.test', 'p-firm')).rejects.toThrow('Not an engagement role')
+        expect(await updateMemberPersona('m2', 'p-firm')).toMatchObject({ ok: false, code: 'invalid_role' })
+        expect(await inviteMember('e1', 'new@client.test', 'p-firm')).toMatchObject({ ok: false, code: 'invalid_role' })
         expect(prisma.engagementMember.update).not.toHaveBeenCalled()
         expect(prisma.engagementInvitation.create).not.toHaveBeenCalled()
     })
@@ -138,18 +141,18 @@ describe('member and invitation writes need manage rights on the engagement', ()
     it('refuses a deleted or unknown engagement', async () => {
         perms.manage = true
         prisma.engagement.findFirst.mockResolvedValue(null)
-        await expect(inviteMember('gone', 'x@y.test', 'p-admin')).rejects.toThrow('Engagement not found')
-        await expect(revokeInvitation('i1')).rejects.toThrow('Engagement not found')
+        expect(await inviteMember('gone', 'x@y.test', 'p-admin')).toEqual({ ok: false, code: 'not_found', error: 'This engagement was deleted. Refresh the page.' })
+        expect(await revokeInvitation('i1')).toMatchObject({ ok: false, code: 'not_found' })
     })
 })
 
 describe('member reads are limited to people who can see them', () => {
     it('lists members and invitations only for those who see the Members tab', async () => {
-        await expect(getProjectMembers('e1')).rejects.toThrow('Insufficient permissions')
+        expect(await getProjectMembers('e1')).toMatchObject({ ok: false, code: 'forbidden' })
         expect(prisma.engagementMember.findMany).not.toHaveBeenCalled()
 
         perms.internal = true
-        await expect(getProjectMembers('e1')).resolves.toEqual({ members: [], invitations: [] })
+        expect(await getProjectMembers('e1')).toEqual({ ok: true, data: { members: [], invitations: [] } })
     })
 
     it('summarizes only the engagements the caller can open', async () => {

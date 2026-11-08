@@ -23,8 +23,13 @@ vi.mock('@/components/projects/document-doc-comments-pane', async () => {
 vi.mock('@/components/files/document-preview-pane', () => ({
     DocumentPreviewPane: ({ document }: { document: { name: string } }) => <div>{`previewing ${document.name}`}</div>,
 }))
-vi.mock('@/components/ui/document-action-menu', () => ({ DocumentActionMenu: () => null }))
-vi.mock('@/components/ui/toast', () => ({ useToast: () => ({ addToast: vi.fn() }) }))
+vi.mock('@/components/ui/document-action-menu', () => ({
+    // Its "Move to trash" item, as the menu calls it.
+    DocumentActionMenu: ({ document, onDeleteDocument }: { document: { name: string }; onDeleteDocument?: () => void }) =>
+        onDeleteDocument ? <button type="button" onClick={onDeleteDocument}>{`Trash ${document.name}`}</button> : null,
+}))
+const { toasts } = vi.hoisted(() => ({ toasts: [] as { type: string; title: string; message?: string }[] }))
+vi.mock('@/components/ui/toast', () => ({ useToast: () => ({ addToast: (t: { type: string; title: string; message?: string }) => toasts.push(t) }) }))
 
 import { DeliverableDetailPanel } from './deliverable-detail-panel'
 import { createPanePreview } from './pane-preview'
@@ -36,9 +41,19 @@ const subtask = (id: string, status: string | null, extra: object = {}) => ({
 
 let subtasks: any[] = []
 let stageCalls: { url: string; body: any }[] = []
+/** Answers for a route, to make it refuse: "[METHOD ]url fragment" → [status, body]. */
+let refusals: Record<string, [number, unknown]> = {}
+let writes: { url: string; method?: string; body: any }[] = []
+let members: any[] = []
+let sharing: unknown = { sharing: { settings: {} } }
 
 beforeEach(() => {
     stageCalls = []
+    refusals = {}
+    writes = []
+    members = []
+    sharing = { sharing: { settings: {} } }
+    toasts.length = 0
     subtasks = [
         subtask('d1', 'approved'),
         subtask('d2', 'in_progress', { blocked: { reason: 'client', note: 'Q3 export', at: 'x', by: 'u' } }),
@@ -46,14 +61,22 @@ beforeEach(() => {
     ]
     vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
         const json = (data: unknown, status = 200) => ({ ok: status < 400, status, json: async () => data }) as Response
+        if (init?.method && init.method !== 'GET') writes.push({ url, method: init.method, body: init.body ? JSON.parse(init.body as string) : null })
+        const method = init?.method ?? 'GET'
+        const refused = Object.entries(refusals).find(([key]) => {
+            const [m, fragment] = key.includes(' ') ? key.split(' ') : [null, key]
+            return (!m || m === method) && url.includes(fragment)
+        })
+        if (refused) return json(refused[1][1], refused[1][0])
         if (url.includes('/sharing/activity')) {
             stageCalls.push({ url, body: JSON.parse(init?.body as string) })
             return json({ deliverable: { id: 'D', status: 'in_progress' } })
         }
         if (url.includes('/subtasks')) return json({ subtasks, deliverable: { ownerUserId: null } })
-        if (url.includes('/members')) return json({ members: [] })
+        if (url.includes('/members')) return json({ members })
         if (url.includes('/doc-comments')) return json({ messages: [] })
-        return json({ sharing: { settings: {} } })
+        if (url.includes('/drive-action') || url.includes('/assignee')) return json({ ok: true })
+        return json(sharing)
     }))
 })
 afterEach(() => vi.unstubAllGlobals())
@@ -96,6 +119,29 @@ describe('DeliverableDetailPanel', () => {
         expect(stageCalls).toEqual([{ url: '/api/projects/p1/documents/d3/sharing/activity', body: { status: 'to_do' } }])
         // Its deliverable followed: the Board card hears of it.
         expect(onStatusChange).toHaveBeenCalledWith('in_progress')
+    })
+
+    it('marks an internal only document, and leaves it out of the progress', async () => {
+        subtasks = [subtask('d1', 'approved'), subtask('d2', 'in_progress', { isPrivate: true })]
+        const onSubtaskStatusChange = vi.fn()
+        panel({ onSubtaskStatusChange })
+        await waitFor(() => expect(screen.getByText('1 of 1 documents approved')).toBeTruthy())
+        expect(screen.getByText('D2')).toBeTruthy()
+        expect(screen.getByRole('img', { name: 'Internal only' })).toBeTruthy()
+        expect(onSubtaskStatusChange).toHaveBeenLastCalledWith(1, 1)
+    })
+
+    it('changes nothing once the engagement is completed', async () => {
+        panel({ readOnly: true, canManage: false })
+        fireEvent.click(await screen.findByRole('button', { name: '1 not on the Board' }))
+        expect(screen.queryByRole('button', { name: 'Add to Board' })).toBeNull()
+        expect(screen.getByText('D1')).toBeTruthy()
+    })
+
+    it("offers a reviewer no action once the engagement is completed", async () => {
+        panel({ readOnly: true, canManage: false, roleSlug: 'eng_viewer', isExternalViewer: true, activityStatus: 'in_review' })
+        await waitFor(() => expect(screen.getByText('D1')).toBeTruthy())
+        expect(screen.queryByRole('button', { name: 'Request changes' })).toBeNull()
     })
 
     it("tags a blocked document", async () => {
@@ -203,5 +249,97 @@ describe('a preview over the details', () => {
         expect(open.getAttribute('aria-disabled')).toBe('true')
         fireEvent.click(open)
         expect(onOpenSubtaskDocument).not.toHaveBeenCalled()
+    })
+})
+
+describe('writes in the pane say when they fail', () => {
+    // BD-1: the trash the Files list uses, read for its answer.
+    it('moves a document to the trash through the Files trash, after asking', async () => {
+        subtasks = [subtask('d2', 'in_progress', { externalId: 'x2' })]
+        panel()
+        fireEvent.click(await screen.findByRole('button', { name: 'Trash d2.docx' }))
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Move to trash' })) })
+        expect(writes).toEqual([{ url: '/api/drive-action', method: 'POST', body: { action: 'trash', fileId: 'x2', projectId: 'p1', fileName: 'd2.docx' } }])
+        expect(toasts).toEqual([{ type: 'success', title: 'Moved to trash', message: "d2.docx moved to the storage's trash" }])
+        expect(screen.queryByRole('button', { name: 'Trash d2.docx' })).toBeNull()
+    })
+
+    it('keeps the row and says why when the trash is refused', async () => {
+        subtasks = [subtask('d2', 'in_progress', { externalId: 'x2' })]
+        refusals = { '/drive-action': [409, { error: 'OneDrive has this locked. Close it everywhere, then try again.' }] }
+        panel()
+        fireEvent.click(await screen.findByRole('button', { name: 'Trash d2.docx' }))
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Move to trash' })) })
+        expect(toasts).toEqual([{ type: 'error', title: 'Move to trash failed', message: 'OneDrive has this locked. Close it everywhere, then try again.' }])
+        expect(screen.getByRole('button', { name: 'Trash d2.docx' })).toBeTruthy()
+    })
+
+    // BD-2
+    it('puts the assignee back when the change is refused', async () => {
+        subtasks = [subtask('d2', 'in_progress', { assigneeUserId: 'u1', assigneeName: 'Ana Lead' })]
+        refusals = { '/assignee': [403, { error: 'Only a Lead can assign this.' }] }
+        panel()
+        await screen.findAllByText('d2.docx')
+        await act(async () => { fireEvent.click(await screen.findByLabelText('Unassign')) })
+        expect(toasts).toEqual([{ type: 'error', title: "Couldn't change the assignee", message: 'Only a Lead can assign this.' }])
+        expect(screen.getAllByText('Ana Lead').length).toBeGreaterThan(0)
+    })
+
+    // P1-63
+    it('puts the Lead back when the change is refused, and says why', async () => {
+        members = [
+            { userId: 'u1', name: 'Ana Lead', email: 'ana@firm.com', avatarUrl: null, role: 'eng_admin' },
+            { userId: 'u2', name: 'Ben Member', email: 'ben@firm.com', avatarUrl: null, role: 'eng_member' },
+        ]
+        refusals = { '/documents/D/assignee': [500, { error: 'Something went wrong on our side. Try again.' }] }
+        const { container } = panel()
+        await waitFor(() => expect(screen.getByText('No lead')).toBeTruthy())
+        fireEvent.click(screen.getByText('No lead'))
+        await act(async () => { fireEvent.click(await screen.findByRole('button', { name: /Ben Member/ })) })
+        expect(toasts).toEqual([{ type: 'error', title: "Couldn't change the Lead", message: 'Something went wrong on our side. Try again.' }])
+        expect(container.textContent).toContain('No lead')
+    })
+
+    // BD-3, and AC-11: only the options are sent.
+    it('flips a delivery toggle back when the save is refused, sending only the options', async () => {
+        refusals = { 'PUT /documents/D/sharing': [403, { error: 'Your plan does not include download controls.' }] }
+        panel()
+        fireEvent.click(await screen.findByRole('button', { name: 'Settings' }))
+        await waitFor(() => expect((screen.getAllByRole('switch')[0] as HTMLButtonElement).disabled).toBe(false))
+        const toggle = screen.getAllByRole('switch')[0]
+        await act(async () => { fireEvent.click(toggle) })
+        expect(writes[0].body).not.toHaveProperty('guest')
+        expect(writes[0].body).not.toHaveProperty('externalCollaborator')
+        expect(toasts).toEqual([{ type: 'error', title: "Couldn't save delivery settings", message: 'Your plan does not include download controls.' }])
+        expect(toggle.getAttribute('aria-checked')).toBe('false')
+    })
+
+    it("doesn't offer the toggles after a failed load, so no default is saved over the real settings", async () => {
+        refusals = { 'GET /documents/D/sharing': [500, { error: 'Failed to load sharing' }] }
+        panel()
+        expect(await screen.findByText("Couldn't load the description")).toBeTruthy()
+        expect(screen.queryByPlaceholderText('Add a description…')).toBeNull()
+        fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+        expect(await screen.findByText("Couldn't load the delivery settings")).toBeTruthy()
+        expect(screen.queryAllByRole('switch')).toEqual([])
+    })
+
+    // BD-4
+    it('marks the description not saved, with why', async () => {
+        panel()
+        const box = await screen.findByPlaceholderText('Add a description…')
+        await waitFor(() => expect((box as HTMLTextAreaElement).disabled).toBe(false))
+        refusals = { 'PUT /documents/D/sharing': [403, { error: "This engagement is completed, so it's read only." }] }
+        fireEvent.change(box, { target: { value: 'Fee schedule' } })
+        expect(await screen.findByText("Not saved · This engagement is completed, so it's read only.", {}, { timeout: 3000 })).toBeTruthy()
+    })
+
+    // EM-4
+    it("says its documents didn't load, never that there are none", async () => {
+        refusals = { '/subtasks': [500, { error: 'Something went wrong on our side. Try again.' }] }
+        panel()
+        expect(await screen.findByText("Couldn't load this deliverable's documents")).toBeTruthy()
+        expect(screen.queryByText('No files in this deliverable yet.')).toBeNull()
+        expect(screen.queryByText('No documents yet')).toBeNull()
     })
 })

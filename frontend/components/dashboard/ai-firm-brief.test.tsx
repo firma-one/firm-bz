@@ -30,7 +30,8 @@ describe('FirmBriefCard while rewriting', () => {
 /** The hook behind the card, in the card. */
 function Harness() {
     const b = useFirmBrief('f1')
-    return <FirmBriefCard brief={b.brief} loading={b.loading} refreshing={b.refreshing} streamText={b.streamText} refreshError={b.refreshError} onRewrite={b.refresh} onStop={b.stop} />
+    if (!b.available) return <p>No brief card</p>
+    return <FirmBriefCard brief={b.brief} loading={b.loading} refreshing={b.refreshing} streamText={b.streamText} refreshError={b.refreshError} loadError={b.loadError} onReload={b.reload} onRewrite={b.refresh} onStop={b.stop} />
 }
 
 /** A streamed rewrite: its NDJSON lines, sent one by one. */
@@ -46,9 +47,11 @@ function ndjson(lines: unknown[]) {
 
 describe('useFirmBrief', () => {
     let rewrite: () => Response
+    let load: () => Response
     beforeEach(() => {
+        load = () => ({ ok: true, json: async () => ({ brief: OLD, configured: true }) } as Response)
         vi.stubGlobal('fetch', vi.fn(async (_url: string, init?: RequestInit) => (
-            init?.method === 'POST' ? rewrite() : ({ ok: true, json: async () => ({ brief: OLD, configured: true }) } as Response)
+            init?.method === 'POST' ? rewrite() : load()
         )))
     })
     afterEach(() => vi.unstubAllGlobals())
@@ -63,12 +66,47 @@ describe('useFirmBrief', () => {
         expect(screen.getByRole('button', { name: /Rewrite with/ })).toBeTruthy()
     })
 
-    it('keeps the old brief, and says so, when the rewrite fails', async () => {
-        rewrite = () => new Response(ndjson([{ type: 'meta' }, { type: 'error', message: 'Brief generation failed' }]))
+    it('keeps the old brief, and says why, when the rewrite fails', async () => {
+        rewrite = () => new Response(ndjson([{ type: 'meta' }, { type: 'error', message: "Brio couldn't write a new brief. Try again." }]))
         render(<Harness />)
         await screen.findByText('Old news.')
         await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Rewrite with/ })) })
-        await waitFor(() => expect(screen.getAllByText(/Could not rewrite it/).length).toBeGreaterThan(0))
+        await waitFor(() => expect(screen.getAllByText("Brio couldn't write a new brief. Try again. The brief below is unchanged.").length).toBeGreaterThan(0))
         expect(screen.getByText('Old news.')).toBeTruthy()
+    })
+
+    it('out of credits: shows the limit’s own words, not a bare "could not rewrite"', async () => {
+        rewrite = () => new Response(
+            JSON.stringify({ error: "You have used this month's 500 AI credits. They refill on Dec 1. Upgrade your plan for more." }),
+            { status: 429 },
+        )
+        render(<Harness />)
+        await screen.findByText('Old news.')
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Rewrite with/ })) })
+        await waitFor(() => expect(screen.getAllByText(/You have used this month's 500 AI credits\. They refill on Dec 1\./).length).toBeGreaterThan(0))
+        expect(screen.getAllByText(/The brief below is unchanged\./).length).toBeGreaterThan(0)
+    })
+
+    it('a failed load keeps the card and says so quietly, rather than the brief vanishing', async () => {
+        load = () => ({ ok: false, status: 500, json: async () => ({ error: 'Something went wrong on our side. Try again.' }) } as Response)
+        render(<Harness />)
+        expect(await screen.findByText("Couldn't load today's brief · Something went wrong on our side. Try again.")).toBeTruthy()
+        expect(screen.queryByText('No brief card')).toBeNull()
+
+        load = () => ({ ok: true, json: async () => ({ brief: OLD, configured: true }) } as Response)
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Try again' })) })
+        expect(await screen.findByText('Old news.')).toBeTruthy()
+    })
+
+    it('no brief because the route couldn’t write one: says why', async () => {
+        load = () => ({ ok: true, json: async () => ({ brief: null, configured: true, reason: "You have used this month's 500 AI credits. They refill on Dec 1. Upgrade your plan for more." }) } as Response)
+        render(<Harness />)
+        expect(await screen.findByText(/Couldn't load today's brief · You have used this month's 500 AI credits/)).toBeTruthy()
+    })
+
+    it('leaves the card out when AI isn’t configured', async () => {
+        load = () => ({ ok: true, json: async () => ({ brief: null, configured: false }) } as Response)
+        render(<Harness />)
+        expect(await screen.findByText('No brief card')).toBeTruthy()
     })
 })

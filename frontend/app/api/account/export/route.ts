@@ -132,6 +132,9 @@ export async function GET(_request: NextRequest) {
         })
     } catch (error) {
         logger.error('[account/export] failed:', error as Error)
-        return NextResponse.json({ error: 'Could not build your export' }, { status: 500 })
+        return NextResponse.json(
+            { error: 'Something went wrong on our side building the file. Try again, or contact support if it keeps failing.' },
+            { status: 500 },
+        )
     }
 }

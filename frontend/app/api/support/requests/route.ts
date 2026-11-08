@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser()
 
     if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return NextResponse.json({ error: 'Your session has expired. Sign in again.' }, { status: 401 })
     }
 
     const firmSlug = request.nextUrl.searchParams.get('firmSlug')
@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
 
     if (all) {
       if (!isSystemAdminEmail(user.email)) {
-        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+        return NextResponse.json({ error: "You don't have access to these requests." }, { status: 403 })
       }
     } else if (firmSlug) {
       // A firm's tickets are for its firm admins (same rule as canAccessSupportTicket). This had no
@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
         select: { id: true }
       })
       if (!firm) {
-        return NextResponse.json({ error: 'Not found' }, { status: 404 })
+        return NextResponse.json({ error: 'This firm no longer exists.' }, { status: 404 })
       }
       const admin = await prisma.firmMember.findFirst({
         where: { firmId: firm.id, userId: user.id, role: 'firm_admin' },
@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('Failed to fetch support requests:', error)
     return NextResponse.json(
-      { error: 'Failed to fetch support requests' },
+      { error: 'Something went wrong on our side. Try again.' },
       { status: 500 }
     )
   }

@@ -5,7 +5,7 @@ import { visibleCommentsWhere } from '@/lib/comments/internal-notes'
 import { resolveProjectContext } from '@/lib/resolve-project-context'
 import { canViewProject } from '@/lib/permission-helpers'
 import { getProjectDocumentContext } from '@/lib/file-utils'
-import { requireEngagementMember, externalMemberCanAccessDocument } from '@/lib/engagement-access'
+import { requireEngagementMember, externalMemberCanAccessDocument, blockIfEngagementCompleted } from '@/lib/engagement-access'
 
 const ALLOWED_KEYS = new Set([
   'urgent',
@@ -41,6 +41,9 @@ export async function POST(
     const member = await requireEngagementMember(projectId, user.id)
     if (!member) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
+    const completed = await blockIfEngagementCompleted(projectId)
+    if (completed) return completed
+
     const docCtx = await getProjectDocumentContext(projectId, documentIdParam)
     if (!docCtx) return NextResponse.json({ error: 'Document not found in this project' }, { status: 404 })
 
@@ -53,7 +56,7 @@ export async function POST(
     const action = typeof body.action === 'string' ? body.action : ''
 
     if (!messageId) return NextResponse.json({ error: 'messageId is required' }, { status: 400 })
-    if (!ALLOWED_KEYS.has(emojiKey)) return NextResponse.json({ error: 'Invalid emojiKey' }, { status: 400 })
+    if (!ALLOWED_KEYS.has(emojiKey)) return NextResponse.json({ error: "That reaction isn't one we offer." }, { status: 400 })
     if (action !== 'add' && action !== 'remove') return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
 
     const msg = await prisma.docCommentMessage.findFirst({
@@ -66,7 +69,7 @@ export async function POST(
       },
       select: { id: true, reactions: true },
     })
-    if (!msg) return NextResponse.json({ error: 'Comment not found' }, { status: 404 })
+    if (!msg) return NextResponse.json({ error: 'This comment is no longer there.' }, { status: 404 })
 
     const current = (msg.reactions ?? {}) as Record<string, unknown>
     const arr = Array.isArray(current[emojiKey]) ? (current[emojiKey] as unknown[]) : []
@@ -87,7 +90,7 @@ export async function POST(
     return NextResponse.json({ messageId: updated.id, reactions: updated.reactions })
   } catch (e) {
     console.error('POST doc-comment reactions error', e)
-    return NextResponse.json({ error: 'Failed to update reactions' }, { status: 500 })
+    return NextResponse.json({ error: "It wasn't saved on our side. Try again." }, { status: 500 })
   }
 }
 

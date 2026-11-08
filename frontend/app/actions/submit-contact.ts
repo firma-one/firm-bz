@@ -6,9 +6,13 @@ import { CONTACT_MESSAGE_MAX_LENGTH } from '@/lib/contact-form-limits'
 import { logger } from '@/lib/logger'
 import { prisma } from '@/lib/prisma'
 import { serverActionWrapper, ActionResponse } from '@/lib/server-action-wrapper'
+import { CONTACT_EMAIL } from '@/components/marketing/v2/config'
 
 const WINDOW_SIZE = 60 * 60 * 1000 // 1 hour
 const MAX_REQUESTS = 5 // 5 requests per hour
+
+/** A failure on our side, in words for a visitor: the form can't help them, so say how to reach us (P2-66). */
+const COULD_NOT_SEND = `We couldn't send this. Please email us at ${CONTACT_EMAIL}.`
 
 export async function submitContactForm(formData: FormData, token: string): Promise<ActionResponse<string>> {
     return serverActionWrapper(async () => {
@@ -47,9 +51,12 @@ export async function submitContactForm(formData: FormData, token: string): Prom
         const secretKey = process.env.TURNSTILE_SECRET_KEY
         if (!secretKey) {
             console.error('TURNSTILE_SECRET_KEY is not set')
-            throw new Error('Server configuration error.')
+            throw new Error(COULD_NOT_SEND)
         }
 
+        // A refused captcha keeps its own words: the throw used to sit inside this try, so the catch
+        // rewrote it to "Failed to verify captcha." (P2-66). Only a check that couldn't run is that.
+        let verifyData: { success?: boolean }
         try {
             const verifyRes = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
                 method: 'POST',
@@ -62,15 +69,14 @@ export async function submitContactForm(formData: FormData, token: string): Prom
                     remoteip: ip,
                 }),
             })
-
-            const verifyData = await verifyRes.json()
-            if (!verifyData.success) {
-                console.error('Turnstile verification failed:', verifyData)
-                throw new Error('Captcha validation failed.')
-            }
+            verifyData = await verifyRes.json()
         } catch (err) {
             console.error('Turnstile verify error:', err)
-            throw new Error('Failed to verify captcha.')
+            throw new Error("We couldn't check the captcha. Please try again.")
+        }
+        if (!verifyData.success) {
+            console.error('Turnstile verification failed:', verifyData)
+            throw new Error('Captcha validation failed. Please try again.')
         }
 
         const messageRaw = (formData.get('message') as string | null) ?? ''
@@ -103,7 +109,7 @@ export async function submitContactForm(formData: FormData, token: string): Prom
             })
         } catch (err) {
             console.error('Contact submission insert error:', err)
-            throw new Error('Database error occurred.')
+            throw new Error(COULD_NOT_SEND)
         }
 
         return 'Feedback received!'

@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { adminFailure } from '@/app/api/system/admin-error'
 import { createClient } from '@/utils/supabase/server'
 import { isSysAdminUser } from '@/lib/system/user-data-map'
 import { getAiEfficacyReport } from '@/lib/ai/feedback'
-import { logger } from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 
@@ -33,7 +33,6 @@ export async function GET(request: NextRequest) {
 
         return NextResponse.json({ data: await getAiEfficacyReport(days, firmId) })
     } catch (error) {
-        logger.error('[system/ai-efficacy] GET failed:', error as Error)
-        return NextResponse.json({ error: 'Could not load AI efficacy' }, { status: 500 })
+        return adminFailure('load AI efficacy', error)
     }
 }

@@ -67,6 +67,6 @@ export async function GET(
     return NextResponse.json({ reminders: existing })
   } catch (e) {
     console.error('GET doc-comment reminders error', e)
-    return NextResponse.json({ error: 'Failed to fetch reminders' }, { status: 500 })
+    return NextResponse.json({ error: "Couldn't load the reminders. Try again." }, { status: 500 })
   }
 }

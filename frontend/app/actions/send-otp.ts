@@ -4,6 +4,8 @@ import { headers } from 'next/headers'
 
 import { serverActionWrapper, ActionResponse } from '@/lib/server-action-wrapper'
 import { prisma } from '@/lib/prisma'
+import { authErrorWords } from '@/lib/actions/auth-error-words'
+import { logger } from '@/lib/logger'
 
 interface SendOTPResult {
     userExists: boolean
@@ -94,7 +96,10 @@ export async function sendOTPWithTurnstile(
             },
         })
 
-        if (error) throw new Error(error.message)
+        if (error) {
+            logger.error('[sendOTPWithTurnstile] Supabase refused to send the code', error)
+            throw new Error(authErrorWords(error, "We couldn't send your code. Try again in a moment."))
+        }
 
         return { userExists: false }
     }, 'sendOTPWithTurnstile')

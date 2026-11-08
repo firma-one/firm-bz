@@ -10,6 +10,7 @@ import { getSharedAndAncestorIdsForPersona } from '@/lib/engagement-sharing-ids'
 import { requireEngagementMember, isExternalEngagementRole } from '@/lib/engagement-access'
 import { SearchService } from '@/lib/services/search-service'
 import { getPermissionAdapter } from '@/lib/connectors/registry'
+import { logger } from '@/lib/logger'
 
 function notFound() {
   return NextResponse.json({ error: 'Not found' }, { status: 404 })
@@ -134,6 +135,8 @@ export async function GET(
       projectRootFolderId,
     })
   } catch (e) {
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    // Not "no access": the browser says "Couldn't open that link. Try again." for anything but 403/404 (P1-43).
+    logger.error('resolve-deeplink failed', e as Error)
+    return NextResponse.json({ error: "Couldn't open that link. Try again." }, { status: 500 })
   }
 }

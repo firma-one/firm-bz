@@ -22,14 +22,14 @@ export async function GET(
   try {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!user) return NextResponse.json({ error: 'Your session has expired. Sign in again.' }, { status: 401 })
 
     const { firmId } = await params
     const settings = await userSettingsPlus.getUserSettingsPlus(user.id)
     const firm = findFirmInPermissions(settings.permissions, firmId)
-    if (!firm) return NextResponse.json({ error: 'Firm not found' }, { status: 404 })
+    if (!firm) return NextResponse.json({ error: "You aren't a member of this firm." }, { status: 404 })
     const canManage = firmPrivileges(firm.scopes).includes('can_manage')
-    if (!canManage) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    if (!canManage) return NextResponse.json({ error: 'Only firm admins can see the firm’s activity.' }, { status: 403 })
 
     const { searchParams } = new URL(request.url)
     const clientIds = searchParams.getAll('clientId').filter(Boolean)
@@ -58,7 +58,7 @@ export async function GET(
     })
   } catch (e) {
     console.error('GET firm audit filters error', e)
-    return NextResponse.json({ error: 'Failed to load filters' }, { status: 500 })
+    return NextResponse.json({ error: 'Something went wrong on our side. Try again.' }, { status: 500 })
   }
 }
 

@@ -25,6 +25,8 @@ import {
 import { Tag } from '@/components/ui/tag'
 import { EmptyPanel } from '@/components/ui/empty-panel'
 import { LoadingAnnouncement, ShimmerBar } from '@/components/ui/shimmer'
+import { LoadFailed } from '@/components/ui/load-failed'
+import { failureReason } from '@/lib/files/action-failure'
 
 type Draft = { name: string; email: string; phone: string; title: string; notes: string }
 
@@ -43,6 +45,8 @@ export function ClientContactsTab({
   const [isPending, startTransition] = useTransition()
   const [contacts, setContacts] = useState<ClientContactRecord[]>([])
   const [loading, setLoading] = useState(true)
+  /** Why the last load failed. Never "No contacts yet" after a failure. */
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
 
   // Unified add/edit modal
@@ -63,15 +67,20 @@ export function ClientContactsTab({
     () => async () => {
       setLoading(true)
       try {
-        const rows = await listClientContacts(orgSlug, clientSlug)
-        setContacts(rows)
+        const result = await listClientContacts(orgSlug, clientSlug)
+        if (result.ok) {
+          setContacts(result.data)
+          setLoadError(null)
+        } else {
+          setLoadError(result.error)
+        }
       } catch (e) {
-        addToast({ type: 'error', title: 'Failed to load', message: e instanceof Error ? e.message : 'Could not load contacts.' })
+        setLoadError(failureReason(e))
       } finally {
         setLoading(false)
       }
     },
-    [orgSlug, clientSlug, addToast]
+    [orgSlug, clientSlug]
   )
 
   useEffect(() => { refresh() }, [refresh])
@@ -136,7 +145,7 @@ export function ClientContactsTab({
     startTransition(async () => {
       try {
         if (isEditing && editingContact) {
-          await updateClientContact(orgSlug, clientSlug, editingContact.id, {
+          const result = await updateClientContact(orgSlug, clientSlug, editingContact.id, {
             name: draft.name.trim(),
             email: draft.email.trim(),
             phone: draft.phone.trim(),
@@ -144,13 +153,17 @@ export function ClientContactsTab({
             notes: draft.notes.trim(),
             tags: ft,
           })
+          if (!result.ok) {
+            addToast({ type: 'error', title: "Couldn't save contact", message: result.error })
+            return
+          }
           setContacts((prev) => prev.map((x) => x.id === editingContact.id
             ? { ...x, name: draft.name.trim(), email: draft.email.trim(), phone: draft.phone.trim(), title: draft.title.trim(), notes: draft.notes.trim(), tags: ft }
             : x
           ))
           addToast({ type: 'success', title: 'Saved', message: 'Contact updated.' })
         } else {
-          await createClientContact(orgSlug, clientSlug, {
+          const result = await createClientContact(orgSlug, clientSlug, {
             name: draft.name.trim(),
             email: draft.email.trim() || undefined,
             phone: draft.phone.trim() || undefined,
@@ -158,12 +171,16 @@ export function ClientContactsTab({
             notes: draft.notes.trim() || undefined,
             tags: ft.length ? ft : undefined,
           })
+          if (!result.ok) {
+            addToast({ type: 'error', title: "Couldn't add contact", message: result.error })
+            return
+          }
           addToast({ type: 'success', title: 'Added', message: 'Contact added.' })
           await refresh()
         }
         closeModal()
       } catch (e) {
-        addToast({ type: 'error', title: 'Failed', message: e instanceof Error ? e.message : 'Could not save contact.' })
+        addToast({ type: 'error', title: isEditing ? "Couldn't save contact" : "Couldn't add contact", message: failureReason(e) })
       }
     })
   }
@@ -195,7 +212,13 @@ export function ClientContactsTab({
         </div>
       </div>
 
-      {loading && contacts.length === 0 ? (
+      {loadError && !loading && contacts.length > 0 && (
+        <p role="alert" className="text-small text-danger">Couldn&apos;t refresh contacts · {loadError}</p>
+      )}
+
+      {loadError && !loading && contacts.length === 0 ? (
+        <LoadFailed what="contacts" reason={loadError} onRetry={() => void refresh()} />
+      ) : loading && contacts.length === 0 ? (
         <div aria-busy="true">
           <LoadingAnnouncement label="Loading contacts" />
           {[0, 1, 2].map((i) => (
@@ -364,12 +387,16 @@ export function ClientContactsTab({
           const id = contactToDelete.id
           startTransition(async () => {
             try {
-              await deleteClientContact(orgSlug, clientSlug, id)
+              const result = await deleteClientContact(orgSlug, clientSlug, id)
+              if (!result.ok) {
+                addToast({ type: 'error', title: "Couldn't remove contact", message: result.error })
+                return
+              }
               addToast({ type: 'success', title: 'Removed', message: 'Contact removed.' })
               setContacts((prev) => prev.filter((x) => x.id !== id))
               setContactToDelete(null)
             } catch (e) {
-              addToast({ type: 'error', title: 'Failed', message: e instanceof Error ? e.message : 'Could not remove contact.' })
+              addToast({ type: 'error', title: "Couldn't remove contact", message: failureReason(e) })
             }
           })
         }}

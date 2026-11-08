@@ -80,6 +80,16 @@ describe('buildChatTranscript', () => {
         expect(out).toContain('_[stopped — incomplete answer]_')
     })
 
+    it('marks an answer that broke off part-way', () => {
+        const out = buildChatTranscript([
+            { role: 'user', content: "What's overdue?" },
+            { role: 'assistant', content: 'Three deliverables are', cutOff: true },
+        ], { generatedAt: AT })
+
+        expect(out).toContain('Three deliverables are')
+        expect(out).toContain('_[cut off · incomplete answer]_')
+    })
+
     it('leaves a completed answer unmarked', () => {
         const out = buildChatTranscript([
             { role: 'user', content: "What's overdue?" },

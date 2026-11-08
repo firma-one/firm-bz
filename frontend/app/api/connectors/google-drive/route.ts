@@ -14,6 +14,22 @@ import { safeInngestSend } from '@/lib/inngest/client'
 import { setMigrationPending } from '@/lib/firm-maintenance'
 import { logger } from '@/lib/logger'
 import { prisma } from '@/lib/prisma'
+import { findFirmForConnector } from '@/lib/connectors/connector-firm'
+import { asStorageFailure, folderStepFailure, reconnectFailure, storageFailureResponse } from '@/lib/connectors/folder-step-failure'
+import { getActiveMigration } from '@/lib/firm-maintenance'
+
+/** "Folder set, but…": the workspace folder was saved, a folder step inside it wasn't. */
+function folderSetupWarning(reason: string): string {
+  return `Folder set, but the firm's folders couldn't be created inside it · ${reason}`
+}
+
+/** Migrate refusals: nothing was changed, and why. */
+function migrationRefused(reason: string, status: number, code?: string) {
+  return NextResponse.json(
+    { error: `Migration couldn't start. Your files and folder are unchanged · ${reason}`, ...(code ? { code } : {}) },
+    { status }
+  )
+}
 
 /** Parse first Drive API error body from `moveTopLevelChildrenBetweenParents` failure entries. */
 function driveMoveFailureHint(failures: { id: string; error: string }[]): string | undefined {
@@ -151,7 +167,7 @@ export async function POST(request: NextRequest) {
       const connector = await prisma.connector.findUnique({ where: { id: connectionId } })
       if (!connector) return NextResponse.json({ error: 'Connector not found' }, { status: 404 })
       const token = await googleDriveConnector.getAccessToken(connectionId)
-      if (!token) return NextResponse.json({ error: 'Could not obtain access token' }, { status: 500 })
+      if (!token) return storageFailureResponse(reconnectFailure('Google Drive'))
       await googleDriveConnector.ensureDefaultWorkspaceRoot(connectionId, token)
       return NextResponse.json({ ok: true })
     }
@@ -186,18 +202,8 @@ export async function POST(request: NextRequest) {
       let org = null
 
       if (connector) {
-        // Try firm-level connector first, then fall back to client-level connector
-        org = await prisma.firm.findFirst({ where: { connectorId: connector.id } })
-        if (!org) {
-          // Client-level connector — find the firm via the linked client
-          const linkedClient = await prisma.client.findFirst({
-            where: { connectorId: connector.id },
-            select: { firmId: true }
-          })
-          if (linkedClient) {
-            org = await prisma.firm.findUnique({ where: { id: linkedClient.firmId } })
-          }
-        }
+        // The connector's own firm, then the firm of a client using it (not legacy Firm.connectorId).
+        org = await findFirmForConnector(connector.id)
         stepOneOrgSlug = org?.slug ?? null
       }
 
@@ -218,6 +224,7 @@ export async function POST(request: NextRequest) {
       }
 
       // Provision client folder + all existing engagement folders for the linked client
+      let finalizeWarning: string | undefined
       if (org && connector) {
         try {
           const linkedClient = await prisma.client.findFirst({
@@ -226,7 +233,7 @@ export async function POST(request: NextRequest) {
           })
           if (linkedClient) {
             const accessToken = await googleDriveConnector.getAccessToken(connector.id)
-            if (!accessToken) throw new Error('Could not get access token for connector')
+            if (!accessToken) throw reconnectFailure('Google Drive')
             const driveAdapter = createGoogleDriveAdapter(async () => accessToken)
             await ensureAppFolderStructure(connector.id, linkedClient.name, linkedClient.slug, driveAdapter, org.id)
             logger.info('finalize: provisioned client folder', { clientId: linkedClient.id, connectorId: connector.id })
@@ -235,6 +242,7 @@ export async function POST(request: NextRequest) {
               where: { clientId: linkedClient.id, isDeleted: false, connectorRootFolderId: null },
               select: { id: true, name: true, slug: true }
             })
+            const engagementFailures: string[] = []
             for (const eng of engagements) {
               try {
                 const engResult = await ensureAppFolderStructure(
@@ -250,12 +258,17 @@ export async function POST(request: NextRequest) {
                 }
               } catch (engErr) {
                 logger.error('finalize: failed to provision engagement folder', engErr instanceof Error ? engErr : new Error(String(engErr)), `engagementId:${eng.id}`)
+                engagementFailures.push(`${eng.name} (${folderStepFailure(engErr, 'Google Drive').message})`)
               }
+            }
+            if (engagementFailures.length > 0) {
+              finalizeWarning = `Folder set, but ${engagementFailures.length} of ${engagements.length} engagement folders couldn't be created · ${engagementFailures.join('; ')}`
             }
           }
         } catch (provErr) {
           logger.error('finalize: failed to provision client/engagement folders', provErr instanceof Error ? provErr : new Error(String(provErr)))
-          // Non-fatal — folder structure can be retried
+          // The folder is set; say the client's folders weren't made, rather than a silent success.
+          finalizeWarning = folderSetupWarning(folderStepFailure(provErr, 'Google Drive').message)
         }
       }
 
@@ -292,16 +305,7 @@ export async function POST(request: NextRequest) {
       // We prioritize the orgFolderId and any doc folders found in settings
       const finalizeConnector = await (prisma as any).connector.findUnique({ where: { id: connectionId } })
       if (finalizeConnector) {
-        let finalizeOrg = await prisma.firm.findFirst({ where: { connectorId: finalizeConnector.id } })
-        if (!finalizeOrg) {
-          const linkedClient = await prisma.client.findFirst({
-            where: { connectorId: finalizeConnector.id },
-            select: { firmId: true }
-          })
-          if (linkedClient) {
-            finalizeOrg = await prisma.firm.findUnique({ where: { id: linkedClient.firmId } })
-          }
-        }
+        const finalizeOrg = await findFirmForConnector(finalizeConnector.id)
         if (finalizeOrg) {
           const settings = (finalizeConnector.settings as any) || {}
           const rootFolderIds: string[] = []
@@ -329,7 +333,7 @@ export async function POST(request: NextRequest) {
       if (userId) {
         userSettingsPlus.invalidateUser(userId)
       }
-      return NextResponse.json({ ...result, slug: orgSlug })
+      return NextResponse.json({ ...result, slug: orgSlug, ...(finalizeWarning ? { warning: finalizeWarning } : {}) })
     }
 
     if (action === 'repair-org-folder') {
@@ -425,20 +429,18 @@ export async function POST(request: NextRequest) {
         // Location can be backfilled on next status fetch
       }
 
-      // Provision firm/client/engagement folder hierarchy after workspace root is set
+      // Provision firm/client/engagement folder hierarchy after workspace root is set. The root is
+      // saved either way; a failure here answers success with a `warning` the dialog shows, since
+      // nothing retries it and engagements would later fail on "Organization folder not configured".
+      let rootWarning: string | undefined
       try {
         const accessToken = await googleDriveConnector.getAccessToken(connectionId)
-        if (accessToken) {
+        if (!accessToken) {
+          rootWarning = folderSetupWarning(reconnectFailure('Google Drive').message)
+        } else {
           const driveAdapter = createGoogleDriveAdapter(async () => accessToken)
-          // Find firm: try connector link first, then client link, then explicit firmId hint
-          let org = await prisma.firm.findFirst({ where: { connectorId: connectionId } })
-          if (!org) {
-            const linkedClient = await prisma.client.findFirst({
-              where: { connectorId: connectionId },
-              select: { firmId: true }
-            })
-            if (linkedClient) org = await prisma.firm.findUnique({ where: { id: linkedClient.firmId } })
-          }
+          // Find firm: the connector's own firm, then a client's, then the explicit firmId hint
+          let org = await findFirmForConnector(connectionId)
           // The hint is caller-supplied: only follow it into a firm the caller administers, or
           // they could set up folders (and firm.firmFolderId) in any firm.
           if (!org && hintFirmId && (await isFirmAdmin(rootUser.id, hintFirmId))) {
@@ -464,6 +466,7 @@ export async function POST(request: NextRequest) {
                 where: { clientId: linkedClient.id, isDeleted: false, connectorRootFolderId: null },
                 select: { id: true, name: true, slug: true }
               })
+              const engagementFailures: string[] = []
               for (const eng of engagements) {
                 try {
                   const engResult = await ensureAppFolderStructure(
@@ -478,7 +481,11 @@ export async function POST(request: NextRequest) {
                   }
                 } catch (engErr) {
                   logger.error('update-root-folder: failed to provision engagement', engErr instanceof Error ? engErr : new Error(String(engErr)), `engagementId:${eng.id}`)
+                  engagementFailures.push(`${eng.name} (${folderStepFailure(engErr, 'Google Drive').message})`)
                 }
+              }
+              if (engagementFailures.length > 0) {
+                rootWarning = `Folder set, but ${engagementFailures.length} of ${engagements.length} engagement folders couldn't be created · ${engagementFailures.join('; ')}`
               }
               logger.info('update-root-folder: provisioned hierarchy', { connectionId, orgId: org.id, clientId: linkedClient.id })
             }
@@ -486,10 +493,10 @@ export async function POST(request: NextRequest) {
         }
       } catch (provErr) {
         logger.error('update-root-folder: provisioning failed', provErr instanceof Error ? provErr : new Error(String(provErr)))
-        // Non-fatal — folder structure can be retried
+        rootWarning = folderSetupWarning(folderStepFailure(provErr, 'Google Drive').message)
       }
 
-      return NextResponse.json({ success: true })
+      return NextResponse.json({ success: true, ...(rootWarning ? { warning: rootWarning } : {}) })
     }
 
     if (action === 'create-folder') {
@@ -499,9 +506,7 @@ export async function POST(request: NextRequest) {
       }
 
       const accessToken = await googleDriveConnector.getAccessToken(connectionId)
-      if (!accessToken) {
-        return NextResponse.json({ error: 'Unauthorized/Expired' }, { status: 401 })
-      }
+      if (!accessToken) return storageFailureResponse(reconnectFailure('Google Drive'))
 
       // Create the folder
       const folder = await googleDriveConnector.createDriveFile(accessToken, {
@@ -541,9 +546,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Missing required parameters' }, { status: 400 })
       }
       const accessToken = await googleDriveConnector.getAccessToken(connectionId)
-      if (!accessToken) {
-        return NextResponse.json({ error: 'Unauthorized/Expired' }, { status: 401 })
-      }
+      if (!accessToken) return storageFailureResponse(reconnectFailure('Google Drive'))
       const folderId = await (googleDriveConnector as any).findOrCreateFolder(
         accessToken,
         name,
@@ -611,26 +614,38 @@ export async function POST(request: NextRequest) {
       const estRootId: string = estSettings.rootFolderId || ''
       if (!estRootId) return NextResponse.json({ itemCount: 0, estimatedMinutes: 1 })
       const estToken = await googleDriveConnector.getAccessToken(estConnId)
-      if (!estToken) return NextResponse.json({ itemCount: 0, estimatedMinutes: 1 })
+      if (!estToken) return storageFailureResponse(reconnectFailure('Google Drive'))
       const params = new URLSearchParams({
         q: `'${estRootId}' in parents and trashed = false`,
-        fields: 'files(id)',
+        fields: 'files(id,mimeType)',
         pageSize: '1000',
         supportsAllDrives: 'true',
         includeItemsFromAllDrives: 'true',
       })
-      let itemCount = 0
+      // Only the top level is counted. Folders inside hold more, so the estimate is then a minimum,
+      // and a count that couldn't be taken is no estimate at all (it used to read "about 1 minute").
+      let itemCount: number | null = null
+      let folderCount = 0
       try {
         const res = await fetch(`https://www.googleapis.com/drive/v3/files?${params}`, {
           headers: { Authorization: `Bearer ${estToken}` },
         })
         if (res.ok) {
           const data = await res.json()
-          itemCount = (data.files || []).length
+          const files: { mimeType?: string }[] = data.files || []
+          itemCount = files.length
+          folderCount = files.filter((f) => f.mimeType === 'application/vnd.google-apps.folder').length
+        } else {
+          logger.warn('estimate-migration: listing the workspace folder failed', { status: res.status })
         }
-      } catch { /* ignore */ }
+      } catch (e) {
+        logger.warn('estimate-migration: listing the workspace folder failed', { message: e instanceof Error ? e.message : String(e) })
+      }
+      if (itemCount == null) {
+        return NextResponse.json({ itemCount: null, estimatedMinutes: null, atLeast: false })
+      }
       const estimatedMinutes = itemCount <= 50 ? 1 : itemCount <= 200 ? 3 : itemCount <= 500 ? 8 : 15
-      return NextResponse.json({ itemCount, estimatedMinutes })
+      return NextResponse.json({ itemCount, estimatedMinutes, atLeast: folderCount > 0 || itemCount >= 1000 })
     }
 
     if (action === 'migrate-and-update-root') {
@@ -666,6 +681,36 @@ export async function POST(request: NextRequest) {
       const oldRoot =
         (typeof migrateFromRootFolderId === 'string' && migrateFromRootFolderId) ||
         (typeof prev.rootFolderId === 'string' ? prev.rootFolderId : '')
+      const willMigrate = Boolean(oldRoot && oldRoot !== migNewRoot)
+
+      // Check everything before the root is repointed: once it is, Location names the new folder,
+      // and a migration that never runs leaves every file behind in the old one (CN-1).
+      let firm: Awaited<ReturnType<typeof findFirmForConnector>> = null
+      if (willMigrate) {
+        firm = await findFirmForConnector(migConnId)
+        if (!firm) {
+          return migrationRefused("This connection isn't linked to a firm yet.", 409, 'no_firm')
+        }
+        if (await getActiveMigration(firm.id)) {
+          return migrationRefused('A migration is already under way for this firm. Wait for it to finish.', 409, 'already_running')
+        }
+        if (!(await googleDriveConnector.getAccessToken(migConnId))) {
+          const f = reconnectFailure('Google Drive')
+          return migrationRefused(f.message, f.status, f.reason)
+        }
+      }
+
+      const restoreRoot = async () => {
+        await (prisma as any).connector.update({ where: { id: migConnId }, data: { settings: prev } })
+        if (typeof prev.rootFolderId === 'string' && prev.rootFolderId) {
+          try {
+            const migAdapter = await getMigrationAdapter(migConnId)
+            await migAdapter.persistWorkspaceRootLocation(migConnId, prev.rootFolderId)
+          } catch {
+            // Backfilled on status if needed
+          }
+        }
+      }
 
       await (prisma as any).connector.update({
         where: { id: migConnId },
@@ -685,30 +730,40 @@ export async function POST(request: NextRequest) {
         // Backfilled on status if needed
       }
 
-      if (oldRoot && oldRoot !== migNewRoot) {
-        const firm = await prisma.firm.findFirst({ where: { connectorId: migConnId } })
-        if (firm) {
-          const estimatedMinutes = typeof bodyEstMinutes === 'number' ? bodyEstMinutes : 5
+      if (willMigrate && firm) {
+        const estimatedMinutes = typeof bodyEstMinutes === 'number' ? bodyEstMinutes : 5
+        try {
           await setMigrationPending(firm.id, {
             initiatedAt: new Date().toISOString(),
             estimatedStartMinutes: graceMinutes,
             initiatedBy: migUser.id,
           })
-          await safeInngestSend('workspace.migrate.requested', {
-            connectionId: migConnId,
-            newRootFolderId: migNewRoot,
-            oldRootFolderId: oldRoot,
-            firmId: firm.id,
-            organizationId: firm.id,
-            initiatingUserId: migUser.id,
-            estimatedMinutes,
-            startedAt: new Date().toISOString(),
-            graceMinutes,
-          })
+        } catch (e) {
+          logger.error('migrate-and-update-root: could not mark the migration pending', e instanceof Error ? e : new Error(String(e)), `firmId:${firm.id}`)
+          await restoreRoot()
+          return migrationRefused("Couldn't record the migration. Try again in a minute.", 500)
+        }
+        const sent = await safeInngestSend('workspace.migrate.requested', {
+          connectionId: migConnId,
+          newRootFolderId: migNewRoot,
+          oldRootFolderId: oldRoot,
+          firmId: firm.id,
+          organizationId: firm.id,
+          initiatingUserId: migUser.id,
+          estimatedMinutes,
+          startedAt: new Date().toISOString(),
+          graceMinutes,
+        })
+        // `false` when the job couldn't be queued (logged by safeInngestSend). Read loosely so this
+        // also holds while an older safeInngestSend still answers void.
+        if ((sent as unknown) === false) {
+          await restoreRoot()
+          await setMigrationPending(firm.id, null).catch(() => undefined)
+          return migrationRefused("The background job that moves your files couldn't be queued. Try again in a minute.", 503, 'not_queued')
         }
       }
 
-      return NextResponse.json({ ok: true, async: true, estimatedMinutes: bodyEstMinutes ?? 5 })
+      return NextResponse.json({ ok: true, async: willMigrate, estimatedMinutes: bodyEstMinutes ?? 5 })
     }
 
     return NextResponse.json(
@@ -716,9 +771,15 @@ export async function POST(request: NextRequest) {
       { status: 400 }
     )
   } catch (error) {
-    console.error('Google Drive connector error:', error)
+    // A folder step Drive refused says why ("…doesn't have permission…", "…out of storage space…").
+    const storage = asStorageFailure(error, 'Google Drive')
+    if (storage) {
+      logger.warn('Google Drive connector action refused by Drive', { message: error instanceof Error ? error.message : String(error), reason: storage.reason })
+      return storageFailureResponse(storage)
+    }
+    logger.error('Google Drive connector error', error instanceof Error ? error : new Error(String(error)))
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Something went wrong on our side. Try again.' },
       { status: 500 }
     )
   }
@@ -871,9 +932,7 @@ export async function GET(request: NextRequest) {
       // Use getAccessToken which handles refresh and decryption
       const accessToken = await googleDriveConnector.getAccessToken(connector.id)
 
-      if (!accessToken) {
-        return NextResponse.json({ error: 'Failed to get access token' }, { status: 500 })
-      }
+      if (!accessToken) return storageFailureResponse(reconnectFailure('Google Drive'))
 
       return NextResponse.json({
         accessToken: accessToken, // Decrypted plaintext token
@@ -897,9 +956,7 @@ export async function GET(request: NextRequest) {
       // Fetch Drives from Google - decrypt token first
       try {
         const accessToken = await googleDriveConnector.getAccessToken(connector.id)
-        if (!accessToken) {
-          return NextResponse.json({ error: 'Failed to get access token' }, { status: 500 })
-        }
+        if (!accessToken) return storageFailureResponse(reconnectFailure('Google Drive'))
 
         const driveRes = await fetch('https://www.googleapis.com/drive/v3/drives?pageSize=10', {
           headers: {

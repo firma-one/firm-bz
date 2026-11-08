@@ -18,7 +18,7 @@ describe('failureFrom', () => {
 
 describe('failureReason', () => {
     it('says the request never got there, in place of the browser\'s "Failed to fetch"', () => {
-        expect(failureReason(new TypeError('Failed to fetch'))).toBe("Couldn't reach Firma. Check your connection and try again.")
+        expect(failureReason(new TypeError('Failed to fetch'))).toBe("Couldn't reach firma. Check your connection and try again.")
     })
 
     it("uses an error's own words", () => {

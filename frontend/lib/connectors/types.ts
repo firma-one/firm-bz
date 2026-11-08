@@ -116,18 +116,71 @@ export interface EngagementFolderIds {
 export type ConnectorRole = 'viewer' | 'editor' | 'commenter'
 
 /**
+ * What restricting a folder to its owner left behind. The permissions inherited from above (a shared
+ * drive's members, a parent folder) are left alone: they can't be removed on the folder itself.
+ */
+export interface FolderRestrictOutcome {
+  /** Permissions taken off the folder. */
+  removed: number
+  /** Who still holds a permission the provider wouldn't remove: an email, or what it is ("anyone with the link"). */
+  remaining: string[]
+  /** Why the first of those still stands, in words for people. */
+  reason?: string
+}
+
+/**
+ * Where an item stands after "Move to trash", for the cleanup after the Undo window. OneDrive can't tell
+ * an item in its recycle bin from one deleted for good, so it answers 'gone' for both.
+ */
+export type TrashState = 'restored' | 'trashed' | 'gone'
+
+/**
  * Permission operations for connectors that support per-file sharing.
  * Google Drive implements all methods; providers that lack native sharing may return no-ops.
+ *
+ * The methods that change who can open something (grant a folder, revoke, lower or raise a folder role,
+ * take a folder grant back) throw a `StorageFailure` saying why when the provider refuses or can't be
+ * reached: a `false` would tell the caller nothing it could pass on.
  */
 export interface IConnectorPermissionAdapter {
-  /** Grant access to a folder for an email address. Returns the permission ID or null. `opts.notify`: false suppresses the provider's own sharing-notification email (defaults to true, matching prior behavior). */
+  /**
+   * Grant access to a folder for an email address. Returns the permission ID (null when the provider
+   * answered without one). Throws a StorageFailure when it refuses. `opts.notify`: false suppresses the
+   * provider's own sharing-notification email (defaults to true, matching prior behavior).
+   */
   grantFolderPermission(connectionId: string, folderId: string, email: string, role: ConnectorRole, opts?: { notify?: boolean }): Promise<string | null>
-  /** Revoke a permission by its permission ID. */
+  /**
+   * Revoke a permission by its permission ID. Resolves true once it's gone (one already gone counts).
+   * Throws a StorageFailure when the provider refuses or can't be reached, so a caller keeps the id.
+   */
   revokePermission(connectionId: string, fileId: string, permissionId: string): Promise<boolean>
-  /** Downgrade an existing user permission on a folder to viewer. Returns true if the permission was changed. */
+  /**
+   * Take back the permission `email` holds on a folder itself, as a member's folder grant is removed.
+   * Resolves once they hold none there (none to begin with counts). One inherited from above is left:
+   * it can't be removed on this folder, and Firma never grants above the engagement's folders.
+   * Throws a StorageFailure when the provider refuses or can't be reached.
+   */
+  revokeFolderPermissionByEmail(connectionId: string, folderId: string, email: string): Promise<void>
+  /**
+   * Lower a user's permission on a folder to viewer. Resolves true when they can no longer edit through
+   * it (no permission there, or the owner's, which can't be lowered, counts as nothing to do). Throws a
+   * StorageFailure when the provider refuses or can't be reached.
+   */
   downgradeFolderUserPermissionToReader(connectionId: string, folderId: string, email: string): Promise<boolean>
-  /** Give a user write on a folder again: a reader is raised, one with no access is granted it, anyone higher is left alone. Returns true if they end up able to edit. */
+  /**
+   * Give a user write on a folder again: a reader is raised, one with no access is granted it, anyone
+   * higher is left alone. Resolves true when they end up able to edit. Throws a StorageFailure when the
+   * provider refuses or can't be reached.
+   */
   upgradeFolderUserPermissionToEditor(connectionId: string, folderId: string, email: string): Promise<boolean>
+  /**
+   * Remove every permission on a folder but its owner's, as a deleted engagement's folders are closed.
+   * Reports who still has access rather than throwing for each refusal. Throws a StorageFailure only
+   * when the provider won't list the folder's permissions at all.
+   */
+  restrictFolderToOwnerOnly(connectionId: string, folderId: string): Promise<FolderRestrictOutcome>
+  /** Where an item moved to the trash stands now. Throws a StorageFailure when the provider can't say. */
+  getTrashState(connectionId: string, fileId: string): Promise<TrashState>
   /** Get the engagement folder structure (general, confidential, staging) for a project. */
   getEngagementFolderIds(connectionId: string, engagementSlug: string, opts: { projectName?: string; clientSlug?: string; clientName?: string; projectFolderId?: string }): Promise<EngagementFolderIds>
   /** Move a file to trash (soft delete). */
@@ -158,7 +211,10 @@ export interface IConnectorPermissionAdapter {
    * enforces it for OneDrive — a companion `setCopyRestricted` call does nothing there.
    */
   grantFilePermission(connectionId: string, fileId: string, email: string, role: ConnectorRole, opts?: { notify?: boolean; message?: string; preventDownload?: boolean }): Promise<string | null>
-  /** List permissions currently set on a single file. */
+  /**
+   * List permissions currently set on a single file. Throws a StorageFailure when the provider won't
+   * list them, so an empty array really means the file has none.
+   */
   listFilePermissions(connectionId: string, fileId: string): Promise<Array<{ id: string; email: string | null; role: ConnectorRole }>>
   /**
    * One permission on a file by its id, or null when it's gone (removed by hand, expired by a
@@ -356,6 +412,9 @@ export interface IConnectorStorageAdapter {
   fileExists(connectionId: string, fileId: string): Promise<boolean>
   search(connectionId: string, query: string): Promise<Array<{ id: string; name: string }>>
 
-  /** Optional: restrict folder to owner-only (e.g. Drive permissions). No-op if not supported. */
-  restrictFolderToOwnerOnly?(connectionId: string, folderId: string): Promise<void>
+  /**
+   * Optional: restrict folder to owner-only (e.g. Drive permissions). No-op if not supported. Answers what
+   * it couldn't remove; folder setup ignores that, a deleted engagement's cleanup reports it.
+   */
+  restrictFolderToOwnerOnly?(connectionId: string, folderId: string): Promise<FolderRestrictOutcome | void>
 }

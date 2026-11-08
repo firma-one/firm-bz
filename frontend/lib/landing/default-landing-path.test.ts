@@ -35,4 +35,13 @@ describe('resolveDefaultFirmLandingPath', () => {
         autoProvisionFirstFirm.mockResolvedValue({ groupSlug: 'g', firmSlug: 'new-firm' })
         expect(await resolveDefaultFirmLandingPath('u1')).toBe('/d/g/f/new-firm?landed=new')
     })
+
+    it('sends a failed first-firm setup to onboarding with the reason, for a Retry that works (P1-22)', async () => {
+        getUserFirms.mockResolvedValue([])
+        autoProvisionFirstFirm.mockRejectedValue(new Error('Polar API 503'))
+        const path = await resolveDefaultFirmLandingPath('u1')
+        const url = new URL(path!, 'http://x')
+        expect(url.pathname).toBe('/d/onboarding')
+        expect(url.searchParams.get('provision_error')).toBe("Our billing provider didn't answer. Try again in a minute.")
+    })
 })

@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
     const { data: { session } } = await supabase.auth.getSession()
 
     if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return NextResponse.json({ error: 'Your session has expired. Sign in again.' }, { status: 401 })
     }
 
     const user = session.user
@@ -72,7 +72,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (!firm) {
-      return NextResponse.json({ error: 'Firm not found in permissions' }, { status: 404 })
+      return NextResponse.json({ error: "You aren't a member of this firm." }, { status: 404 })
     }
 
     const firmPrivs = firmPrivileges(firm.scopes)
@@ -144,8 +144,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(body)
   } catch (error) {
     console.error('Error fetching firm permissions', error)
+    // Read by the views as the reason under "Couldn't load your permissions".
     return NextResponse.json(
-      { error: 'Failed to fetch permissions' },
+      { error: 'Something went wrong on our side.' },
       { status: 500 }
     )
   }

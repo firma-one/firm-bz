@@ -162,3 +162,35 @@ describe('UploadConflictDialog', () => {
         expect(onCancel).toHaveBeenCalled()
     })
 })
+
+describe('pickers whose list failed to load', () => {
+    const moveBase = {
+        open: true, onOpenChange: vi.fn(), action: 'move' as const, targetName: 'Plan.xlsx', keepBoth: true,
+        onKeepBothChange: vi.fn(), path: [{ id: 'gen', name: 'General' }], onPathClick: vi.fn(), loading: false,
+        folders: [], emptyFolderIds: new Set<string>(), subfolderIds: new Set<string>(), checkingFolderId: null,
+        submittingFolderId: null, onOpenFolder: vi.fn(), onSubmit: vi.fn(), onCancel: vi.fn(),
+    }
+
+    it('Move/Copy says why with Try again, and offers no Move here until the folders load', () => {
+        const onRetryLoad = vi.fn()
+        render(<CopyMoveDialog {...moveBase} loadError="Google Drive is busy right now. Try again in a minute." onRetryLoad={onRetryLoad} />)
+        expect(screen.getByText("Couldn't load folders")).toBeTruthy()
+        expect(screen.getByText('Google Drive is busy right now. Try again in a minute.')).toBeTruthy()
+        expect(screen.queryByText(/No subfolders here/)).toBeNull()
+        expect(screen.queryByRole('button', { name: 'Move here' })).toBeNull()
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+        expect(onRetryLoad).toHaveBeenCalled()
+    })
+
+    it('Copy to another engagement says why, not "No other engagements available"', () => {
+        render(
+            <CopyToEngagementDialog
+                open onOpenChange={vi.fn()} targetName="Plan.xlsx" firmName="Firm" loading={false}
+                loadError="Something went wrong on our side. Try again." onRetryLoad={vi.fn()}
+                engagements={[]} selectedId={null} onSelect={vi.fn()} submitting={false} onSubmit={vi.fn()} onCancel={vi.fn()}
+            />
+        )
+        expect(screen.getByText("Couldn't load engagements")).toBeTruthy()
+        expect(screen.queryByText('No other engagements available.')).toBeNull()
+    })
+})

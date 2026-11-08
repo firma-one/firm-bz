@@ -5,6 +5,7 @@ import { CheckCircle2, XCircle, Clock, Maximize2, Minimize2, Loader2, X, LockOpe
 import { useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 import type { MaintenanceStatus } from '@/lib/hooks/use-firm-maintenance-status'
+import { failureFrom, failureReason } from '@/lib/files/action-failure'
 
 type Props = {
   status: MaintenanceStatus
@@ -71,20 +72,27 @@ export function MigrationProgressPanel({ status, migrationStartedAt, onMigration
   const [countdownLabel, setCountdownLabel] = useState('')
   const [cancelling, setCancelling] = useState(false)
   const [unlocking, setUnlocking] = useState(false)
+  /** Why Cancel or Unlock didn't work. The panel never moves on as though it had (CN-7). */
+  const [actionError, setActionError] = useState<string | null>(null)
   useEffect(() => { setMounted(true) }, [])
 
   const handleCancel = async () => {
     if (!firmId || !accessToken || cancelling) return
     setCancelling(true)
+    setActionError(null)
     try {
-      await fetch('/api/firm/maintenance', {
+      const res = await fetch('/api/firm/maintenance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
         body: JSON.stringify({ action: 'cancel-migration', firmId }),
       })
+      if (!res.ok) throw await failureFrom(res)
       onRefresh?.()
       onCancelled?.()
-    } catch { /* ignore */ } finally {
+    } catch (e) {
+      setActionError(`Couldn't cancel · ${failureReason(e)}`)
+      onRefresh?.()
+    } finally {
       setCancelling(false)
     }
   }
@@ -92,14 +100,18 @@ export function MigrationProgressPanel({ status, migrationStartedAt, onMigration
   const handleForceUnlock = async () => {
     if (!firmId || !accessToken || unlocking) return
     setUnlocking(true)
+    setActionError(null)
     try {
-      await fetch('/api/firm/maintenance', {
+      const res = await fetch('/api/firm/maintenance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
         body: JSON.stringify({ action: 'force-unlock', firmId }),
       })
+      if (!res.ok) throw await failureFrom(res)
       onCancelled?.()
-    } catch { /* ignore */ } finally {
+    } catch (e) {
+      setActionError(`Couldn't unlock · ${failureReason(e)}`)
+    } finally {
       setUnlocking(false)
     }
   }
@@ -256,13 +268,18 @@ export function MigrationProgressPanel({ status, migrationStartedAt, onMigration
 
         {expanded && (
           <div className="flex flex-col min-h-0 overflow-hidden rounded-b-lg">
+            {actionError && (
+              <p role="alert" className="px-3 py-2 border-b border-line text-[11px] text-red-600 leading-relaxed shrink-0">
+                {actionError}
+              </p>
+            )}
             {/* Status summary */}
             <div className="px-3 py-2.5 border-b border-line shrink-0">
               {isStuck ? (
                 <div className="flex flex-col items-center gap-3 py-2">
                   <BlockLoader />
                   <p className="text-[11px] text-[#45474c] text-center leading-relaxed">
-                    Workspace is locked — migration started
+                    Workspace is locked · migration started
                   </p>
                 </div>
               ) : isActive ? (
@@ -296,7 +313,7 @@ export function MigrationProgressPanel({ status, migrationStartedAt, onMigration
               ) : (
                 <>
                   <p className="text-[11px] text-[#45474c] leading-relaxed">
-                    Save any open work — the workspace will lock in:
+                    Save any open work. The workspace locks in:
                   </p>
                   <div className="mt-2 flex items-center gap-2">
                     <span className="font-mono tabular-nums font-bold text-primary text-sm">

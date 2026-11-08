@@ -1,6 +1,7 @@
 'use server'
 
 import { prisma } from '@/lib/prisma'
+import { assertEngagementNotCompleted } from '@/lib/engagement-access'
 import { ensureFirmAgentUser } from '@/lib/ai/files-agent/agent-identity'
 import { type EngagementStatus, type NotificationPriority, DocumentSharingPermissionStatus } from '@prisma/client'
 import { createClient as createSupabaseClient } from '@/utils/supabase/server'
@@ -14,6 +15,10 @@ import { getStorageAdapter, getPermissionAdapter } from '@/lib/connectors/regist
 import { ensureAppFolderStructure } from '@/lib/connectors/pockett-structure.service'
 import { logger } from '@/lib/logger'
 import { safeInngestSend } from '@/lib/inngest/client'
+import { asResult, userFacing, type ActionResult } from '@/lib/actions/action-result'
+import { asResultWithWarning, connectorProviderName, gone, notAllowed, readableReason, signedOut } from '@/lib/actions/action-reasons'
+import { takeBackEngagementAccess } from '@/lib/connectors/firm-folder-access'
+import { accessLeftAfterDelete, storageProviderName } from '@/lib/storage-access-notice'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 import { engagementPath, clientPath } from '@/lib/navigation/firm-paths'
 import { buildAbsoluteUrl, sendEventEmailToUser } from '@/lib/notify-event'
@@ -51,15 +56,23 @@ export interface CreateProjectData {
     internalMemo?: string | null
 }
 
+export type CreatedEngagement = { id: string; slug: string; name: string }
+
 /**
- * Create a new project for the current user (V2)
+ * Create a new project for the current user (V2). When the client has storage, the engagement's folder
+ * must be made too, or the engagement is rolled back and the answer says why. If even the rollback
+ * fails, the engagement stands and the answer is ok with a `warning` saying its folder is missing.
  */
-export async function createEngagement(firmSlug: string, clientSlug: string, data: CreateProjectData) {
+export async function createEngagement(firmSlug: string, clientSlug: string, data: CreateProjectData): Promise<ActionResult<CreatedEngagement>> {
+    return asResultWithWarning('createEngagement', () => createEngagementOrThrow(firmSlug, clientSlug, data))
+}
+
+async function createEngagementOrThrow(firmSlug: string, clientSlug: string, data: CreateProjectData): Promise<{ data: CreatedEngagement; warning?: string }> {
     const supabase = await createSupabaseClient()
     const { data: { user }, error } = await supabase.auth.getUser()
 
     if (error || !user) {
-        throw new Error('Unauthorized')
+        throw signedOut()
     }
 
     // 1. Resolve Org & Check Permissions (V2)
@@ -73,17 +86,12 @@ export async function createEngagement(firmSlug: string, clientSlug: string, dat
         }
     })
 
-    if (!firm) {
-        throw new Error('Firm not found')
+    if (!firm || firm.members.length === 0) {
+        throw notAllowed('add engagements in this firm')
     }
 
     const { requireAccess } = await import('@/lib/billing/subscription-gate')
     await requireAccess(firm.id, 'projects.create')
-
-    const membership = firm.members[0]
-    if (!membership) {
-        throw new Error('Unauthorized')
-    }
 
     // 2. Resolve Client (V2)
     const client = await (prisma as any).client.findFirst({
@@ -94,7 +102,7 @@ export async function createEngagement(firmSlug: string, clientSlug: string, dat
     })
 
     if (!client) {
-        throw new Error('Client not found')
+        throw gone('This client was deleted.')
     }
 
     // 3. Check for duplicate Project Name (V2)
@@ -109,7 +117,7 @@ export async function createEngagement(firmSlug: string, clientSlug: string, dat
     })
 
     if (existingName) {
-        throw new Error('A project with this name already exists for this client')
+        throw userFacing('This client already has an engagement with this name.', 'name_taken')
     }
 
     // 4. Generate Slug and ensure uniqueness (V2)
@@ -131,7 +139,7 @@ export async function createEngagement(firmSlug: string, clientSlug: string, dat
         attempts++
     }
     if (attempts >= MAX_SLUG_ATTEMPTS) {
-        throw new Error('Could not generate a unique project slug. Please try again.')
+        throw userFacing("Couldn't make a unique link for this engagement. Try again.", 'slug_taken')
     }
 
     const { assertWithinActiveEngagementCap } = await import('@/lib/billing/effective-billing-caps')
@@ -233,7 +241,8 @@ export async function createEngagement(firmSlug: string, clientSlug: string, dat
         logger.error('Failed to add agent to engagement', error as Error, 'Agent', { engagementId: newProject.id })
     }
 
-    // 7. Google Drive folder structure — required when a connector exists; failure rolls back the engagement
+    // 7. Storage folder structure — required when a connector exists; failure rolls back the engagement
+    let folderWarning: string | undefined
     const { connectorId } = await resolveClientConnector(client.id)
     if (connectorId) {
         try {
@@ -255,18 +264,28 @@ export async function createEngagement(firmSlug: string, clientSlug: string, dat
                     where: { id: newProject.id },
                     data: { connectorRootFolderId: result.projectId, updatedBy: user.id }
                 })
+            } else {
+                folderWarning = `Engagement created, but ${await connectorProviderName(connectorId)} didn't return its folder. Open it and use Set up storage folder in Files.`
             }
         } catch (e) {
-            logger.error('Failed to create Google Drive folder structure for project', e as Error)
+            logger.error('Failed to create storage folder structure for project', e as Error)
+            const provider = await connectorProviderName(connectorId)
+            const why = readableReason(e)
+            let rolledBack = true
             try {
                 await prisma.engagement.delete({ where: { id: newProject.id } })
             } catch (delErr) {
+                rolledBack = false
                 logger.error('Failed to roll back engagement after Drive error', delErr as Error)
             }
-            const detail = e instanceof Error ? e.message : String(e)
-            throw new Error(
-                `Could not finish creating this engagement because Google Drive setup failed: ${detail}`
-            )
+            if (rolledBack) {
+                throw userFacing(
+                    `Couldn't create this engagement: its folder in ${provider} couldn't be set up${why ? ` · ${why}` : '. Try again.'}`,
+                    'storage_setup_failed'
+                )
+            }
+            // It exists after all: say so, rather than invite a second one with the same name.
+            folderWarning = `Engagement created, but its folder in ${provider} couldn't be set up${why ? ` · ${why}` : ''}. Open it and use Set up storage folder in Files.`
         }
     }
 
@@ -323,7 +342,10 @@ export async function createEngagement(firmSlug: string, clientSlug: string, dat
     }
 
     revalidatePath(clientPath(firm.group.slug, firmSlug, clientSlug))
-    return { id: newProject.id, slug: newProject.slug, name: newProject.name }
+    return {
+        data: { id: newProject.id, slug: newProject.slug, name: newProject.name },
+        ...(folderWarning ? { warning: folderWarning } : {}),
+    }
 }
 
 /**
@@ -392,31 +414,44 @@ export async function canViewEngagementSettings(projectId: string): Promise<bool
     )
 }
 
-async function assertCanManageProject(projectId: string) {
+async function assertCanManageProject(projectId: string, toDoWhat = 'change this engagement') {
     const can = await canViewEngagementSettings(projectId)
-    if (!can) throw new Error('Insufficient permissions')
+    if (!can) throw notAllowed(toDoWhat)
+}
+
+export type EngagementUpdate = {
+    name?: string
+    description?: string
+    kickoffDate?: string | null
+    dueDate?: string | null
+    followUpDate?: string | null
+    status?: LwCrmEngagementStatus
+    contractType?: string | null
+    rateOrValue?: string | number | null
+    tags?: string[]
+    internalMemo?: string | null
 }
 
 /**
- * Update project (V2)
+ * Update project (V2). Answers the reason when it's refused: a completed engagement, or a due date
+ * before one of its deliverables' ("{x} is due {date}, after that. Set the engagement's due date on or
+ * after it, or move that deliverable first.").
  */
 export async function updateEngagement(
     projectId: string,
-    data: {
-        name?: string
-        description?: string
-        kickoffDate?: string | null
-        dueDate?: string | null
-        followUpDate?: string | null
-        status?: LwCrmEngagementStatus
-        contractType?: string | null
-        rateOrValue?: string | number | null
-        tags?: string[]
-        internalMemo?: string | null
-    },
+    data: EngagementUpdate,
     firmSlug: string,
     clientSlug: string
-) {
+): Promise<ActionResult> {
+    return asResult('updateEngagement', () => updateEngagementOrThrow(projectId, data, firmSlug, clientSlug))
+}
+
+async function updateEngagementOrThrow(
+    projectId: string,
+    data: EngagementUpdate,
+    firmSlug: string,
+    clientSlug: string
+): Promise<void> {
     await assertCanManageProject(projectId)
 
     const project = await prisma.engagement.findFirst({
@@ -431,11 +466,11 @@ export async function updateEngagement(
             firm: { select: { group: { select: { slug: true } } } },
         }
     })
-    if (!project) throw new Error('Project not found')
+    if (!project) throw gone('This engagement was deleted.')
 
     // Only allow status changes on completed engagements (for reopening); block all other updates
     if (project.status === 'COMPLETED' && (!data.status || data.status === 'COMPLETED')) {
-        throw new Error('Cannot update a completed engagement.')
+        throw userFacing("This engagement is completed, so it's read only. Change its status to make changes.", 'engagement_completed')
     }
 
     const parsedKickoff = data.kickoffDate === undefined ? undefined : (data.kickoffDate ? new Date(data.kickoffDate) : null)
@@ -448,7 +483,7 @@ export async function updateEngagement(
     if (parsedDue) {
         const later = await deliverableDueAfter(projectId, parsedDue)
         if (later) {
-            throw new Error(`${dueLabel(later)} is due ${formatFullDate(later.due)}, after that. Set the engagement's due date on or after it, or move that deliverable first.`)
+            throw userFacing(`${dueLabel(later)} is due ${formatFullDate(later.due)}, after that. Set the engagement's due date on or after it, or move that deliverable first.`, 'due_date_conflict')
         }
     }
 
@@ -626,13 +661,17 @@ export async function updateEngagement(
 /**
  * Close/Archive project (V2)
  */
-export async function closeEngagement(projectId: string, firmSlug: string, clientSlug: string) {
-    await assertCanManageProject(projectId)
+export async function closeEngagement(projectId: string, firmSlug: string, clientSlug: string): Promise<ActionResult> {
+    return asResult('closeEngagement', () => closeEngagementOrThrow(projectId, firmSlug, clientSlug))
+}
+
+async function closeEngagementOrThrow(projectId: string, firmSlug: string, clientSlug: string): Promise<void> {
+    await assertCanManageProject(projectId, 'complete this engagement')
     const project = await prisma.engagement.findFirst({
         where: { id: projectId, isDeleted: false },
         select: { id: true, firmId: true, clientId: true, firm: { select: { group: { select: { slug: true } } } } }
     })
-    if (!project) throw new Error('Project not found')
+    if (!project) throw gone('This engagement was deleted.')
 
     const externalMembers = await prisma.engagementMember.findMany({
         where: {
@@ -735,14 +774,18 @@ export async function closeEngagement(projectId: string, firmSlug: string, clien
 /**
  * Reopen project (V2)
  */
-export async function reopenEngagement(projectId: string, firmSlug: string, clientSlug: string) {
-    await assertCanManageProject(projectId)
+export async function reopenEngagement(projectId: string, firmSlug: string, clientSlug: string): Promise<ActionResult> {
+    return asResult('reopenEngagement', () => reopenEngagementOrThrow(projectId, firmSlug, clientSlug))
+}
+
+async function reopenEngagementOrThrow(projectId: string, firmSlug: string, clientSlug: string): Promise<void> {
+    await assertCanManageProject(projectId, 'reopen this engagement')
 
     const project = await prisma.engagement.findFirst({
         where: { id: projectId, isDeleted: false },
         select: { firmId: true, clientId: true, firm: { select: { group: { select: { slug: true } } } } }
     })
-    if (!project) throw new Error('Project not found')
+    if (!project) throw gone('This engagement was deleted.')
 
     await prisma.engagement.update({
         where: { id: projectId },
@@ -767,17 +810,32 @@ export async function reopenEngagement(projectId: string, firmSlug: string, clie
  * Delete project (Soft delete) (V2)
  *
  * Sequence:
- *   1. Revoke all doc-level connector permissions (sync — must read connectorPermissionId
- *      before FK cascade drops sharing rows on member delete)
- *   2. Restrict Drive root folder to owner-only (sync — immediate safety net)
- *   3. Transaction: hard-delete members (FK cascades sharing rows), invitations,
+ *   1. Take back storage access (sync — must read connectorPermissionId before the FK cascade drops
+ *      sharing rows on member delete): every permission a row holds, through the connector it was
+ *      granted on, then its folders restricted to their owner (takeBackEngagementAccess). Both storages.
+ *   2. Transaction: hard-delete members (FK cascades sharing rows), invitations,
  *      file persona grants; soft-delete engagement with deletedAt timestamp
- *   4. Invalidate member caches (sync — must take effect on next request)
- *   5. Fire engagement.deleted (async Inngest) — reminder cleanup + member sign-outs
- *   6. Fire project/archived (async Inngest) — share config clear + internal folder downgrade
+ *   3. Invalidate member caches (sync — must take effect on next request)
+ *   4. Fire engagement.deleted (async Inngest) — reminder cleanup + member sign-outs
+ *   5. Fire project/archived (async Inngest) — share config clear + internal folder downgrade
+ *
+ * Answers with a `warning` when storage still gives access after step 1: "Engagement deleted. Google
+ * Drive still gives 2 people access to its folders · {why}". The rows that held the ids are gone after
+ * the delete, so the person who deleted it is the one who can still act on it.
  */
-export async function deleteEngagement(projectId: string, firmSlug: string, clientSlug: string) {
-    await assertCanManageProject(projectId)
+export async function deleteEngagement(projectId: string, firmSlug: string, clientSlug: string): Promise<ActionResult> {
+    const result = await asResult('deleteEngagement', () => deleteEngagementAndAccess(projectId, firmSlug, clientSlug))
+    if (!result.ok) return result
+    return { ok: true, data: undefined, ...(result.data.warning ? { warning: result.data.warning } : {}) }
+}
+
+async function deleteEngagementAndAccess(projectId: string, firmSlug: string, clientSlug: string): Promise<{ warning?: string }> {
+    if (!(await canViewEngagementSettings(projectId))) {
+        // A second click on Delete lands here too: say what happened rather than "no permission".
+        const deleted = await prisma.engagement.findFirst({ where: { id: projectId, isDeleted: true }, select: { id: true } })
+        if (deleted) throw userFacing('This engagement was already deleted.', 'not_found')
+        throw userFacing("You don't have permission to delete this engagement.", 'forbidden')
+    }
 
     const project = await prisma.engagement.findFirst({
         where: { id: projectId, isDeleted: false },
@@ -789,7 +847,7 @@ export async function deleteEngagement(projectId: string, firmSlug: string, clie
             firm: { select: { group: { select: { slug: true } } } },
         }
     })
-    if (!project) throw new Error('Project not found')
+    if (!project) throw userFacing('This engagement was already deleted.', 'not_found')
 
     const supabase = await createSupabaseClient()
     const { data: { user } } = await supabase.auth.getUser()
@@ -800,45 +858,10 @@ export async function deleteEngagement(projectId: string, firmSlug: string, clie
     })
     const memberUserIds = projectMembers.map((m: { userId: string }) => m.userId)
 
-    const { connectorId: clientConnectorId } = await resolveClientConnector(project.clientId)
+    // 1. Storage access, before the members' rows (and the permission ids on them) go.
+    const left = await takeBackEngagementAccess(projectId)
 
-    // 1. Revoke doc-level connector permissions before deleting members.
-    //    FK cascade drops sharing rows (and connectorPermissionId) on member delete.
-    if (clientConnectorId) {
-        try {
-            const { getPermissionAdapter } = await import('@/lib/connectors/registry')
-            const adapter = await getPermissionAdapter(clientConnectorId)
-            if (adapter) {
-                const sharingRows = await prisma.engagementDocumentSharingUser.findMany({
-                    where: {
-                        engagementId: projectId,
-                        sharingPermissionStatus: DocumentSharingPermissionStatus.GRANTED,
-                        connectorPermissionId: { not: null },
-                    },
-                    select: { connectorPermissionId: true, document: { select: { externalId: true } } },
-                })
-                await Promise.allSettled(
-                    sharingRows
-                        .filter((s) => s.connectorPermissionId && s.document?.externalId)
-                        .map((s) => adapter.revokePermission(clientConnectorId, s.document!.externalId, s.connectorPermissionId!))
-                )
-            }
-        } catch (e) {
-            logger.error('Error revoking document-level connector permissions on project delete', e as Error)
-        }
-    }
-
-    // 2. Restrict Drive root folder to owner-only (immediate safety net)
-    if (project.connectorRootFolderId && clientConnectorId) {
-        try {
-            const storageAdapter = await getStorageAdapter(clientConnectorId)
-            await storageAdapter.restrictFolderToOwnerOnly?.(clientConnectorId, project.connectorRootFolderId)
-        } catch (e) {
-            logger.error('Error restricting Drive folders on project delete', e as Error)
-        }
-    }
-
-    // 3. Hard-delete live access objects; soft-delete the engagement anchor
+    // 2. Hard-delete live access objects; soft-delete the engagement anchor
     await prisma.$transaction(async (tx) => {
         // Members — FK cascade drops their engagement_document_sharing_users rows
         await tx.engagementMember.deleteMany({ where: { engagementId: projectId } })
@@ -861,20 +884,20 @@ export async function deleteEngagement(projectId: string, firmSlug: string, clie
         .actor(user?.id)
         .fireAndForget()
 
-    // 4. Invalidate caches — must take effect on next request
+    // 3. Invalidate caches — must take effect on next request
     if (memberUserIds.length > 0) {
         const { invalidateUsersSettingsPlus } = await import('@/lib/permissions/invalidate-user-settings')
         await invalidateUsersSettingsPlus(memberUserIds)
     }
 
-    // 5. Async: reminder cleanup + member sign-outs
+    // 4. Async: reminder cleanup + member sign-outs
     await safeInngestSend('engagement.deleted', {
         engagementId: projectId,
         memberUserIds,
         timestamp: new Date().toISOString(),
     })
 
-    // 6. Async: share config clear + internal folder access downgrade
+    // 5. Async: share config clear + internal folder access downgrade
     await safeInngestSend('project/archived', {
         projectId,
         organizationId: project.firmId,
@@ -883,6 +906,9 @@ export async function deleteEngagement(projectId: string, firmSlug: string, clie
     })
 
     revalidatePath(clientPath(project.firm.group.slug, firmSlug, clientSlug))
+
+    const warning = accessLeftAfterDelete({ done: 'Engagement deleted', provider: await storageProviderName(projectId), left })
+    return warning ? { warning } : {}
 }
 
 /**
@@ -890,26 +916,32 @@ export async function deleteEngagement(projectId: string, firmSlug: string, clie
  * before a connector was attached to the client. Safe to call multiple times — idempotent
  * via ensureAppFolderStructure.
  */
-export async function provisionEngagementDriveFolder(engagementId: string): Promise<{ connectorRootFolderId: string }> {
+export async function provisionEngagementDriveFolder(engagementId: string): Promise<ActionResult<{ connectorRootFolderId: string }>> {
+    return asResult('provisionEngagementDriveFolder', () => provisionEngagementDriveFolderOrThrow(engagementId))
+}
+
+async function provisionEngagementDriveFolderOrThrow(engagementId: string): Promise<{ connectorRootFolderId: string }> {
     const supabase = await createSupabaseClient()
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('Not authenticated')
+    if (!user) throw signedOut()
 
-    const engagement = await prisma.engagement.findUnique({
-        where: { id: engagementId },
+    const engagement = await prisma.engagement.findFirst({
+        where: { id: engagementId, isDeleted: false },
         select: { id: true, name: true, slug: true, firmId: true, clientId: true, connectorRootFolderId: true }
     })
-    if (!engagement) throw new Error('Engagement not found')
+    if (!engagement || !(await checkCanViewProject(engagement.firmId, engagement.clientId, engagement.id))) {
+        throw gone('This engagement was deleted.')
+    }
     if (engagement.connectorRootFolderId) return { connectorRootFolderId: engagement.connectorRootFolderId }
 
     const client = await prisma.client.findUnique({
         where: { id: engagement.clientId },
         select: { id: true, name: true, slug: true }
     })
-    if (!client) throw new Error('Client not found')
+    if (!client) throw gone('This client was deleted.')
 
     const { connectorId } = await resolveClientConnector(client.id)
-    if (!connectorId) throw new Error('No connector found for this client')
+    if (!connectorId) throw userFacing("This client has no storage attached. Attach one in the firm's Storage settings first.", 'no_connector')
 
     const adapter = await getStorageAdapter(connectorId)
     const result = await ensureAppFolderStructure(
@@ -921,7 +953,9 @@ export async function provisionEngagementDriveFolder(engagementId: string): Prom
         { projectName: engagement.name, projectSlug: engagement.slug }
     )
 
-    if (!result.projectId) throw new Error('Drive folder creation returned no folder ID')
+    if (!result.projectId) {
+        throw userFacing(`${await connectorProviderName(connectorId)} didn't return the new folder. Try again.`, 'storage_setup_failed')
+    }
 
     await prisma.engagement.update({
         where: { id: engagement.id },
@@ -931,13 +965,18 @@ export async function provisionEngagementDriveFolder(engagementId: string): Prom
     return { connectorRootFolderId: result.projectId }
 }
 
-export async function updateEngagementInsightsSummary(projectId: string, summary: string | null) {
-    await assertCanManageProject(projectId)
+export async function updateEngagementInsightsSummary(projectId: string, summary: string | null): Promise<ActionResult> {
+    return asResult('updateEngagementInsightsSummary', () => updateEngagementInsightsSummaryOrThrow(projectId, summary))
+}
+
+async function updateEngagementInsightsSummaryOrThrow(projectId: string, summary: string | null): Promise<void> {
+    await assertCanManageProject(projectId, "change this engagement's summary")
+    await assertEngagementNotCompleted(projectId)
     const project = await prisma.engagement.findFirst({
         where: { id: projectId, isDeleted: false },
         select: { settings: true },
     })
-    if (!project) throw new Error('Project not found')
+    if (!project) throw gone('This engagement was deleted.')
     const existingSettings = (project.settings as Record<string, unknown> | null) ?? {}
     const { readInsightsSummary } = await import('@/lib/ai/engagement-summary')
     const current = readInsightsSummary(existingSettings)
@@ -973,8 +1012,13 @@ export async function updateEngagementInsightsSummary(projectId: string, summary
  * status 'pending_review' and can never publish. The approved draft is retained (status
  * 'approved') as an audit record of what was reviewed, by whom, and whether it was edited.
  */
-export async function approveEngagementAiSummary(projectId: string, editedContent?: string) {
-    await assertCanManageProject(projectId)
+export async function approveEngagementAiSummary(projectId: string, editedContent?: string): Promise<ActionResult<{ published: string }>> {
+    return asResult('approveEngagementAiSummary', () => approveEngagementAiSummaryOrThrow(projectId, editedContent))
+}
+
+async function approveEngagementAiSummaryOrThrow(projectId: string, editedContent?: string): Promise<{ published: string }> {
+    await assertCanManageProject(projectId, "publish this engagement's summary")
+    await assertEngagementNotCompleted(projectId)
 
     const supabase = await createSupabaseClient()
     const { data: { user } } = await supabase.auth.getUser()
@@ -983,25 +1027,26 @@ export async function approveEngagementAiSummary(projectId: string, editedConten
         where: { id: projectId, isDeleted: false },
         select: { settings: true },
     })
-    if (!project) throw new Error('Project not found')
+    if (!project) throw gone('This engagement was deleted.')
 
     const existingSettings = (project.settings as Record<string, unknown> | null) ?? {}
     const { readInsightsSummary } = await import('@/lib/ai/engagement-summary')
     const current = readInsightsSummary(existingSettings)
     const draft = current.draft
-    if (!draft) throw new Error('No draft to approve')
+    if (!draft) throw userFacing('There is no draft to publish. It may have been published or discarded already.', 'no_draft')
 
     const originalText = (draft.text ?? '').trim()
     const text = (editedContent ?? originalText).trim()
-    if (!text) throw new Error('Cannot publish an empty summary')
+    if (!text) throw userFacing("The summary is empty. Write something before publishing.", 'empty_summary')
 
     // Enforced here, not only in the UI: the client-facing summary must never claim a mitigation
     // plan or next steps that no human has actually written.
     const { findUnfilledSections } = await import('@/lib/ai/engagement-summary')
     const unfilled = findUnfilledSections(text)
     if (unfilled.length > 0) {
-        throw new Error(
-            `Complete these sections before publishing: ${unfilled.join(', ')}`
+        throw userFacing(
+            `Complete these sections before publishing: ${unfilled.join(', ')}`,
+            'unfilled_sections'
         )
     }
 
@@ -1053,8 +1098,13 @@ export async function approveEngagementAiSummary(projectId: string, editedConten
 }
 
 /** Rejects the draft. It is retained with status 'dismissed' and never reaches exports. */
-export async function dismissEngagementAiSummary(projectId: string) {
-    await assertCanManageProject(projectId)
+export async function dismissEngagementAiSummary(projectId: string): Promise<ActionResult> {
+    return asResult('dismissEngagementAiSummary', () => dismissEngagementAiSummaryOrThrow(projectId))
+}
+
+async function dismissEngagementAiSummaryOrThrow(projectId: string): Promise<void> {
+    await assertCanManageProject(projectId, "discard this engagement's summary draft")
+    await assertEngagementNotCompleted(projectId)
 
     const supabase = await createSupabaseClient()
     const { data: { user } } = await supabase.auth.getUser()
@@ -1063,7 +1113,7 @@ export async function dismissEngagementAiSummary(projectId: string) {
         where: { id: projectId, isDeleted: false },
         select: { settings: true },
     })
-    if (!project) throw new Error('Project not found')
+    if (!project) throw gone('This engagement was deleted.')
 
     const existingSettings = (project.settings as Record<string, unknown> | null) ?? {}
     const { readInsightsSummary } = await import('@/lib/ai/engagement-summary')

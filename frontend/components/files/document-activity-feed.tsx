@@ -12,6 +12,8 @@ import { STATUS } from "@/lib/ui/status"
 import { RelativeDateTime } from "@/components/ui/relative-date-time"
 import { Button } from "@/components/ui/button"
 import { useDocumentVersions } from "@/components/files/use-document-versions"
+import { LoadFailed } from "@/components/ui/load-failed"
+import { failureFrom, failureReason } from "@/lib/files/action-failure"
 
 /**
  * A document's activity: what people did to it through Firma (the audit log, which every storage
@@ -234,7 +236,9 @@ export function DocumentActivityFeed({ projectDocumentId, documentId, projectId,
     const [cursor, setCursor] = useState<string | null>(null)
     const [loading, setLoading] = useState(true)
     const [loadingMore, setLoadingMore] = useState(false)
-    const [error, setError] = useState(false)
+    /** Why the activity didn't load, in the server's words (P2-02). */
+    const [error, setError] = useState<string | null>(null)
+    const [loads, setLoads] = useState(0)
 
     const load = useCallback(async (after: string | null) => {
         if (!recordId) return { events: [] as AuditEventRow[], nextCursor: null as string | null }
@@ -242,7 +246,7 @@ export function DocumentActivityFeed({ projectDocumentId, documentId, projectId,
         for (const t of ACTIVITY_EVENT_TYPES) qs.append('eventType', t)
         if (after) qs.set('cursor', after)
         const res = await fetch(`/api/projects/${projectId}/audit?${qs.toString()}`)
-        if (!res.ok) throw new Error(String(res.status))
+        if (!res.ok) throw await failureFrom(res)
         const data = await res.json()
         return { events: (data.events ?? []) as AuditEventRow[], nextCursor: (data.nextCursor ?? null) as string | null }
     }, [recordId, projectId])
@@ -250,17 +254,22 @@ export function DocumentActivityFeed({ projectDocumentId, documentId, projectId,
     useEffect(() => {
         let cancelled = false
         setLoading(true)
-        setError(false)
+        setError(null)
         load(null)
             .then((page) => {
                 if (cancelled) return
                 setEvents(page.events)
                 setCursor(page.nextCursor)
             })
-            .catch(() => { if (!cancelled) setError(true) })
+            .catch((e) => { if (!cancelled) setError(failureReason(e)) })
             .finally(() => { if (!cancelled) setLoading(false) })
         return () => { cancelled = true }
-    }, [load])
+    }, [load, loads])
+
+    const retry = () => {
+        setLoads((n) => n + 1)
+        if (!isLink) versions.reload()
+    }
 
     const loadMore = async () => {
         if (!cursor) return
@@ -269,8 +278,8 @@ export function DocumentActivityFeed({ projectDocumentId, documentId, projectId,
             const page = await load(cursor)
             setEvents((prev) => [...prev, ...page.events])
             setCursor(page.nextCursor)
-        } catch {
-            setError(true)
+        } catch (e) {
+            setError(failureReason(e))
         } finally {
             setLoadingMore(false)
         }
@@ -292,13 +301,10 @@ export function DocumentActivityFeed({ projectDocumentId, documentId, projectId,
         )
     }
 
-    if (error && entries.length === 0) {
-        return (
-            <div className="flex flex-col items-center justify-center gap-3 py-12 text-center">
-                <AlertCircle className="h-5 w-5 text-fg-subtle" />
-                <p className="text-xs text-fg-muted">Failed to load activity</p>
-            </div>
-        )
+    // A link has no versions; for a file, its versions are half the stream.
+    const versionsError = isLink ? null : versions.error
+    if ((error || versionsError) && entries.length === 0) {
+        return <LoadFailed compact what="this file's activity" reason={error ?? versionsError} onRetry={retry} />
     }
 
     if (entries.length === 0) {
@@ -312,6 +318,13 @@ export function DocumentActivityFeed({ projectDocumentId, documentId, projectId,
 
     return (
         <div className="space-y-4">
+            {/* Part of it loaded: say which part didn't, rather than show it as the whole story. */}
+            {(error || versionsError) && (
+                <p role="alert" className="text-caption text-danger">
+                    {error ? "Some activity didn't load" : "Versions didn't load"} · {error ?? versionsError}{' '}
+                    <button type="button" onClick={retry} className="underline underline-offset-2">Try again</button>
+                </p>
+            )}
             {groupActivity(entries).map((day) => (
                 <section key={day.label}>
                     <h4 className="mb-2 text-caption font-medium text-fg-subtle">{day.label}</h4>

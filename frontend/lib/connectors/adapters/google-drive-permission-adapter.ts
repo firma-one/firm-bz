@@ -4,8 +4,9 @@
  * Inngest functions and other callers never import the GDrive connector directly.
  */
 
-import type { IConnectorPermissionAdapter, EngagementFolderIds, ConnectorRole } from '../types'
+import type { IConnectorPermissionAdapter, EngagementFolderIds, ConnectorRole, TrashState } from '../types'
 import { GoogleDriveConnector } from '@/lib/google-drive-connector'
+import { storageFailure, storageFailureFromResponse } from '@/lib/connectors/storage-failure'
 
 /** Maps the provider-agnostic role vocabulary to Google Drive's native permission roles. */
 function toDriveRole(role: ConnectorRole): 'writer' | 'reader' | 'commenter' {
@@ -20,6 +21,28 @@ function fromDriveRole(role: string): ConnectorRole {
   return 'viewer'
 }
 
+/**
+ * Where a trashed file stands, read with its status: getFileMetadata answers null both for a file deleted
+ * for good and for a Drive that couldn't be reached, and the cleanup after the Undo window must never
+ * take the second for the first.
+ */
+async function trashStateOf(g: GoogleDriveConnector, connectorId: string, fileId: string): Promise<TrashState> {
+  const token = await g.getAccessToken(connectorId).catch(() => null)
+  if (!token) throw storageFailure('reconnect', 'Google Drive')
+  let res: Response
+  try {
+    res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?fields=id,trashed&supportsAllDrives=true`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+  } catch {
+    throw storageFailure('unreachable', 'Google Drive')
+  }
+  if (res.status === 404) return 'gone'
+  if (!res.ok) throw await storageFailureFromResponse(res, 'Google Drive', 'check a file in the trash')
+  const data = await res.json() as { trashed?: boolean }
+  return data.trashed === true ? 'trashed' : 'restored'
+}
+
 export function createGoogleDrivePermissionAdapter(): IConnectorPermissionAdapter {
   const g = GoogleDriveConnector.getInstance()
   return {
@@ -28,6 +51,14 @@ export function createGoogleDrivePermissionAdapter(): IConnectorPermissionAdapte
 
     revokePermission: (id, fileId, permId) =>
       g.revokePermission(id, fileId, permId),
+
+    revokeFolderPermissionByEmail: (id, folderId, email) =>
+      g.revokeFolderPermissionByEmail(id, folderId, email),
+
+    restrictFolderToOwnerOnly: (id, folderId) =>
+      g.restrictFolderToOwnerOnly(id, folderId),
+
+    getTrashState: (id, fileId) => trashStateOf(g, id, fileId),
 
     downgradeFolderUserPermissionToReader: (id, folderId, email) =>
       g.downgradeFolderUserPermissionToReader(id, folderId, email),
@@ -64,6 +95,7 @@ export function createGoogleDrivePermissionAdapter(): IConnectorPermissionAdapte
         sendNotificationEmail: opts?.notify === false ? 'false' : 'true',
       }),
 
+    // Throws a StorageFailure when Drive won't list them (the connector's method does).
     listFilePermissions: async (id, fileId) => {
       const perms = await g.listFilePermissions(id, fileId)
       return perms

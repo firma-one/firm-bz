@@ -6,6 +6,9 @@ import { resolveProjectContext } from '@/lib/resolve-project-context'
 import { canViewProjectSettings } from '@/lib/permission-helpers'
 import { sendEmail } from '@/lib/email'
 import { renderEmail, ctaButton, detailCard, emailFootnote, emailHeading, escHtml } from '@/lib/email-templates/base'
+import { resolveDisplayName } from '@/lib/auth/display-name'
+import { logger } from '@/lib/logger'
+import { shareReportText, type ShareReportOutcome } from '@/lib/insights/share-report-outcome'
 
 export async function POST(
   request: NextRequest,
@@ -45,24 +48,28 @@ export async function POST(
     const userIds = members.map((m) => m.userId)
 
     if (userIds.length === 0) {
-      return NextResponse.json({ sent: 0 })
+      return NextResponse.json({ error: 'No one is on this engagement yet, so there is no one to send it to.', code: 'no_recipients' }, { status: 400 })
     }
 
-    // Resolve emails via Supabase admin
+    // Without a mail server nothing is sent (sendEmail returns quietly): that's a failure to say,
+    // never a tick (OT-3).
+    if (!process.env.SMTP_HOST) {
+      logger.warn('share-report: SMTP_HOST not configured, report not sent', 'ShareReport', { projectId })
+      return NextResponse.json({ error: "Email isn't set up, so the report wasn't sent.", code: 'email_not_configured' }, { status: 503 })
+    }
+
+    // Resolve emails via Supabase admin. A member whose address can't be read isn't reached either.
     const admin = createAdminClient()
-    const emailResults = await Promise.allSettled(
+    const recipientResults = await Promise.allSettled(
       userIds.map(async (userId) => {
         const { data } = await admin.auth.admin.getUserById(userId)
-        return data?.user?.email ?? null
+        const email = data?.user?.email ?? null
+        return email ? { email, name: resolveDisplayName(data?.user?.user_metadata ?? {}, email) || email } : null
       })
     )
-    const emails = emailResults
+    const recipients = recipientResults
       .map((r) => (r.status === 'fulfilled' ? r.value : null))
-      .filter((e): e is string => !!e)
-
-    if (emails.length === 0) {
-      return NextResponse.json({ sent: 0 })
-    }
+      .filter((r): r is { email: string; name: string } => !!r)
 
     const pdfBuffer = Buffer.from(pdfBase64, 'base64')
     const subject = `Engagement Health Report — ${engagementName}`
@@ -80,10 +87,11 @@ export async function POST(
     ].join('\n')
     const html = renderEmail({ title: subject, preheader: `Engagement health snapshot for ${engagementName}`, body: emailBody })
 
-    // Send to all members in parallel
-    await Promise.allSettled(
-      emails.map((email) =>
-        sendEmail(email, subject, html, [
+    // Send to all members in parallel, and count what each send really did: a rejected send, or one
+    // that returned nothing (no mail server), didn't reach that person.
+    const sends = await Promise.allSettled(
+      recipients.map((r) =>
+        sendEmail(r.email, subject, html, [
           {
             filename: `${engagementName.replace(/[^a-zA-Z0-9_-]/g, '_')}_Health_Report.pdf`,
             content: pdfBuffer,
@@ -92,10 +100,20 @@ export async function POST(
         ])
       )
     )
+    const outcome: ShareReportOutcome = {
+      sent: sends.filter((s) => s.status === 'fulfilled' && s.value).length,
+      total: userIds.length,
+      failed: recipients.filter((_, i) => !(sends[i].status === 'fulfilled' && (sends[i] as PromiseFulfilledResult<unknown>).value)).map((r) => r.name),
+    }
 
-    return NextResponse.json({ sent: emails.length })
+    // Nothing sent is an error, with who it couldn't reach; some sent is a success the browser words
+    // as "Sent to 3 of 5. Couldn't reach Ana, Raj."
+    if (outcome.sent === 0) {
+      return NextResponse.json({ ...outcome, error: shareReportText(outcome).message, code: 'not_sent' }, { status: 502 })
+    }
+    return NextResponse.json(outcome)
   } catch (e) {
-    console.error('share-report POST error', e)
-    return NextResponse.json({ error: 'Failed to send report' }, { status: 500 })
+    logger.error('share-report POST error', e as Error)
+    return NextResponse.json({ error: "Couldn't send the report. Something went wrong on our side. Try again." }, { status: 500 })
   }
 }

@@ -8,7 +8,7 @@ import { getAllowedTransitions, type EngagementRoleSlug } from '@/lib/deliverabl
 import { statusOf } from '@/lib/ui/status'
 import { ACTIVITY_STAGES, type ActivityStatus } from '@/lib/sharing-settings'
 import { Hint } from '@/components/ui/tooltip'
-import { useStageMove } from '@/components/files/use-stage-move'
+import { stageDoneTitle, stageFailureTitle, useStageMove } from '@/components/files/use-stage-move'
 import { useDueDateSave } from '@/components/files/use-due-date-save'
 import { cn } from '@/lib/utils'
 
@@ -67,22 +67,22 @@ export function FileStatusCell({
                 kind="deliverable"
                 value={value}
                 placeholder={emptyLabel}
+                failTitle="Couldn't change the stage"
                 options={ACTIVITY_STAGES.filter((s) => s === value || allowed.includes(s))}
                 onChange={async (next) => {
                     const stage = next as ActivityStatus
                     const result = await move(projectId, documentId, stage)
                     if (!result.ok) {
-                        if (!result.cancelled) onAddToast({ type: 'error', title: "Couldn't change the stage", message: result.error })
+                        if (!result.cancelled) onAddToast({ type: 'error', title: stageFailureTitle(result, stage), message: result.error })
                         return
                     }
                     setValue(stage)
                     onSaved(stage)
                     if (result.deliverable) onDeliverableChanged?.(result.deliverable)
-                    onAddToast({
-                        type: 'success',
-                        title: stage === 'approved' ? 'Approved' : 'Stage updated',
-                        message: `${fileName} · ${statusOf('deliverable', stage).label}`,
-                    })
+                    // Moved, but part of it couldn't be done (its deliverable stayed, storage refused part of an approval).
+                    onAddToast(result.warning
+                        ? { type: 'warning', title: stageDoneTitle(stage), message: result.warning }
+                        : { type: 'success', title: stageDoneTitle(stage), message: `${fileName} · ${statusOf('deliverable', stage).label}` })
                     window.dispatchEvent(new CustomEvent('pockett-notifications-updated'))
                 }}
             />
@@ -125,6 +125,7 @@ export function FileAssigneeCell({
             people={people}
             disabled={!canEdit}
             placeholder={placeholder}
+            failTitle="Couldn't change the assignee"
             onChange={async (next) => {
                 const result = await saveAssignee(projectId, documentId, next?.id ?? null)
                 if (!result.ok) {
@@ -146,6 +147,7 @@ export function FileDueDateCell({
     placeholder,
     onSaved,
     onError,
+    onWarning,
     asProperty = false,
     onOthersChanged,
 }: {
@@ -156,6 +158,8 @@ export function FileDueDateCell({
     placeholder: string
     onSaved: (next: string | null) => void
     onError: (message: string) => void
+    /** Saved, but its reminders or notices couldn't all follow ("done, but…"): a warning, not an error. */
+    onWarning: (message: string) => void
     /** In a property list (the Details pane) rather than a table cell: full size, no chip. */
     asProperty?: boolean
     /** A fix chosen in the due-date dialog moved another date too (its deliverable, its documents, the engagement). */
@@ -174,14 +178,19 @@ export function FileDueDateCell({
             allowTime
             compact={!asProperty}
             chip={!asProperty}
+            failTitle="Couldn't set due date"
             onChange={async (next) => {
                 const result = await save(projectId, documentId, next)
                 if (!result.ok) {
-                    if (!result.cancelled) onError(result.error)
+                    if (result.cancelled) return
+                    onError(result.error)
+                    // The engagement's date moved and couldn't be put back: show it as it is.
+                    if (result.engagementDueDate) onOthersChanged?.()
                     return
                 }
                 setValue(result.dueDate)
                 onSaved(result.dueDate)
+                if (result.warning) onWarning(result.warning)
                 if (result.alsoChanged.length > 0 || result.engagementDueDate) onOthersChanged?.()
                 window.dispatchEvent(new CustomEvent('pockett-notifications-updated'))
             }}

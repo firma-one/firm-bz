@@ -375,8 +375,9 @@ export async function getMyWork(params: {
             dueSoon: [...dueSoon, ...fromReminders.dueSoon].sort((a, b) => a.dueDate.localeCompare(b.dueDate)),
         }
     } catch (e) {
+        // Thrown, not answered as no work: Home read "All caught up" after a failed load (EM-2).
         logger.error('getMyWork failed', e as Error, 'Home', { userId, firmIds: Array.from(firmIds) })
-        return empty
+        throw e
     }
 }
 

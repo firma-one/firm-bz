@@ -70,5 +70,7 @@ describe('GET subtasks', () => {
         st.withPrivate = true
         const { subtasks } = await (await get()).json()
         expect(subtasks.map((s: any) => s.id).sort()).toEqual(['d1', 'd2', 'd3', 'd4'])
+        // Which the pane marks, and leaves out of its progress.
+        expect(subtasks.filter((s: any) => s.isPrivate).map((s: any) => s.id).sort()).toEqual(['d3', 'd4'])
     })
 })

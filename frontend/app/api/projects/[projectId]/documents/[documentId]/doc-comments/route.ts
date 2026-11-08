@@ -6,7 +6,7 @@ import { resolveProjectContext } from '@/lib/resolve-project-context'
 import { canViewProject } from '@/lib/permission-helpers'
 import { getProjectDocumentContext } from '@/lib/file-utils'
 import { createClient as createSupabaseAdmin } from '@supabase/supabase-js'
-import { requireEngagementMember, externalMemberCanAccessDocument, isExternalEngagementRole, visibleDocumentIdsFor } from '@/lib/engagement-access'
+import { requireEngagementMember, externalMemberCanAccessDocument, isExternalEngagementRole, visibleDocumentIdsFor, blockIfEngagementCompleted, getEngagementStatus } from '@/lib/engagement-access'
 import { canBeRemindedOfInternalNote, canWriteInternalNote, visibleCommentsWhere } from '@/lib/comments/internal-notes'
 import { taggedDocumentsIn } from '@/lib/comments/tagged-documents'
 import { markDiscussionRead, reopenDiscussion } from '@/lib/comments/discussions'
@@ -32,6 +32,50 @@ async function purgeStaleDocComments(firmId: string): Promise<void> {
   } catch {
     // Purge failures must never surface to callers
   }
+}
+
+// What the comments pane shows when a request fails on our side: plain words, never a raw error.
+const LOAD_FAILED = "Couldn't load the comments. Try again."
+const POST_FAILED = "Couldn't post your comment on our side. Try again."
+/** Read after "Couldn't notify Anna · ", so it doesn't start with "Couldn't" again. */
+const REMINDER_NOT_SAVED = "The reminder wasn't saved on our side. Try again."
+
+/**
+ * Saves the reminder (or the mention's notice) of a comment for one person. Awaited, and its failure
+ * thrown: a write left to run after the response may never finish on Vercel, and the person who
+ * posted must be told who wasn't notified (CM-1).
+ */
+async function remindOfComment(args: {
+  recipientId: string
+  projectId: string
+  firmId: string
+  projectDocumentId: string
+  messageId: string
+  content: string
+  dateValue: string | null
+}): Promise<void> {
+  const { upsertFollowUpReminder } = await import('@/lib/reminders/reminder-service')
+  const engDetails = await prisma.engagement.findUnique({
+    where: { id: args.projectId },
+    select: { slug: true, client: { select: { slug: true, firm: { select: { slug: true, group: { select: { slug: true } } } } } } },
+  })
+  const groupSlug = engDetails?.client?.firm?.group?.slug ?? ''
+  const firmSlug = engDetails?.client?.firm?.slug ?? ''
+  const clientSlug = engDetails?.client?.slug ?? ''
+  const engSlug = engDetails?.slug ?? ''
+  await upsertFollowUpReminder({
+    userId: args.recipientId,
+    entityKey: 'platform.doc_comments',
+    entityValue: args.messageId,
+    action: 'Review comment',
+    dateKey: null,
+    dateValue: args.dateValue,
+    entityName: args.content.slice(0, 60),
+    firmId: args.firmId,
+    ctaUrl: groupSlug && firmSlug && clientSlug && engSlug
+      ? engagementDocCommentPath(groupSlug, firmSlug, clientSlug, engSlug, args.projectDocumentId, args.messageId)
+      : null,
+  })
 }
 
 /**
@@ -133,15 +177,11 @@ export async function GET(
 
     const taggedDocuments = await taggedDocumentsIn(projectId, messages.map((m) => m.content), visible)
 
-    return NextResponse.json({ messages: enriched, taggedDocuments })
+    return NextResponse.json({ messages: enriched, taggedDocuments, readOnly: (await getEngagementStatus(projectId)) === 'COMPLETED' })
   } catch (e) {
     const err = e instanceof Error ? e : new Error(typeof e === 'string' ? e : 'Unknown error')
     console.error('GET doc-comments error', { message: err.message, stack: err.stack })
-    const isDev = process.env.NODE_ENV === 'development'
-    return NextResponse.json(
-      { error: isDev ? err.message : 'Failed to load comments' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: LOAD_FAILED }, { status: 500 })
   }
 }
 
@@ -166,6 +206,9 @@ export async function POST(
 
     const member = await requireEngagementMember(projectId, user.id)
     if (!member) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+    const completed = await blockIfEngagementCompleted(projectId)
+    if (completed) return completed
 
     const docCtx = await getProjectDocumentContext(projectId, documentIdParam)
     if (!docCtx) return NextResponse.json({ error: 'Document not found in this project' }, { status: 404 })
@@ -292,34 +335,14 @@ export async function POST(
       })
     }
 
-    // Create reminder for tagged recipient
+    // The tagged recipient's reminder. The comment stands either way; who wasn't notified is said.
+    let notNotified: string[] = []
     if (isReminder && recipientId) {
       try {
-        const { upsertFollowUpReminder } = await import('@/lib/reminders/reminder-service')
-        const engDetails = await prisma.engagement.findUnique({
-          where: { id: projectId },
-          select: { slug: true, client: { select: { slug: true, firm: { select: { slug: true, group: { select: { slug: true } } } } } } },
-        })
-        const groupSlug = engDetails?.client?.firm?.group?.slug ?? ''
-        const firmSlug = engDetails?.client?.firm?.slug ?? ''
-        const clientSlug = engDetails?.client?.slug ?? ''
-        const engSlug = engDetails?.slug ?? ''
-
-        upsertFollowUpReminder({
-          userId: recipientId,
-          entityKey: 'platform.doc_comments',
-          entityValue: message.id,
-          action: 'Review comment',
-          dateKey: null,
-          dateValue: null,
-          entityName: content.slice(0, 60),
-          firmId: ctx.orgId,
-          ctaUrl: groupSlug && firmSlug && clientSlug && engSlug
-            ? engagementDocCommentPath(groupSlug, firmSlug, clientSlug, engSlug, docCtx.id, message.id)
-            : null,
-        }).catch(() => {})
-      } catch {
-        // Never break comment creation if reminder fails
+        await remindOfComment({ recipientId, projectId, firmId: ctx.orgId, projectDocumentId: docCtx.id, messageId: message.id, content, dateValue: null })
+      } catch (e) {
+        console.error('doc-comments: reminder not saved', { messageId: message.id, message: e instanceof Error ? e.message : String(e) })
+        notNotified = [recipientId]
       }
     }
 
@@ -330,10 +353,11 @@ export async function POST(
         createdAt: message.createdAt.toISOString(),
         authorEmail: user.email ?? null,
       },
+      ...(notNotified.length > 0 ? { notNotified, warning: "Comment posted, but the person you reminded wasn't notified. Try again from the comment." } : {}),
     })
   } catch (e) {
     console.error('POST doc-comments error', e)
-    return NextResponse.json({ error: 'Failed to add comment' }, { status: 500 })
+    return NextResponse.json({ error: POST_FAILED }, { status: 500 })
   }
 }
 
@@ -358,6 +382,9 @@ export async function PATCH(
 
     const member = await requireEngagementMember(projectId, user.id)
     if (!member) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+    const completed = await blockIfEngagementCompleted(projectId)
+    if (completed) return completed
 
     const docCtx = await getProjectDocumentContext(projectId, documentIdParam)
     if (!docCtx) return NextResponse.json({ error: 'Document not found in this project' }, { status: 404 })
@@ -396,38 +423,13 @@ export async function PATCH(
       return NextResponse.json({ error: 'An internal note can only remind Leads and Full Access contributors' }, { status: 400 })
     }
 
-    try {
-      const { upsertFollowUpReminder } = await import('@/lib/reminders/reminder-service')
-      const engDetails = await prisma.engagement.findUnique({
-        where: { id: projectId },
-        select: { slug: true, client: { select: { slug: true, firm: { select: { slug: true, group: { select: { slug: true } } } } } } },
-      })
-      const groupSlug = engDetails?.client?.firm?.group?.slug ?? ''
-      const firmSlug = engDetails?.client?.firm?.slug ?? ''
-      const clientSlug = engDetails?.client?.slug ?? ''
-      const engSlug = engDetails?.slug ?? ''
-
-      upsertFollowUpReminder({
-        userId: recipientId,
-        entityKey: 'platform.doc_comments',
-        entityValue: message.id,
-        action: 'Review comment',
-        dateKey: null,
-        dateValue: dateValue,
-        entityName: message.content.slice(0, 60),
-        firmId: ctx.orgId,
-        ctaUrl: groupSlug && firmSlug && clientSlug && engSlug
-          ? engagementDocCommentPath(groupSlug, firmSlug, clientSlug, engSlug, docCtx.id, message.id)
-          : null,
-      }).catch(() => {})
-    } catch {
-      // Never break if reminder fails
-    }
+    // Awaited and checked: the answer says whether this person will be notified (CM-1).
+    await remindOfComment({ recipientId, projectId, firmId: ctx.orgId, projectDocumentId: docCtx.id, messageId: message.id, content: message.content, dateValue })
 
     return NextResponse.json({ success: true })
   } catch (e) {
     console.error('PATCH doc-comments error', e)
-    return NextResponse.json({ error: 'Failed to set reminder' }, { status: 500 })
+    return NextResponse.json({ error: REMINDER_NOT_SAVED }, { status: 500 })
   }
 }
 
@@ -450,6 +452,8 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ projectId: string; documentId: string }> }
 ) {
+  // What a failure on our side says, by what was asked: deleting a comment, or removing a reminder.
+  let failure = "Couldn't do that on our side. Try again."
   try {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
@@ -461,10 +465,14 @@ export async function DELETE(
     const canView = await canViewProject(ctx.orgId, ctx.clientId, ctx.projectId)
     if (!canView) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
+    const completed = await blockIfEngagementCompleted(projectId)
+    if (completed) return completed
+
     const body = await request.json().catch(() => ({}))
 
     // ── Hard-delete a comment ──────────────────────────────────────────────
     if (body.action === 'delete-comment' || (body.messageId && !body.reminderId)) {
+      failure = "Couldn't delete the comment on our side. Try again."
       const messageId = typeof body.messageId === 'string' ? body.messageId : null
       if (!messageId) return NextResponse.json({ error: 'messageId is required' }, { status: 400 })
 
@@ -526,6 +534,7 @@ export async function DELETE(
     }
 
     // ── Remove a reminder from a comment ──────────────────────────────────
+    failure = "Couldn't remove the reminder on our side. Try again."
     const reminderId = typeof body.reminderId === 'string' ? body.reminderId : null
     const recipientId = typeof body.recipientId === 'string' ? body.recipientId : null
     if (!reminderId || !recipientId) return NextResponse.json({ error: 'reminderId and recipientId are required' }, { status: 400 })
@@ -556,6 +565,6 @@ export async function DELETE(
     return NextResponse.json({ success: true })
   } catch (e) {
     console.error('DELETE doc-comments error', e)
-    return NextResponse.json({ error: 'Failed to process request' }, { status: 500 })
+    return NextResponse.json({ error: failure }, { status: 500 })
   }
 }

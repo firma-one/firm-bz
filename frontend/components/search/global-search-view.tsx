@@ -29,6 +29,9 @@ import { HowThisWorksLink } from '@/components/ui/how-this-works-link'
 import { useOptionalShellData } from '@/components/shell/shell-data-context'
 import { resolvePeriod } from '@/lib/search/period'
 import { fetchWithTimeout, AI_TIMEOUT_MS } from '@/lib/ai/fetch-timeout'
+import { useToast } from '@/components/ui/toast'
+import { failureReason } from '@/lib/files/action-failure'
+import { SearchFailed, searchFailureFrom } from '@/components/search/search-failed'
 import {
   Tooltip,
   TooltipContent,
@@ -277,6 +280,17 @@ function recordSearchHistory(firmId: string, query: string, chips: SelectedChip[
   return id
 }
 
+/**
+ * Why a result's "Open in Files" link didn't resolve (P1-79). The link resolver answers bare
+ * "Forbidden" and "Project not found", so the words are ours.
+ */
+export function openFailureText(status: number): string {
+  if (status === 401) return 'Sign in again to open it.'
+  if (status === 403) return "You don't have access to its engagement anymore."
+  if (status === 404) return 'Its engagement was deleted or moved.'
+  return `The server answered ${status}. Try again.`
+}
+
 function recordSearchHistoryOpen(firmId: string, entryId: string) {
   const prev = getSearchHistory(firmId)
   const next = prev.map((e) => (e.id === entryId ? { ...e, openedCount: e.openedCount + 1 } : e))
@@ -289,6 +303,7 @@ function removeSearchHistoryEntry(firmId: string, entryId: string) {
 
 export function GlobalSearchView({ firmId }: { firmId: string }) {
   const { session } = useAuth()
+  const { addToast } = useToast()
   const accessToken = session?.access_token
   const isExternalOnly = useOptionalShellData()?.data?.isExternalOnly ?? false
 
@@ -327,12 +342,17 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
   const [results, setResults] = useState<GlobalSearchResult[]>([])
   const [resolvedFilters, setResolvedFilters] = useState<ResolvedFilters | null>(null)
   const [hasSearched, setHasSearched] = useState(false)
+  /** Why the last search couldn't run, or null. Never shown as "No results found" (EM-6). */
+  const [searchError, setSearchError] = useState<string | null>(null)
   const [openingExternalId, setOpeningExternalId] = useState<string | null>(null)
   const [searchHistory, setSearchHistory] = useState<SearchHistoryEntry[]>([])
   const [historyOpen, setHistoryOpen] = useState(false)
   const currentHistoryEntryId = useRef<string | null>(null)
 
   const [pickerData, setPickerData] = useState<PickerData>({ clients: [], engagements: [], deliverables: [] })
+  /** The filter options didn't load: the menus say so instead of "Nothing available" (P2-62). */
+  const [pickerFailed, setPickerFailed] = useState(false)
+  const [pickerLoadId, setPickerLoadId] = useState(0)
 
   // Selected filter chips — same idea as mentionedUsers in the Comments @mention picker:
   // a chip array decoupled from the raw text, rendered before the textarea.
@@ -383,19 +403,22 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
     fetch(`/api/firms/${firmId}/search/picker-data`, {
       headers: { Authorization: `Bearer ${accessToken}` },
     })
-      .then((r) => r.json())
-      .then((data) => {
-        if (!cancelled && data && !data.error) {
-          setPickerData({
-            clients: data.clients ?? [],
-            engagements: data.engagements ?? [],
-            deliverables: data.deliverables ?? [],
-          })
-        }
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`picker-data answered ${r.status}`)
+        return r.json()
       })
-      .catch(() => {})
+      .then((data) => {
+        if (cancelled) return
+        setPickerData({
+          clients: data?.clients ?? [],
+          engagements: data?.engagements ?? [],
+          deliverables: data?.deliverables ?? [],
+        })
+        setPickerFailed(false)
+      })
+      .catch(() => { if (!cancelled) setPickerFailed(true) })
     return () => { cancelled = true }
-  }, [firmId, accessToken])
+  }, [firmId, accessToken, pickerLoadId])
 
   useEffect(() => {
     // Ask mode submits explicitly, so no debounce — typing must not fire a paid interpretation.
@@ -536,10 +559,11 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
 
   /** Why a filter is unavailable, or null when it can be used. */
   const stageDisabledReason = useCallback((stage: FilterStage): string | null => {
-    if (stage === 'engagement' && pickerData.engagements.length === 0) return 'No engagements available'
+    // A failed load isn't "none": the menu opens and says the options didn't load.
+    if (stage === 'engagement' && pickerData.engagements.length === 0 && !pickerFailed) return 'No engagements available'
     if (stage === 'deliverable' && !clientChip && !engagementChip) return 'Select a client or engagement first'
     return null
-  }, [pickerData, clientChip, engagementChip])
+  }, [pickerData, pickerFailed, clientChip, engagementChip])
 
   /** Commits a selection, clearing any downstream filter the new value invalidates. */
   const selectStageValue = useCallback((stage: FilterStage, entity: PickerEntity) => {
@@ -592,7 +616,7 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
   const executeSearch = useCallback(async (
     query: string,
     filters: { client?: SelectedChip; engagement?: SelectedChip; deliverable?: SelectedChip; dateRange?: SelectedChip; type?: SelectedChip },
-  ): Promise<GlobalSearchResult[] | null> => {
+  ): Promise<GlobalSearchResult[]> => {
     const params = new URLSearchParams()
     if (query.trim()) params.set('q', query.trim())
     if (filters.client) params.set('clientId', filters.client.id)
@@ -628,10 +652,10 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
     const res = await fetch(`/api/firms/${firmId}/search?${params.toString()}`, {
       headers: { Authorization: `Bearer ${accessToken}` },
     })
+    // A failed search throws with its reason, apart from "searched, found nothing": the ladder must
+    // not treat a 500 as a reason to relax filters, and the page must not say "No results found".
+    if (!res.ok) throw await searchFailureFrom(res)
     const data = await res.json()
-    // null distinguishes "request failed" from "searched, found nothing" — the ladder must not
-    // treat a 500 as a reason to relax filters.
-    if (!res.ok) return null
     setResolvedFilters(data.resolvedFilters ?? null)
     return (data.files ?? []) as GlobalSearchResult[]
   }, [firmId, accessToken])
@@ -684,7 +708,6 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
       if (!stillConstrained) return null
 
       const files = await executeSearch(query, current)
-      if (files === null) return null
       if (files.length > 0) {
         const kept = current.client ? ` in ${current.client.name}` : ''
         // Name the filter AND its value: "the Q2 2026 date filter" tells the user what to correct,
@@ -713,11 +736,13 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
       setResults([])
       setResolvedFilters(null)
       setHasSearched(false)
+      setSearchError(null)
       return
     }
 
     setIsSearching(true)
     setHasSearched(true)
+    setSearchError(null)
     // Relaxation state is produced by THIS function, so it resets here. Conflicts are produced by
     // runAskSearch, which then bumps askRunId to trigger this search — clearing them here wiped
     // the banner before it ever rendered. They are cleared when a new Ask search starts instead.
@@ -733,11 +758,6 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
       }
 
       let files = await executeSearch(debouncedQuery, base)
-      if (files === null) {
-        setResults([])
-        setResolvedFilters(null)
-        return
-      }
 
       // Zero-result ladder (§A.11). Only ever relaxes filters Brio *inferred* — a filter the user
       // picked by hand is an instruction, not a guess, and is never second-guessed.
@@ -753,8 +773,10 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
       setResults(files)
       currentHistoryEntryId.current = recordSearchHistory(firmId, debouncedQuery, chips, files.length)
       setSearchHistory(getSearchHistory(firmId))
-    } catch {
+    } catch (e) {
       setResults([])
+      setResolvedFilters(null)
+      setSearchError(failureReason(e))
     } finally {
       setIsSearching(false)
     }
@@ -780,21 +802,20 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
       const documentId = file.documentId ?? file.externalId
       const qs = new URLSearchParams({ kind: 'document', projectId: file.engagementId, documentId })
       const res = await fetch(`/api/deeplink?${qs.toString()}`)
-      if (!res.ok) return
+      if (!res.ok) throw new Error(openFailureText(res.status))
       const data = await res.json().catch(() => null) as { url?: string } | null
-      if (data?.url) {
-        window.open(data.url, '_blank', 'noopener,noreferrer')
-        if (currentHistoryEntryId.current) {
-          recordSearchHistoryOpen(firmId, currentHistoryEntryId.current)
-          setSearchHistory(getSearchHistory(firmId))
-        }
+      if (!data?.url) throw new Error(openFailureText(404))
+      window.open(data.url, '_blank', 'noopener,noreferrer')
+      if (currentHistoryEntryId.current) {
+        recordSearchHistoryOpen(firmId, currentHistoryEntryId.current)
+        setSearchHistory(getSearchHistory(firmId))
       }
-    } catch {
-      // ignore - link just won't navigate
+    } catch (e) {
+      addToast({ type: 'error', title: "Couldn't open this file", message: failureReason(e) })
     } finally {
       setOpeningExternalId(null)
     }
-  }, [firmId])
+  }, [firmId, addToast])
 
   const filteredResults = (selectedFileTypes.length === 0 || selectedFileTypes.includes('any'))
     ? results
@@ -949,6 +970,7 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                           setInferredStages([])
                           setAskNote(null)
                           setResults([])
+                          setSearchError(null)
                           setHasSearched(false)
                         }}
                         className="p-1 rounded-full text-fg-muted hover:bg-surface-hover"
@@ -1057,6 +1079,17 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                                       </FilterMenuRow>
                                     ))}
                                   </>
+                                ) : options.length === 0 && pickerFailed && stage !== 'dateRange' ? (
+                                  <div role="alert" className="flex items-center justify-between gap-2 px-2 py-1.5 text-small text-fg-muted">
+                                    <span>Couldn&apos;t load options.</span>
+                                    <button
+                                      type="button"
+                                      onClick={() => setPickerLoadId((n) => n + 1)}
+                                      className="font-medium text-action hover:text-action-hover"
+                                    >
+                                      Try again
+                                    </button>
+                                  </div>
                                 ) : options.length === 0 ? (
                                   <p className="px-2 py-1.5 text-small text-fg-subtle">Nothing available</p>
                                 ) : (
@@ -1160,6 +1193,8 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                 <LoadingSpinner size="md" />
                 <p className="text-small text-fg-muted">Searching across your firm…</p>
               </div>
+            ) : searchError ? (
+              <SearchFailed reason={searchError} onRetry={() => void runSearch()} />
             ) : results.length > 0 ? (
               <>
                 {/* Notices sit on the count row: they qualify what was counted, and reading the

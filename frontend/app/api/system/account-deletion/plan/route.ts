@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { adminFailure } from '@/app/api/system/admin-error'
 import { createClient } from '@/utils/supabase/server'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { isSysAdminUser } from '@/lib/system/user-data-map'
 import { buildDeletionPlan } from '@/lib/account/deletion-plan'
-import { logger } from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 
@@ -43,7 +43,6 @@ export async function GET(request: NextRequest) {
         const plan = await buildDeletionPlan(userId, data?.user?.email ?? null)
         return NextResponse.json({ data: plan })
     } catch (error) {
-        logger.error('[system/account-deletion/plan] failed:', error as Error)
-        return NextResponse.json({ error: 'Could not build the plan' }, { status: 500 })
+        return adminFailure('build the deletion plan', error)
     }
 }

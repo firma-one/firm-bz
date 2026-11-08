@@ -11,6 +11,8 @@ import { FirmActions, type FirmActionLinks } from '@/components/dashboard/firm-a
 import { firmActionsFromInsights } from '@/lib/insights/firm-actions'
 import { Hint } from '@/components/ui/tooltip'
 import { ShimmerBlock } from '@/components/ui/shimmer'
+import { LoadFailed } from '@/components/ui/load-failed'
+import { failureFrom, failureReason } from '@/lib/files/action-failure'
 import { clientPath, engagementPath } from '@/lib/navigation/firm-paths'
 
 // The pipeline bar moved to its own file; re-exported for anything still importing it from here.
@@ -71,6 +73,9 @@ export function FirmBusinessInsights({ firmId, firmSlug, groupSlug }: FirmBusine
     const { session } = useAuth()
     const [data, setData] = useState<FirmInsightsResponse | null>(null)
     const [loading, setLoading] = useState(true)
+    // Why the last load failed. Without it a failed load looked like one still running: the Action
+    // Center and the overview stayed on their shimmer for good, on the firm's landing page.
+    const [loadError, setLoadError] = useState<string | null>(null)
     const [refreshTick, setRefreshTick] = useState(0)
     const brief = useFirmBrief(firmId)
 
@@ -80,14 +85,19 @@ export function FirmBusinessInsights({ firmId, firmSlug, groupSlug }: FirmBusine
         fetch(`/api/firms/${firmId}/insights`, {
             headers: { Authorization: `Bearer ${session.access_token}` },
         })
-            .then((r) => {
-                if (!r.ok) throw new Error(`Insights request failed (${r.status})`)
+            .then(async (r) => {
+                if (!r.ok) throw await failureFrom(r)
                 return r.json()
             })
-            .then((d) => setData(d))
-            .catch((e) => console.error('Failed to load firm insights', e))
+            .then((d) => { setData(d); setLoadError(null) })
+            .catch((e) => {
+                console.error('Failed to load firm insights', e)
+                setLoadError(failureReason(e))
+            })
             .finally(() => setLoading(false))
     }, [firmId, session, refreshTick])
+
+    const retry = () => setRefreshTick((t) => t + 1)
 
     // "Now" is when the data arrived, so the rows don't shift while it's on screen.
     const overview = useMemo(() => (data ? firmOverviewFromInsights(data, Date.now()) : null), [data])
@@ -117,6 +127,8 @@ export function FirmBusinessInsights({ firmId, firmSlug, groupSlug }: FirmBusine
             refreshing={brief.refreshing}
             streamText={brief.streamText}
             refreshError={brief.refreshError}
+            loadError={brief.loadError}
+            onReload={brief.reload}
             onRewrite={brief.refresh}
             onStop={brief.stop}
         />
@@ -124,15 +136,23 @@ export function FirmBusinessInsights({ firmId, firmSlug, groupSlug }: FirmBusine
 
     return (
         <div className="flex flex-col gap-10">
-        <FirmActions data={actions} loading={loading} onRefresh={() => setRefreshTick((t) => t + 1)} links={links} />
+        <FirmActions data={actions} loading={loading} onRefresh={retry} links={links} error={loadError} />
         <InsightCard title="Business overview" icon={LineChart} theme="blue" subtext="Engagements, clients and pipeline" headerExtra={refreshButton}>
-            {!overview ? (
+            {!overview && loadError && !loading ? (
+                <LoadFailed compact className="pt-4" what="this overview" reason={loadError} onRetry={retry} />
+            ) : !overview ? (
                 <div className="grid grid-cols-1 gap-4 pt-4 md:grid-cols-3" aria-busy="true">
                     <ShimmerBlock className="h-40 w-full" />
                     <ShimmerBlock className="h-40 w-full md:col-span-2" />
                 </div>
             ) : (
                 <div className={`flex flex-col gap-10 pt-4 transition-opacity duration-300 ${loading ? 'opacity-50' : ''}`}>
+                    {/* A refresh that failed keeps what was on screen, and says it is from before. */}
+                    {loadError && !loading && (
+                        <p role="status" className="text-small text-fg-muted">
+                            Couldn&apos;t refresh this overview · {loadError}
+                        </p>
+                    )}
                     <FirmOverviewTop data={overview} brief={briefCard} />
                     <FirmEngagementsList
                         rows={overview.engagementRows}

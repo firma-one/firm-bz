@@ -5,36 +5,17 @@
  * rationale (origin-matching, poll-as-fallback for missed postMessage, etc.).
  */
 
-import { logger } from '@/lib/logger'
-import { isGoogleDriveOAuthPopupOriginAllowed } from '@/lib/google-drive-popup-oauth'
+import { oauthPopupFailureMessage, startOAuthPopup } from '@/lib/google-drive-popup-oauth'
 
 export const ONEDRIVE_OAUTH_POPUP_WINDOW_NAME = 'FirmOneDriveOAuth'
 
-const POPUP_WIDTH = 520
-const POPUP_HEIGHT = 700
-const TIMEOUT_MS = 120_000
-const POLL_INTERVAL_MS = 2000
 
-/** User-facing message for `data.error` from OAuth callback postMessage. */
-export function oneDriveOAuthPopupFailureMessage(errorCode?: string): string {
-  if (errorCode === 'oauth_error') return 'Microsoft sign-in was cancelled or denied.'
-  if (errorCode === 'microsoft_oauth_unreachable') {
-    return 'Could not reach Microsoft to finish sign-in (network timeout or outage). Check your connection and try again.'
-  }
-  if (errorCode === 'token_exchange_failed' || errorCode === 'user_info_failed') {
-    return 'Microsoft could not finish sign-in. Try again in a moment.'
-  }
-  if (errorCode === 'account_mismatch') {
-    return 'Wrong Microsoft account. Reconnect must use the same account that was originally connected.'
-  }
-  if (errorCode === 'oauth_not_configured') {
-    return 'OneDrive/SharePoint sign-in is not configured on this server.'
-  }
-  if (errorCode === 'not_enabled') {
-    return 'OneDrive/SharePoint connector is not enabled.'
-  }
-  if (typeof errorCode === 'string' && errorCode.length > 0) return errorCode
-  return 'OneDrive/SharePoint connection failed.'
+/**
+ * User-facing message for `data.error` from OAuth callback postMessage: one sentence per code (see
+ * `oauthPopupFailureMessage`). `detail` is Microsoft's own sentence, when it gave one.
+ */
+export function oneDriveOAuthPopupFailureMessage(errorCode?: string, detail?: string | null): string {
+  return oauthPopupFailureMessage('Microsoft', 'OneDrive and SharePoint', errorCode, detail)
 }
 
 export type InitiateOneDriveOAuthPopupParams = {
@@ -93,7 +74,8 @@ export type OneDriveOAuthPopupHandlers = {
   getAccessToken: () => Promise<string | null>
   onMessageSuccess: (payload: { connectionId?: string; email?: string }) => void | Promise<void>
   onPollSuccess: (connector: { id: string; name?: string | null }) => void | Promise<void>
-  onMessageFailure: (errorCode?: string) => void
+  /** A callback code, or the popup's own `popup_blocked` / `popup_closed`; `detail` is Microsoft's sentence. */
+  onMessageFailure: (errorCode?: string, detail?: string) => void
   onTimeout: () => void
   onFlowEnd: () => void
 }
@@ -103,110 +85,18 @@ export type StartOneDriveOAuthPopupOptions = {
   priorConnectorIds?: string[] | null
 }
 
+/** Same flow as Google's (blocked and closed popups, a baseline for the status poll). */
 export function startOneDriveOAuthPopup(
   authUrl: string,
   oauthNonce: string | null | undefined,
   handlers: OneDriveOAuthPopupHandlers,
   options?: StartOneDriveOAuthPopupOptions
 ): () => void {
-  const label = options?.logLabel ?? 'onedrive_oauth_popup'
-  const appOrigin = typeof window !== 'undefined' ? window.location.origin : ''
-  const expectedNonce = oauthNonce ?? null
-  const priorConnectorIds = new Set(options?.priorConnectorIds ?? [])
-
-  let timeoutId: number | null = null
-  let pollIntervalId: number | null = null
-
-  const cleanup = () => {
-    window.removeEventListener('message', handleMessage)
-    if (timeoutId !== null) {
-      window.clearTimeout(timeoutId)
-      timeoutId = null
-    }
-    if (pollIntervalId !== null) {
-      window.clearInterval(pollIntervalId)
-      pollIntervalId = null
-    }
-  }
-
-  const handleMessage = async (event: MessageEvent) => {
-    if (!isGoogleDriveOAuthPopupOriginAllowed(event.origin, appOrigin)) return
-    const data = event.data
-    if (!data || data.type !== 'onedrive_oauth') return
-    if (expectedNonce != null && data.nonce !== expectedNonce) return
-
-    cleanup()
-    handlers.onFlowEnd()
-
-    if (data.ok === true) {
-      logger.debug(`${label}: popup postMessage success`, { hasEmail: !!data.email, hasConnectionId: !!data.connectionId })
-      await handlers.onMessageSuccess({ connectionId: data.connectionId, email: data.email })
-    } else {
-      logger.warn(`${label}: popup postMessage error`, { error: data.error })
-      handlers.onMessageFailure(typeof data.error === 'string' ? data.error : undefined)
-    }
-  }
-
-  window.addEventListener('message', handleMessage)
-
-  const fetchActiveConnectorIfAny = async (): Promise<{ id: string; name?: string | null } | null> => {
-    try {
-      const token = await handlers.getAccessToken()
-      if (!token) return null
-      const statusRes = await fetch('/api/connectors/onedrive?action=status', {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      if (!statusRes.ok) return null
-      const statusData = await statusRes.json()
-      if (statusData.isConnected && statusData.connector?.id) {
-        if (priorConnectorIds.size > 0 && priorConnectorIds.has(statusData.connector.id)) return null
-        return { id: statusData.connector.id, name: statusData.connector.name ?? null }
-      }
-    } catch {
-      /* ignore */
-    }
-    return null
-  }
-
-  timeoutId = window.setTimeout(() => {
-    void (async () => {
-      cleanup()
-      handlers.onFlowEnd()
-      try {
-        const connector = await fetchActiveConnectorIfAny()
-        if (connector) {
-          await handlers.onPollSuccess(connector)
-          return
-        }
-      } catch (e) {
-        logger.warn(`${label}: last-chance status after timer failed`, e as Error)
-      }
-      logger.warn(`${label}: popup timed out`)
-      handlers.onTimeout()
-    })()
-  }, TIMEOUT_MS)
-
-  const pollOnce = async () => {
-    const connector = await fetchActiveConnectorIfAny()
-    if (!connector) return
-    cleanup()
-    handlers.onFlowEnd()
-    await handlers.onPollSuccess(connector)
-  }
-
-  pollIntervalId = window.setInterval(() => void pollOnce(), POLL_INTERVAL_MS)
-
-  const left = window.screenX + (window.outerWidth - POPUP_WIDTH) / 2
-  const top = window.screenY + (window.outerHeight - POPUP_HEIGHT) / 2
-  const popup = window.open(
-    authUrl,
-    ONEDRIVE_OAUTH_POPUP_WINDOW_NAME,
-    `width=${POPUP_WIDTH},height=${POPUP_HEIGHT},left=${left},top=${top},status=no,menubar=no,toolbar=no,location=no`
-  )
-
-  if (!popup) {
-    logger.warn(`${label}: window.open returned null (popup may still open)`)
-  }
-
-  return cleanup
+  return startOAuthPopup(authUrl, oauthNonce, handlers, {
+    label: options?.logLabel ?? 'onedrive_oauth_popup',
+    messageType: 'onedrive_oauth',
+    statusUrl: '/api/connectors/onedrive?action=status',
+    windowName: ONEDRIVE_OAUTH_POPUP_WINDOW_NAME,
+    priorConnectorIds: options?.priorConnectorIds ?? null,
+  })
 }

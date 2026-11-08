@@ -25,6 +25,7 @@ vi.mock('@/utils/supabase/server', () => ({
 vi.mock('@/lib/prisma', () => ({ getPrismaWithRls: () => prisma }))
 vi.mock('@/lib/permission-helpers', () => ({ canManageClient: vi.fn(), canManageProject: vi.fn() }))
 vi.mock('@/lib/home/home-firms', () => ({ getHomeFirms }))
+vi.mock('@/lib/logger', () => ({ logger: { error: vi.fn() } }))
 
 import { GET, PATCH, DELETE } from './route'
 
@@ -78,5 +79,26 @@ describe('/api/notifications?firms=all', () => {
         const list = prisma.notification.findMany.mock.calls.find((c: any[]) => c[0].take === 30)![0]
         expect(list.where).toEqual({ userId: 'u1', OR: [{ firmId: 'f1' }, { scope: 'PLATFORM' }], dismissedAt: null })
         expect(getHomeFirms).not.toHaveBeenCalled()
+    })
+})
+
+describe('/api/notifications when the work fails', () => {
+    it('answers in words, not an empty list, when the firm lookup fails (EM-1)', async () => {
+        getHomeFirms.mockRejectedValueOnce(new Error('db down'))
+        const res = await GET(req('/api/notifications?firms=all'))
+        expect(res.status).toBe(500)
+        expect(await res.json()).toEqual({ error: 'Something went wrong on our side. Try again.' })
+    })
+
+    it('answers in words when marking read or dismissing fails (P2-26, P2-28)', async () => {
+        prisma.notification.updateMany.mockRejectedValueOnce(new Error('timeout'))
+        const read = await PATCH(req('/api/notifications', { method: 'PATCH', body: { ids: ['n1'] } }))
+        expect(read.status).toBe(500)
+        expect((await read.json()).error).toBe('Something went wrong on our side. Try again.')
+
+        prisma.notification.deleteMany.mockRejectedValueOnce(new Error('timeout'))
+        const dismissed = await DELETE(req('/api/notifications?firms=all', { method: 'DELETE', body: { ids: ['n1'] } }))
+        expect(dismissed.status).toBe(500)
+        expect((await dismissed.json()).error).toBe('Something went wrong on our side. Try again.')
     })
 })

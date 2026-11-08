@@ -2,8 +2,29 @@ import { failureFrom, failureReason } from '@/lib/files/action-failure'
 import { useState, useCallback, useRef } from 'react'
 import { logger } from '@/lib/logger'
 import { useToast } from '@/components/ui/toast'
+import { useStageMove } from '@/components/files/use-stage-move'
 import { DriveFile } from '@/lib/types'
 import { ENGAGEMENT_ROOT_LABEL } from '@/lib/files/engagement-root'
+import { describeOutcome, type NotDone } from '@/lib/files/partial-outcome'
+
+/** An answer's JSON, or nothing when it has none. */
+const bodyOf = async (res: Response): Promise<Record<string, any>> => (await res.json().catch(() => null)) ?? {}
+
+/** Each review action's failure title, naming it (P2-01). */
+const INTAKE_FAILED: Record<'approve' | 'reject' | 'withdraw' | 'approve-folder' | 'reject-folder' | 'withdraw-folder', string> = {
+    'approve': 'Approve failed',
+    'reject': 'Reject failed',
+    'withdraw': 'Withdraw failed',
+    'approve-folder': 'Approve failed',
+    'reject-folder': 'Reject failed',
+    'withdraw-folder': 'Withdraw failed',
+}
+
+/** The intake route's "not pending" answer, said as what to do about it (P1-53). */
+function intakeRefusal(status: number, error: string | undefined): string {
+    if (status === 409 && /not pending intake/i.test(error ?? '')) return "It's no longer waiting for review. Refresh the list."
+    return error || `The server answered ${status}. Try again.`
+}
 
 type Session = {
     access_token?: string
@@ -49,6 +70,7 @@ export function useEngagementFileOps({
     canUndoTrash = false,
 }: UseEngagementFileOpsOptions) {
     const { addToast } = useToast()
+    const { send: sendWithConfirmation, dialog: privacyConfirmDialog } = useStageMove()
 
     // Rename state
     const [renameModalOpen, setRenameModalOpen] = useState(false)
@@ -73,6 +95,8 @@ export function useEngagementFileOps({
     const [destinationFolders, setDestinationFolders] = useState<DriveFile[]>([])
     const [selectedDestinationId, setSelectedDestinationId] = useState<string | null>(null)
     const [loadingDestinations, setLoadingDestinations] = useState(false)
+    /** Why the picker's folder list didn't load: no "No subfolders here", and no Move here, until it does (EM-7). */
+    const [destinationsError, setDestinationsError] = useState<string | null>(null)
     const [copyMoveSubmittingFolderId, setCopyMoveSubmittingFolderId] = useState<string | null>(null)
     const [emptyFolderIds, setEmptyFolderIds] = useState<Set<string>>(new Set())
     /** Picker folders known to have subfolders: only these show an arrow, so none appears and then vanishes. */
@@ -85,6 +109,8 @@ export function useEngagementFileOps({
     const [crossEngagementFirmName, setCrossEngagementFirmName] = useState<string | null>(null)
     const [crossEngagementEngagements, setCrossEngagementEngagements] = useState<{ id: string; name: string; clientId: string; clientName: string }[]>([])
     const [crossEngagementLoading, setCrossEngagementLoading] = useState(false)
+    /** Why the engagement list didn't load, in place of "No other engagements available" (P1-46). */
+    const [crossEngagementError, setCrossEngagementError] = useState<string | null>(null)
     const [crossEngagementSubmitting, setCrossEngagementSubmitting] = useState(false)
     const [crossEngagementSelectedId, setCrossEngagementSelectedId] = useState<string | null>(null)
 
@@ -237,8 +263,8 @@ export function useEngagementFileOps({
             },
             body: JSON.stringify({ action: 'list', folderId, projectId, pageSize: 500 })
         })
-        // A failed list throws rather than reading as "no subfolders", which hid the folder's arrow.
-        if (!r.ok) throw new Error(`Could not list folder (${r.status})`)
+        // A failed list throws its reason rather than reading as "no subfolders", which hid the folder's arrow.
+        if (!r.ok) throw await failureFrom(r)
         const data = await r.json()
         const list = (data.files || []) as DriveFile[]
         return list.filter((f: DriveFile) => f.mimeType === 'application/vnd.google-apps.folder')
@@ -284,15 +310,27 @@ export function useEngagementFileOps({
             return
         }
         setLoadingDestinations(true)
+        setDestinationsError(null)
         fetchFolderChildrenResult(folderId)
             .then((folders) => {
                 childFoldersRef.current.set(folderId, folders)
                 setDestinationFolders(folders)
                 lookAheadFolders(folders)
             })
-            .catch(() => setDestinationFolders([]))
+            .catch((e) => {
+                setDestinationFolders([])
+                setDestinationsError(failureReason(e))
+            })
             .finally(() => setLoadingDestinations(false))
     }, [fetchFolderChildrenResult, lookAheadFolders])
+
+    /** The picker's Try again: the folder on screen, loaded afresh. */
+    const retryDestinations = useCallback(() => {
+        const segment = currentPath[currentPath.length - 1]
+        if (!segment) return
+        childFoldersRef.current.delete(segment.id)
+        fetchFolderChildren(segment.id)
+    }, [currentPath, fetchFolderChildren])
 
     const handleCopyMoveBreadcrumbClick = useCallback((index: number) => {
         setCurrentPath(prev => {
@@ -324,10 +362,11 @@ export function useEngagementFileOps({
             setSubfolderIds(prev => new Set(prev).add(folder.id))
             setSelectedDestinationId(folder.id)
             setCurrentPath(prev => [...prev, { id: folder.id, name: folder.name }])
+            setDestinationsError(null)
             setDestinationFolders(folders)
             lookAheadFolders(folders)
-        } catch {
-            addToast({ type: 'error', title: 'Error', message: 'Could not load folder' })
+        } catch (e) {
+            addToast({ type: 'error', title: `Couldn't open ${folder.name}`, message: failureReason(e) })
         } finally {
             setCheckingFolderId(null)
         }
@@ -509,26 +548,32 @@ export function useEngagementFileOps({
 
     const handlePrivacy = useCallback(async (file: DriveFile, makePrivate: boolean) => {
         const docId = file.projectDocumentId ?? file.id
-        try {
+        // Internal only documents don't count toward a deliverable's stage, so this can move it: asks first.
+        // The route answers `warning` when part of it couldn't be done (someone still has access in
+        // storage): read from a copy of the answer, which the confirmation step reads too.
+        let warning: string | undefined
+        const result = await sendWithConfirmation(async (confirm) => {
             const res = await fetch(`/api/projects/${projectId}/documents/${docId}/privacy`, {
                 method: 'PATCH',
                 headers: {
                     'Authorization': `Bearer ${sessionRef.current?.access_token}`,
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ private: makePrivate }),
+                body: JSON.stringify({ private: makePrivate, ...(confirm ? { confirm: true } : {}) }),
             })
-            if (!res.ok) throw await failureFrom(res)
-        } catch (e) {
-            addToast({ type: 'error', title: makePrivate ? 'Couldn’t make it internal only' : 'Couldn’t remove internal only', message: failureReason(e) })
+            if (res.ok) warning = (await bodyOf(res.clone())).warning
+            return res
+        })
+        if (!result.ok) {
+            if (result.cancelled) return
+            addToast({ type: 'error', title: makePrivate ? 'Couldn’t make it internal only' : 'Couldn’t remove internal only', message: result.error })
             return
         }
-        addToast({
-            type: 'success',
-            title: makePrivate ? `${file.name} is now internal only` : `${file.name} is no longer internal only`,
-        })
+        addToast(warning
+            ? { type: 'warning', title: makePrivate ? `${file.name} is internal only, with a problem` : `${file.name} is no longer internal only, with a problem`, message: warning, duration: 12000 }
+            : { type: 'success', title: makePrivate ? `${file.name} is now internal only` : `${file.name} is no longer internal only` })
         refreshShareStateAndFiles()
-    }, [projectId, addToast, refreshShareStateAndFiles])
+    }, [projectId, addToast, refreshShareStateAndFiles, sendWithConfirmation])
 
     const handleUnlockFromBadge = useCallback(async (file: DriveFile) => {
         const docId = file.projectDocumentId ?? file.id
@@ -540,16 +585,18 @@ export function useEngagementFileOps({
                 headers: { Authorization: `Bearer ${sessionRef.current.access_token}` },
                 credentials: 'include',
             })
-            if (res.ok) {
-                addToast({ type: 'success', title: 'Returned to Draft', message: `"${file.name}" is now editable.` })
-                const currentFolderId = currentFolderIdRef.current
-                if (currentFolderId) fetchFiles(currentFolderId, true)
+            if (!res.ok) throw await failureFrom(res)
+            const d = await bodyOf(res)
+            // Storage refused to give someone their edit access back: it stays locked, and says why.
+            if (d.unlocked === false) {
+                addToast({ type: 'warning', title: 'Still locked', message: d.warning || 'It stays locked until edit access is back. Try Unlock again.', duration: 12000 })
             } else {
-                const d = await res.json().catch(() => ({}))
-                addToast({ type: 'error', title: 'Failed', message: d.error || 'Could not return to draft.' })
+                addToast({ type: 'success', title: 'Returned to Draft', message: `"${file.name}" is now editable.` })
             }
-        } catch {
-            addToast({ type: 'error', title: 'Failed', message: 'Network error.' })
+            const currentFolderId = currentFolderIdRef.current
+            if (currentFolderId) fetchFiles(currentFolderId, true)
+        } catch (e) {
+            addToast({ type: 'error', title: 'Return to draft failed', message: failureReason(e) })
         } finally {
             setUnlockInProgress(false)
             setUnlockConfirmFile(null)
@@ -566,16 +613,15 @@ export function useEngagementFileOps({
                 headers: { Authorization: `Bearer ${sessionRef.current.access_token}` },
                 credentials: 'include',
             })
-            if (res.ok) {
-                addToast({ type: 'success', title: 'Unshared', message: `"${file.name}" is no longer shared externally.` })
-                const currentFolderId = currentFolderIdRef.current
-                if (currentFolderId) fetchFiles(currentFolderId, true)
-            } else {
-                const d = await res.json().catch(() => ({}))
-                addToast({ type: 'error', title: 'Failed', message: d.error || 'Could not revoke access.' })
-            }
-        } catch {
-            addToast({ type: 'error', title: 'Failed', message: 'Network error.' })
+            if (!res.ok) throw await failureFrom(res)
+            const d = await bodyOf(res)
+            addToast(d.warning
+                ? { type: 'warning', title: 'Unshared, with a problem', message: d.warning, duration: 12000 }
+                : { type: 'success', title: 'Unshared', message: `"${file.name}" is no longer shared outside the firm.` })
+            const currentFolderId = currentFolderIdRef.current
+            if (currentFolderId) fetchFiles(currentFolderId, true)
+        } catch (e) {
+            addToast({ type: 'error', title: "Couldn't revoke access", message: failureReason(e) })
         } finally {
             setUnshareInProgress(false)
             setUnshareConfirmFile(null)
@@ -595,16 +641,17 @@ export function useEngagementFileOps({
                 body: JSON.stringify({ action }),
                 credentials: 'include',
             })
+            // "Has been removed" only once it has: a trash the storage refused keeps the row (decision 6).
             if (res.ok) {
                 addToast({ type: 'success', title: action === 'approve' ? 'File approved' : action === 'reject' ? 'File rejected' : 'Upload withdrawn', message: `"${file.name}" ${action === 'approve' ? 'is now available to all.' : 'has been removed.'}` })
                 const currentFolderId = currentFolderIdRef.current
                 if (currentFolderId) fetchFiles(currentFolderId, true)
             } else {
-                const d = await res.json().catch(() => ({}))
-                addToast({ type: 'error', title: 'Action failed', message: d.error || 'Something went wrong.' })
+                const d = await bodyOf(res)
+                addToast({ type: 'error', title: INTAKE_FAILED[action], message: intakeRefusal(res.status, d.error) })
             }
         } catch (e) {
-            addToast({ type: 'error', title: 'Action failed', message: 'Network error.' })
+            addToast({ type: 'error', title: INTAKE_FAILED[action], message: failureReason(e) })
         }
     }, [projectId, currentFolderIdRef, fetchFiles, addToast])
 
@@ -630,11 +677,11 @@ export function useEngagementFileOps({
                 const currentFolderId = currentFolderIdRef.current
                 if (currentFolderId) fetchFiles(currentFolderId, true)
             } else {
-                const d = await res.json().catch(() => ({}))
-                addToast({ type: 'error', title: 'Action failed', message: d.error || 'Something went wrong.' })
+                const d = await bodyOf(res)
+                addToast({ type: 'error', title: INTAKE_FAILED[action], message: intakeRefusal(res.status, d.error) })
             }
         } catch (e) {
-            addToast({ type: 'error', title: 'Action failed', message: 'Network error.' })
+            addToast({ type: 'error', title: INTAKE_FAILED[action], message: failureReason(e) })
         } finally {
             stopProcessing(file.id)
         }
@@ -645,6 +692,7 @@ export function useEngagementFileOps({
         setCopyMoveTargets(Array.isArray(doc) ? doc : [doc])
         setCopyMoveAction(action)
         setCopyMoveKeepBoth(true)
+        setDestinationsError(null)
         setEmptyFolderIds(new Set())
         setSubfolderIds(new Set())
         setCheckingFolderId(null)
@@ -666,31 +714,13 @@ export function useEngagementFileOps({
         setSelectedDestinationId(rootId)
         setCopyMoveModalOpen(true)
         setDestinationFolders([])
-        setLoadingDestinations(true)
         if (!sessionRef.current?.access_token) {
-            setLoadingDestinations(false)
+            setDestinationsError('Your session has ended. Sign in again, then retry.')
             return
         }
-        fetch('/api/connectors/google-drive/linked-files', {
-            method: 'POST',
-            credentials: 'include',
-            headers: {
-                Authorization: `Bearer ${sessionRef.current.access_token}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ action: 'list', folderId: rootId, projectId, pageSize: 500 })
-        })
-            .then((r) => (r.ok ? r.json() : { files: [] }))
-            .then((data) => {
-                const list = (data.files || []) as DriveFile[]
-                const folders = list.filter((f: DriveFile) => f.mimeType === 'application/vnd.google-apps.folder')
-                childFoldersRef.current.set(rootId, folders)
-                setDestinationFolders(folders)
-                lookAheadFolders(folders)
-            })
-            .catch(() => setDestinationFolders([]))
-            .finally(() => setLoadingDestinations(false))
-    }, [generalFolderId, confidentialFolderId, stagingFolderId, currentFolderType, projectId, lookAheadFolders])
+        // A failed root list says why, with Try again, instead of "No subfolders here" (EM-7).
+        fetchFolderChildren(rootId)
+    }, [generalFolderId, confidentialFolderId, stagingFolderId, currentFolderType, fetchFolderChildren])
 
     const openCrossEngagementModal = useCallback(async (doc: DriveFile) => {
         setCrossEngagementTarget(doc)
@@ -698,17 +728,19 @@ export function useEngagementFileOps({
         setCrossEngagementFirmName(null)
         setCrossEngagementModalOpen(true)
         setCrossEngagementLoading(true)
+        setCrossEngagementError(null)
         try {
             const res = await fetch(`/api/projects/${projectId}/engagements`, { credentials: 'include' })
-            if (res.ok) {
-                const data = await res.json()
-                setCrossEngagementFirmName(data.firmName ?? null)
-                setCrossEngagementEngagements(
-                    ((data.engagements ?? []) as { id: string; name: string; clientId: string; clientName: string }[]).filter((e) => e.id !== projectId)
-                )
-            }
-        } catch {
+            if (!res.ok) throw await failureFrom(res)
+            const data = await res.json()
+            setCrossEngagementFirmName(data.firmName ?? null)
+            setCrossEngagementEngagements(
+                ((data.engagements ?? []) as { id: string; name: string; clientId: string; clientName: string }[]).filter((e) => e.id !== projectId)
+            )
+        } catch (e) {
+            // Never "No other engagements available" for a list that didn't load (P1-46).
             setCrossEngagementEngagements([])
+            setCrossEngagementError(failureReason(e))
         } finally {
             setCrossEngagementLoading(false)
         }
@@ -746,12 +778,30 @@ export function useEngagementFileOps({
                     targetEngagementId: crossEngagementSelectedId,
                 }),
             })
-            if (!res.ok) throw await failureFrom(res)
-            addToast({
-                type: 'success',
-                title: 'Copied',
-                message: `${crossEngagementTarget.name} copied to the selected engagement.`,
-            })
+            const target = crossEngagementEngagements.find((e) => e.id === crossEngagementSelectedId)
+            const where = target ? `to ${target.name}` : 'to the other engagement'
+            const d = await bodyOf(res)
+            if (!res.ok) {
+                // OneDrive still copying after 30 seconds isn't a failure: its words say to look again.
+                if (d.code === 'timed_out') {
+                    addToast({ type: 'info', title: 'Copy still running', message: d.error, duration: 12000 })
+                    setCrossEngagementModalOpen(false)
+                    return
+                }
+                throw new Error(d.error || `The server answered ${res.status}. Try again.`)
+            }
+            // A folder: what copied, out of how many, and what didn't with why (FI-4, decision 1).
+            const failed: NotDone[] = Array.isArray(d.failed) ? d.failed : []
+            if (typeof d.filesTotal === 'number' && failed.length > 0) {
+                addToast({
+                    type: 'warning',
+                    title: `Copied ${d.filesCopied} of ${d.filesTotal}`,
+                    message: describeOutcome({ done: d.filesCopied, total: d.filesTotal, verb: 'Copied', noun: 'file', where, notDone: failed, notDoneLabel: 'Not copied' }),
+                    duration: 15000,
+                })
+            } else {
+                addToast({ type: 'success', title: 'Copied', message: `${crossEngagementTarget.name} copied ${where}.` })
+            }
             setCrossEngagementModalOpen(false)
         } catch (e) {
             addToast({ type: 'error', title: 'Copy failed', message: failureReason(e) })
@@ -759,7 +809,7 @@ export function useEngagementFileOps({
             setCrossEngagementSubmitting(false)
             stopProcessing(crossEngagementTarget.id)
         }
-    }, [crossEngagementTarget, crossEngagementSelectedId, projectId, addToast, startProcessing, stopProcessing])
+    }, [crossEngagementTarget, crossEngagementSelectedId, crossEngagementEngagements, projectId, addToast, startProcessing, stopProcessing])
 
     return {
         // Rename state
@@ -794,6 +844,8 @@ export function useEngagementFileOps({
         selectedDestinationId,
         setSelectedDestinationId,
         loadingDestinations,
+        destinationsError,
+        retryDestinations,
         copyMoveSubmittingFolderId,
         emptyFolderIds,
         subfolderIds,
@@ -807,6 +859,7 @@ export function useEngagementFileOps({
         setCrossEngagementFirmName,
         crossEngagementEngagements,
         crossEngagementLoading,
+        crossEngagementError,
         crossEngagementSubmitting,
         crossEngagementSelectedId,
         setCrossEngagementSelectedId,
@@ -827,6 +880,7 @@ export function useEngagementFileOps({
         openRenameModal,
         handleConfirmRename,
         handlePrivacy,
+        privacyConfirmDialog,
         handleUnlockFromBadge,
         handleUnshare,
         handleIntakeAction,

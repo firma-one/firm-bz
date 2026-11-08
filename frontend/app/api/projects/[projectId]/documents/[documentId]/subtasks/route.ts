@@ -175,6 +175,7 @@ export async function GET(
           return a ? { version: { label: a.version.label ?? null, savedAt: a.version.savedAt }, approvedAt: a.approvedAt } : null
         })(),
         breadcrumb,
+        isPrivate: privateIds.has(c.externalId),
       }
     })
 

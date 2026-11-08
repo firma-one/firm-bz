@@ -106,6 +106,15 @@ describe('on OneDrive', () => {
             expect(await copy()).toEqual({ id: 'new-2' })
         })
 
+        it("doesn't call a same-named item done while the copy is still running", async () => {
+            vi.useFakeTimers()
+            // An older folder of that name is already there: it is not this copy.
+            answers(copying({ status: 'inProgress' }, [{ id: 'older', name: 'New.docx' }]))
+            const outcome = failureOf(copy())
+            await vi.runAllTimersAsync()
+            expect((await outcome).reason).toBe('timed_out')
+        })
+
         it('says it may still finish when the copy outlasts the wait', async () => {
             vi.useFakeTimers()
             answers(copying({ status: 'inProgress' }))

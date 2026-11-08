@@ -10,6 +10,8 @@ import {
     withReminderLock,
 } from '@/lib/reminders/reminder-store'
 import { computeDueReminders, upsertFollowUpReminder } from '@/lib/reminders/reminder-service'
+import { asResult, type ActionResult } from '@/lib/actions/action-result'
+import { signedOut } from '@/lib/actions/action-reasons'
 
 /*
  * Session-scoped reminder actions only. Every export here can be called from the browser as a
@@ -66,13 +68,16 @@ export async function getUserReminders(): Promise<ReminderWithContext[]> {
 
 /**
  * Every one of the signed-in user's reminders, however far out — the New UI Inbox's Reminders view.
- * getUserReminders keeps its 30-day window for the legacy panel and the digest.
+ * getUserReminders keeps its 30-day window for the legacy panel and the digest. The Inbox calls this
+ * from the browser, so a failed load answers `{ ok: false }` (EM-1), never a throw it can't read.
  */
-export async function getAllUserReminders(): Promise<ReminderWithContext[]> {
-    const supabase = await createClient()
-    const { data: { user }, error } = await supabase.auth.getUser()
-    if (error || !user) return []
-    return computeDueReminders(user.id, { horizonDays: null })
+export async function getAllUserReminders(): Promise<ActionResult<ReminderWithContext[]>> {
+    return asResult('getAllUserReminders', async () => {
+        const supabase = await createClient()
+        const { data: { user }, error } = await supabase.auth.getUser()
+        if (error || !user) throw signedOut()
+        return computeDueReminders(user.id, { horizonDays: null })
+    })
 }
 
 /**
@@ -115,14 +120,18 @@ export async function checkDailyReminderDigest(): Promise<{ notify: boolean; cou
     }
 }
 
-/** Mark a reminder done: remove the node and cancel Inngest. The date it watches stays (DONE_KEEPS_ENTITY_DATES). */
-export async function markReminderDone(reminderId: string): Promise<void> {
+/** The signed-in user, or the words for a session that has ended. */
+async function sessionUserId(): Promise<string> {
     const supabase = await createClient()
     const { data: { user }, error } = await supabase.auth.getUser()
-    if (error || !user) return
+    if (error || !user) throw signedOut()
+    return user.id
+}
 
-    return withReminderLock(user.id, async () => {
-        const items = await loadItems(user.id)
+async function markReminderDoneOrThrow(reminderId: string): Promise<void> {
+    const userId = await sessionUserId()
+    return withReminderLock(userId, async () => {
+        const items = await loadItems(userId)
         const item = items.find((r) => r.id === reminderId)
         if (!item) return
 
@@ -136,49 +145,48 @@ export async function markReminderDone(reminderId: string): Promise<void> {
         await safeInngestSend('reminder.recurring.cancelled', { reminderId })
 
         // Remove node from array
-        await saveItems(user.id, items.filter((r) => r.id !== reminderId))
+        await saveItems(userId, items.filter((r) => r.id !== reminderId))
     })
 }
 
-/** Hide a reminder from the panel (sets hiddenAt). */
-export async function hideReminder(reminderId: string): Promise<void> {
-    const supabase = await createClient()
-    const { data: { user }, error } = await supabase.auth.getUser()
-    if (error || !user) return
-
-    return withReminderLock(user.id, async () => {
-        const items = await loadItems(user.id)
+async function setReminderHidden(reminderId: string, hidden: boolean): Promise<void> {
+    const userId = await sessionUserId()
+    return withReminderLock(userId, async () => {
+        const items = await loadItems(userId)
         const next = items.map((r) =>
-            r.id === reminderId ? { ...r, hiddenAt: new Date().toISOString() } : r
+            r.id === reminderId ? { ...r, hiddenAt: hidden ? new Date().toISOString() : null } : r
         )
-        await saveItems(user.id, next)
+        await saveItems(userId, next)
     })
 }
 
-/** Unhide a reminder (clears hiddenAt). */
-export async function showReminder(reminderId: string): Promise<void> {
-    const supabase = await createClient()
-    const { data: { user }, error } = await supabase.auth.getUser()
-    if (error || !user) return
+/**
+ * Mark a reminder done: remove the node and cancel Inngest. The date it watches stays (DONE_KEEPS_ENTITY_DATES).
+ * Answers why when it can't (P2-30): with no session it used to return as if done, so the Inbox
+ * dropped a reminder that stayed; code `unauthorized` when the session has ended.
+ */
+export async function markReminderDone(reminderId: string): Promise<ActionResult> {
+    return asResult('markReminderDone', () => markReminderDoneOrThrow(reminderId))
+}
 
-    return withReminderLock(user.id, async () => {
-        const items = await loadItems(user.id)
-        const next = items.map((r) =>
-            r.id === reminderId ? { ...r, hiddenAt: null } : r
-        )
-        await saveItems(user.id, next)
+/** Hide a reminder from the panel (sets hiddenAt). Answers why when it can't, rather than pretend. */
+export async function hideReminder(reminderId: string): Promise<ActionResult> {
+    return asResult('hideReminder', () => setReminderHidden(reminderId, true))
+}
+
+/** Unhide a reminder (clears hiddenAt). Answers why when it can't, rather than pretend. */
+export async function showReminder(reminderId: string): Promise<ActionResult> {
+    return asResult('showReminder', () => setReminderHidden(reminderId, false))
+}
+
+/** Mark multiple reminders done at once. Stops at the first that can't be, and says why. */
+export async function markAllRemindersDone(reminderIds: string[]): Promise<ActionResult> {
+    return asResult('markAllRemindersDone', async () => {
+        for (const id of reminderIds) await markReminderDoneOrThrow(id)
     })
 }
 
-/** Mark multiple reminders done at once. */
-export async function markAllRemindersDone(reminderIds: string[]): Promise<void> {
-    for (const id of reminderIds) {
-        await markReminderDone(id)
-    }
-}
-
-/** Create a manual (ad-hoc) reminder for the currently logged-in user. Called from client UI. */
-export async function createManualReminder(params: {
+type ManualReminder = {
     entityKey: string
     entityValue: string
     action: string
@@ -187,10 +195,17 @@ export async function createManualReminder(params: {
     firmId: string
     ctaUrl: string | null
     note?: string | null
-}): Promise<void> {
+}
+
+/** Create a manual (ad-hoc) reminder for the currently logged-in user. Called from client UI. */
+export async function createManualReminder(params: ManualReminder): Promise<ActionResult> {
+    return asResult('createManualReminder', () => createManualReminderOrThrow(params))
+}
+
+async function createManualReminderOrThrow(params: ManualReminder): Promise<void> {
     const supabase = await createClient()
     const { data: { user }, error } = await supabase.auth.getUser()
-    if (error || !user) throw new Error('Unauthorized')
+    if (error || !user) throw signedOut()
 
     await upsertFollowUpReminder({
         userId: user.id,

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { logger } from '@/lib/logger'
+import { PLATFORM_SUPPORT_EMAIL } from '@/config/platform-emails'
 
 /**
  * Root-level global error handler
@@ -72,15 +73,27 @@ export default function GlobalError({
                                 color: '#111827',
                                 marginBottom: '0.5rem',
                             }}>
-                                Critical Error
+                                Something went wrong on this page
                             </h1>
 
                             <p style={{
                                 color: '#6b7280',
-                                marginBottom: '1.5rem',
+                                marginBottom: error.digest ? '0.5rem' : '1.5rem',
                             }}>
-                                A critical error occurred. Please refresh the page or contact support.
+                                Refresh the page, or go home. If it keeps happening, email {PLATFORM_SUPPORT_EMAIL}
+                                {error.digest ? ' and quote the reference below.' : '.'}
                             </p>
+                            {/* Next's digest for a server error: the one thing support can look up. */}
+                            {error.digest && (
+                                <p style={{
+                                    fontFamily: 'monospace',
+                                    fontSize: '0.75rem',
+                                    color: '#6b7280',
+                                    marginBottom: '1.5rem',
+                                }}>
+                                    Reference {error.digest}
+                                </p>
+                            )}
 
                             {process.env.NODE_ENV === 'development' && (
                                 <details style={{

@@ -129,3 +129,21 @@ describe('GET download-share ?revisionId', () => {
         expect(content.getRenderableContent).toHaveBeenCalledWith('conn1', 'ext1', 'native')
     })
 })
+
+describe('GET download-share when the storage refuses', () => {
+    it("answers the storage's reason for the Downloads tray, not 'Failed to download file'", async () => {
+        st.connectorType = 'ONEDRIVE'
+        const { storageFailure } = await import('@/lib/connectors/storage-failure')
+        content.getRenderableContent.mockRejectedValueOnce(storageFailure('locked', 'OneDrive'))
+        const res = await get()
+        expect(res.status).toBe(409)
+        expect(await res.json()).toEqual({ error: storageFailure('locked', 'OneDrive').message, code: 'locked' })
+    })
+
+    it('a connection that needs renewing says so, naming the storage', async () => {
+        content.getRenderableContent.mockRejectedValueOnce(new Error('Could not get access token'))
+        const res = await get()
+        expect(res.status).toBe(502)
+        expect((await res.json()).error).toBe('The connection to Google Drive needs renewing. Reconnect the storage, then try again.')
+    })
+})

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 
-const { updateProject, refresh } = vi.hoisted(() => ({ updateProject: vi.fn(async () => ({})), refresh: vi.fn() }))
+const { updateProject, refresh } = vi.hoisted(() => ({ updateProject: vi.fn(async (..._args: unknown[]) => ({ ok: true, data: undefined })), refresh: vi.fn() }))
 vi.mock('@/lib/actions/project', () => ({ updateProject }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh }) }))
 vi.mock('next/link', () => ({ default: ({ href, children, ...rest }: any) => <a href={href} {...rest}>{children}</a> }))

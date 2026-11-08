@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { adminFailure } from '@/app/api/system/admin-error'
 import { createClient } from '@supabase/supabase-js'
 import { prisma } from '@/lib/prisma'
 import { inngest } from '@/lib/inngest/client'
@@ -159,10 +160,6 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(response)
   } catch (error) {
-    logger.error('Error in integrations status route', error as Error)
-    return NextResponse.json(
-      { error: 'Failed to check integration status' },
-      { status: 500 }
-    )
+    return adminFailure('check the integrations', error)
   }
 }

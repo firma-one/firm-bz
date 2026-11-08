@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input'
 import { BlockedTag } from '@/components/files/blocked-tag'
 import { BLOCKED_NOTE_MAX, BLOCKED_REASONS, BLOCKED_REASON_LABEL, type BlockedFlag, type BlockedReason } from '@/lib/files/blocked'
 import { cn } from '@/lib/utils'
+import { failureReason } from '@/lib/files/action-failure'
 
 /**
  * The Details pane's Blocked row (.claude/plans/deliverable-stages-blocked.md, section 3): what the
@@ -51,12 +52,15 @@ export function BlockedProperty({
             })
             const data = await res.json().catch(() => ({}))
             if (!res.ok) {
-                onError(data.error ?? 'Please try again.')
+                onError(typeof data.error === 'string' && data.error ? data.error : `The server answered ${res.status}. Try again.`)
                 return
             }
             setBlocked(data.blocked ?? null)
             setNote(data.blocked?.note ?? '')
             onSaved(data.blocked ?? null)
+        } catch (e) {
+            // A request that never got there (P1-65): say so; what's shown stays as it was saved.
+            onError(failureReason(e))
         } finally {
             setSaving(false)
         }

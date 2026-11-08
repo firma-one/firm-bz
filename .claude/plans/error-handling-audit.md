@@ -1,6 +1,44 @@
 # User-facing error handling: audit
 
-**Status:** inventory only, 2026-11-07. No app code changed, nothing committed. Line numbers are from `dev` on that date, with another session's stage work uncommitted in `engagement-file-list.tsx`, `use-engagement-file-ops.ts` and `deliverable-detail-panel.tsx`, so those three may drift. Raw pass output is in [error-handling-audit-inventory.md](error-handling-audit-inventory.md).
+**Status:** inventory 2026-11-07; **fixed 2026-11-08**, uncommitted on `dev` at the time of writing. Every P0 and P1 is fixed, and every P2 except P2-46 and P2-63 (see "Still open" below). Line numbers in the tables are from the inventory, before the fixes. Raw pass output is in [error-handling-audit-inventory.md](error-handling-audit-inventory.md).
+
+## Fix status, 2026-11-08
+
+Six fix agents worked in three waves, each owning its own files, with a typecheck and the full suite between waves. Each fix has a test next to it. **Nothing ran against a live Drive, OneDrive, Polar or production**: every fix is checked by tests and by reading the code.
+
+**What changed, by root cause**
+1. **Server action reasons.** `lib/actions/action-result.ts` adds `asResult`, `ActionResult` and `userFacing`. Browser-called actions answer `{ ok, error, warning }` and never throw a reason. The guard `lib/actions/action-result-guard.test.ts` fails on a dropped result, on `e.message` from a throwing action, on `instanceof` against an action error class, and on a `userFacing` throw from an export that doesn't return `ActionResult`. The plan-cap throws in `lib/billing` are `userFacing` too.
+2. **Permission methods.** `revokePermission`, `grantFolderPermission`, the folder downgrade and upgrade calls, and `listFilePermissions` throw `StorageFailure` on a refusal on both providers. New adapter methods: `revokeFolderPermissionByEmail`, `restrictFolderToOwnerOnly` and `getTrashState`. Every Drive permission URL carries `supportsAllDrives=true`, enforced by a guard test.
+3. **Record kept until confirmed.** A revoked row keeps its permission id until storage confirms. Demote, removal, engagement delete, unlock, reject and Internal only all revoke before erasing, and keep what storage refused.
+4. **Jobs report.** `safeInngestSend` returns a boolean. Revoke and grant jobs retry once, then send the new Inbox notice `STORAGE_ACCESS_NOT_CHANGED` to the Leads (`lib/storage-access-notice.ts`). A failed workspace move is recorded as failed.
+5. **Failed loads.** `components/ui/load-failed.tsx` replaces every false empty in the audit.
+6. **Writes read the answer.** `useSaving` toasts any rejected save. The deliverable pane, comments, Board, Inbox and push read `.ok` and roll back.
+7. **Partial results.** "X of Y" with what failed and why, from `lib/files/partial-outcome.ts`, covering upload, import, folder copy, ZIP, Attach all, health report and scaffold.
+8. **Storage reasons everywhere.** Preview, download, sharing, intake, folder create and list, upload start, and connector setup all carry `StorageFailure` words. A null token gives the `reconnect` reason.
+9. **Legacy `Firm.connectorId`.** No longer read by Migrate, Dossier, the sharing and intake routes, connector setup or the Board. The remaining readers are admin, dead onboarding routes and the last fallback in `resolve-client-connector.ts`.
+10. **Dead paths.** The deliverable pane's trash, onboarding's removed `create-sandbox` and the invite's Sign Out now point at working code.
+
+**Decisions taken as recommended** (the table below): partial copies keep what worked and report "X of Y"; jobs notify the Leads in the Inbox; a refused grant or an unpreparable PDF copy refuses the open for Contributor · Limited Access and Reviewer; removing or lowering a role takes back folder access; demote revokes; reject trashes first and keeps the row on refusal.
+
+**Behavior changes to know about**
+- Search for Contributor · Limited Access and Reviewer is now limited to what's shared with them. Before, it was unfiltered.
+- Bulk download is scoped to the engagement. It applies `allowDownload` and the private-document rule, and leaves out a Reviewer's PDF-only files.
+- The deliverable pane asks before Move to trash. The /tour demo pane isn't mirrored.
+- The members list fails as a whole if one person's lookup fails, rather than quietly leaving them out. Every picker shows the failure with a retry.
+- `getUserFirms` throws on a database failure, so `/d` shows the error page instead of "no firms".
+- A paid Polar webhook that matches no group answers 500, so Polar retries, and is logged as an error. In the sandbox it only warns.
+- Reprovision firms (admin) refuses with 409, because nothing listens for its event.
+- Fixed in passing: corrupt small ZIPs (a pooled Buffer's `.buffer`), the regrant email saying "POCKETT", and the maintenance GET ordering by a column that doesn't exist.
+
+**Still open**
+- **Check 1** (production #441): not seen in a browser. The fix doesn't depend on it.
+- **Check 3** (Shared Drive revoke): fixed in code and guard-tested, not tried on a live Shared Drive.
+- **P2-46** `lib/email.ts` returns as if sent when SMTP is unset: left alone, because another session works on email.
+- **P2-63** dead routes: kept, per the rule of no deletion until sign-off. `lib/actions/client-errors.ts` is unused now and kept for the same reason.
+- `removeFirmMember` keeps the person's engagement rows. This predates the audit and belongs with the access-gates work.
+- `getRecentVisits` answers `[]` on failure. It's deliberate: recents are a convenience list.
+- The reminders panel's done and hide buttons are commented out, so their new error paths can't be reached yet.
+- Live checks worth doing before launch: on a real Drive and OneDrive, with an account that isn't the Drive's owner, revoke, remove a member, lower a role, demote, lock and unlock, then confirm in Drive that access really changed.
 
 **Question (Deepak):** "Should we should audit such and other user encountered - error handling scenarios ?" It came from a rename toast that said only "Failed to rename file" while OneDrive had the file locked. His rule: "We cant have no reason being stated."
 

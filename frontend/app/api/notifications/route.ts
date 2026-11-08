@@ -4,6 +4,25 @@ import { getPrismaWithRls } from '@/lib/prisma'
 import { canManageClient, canManageProject } from '@/lib/permission-helpers'
 import { getHomeFirms } from '@/lib/home/home-firms'
 import { placeNotifications } from '@/lib/notification-links'
+import { logger } from '@/lib/logger'
+
+/** The Inbox shows these words as they are (EM-1, P2-26, P2-28). */
+const SIGNED_OUT = 'Your session has ended. Sign in again.'
+
+/**
+ * A handler whose unexpected failure answers in words, not a bare 500: the Inbox reads `error` and
+ * says "Couldn't load your updates · …", or puts a dismissed update back with why.
+ */
+function inWords(name: string, words: string, handler: (request: NextRequest) => Promise<NextResponse>) {
+  return async (request: NextRequest): Promise<NextResponse> => {
+    try {
+      return await handler(request)
+    } catch (e) {
+      logger.error(`/api/notifications ${name} failed`, e instanceof Error ? e : new Error(String(e)), 'Notifications')
+      return NextResponse.json({ error: words }, { status: 500 })
+    }
+  }
+}
 
 function daysAgoUtc(days: number) {
   const d = new Date()
@@ -138,10 +157,10 @@ async function resolveClientAndProjectIds(args: {
   return { clientId: client.id, projectId: project?.id ?? null }
 }
 
-export async function GET(request: NextRequest) {
+async function list(request: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!user) return NextResponse.json({ error: SIGNED_OUT }, { status: 401 })
 
   const authHeader = request.headers.get('authorization') || request.headers.get('Authorization')
   const bearer = authHeader?.startsWith('Bearer ') ? authHeader.slice('Bearer '.length) : null
@@ -213,10 +232,10 @@ export async function GET(request: NextRequest) {
   })
 }
 
-export async function PATCH(request: NextRequest) {
+async function markRead(request: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!user) return NextResponse.json({ error: SIGNED_OUT }, { status: 401 })
 
   const authHeader = request.headers.get('authorization') || request.headers.get('Authorization')
   const bearer = authHeader?.startsWith('Bearer ') ? authHeader.slice('Bearer '.length) : null
@@ -258,10 +277,10 @@ export async function PATCH(request: NextRequest) {
   return NextResponse.json({ success: true })
 }
 
-export async function DELETE(request: NextRequest) {
+async function dismiss(request: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!user) return NextResponse.json({ error: SIGNED_OUT }, { status: 401 })
 
   const authHeader = request.headers.get('authorization') || request.headers.get('Authorization')
   const bearer = authHeader?.startsWith('Bearer ') ? authHeader.slice('Bearer '.length) : null
@@ -305,3 +324,6 @@ export async function DELETE(request: NextRequest) {
   return NextResponse.json({ success: true })
 }
 
+export const GET = inWords('GET', 'Something went wrong on our side. Try again.', list)
+export const PATCH = inWords('PATCH', 'Something went wrong on our side. Try again.', markRead)
+export const DELETE = inWords('DELETE', 'Something went wrong on our side. Try again.', dismiss)

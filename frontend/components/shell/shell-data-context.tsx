@@ -7,6 +7,7 @@ import { getInboxCounts, type InboxCounts } from "@/lib/actions/inbox"
 import { INBOX_CHANGED_EVENT } from "@/components/inbox/inbox-items"
 import { useSidebarFirms } from "@/lib/sidebar-firms-context"
 import { useViewAs } from "@/lib/view-as-context"
+import { failureFrom, failureReason } from "@/lib/files/action-failure"
 
 /**
  * Shared data for the New UI shell (sidebar, header breadcrumbs, workspace switcher).
@@ -35,8 +36,18 @@ type ShellDataValue = {
     firmInUrl: boolean
     data: ShellSidebarData | null
     loading: boolean
+    /**
+     * Set when the sidebar's data failed to load, so the sidebar says it couldn't load rather than
+     * "No active engagements yet." `refresh` tries again.
+     */
+    loadFailed: boolean
     /** Firm-level can_manage, with View As applied. */
     canManage: boolean
+    /**
+     * Why the caller's permissions didn't load, when they didn't. `canManage` is false then, which
+     * would hide Settings and Members from an admin as though they lacked access; the sidebar says so.
+     */
+    permissionsError: string | null
     /** Unread Inbox items per firm id (platform-wide notifications already added to each). */
     inboxCountFor: (firmId: string | null | undefined) => number
     /** Unread items across all the user's firms plus platform-wide ones — the cross-firm Inbox's badge. */
@@ -66,7 +77,9 @@ export function ShellDataProvider({ children }: { children: ReactNode }) {
 
     const [data, setData] = useState<ShellSidebarData | null>(null)
     const [loading, setLoading] = useState(true)
+    const [loadFailed, setLoadFailed] = useState(false)
     const [orgCanManage, setOrgCanManage] = useState(false)
+    const [permissionsError, setPermissionsError] = useState<string | null>(null)
     const requestId = useRef(0)
     const [inboxCounts, setInboxCounts] = useState<InboxCounts>({ byFirm: {}, platform: 0 })
 
@@ -96,14 +109,22 @@ export function ShellDataProvider({ children }: { children: ReactNode }) {
         const id = ++requestId.current
         setLoading(true)
         const [sidebar, perms] = await Promise.all([
-            getShellSidebarData(firmSlug).catch(() => null),
+            getShellSidebarData(firmSlug).then((d) => ({ ok: true as const, d }), () => ({ ok: false as const })),
             fetch(`/api/permissions/firm?firmSlug=${encodeURIComponent(firmSlug)}`)
-                .then((r) => (r.ok ? r.json() : null))
-                .catch(() => null),
+                .then(async (r) => {
+                    if (!r.ok) throw await failureFrom(r)
+                    return { ok: true as const, d: await r.json() as { canManage?: boolean } }
+                })
+                .catch((e: unknown) => ({ ok: false as const, reason: failureReason(e) })),
         ])
         if (id !== requestId.current) return
-        setData(sidebar)
-        setOrgCanManage(perms?.canManage === true)
+        // A failed refresh keeps what the sidebar already shows for this firm; another firm's data
+        // is never left standing in for it.
+        if (sidebar.ok) setData(sidebar.d)
+        else setData((prev) => (prev?.firm.slug === firmSlug ? prev : null))
+        setLoadFailed(!sidebar.ok)
+        setOrgCanManage(perms.ok ? perms.d.canManage === true : false)
+        setPermissionsError(perms.ok ? null : perms.reason)
         setLoading(false)
     }, [firmSlug])
 
@@ -132,13 +153,15 @@ export function ShellDataProvider({ children }: { children: ReactNode }) {
             firmInUrl: Boolean(match),
             data,
             loading,
+            loadFailed,
             canManage,
+            permissionsError,
             inboxCountFor: (firmId) => (firmId ? (inboxCounts.byFirm[firmId] ?? 0) + inboxCounts.platform : 0),
             inboxTotal: firms.reduce((n, f) => n + (inboxCounts.byFirm[f.id] ?? 0), inboxCounts.platform),
             refresh: () => void load(),
         }),
         // eslint-disable-next-line react-hooks/exhaustive-deps
-        [firms, firmSlug, groupSlug, Boolean(match), data, loading, canManage, load, inboxCounts]
+        [firms, firmSlug, groupSlug, Boolean(match), data, loading, loadFailed, canManage, permissionsError, load, inboxCounts]
     )
 
     return <ShellDataContext.Provider value={value}>{children}</ShellDataContext.Provider>

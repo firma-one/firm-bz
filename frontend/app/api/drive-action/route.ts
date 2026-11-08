@@ -203,14 +203,24 @@ export async function POST(request: NextRequest) {
                     return NextResponse.json({ error: message }, { status: trashStatus })
                 }
 
-                // Get metadata using the successful connector to determine if it's a folder or file
+                // Get metadata using the successful connector to determine if it's a folder or file.
+                // The item is in the trash by now: a failed read here must not answer "Move to trash
+                // failed" (P2-05). Firma's own row says whether it's a folder when the storage won't.
                 const trashAdapter = await getPermissionAdapter(targetId)
-                const fileMeta = trashAdapter ? await trashAdapter.getFileMetadata(targetId, fileId) : null
+                const fileMeta = trashAdapter
+                    ? await trashAdapter.getFileMetadata(targetId, fileId).catch((err) => {
+                        logger.warn(`[trash] Couldn't read ${fileId} after trashing it`, { error: err instanceof Error ? err.message : String(err) })
+                        return null
+                    })
+                    : null
+                const isFolderTrashed = fileMeta
+                    ? fileMeta.mimeType === 'application/vnd.google-apps.folder'
+                    : !!(await prisma.engagementDocument.findFirst({ where: { externalId: fileId }, select: { isFolder: true } }).catch(() => null))?.isFolder
 
                 // Trigger background reconciliation via Inngest. From an engagement's Files list the
                 // cleanup waits out the Undo window first (.claude/plans/undo-move-to-bin.md).
                 const reconcile = { organizationId: successOrgId, externalId: fileId, connectorId: targetId, undoable: Boolean(engagementId) }
-                if (fileMeta?.mimeType === 'application/vnd.google-apps.folder') {
+                if (isFolderTrashed) {
                     await safeInngestSend('folder.delete.requested', reconcile)
                 } else {
                     await safeInngestSend('file.delete.requested', reconcile)
@@ -290,6 +300,10 @@ export async function POST(request: NextRequest) {
                         await restoreAdapter.restoreFile(restoreConnectorId, fileId)
                     } catch (err) {
                         logger.error(`[restore] Failed to restore fileId=${fileId}`, err as Error)
+                        // The storage's reason, when it gave one (a locked file, no permission).
+                        if (err instanceof StorageFailure) {
+                            return NextResponse.json({ error: `Couldn’t restore it · ${err.message}`, code: err.reason }, { status: err.status })
+                        }
                         return NextResponse.json({ error: 'Couldn’t restore it. Try again, or restore it from the trash in your storage.' }, { status: 500 })
                     }
                 }
@@ -344,6 +358,8 @@ export async function POST(request: NextRequest) {
                             source: c.name ?? c.id
                         }))
                     } catch (e) {
+                        // A refused read isn't "nothing stale": say why (P2-37).
+                        if (e instanceof StorageFailure) throw e
                         logger.error(`[Stale Action] Failed to search stale files for ${c.id}`, e as Error)
                         return []
                     }
@@ -409,6 +425,10 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(result)
 
     } catch (error) {
+        // A storage read or change refused says why (the scope check, duplicate and stale searches).
+        if (error instanceof StorageFailure) {
+            return NextResponse.json({ error: error.message, code: error.reason }, { status: error.status })
+        }
         logger.error('Action API Error:', error as Error)
         return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
     }

@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { useAuth } from '@/lib/auth-context'
 import { useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
+import { failureFrom, failureReason } from '@/lib/files/action-failure'
 
 interface StatusCheckResult {
   database: { status: 'up' | 'down'; latencyMs?: number; error?: string }
@@ -62,6 +63,7 @@ export default function IntegrationsPage() {
   const [error, setError] = useState<string | null>(null)
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
+  const [stuckFirmsError, setStuckFirmsError] = useState<string | null>(null)
 
   const fetchStatus = async () => {
     try {
@@ -71,11 +73,11 @@ export default function IntegrationsPage() {
       const res = await fetch('/api/system/integrations/status', {
         headers: { Authorization: `Bearer ${token}` },
       })
-      if (!res.ok) throw new Error(`Status check failed: ${res.status}`)
+      if (!res.ok) throw await failureFrom(res)
       setStatusData(await res.json())
       setError(null)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch status')
+      setError(`Couldn't check the integrations · ${failureReason(err)}`)
     }
   }
 
@@ -87,13 +89,15 @@ export default function IntegrationsPage() {
       const res = await fetch('/api/system/stuck-firms', {
         headers: { Authorization: `Bearer ${token}` },
       })
-      if (!res.ok) throw new Error(`Query failed: ${res.status}`)
+      if (!res.ok) throw await failureFrom(res)
       const data: StuckFirmsResponse = await res.json()
       setStuckFirms(data.firms)
+      setStuckFirmsError(null)
       setSelectedFirms(new Set())
       setError(null)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch stuck firms')
+      // Kept apart from the banner, so the list says it didn't load rather than "All caught up".
+      setStuckFirmsError(failureReason(err))
     }
   }
 
@@ -126,15 +130,22 @@ export default function IntegrationsPage() {
         body: JSON.stringify({ firmIds: Array.from(selectedFirms) }),
       })
 
-      if (!res.ok) throw new Error(`Reprovision failed: ${res.status}`)
+      if (!res.ok) throw await failureFrom(res)
 
       const result: ReprovisionResponse = await res.json()
       setError(null)
 
-      // Clear selection and show success message
+      // Only what really started is "queued"; the rest are named with why.
       const queued = result.queued
+      const asked = queued + result.skipped + result.errors.length
       setSelectedFirms(new Set())
-      setSuccessMessage(`Queued ${queued} firm${queued === 1 ? '' : 's'} for provisioning. Will refresh in 30 seconds.`)
+      if (result.errors.length > 0) {
+        setError(
+          `Started ${queued} of ${asked}. Not started: `
+          + result.errors.map((e) => `${stuckFirms.find((f) => f.id === e.firmId)?.name ?? e.firmId} (${e.error})`).join('; '),
+        )
+      }
+      if (queued > 0) setSuccessMessage(`Queued ${queued} firm${queued === 1 ? '' : 's'} for provisioning. Will refresh in 30 seconds.`)
 
       // Clear success message after 5 seconds
       setTimeout(() => setSuccessMessage(null), 5000)
@@ -145,7 +156,7 @@ export default function IntegrationsPage() {
         setIsReprovisioning(false)
       }, 1500)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to reprovision')
+      setError(`Couldn't resume provisioning · ${failureReason(err)}`)
       setIsReprovisioning(false)
     }
   }
@@ -180,9 +191,11 @@ export default function IntegrationsPage() {
   }
 
   const copyToClipboard = (value: string, itemId: string) => {
-    navigator.clipboard.writeText(value)
-    setCopiedId(itemId)
-    setTimeout(() => setCopiedId(null), 2000)
+    // The tick only once the clipboard has it.
+    navigator.clipboard.writeText(value).then(() => {
+      setCopiedId(itemId)
+      setTimeout(() => setCopiedId(null), 2000)
+    }, () => setError("Couldn't copy · the browser blocked the clipboard."))
   }
 
   const getServiceStatus = (service: ServiceKey): { icon: any; bgColor: string; textColor: string } => {
@@ -310,6 +323,10 @@ export default function IntegrationsPage() {
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+          </div>
+        ) : stuckFirmsError && stuckFirms.length === 0 ? (
+          <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
+            Couldn&apos;t load the stuck firms · {stuckFirmsError}
           </div>
         ) : stuckFirms.length === 0 ? (
           <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-900">

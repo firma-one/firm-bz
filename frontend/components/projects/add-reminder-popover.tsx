@@ -12,6 +12,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { DateTimePicker } from '@/components/ui/date-time-picker'
 import { createManualReminder } from '@/lib/actions/user-reminders'
+import { failureReason } from '@/lib/files/action-failure'
 import { useToast } from '@/components/ui/toast'
 
 interface AddReminderPopoverProps {
@@ -45,7 +46,7 @@ export function AddReminderPopover({
         if (!label) return
         setSaving(true)
         try {
-            await createManualReminder({
+            const result = await createManualReminder({
                 entityKey,
                 entityValue,
                 action: label,
@@ -55,13 +56,17 @@ export function AddReminderPopover({
                 ctaUrl,
                 note: note.trim() || null,
             })
+            if (!result.ok) {
+                addToast({ type: 'error', title: "Couldn't save the reminder", message: result.error })
+                return
+            }
             addToast({ type: 'success', title: 'Reminder added', message: `"${label}" saved.` })
             setOpen(false)
             setAction('')
             setDueDate('')
             setNote('')
-        } catch {
-            addToast({ type: 'error', title: 'Failed', message: 'Could not save reminder.' })
+        } catch (e) {
+            addToast({ type: 'error', title: "Couldn't save the reminder", message: failureReason(e) })
         } finally {
             setSaving(false)
         }

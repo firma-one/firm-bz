@@ -11,6 +11,33 @@ import {
     SCAFFOLD_QUESTIONS, buildScaffold, flattenScaffold, unusedAnswers,
     type ScaffoldAnswers, type ScaffoldEdits, type ScaffoldQuestion, type ScaffoldQuestionId,
 } from '@/lib/ai/files-agent/scaffold'
+import { ASSISTANT } from '@/lib/ai/assistant'
+import { BRIO_UNREACHABLE } from '@/lib/ai/brio-failure'
+
+/** What the scaffold route answers on success: counts, and each folder it couldn't create, with why. */
+interface ScaffoldResult {
+    created: number
+    failed: number
+    total: number
+    failures?: Array<{ path: string; name: string; reason: string }>
+}
+
+/** The thread's record of a run: the count, then each folder not created and why. */
+export function scaffoldOutcome(r: ScaffoldResult): { ok: boolean; message: string } {
+    const plural = (n: number) => `${n} folder${n === 1 ? '' : 's'}`
+    const notCreated = (r.failures ?? []).map((f) => `- ${f.path}: ${f.reason}`)
+    if (r.failed === 0) {
+        return {
+            ok: true,
+            message: `Created ${plural(r.created)}, recorded in the audit trail as ${ASSISTANT.name}, your Executive Assistant.`,
+        }
+    }
+    // Nothing created is a failure, not a partial success.
+    const head = r.created === 0
+        ? "Couldn't create the folders, so nothing was created."
+        : `Created ${r.created} of ${plural(r.total)}. Not created:`
+    return { ok: false, message: [head, ...notCreated].join('\n') }
+}
 
 /**
  * The folder-structure interview, asked one question at a time.
@@ -133,6 +160,8 @@ export function FilesScaffoldPanel({
     const [approval, setApproval] = useState<string | null>(null)
     /** A previous run, if this engagement has been scaffolded before. Advisory only. */
     const [previousRun, setPreviousRun] = useState<{ at: string; folderCount: number } | null>(null)
+    /** Why the preview's token didn't arrive, which otherwise left Create disabled with no word. */
+    const [previewError, setPreviewError] = useState<string | null>(null)
     useEffect(() => {
         // Runs as soon as the panel OPENS, not only once the answers are complete: a structure
         // that already exists should stop the interview before the first question, not after the
@@ -140,18 +169,27 @@ export function FilesScaffoldPanel({
         // the previous run and a null token, which is exactly what is wanted here.
         if (!open || !token) { setApproval(null); return }
         let cancelled = false
+        setPreviewError(null)
         fetch(
             `/api/projects/${projectId}/files-agent/scaffold?answers=${encodeURIComponent(JSON.stringify(answers))}`
             + `&edits=${encodeURIComponent(JSON.stringify(edits))}`,
             { headers: { Authorization: `Bearer ${token}` }, credentials: 'include' },
         )
-            .then((res) => (res.ok ? res.json() : null))
+            .then(async (res) => {
+                const body = await res.json().catch(() => null)
+                if (!res.ok) throw new Error(body?.error ?? `${ASSISTANT.name} couldn't prepare these folders. Try again.`)
+                return body
+            })
             .then((body) => {
                 if (cancelled) return
                 setApproval(body?.data?.token ?? null)
                 setPreviousRun(body?.data?.previousRun ?? null)
             })
-            .catch(() => { if (!cancelled) setApproval(null) })
+            .catch((e) => {
+                if (cancelled) return
+                setApproval(null)
+                setPreviewError(e instanceof TypeError ? BRIO_UNREACHABLE : e instanceof Error ? e.message : null)
+            })
         return () => { cancelled = true }
     }, [open, complete, answers, edits, projectId, token])
 
@@ -165,31 +203,39 @@ export function FilesScaffoldPanel({
         }
         setCreating(true)
         try {
-            const res = await fetch(`/api/projects/${projectId}/files-agent/scaffold`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                credentials: 'include',
-                body: JSON.stringify({ answers, edits, token: approval }),
-            })
-            const body = await res.json().catch(() => ({}))
-            if (!res.ok) {
-                setOutcome({ ok: false, message: body.error ?? 'Please try again.' })
+            let res: Response
+            try {
+                res = await fetch(`/api/projects/${projectId}/files-agent/scaffold`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                    credentials: 'include',
+                    body: JSON.stringify({ answers, edits, token: approval }),
+                })
+            } catch {
+                // The request never got there, so no folder was made.
+                setOutcome({ ok: false, message: BRIO_UNREACHABLE })
                 return
             }
-            const { created, failed } = body.data
+            const body = await res.json().catch(() => ({}))
+            if (!res.ok) {
+                // The route's words: an expired preview, an engagement already set up, or why the
+                // storage refused before anything was created.
+                setOutcome({
+                    ok: false,
+                    message: body.error ?? `${ASSISTANT.name} couldn't create the folders. Nothing was created. Try again.`,
+                })
+                return
+            }
+            if (!body?.data) throw new Error('No result')
             // In the thread, and the panel stays open. Closing it on success took the result away
             // with the questions that produced it, leaving a toast as the only record of what
             // happened — in a panel whose whole job is to be the record.
-            setOutcome({
-                ok: failed === 0,
-                message: failed > 0
-                    ? `Created ${created} folder${created === 1 ? '' : 's'}, ${failed} could not be created.`
-                    : `Created ${created} folder${created === 1 ? '' : 's'}, recorded in the audit trail as `
-                        + 'Brio, your Executive Assistant.',
-            })
-            onCreated?.()
+            const result = body.data as ScaffoldResult
+            setOutcome(scaffoldOutcome(result))
+            if (result.created > 0) onCreated?.()
         } catch {
-            setOutcome({ ok: false, message: 'Please try again.' })
+            // Past the request, so folders may have been made: point at the list, don't guess.
+            setOutcome({ ok: false, message: `${ASSISTANT.name} couldn't read the result. Refresh the file list to see which folders were created.` })
         } finally {
             setCreating(false)
         }
@@ -289,7 +335,7 @@ export function FilesScaffoldPanel({
                     {outcome.ok
                         ? <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
                         : <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" aria-hidden />}
-                    <p className={`min-w-0 flex-1 text-xs leading-relaxed ${
+                    <p role="status" className={`min-w-0 flex-1 whitespace-pre-line text-xs leading-relaxed ${
                         outcome.ok ? 'text-gray-700' : 'text-amber-800'
                     }`}>
                         {outcome.message}
@@ -407,6 +453,12 @@ export function FilesScaffoldPanel({
                                 </p>
                             ))}
                         </div>
+                    )}
+
+                    {previewError && (
+                        <p role="status" className="border-t border-gray-100 bg-amber-50/50 px-3.5 py-2 text-[10px] leading-snug text-amber-800">
+                            Couldn&apos;t prepare these folders · {previewError}
+                        </p>
                     )}
 
                     <p className="border-t border-gray-100 px-3.5 py-2 text-[10px] leading-relaxed text-gray-400">

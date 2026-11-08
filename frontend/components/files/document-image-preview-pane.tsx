@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import { ZoomIn, ZoomOut, Undo2 } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { documentName } from '@/lib/preview-kinds'
+import { PreviewUnavailable, useMediaFailure } from '@/components/files/preview-unavailable'
 
 const ZOOM_MIN = 25
 const ZOOM_MAX = 400
@@ -34,6 +35,8 @@ export function DocumentImagePreviewPane({ document, projectId }: DocumentImageP
         if (!effectiveProjectId || !documentId) return null
         return `/api/projects/${effectiveProjectId}/documents/${encodeURIComponent(documentId)}/preview?native=1`
     }, [effectiveProjectId, documentId])
+    // A refused image used to show the browser's broken-image icon (P1-40).
+    const media = useMediaFailure(src)
 
     if (!src) {
         return (
@@ -97,13 +100,19 @@ export function DocumentImagePreviewPane({ document, projectId }: DocumentImageP
             </div>
 
             <div className="flex-1 min-h-0 overflow-auto bg-[#f3f4f6] flex items-center justify-center p-4">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                    src={src}
-                    alt={documentName(document) || 'Preview'}
-                    style={{ width: `${zoom}%`, maxWidth: zoom <= 100 ? '100%' : 'none' }}
-                    className="object-contain"
-                />
+                {media.failed ? (
+                    <PreviewUnavailable reason={media.reason} onReload={media.reload} />
+                ) : (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                        key={media.attempt}
+                        src={src}
+                        alt={documentName(document) || 'Preview'}
+                        onError={media.fail}
+                        style={{ width: `${zoom}%`, maxWidth: zoom <= 100 ? '100%' : 'none' }}
+                        className="object-contain"
+                    />
+                )}
             </div>
         </div>
     )

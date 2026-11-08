@@ -38,22 +38,21 @@ export async function GET(
       select: { userId: true, role: true },
     })
 
+    // A lookup that fails fails the load (P2-21): a list quietly missing people reads as "they aren't
+    // on this engagement" in every picker. Only an account that's gone (no user, no email) is left out.
     const enriched = (
       await Promise.all(
         members.map(async (m) => {
-          try {
-            const { data } = await supabaseAdmin.auth.admin.getUserById(m.userId)
-            const email = data?.user?.email
-            if (!email) return null
-            const meta = data?.user?.user_metadata ?? {}
-            const name = resolveDisplayName(meta, email)
-            const avatarUrl = (meta.avatar_url ?? meta.picture ?? null) as string | null
-            // Flagged rather than filtered: Brio belongs in the Members list, but not in pickers
-            // that are choosing a person to do work. Consumers decide which they are.
-            return { userId: m.userId, email, name, role: m.role, avatarUrl, isAgent: isAgentUser(data?.user) }
-          } catch {
-            return null
-          }
+          const { data, error } = await supabaseAdmin.auth.admin.getUserById(m.userId)
+          if (error && error.status !== 404) throw error
+          const email = data?.user?.email
+          if (!email) return null
+          const meta = data?.user?.user_metadata ?? {}
+          const name = resolveDisplayName(meta, email)
+          const avatarUrl = (meta.avatar_url ?? meta.picture ?? null) as string | null
+          // Flagged rather than filtered: Brio belongs in the Members list, but not in pickers
+          // that are choosing a person to do work. Consumers decide which they are.
+          return { userId: m.userId, email, name, role: m.role, avatarUrl, isAgent: isAgentUser(data?.user) }
         })
       )
     ).filter(Boolean) as { userId: string; email: string; name: string; role: string; avatarUrl: string | null; isAgent: boolean }[]
@@ -61,6 +60,6 @@ export async function GET(
     return NextResponse.json({ members: enriched })
   } catch (e) {
     console.error('GET members error', e)
-    return NextResponse.json({ error: 'Failed to fetch members' }, { status: 500 })
+    return NextResponse.json({ error: "Couldn't load the people on this engagement. Try again." }, { status: 500 })
   }
 }

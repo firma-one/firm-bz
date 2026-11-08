@@ -8,6 +8,7 @@ const { pane } = vi.hoisted(() => ({ pane: { clearPane: vi.fn(), canClose: vi.fn
 vi.mock('@/lib/right-pane-context', () => ({
     useRightPane: () => pane,
 }))
+vi.mock('@/components/ui/toast', () => ({ useToast: () => ({ addToast: vi.fn() }) }))
 
 import { DocumentDocCommentsPane } from './document-doc-comments-pane'
 
@@ -21,6 +22,7 @@ let posted: { method: string; body: any }[] = []
 /** Marks of the discussion as read (POST …/doc-comments/read), kept apart from what's posted. */
 let reads: string[] = []
 let existing: any[] = []
+let readOnly = false
 /** messageId → its reminder records, as the reminders endpoint returns them. */
 let reminders: Record<string, { userId: string; reminderId: string; dateValue: string | null }[]> = {}
 
@@ -28,6 +30,7 @@ beforeEach(() => {
     posted = []
     reads = []
     existing = []
+    readOnly = false
     reminders = {}
     vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => { cb(0); return 0 })
     // jsdom has no scrolling.
@@ -46,12 +49,21 @@ beforeEach(() => {
         if (url.includes('/reminders')) return json({ reminders: reminders[new URL(url, 'http://x').searchParams.get('messageId') ?? ''] ?? [] })
         if (method === 'POST') return json({ message: { id: 'm-new', createdAt: new Date().toISOString(), authorUserId: 'me', authorEmail: 'me@firm.com', content: body.content } })
         if (method === 'PATCH') return json({})
-        return json({ messages: existing })
+        return json({ messages: existing, readOnly })
     }))
 })
 afterEach(() => vi.unstubAllGlobals())
 
 const renderPane = () => render(<DocumentDocCommentsPane engagementId="e1" documentId="d1" documentName="Report" />)
+
+describe('a completed engagement', () => {
+    it('reads, with no way to add to the thread', async () => {
+        readOnly = true
+        renderPane()
+        expect(await screen.findByText("This engagement is completed, so it's read only.")).toBeTruthy()
+        expect(screen.queryByRole('textbox')).toBeNull()
+    })
+})
 
 /** Lets the mocked requests (members, comments) resolve and their state land. */
 const settle = () => act(async () => { await new Promise((r) => setTimeout(r, 20)) })

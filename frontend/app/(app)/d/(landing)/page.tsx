@@ -71,22 +71,32 @@ export default async function FirmsPage({
     // something meaningful to do here (2+ groups, or a single group where the user isn't admin
     // and can create their own workspace); otherwise fall through to the defensive firm-picker
     // fallback below.
-    if (await shouldShowSwitchWorkspace()) {
-        return (
-            <div className="h-full flex flex-col p-0 bg-transparent">
-                <GroupPicker />
-            </div>
-        )
+    //
+    // A failed load here lands on the group picker too: it loads again in the browser, and says
+    // "Couldn't load your workspaces" with Retry when it still can't, rather than "No firms found".
+    const groupPicker = (
+        <div className="h-full flex flex-col p-0 bg-transparent">
+            <GroupPicker />
+        </div>
+    )
+    let showPicker: boolean
+    try {
+        showPicker = await shouldShowSwitchWorkspace()
+    } catch (e) {
+        if (isRedirectError(e)) throw e
+        showPicker = true
     }
+    if (showPicker) return groupPicker
 
     // Defensive fallback: reached when deliberately navigating to `/d/` with nothing for the
     // group picker to show (single group, already its admin), or if resolveDefaultFirmLandingPath
     // returned null (malformed firm/group data) during auto-routing above.
-    let firms: FirmOption[] = []
+    let firms: FirmOption[]
     try {
         firms = await getUserFirms()
     } catch (e) {
         if (isRedirectError(e)) throw e
+        return groupPicker
     }
 
     return (

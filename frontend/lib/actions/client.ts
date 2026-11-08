@@ -11,8 +11,11 @@ import type { ClientStatus } from '@prisma/client'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 import { upsertFollowUpReminder } from '@/lib/reminders/reminder-service'
 import { assertWithinClientCap, assertWithinClientContactCap } from '@/lib/billing/effective-billing-caps'
-import { ClientLinkedFolderFailedError } from '@/lib/actions/client-errors'
 import { clientPath, firmPath } from '@/lib/navigation/firm-paths'
+import { asResult, userFacing, type ActionResult } from '@/lib/actions/action-result'
+import { asResultWithWarning, connectorProviderName, gone, notAllowed, readableReason, signedOut } from '@/lib/actions/action-reasons'
+import { takeBackEngagementAccess, type EngagementAccessLeft } from '@/lib/connectors/firm-folder-access'
+import { accessLeftAfterDelete, storageProviderName } from '@/lib/storage-access-notice'
 
 export type LwCrmClientStatus = 'PROSPECT' | 'ACTIVE' | 'ON_HOLD' | 'PAST'
 
@@ -36,15 +39,22 @@ export interface CreateClientData {
     billingAddress?: string | null
 }
 
+export type CreatedClient = { id: string; name: string; slug: string }
+
 /**
- * Create a new client (V2)
+ * Create a new client (V2). Answers a `warning` when the client was created but its folder in storage
+ * couldn't be made yet (it's made again with its first engagement, or Set up storage folder in Files).
  */
-export async function createClient(organizationSlug: string, data: CreateClientData) {
+export async function createClient(organizationSlug: string, data: CreateClientData): Promise<ActionResult<CreatedClient>> {
+    return asResultWithWarning('createClient', () => createClientOrThrow(organizationSlug, data))
+}
+
+async function createClientOrThrow(organizationSlug: string, data: CreateClientData): Promise<{ data: CreatedClient; warning?: string }> {
     const supabase = await createSupabaseClient()
     const { data: { user }, error } = await supabase.auth.getUser()
 
     if (error || !user) {
-        throw new Error('Unauthorized')
+        throw signedOut()
     }
 
     // 1. Resolve firm & check permissions
@@ -56,18 +66,13 @@ export async function createClient(organizationSlug: string, data: CreateClientD
         }
     })
 
-    if (!firm) {
-        throw new Error('Firm not found')
+    if (!firm || firm.members.length === 0) {
+        throw notAllowed('add clients to this firm')
     }
 
     const { requireAccess } = await import('@/lib/billing/subscription-gate')
     await requireAccess(firm.id, 'clients.create')
     await assertWithinClientCap(firm.id)
-
-    const membership = firm.members[0]
-    if (!membership) {
-        throw new Error('Unauthorized')
-    }
 
     // 2. Check for duplicate name
     const existingName = await prisma.client.findFirst({
@@ -81,7 +86,7 @@ export async function createClient(organizationSlug: string, data: CreateClientD
     })
 
     if (existingName) {
-        throw new Error('A client with this name already exists')
+        throw userFacing('A client with this name already exists', 'name_taken')
     }
 
     // 3. Generate slug and ensure uniqueness
@@ -103,7 +108,7 @@ export async function createClient(organizationSlug: string, data: CreateClientD
         attempts++
     }
     if (attempts >= MAX_SLUG_ATTEMPTS) {
-        throw new Error('Could not generate a unique client slug. Please try again.')
+        throw userFacing("Couldn't make a unique link for this client. Try again.", 'slug_taken')
     }
 
     // 4. Create client + ClientMember for creator; add Firm Admins as Client Admin (permission hierarchy)
@@ -178,9 +183,14 @@ export async function createClient(organizationSlug: string, data: CreateClientD
         .meta({ name: newClient.name, slug: newClient.slug })
         .fireAndForget()
 
-    // 5. Create storage folder structure if connected (Google Drive or OneDrive)
+    // 5. Create storage folder structure if connected (Google Drive or OneDrive). The client stands
+    // without it (its first engagement, or Set up storage folder in Files, makes it again), but the
+    // person is told it isn't there yet.
+    let folderWarning: string | undefined
+    let folderConnectorId: string | null = null
     try {
         const { connectorId } = await resolveClientConnector(newClient.id)
+        folderConnectorId = connectorId
         if (connectorId) {
             const adapter = await getStorageAdapter(connectorId)
             await ensureAppFolderStructure(
@@ -193,6 +203,9 @@ export async function createClient(organizationSlug: string, data: CreateClientD
         }
     } catch (e) {
         logger.error("Failed to create storage connector folder for client", e as Error)
+        const provider = await connectorProviderName(folderConnectorId)
+        const why = readableReason(e)
+        folderWarning = `Client added, but its folder in ${provider} couldn't be created yet${why ? ` · ${why}` : ''}. It's made again with its first engagement.`
     }
 
     // Upsert follow-up reminder if followUpDate was set.
@@ -223,7 +236,10 @@ export async function createClient(organizationSlug: string, data: CreateClientD
     }).catch(() => {})
 
     revalidatePath(firmPath(firm.group.slug, organizationSlug))
-    return newClient
+    return {
+        data: { id: newClient.id, name: newClient.name, slug: newClient.slug },
+        ...(folderWarning ? { warning: folderWarning } : {}),
+    }
 }
 
 export interface UpdateClientData {
@@ -253,10 +269,18 @@ export async function updateClient(
     organizationSlug: string,
     clientSlug: string,
     data: UpdateClientData
+): Promise<ActionResult> {
+    return asResult('updateClient', () => updateClientOrThrow(organizationSlug, clientSlug, data))
+}
+
+async function updateClientOrThrow(
+    organizationSlug: string,
+    clientSlug: string,
+    data: UpdateClientData
 ): Promise<void> {
     const supabase = await createSupabaseClient()
     const { data: { user }, error } = await supabase.auth.getUser()
-    if (error || !user) throw new Error('Unauthorized')
+    if (error || !user) throw signedOut()
 
     const firm = await prisma.firm.findUnique({
         where: { slug: organizationSlug },
@@ -266,19 +290,19 @@ export async function updateClient(
             group: { select: { slug: true } }
         }
     })
-    if (!firm || firm.members.length === 0) throw new Error('Unauthorized')
+    if (!firm || firm.members.length === 0) throw notAllowed('change this client')
     const client = firm.clients[0]
-    if (!client) throw new Error('Client not found')
+    if (!client) throw gone('This client was deleted.')
 
     const { canManageClient } = await import('@/lib/permission-helpers')
     const canManage = await canManageClient(firm.id, client.id)
-    if (!canManage) throw new Error('Insufficient permissions')
+    if (!canManage) throw notAllowed('change this client')
 
     if (data.ownerId !== undefined && data.ownerId !== null) {
         const ownerMember = await prisma.firmMember.findFirst({
             where: { firmId: firm.id, userId: data.ownerId },
         })
-        if (!ownerMember) throw new Error('Owner must be a member of this firm')
+        if (!ownerMember) throw userFacing('The owner must be a member of this firm.', 'invalid_owner')
     }
 
     const updateData: Record<string, unknown> = {}
@@ -382,7 +406,7 @@ export type ClientContactRecord = {
 async function assertCanManageClient(organizationSlug: string, clientSlug: string) {
     const supabase = await createSupabaseClient()
     const { data: { user }, error } = await supabase.auth.getUser()
-    if (error || !user) throw new Error('Unauthorized')
+    if (error || !user) throw signedOut()
 
     const firm = await prisma.firm.findUnique({
         where: { slug: organizationSlug },
@@ -392,21 +416,31 @@ async function assertCanManageClient(organizationSlug: string, clientSlug: strin
             group: { select: { slug: true } }
         }
     })
-    if (!firm || firm.members.length === 0) throw new Error('Unauthorized')
+    if (!firm || firm.members.length === 0) throw notAllowed("change this client's contacts")
     const client = firm.clients[0]
-    if (!client) throw new Error('Client not found')
+    if (!client) throw gone('This client was deleted.')
 
     const { canManageClient } = await import('@/lib/permission-helpers')
     const canManage = await canManageClient(firm.id, client.id)
-    if (!canManage) throw new Error('Insufficient permissions')
+    if (!canManage) throw notAllowed("change this client's contacts")
 
     return { firmId: firm.id, clientId: client.id, groupSlug: firm.group.slug }
 }
 
-export async function listClientContacts(organizationSlug: string, clientSlug: string): Promise<ClientContactRecord[]> {
+/** A contact of this client, or a not-found the person can read. Contacts are addressed by id. */
+async function requireClientContact(clientId: string, contactId: string): Promise<void> {
+    const contact = await prisma.clientContact.findFirst({ where: { id: contactId, clientId }, select: { id: true } })
+    if (!contact) throw gone('This contact was deleted.')
+}
+
+export async function listClientContacts(organizationSlug: string, clientSlug: string): Promise<ActionResult<ClientContactRecord[]>> {
+    return asResult('listClientContacts', () => listClientContactsOrThrow(organizationSlug, clientSlug))
+}
+
+async function listClientContactsOrThrow(organizationSlug: string, clientSlug: string): Promise<ClientContactRecord[]> {
     const supabase = await createSupabaseClient()
     const { data: { user }, error } = await supabase.auth.getUser()
-    if (error || !user) throw new Error('Unauthorized')
+    if (error || !user) throw signedOut()
 
     const firm = await prisma.firm.findUnique({
         where: { slug: organizationSlug },
@@ -415,9 +449,9 @@ export async function listClientContacts(organizationSlug: string, clientSlug: s
             clients: { where: { slug: clientSlug }, select: { id: true } }
         }
     })
-    if (!firm || firm.members.length === 0) throw new Error('Unauthorized')
+    if (!firm || firm.members.length === 0) throw notAllowed("see this client's contacts")
     const client = firm.clients[0]
-    if (!client) throw new Error('Client not found')
+    if (!client) throw gone('This client was deleted.')
 
     const rows = await prisma.clientContact.findMany({
         where: { firmId: firm.id, clientId: client.id },
@@ -449,12 +483,20 @@ export async function createClientContact(
     organizationSlug: string,
     clientSlug: string,
     data: { name: string; email?: string; phone?: string; title?: string; notes?: string; tags?: string[]; projectId?: string | null }
+): Promise<ActionResult> {
+    return asResult('createClientContact', () => createClientContactOrThrow(organizationSlug, clientSlug, data))
+}
+
+async function createClientContactOrThrow(
+    organizationSlug: string,
+    clientSlug: string,
+    data: { name: string; email?: string; phone?: string; title?: string; notes?: string; tags?: string[]; projectId?: string | null }
 ): Promise<void> {
     const supabase = await createSupabaseClient()
     const { data: { user }, error } = await supabase.auth.getUser()
-    if (error || !user) throw new Error('Unauthorized')
+    if (error || !user) throw signedOut()
     const { firmId, clientId, groupSlug } = await assertCanManageClient(organizationSlug, clientSlug)
-    if (!data.name?.trim()) throw new Error('Name is required')
+    if (!data.name?.trim()) throw userFacing('A contact needs a name.', 'name_required')
     await assertWithinClientContactCap(firmId)
 
     const contact = await prisma.clientContact.create({
@@ -489,11 +531,22 @@ export async function updateClientContact(
     clientSlug: string,
     contactId: string,
     data: { name?: string; email?: string; phone?: string; title?: string; notes?: string; tags?: string[]; projectId?: string | null }
+): Promise<ActionResult> {
+    return asResult('updateClientContact', () => updateClientContactOrThrow(organizationSlug, clientSlug, contactId, data))
+}
+
+async function updateClientContactOrThrow(
+    organizationSlug: string,
+    clientSlug: string,
+    contactId: string,
+    data: { name?: string; email?: string; phone?: string; title?: string; notes?: string; tags?: string[]; projectId?: string | null }
 ): Promise<void> {
     const supabase = await createSupabaseClient()
     const { data: { user }, error } = await supabase.auth.getUser()
-    if (error || !user) throw new Error('Unauthorized')
+    if (error || !user) throw signedOut()
     const { firmId: updateFirmId, clientId: updateClientId, groupSlug: updateGroupSlug } = await assertCanManageClient(organizationSlug, clientSlug)
+    await requireClientContact(updateClientId, contactId)
+    if (data.name !== undefined && !data.name.trim()) throw userFacing('A contact needs a name.', 'name_required')
 
     await prisma.clientContact.update({
         where: { id: contactId },
@@ -520,12 +573,20 @@ export async function updateClientContact(
     revalidatePath(clientPath(updateGroupSlug, organizationSlug, clientSlug))
 }
 
-export async function deleteClientContact(organizationSlug: string, clientSlug: string, contactId: string): Promise<void> {
+export async function deleteClientContact(organizationSlug: string, clientSlug: string, contactId: string): Promise<ActionResult> {
+    return asResult('deleteClientContact', () => deleteClientContactOrThrow(organizationSlug, clientSlug, contactId))
+}
+
+async function deleteClientContactOrThrow(organizationSlug: string, clientSlug: string, contactId: string): Promise<void> {
     const supabase = await createSupabaseClient()
     const { data: { user }, error } = await supabase.auth.getUser()
-    if (error || !user) throw new Error('Unauthorized')
+    if (error || !user) throw signedOut()
     const { firmId: delFirmId, clientId: delClientId, groupSlug: delGroupSlug } = await assertCanManageClient(organizationSlug, clientSlug)
+    await requireClientContact(delClientId, contactId)
 
+    await prisma.clientContact.delete({ where: { id: contactId } })
+
+    // After the delete, so the audit never records one that didn't happen.
     audit(AUDIT_EVENT.CLIENT_CONTACT_DELETED)
         .scope(AUDIT_SCOPE.CLIENT)
         .firm(delFirmId)
@@ -534,15 +595,19 @@ export async function deleteClientContact(organizationSlug: string, clientSlug: 
         .meta({ contactId })
         .fireAndForget()
 
-    await prisma.clientContact.delete({ where: { id: contactId } })
     revalidatePath(clientPath(delGroupSlug, organizationSlug, clientSlug))
 }
 
-export async function setClientContactPrimary(organizationSlug: string, clientSlug: string, contactId: string): Promise<void> {
+export async function setClientContactPrimary(organizationSlug: string, clientSlug: string, contactId: string): Promise<ActionResult> {
+    return asResult('setClientContactPrimary', () => setClientContactPrimaryOrThrow(organizationSlug, clientSlug, contactId))
+}
+
+async function setClientContactPrimaryOrThrow(organizationSlug: string, clientSlug: string, contactId: string): Promise<void> {
     const supabase = await createSupabaseClient()
     const { data: { user }, error } = await supabase.auth.getUser()
-    if (error || !user) throw new Error('Unauthorized')
+    if (error || !user) throw signedOut()
     const { clientId, groupSlug } = await assertCanManageClient(organizationSlug, clientSlug)
+    await requireClientContact(clientId, contactId)
 
     await prisma.$transaction([
         prisma.clientContact.updateMany({ where: { clientId }, data: { isPrimary: false } }),
@@ -554,11 +619,22 @@ export async function setClientContactPrimary(organizationSlug: string, clientSl
 
 /**
  * Delete client (V2)
+ *
+ * Deleting the client deletes its engagements, their members and sharing rows with it (FK cascade), so
+ * the storage access they gave is taken back first, engagement by engagement (takeBackEngagementAccess):
+ * file permissions, then the engagements' folders restricted to their owner. What storage still allows
+ * is answered as the result's `warning`.
  */
-export async function deleteClient(organizationSlug: string, clientSlug: string): Promise<void> {
+export async function deleteClient(organizationSlug: string, clientSlug: string): Promise<ActionResult> {
+    const result = await asResult('deleteClient', () => deleteClientAndAccess(organizationSlug, clientSlug))
+    if (!result.ok) return result
+    return { ok: true, data: undefined, ...(result.data.warning ? { warning: result.data.warning } : {}) }
+}
+
+async function deleteClientAndAccess(organizationSlug: string, clientSlug: string): Promise<{ warning?: string }> {
     const supabase = await createSupabaseClient()
     const { data: { user }, error } = await supabase.auth.getUser()
-    if (error || !user) throw new Error('Unauthorized')
+    if (error || !user) throw userFacing('Your session has ended. Sign in again.', 'unauthorized')
 
     const firm = await prisma.firm.findUnique({
         where: { slug: organizationSlug },
@@ -569,14 +645,35 @@ export async function deleteClient(organizationSlug: string, clientSlug: string)
         }
     })
 
-    if (!firm || firm.members.length === 0) throw new Error('Unauthorized')
+    if (!firm || firm.members.length === 0) throw userFacing("You don't have permission to delete this client.", 'forbidden')
 
     const memberRole = firm.members[0].role
-    if (memberRole !== 'firm_admin') throw new Error('Only firm admins can delete a client')
+    if (memberRole !== 'firm_admin') throw userFacing('Only firm admins can delete a client', 'forbidden')
 
     const client = firm.clients[0]
-    if (!client) throw new Error('Client not found')
+    if (!client) throw userFacing('This client was already deleted.', 'not_found')
 
+    // Storage access first: the delete takes the rows that record it.
+    const engagements = await prisma.engagement.findMany({
+        where: { clientId: client.id, isDeleted: false },
+        select: { id: true },
+    })
+    const provider = engagements.length > 0 ? await storageProviderName(engagements[0].id) : 'Storage'
+    const left: EngagementAccessLeft = { files: [], folderAccess: [], foldersUnchecked: false }
+    for (const engagement of engagements) {
+        const one = await takeBackEngagementAccess(engagement.id)
+        left.files.push(...one.files)
+        left.folderAccess.push(...one.folderAccess)
+        left.foldersUnchecked ||= one.foldersUnchecked
+        left.reason ??= one.reason
+    }
+    left.folderAccess = Array.from(new Set(left.folderAccess))
+
+    await prisma.client.delete({
+        where: { id: client.id }
+    })
+
+    // After the delete, so the audit never records one that didn't happen.
     audit(AUDIT_EVENT.CLIENT_DELETED)
         .scope(AUDIT_SCOPE.CLIENT)
         .firm(firm.id)
@@ -585,11 +682,10 @@ export async function deleteClient(organizationSlug: string, clientSlug: string)
         .meta({ clientSlug })
         .fireAndForget()
 
-    await prisma.client.delete({
-        where: { id: client.id }
-    })
-
     revalidatePath(firmPath(firm.group.slug, organizationSlug))
+
+    const warning = accessLeftAfterDelete({ done: 'Client deleted', provider, left })
+    return warning ? { warning } : {}
 }
 
 /**
@@ -597,58 +693,78 @@ export async function deleteClient(organizationSlug: string, clientSlug: string)
  * disconnectClientConnector already use. For actions addressed only by clientId: the firm is read
  * from the client row, never taken from the caller. Returns the client's firm.
  */
-async function requireClientManager(clientId: string): Promise<{ firmId: string }> {
+async function requireClientManager(clientId: string, toDoWhat = 'change this client'): Promise<{ firmId: string }> {
     const supabase = await createSupabaseClient()
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('Unauthorized')
+    if (!user) throw signedOut()
     const client = await prisma.client.findUnique({ where: { id: clientId }, select: { firmId: true } })
-    if (!client) throw new Error('Client not found')
+    if (!client) throw gone('This client was deleted.')
     const { canManageClient } = await import('@/lib/permission-helpers')
-    if (!(await canManageClient(client.firmId, clientId))) throw new Error('Unauthorized')
+    if (!(await canManageClient(client.firmId, clientId))) throw notAllowed(toDoWhat)
     return { firmId: client.firmId }
 }
 
 // ── Connector sharing actions ──────────────────────────────────────────────
 
 /** Return other clients (excluding the caller) that share the same connectorId. */
-export async function getConnectorSiblingClients(clientId: string): Promise<{ id: string; name: string }[]> {
-    await requireClientManager(clientId)
-    const client = await prisma.client.findUnique({
-        where: { id: clientId },
-        select: { connectorId: true },
-    })
-    if (!client?.connectorId) return []
+export async function getConnectorSiblingClients(clientId: string): Promise<ActionResult<{ id: string; name: string }[]>> {
+    return asResult('getConnectorSiblingClients', async () => {
+        await requireClientManager(clientId, "see this client's storage")
+        const client = await prisma.client.findUnique({
+            where: { id: clientId },
+            select: { connectorId: true },
+        })
+        if (!client?.connectorId) return []
 
-    const siblings = await prisma.client.findMany({
-        where: { connectorId: client.connectorId, id: { not: clientId }, deletedAt: null },
-        select: { id: true, name: true },
-        orderBy: { name: 'asc' },
+        return prisma.client.findMany({
+            where: { connectorId: client.connectorId, id: { not: clientId }, deletedAt: null },
+            select: { id: true, name: true },
+            orderBy: { name: 'asc' },
+        })
     })
-    return siblings
 }
 
-/** Link an existing firm connector to a client (shared row, no new connector created). */
-export async function shareConnectorWithClient({
+/** What attaching a client to a connector did, beyond the link itself. */
+export type ShareConnectorOutcome = {
+    /** The client's own folder couldn't be set up. The link stands; the folder is retried on its next use. */
+    folderFailed: boolean
+    /** Engagements still without a folder after this attach. */
+    engagementsWithoutFolder: string[]
+}
+
+/**
+ * Link an existing firm connector to a client (shared row, no new connector created).
+ *
+ * The link is the action; the folders are its follow-on. When the link is saved but the client's folder
+ * (or an engagement's) can't be set up, the answer is still ok, with a `warning` that says what's
+ * missing and why, and the auto-filed support ticket's number. A thrown error class can't reach the
+ * browser, so "linked, with a problem" has to travel in the result.
+ */
+export async function shareConnectorWithClient(input: { clientId: string; connectorId: string }): Promise<ActionResult<ShareConnectorOutcome>> {
+    return asResultWithWarning('shareConnectorWithClient', () => shareConnectorWithClientOrThrow(input))
+}
+
+async function shareConnectorWithClientOrThrow({
     clientId,
     connectorId,
 }: {
     clientId: string
     connectorId: string
-}) {
+}): Promise<{ data: ShareConnectorOutcome; warning?: string }> {
     const supabase = await createSupabaseClient()
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('Unauthorized')
+    if (!user) throw signedOut()
 
     const [client, connector] = await Promise.all([
         prisma.client.findUnique({ where: { id: clientId }, select: { firmId: true, name: true, slug: true } }),
-        prisma.connector.findUnique({ where: { id: connectorId }, select: { firmId: true, settings: true } }),
+        prisma.connector.findUnique({ where: { id: connectorId }, select: { firmId: true, settings: true, type: true } }),
     ])
-    if (!client) throw new Error('Client not found')
-    if (!connector) throw new Error('Connector not found')
-    if (connector.firmId !== client.firmId) throw new Error('Cross-firm connector share not allowed')
+    if (!client) throw gone('This client was deleted.')
+    if (!connector) throw gone('This storage connection was removed.')
+    if (connector.firmId !== client.firmId) throw notAllowed('attach this storage to that client')
 
     const { canManageClient } = await import('@/lib/permission-helpers')
-    if (!(await canManageClient(client.firmId, clientId))) throw new Error('Unauthorized')
+    if (!(await canManageClient(client.firmId, clientId))) throw notAllowed("change this client's storage")
 
     await prisma.client.update({ where: { id: clientId }, data: { connectorId } })
 
@@ -661,6 +777,8 @@ export async function shareConnectorWithClient({
         .meta({ connectorId })
         .fireAndForget()
 
+    const provider = connector.type === 'GOOGLE_DRIVE' ? 'Google Drive' : connector.type === 'ONEDRIVE' ? 'OneDrive' : 'storage'
+
     // Provision the client folder and all existing engagement folders. ensureAppFolderStructure
     // is provider-agnostic (built against IConnectorStorageAdapter); getStorageAdapter resolves
     // the right adapter for whatever connector type this is.
@@ -671,8 +789,10 @@ export async function shareConnectorWithClient({
     // (nothing actually retries automatically) — so the UI showed a plain success toast while the
     // client was silently left with no working Drive folder. Confirmed live 2026-08-07: this
     // masked a real bug (see .claude/plans/connector-microsoft-impl.md) where the failure never
-    // surfaced anywhere the user could see it. Now re-thrown so the caller's catch block fires and
-    // can show a real error, with a support ticket auto-filed with the failure details.
+    // surfaced anywhere the user could see it. It's answered as the result's warning, with a support
+    // ticket auto-filed with the failure details.
+    const engagementsWithoutFolder: string[] = []
+    let engagementReason: string | undefined
     try {
         const adapter = await getStorageAdapter(connectorId)
 
@@ -711,9 +831,13 @@ export async function shareConnectorWithClient({
                         where: { id: eng.id },
                         data: { connectorRootFolderId: engResult.projectId },
                     })
+                } else {
+                    engagementsWithoutFolder.push(eng.name)
                 }
             } catch (engErr) {
                 logger.error('[shareConnectorWithClient] Failed to provision engagement folder', engErr as Error, `engagementId:${eng.id}`)
+                engagementsWithoutFolder.push(eng.name)
+                engagementReason ??= readableReason(engErr)
             }
         }
     } catch (err) {
@@ -725,68 +849,86 @@ export async function shareConnectorWithClient({
             firmSlug: firm?.slug,
             clientSlug: client.slug,
         })
-        const message = err instanceof Error ? err.message : String(err)
-        const ticketSuffix = ticketNumber ? ` Support ticket #${ticketNumber} filed automatically.` : ''
-        throw new ClientLinkedFolderFailedError(`Client linked, but the Drive folder could not be set up: ${message}.${ticketSuffix}`)
+        revalidatePath('/d/[groupSlug]/f', 'layout')
+        const why = readableReason(err)
+        const ticket = ticketNumber ? ` Support ticket #${ticketNumber} filed.` : ''
+        return {
+            data: { folderFailed: true, engagementsWithoutFolder },
+            warning: `Attached, but its folder in ${provider} couldn't be set up${why ? ` · ${why}` : '.'}${ticket}`,
+        }
     }
 
     revalidatePath('/d/[groupSlug]/f', 'layout')
+
+    if (engagementsWithoutFolder.length === 0) return { data: { folderFailed: false, engagementsWithoutFolder } }
+    const count = engagementsWithoutFolder.length
+    return {
+        data: { folderFailed: false, engagementsWithoutFolder },
+        warning: `Attached. ${count === 1 ? '1 engagement has' : `${count} engagements have`} no folder in ${provider} yet: ${engagementsWithoutFolder.join(', ')}${engagementReason ? ` · ${engagementReason}` : ''}. Open it and use Set up storage folder.`,
+    }
 }
 
-export async function removeClientConnector({ clientId }: { clientId: string }) {
-    await requireClientManager(clientId)
-    const client = await prisma.client.findUnique({
-        where: { id: clientId },
-        select: { connectorId: true },
-    })
-    if (!client) throw new Error('Client not found')
-    if (!client.connectorId) throw new Error('Client has no connector')
+export async function removeClientConnector({ clientId }: { clientId: string }): Promise<ActionResult> {
+    return asResult('removeClientConnector', async () => {
+        await requireClientManager(clientId, "change this client's storage")
+        const client = await prisma.client.findUnique({
+            where: { id: clientId },
+            select: { connectorId: true },
+        })
+        if (!client) throw gone('This client was deleted.')
+        if (!client.connectorId) throw userFacing('This client has no storage attached.', 'no_connector')
 
-    const { removeConnector } = await import('@/lib/actions/connectors')
-    await removeConnector({ connectorId: client.connectorId })
+        const { removeConnector } = await import('@/lib/actions/connectors')
+        await removeConnector({ connectorId: client.connectorId })
+    })
 }
 
-export async function renameClientConnector({ connectorId, name }: { connectorId: string; name: string }) {
-    const supabase = await createSupabaseClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('Unauthorized')
+export async function renameClientConnector({ connectorId, name }: { connectorId: string; name: string }): Promise<ActionResult> {
+    return asResult('renameClientConnector', async () => {
+        const supabase = await createSupabaseClient()
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) throw signedOut()
 
-    const connector = await prisma.connector.findUnique({
-        where: { id: connectorId },
-        select: { userId: true },
-    })
-    if (!connector) throw new Error('Connector not found')
-    if (connector.userId !== user.id) throw new Error('Unauthorized')
+        const connector = await prisma.connector.findUnique({
+            where: { id: connectorId },
+            select: { userId: true },
+        })
+        if (!connector) throw gone('This storage connection was removed.')
+        if (connector.userId !== user.id) throw userFacing('Only the person who connected this storage can rename it.', 'forbidden')
+        if (!name.trim()) throw userFacing('A connection needs a name.', 'name_required')
 
-    await prisma.connector.update({
-        where: { id: connectorId },
-        data: { name: name.trim() },
+        await prisma.connector.update({
+            where: { id: connectorId },
+            data: { name: name.trim() },
+        })
+        revalidatePath('/d/[groupSlug]/f', 'layout')
     })
-    revalidatePath('/d/[groupSlug]/f', 'layout')
 }
 
-export async function disconnectClientConnector({ clientId }: { clientId: string }) {
-    const supabase = await createSupabaseClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('Unauthorized')
+export async function disconnectClientConnector({ clientId }: { clientId: string }): Promise<ActionResult> {
+    return asResult('disconnectClientConnector', async () => {
+        const supabase = await createSupabaseClient()
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) throw signedOut()
 
-    const client = await prisma.client.findUnique({
-        where: { id: clientId },
-        select: { firmId: true, connectorId: true },
+        const client = await prisma.client.findUnique({
+            where: { id: clientId },
+            select: { firmId: true, connectorId: true },
+        })
+        if (!client) throw gone('This client was deleted.')
+        if (!client.connectorId) throw userFacing('This client has no storage attached.', 'no_connector')
+
+        const { canManageClient } = await import('@/lib/permission-helpers')
+        if (!(await canManageClient(client.firmId, clientId))) throw notAllowed("change this client's storage")
+
+        // Revoke tokens but keep client.connectorId linked — the REVOKED card stays visible
+        // so the user can immediately Reconnect or Remove without an extra click.
+        await prisma.connector.update({
+            where: { id: client.connectorId },
+            data: { status: 'REVOKED', accessToken: '', refreshToken: null, tokenExpiresAt: null },
+        })
+        revalidatePath('/d/[groupSlug]/f', 'layout')
     })
-    if (!client) throw new Error('Client not found')
-    if (!client.connectorId) throw new Error('Client has no connector')
-
-    const { canManageClient } = await import('@/lib/permission-helpers')
-    if (!(await canManageClient(client.firmId, clientId))) throw new Error('Unauthorized')
-
-    // Revoke tokens but keep client.connectorId linked — the REVOKED card stays visible
-    // so the user can immediately Reconnect or Remove without an extra click.
-    await prisma.connector.update({
-        where: { id: client.connectorId },
-        data: { status: 'REVOKED', accessToken: '', refreshToken: null, tokenExpiresAt: null },
-    })
-    revalidatePath('/d/[groupSlug]/f', 'layout')
 }
 
 export interface ClientBrandData {
@@ -799,13 +941,17 @@ export interface ClientBrandData {
     secondaryColor?: string | null
 }
 
-export async function upsertClientBrand(clientId: string, data: ClientBrandData | null): Promise<void> {
-    await requireClientManager(clientId)
+export async function upsertClientBrand(clientId: string, data: ClientBrandData | null): Promise<ActionResult> {
+    return asResult('upsertClientBrand', () => upsertClientBrandOrThrow(clientId, data))
+}
+
+async function upsertClientBrandOrThrow(clientId: string, data: ClientBrandData | null): Promise<void> {
+    await requireClientManager(clientId, "change this client's branding")
     const client = await prisma.client.findUnique({
         where: { id: clientId },
         select: { firmId: true, name: true, settings: true },
     })
-    if (!client) throw new Error('Client not found')
+    if (!client) throw gone('This client was deleted.')
 
     const currentSettings = (client.settings as Record<string, unknown>) ?? {}
     const brandId = currentSettings?.brandId as string | undefined

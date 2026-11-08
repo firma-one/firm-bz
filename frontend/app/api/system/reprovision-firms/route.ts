@@ -4,16 +4,30 @@ import { prisma } from '@/lib/prisma'
 import { isSysAdminUser } from '@/lib/system/user-data-map'
 import { safeInngestSend } from '@/lib/inngest/client'
 import { logger } from '@/lib/logger'
+import { adminFailure } from '@/app/api/system/admin-error'
 
 interface ReprovisionRequest {
   firmIds: string[]
 }
 
 interface ReprovisionResponse {
+  /** Firms whose provisioning job really started: the event reached Inngest. */
   queued: number
   skipped: number
   errors: Array<{ firmId: string; error: string }>
 }
+
+/**
+ * The event this route sends, and whether any Inngest function listens for it.
+ *
+ * None does: no function in `lib/inngest/` or `app/api/inngest/route.ts` is triggered by
+ * `sandbox.provision.requested` (read from code, 2026-11-08). Sending it starts nothing, so the route
+ * used to rewrite each firm's onboarding state and count it "queued" for work that never ran. Until a
+ * function handles the event, the route refuses before touching anything. Register one, then set
+ * this true; the loop below then counts only the sends that reached Inngest.
+ */
+const PROVISION_EVENT = 'sandbox.provision.requested'
+const PROVISION_JOB_REGISTERED = false
 
 export async function POST(request: NextRequest) {
   try {
@@ -48,6 +62,18 @@ export async function POST(request: NextRequest) {
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
     if (!firmIds.every(id => uuidRegex.test(id))) {
       return NextResponse.json({ error: 'Invalid firm IDs' }, { status: 400 })
+    }
+
+    if (!PROVISION_JOB_REGISTERED) {
+      return NextResponse.json(
+        {
+          error: 'Nothing was started: no background job handles provisioning any more '
+            + `(nothing listens for "${PROVISION_EVENT}"). These firms are unchanged. Finish their setup `
+            + 'from onboarding, or register a job for the event first.',
+          code: 'no_provision_job',
+        },
+        { status: 409 },
+      )
     }
 
     const result: ReprovisionResponse = {
@@ -121,11 +147,12 @@ export async function POST(request: NextRequest) {
           },
         })
 
-        // Re-enqueue Inngest
+        // Re-enqueue Inngest. Counted only when the event reached it: safeInngestSend answers false
+        // (and logs) when it couldn't, and a firm reported "queued" then would never move.
         const firstName = (authUser.user_metadata?.first_name as string) || undefined
         const lastName = (authUser.user_metadata?.last_name as string) || undefined
 
-        await safeInngestSend('sandbox.provision.requested', {
+        const sent = await safeInngestSend(PROVISION_EVENT, {
           firmId,
           userId: adminUserId,
           userEmail: authUser.email,
@@ -133,6 +160,10 @@ export async function POST(request: NextRequest) {
           lastName,
           connectionId: firm.connectorId,
         })
+        if (!sent) {
+          result.errors.push({ firmId, error: "Couldn't reach Inngest, so provisioning didn't start. Try again." })
+          continue
+        }
 
         result.queued++
         logger.info('Re-enqueued Inngest provisioning', { firmId, userId: adminUserId })
@@ -147,10 +178,6 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(result)
   } catch (error) {
-    logger.error('Error in reprovision route', error as Error)
-    return NextResponse.json(
-      { error: 'Failed to reprovision firms' },
-      { status: 500 }
-    )
+    return adminFailure('resume provisioning', error)
   }
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireProjectManage } from '@/lib/api/engagement-auth'
+import { blockIfEngagementCompleted } from '@/lib/engagement-access'
 import { resolveEngagementConnector } from '@/lib/connectors/resolve-client-connector'
 import { getStorageAdapter } from '@/lib/connectors/registry'
 import { googleDriveConnector } from '@/lib/google-drive-connector'
@@ -101,6 +102,9 @@ export async function POST(
         const auth = await requireProjectManage(request, projectId)
         if (auth instanceof NextResponse) return auth
         const { user, ctx } = auth
+
+        const completed = await blockIfEngagementCompleted(projectId)
+        if (completed) return completed
 
         const body = await request.json().catch(() => null) as {
             token?: unknown
@@ -358,7 +362,8 @@ export async function POST(
                 outcomes.push({
                     proposal,
                     ok: false,
-                    error: applyFailureMessage(error),
+                    // The provider is known here, so a folder the storage refused says why.
+                    error: applyFailureMessage(error, isOneDrive(connector) ? 'OneDrive' : 'Google Drive'),
                 })
             }
         }

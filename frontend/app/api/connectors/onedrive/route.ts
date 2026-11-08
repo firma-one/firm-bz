@@ -9,8 +9,15 @@ import { createOneDriveAdapter } from '@/lib/connectors/adapters/onedrive-adapte
 import { ensureAppFolderStructure, setupFirmFolder } from '@/lib/connectors/pockett-structure.service'
 import { logger } from '@/lib/logger'
 import { prisma } from '@/lib/prisma'
+import { findFirmForConnector } from '@/lib/connectors/connector-firm'
+import { asStorageFailure, folderStepFailure, reconnectFailure, storageFailureResponse } from '@/lib/connectors/folder-step-failure'
 
 const oneDriveConnector = OneDriveConnector.getInstance()
+
+/** "Folder set, but…": the workspace folder was saved, a folder step inside it wasn't. */
+function folderSetupWarning(reason: string): string {
+  return `Folder set, but the firm's folders couldn't be created inside it · ${reason}`
+}
 
 /**
  * Scopes requested at connect time. Microsoft doesn't have a separate "personal vs shared
@@ -157,14 +164,12 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Missing required parameters' }, { status: 400 })
       }
       const accessToken = await oneDriveConnector.getAccessToken(ensureConnId)
-      if (!accessToken) {
-        return NextResponse.json({ error: 'Unauthorized/Expired' }, { status: 401 })
-      }
+      if (!accessToken) return storageFailureResponse(reconnectFailure('OneDrive'))
       const adapter = createOneDriveAdapter(async () => accessToken)
       const connector = await prisma.connector.findUnique({ where: { id: ensureConnId } })
       const rootParentId = parentId || (connector?.workspaceRootLocation === 'SHARED' ? undefined : 'root')
       if (!rootParentId) {
-        return NextResponse.json({ error: 'A parent folder is required for shared (SharePoint) connections' }, { status: 400 })
+        return NextResponse.json({ error: 'Choose a SharePoint site first, then create the folder inside it.' }, { status: 400 })
       }
       const folderId = await adapter.findOrCreateFolder(ensureConnId, rootParentId, name)
       return NextResponse.json({ folderId })
@@ -225,19 +230,16 @@ export async function POST(request: NextRequest) {
 
       // Provision firm/client/engagement folder hierarchy after workspace root is set —
       // mirrors google-drive's update-root-folder action exactly (pockett-structure.service
-      // is already provider-agnostic, built against IConnectorStorageAdapter).
+      // is already provider-agnostic, built against IConnectorStorageAdapter). The root is saved
+      // either way; a failure answers success with a `warning` the dialog shows (CN-3).
+      let rootWarning: string | undefined
       try {
         const accessToken = await oneDriveConnector.getAccessToken(rootConnId)
-        if (accessToken) {
+        if (!accessToken) {
+          rootWarning = folderSetupWarning(reconnectFailure('OneDrive').message)
+        } else {
           const adapter = createOneDriveAdapter(async () => accessToken)
-          let org = await prisma.firm.findFirst({ where: { connectorId: rootConnId } })
-          if (!org) {
-            const linkedClient = await prisma.client.findFirst({
-              where: { connectorId: rootConnId },
-              select: { firmId: true },
-            })
-            if (linkedClient) org = await prisma.firm.findUnique({ where: { id: linkedClient.firmId } })
-          }
+          let org = await findFirmForConnector(rootConnId)
           // Caller-supplied hint: only follow it into a firm the caller administers.
           if (!org && hintFirmId && (await isFirmAdmin(rootUser.id, hintFirmId))) {
             org = await prisma.firm.findUnique({ where: { id: hintFirmId } })
@@ -261,6 +263,7 @@ export async function POST(request: NextRequest) {
                 where: { clientId: linkedClient.id, isDeleted: false, connectorRootFolderId: null },
                 select: { id: true, name: true, slug: true },
               })
+              const engagementFailures: string[] = []
               for (const eng of engagements) {
                 try {
                   const engResult = await ensureAppFolderStructure(
@@ -275,7 +278,11 @@ export async function POST(request: NextRequest) {
                   }
                 } catch (engErr) {
                   logger.error('onedrive update-root-folder: failed to provision engagement', engErr instanceof Error ? engErr : new Error(String(engErr)), `engagementId:${eng.id}`)
+                  engagementFailures.push(`${eng.name} (${folderStepFailure(engErr, 'OneDrive').message})`)
                 }
+              }
+              if (engagementFailures.length > 0) {
+                rootWarning = `Folder set, but ${engagementFailures.length} of ${engagements.length} engagement folders couldn't be created · ${engagementFailures.join('; ')}`
               }
               logger.info('onedrive update-root-folder: provisioned hierarchy', { connectionId: rootConnId, orgId: org.id, clientId: linkedClient.id })
             }
@@ -283,10 +290,10 @@ export async function POST(request: NextRequest) {
         }
       } catch (provErr) {
         logger.error('onedrive update-root-folder: provisioning failed', provErr instanceof Error ? provErr : new Error(String(provErr)))
-        // Non-fatal — folder structure can be retried
+        rootWarning = folderSetupWarning(folderStepFailure(provErr, 'OneDrive').message)
       }
 
-      return NextResponse.json({ success: true })
+      return NextResponse.json({ success: true, ...(rootWarning ? { warning: rootWarning } : {}) })
     }
 
     if (action === 'folder-breadcrumb') {
@@ -327,7 +334,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Connection ID required' }, { status: 400 })
       }
       const token = await oneDriveConnector.getAccessToken(connectionId)
-      if (!token) return NextResponse.json({ success: false, error: 'Could not obtain access token' })
+      if (!token) return NextResponse.json({ success: false, error: reconnectFailure('OneDrive').message, code: 'reconnect' })
       const res = await fetch('https://graph.microsoft.com/v1.0/me/drive?$select=id', {
         headers: { Authorization: `Bearer ${token}` },
       })
@@ -336,8 +343,14 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
   } catch (error) {
-    console.error('OneDrive connector error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    // A folder step OneDrive refused says why, in StorageFailure's words (P1-32).
+    const storage = asStorageFailure(error, 'OneDrive')
+    if (storage) {
+      logger.warn('OneDrive connector action refused by OneDrive', { message: error instanceof Error ? error.message : String(error), reason: storage.reason })
+      return storageFailureResponse(storage)
+    }
+    logger.error('OneDrive connector error', error instanceof Error ? error : new Error(String(error)))
+    return NextResponse.json({ error: 'Something went wrong on our side. Try again.' }, { status: 500 })
   }
 }
 

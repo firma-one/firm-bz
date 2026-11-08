@@ -15,6 +15,8 @@ import { getPricingComparisonBulletsForPlan, getSandboxPlanHighlights, type Pric
 import { BillingPolarExplainInline } from '@/components/billing/billing-polar-inline'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { EmptyPanel } from '@/components/ui/empty-panel'
+import { LoadFailed } from '@/components/ui/load-failed'
+import { failureFrom, failureReason } from '@/lib/files/action-failure'
 import { LoadingAnnouncement, ShimmerBar } from '@/components/ui/shimmer'
 import { Tag } from '@/components/ui/tag'
 
@@ -96,6 +98,12 @@ interface PolarPlansPickerProps {
      * Used as fallback while `current-plan` is loading or temporarily unavailable.
      */
     fallbackCanManageBilling?: boolean
+    /**
+     * Whether `currentPlanState` is known. While it is loading, or after its load failed, Checkout is
+     * held back: no plan state reads as "not paid", and a paying admin must never be offered a second
+     * checkout. Left out (the upgrade dialog), the old behavior stands.
+     */
+    currentPlanStatus?: 'loading' | 'ready' | 'failed'
 }
 
 /*
@@ -555,10 +563,12 @@ export function PolarPlansPicker({
     enableBillingTour = false,
     enableCheckoutIntentJoyride = false,
     fallbackCanManageBilling,
+    currentPlanStatus,
 }: PolarPlansPickerProps) {
     const enableTour = enableBillingTour || enableCheckoutIntentJoyride
     const [plans, setPlans] = useState<BillingCatalogPlan[] | null>(null)
     const [error, setError] = useState<string | null>(null)
+    const [catalogAttempt, setCatalogAttempt] = useState(0)
     const [loading, setLoading] = useState(true)
     const [portalLoading, setPortalLoading] = useState(false)
     const [portalError, setPortalError] = useState<string | null>(null)
@@ -733,17 +743,15 @@ export function PolarPlansPicker({
         setError(null)
         fetch('/api/billing/catalog')
             .then(async (res) => {
+                if (!res.ok) throw await failureFrom(res)
                 const body = (await res.json().catch(() => ({}))) as CatalogJson
-                if (!res.ok) {
-                    throw new Error(body.error || `Could not load plans (${res.status})`)
-                }
                 return body.items ?? []
             })
             .then((items) => {
                 if (!cancelled) setPlans(items)
             })
             .catch((e: unknown) => {
-                if (!cancelled) setError(e instanceof Error ? e.message : 'Could not load plans')
+                if (!cancelled) setError(failureReason(e))
             })
             .finally(() => {
                 if (!cancelled) setLoading(false)
@@ -751,7 +759,7 @@ export function PolarPlansPicker({
         return () => {
             cancelled = true
         }
-    }, [])
+    }, [catalogAttempt])
 
     const sortedPlans = useMemo(() => {
         if (!plans?.length) return null
@@ -940,16 +948,13 @@ export function PolarPlansPicker({
 
     if (error) {
         return (
-            <div
-                role="alert"
-                className={cn(
-                    'flex items-start gap-2 rounded-card border border-line bg-surface px-4 py-3 text-small text-fg',
-                    className
-                )}
-            >
-                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-danger" strokeWidth={1.75} aria-hidden />
-                <span className="min-w-0">{error}</span>
-            </div>
+            <LoadFailed
+                compact
+                className={cn('rounded-card border border-line', className)}
+                what="plans"
+                reason={error}
+                onRetry={() => setCatalogAttempt((n) => n + 1)}
+            />
         )
     }
 
@@ -989,6 +994,9 @@ export function PolarPlansPicker({
     const portalSwitchUi = isPaidRecurringCurrent
     const explicitAdminFlag = currentPlanState?.isFirmBillingAdmin
     const isFirmBillingAdmin = explicitAdminFlag ?? Boolean(fallbackCanManageBilling)
+    /** Checkout only once the current plan is known (BL-2): an unknown plan is not "not paid". */
+    const planKnown = currentPlanStatus === undefined || currentPlanStatus === 'ready'
+    const canStartCheckout = isFirmBillingAdmin && planKnown
     const canOpenCustomerPortal = Boolean(currentPlanState?.canOpenCustomerPortal)
     const showPortalButton = isFirmBillingAdmin && portalSwitchUi && canOpenCustomerPortal
     const showAdminOnlyBlock = explicitAdminFlag === false && !fallbackCanManageBilling
@@ -1017,6 +1025,17 @@ export function PolarPlansPicker({
                 <div className="flex items-start gap-2 rounded-card border border-line bg-surface-subtle px-4 py-3 text-small text-fg-muted">
                     <Lock className="mt-0.5 h-4 w-4 shrink-0 text-fg-subtle" strokeWidth={1.75} aria-hidden />
                     <span className="min-w-0">{upgradeCopy.billingPortalAdminOnlyHint}</span>
+                </div>
+            ) : null}
+            {isFirmBillingAdmin && currentPlanStatus === 'failed' ? (
+                <div
+                    role="status"
+                    className="flex items-start gap-2 rounded-card border border-line bg-surface-subtle px-4 py-3 text-small text-fg-muted"
+                >
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-fg-subtle" strokeWidth={1.75} aria-hidden />
+                    <span className="min-w-0">
+                        Checkout is held back until your current plan loads, so nobody pays twice.
+                    </span>
                 </div>
             ) : null}
             {showPortalButton ? (
@@ -1198,7 +1217,7 @@ export function PolarPlansPicker({
                                             ) : (
                                                 <PlanStatusBlock>{upgradeCopy.planPickerCurrentPlanBadge}</PlanStatusBlock>
                                             )
-                                        ) : isPaidRecurringCurrent ? null : isFirmBillingAdmin ? (
+                                        ) : isPaidRecurringCurrent ? null : canStartCheckout ? (
                                             <Button
                                                 type="button"
                                                 variant={primaryCta ? 'greenCta' : 'outline'}
@@ -1319,7 +1338,7 @@ export function PolarPlansPicker({
                                                 {upgradeCopy.freeSandboxFootnote}
                                             </p>
                                         </div>
-                                    ) : isPaidRecurringCurrent ? null : isFirmBillingAdmin ? (
+                                    ) : isPaidRecurringCurrent ? null : canStartCheckout ? (
                                         <Button
                                             type="button"
                                             variant={primaryCta ? 'greenCta' : 'outline'}

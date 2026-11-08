@@ -9,6 +9,7 @@ import {
     createSubscriptionCancellationRemindersForAdmins,
     clearSubscriptionCancellationRemindersForAdmins,
 } from '@/lib/billing/polar-billing-lifecycle'
+import { PolarWebhookRetryError, withinPolarRetryWindow } from '@/lib/billing/polar-webhook-retry'
 
 function getWebhookSecret(): string | null {
     const secret = process.env.POLAR_WEBHOOK_SECRET?.trim()
@@ -109,14 +110,36 @@ export async function POST(request: NextRequest) {
     })
 
     const handler = buildHandler()
+    // The SDK reads the body itself; keep a copy to learn the event's age if a handler fails.
+    const rawBody = await request.clone().text().catch(() => '')
 
     try {
         return await handler(request)
     } catch (error) {
         const errorObj = error instanceof Error ? error : new Error(String(error))
-        logger.error('Polar webhook: handler threw error', errorObj, undefined, {
-            errorStack: errorObj.stack,
-        })
+        let event: unknown = null
+        try {
+            event = JSON.parse(rawBody)
+        } catch {
+            event = null
+        }
+        const type = (event as { type?: unknown } | null)?.type
+        // A failure answers 500 so Polar delivers the event again, but not forever: past the window
+        // the event is acknowledged and the operator (Sentry) is told it was given up.
+        if (!withinPolarRetryWindow(event)) {
+            logger.error('Polar webhook: still failing after the retry window, giving up', errorObj, 'billing', {
+                type,
+                webhookId: request.headers.get('webhook-id'),
+            })
+            return NextResponse.json({ received: true, gaveUp: true })
+        }
+        // A PolarWebhookRetryError was logged where it was thrown, with its ids.
+        if (!(error instanceof PolarWebhookRetryError)) {
+            logger.error('Polar webhook: handler threw error', errorObj, undefined, {
+                errorStack: errorObj.stack,
+                type,
+            })
+        }
         return NextResponse.json(
             { error: 'Webhook processing failed' },
             { status: 500 }

@@ -10,7 +10,8 @@ import { Brio } from '@/components/ui/brio'
 import { BrioByline } from '@/components/ui/brio-byline'
 import { ShimmerBar } from '@/components/ui/shimmer'
 import { BrioReading, BrioSections, StreamingBrioSections } from '@/components/ui/brio-sections'
-import { fetchWithTimeout, AI_TIMEOUT_MS } from '@/lib/ai/fetch-timeout'
+import { fetchWithTimeout, AI_TIMEOUT_MS, AiTimeoutError } from '@/lib/ai/fetch-timeout'
+import { BRIO_BRIEF_FAILED, BRIO_UNREACHABLE_RETRY } from '@/lib/ai/brio-failure'
 
 export interface FirmBrief {
     content: string
@@ -24,6 +25,10 @@ export interface FirmBrief {
  *
  * The rewrite streams (`streamText` grows as Brio writes) and the brief on screen is replaced only
  * when it completes; `stop` ends it early and keeps the old one.
+ *
+ * A failed load is `loadError`, with the reason, so the card says it couldn't load rather than
+ * vanishing as though the firm had no brief; a failed rewrite is `refreshError`, with the route's
+ * reason (the credit limit's own words, for one).
  */
 export function useFirmBrief(firmId: string) {
     const { session } = useAuth()
@@ -36,6 +41,8 @@ export function useFirmBrief(firmId: string) {
     // brief is left out entirely rather than showing an error to every user.
     const [configured, setConfigured] = useState(true)
     const [refreshError, setRefreshError] = useState<string | null>(null)
+    const [loadError, setLoadError] = useState<string | null>(null)
+    const [loadTick, setLoadTick] = useState(0)
     const [streamText, setStreamText] = useState('')
     const abortRef = useRef<AbortController | null>(null)
 
@@ -44,26 +51,44 @@ export function useFirmBrief(firmId: string) {
         let cancelled = false
 
         setLoading(true)
+        setLoadError(null)
         fetchWithTimeout(`/api/firms/${firmId}/ai-brief`, {
             headers: { Authorization: `Bearer ${accessToken}` },
         }, AI_TIMEOUT_MS.brief)
-            .then((r) => {
+            .then(async (r) => {
                 // Without this, a 500 returning an HTML body throws on .json() into the same
-                // silent catch as "no brief", making a real failure indistinguishable from
-                // having nothing to show.
-                if (!r.ok) throw new Error(`Brief request failed (${r.status})`)
+                // catch as "no brief", making a real failure indistinguishable from having
+                // nothing to show.
+                if (!r.ok) {
+                    const d = await r.json().catch(() => null) as { error?: string } | null
+                    throw new Error(d?.error || `The server answered ${r.status}. Try again.`)
+                }
                 return r.json()
             })
             .then((d) => {
                 if (cancelled) return
                 setBrief(d.brief ?? null)
                 setConfigured(d.configured !== false)
+                // No brief, and the route says why (out of credits, or Brio failed to write one).
+                if (!d.brief && typeof d.reason === 'string') setLoadError(d.reason)
             })
-            .catch(() => { if (!cancelled) setBrief(null) })
+            .catch((e) => {
+                if (cancelled) return
+                setBrief(null)
+                setLoadError(
+                    e instanceof AiTimeoutError ? `${ASSISTANT.name} took too long. Try again.`
+                        : e instanceof TypeError ? BRIO_UNREACHABLE_RETRY
+                            // The route's words, thrown above; not a parse error's own text.
+                            : e instanceof Error && e.name === 'Error' && e.message ? e.message : BRIO_BRIEF_FAILED,
+                )
+            })
             .finally(() => { if (!cancelled) setLoading(false) })
 
         return () => { cancelled = true }
-    }, [firmId, accessToken])
+    }, [firmId, accessToken, loadTick])
+
+    /** Loads the brief again, after a failed load. */
+    const reload = useCallback(() => setLoadTick((t) => t + 1), [])
 
     const refresh = useCallback(async () => {
         if (!accessToken || refreshing) return
@@ -80,15 +105,20 @@ export function useFirmBrief(firmId: string) {
             idle = setTimeout(() => ctrl.abort('timeout'), AI_TIMEOUT_MS.brief)
         }
         arm()
+        // Whether the request got an answer, so a fetch that never left reads differently from
+        // a stream that broke off.
+        let answered = false
         try {
             const res = await fetch(`/api/firms/${firmId}/ai-brief?stream=1`, {
                 method: 'POST',
                 headers: { Authorization: `Bearer ${accessToken}` },
                 signal: ctrl.signal,
             })
+            answered = true
             if (!res.ok || !res.body) {
+                // The route's reason: the credit limit's own words, or Brio's failure.
                 const d = await res.json().catch(() => null)
-                throw new Error(d?.error ?? `Rewrite failed (${res.status})`)
+                throw new Error(d?.error ?? BRIO_BRIEF_FAILED)
             }
             const reader = res.body.getReader()
             const decoder = new TextDecoder()
@@ -107,19 +137,22 @@ export function useFirmBrief(firmId: string) {
                     const msg = JSON.parse(raw) as { type: string; text?: string; brief?: FirmBrief; message?: string }
                     if (msg.type === 'delta' && msg.text) setStreamText((t) => t + msg.text)
                     else if (msg.type === 'done' && msg.brief) { setBrief(msg.brief); finished = true }
-                    else if (msg.type === 'error') throw new Error(msg.message ?? 'Rewrite failed')
+                    else if (msg.type === 'error') throw new Error(msg.message ?? BRIO_BRIEF_FAILED)
                 }
             }
-            if (!finished) throw new Error('The rewrite stopped before it finished')
-        } catch {
-            // Stopped on purpose: the old brief simply stays. Anything else, say so — the user
-            // pressed a button and silence reads as "nothing happened".
+            if (!finished) throw new Error(BRIO_BRIEF_FAILED)
+        } catch (e) {
+            // Stopped on purpose: the old brief simply stays. Anything else, say why — the user
+            // pressed a button, and silence reads as "nothing happened".
             if (!(ctrl.signal.aborted && ctrl.signal.reason === 'stopped')) {
-                setRefreshError(
-                    ctrl.signal.reason === 'timeout'
-                        ? `${ASSISTANT.name} took too long. The brief below is unchanged.`
-                        : `Could not rewrite it. The brief below is unchanged.`,
-                )
+                const reason = ctrl.signal.reason === 'timeout'
+                    ? `${ASSISTANT.name} took too long.`
+                    : !answered && e instanceof TypeError
+                        ? BRIO_UNREACHABLE_RETRY
+                        // Only the words thrown above (the route's); a parse or transport error's
+                        // own text isn't written for a reader.
+                        : e instanceof Error && e.name === 'Error' && e.message ? e.message : BRIO_BRIEF_FAILED
+                setRefreshError(`${reason} The brief below is unchanged.`)
             }
         } finally {
             clearTimeout(idle)
@@ -134,7 +167,11 @@ export function useFirmBrief(firmId: string) {
     // Leaving the page stops it, rather than writing into a card no one sees.
     useEffect(() => () => abortRef.current?.abort('stopped'), [])
 
-    return { brief, loading, refreshing, streamText, refreshError, refresh, stop, available: configured && (loading || !!brief) }
+    return {
+        brief, loading, refreshing, streamText, refreshError, loadError, refresh, stop, reload,
+        // A failed load keeps the card, saying so, rather than leaving the Overview without it.
+        available: configured && (loading || !!brief || !!loadError),
+    }
 }
 
 const CONTROL = 'inline-flex h-7 items-center gap-1.5 rounded-control border border-line bg-surface px-2 text-small transition-colors hover:border-line-strong hover:bg-surface-hover disabled:cursor-default disabled:opacity-50'
@@ -146,9 +183,13 @@ const ICON_BUTTON = 'inline-flex h-7 w-7 items-center justify-center rounded-con
  * "Rewrite with Brio". Presentational: the Overview feeds it from useFirmBrief, the tour from its
  * sample data.
  */
-export function FirmBriefCard({ brief, loading = false, refreshing = false, streamText = '', refreshError = null, onRewrite, onStop, source = 'your current data', reading = 'your firm’s data' }: {
+export function FirmBriefCard({ brief, loading = false, refreshing = false, streamText = '', refreshError = null, loadError = null, onReload, onRewrite, onStop, source = 'your current data', reading = 'your firm’s data' }: {
     brief: FirmBrief | null
     loading?: boolean
+    /** Why there is no brief to show, when loading it failed. Shown in its place, quietly. */
+    loadError?: string | null
+    /** Loads the brief again, after a failed load. */
+    onReload?: () => void
     /** A rewrite is being written: the card shows it streaming in, in place of the brief. */
     refreshing?: boolean
     /** What Brio has written of the rewrite so far. */
@@ -230,6 +271,17 @@ export function FirmBriefCard({ brief, loading = false, refreshing = false, stre
 
             {refreshing ? (
                 <StreamingBrioSections text={streamText} placeholder={<BrioReading what={reading} />} className="px-4 py-3 text-fg-muted" />
+            ) : !loading && !brief && loadError ? (
+                // Not a shimmer forever, and not a card that vanishes: a quiet line with the reason.
+                <div role="status" className="flex flex-wrap items-center gap-x-2 gap-y-1 px-4 py-4 text-small text-fg-muted">
+                    <AlertCircle className="h-3.5 w-3.5 shrink-0 text-tag-yellow-fg" />
+                    <span>Couldn&apos;t load today&apos;s brief · {loadError}</span>
+                    {onReload && (
+                        <button type="button" onClick={onReload} className="text-small font-medium text-fg underline-offset-2 hover:underline">
+                            Try again
+                        </button>
+                    )}
+                </div>
             ) : loading || !brief ? (
                 <div className="space-y-2 px-4 py-4" aria-busy="true">
                     <ShimmerBar className="w-full" />

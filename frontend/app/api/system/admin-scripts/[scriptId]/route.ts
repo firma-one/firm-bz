@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { adminFailure } from '@/app/api/system/admin-error'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { isSysAdminUser } from '@/lib/system/user-data-map'
 import { findScript } from '@/lib/admin-scripts'
@@ -33,9 +34,6 @@ export async function POST(
     const result = await script.run()
     return NextResponse.json(result)
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Script execution failed' },
-      { status: 500 },
-    )
+    return adminFailure('run the script', error)
   }
 }

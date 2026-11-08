@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from "@/lib/prisma"
 import { logger } from '@/lib/logger'
+import { StorageFailure } from '@/lib/connectors/storage-failure'
 import { requireProjectView } from '@/lib/api/engagement-auth'
 import { getLock } from '@/lib/sharing-settings'
 import { resolveEngagementConnectorId } from '@/lib/connectors/resolve-client-connector'
 import { getPermissionAdapter } from '@/lib/connectors/registry'
+import { isExternalEngagementRole, requireEngagementMember, visibleDocumentIdsFor } from '@/lib/engagement-access'
+import { privateExternalIds } from '@/lib/engagement-sharing-ids'
 
 export async function GET(
     request: NextRequest,
@@ -23,6 +26,10 @@ export async function GET(
 
         const authResult = await requireProjectView(request, projectId)
         if (authResult instanceof NextResponse) return authResult
+        // A Limited Access contributor or Reviewer is shown only what's shared with them, and nothing
+        // private to the firm. Their search fails closed: what can't be checked isn't listed.
+        const searcher = await requireEngagementMember(projectId, authResult.user.id)
+        const isClient = isExternalEngagementRole(searcher?.role)
 
         const project = await prisma.engagement.findUnique({
             where: { id: projectId },
@@ -219,8 +226,21 @@ export async function GET(
                     finalFiles = finalFiles.filter((f: any) => !lockedSet.has(f.id))
                 }
             } catch (e) {
-                logger.warn('Lock filter for search results failed', { error: e })
+                logger.warn('Lock filter for search results failed', { error: e, failClosed: isClient })
+                // Drive knows nothing of what's private: unchecked, its hits aren't shown to a client.
+                // The indexed results are filtered in their own queries.
+                if (isClient) finalFiles = finalFiles.filter((f: any) => !driveFileIdSet.has(f.id))
             }
+        }
+
+        // A client sees only what's shared with them, and nothing inside something private (the lock
+        // filter above reads a file's own lock, not its folders'). Either check failing fails the search.
+        if (isClient && finalFiles.length > 0) {
+            const [visible, hidden] = await Promise.all([
+                visibleDocumentIdsFor(projectId, searcher!.role),
+                privateExternalIds(projectId),
+            ])
+            finalFiles = finalFiles.filter((f: any) => (!visible || visible.has(f.id)) && !hidden.has(f.id))
         }
 
         // When search was scoped to a root folder, keep only results under that root.
@@ -315,6 +335,9 @@ export async function GET(
 
     } catch (error) {
         logger.error('Project Search API Error:', error as Error)
-        return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+        if (error instanceof StorageFailure) {
+            return NextResponse.json({ error: `Search couldn't run. ${error.message}`, code: error.reason }, { status: error.status })
+        }
+        return NextResponse.json({ error: "Search couldn't run. Something went wrong on our side. Try again." }, { status: 500 })
     }
 }

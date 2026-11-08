@@ -14,6 +14,8 @@ import { useRightPane } from "@/lib/right-pane-context"
 import { useState } from "react"
 import { useToast } from "@/components/ui/toast"
 import { logger } from "@/lib/logger"
+import { failureReason } from "@/lib/files/action-failure"
+import { regrantRefusalReason } from "@/lib/files/regrant-refusal"
 import { Loader2, MailCheck, ShieldCheck, Mail, ExternalLink } from "lucide-react"
 import {
   Dialog,
@@ -51,7 +53,8 @@ export function ReGrantEditorAccessButton({ projectId, documentId, isGuest }: { 
           addToast({ type: "error", title: "Sharing blocked", message: errBody.error })
           return
         }
-        throw new Error(errBody.error || 'Failed to authenticate editor access')
+        // The route says why (a refused grant, a PDF copy that couldn't be made, a revoke).
+        throw new Error(regrantRefusalReason(res.status, errBody))
       }
 
       const data = await res.json().catch(() => ({}))
@@ -73,16 +76,19 @@ export function ReGrantEditorAccessButton({ projectId, documentId, isGuest }: { 
           logger.warn('Editor access tab was blocked by the browser', 'DocumentEditSheet', { documentId })
           setBlockedUrl(data.documentUrl)
         }
-      } else {
-        // Google Drive: unchanged — Google's own OTP is delivered via this email, so the
-        // "check your inbox" step is the actual verification mechanism, not just a notification.
+      } else if (data.emailed === true) {
+        // Google Drive: Google's own OTP is delivered via this email, so the "check your inbox"
+        // step is the actual verification mechanism, not just a notification. Only when the route
+        // says the email went out (AC-10).
         setShowSuccessModal(true)
+      } else {
+        throw new Error("Storage didn't send a link to open it. Try again in a moment.")
       }
     } catch (err) {
       addToast({
         type: "error",
-        title: "Failed to authenticate",
-        message: "There was a problem authenticating editor access. Please try again.",
+        title: "Couldn't authenticate editor access",
+        message: failureReason(err),
       })
     } finally {
       setIsLoading(false)

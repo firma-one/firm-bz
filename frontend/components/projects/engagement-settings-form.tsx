@@ -9,6 +9,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { PropertyList, PropertyRow, PROPERTY_FIELD_CLASS, PROPERTY_TEXTAREA_CLASS, SETTINGS_SECTION_HEADING_CLASS } from '@/components/ui/property-list'
 import { StatusProperty } from '@/components/ui/property-cells'
 import { updateProject, deleteProject } from '@/lib/actions/project'
+import { failureReason } from '@/lib/files/action-failure'
 import type { LwCrmEngagementStatus } from '@/lib/actions/project'
 import { useRouter } from 'next/navigation'
 import { useToast } from '@/components/ui/toast'
@@ -138,7 +139,7 @@ export function EngagementSettingsForm({
     const handleSaveProperties = async () => {
         setSaving(true)
         try {
-            await updateProject(projectId, {
+            const result = await updateProject(projectId, {
                 name,
                 description,
                 kickoffDate: kickoffDate || null,
@@ -150,10 +151,14 @@ export function EngagementSettingsForm({
                 tags: tagInput.trim() ? [...tags, tagInput.trim().toLowerCase().replace(/\s+/g, '-')] : tags,
                 internalMemo: internalMemo.trim() || null,
             }, orgSlug, clientSlug)
+            if (!result.ok) {
+                addToast({ type: 'error', title: "Couldn't save engagement", message: result.error })
+                return
+            }
             addToast({ type: 'success', title: 'Saved', message: 'Engagement properties updated.' })
             onSaved?.()
         } catch (e: unknown) {
-            addToast({ type: 'error', title: 'Update failed', message: e instanceof Error ? e.message : 'Could not update project.' })
+            addToast({ type: 'error', title: "Couldn't save engagement", message: failureReason(e) })
         } finally {
             setSaving(false)
         }
@@ -162,13 +167,18 @@ export function EngagementSettingsForm({
     const handleDeleteProject = async () => {
         setDeleting(true)
         try {
-            await deleteProject(projectId, orgSlug, clientSlug)
-            addToast({ type: 'success', title: 'Engagement deleted', message: 'Engagement has been removed.' })
+            const result = await deleteProject(projectId, orgSlug, clientSlug)
+            if (!result.ok) {
+                addToast({ type: 'error', title: "Couldn't delete engagement", message: result.error })
+                return
+            }
+            if (result.warning) addToast({ type: 'warning', title: 'Engagement deleted', message: result.warning })
+            else addToast({ type: 'success', title: 'Engagement deleted', message: 'Its access in storage has been taken back.' })
             setIsDeleteDialogOpen(false)
             onSaved?.()
             router.push(clientTabPath(groupSlug, orgSlug, clientSlug, 'projects'))
         } catch (e: unknown) {
-            addToast({ type: 'error', title: 'Delete failed', message: e instanceof Error ? e.message : 'Could not delete project.' })
+            addToast({ type: 'error', title: "Couldn't delete engagement", message: failureReason(e) })
         } finally {
             setDeleting(false)
         }
@@ -188,7 +198,7 @@ export function EngagementSettingsForm({
             {isCompleted && (
                 <div className="flex items-center gap-2 rounded-card bg-surface-subtle px-3 py-2 text-small text-fg-muted">
                     <Lock className="h-3.5 w-3.5 shrink-0 text-fg-subtle" />
-                    This engagement is completed. Change its status to edit the other fields.
+                    This engagement is completed, so it's read only for all its members. Change its status to make changes.
                 </div>
             )}
 

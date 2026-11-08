@@ -6,6 +6,7 @@ const { auth, reminders, work } = vi.hoisted(() => ({
     work: { needsYou: [] as any[] },
 }))
 vi.mock('@/lib/logger', () => ({ logger: { error: vi.fn() } }))
+vi.mock('next/navigation', () => ({ unstable_rethrow: vi.fn() }))
 vi.mock('@/utils/supabase/server', () => ({
     createClient: async () => ({ auth: { getUser: async () => ({ data: { user: auth.user } }) } }),
 }))
@@ -50,8 +51,20 @@ describe('getInboxCounts', () => {
 describe('getNeedsYou', () => {
     it('returns the same items Home lists, for the signed-in user only', async () => {
         work.needsYou = [{ id: 'review:a', firmId: 'f1' }]
-        expect(await getNeedsYou()).toEqual([{ id: 'review:a', firmId: 'f1' }])
+        expect(await getNeedsYou()).toEqual({ ok: true, data: [{ id: 'review:a', firmId: 'f1' }] })
         auth.user = null
-        expect(await getNeedsYou()).toEqual([])
+        expect(await getNeedsYou()).toEqual({ ok: false, code: 'unauthorized', error: 'Your session has ended. Sign in again.' })
+    })
+
+    it('answers that it did not load, never an empty list, when the lookup fails (EM-1)', async () => {
+        vi.mocked(getMyWork).mockRejectedValueOnce(new Error('db down'))
+        expect(await getNeedsYou()).toEqual({ ok: false, code: 'internal', error: 'Something went wrong on our side. Try again.' })
+    })
+})
+
+describe('getInboxCounts when the lookup fails', () => {
+    it('answers no badge rather than an error on every page', async () => {
+        vi.mocked(getMyWork).mockRejectedValueOnce(new Error('db down'))
+        expect(await getInboxCounts()).toEqual({ byFirm: {}, platform: 0 })
     })
 })

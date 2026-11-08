@@ -21,7 +21,7 @@ Agreed with Deepak 2026-10-29. Builds on `2026-08-deliverable-status-derivation-
 
 ## 2. Deliverable stage follows its documents
 
-The rules, over the deliverable's To do+ documents (Not started ones are left out):
+The rules, over the deliverable's To do+ documents (Not started and Internal only ones are left out):
 1. none → To do
 2. any In progress → In progress
 3. all Approved → Approved (finalizes, as today)
@@ -39,6 +39,9 @@ The rules, over the deliverable's To do+ documents (Not started ones are left ou
   (locks it) asks first. A client sees the deliverable's card on the Board from promotion on; what
   these moves open to them is its documents, and its folder in Files.
   The route answers 409 with what would change, and the client resends with `confirm: true`.
+- **Internal only:** an Internal only document can't hold its deliverable back or move it along, and
+  doesn't count toward progress. Adding or removing the mark recomputes the deliverable, asking first
+  in the same way.
 - One-time recompute (data migration): each unfinalized deliverable takes its derived stage where
   that is the same or earlier than its stored one, which needs no side effects. A deliverable
   behind its documents catches up at its next document change.

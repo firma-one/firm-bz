@@ -27,6 +27,7 @@ import {
 } from '@/components/signup/signup-step-progress'
 import { Turnstile, type TurnstileInstance } from '@marsidev/react-turnstile'
 import { checkEmailExists, sendOTPWithTurnstile } from '@/app/actions/send-otp'
+import { authRequestFailure, TURNSTILE_BLOCKED, TURNSTILE_RETRYING, turnstileErrorStep } from '@/app/(app)/signin/auth-failure-words'
 import { sendEvent, ANALYTICS_EVENTS } from "@/lib/analytics"
 import { logger } from '@/lib/logger'
 import { persistCheckoutIntent } from '@/lib/marketing/checkout-intent'
@@ -155,6 +156,13 @@ export function SignupForm({
     const [error, setError] = useState('')
     const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
     const [showTurnstile, setShowTurnstile] = useState(false)
+    // Each time the check is shown again, it gets its full set of retries (P1-21).
+    useEffect(() => {
+        if (!showTurnstile) return
+        infoTurnstileErrorCount.current = 0
+        otpSendTurnstileErrorCount.current = 0
+        otpResendTurnstileErrorCount.current = 0
+    }, [showTurnstile])
     const [emailVerifiedNewUser, setEmailVerifiedNewUser] = useState(false)
     const [isReturningUser, setIsReturningUser] = useState(false) // User exists, OTP already sent
     const [existingAccountMessage, setExistingAccountMessage] = useState('')
@@ -239,7 +247,7 @@ export function SignupForm({
             }
         } catch (err) {
             logger.error('Email check failed', err as Error)
-            setError('Something went wrong. Please try again.')
+            setError(authRequestFailure(err))
         }
 
         setLoading(false)
@@ -358,7 +366,18 @@ export function SignupForm({
     const sendOTPWithToken = async (token: string) => {
         setLoading(true)
         setError('')
-        const result = await sendOTPWithTurnstile(email, token, firstName.trim() || undefined, lastName.trim() || undefined)
+        let result: Awaited<ReturnType<typeof sendOTPWithTurnstile>>
+        try {
+            result = await sendOTPWithTurnstile(email, token, firstName.trim() || undefined, lastName.trim() || undefined)
+        } catch (err) {
+            // A rejected request used to leave "Sending code…" spinning forever (P1-20).
+            logger.error('Sending the sign-up code failed', err as Error)
+            setError(authRequestFailure(err))
+            setLoading(false)
+            setTurnstileToken(null)
+            setShowTurnstile(false)
+            return
+        }
         if (!result.success) {
             setError(result.error || 'Failed to send verification code')
             setLoading(false)
@@ -395,7 +414,14 @@ export function SignupForm({
             return
         }
 
-        const result = await AuthService.verifyOTP(email, codeToVerify)
+        let result: Awaited<ReturnType<typeof AuthService.verifyOTP>>
+        try {
+            result = await AuthService.verifyOTP(email, codeToVerify)
+        } catch (err) {
+            setError(authRequestFailure(err))
+            setLoading(false)
+            return
+        }
 
         if (!result.success) {
             setError(result.error || 'Invalid verification code')
@@ -406,9 +432,14 @@ export function SignupForm({
         // Clear onboarding data
         AuthService.clearOnboardingData()
 
-        const {
-            data: { session },
-        } = await supabase.auth.getSession()
+        let session: Awaited<ReturnType<typeof supabase.auth.getSession>>['data']['session'] = null
+        try {
+            session = (await supabase.auth.getSession()).data.session
+        } catch (err) {
+            setError(authRequestFailure(err))
+            setLoading(false)
+            return
+        }
         if (!session) {
             setError('Failed to establish session')
             setLoading(false)
@@ -463,13 +494,16 @@ export function SignupForm({
             }}
             onError={() => {
                 infoTurnstileErrorCount.current += 1
-                if (infoTurnstileErrorCount.current > 1) {
-                    setError('Captcha verification failed. Please try again.')
+                const next = turnstileErrorStep(infoTurnstileErrorCount.current)
+                setTurnstileToken(null)
+                if (next === 'stop') {
+                    // Stop and say what to do; submitting again shows the check again.
                     setShowTurnstile(false)
-                } else {
-                    setTurnstileToken(null)
-                    infoTurnstileRef.current?.reset()
+                    setError(TURNSTILE_BLOCKED)
+                    return
                 }
+                if (next === 'retry_with_notice') setError(TURNSTILE_RETRYING)
+                infoTurnstileRef.current?.reset()
             }}
             onExpire={() => {
                 setTurnstileToken(null)
@@ -494,10 +528,14 @@ export function SignupForm({
             }}
             onError={() => {
                 otpSendTurnstileErrorCount.current += 1
-                if (otpSendTurnstileErrorCount.current > 1) {
-                    setError('Captcha verification failed. Please try again.')
-                }
+                const next = turnstileErrorStep(otpSendTurnstileErrorCount.current)
                 setTurnstileToken(null)
+                if (next === 'stop') {
+                    setShowTurnstile(false)
+                    setError(TURNSTILE_BLOCKED)
+                    return
+                }
+                if (next === 'retry_with_notice') setError(TURNSTILE_RETRYING)
                 otpSendTurnstileRef.current?.reset()
             }}
             onExpire={() => {
@@ -523,10 +561,14 @@ export function SignupForm({
             }}
             onError={() => {
                 otpResendTurnstileErrorCount.current += 1
-                if (otpResendTurnstileErrorCount.current > 1) {
-                    setError('Captcha verification failed. Please try again.')
-                }
+                const next = turnstileErrorStep(otpResendTurnstileErrorCount.current)
                 setTurnstileToken(null)
+                if (next === 'stop') {
+                    setShowTurnstile(false)
+                    setError(TURNSTILE_BLOCKED.replace('press Continue', 'press Resend code'))
+                    return
+                }
+                if (next === 'retry_with_notice') setError(TURNSTILE_RETRYING)
                 otpResendTurnstileRef.current?.reset()
             }}
             onExpire={() => {

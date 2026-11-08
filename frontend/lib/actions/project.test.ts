@@ -62,8 +62,12 @@ beforeEach(() => {
 describe('updateEngagement and its deliverables', () => {
     it("refuses a due date before one of its deliverables, naming it", async () => {
         dueRule.later = { id: 'D', docId: 'QSR-9', name: 'Market report', due: '2026-12-20T00:00:00.000Z' }
-        await expect(updateEngagement('eng-1', { dueDate: '2026-11-30T12:00:00Z' }, 'acme', 'contoso'))
-            .rejects.toThrow("QSR-9 · Market report is due Dec 20, 2026, after that. Set the engagement's due date on or after it, or move that deliverable first.")
+        // Answered, not thrown: a thrown reason reaches the browser as "Minified React error #441".
+        expect(await updateEngagement('eng-1', { dueDate: '2026-11-30T12:00:00Z' }, 'acme', 'contoso')).toEqual({
+            ok: false,
+            code: 'due_date_conflict',
+            error: "QSR-9 · Market report is due Dec 20, 2026, after that. Set the engagement's due date on or after it, or move that deliverable first.",
+        })
         expect(prisma.engagement.update).not.toHaveBeenCalled()
     })
 })

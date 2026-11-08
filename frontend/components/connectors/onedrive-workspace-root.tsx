@@ -15,6 +15,7 @@ import { SharePointIcon } from "@/components/ui/sharepoint-icon"
 import { MicrosoftIcon } from "@/components/ui/microsoft-icon"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useToast } from "@/components/ui/toast"
+import { failureFrom, failureReason } from "@/lib/files/action-failure"
 import { generateWorkspaceFolderName } from "@/lib/generate-unique-workspace-folder-name"
 import {
   ArrowRightLeft,
@@ -176,22 +177,18 @@ export function OneDriveWorkspaceRoot({
       const res = await fetch(`/api/connectors/onedrive/sites?${params}`, {
         headers: { Authorization: `Bearer ${accessToken}` },
       })
-      const data = await res.json().catch(() => ({}))
       if (res.ok) {
+        const data = await res.json().catch(() => ({}))
         setSites(data.sites ?? [])
       } else {
+        // The route gives Microsoft's reason (admin consent, a needed reconnect…): show that, not
+        // a guess that reconnecting will help (P2-34).
         setSites([])
-        addToast({
-          title: 'Could not load sites',
-          message: data.error === 'Failed to list SharePoint sites'
-            ? 'Reconnect this account to grant SharePoint site access, then try again.'
-            : (data.error || 'Try again.'),
-          type: 'error',
-        })
+        addToast({ title: "Couldn't load sites", message: failureReason(await failureFrom(res)), type: 'error' })
       }
-    } catch {
+    } catch (e) {
       setSites([])
-      addToast({ title: 'Could not load sites', message: 'Try again.', type: 'error' })
+      addToast({ title: "Couldn't load sites", message: failureReason(e), type: 'error' })
     } finally {
       setSitesLoading(false)
     }
@@ -222,35 +219,32 @@ export function OneDriveWorkspaceRoot({
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
         body: JSON.stringify({ action: 'ensure-folder', connectionId, name: '_firma' }),
       })
-      if (!firmaRes.ok) {
-        const err = await firmaRes.json().catch(() => ({}))
-        throw new Error((err as { error?: string }).error || 'Failed to ensure _firma folder')
-      }
+      if (!firmaRes.ok) throw await failureFrom(firmaRes)
       const { folderId: firmaFolderId } = await firmaRes.json()
       const createRes = await fetch('/api/connectors/onedrive', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
         body: JSON.stringify({ action: 'ensure-folder', connectionId, name: folderName, parentId: firmaFolderId }),
       })
-      if (!createRes.ok) {
-        const err = await createRes.json().catch(() => ({}))
-        throw new Error((err as { error?: string }).error || 'Failed to create workspace folder')
-      }
+      if (!createRes.ok) throw await failureFrom(createRes)
       const { folderId } = await createRes.json()
       const updateRes = await fetch('/api/connectors/onedrive', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
         body: JSON.stringify({ action: 'update-root-folder', connectionId, rootFolderId: folderId, ...(firmId && { firmId }) }),
       })
-      if (!updateRes.ok) {
-        const err = await updateRes.json().catch(() => ({}))
-        throw new Error((err as { error?: string }).error || 'Failed to set workspace root')
+      if (!updateRes.ok) throw await failureFrom(updateRes)
+      const updated = (await updateRes.json().catch(() => ({}))) as { warning?: string }
+      // Set, but the firm's folders inside it weren't made: say so instead of a plain success (CN-3).
+      if (updated.warning) {
+        addToast({ title: 'Folder set, with a problem', message: updated.warning, type: 'warning' })
+      } else {
+        addToast({ title: 'Folder created', message: `"${folderName}" set as your workspace root.`, type: 'success' })
       }
-      addToast({ title: 'Folder created', message: `"${folderName}" set as your workspace root.`, type: 'success' })
       await onUpdated()
       closeDialog()
     } catch (e) {
-      addToast({ title: 'Could not create folder', message: e instanceof Error ? e.message : 'Try again.', type: 'error' })
+      addToast({ title: "Couldn't create folder", message: failureReason(e), type: 'error' })
     } finally {
       setSaving(false)
     }
@@ -284,11 +278,14 @@ export function OneDriveWorkspaceRoot({
         body: JSON.stringify({ connectionId, siteId: site.id, siteName: site.name, ...(firmId && { firmId }) }),
         signal: AbortSignal.timeout(90_000),
       })
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        throw new Error((err as { error?: string }).error || 'Failed to select site')
+      // The route words Microsoft's reason and says the current folder is unchanged (CN-2).
+      if (!res.ok) throw await failureFrom(res)
+      const selected = (await res.json().catch(() => ({}))) as { warning?: string }
+      if (selected.warning) {
+        addToast({ title: 'Site set, with a problem', message: selected.warning, type: 'warning' })
+      } else {
+        addToast({ title: 'SharePoint site connected', message: `${site.name} is now linked.`, type: 'success' })
       }
-      addToast({ title: 'SharePoint site connected', message: `${site.name} is now linked.`, type: 'success' })
       await onUpdated()
       closeDialog()
     } catch (e) {
@@ -296,10 +293,10 @@ export function OneDriveWorkspaceRoot({
       // while the server may well have finished. Say so, rather than inviting a duplicate attempt.
       const timedOut = e instanceof DOMException && (e.name === 'TimeoutError' || e.name === 'AbortError')
       addToast({
-        title: timedOut ? 'Still setting up' : 'Site selection failed',
+        title: timedOut ? 'Still setting up' : `Couldn't use ${site.name}`,
         message: timedOut
-          ? 'This is taking longer than expected. It may still be completing — reopen this dialog shortly to check before trying again.'
-          : e instanceof Error ? e.message : 'Try again.',
+          ? 'This is taking longer than expected. It may still be completing. Reopen this dialog shortly to check before trying again.'
+          : failureReason(e),
         type: 'error',
       })
     } finally {

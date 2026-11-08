@@ -17,6 +17,14 @@ describe('demo document stages', () => {
         }
     })
 
+    it("leaves an internal only document out of what makes the deliverable's stage", () => {
+        const file = (id: string, isPrivate = false) => ({ id, docId: id, name: id, type: 'pdf', modifiedTime: '', size: 0, private: isPrivate })
+        const stages = demoDocumentStages('approved', [file('a'), file('hidden', true), file('b')])
+        expect(stages.hidden.stage).toBe('not_started')
+        expect(stages.a.stage).toBe('approved')
+        expect(stages.b.stage).toBe('approved')
+    })
+
     it('keeps a document off the Board, and one blocked, somewhere on the tour', () => {
         const all = engagements.flatMap((e) => getDemoDeliverables(e).flatMap((d) => Object.values(demoDocumentStages(d.status, demoFilesIn(d.folder)))))
         expect(all.some((s) => s.stage === 'not_started')).toBe(true)

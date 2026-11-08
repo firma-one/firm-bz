@@ -32,7 +32,19 @@ describe('Profile — Sign out of all devices', () => {
         render(<SessionsCard />)
         fireEvent.click(screen.getByRole('button', { name: 'Sign out everywhere' }))
         fireEvent.click(screen.getAllByRole('button', { name: 'Sign out everywhere' }).at(-1)!)
-        await waitFor(() => expect(addToast).toHaveBeenCalledWith(expect.objectContaining({ type: 'error', title: "Couldn't sign out of all devices" })))
+        await waitFor(() => expect(addToast).toHaveBeenCalledWith(expect.objectContaining({
+            type: 'error',
+            title: "Couldn't sign out of all devices",
+            message: "Something went wrong on our side, so you're still signed in everywhere. Try again.",
+        })))
+    })
+
+    it('says the request never left when the browser is offline', async () => {
+        signOutEverywhere.mockRejectedValue(new TypeError('Failed to fetch'))
+        render(<SessionsCard />)
+        fireEvent.click(screen.getByRole('button', { name: 'Sign out everywhere' }))
+        fireEvent.click(screen.getAllByRole('button', { name: 'Sign out everywhere' }).at(-1)!)
+        await waitFor(() => expect(addToast).toHaveBeenCalledWith(expect.objectContaining({ message: expect.stringMatching(/^Couldn't reach/) })))
     })
 })
 

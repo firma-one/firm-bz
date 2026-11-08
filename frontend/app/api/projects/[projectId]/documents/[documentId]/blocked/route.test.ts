@@ -8,6 +8,10 @@ const { st, sql, events } = vi.hoisted(() => ({
     st: { role: 'eng_member' as string, doc: null as any },
 }))
 
+vi.mock('@/lib/engagement-access', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('@/lib/engagement-access')>()),
+    blockIfEngagementCompleted: async () => null,
+}))
 vi.mock('@/utils/supabase/server', () => ({
     createClient: async () => ({ auth: { getUser: async () => ({ data: { user: { id: 'me' } } }) } }),
 }))

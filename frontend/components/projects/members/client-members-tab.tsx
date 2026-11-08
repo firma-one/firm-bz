@@ -19,6 +19,8 @@ import { StatusPill } from '@/components/ui/status-pill'
 import { FRESH_CHIP_CLASS, useApprovalFeedback } from '@/lib/ui/use-approval-feedback'
 import { logger } from '@/lib/logger'
 import { initialsOf } from '@/lib/initials'
+import { LoadFailed } from '@/components/ui/load-failed'
+import { failureReason } from '@/lib/files/action-failure'
 
 interface ClientMembersTabProps {
     firmId: string
@@ -45,6 +47,8 @@ export function ClientMembersTab({ firmId, clientId, orgSlug, clientSlug, canMan
     const [members, setMembers] = useState<any[]>([])
     const [invitations, setInvitations] = useState<any[]>([])
     const [isLoading, setIsLoading] = useState(true)
+    /** Why the last load failed. Never "No members yet" (with Invite beside it) after a failure. */
+    const [loadError, setLoadError] = useState<string | null>(null)
     const [isInviteModalOpen, setIsInviteModalOpen] = useState(false)
     const [actionLoading, setActionLoading] = useState<string | null>(null)
     const [inviteToRevokeId, setInviteToRevokeId] = useState<string | null>(null)
@@ -54,11 +58,17 @@ export function ClientMembersTab({ firmId, clientId, orgSlug, clientSlug, canMan
     const refreshData = async () => {
         setIsLoading(true)
         try {
-            const data = await getClientMembers(clientId)
-            setMembers(data.members)
-            setInvitations(data.invitations)
+            const result = await getClientMembers(clientId)
+            if (!result.ok) {
+                setLoadError(result.error)
+                return
+            }
+            setMembers(result.data.members)
+            setInvitations(result.data.invitations)
+            setLoadError(null)
         } catch (error) {
             logger.error('Failed to fetch client members', error instanceof Error ? error : new Error(String(error)), 'ClientMembersTab', { clientId })
+            setLoadError(failureReason(error))
         } finally {
             setIsLoading(false)
         }
@@ -71,11 +81,16 @@ export function ClientMembersTab({ firmId, clientId, orgSlug, clientSlug, canMan
     const handleResendInvite = async (id: string, email: string) => {
         setActionLoading(id)
         try {
-            await resendClientInvitation(id)
+            const result = await resendClientInvitation(id)
+            if (!result.ok) {
+                addToast({ type: 'error', title: "Couldn't resend invitation", message: result.error })
+                refreshData()
+                return
+            }
             resendFeedback.confirm({ id, name: email, title: 'Invitation resent' })
             refreshData()
         } catch (e) {
-            addToast({ type: 'error', title: 'Failed to Send', message: 'Could not resend the invitation.' })
+            addToast({ type: 'error', title: "Couldn't resend invitation", message: failureReason(e) })
         } finally {
             setActionLoading(null)
         }
@@ -87,11 +102,15 @@ export function ClientMembersTab({ firmId, clientId, orgSlug, clientSlug, canMan
         setInviteToRevokeId(null)
         setActionLoading(id)
         try {
-            await revokeClientInvitation(id)
-            addToast({ type: 'success', title: 'Invitation Cancelled', message: 'The invitation has been revoked.' })
+            const result = await revokeClientInvitation(id)
+            if (!result.ok) {
+                addToast({ type: 'error', title: "Couldn't cancel invitation", message: result.error })
+                return
+            }
+            addToast({ type: 'success', title: 'Invitation canceled', message: 'The invitation has been revoked.' })
             refreshData()
         } catch (e) {
-            addToast({ type: 'error', title: 'Error', message: 'Failed to revoke invitation.' })
+            addToast({ type: 'error', title: "Couldn't cancel invitation", message: failureReason(e) })
         } finally {
             setActionLoading(null)
         }
@@ -109,7 +128,7 @@ export function ClientMembersTab({ firmId, clientId, orgSlug, clientSlug, canMan
                     <div>
                         <h2 className="text-xl font-semibold tracking-tight text-fg flex items-center gap-2">
                             Client Members
-                            {!isLoading && (members.length > 0 || invitations.length > 0) && (
+                            {!isLoading && !loadError && (members.length > 0 || invitations.length > 0) && (
                                 <span className="font-mono text-[10px] font-bold bg-primary text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
                                     {members.length + invitations.length}
                                 </span>
@@ -132,7 +151,12 @@ export function ClientMembersTab({ firmId, clientId, orgSlug, clientSlug, canMan
             </div>
 
             <div className="flex-1 overflow-auto p-4">
-                {isLoading ? (
+                {loadError && !isLoading && (members.length > 0 || invitations.length > 0) && (
+                    <p role="alert" className="pb-2 text-small text-danger">Couldn&apos;t refresh members · {loadError}</p>
+                )}
+                {loadError && !isLoading && members.length === 0 && invitations.length === 0 ? (
+                    <LoadFailed what="members" reason={loadError} onRetry={() => void refreshData()} />
+                ) : isLoading ? (
                     <div className="space-y-3">
                         {[1, 2, 3].map((i) => (
                             <div key={i} className="rounded border border-line bg-white p-4 animate-pulse flex items-center gap-3">
@@ -179,7 +203,7 @@ export function ClientMembersTab({ firmId, clientId, orgSlug, clientSlug, canMan
                                     </div>
                                     <div className="flex-1 min-w-0">
                                         <p className="text-[13px] font-medium text-fg truncate">{inv.email}</p>
-                                        <StatusPill kind="invitation" status="PENDING" className={resendFeedback.isFresh(inv.id) ? FRESH_CHIP_CLASS : undefined} />
+                                        <StatusPill kind="invitation" status={inv.status ?? 'PENDING'} className={resendFeedback.isFresh(inv.id) ? FRESH_CHIP_CLASS : undefined} />
                                     </div>
                                     {canManage && (
                                         <DropdownMenu>

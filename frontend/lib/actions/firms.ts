@@ -16,6 +16,8 @@ import { mergeLeanAppMetadata } from '@/lib/auth/supabase-jwt-metadata'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 import { firmPath, groupFirmListPath } from '@/lib/navigation/firm-paths'
 import { resolveDefaultFirmLandingPath } from '@/lib/landing/default-landing-path'
+import { asResult, userFacing, type ActionResult } from '@/lib/actions/action-result'
+import { asResultWithWarning, gone, notAllowed, signedOut } from '@/lib/actions/action-reasons'
 
 export interface FirmOption {
     id: string
@@ -49,7 +51,11 @@ export interface CreateFirmData {
 }
 
 /**
- * Get all firms that the current user belongs to
+ * Get all firms that the current user belongs to.
+ *
+ * A failed load throws: it used to answer `[]`, which every caller read as "no workspaces" (and offered
+ * to create one). Server callers let it reach the error boundary; browser callers catch it and say the
+ * load failed, or use `getUserGroups`, which answers a result.
  */
 export async function getUserFirms(): Promise<FirmOption[]> {
     const supabase = await createClient()
@@ -59,47 +65,44 @@ export async function getUserFirms(): Promise<FirmOption[]> {
         redirect('/signin')
     }
 
-    const user = session.user
+    return loadUserFirms(session.user.id)
+}
 
-    try {
-        const memberships = await (prisma as any).firmMember.findMany({
-            where: { userId: user.id, firm: { sandboxOnly: false } },
-            include: {
-                firm: {
-                    include: {
-                        group: { select: { id: true, name: true, slug: true } },
-                        _count: { select: { clients: { where: { deletedAt: null } } } },
-                    },
+async function loadUserFirms(userId: string): Promise<FirmOption[]> {
+    const memberships = await (prisma as any).firmMember.findMany({
+        where: { userId, firm: { sandboxOnly: false } },
+        include: {
+            firm: {
+                include: {
+                    group: { select: { id: true, name: true, slug: true } },
+                    _count: { select: { clients: { where: { deletedAt: null } } } },
                 },
             },
-            orderBy: { firm: { createdAt: 'asc' } },
-        })
+        },
+        orderBy: { firm: { createdAt: 'asc' } },
+    })
 
-        return memberships.map((m: any) => {
-            const firm = m.firm
-            // The row itself is this user's membership; no need to load every member of the firm.
-            const membership = m
-            const branding = (firm.settings as Record<string, any>)?.branding ?? {}
-            return {
-                id: firm.id,
-                name: firm.name,
-                slug: firm.slug,
-                isDefault: membership?.isDefault || false,
-                createdAt: (firm.createdAt || new Date()).toISOString(),
-                sandboxOnly: firm.sandboxOnly || false,
-                logoUrl: (branding.logoData as string | null | undefined) ?? (branding.logoUrl as string | null | undefined) ?? null,
-                themeColor: (branding.primaryColor as string | null | undefined) ?? null,
-                groupId: firm.groupId ?? null,
-                groupName: firm.group?.name ?? null,
-                groupSlug: firm.group?.slug ?? null,
-                isFirmAdmin: membership?.role === 'firm_admin',
-                clientCount: firm._count?.clients ?? 0,
-            }
-        })
-    } catch (err) {
-        logger.error('Error fetching user firms (V2)', err as Error)
-        return []
-    }
+    return memberships.map((m: any) => {
+        const firm = m.firm
+        // The row itself is this user's membership; no need to load every member of the firm.
+        const membership = m
+        const branding = (firm.settings as Record<string, any>)?.branding ?? {}
+        return {
+            id: firm.id,
+            name: firm.name,
+            slug: firm.slug,
+            isDefault: membership?.isDefault || false,
+            createdAt: (firm.createdAt || new Date()).toISOString(),
+            sandboxOnly: firm.sandboxOnly || false,
+            logoUrl: (branding.logoData as string | null | undefined) ?? (branding.logoUrl as string | null | undefined) ?? null,
+            themeColor: (branding.primaryColor as string | null | undefined) ?? null,
+            groupId: firm.groupId ?? null,
+            groupName: firm.group?.name ?? null,
+            groupSlug: firm.group?.slug ?? null,
+            isFirmAdmin: membership?.role === 'firm_admin',
+            clientCount: firm._count?.clients ?? 0,
+        }
+    })
 }
 
 /**
@@ -163,18 +166,35 @@ export interface UserGroupOption {
     firmCount: number
 }
 
+/** The group picker's load: the groups, and the firms they're made of. */
+export type UserGroupsAndFirms = { groups: UserGroupOption[]; firms: FirmOption[] }
+
 /**
- * Distinct groups the current user has any firm membership in, deduped from `getUserFirms()`,
- * each annotated with whether the user is that group's `GROUP_ADMIN` (checked via `GroupMember`,
- * not `FirmMember` — a user invited into someone else's firm has no `GroupMember` row in that
- * group at all, which correctly reads as "not admin" here).
+ * Distinct groups the current user has any firm membership in, deduped from their firms, each
+ * annotated with whether the user is that group's `GROUP_ADMIN` (checked via `GroupMember`, not
+ * `FirmMember` — a user invited into someone else's firm has no `GroupMember` row in that group at
+ * all, which correctly reads as "not admin" here). With the firms, so the picker needs one load.
+ *
+ * Answers a result: a failed load must read as a failure, never as "No workspaces yet".
  */
-export async function getUserGroups(): Promise<UserGroupOption[]> {
+export async function getUserGroups(): Promise<ActionResult<UserGroupsAndFirms>> {
+    return asResult('getUserGroups', async () => {
+        const supabase = await createClient()
+        const { data: { user }, error } = await supabase.auth.getUser()
+        if (error || !user) throw signedOut()
+        const firms = await loadUserFirms(user.id)
+        return { groups: await groupsOfFirms(user.id, firms), firms }
+    })
+}
+
+async function loadUserGroups(): Promise<UserGroupOption[]> {
     const supabase = await createClient()
     const { data: { user }, error } = await supabase.auth.getUser()
     if (error || !user) return []
+    return groupsOfFirms(user.id, await loadUserFirms(user.id))
+}
 
-    const firms = await getUserFirms()
+async function groupsOfFirms(userId: string, firms: FirmOption[]): Promise<UserGroupOption[]> {
     const groupsById = new Map<string, { slug: string; name: string; firmCount: number }>()
     for (const firm of firms) {
         if (!firm.groupId || !firm.groupSlug) continue
@@ -190,7 +210,7 @@ export async function getUserGroups(): Promise<UserGroupOption[]> {
     if (groupIds.length === 0) return []
 
     const adminRows = await (prisma as any).groupMember.findMany({
-        where: { userId: user.id, groupId: { in: groupIds }, role: 'GROUP_ADMIN' },
+        where: { userId, groupId: { in: groupIds }, role: 'GROUP_ADMIN' },
         select: { groupId: true },
     })
     const adminGroupIds = new Set(adminRows.map((r: { groupId: string }) => r.groupId))
@@ -209,7 +229,7 @@ export async function getUserGroups(): Promise<UserGroupOption[]> {
  * firm member with no group of their own) to create their first one.
  */
 export async function shouldShowSwitchWorkspace(): Promise<boolean> {
-    const groups = await getUserGroups()
+    const groups = await loadUserGroups()
     return groups.length > 0
 }
 
@@ -287,14 +307,32 @@ export async function firmAdminMustCompleteOnboarding(): Promise<boolean> {
 }
 
 /**
- * Create a new firm for the current user
+ * Create a new firm for the current user.
+ *
+ * With `details`, the firm's settings (branding, notes and the rest of the Add firm form) are saved in
+ * the same call. The firm is the action: when it's created but its details can't be saved, the answer
+ * is still ok, with a `warning`, so the person opens it to finish rather than create it twice.
  */
-export async function createFirm(data: CreateFirmData): Promise<FirmOption> {
+export async function createFirm(data: CreateFirmData, details?: FirmUpdate): Promise<ActionResult<FirmOption>> {
+    return asResultWithWarning('createFirm', async () => {
+        const firm = await createFirmOrThrow(data)
+        if (!details || Object.keys(details).length === 0) return { data: firm }
+        try {
+            await updateFirmOrThrow(firm.slug, details)
+            return { data: firm }
+        } catch (e) {
+            logger.error('[createFirm] Firm created, but its details were not saved', e as Error, undefined, { firmId: firm.id })
+            return { data: firm, warning: "Firm created, but its details weren't saved. Open its settings to finish." }
+        }
+    })
+}
+
+async function createFirmOrThrow(data: CreateFirmData): Promise<FirmOption> {
     const supabase = await createClient()
     const { data: { user }, error } = await supabase.auth.getUser()
 
     if (error || !user || !user.email) {
-        throw new Error('Unauthorized')
+        throw signedOut()
     }
 
     await requireNonSandboxFirmCreationAccess(user.id)
@@ -307,7 +345,7 @@ export async function createFirm(data: CreateFirmData): Promise<FirmOption> {
         billingAnchorId = await resolveGroupForNewFirm(user.id)
     }
     if (!billingAnchorId) {
-        throw new Error('Could not attach your new firm to a billing subscription. Please try again.')
+        throw userFacing("Couldn't attach your new firm to a billing subscription. Try again.", 'no_billing_group')
     }
 
     const existingFirm = await prisma.firm.findFirst({
@@ -320,7 +358,7 @@ export async function createFirm(data: CreateFirmData): Promise<FirmOption> {
     })
 
     if (existingFirm) {
-        throw new Error('A firm with this name already exists')
+        throw userFacing('A firm with this name already exists', 'name_taken')
     }
 
     const fullName = user.user_metadata?.full_name || ''
@@ -374,12 +412,16 @@ export async function createFirm(data: CreateFirmData): Promise<FirmOption> {
 /**
  * Switch to a different firm
  */
-export async function switchFirm(firmSlug: string): Promise<void> {
+export async function switchFirm(firmSlug: string): Promise<ActionResult> {
+    return asResult('switchFirm', () => switchFirmOrThrow(firmSlug))
+}
+
+async function switchFirmOrThrow(firmSlug: string): Promise<void> {
     const supabase = await createClient()
     const { data: { user }, error } = await supabase.auth.getUser()
 
     if (error || !user) {
-        throw new Error('Unauthorized')
+        throw signedOut()
     }
 
     const firm = await prisma.firm.findUnique({
@@ -392,7 +434,7 @@ export async function switchFirm(firmSlug: string): Promise<void> {
     })
 
     if (!firm || firm.members.length === 0) {
-        throw new Error('You do not have access to this firm')
+        throw userFacing('You do not have access to this firm', 'forbidden')
     }
 
     await FirmService.setDefaultFirm(user.id, firm.id)
@@ -476,19 +518,24 @@ export type FirmReminderEmailConfig = {
 // settings by id and is called from crons and webhooks with no session, so it can't be a server action.
 
 
-export async function updateFirm(
-    firmSlug: string,
-    data: { name?: string; branding?: FirmBranding; currency?: FirmCurrency; betaFeatures?: Record<string, boolean>; internalMemo?: string | null; industry?: string | null; companySizeBracket?: string | null; companyWebsite?: string | null; linkedInUrl?: string | null; billingAddress?: string | null; notes?: string | null; allowDomainAccess?: boolean; allowedEmailDomain?: string | null; reminderEmailConfig?: FirmReminderEmailConfig; externalSections?: { engagementHealth: boolean; fileOrganization: boolean; documentActivity: boolean } }
-): Promise<void> {
+export type FirmUpdate = { name?: string; branding?: FirmBranding; currency?: FirmCurrency; betaFeatures?: Record<string, boolean>; internalMemo?: string | null; industry?: string | null; companySizeBracket?: string | null; companyWebsite?: string | null; linkedInUrl?: string | null; billingAddress?: string | null; notes?: string | null; allowDomainAccess?: boolean; allowedEmailDomain?: string | null; reminderEmailConfig?: FirmReminderEmailConfig; externalSections?: { engagementHealth: boolean; fileOrganization: boolean; documentActivity: boolean } }
+
+export async function updateFirm(firmSlug: string, data: FirmUpdate): Promise<ActionResult> {
+    return asResult('updateFirm', () => updateFirmOrThrow(firmSlug, data))
+}
+
+async function updateFirmOrThrow(firmSlug: string, data: FirmUpdate): Promise<void> {
     const supabase = await createClient()
     const { data: { user }, error } = await supabase.auth.getUser()
-    if (error || !user) throw new Error('Unauthorized')
+    if (error || !user) throw signedOut()
 
     const firm = await prisma.firm.findUnique({
         where: { slug: firmSlug },
         select: { id: true, settings: true, group: { select: { slug: true } } }
     })
-    if (!firm) throw new Error('Firm not found')
+    if (!firm) throw gone('This firm was deleted.')
+    // FirmService checks this too, in words that can't reach the browser; say it here first.
+    await requireFirmAdmin(firm.id, user.id, 'Only firm admins can change firm settings.')
 
     let payload: any = {}
     if (data.name !== undefined) payload.name = data.name
@@ -576,17 +623,25 @@ export async function updateFirm(
 /**
  * Delete firm.
  */
-export async function deleteFirm(firmSlug: string): Promise<void> {
+export async function deleteFirm(firmSlug: string): Promise<ActionResult> {
+    return asResult('deleteFirm', () => deleteFirmOrThrow(firmSlug))
+}
+
+async function deleteFirmOrThrow(firmSlug: string): Promise<void> {
     const supabase = await createClient()
     const { data: { user }, error } = await supabase.auth.getUser()
-    if (error || !user) throw new Error('Unauthorized')
+    if (error || !user) throw signedOut()
 
     const firm = await prisma.firm.findUnique({
         where: { slug: firmSlug },
         select: { id: true }
     })
-    if (!firm) throw new Error('Firm not found')
+    if (!firm) throw gone('This firm was already deleted.')
+    await requireFirmAdmin(firm.id, user.id, 'Only firm admins can delete a firm.')
 
+    await FirmService.deleteFirm(firm.id, user.id)
+
+    // After the delete, so the audit never records one that didn't happen.
     audit(AUDIT_EVENT.FIRM_DELETED)
         .scope(AUDIT_SCOPE.FIRM)
         .firm(firm.id)
@@ -594,8 +649,14 @@ export async function deleteFirm(firmSlug: string): Promise<void> {
         .meta({ firmSlug })
         .fireAndForget()
 
-    await FirmService.deleteFirm(firm.id, user.id)
     revalidatePath('/d')
+}
+
+/** The caller is a firm admin of this firm, or the words that say why not. */
+async function requireFirmAdmin(firmId: string, userId: string, notAdmin: string): Promise<void> {
+    const membership = await prisma.firmMember.findFirst({ where: { firmId, userId }, select: { role: true } })
+    if (!membership) throw userFacing('You do not have access to this firm', 'forbidden')
+    if (membership.role !== 'firm_admin') throw userFacing(notAdmin, 'forbidden')
 }
 
 // ── Connector management (firm level) ──────────────────────────────────────
@@ -624,14 +685,27 @@ export interface FirmConnectorRecord {
 async function requireFirmManager(firmId: string | null | undefined): Promise<{ userId: string }> {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('Unauthorized')
-    if (!firmId) throw new Error('Unauthorized')
+    if (!user) throw signedOut()
+    if (!firmId) throw notAllowed("manage this firm's storage")
     const { canManageOrganization } = await import('@/lib/permission-helpers')
-    if (!(await canManageOrganization(firmId))) throw new Error('Unauthorized')
+    if (!(await canManageOrganization(firmId))) throw notAllowed("manage this firm's storage")
     return { userId: user.id }
 }
 
-export async function getFirmConnectors(firmId: string): Promise<FirmConnectorRecord[]> {
+/** A connector of this firm, or a reason. The firmId passed in is checked against the connector's own. */
+async function requireFirmConnector(connectorId: string, firmId?: string): Promise<{ userId: string; firmId: string }> {
+    const connector = await prisma.connector.findUnique({ where: { id: connectorId }, select: { firmId: true } })
+    if (!connector) throw gone('This storage connection was already removed.')
+    if (firmId !== undefined && connector.firmId !== firmId) throw notAllowed("manage this firm's storage")
+    const { userId } = await requireFirmManager(connector.firmId)
+    return { userId, firmId: connector.firmId! }
+}
+
+export async function getFirmConnectors(firmId: string): Promise<ActionResult<FirmConnectorRecord[]>> {
+    return asResult('getFirmConnectors', () => getFirmConnectorsOrThrow(firmId))
+}
+
+async function getFirmConnectorsOrThrow(firmId: string): Promise<FirmConnectorRecord[]> {
     await requireFirmManager(firmId)
 
     const connectors = await prisma.connector.findMany({
@@ -686,14 +760,12 @@ export async function getFirmConnectors(firmId: string): Promise<FirmConnectorRe
     })
 }
 
-export async function disconnectFirmConnector({ connectorId, firmId }: { connectorId: string; firmId: string }): Promise<void> {
-    const connector = await prisma.connector.findUnique({
-        where: { id: connectorId },
-        select: { firmId: true },
-    })
-    if (!connector) throw new Error('Connector not found')
-    if (connector.firmId !== firmId) throw new Error('Unauthorized')
-    const user = { id: (await requireFirmManager(connector.firmId)).userId }
+export async function disconnectFirmConnector(input: { connectorId: string; firmId: string }): Promise<ActionResult> {
+    return asResult('disconnectFirmConnector', () => disconnectFirmConnectorOrThrow(input))
+}
+
+async function disconnectFirmConnectorOrThrow({ connectorId, firmId }: { connectorId: string; firmId: string }): Promise<void> {
+    const user = { id: (await requireFirmConnector(connectorId, firmId)).userId }
 
     await prisma.connector.update({
         where: { id: connectorId },
@@ -710,22 +782,21 @@ export async function disconnectFirmConnector({ connectorId, firmId }: { connect
     revalidatePath('/d/[groupSlug]/f', 'layout')
 }
 
-export async function removeFirmConnector({ connectorId }: { connectorId: string; firmId?: string }): Promise<void> {
-    const connector = await prisma.connector.findUnique({ where: { id: connectorId }, select: { firmId: true } })
-    if (!connector) throw new Error('Connector not found')
-    await requireFirmManager(connector.firmId)
-    const { removeConnector } = await import('@/lib/actions/connectors')
-    await removeConnector({ connectorId })
+export async function removeFirmConnector({ connectorId }: { connectorId: string; firmId?: string }): Promise<ActionResult> {
+    return asResult('removeFirmConnector', async () => {
+        await requireFirmConnector(connectorId)
+        const { removeConnector } = await import('@/lib/actions/connectors')
+        await removeConnector({ connectorId })
+    })
 }
 
-export async function renameFirmConnector({ connectorId, firmId, name }: { connectorId: string; firmId: string; name: string }): Promise<void> {
-    const connector = await prisma.connector.findUnique({
-        where: { id: connectorId },
-        select: { firmId: true },
-    })
-    if (!connector) throw new Error('Connector not found')
-    if (connector.firmId !== firmId) throw new Error('Unauthorized')
-    await requireFirmManager(connector.firmId)
+export async function renameFirmConnector(input: { connectorId: string; firmId: string; name: string }): Promise<ActionResult> {
+    return asResult('renameFirmConnector', () => renameFirmConnectorOrThrow(input))
+}
+
+async function renameFirmConnectorOrThrow({ connectorId, firmId, name }: { connectorId: string; firmId: string; name: string }): Promise<void> {
+    await requireFirmConnector(connectorId, firmId)
+    if (!name.trim()) throw userFacing('A connection needs a name.', 'name_required')
 
     await prisma.connector.update({
         where: { id: connectorId },
@@ -740,24 +811,30 @@ export interface FirmClientRecord {
     connectorId: string | null
 }
 
-export async function getFirmAllClients(firmId: string): Promise<FirmClientRecord[]> {
-    await requireFirmManager(firmId)
+export async function getFirmAllClients(firmId: string): Promise<ActionResult<FirmClientRecord[]>> {
+    return asResult('getFirmAllClients', async () => {
+        await requireFirmManager(firmId)
 
-    const clients = await prisma.client.findMany({
-        where: { firmId, deletedAt: null },
-        select: { id: true, name: true, connectorId: true },
-        orderBy: { name: 'asc' },
+        const clients = await prisma.client.findMany({
+            where: { firmId, deletedAt: null },
+            select: { id: true, name: true, connectorId: true },
+            orderBy: { name: 'asc' },
+        })
+        return clients.map(c => ({ id: c.id, name: c.name, connectorId: c.connectorId ?? null }))
     })
-    return clients.map(c => ({ id: c.id, name: c.name, connectorId: c.connectorId ?? null }))
 }
 
-export async function detachConnectorFromClient({ clientId, firmId }: { clientId: string; firmId: string }): Promise<void> {
+export async function detachConnectorFromClient(input: { clientId: string; firmId: string }): Promise<ActionResult> {
+    return asResult('detachConnectorFromClient', () => detachConnectorFromClientOrThrow(input))
+}
+
+async function detachConnectorFromClientOrThrow({ clientId, firmId }: { clientId: string; firmId: string }): Promise<void> {
     const client = await prisma.client.findUnique({
         where: { id: clientId },
         select: { firmId: true, connectorId: true },
     })
-    if (!client) throw new Error('Client not found')
-    if (client.firmId !== firmId) throw new Error('Unauthorized')
+    if (!client) throw gone('This client was deleted.')
+    if (client.firmId !== firmId) throw notAllowed("manage this firm's storage")
     await requireFirmManager(client.firmId)
 
     // Clear engagement + document connector references so re-linking uses the new workspace

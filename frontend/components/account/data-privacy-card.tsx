@@ -7,6 +7,7 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Button } from '@/components/ui/button'
 import { Tag } from '@/components/ui/tag'
 import { SETTINGS_SECTION_HEADING_CLASS } from '@/components/ui/property-list'
+import { failureFrom, failureReason } from '@/lib/files/action-failure'
 
 /**
  * Export and deletion, the two rights the privacy policy says live in settings.
@@ -27,15 +28,21 @@ export function DataPrivacyCard() {
     const [confirming, setConfirming] = useState(false)
     const [requesting, setRequesting] = useState(false)
     const [openRequest, setOpenRequest] = useState<{ ticketNumber: string; status: string } | null>(null)
+    /** Whether an earlier request could be checked; when it couldn't, the button still works (the server returns any open one). */
+    const [checkFailed, setCheckFailed] = useState(false)
 
     // An account with a request already in flight should see its state, not a button that would
     // raise a second one.
     useEffect(() => {
         let cancelled = false
         fetch('/api/account/deletion-request')
-            .then((res) => (res.ok ? res.json() : null))
+            .then(async (res) => {
+                if (!res.ok) throw await failureFrom(res)
+                return res.json()
+            })
             .then((body) => { if (!cancelled) setOpenRequest(body?.data?.open ?? null) })
-            .catch(() => { /* The button simply offers to raise one. */ })
+            // Said, quietly: without it the card read as "no request" when it couldn't tell.
+            .catch(() => { if (!cancelled) setCheckFailed(true) })
         return () => { cancelled = true }
     }, [])
 
@@ -43,7 +50,7 @@ export function DataPrivacyCard() {
         setExporting(true)
         try {
             const res = await fetch('/api/account/export')
-            if (!res.ok) throw new Error(String(res.status))
+            if (!res.ok) throw await failureFrom(res)
 
             // Downloaded via a blob rather than by navigating to the URL: a navigation would hand
             // the JSON to the browser, which may render it instead of saving it.
@@ -56,12 +63,8 @@ export function DataPrivacyCard() {
             a.click()
             a.remove()
             URL.revokeObjectURL(url)
-        } catch {
-            addToast({
-                type: 'error',
-                title: 'Could not build your export',
-                message: 'Please try again, or contact support if it keeps failing.',
-            })
+        } catch (e) {
+            addToast({ type: 'error', title: "Couldn't download your data", message: failureReason(e) })
         } finally {
             setExporting(false)
         }
@@ -72,7 +75,7 @@ export function DataPrivacyCard() {
         try {
             const res = await fetch('/api/account/deletion-request', { method: 'POST' })
             const body = await res.json().catch(() => ({}))
-            if (!res.ok) throw new Error(body?.error ?? 'failed')
+            if (!res.ok) throw new Error(body?.error ?? `The server answered ${res.status}. Try again.`)
 
             setOpenRequest({ ticketNumber: body.data.ticketNumber, status: 'NEW' })
             setConfirming(false)
@@ -81,12 +84,8 @@ export function DataPrivacyCard() {
                 title: `Request ${body.data.ticketNumber} raised`,
                 message: 'We will email you when your account has been deleted.',
             })
-        } catch {
-            addToast({
-                type: 'error',
-                title: 'Could not raise the request',
-                message: 'Please try again, or contact support.',
-            })
+        } catch (e) {
+            addToast({ type: 'error', title: "Couldn't request deletion", message: failureReason(e) })
         } finally {
             setRequesting(false)
         }
@@ -125,6 +124,11 @@ export function DataPrivacyCard() {
                             it is done. Audit records of what you did remain, and a workspace shared
                             with colleagues carries on without you.
                         </p>
+                        {checkFailed && !openRequest && (
+                            <p role="status" className="mt-1 text-small text-fg-subtle">
+                                Couldn&apos;t check for an earlier request. Requesting again won&apos;t raise a second one.
+                            </p>
+                        )}
                     </div>
                     {openRequest ? (
                         // The status lives HERE, not on the support page.
