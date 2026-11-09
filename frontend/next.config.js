@@ -98,6 +98,9 @@ const nextConfig = {
     // Lower webpack's peak memory in production builds, at a small cost in build time. Vercel's build
     // container has run out of memory more than once (#123 at type checking, #129 while compiling).
     webpackMemoryOptimizations: true,
+    // Not `webpackBuildWorker`: measured locally on 2026-11-09, the compile worker alone peaked at 4.3 GB
+    // while the main process still held its own memory (2.8 GB peak without workers), so it would raise
+    // the total on Vercel's 8 GB build machine rather than lower it.
     // Optimize package imports - reduces compilation time
     optimizePackageImports: [
       'lucide-react',
@@ -234,8 +237,16 @@ const sentryWebpackPluginOptions = {
   // For all available options, see:
   // https://docs.sentry.io/platforms/javascript/guides/nextjs/manual-setup/
 
-  // Upload a larger set of source maps for prettier stack traces (increases build time)
-  widenClientFileUpload: true,
+  // Our own code's source maps only, not Next.js internals and dependencies: fewer maps to upload while
+  // the build is at its peak. The PR #148 production build ran out of memory twice (2026-11-08 and 09),
+  // killed right after the uploads. Stack frames inside dependencies won't be readable in Sentry; ours
+  // stay readable. Sentry's own default is false.
+  widenClientFileUpload: false,
+
+  // One consolidated upload after `next build` has finished compiling, instead of one inside each of
+  // the three webpack compiles (server, edge, client) while that compile's memory is still held.
+  // Same production build OOM as above.
+  useRunAfterProductionCompileHook: true,
 
   // Transpiles SDK to be compatible with IE11 (increases bundle size)
   transpileClientSDK: false,
@@ -261,6 +272,9 @@ if (process.env.NODE_ENV === 'development' || !withSentryConfig) {
     {
       ...sentryWebpackPluginOptions,
     },
+    // Unused: Sentry v10's withSentryConfig(nextConfig, options) reads two arguments, so nothing in this
+    // third one takes effect (its widenClientFileUpload: true never applied). Left as it was; the options
+    // that count are in sentryWebpackPluginOptions above.
     {
       // The new webpack tree-shaking and integration options belong in the 3rd argument for Sentry v8 Next.js SDK
       automaticVercelMonitors: true,
