@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Analytics Notice Mock</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet">
+<style>
+  /* Literal values from components/ui/cookie-consent.tsx, which renders on every route. */
+  :root {
+    --ink: #05271C; --body: #3F5650; --muted: #4F625B; --link: #007A55; --green: #009669;
+    --mint: #EFFFF1; --wash: #F6FAF8; --line: #E3EBE7; --lime: #7DFF77; --lime-ink: #03281B;
+    --ring: 0 0 0 1px rgba(5,39,28,0.08);
+    --lift: 0 20px 44px -18px rgba(3,40,27,0.45);
+    --page: #f4f6f5;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); color: #0f172a; font: 14px/1.5 Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  main { max-width: 1360px; margin: 0 auto; padding: 32px 16px 72px; }
+  h1 { font: 700 22px/1.2 "Space Grotesk", Inter, sans-serif; letter-spacing: -0.02em; margin: 0 0 6px; color: var(--ink); }
+  .lede { color: #475569; margin: 0 0 8px; max-width: 860px; }
+  .rules { color: #475569; margin: 0 0 32px; padding-left: 18px; max-width: 860px; }
+  .rules li { margin: 2px 0; }
+  h2.sec { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: #64748b; margin: 40px 0 14px; font-weight: 600; }
+  .row { display: flex; flex-wrap: wrap; gap: 28px; align-items: flex-start; }
+  .state h3 { font-size: 13px; margin: 0 0 3px; color: #0f172a; }
+  .state p.note { font-size: 12px; color: #64748b; margin: 0 0 12px; max-width: 640px; }
+  .tag { display: inline-block; font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 4px; margin-left: 6px; vertical-align: 1px; }
+  .tag.new { background: var(--mint); color: var(--link); box-shadow: inset 0 0 0 1px rgba(0,150,105,.2); }
+  .tag.same { background: #f1f5f9; color: #64748b; }
+  .reset { font: inherit; font-size: 12px; color: var(--link); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+
+  /* ---------- The notice ---------- */
+  .notice {
+    display: flex; align-items: center; gap: 12px;
+    width: max-content; max-width: 680px;
+    padding: 8px 8px 8px 12px; border-radius: 14px; background: #fff;
+    box-shadow: var(--ring), var(--lift);
+    font: 13.5px/1.45 Inter, system-ui, sans-serif; color: var(--body);
+    transition: opacity .25s ease, transform .25s ease;
+  }
+  .notice.gone { opacity: 0; transform: translateY(8px); pointer-events: none; }
+  .notice .chip { width: 26px; height: 26px; flex: none; border-radius: 999px; background: var(--mint); box-shadow: inset 0 0 0 1px rgba(0,150,105,.18); display: grid; place-items: center; color: var(--green); }
+  .notice .chip svg { width: 14px; height: 14px; }
+  .notice .msg { margin: 0; min-width: 0; }
+  .notice .dot { color: #9AA9A3; margin: 0 4px; }
+  .notice a { color: var(--link); font-weight: 600; text-decoration: underline; text-underline-offset: 2px; text-decoration-color: rgba(0,122,85,.35); cursor: pointer; white-space: nowrap; }
+  .notice a:hover { color: var(--ink); text-decoration-color: currentColor; }
+  .notice button.ok {
+    flex: none; height: 32px; padding: 0 16px; border: 0; border-radius: 999px; cursor: pointer;
+    font: 600 13.5px/1 Inter, system-ui, sans-serif; color: var(--ink); background: #fff;
+    box-shadow: 0 0 0 1px rgba(5,39,28,0.14); transition: background-color .2s;
+  }
+  .notice button.ok:hover { background: var(--wash); }
+  .notice button.ok:focus-visible, .notice a:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+  /* Phone: full width between 16px gutters, text wraps beside the OK button. */
+  .notice.phone { width: auto; max-width: none; border-radius: 14px; padding: 10px 10px 10px 12px; align-items: center; }
+
+  /* ---------- Screens (drawn at real size, then scaled) ---------- */
+  .frame { position: relative; overflow: hidden; border-radius: 10px; background: #fff; box-shadow: 0 0 0 1px #dfe5e2, 0 12px 30px -16px rgba(15,23,42,.25); }
+  .frame.desk { width: 640px; height: 380px; }
+  .frame.phone { width: 225px; height: 456px; border-radius: 22px; box-shadow: 0 0 0 6px #111827, 0 12px 30px -10px rgba(15,23,42,.4); margin: 6px; }
+  .screen { position: absolute; top: 0; left: 0; transform-origin: 0 0; }
+  .desk .screen { width: 1280px; height: 760px; transform: scale(.5); }
+  .phone .screen { width: 375px; height: 760px; transform: scale(.6); }
+  .fixed-bl { position: absolute; left: 24px; bottom: 24px; z-index: 100; }
+  .fixed-top { position: absolute; left: 16px; right: 16px; top: 12px; z-index: 100; }
+
+  /* Wireframe content */
+  .bar { background: #e6ebe8; border-radius: 6px; }
+  .bar.dark { background: #1d3a30; }
+  .bar.mid { background: #c9d4cf; }
+
+  /* Marketing page */
+  .mk { position: absolute; inset: 0; background: linear-gradient(180deg, #F4FFF3 0%, #fff 60%); }
+  .mk-nav { height: 72px; display: flex; align-items: center; gap: 28px; padding: 0 48px; }
+  .logo { font: 700 22px "Space Grotesk", sans-serif; color: var(--ink); letter-spacing: -.02em; }
+  .mk-nav .links { display: flex; gap: 24px; margin-left: 24px; }
+  .mk-nav .cta { margin-left: auto; height: 40px; width: 120px; border-radius: 999px; background: var(--lime); box-shadow: inset 0 0 0 1px rgba(3,40,27,.16); }
+  .mk-hero { padding: 88px 48px 0; max-width: 820px; }
+  .mk-shot { position: absolute; left: 640px; top: 150px; width: 580px; height: 420px; border-radius: 16px; background: #fff; box-shadow: 0 0 0 1px rgba(5,39,28,.08), 0 40px 80px -40px rgba(3,40,27,.4); }
+
+  /* Tour (app UI) */
+  .app { position: absolute; inset: 0; display: flex; background: #fff; }
+  .side { width: 248px; background: #fafafa; border-right: 1px solid #ececec; padding: 18px 14px; display: flex; flex-direction: column; gap: 10px; }
+  .side .bar { height: 12px; }
+  .side .foot { margin-top: auto; display: flex; gap: 10px; align-items: center; }
+  .side .avatar { width: 28px; height: 28px; border-radius: 999px; background: #dfe3e1; flex: none; }
+  .content { flex: 1; display: flex; flex-direction: column; }
+  .topbar { height: 56px; border-bottom: 1px solid #ececec; display: flex; align-items: center; padding: 0 24px; gap: 12px; }
+  .table { padding: 20px 24px; display: flex; flex-direction: column; gap: 0; }
+  .table .tr { height: 44px; border-bottom: 1px solid #f0f0f0; display: flex; align-items: center; gap: 16px; }
+  .scrim { position: absolute; inset: 0; z-index: 120; background: rgba(0,0,0,.10); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); }
+  .tour-panel { position: absolute; right: 16px; bottom: 16px; z-index: 121; width: 380px; border-radius: 12px; background: #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.06), 0 24px 60px -20px rgba(0,0,0,.35); padding: 22px; }
+  .tour-panel.run { width: 340px; background: rgba(255,255,255,.86); backdrop-filter: blur(12px); padding: 16px 18px; }
+  .tour-panel .btn { height: 36px; width: 128px; border-radius: 8px; background: #111827; margin-top: 18px; }
+  .tour-label { position: absolute; font: 600 18px Inter, sans-serif; color: #94a3b8; }
+
+  /* Phone variants */
+  .phone .mk-nav { padding: 0 20px; height: 64px; }
+  .phone .mk-nav .cta { width: 40px; height: 40px; background: #fff; box-shadow: 0 0 0 1px rgba(5,39,28,.14); }
+  .phone .mk-hero { padding: 72px 20px 0; }
+  .phone .tour-panel { left: 16px; right: 16px; width: auto; }
+  .ph-top { height: 56px; border-bottom: 1px solid #ececec; display: flex; align-items: center; gap: 12px; padding: 0 16px; }
+
+  /* The banner every visitor sees today (unchanged for EU, other countries and app pages). */
+  .banner { display: flex; align-items: center; gap: 32px; width: 880px; padding: 24px; border-radius: 18px; background: #fff; box-shadow: 0 0 0 1px rgba(5,39,28,0.08), 0 30px 70px -24px rgba(3,40,27,0.45); color: var(--ink); }
+  .banner .ic { width: 36px; height: 36px; border-radius: 999px; background: var(--mint); box-shadow: inset 0 0 0 1px rgba(0,150,105,.18); display: grid; place-items: center; color: var(--green); flex: none; }
+  .banner h4 { margin: 0; font: 700 18px "Space Grotesk", sans-serif; letter-spacing: -.015em; }
+  .banner p { margin: 6px 0 0; font-size: 14.5px; color: var(--body); }
+  .banner .acts { display: flex; gap: 8px; flex: none; }
+  .pill { height: 44px; padding: 0 20px; border-radius: 999px; display: inline-flex; align-items: center; font-weight: 600; font-size: 14.5px; }
+  .pill.ghost { color: var(--body); padding: 0 16px; }
+  .pill.sec { background: #fff; box-shadow: 0 0 0 1px rgba(5,39,28,.14); }
+  .pill.pri { background: var(--lime); color: var(--lime-ink); font-weight: 700; padding: 0 24px; }
+  .scrim-light { position: absolute; inset: 0; background: rgba(4,22,15,.16); backdrop-filter: blur(2px); z-index: 60; }
+  .fixed-bc { position: absolute; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 70; }
+
+  .closeup { padding: 28px; border-radius: 10px; background: #fff; box-shadow: 0 0 0 1px #dfe5e2; }
+  .closeup.grey { background: #f3f4f4; }
+  .closeup.narrow { width: 375px; padding: 16px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Analytics notice</h1>
+  <p class="lede">For visitors outside the EU, EEA and Quebec, on public pages (landing, pricing, tour, sign-up, sign-in),
+    Google Analytics loads on arrival and this notice says so. It replaces the consent banner for them. It never blocks the page or the tour.</p>
+  <ul class="rules">
+    <li><strong>OK</strong> hides it for good. It saves that the notice was seen, not consent, so app pages still ask.</li>
+    <li><strong>Cookie settings</strong> opens today's settings panel, unchanged. Saving there is a real choice and wins everywhere.</li>
+    <li><strong>Desktop:</strong> bottom-left, clear of the tour panel and its button, which sit bottom-right.
+      <strong>Phone:</strong> top, because the tour panel takes the bottom of the screen.</li>
+    <li>It sits under the tour's intro dialog, so a click on it can't close the dialog by accident. It's dimmed until the dialog closes.</li>
+    <li>Visitors in the EU, EEA and Quebec, visitors whose country can't be read, and all app pages keep today's banner.</li>
+  </ul>
+
+  <h2 class="sec">The notice, actual size</h2>
+  <div class="row">
+    <div class="state">
+      <h3>Desktop <span class="tag new">New</span></h3>
+      <p class="note">Hover the link and the button to see their states. OK fades it out. <button class="reset" data-reset>Show again</button></p>
+      <div class="closeup">
+        <div class="notice" data-notice>
+          <span class="chip" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg></span>
+          <p class="msg">We use Google Analytics to see how visitors use this site.<span class="dot">·</span><a tabindex="0">Cookie settings</a></p>
+          <button class="ok" data-ok>OK</button>
+        </div>
+      </div>
+    </div>
+    <div class="state">
+      <h3>On the app's grey surface <span class="tag new">New</span></h3>
+      <p class="note">The same component on the tour, which uses the app's neutral UI.</p>
+      <div class="closeup grey">
+        <div class="notice" data-notice>
+          <span class="chip" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg></span>
+          <p class="msg">We use Google Analytics to see how visitors use this site.<span class="dot">·</span><a tabindex="0">Cookie settings</a></p>
+          <button class="ok" data-ok>OK</button>
+        </div>
+      </div>
+    </div>
+    <div class="state">
+      <h3>Phone, 375 wide <span class="tag new">New</span></h3>
+      <p class="note">Full width between 16px gutters. The text wraps beside OK.</p>
+      <div class="closeup grey narrow">
+        <div class="notice phone" data-notice>
+          <span class="chip" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg></span>
+          <p class="msg">We use Google Analytics to see how visitors use this site.<span class="dot">·</span><a tabindex="0">Cookie settings</a></p>
+          <button class="ok" data-ok>OK</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h2 class="sec">In place, desktop</h2>
+  <div class="row">
+    <div class="state">
+      <h3>Landing page, notice zone (US, UK and most countries) <span class="tag new">New</span></h3>
+      <p class="note">No scrim and nothing to answer. The page is fully usable.</p>
+      <div class="frame desk"><div class="screen">
+        <div class="mk">
+          <div class="mk-nav"><span class="logo">firmä</span><div class="links"><div class="bar mid" style="width:70px;height:12px"></div><div class="bar mid" style="width:60px;height:12px"></div><div class="bar mid" style="width:56px;height:12px"></div></div><div class="cta"></div></div>
+          <div class="mk-hero">
+            <div class="bar dark" style="width:520px;height:44px;margin-bottom:14px"></div>
+            <div class="bar dark" style="width:440px;height:44px;margin-bottom:28px"></div>
+            <div class="bar" style="width:460px;height:14px;margin-bottom:10px"></div>
+            <div class="bar" style="width:400px;height:14px;margin-bottom:32px"></div>
+            <div style="display:flex;gap:12px"><div style="height:48px;width:170px;border-radius:999px;background:var(--lime)"></div><div style="height:48px;width:150px;border-radius:999px;background:#fff;box-shadow:0 0 0 1px rgba(5,39,28,.14)"></div></div>
+          </div>
+          <div class="mk-shot"></div>
+        </div>
+        <div class="fixed-bl">
+          <div class="notice">
+            <span class="chip" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg></span>
+            <p class="msg">We use Google Analytics to see how visitors use this site.<span class="dot">·</span><a>Cookie settings</a></p>
+            <button class="ok">OK</button>
+          </div>
+        </div>
+      </div></div>
+    </div>
+
+    <div class="state">
+      <h3>Landing page today, every visitor <span class="tag same">Stays in the EU, EEA and Quebec</span></h3>
+      <p class="note">For comparison: the consent banner with its scrim, which visitors in the notice zone no longer see on public pages.</p>
+      <div class="frame desk"><div class="screen">
+        <div class="mk">
+          <div class="mk-nav"><span class="logo">firmä</span><div class="links"><div class="bar mid" style="width:70px;height:12px"></div><div class="bar mid" style="width:60px;height:12px"></div><div class="bar mid" style="width:56px;height:12px"></div></div><div class="cta"></div></div>
+          <div class="mk-hero">
+            <div class="bar dark" style="width:520px;height:44px;margin-bottom:14px"></div>
+            <div class="bar dark" style="width:440px;height:44px;margin-bottom:28px"></div>
+            <div class="bar" style="width:460px;height:14px;margin-bottom:10px"></div>
+            <div class="bar" style="width:400px;height:14px;margin-bottom:32px"></div>
+            <div style="display:flex;gap:12px"><div style="height:48px;width:170px;border-radius:999px;background:var(--lime)"></div><div style="height:48px;width:150px;border-radius:999px;background:#fff;box-shadow:0 0 0 1px rgba(5,39,28,.14)"></div></div>
+          </div>
+          <div class="mk-shot"></div>
+        </div>
+        <div class="scrim-light"></div>
+        <div class="fixed-bc">
+          <div class="banner">
+            <span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></svg></span>
+            <div style="flex:1;min-width:0"><h4>Your privacy</h4><p>We use cookies that the site needs to work and, with your consent, analytics to understand our traffic. See our <u style="color:var(--link);font-weight:600">Privacy Policy</u>.</p></div>
+            <div class="acts"><span class="pill ghost">Reject non-essential</span><span class="pill sec">Customize</span><span class="pill pri">Accept all</span></div>
+          </div>
+        </div>
+      </div></div>
+    </div>
+
+    <div class="state">
+      <h3>Tour, intro dialog open <span class="tag new">New</span></h3>
+      <p class="note">The notice sits under the dialog's scrim, dimmed, at the opposite corner. The tour opens straight away instead of waiting for a banner answer.</p>
+      <div class="frame desk"><div class="screen">
+        <div class="app">
+          <div class="side">
+            <span class="logo" style="font-size:18px;margin-bottom:12px">firmä</span>
+            <div class="bar" style="width:150px"></div><div class="bar" style="width:120px"></div><div class="bar" style="width:136px"></div><div class="bar" style="width:104px"></div>
+            <div class="foot"><span class="avatar"></span><div class="bar" style="width:110px"></div></div>
+          </div>
+          <div class="content">
+            <div class="topbar"><div class="bar mid" style="width:220px;height:14px"></div><div class="bar" style="width:90px;height:28px;margin-left:auto;border-radius:8px"></div></div>
+            <div class="table">
+              <div class="tr"><div class="bar" style="width:260px;height:12px"></div><div class="bar" style="width:90px;height:12px;margin-left:auto"></div></div>
+              <div class="tr"><div class="bar" style="width:220px;height:12px"></div><div class="bar" style="width:90px;height:12px;margin-left:auto"></div></div>
+              <div class="tr"><div class="bar" style="width:300px;height:12px"></div><div class="bar" style="width:90px;height:12px;margin-left:auto"></div></div>
+              <div class="tr"><div class="bar" style="width:240px;height:12px"></div><div class="bar" style="width:90px;height:12px;margin-left:auto"></div></div>
+              <div class="tr"><div class="bar" style="width:280px;height:12px"></div><div class="bar" style="width:90px;height:12px;margin-left:auto"></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="fixed-bl">
+          <div class="notice">
+            <span class="chip" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg></span>
+            <p class="msg">We use Google Analytics to see how visitors use this site.<span class="dot">·</span><a>Cookie settings</a></p>
+            <button class="ok">OK</button>
+          </div>
+        </div>
+        <div class="scrim"></div>
+        <div class="tour-panel">
+          <div class="bar dark" style="width:220px;height:20px;margin-bottom:12px"></div>
+          <div class="bar" style="width:320px;height:12px;margin-bottom:8px"></div>
+          <div class="bar" style="width:280px;height:12px"></div>
+          <div class="btn"></div>
+        </div>
+      </div></div>
+    </div>
+
+    <div class="state">
+      <h3>Tour, while it runs <span class="tag new">New</span></h3>
+      <p class="note">Once the dialog closes, the notice is clear to read and click, bottom-left, away from the tour panel.</p>
+      <div class="frame desk"><div class="screen">
+        <div class="app">
+          <div class="side">
+            <span class="logo" style="font-size:18px;margin-bottom:12px">firmä</span>
+            <div class="bar" style="width:150px"></div><div class="bar" style="width:120px"></div><div class="bar" style="width:136px"></div><div class="bar" style="width:104px"></div>
+            <div class="foot"><span class="avatar"></span><div class="bar" style="width:110px"></div></div>
+          </div>
+          <div class="content">
+            <div class="topbar"><div class="bar mid" style="width:220px;height:14px"></div><div class="bar" style="width:90px;height:28px;margin-left:auto;border-radius:8px"></div></div>
+            <div class="table">
+              <div class="tr"><div class="bar" style="width:260px;height:12px"></div><div class="bar" style="width:90px;height:12px;margin-left:auto"></div></div>
+              <div class="tr"><div class="bar" style="width:220px;height:12px"></div><div class="bar" style="width:90px;height:12px;margin-left:auto"></div></div>
+              <div class="tr"><div class="bar" style="width:300px;height:12px"></div><div class="bar" style="width:90px;height:12px;margin-left:auto"></div></div>
+              <div class="tr"><div class="bar" style="width:240px;height:12px"></div><div class="bar" style="width:90px;height:12px;margin-left:auto"></div></div>
+              <div class="tr"><div class="bar" style="width:280px;height:12px"></div><div class="bar" style="width:90px;height:12px;margin-left:auto"></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="fixed-bl">
+          <div class="notice">
+            <span class="chip" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg></span>
+            <p class="msg">We use Google Analytics to see how visitors use this site.<span class="dot">·</span><a>Cookie settings</a></p>
+            <button class="ok">OK</button>
+          </div>
+        </div>
+        <div class="tour-panel run">
+          <div class="bar mid" style="width:120px;height:10px;margin-bottom:10px"></div>
+          <div class="bar dark" style="width:240px;height:16px;margin-bottom:10px"></div>
+          <div class="bar" style="width:280px;height:10px;margin-bottom:6px"></div>
+          <div class="bar" style="width:220px;height:10px"></div>
+        </div>
+      </div></div>
+    </div>
+  </div>
+
+  <h2 class="sec">In place, phone</h2>
+  <div class="row">
+    <div class="state">
+      <h3>Landing page <span class="tag new">New</span></h3>
+      <p class="note" style="max-width:240px">Top of the screen, over the nav until OK.</p>
+      <div class="frame phone"><div class="screen">
+        <div class="mk">
+          <div class="mk-nav"><span class="logo">firmä</span><div class="cta" style="margin-left:auto"></div></div>
+          <div class="mk-hero">
+            <div class="bar dark" style="width:300px;height:34px;margin-bottom:10px"></div>
+            <div class="bar dark" style="width:240px;height:34px;margin-bottom:22px"></div>
+            <div class="bar" style="width:320px;height:12px;margin-bottom:8px"></div>
+            <div class="bar" style="width:280px;height:12px;margin-bottom:24px"></div>
+            <div style="height:48px;width:200px;border-radius:999px;background:var(--lime)"></div>
+          </div>
+        </div>
+        <div class="fixed-top">
+          <div class="notice phone">
+            <span class="chip" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg></span>
+            <p class="msg">We use Google Analytics to see how visitors use this site.<span class="dot">·</span><a>Cookie settings</a></p>
+            <button class="ok">OK</button>
+          </div>
+        </div>
+      </div></div>
+    </div>
+
+    <div class="state">
+      <h3>Tour, intro dialog open <span class="tag new">New</span></h3>
+      <p class="note" style="max-width:240px">The tour panel fills the bottom, so the notice takes the top, dimmed under the scrim.</p>
+      <div class="frame phone"><div class="screen">
+        <div class="app" style="flex-direction:column">
+          <div class="ph-top"><div class="bar" style="width:22px;height:16px"></div><span class="logo" style="font-size:17px">firmä</span></div>
+          <div class="table" style="padding:12px 16px">
+            <div class="tr"><div class="bar" style="width:200px;height:11px"></div></div>
+            <div class="tr"><div class="bar" style="width:170px;height:11px"></div></div>
+            <div class="tr"><div class="bar" style="width:220px;height:11px"></div></div>
+            <div class="tr"><div class="bar" style="width:150px;height:11px"></div></div>
+            <div class="tr"><div class="bar" style="width:190px;height:11px"></div></div>
+          </div>
+        </div>
+        <div class="fixed-top">
+          <div class="notice phone">
+            <span class="chip" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg></span>
+            <p class="msg">We use Google Analytics to see how visitors use this site.<span class="dot">·</span><a>Cookie settings</a></p>
+            <button class="ok">OK</button>
+          </div>
+        </div>
+        <div class="scrim"></div>
+        <div class="tour-panel">
+          <div class="bar dark" style="width:200px;height:18px;margin-bottom:12px"></div>
+          <div class="bar" style="width:280px;height:11px;margin-bottom:8px"></div>
+          <div class="bar" style="width:230px;height:11px"></div>
+          <div class="btn"></div>
+        </div>
+      </div></div>
+    </div>
+  </div>
+</main>
+<script>
+  document.querySelectorAll('[data-ok]').forEach(function (b) {
+    b.addEventListener('click', function () { b.closest('[data-notice]').classList.add('gone') })
+  })
+  document.querySelectorAll('[data-reset]').forEach(function (b) {
+    b.addEventListener('click', function () { document.querySelectorAll('[data-notice]').forEach(function (n) { n.classList.remove('gone') }) })
+  })
+</script>
+</body>
+</html>
