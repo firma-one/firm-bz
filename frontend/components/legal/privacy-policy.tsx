@@ -63,7 +63,7 @@ function PrivacyPolicyPageView() {
       }
       meta={
         <>
-          Last updated <time dateTime="2026-10">October 2026</time>
+          Last updated <time dateTime="2026-11">November 2026</time>
         </>
       }
       toc={TOC}
@@ -87,9 +87,13 @@ function PrivacyPolicyPageView() {
           </Clause>
           <Clause icon={BarChart3} title="Usage telemetry">
             Aggregated data on how you interact with the platform, to improve performance. We use Google
-            Analytics for this, and only after you accept analytics cookies — decline and it never loads. It
-            identifies a browser rather than a person, so treat it as pseudonymous rather than anonymous. See
-            section 07.
+            Analytics for this. Google processes it only on our behalf, never for advertising, keeps the detailed
+            data for two months, and may process it in the United States. On our public pages (the website, the
+            product tour, sign-up and sign-in), visitors outside the EU, the EEA and Quebec get it without being
+            asked, and can turn it off at any time in Cookie settings. In the EU, the EEA and Quebec, and inside
+            the app everywhere, it loads only after you accept analytics cookies. If your browser sends a Global
+            Privacy Control signal, it doesn&apos;t load unless you turn it on yourself. It identifies a browser
+            rather than a person, so treat it as pseudonymous rather than anonymous. See section 07.
           </Clause>
         </Clauses>
       </Section>
@@ -232,7 +236,9 @@ function PrivacyPolicyPageView() {
           </Clause>
           <Clause icon={BarChart3} title="Analytics & performance" tag={<ClauseTag>Optional</ClauseTag>}>
             We use these to understand how you interact with {BRAND_NAME} (e.g., page visit counts, load times,
-            errors). Data is aggregated and anonymized.
+            errors). The data is pseudonymous. Outside the EU, the EEA and Quebec they&apos;re on by default on
+            our public pages; everywhere else, and inside the app, they stay off until you accept them. Change this
+            at any time in Cookie settings.
           </Clause>
         </Clauses>
         <CookieSettingsButton />

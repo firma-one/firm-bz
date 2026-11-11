@@ -8,6 +8,9 @@ import { TimezoneSync } from '@/components/app/timezone-sync'
 import { ToastProvider } from '@/components/ui/toast'
 import { CookieConsent } from '@/components/ui/cookie-consent'
 import { ConsentAwareGoogleAnalytics } from '@/components/analytics/consent-aware-google-analytics'
+import { AnalyticsModeProvider } from '@/components/analytics/analytics-mode-context'
+import { analyticsModeFromRequest } from '@/lib/analytics-zone'
+import { headers } from 'next/headers'
 import { BRAND_NAME, BRAND_NAME_TEAM } from '@/config/brand'
 import { getPlatformSiteOrigin } from '@/config/platform-domain'
 import { createClient } from '@/utils/supabase/server'
@@ -121,6 +124,16 @@ export default async function RootLayout({
     // fail silently — client AuthProvider will fall back to its own getSession()
   }
 
+  // Which cookie rule this visitor gets for Google Analytics, from Vercel's country headers
+  // (lib/analytics-zone.ts). No header (local dev) keeps the opt-in banner.
+  const requestHeaders = await headers()
+  const analyticsMode = analyticsModeFromRequest({
+    country: requestHeaders.get('x-vercel-ip-country'),
+    region: requestHeaders.get('x-vercel-ip-country-region'),
+    override: process.env.ANALYTICS_COUNTRY_OVERRIDE,
+    vercelEnv: process.env.VERCEL_ENV,
+  })
+
   return (
     <html lang="en" suppressHydrationWarning>
       <body
@@ -132,7 +145,7 @@ export default async function RootLayout({
         <Script id="fm-ui-shell" strategy="beforeInteractive" dangerouslySetInnerHTML={{ __html: `try{if(/^\\/(d|tour)(\\/|$)/.test(location.pathname)){document.documentElement.dataset.ui='v2'}}catch(e){}` }} />
         {/* Inject firm brand CSS vars before first paint to prevent FOUC on dashboard routes */}
         <Script id="fm-brand-css-vars" strategy="beforeInteractive" dangerouslySetInnerHTML={{ __html: `try{var m=location.pathname.match(/^\\/d\\/[^/]+\\/f\\/([^/]+)/);if(m){var b=JSON.parse(sessionStorage.getItem('fm_firm_branding_'+m[1])||'null');if(b&&b.primaryHsl){document.documentElement.style.setProperty('--primary',b.primaryHsl);document.documentElement.style.setProperty('--primary-foreground',b.primaryFgHsl);if(b.primaryRgb)document.documentElement.style.setProperty('--primary-rgb',b.primaryRgb);}if(b&&b.accentHsl){document.documentElement.style.setProperty('--brand-accent',b.accentHsl);document.documentElement.style.setProperty('--brand-accent-foreground',b.accentFgHsl);}}}catch(e){}` }} />
-        {/* GA is loaded client-side only when analytics consent is granted (see ConsentAwareGoogleAnalytics). */}
+        {/* GA is loaded client-side only where analyticsAllowed says so (see ConsentAwareGoogleAnalytics). */}
         {/* JSON-LD for Search/Answer Engines */}
         {/* JSON-LD for Search/Answer Engines */}
         <script
@@ -163,14 +176,16 @@ export default async function RootLayout({
         />
         {/* Force Unregister Service Workers and Handle Chunk Errors (Fix ChunkLoadError) */}
         <Script src="/fix-chunk-errors.js" strategy="afterInteractive" />
-        <AuthProvider initialSession={initialSession}>
-          <ToastProvider>
-            <TimezoneSync />
-            {children}
-            <CookieConsent />
-            <ConsentAwareGoogleAnalytics />
-          </ToastProvider>
-        </AuthProvider>
+        <AnalyticsModeProvider mode={analyticsMode}>
+          <AuthProvider initialSession={initialSession}>
+            <ToastProvider>
+              <TimezoneSync />
+              {children}
+              <CookieConsent />
+              <ConsentAwareGoogleAnalytics />
+            </ToastProvider>
+          </AuthProvider>
+        </AnalyticsModeProvider>
       </body>
     </html>
   )
