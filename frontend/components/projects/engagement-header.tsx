@@ -11,7 +11,8 @@ import { Tag } from "@/components/ui/tag"
 import { Hint } from "@/components/ui/tooltip"
 import { HeaderProp as Prop } from "@/components/ui/header-prop"
 import { useToast } from "@/components/ui/toast"
-import { failureFrom, failureReason } from "@/lib/files/action-failure"
+import { failureReason } from "@/lib/files/action-failure"
+import { cachedEngagementMembers, loadEngagementMembers, type EngagementMember } from "@/lib/engagement-members"
 import { clientPath } from "@/lib/navigation/firm-paths"
 import { HowThisWorksLink } from "@/components/ui/how-this-works-link"
 import type { TourNodeId } from "@/lib/demo/tour-chapters"
@@ -27,10 +28,7 @@ import type { TourNodeId } from "@/lib/demo/tour-chapters"
 
 const INLINE_STATUSES: LwCrmEngagementStatus[] = ["PLANNED", "ACTIVE", "PAUSED"]
 
-type Member = { userId: string; name: string; role: string; avatarUrl: string | null; isAgent: boolean }
-
-/** Last member list per engagement, so a revisit (or the page's loading state) shows people at once. */
-const membersCache = new Map<string, Member[]>()
+type Member = EngagementMember
 
 export function EngagementHeader({
     projectId,
@@ -76,21 +74,20 @@ export function EngagementHeader({
 }) {
     const router = useRouter()
     const { addToast } = useToast()
-    const [members, setMembers] = useState<Member[] | null>(() => membersCache.get(projectId) ?? null)
+    // Seeded from the shared cache, so a revisit (or the page's loading state) shows people at once.
+    const [members, setMembers] = useState<Member[] | null>(
+        () => cachedEngagementMembers(projectId)?.filter((m) => !m.isAgent) ?? null
+    )
     /** The people didn't load: never shown as "No lead", and never cached as an empty list. */
     const [peopleFailed, setPeopleFailed] = useState(false)
 
     useEffect(() => {
         if (!showPeople || !fetchPeople) return
         let cancelled = false
-        fetch(`/api/projects/${projectId}/members`)
-            .then(async (r) => {
-                if (!r.ok) throw await failureFrom(r)
-                return r.json()
-            })
-            .then((d) => {
-                const list = ((d.members ?? []) as Member[]).filter((m) => !m.isAgent)
-                membersCache.set(projectId, list)
+        // Shared with the file list and the panes, so the Files page asks the server once.
+        loadEngagementMembers(projectId)
+            .then((all) => {
+                const list = all.filter((m) => !m.isAgent)
                 if (!cancelled) {
                     setMembers(list)
                     setPeopleFailed(false)

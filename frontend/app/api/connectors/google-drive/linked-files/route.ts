@@ -232,40 +232,54 @@ export async function POST(request: NextRequest) {
             if (!connector) {
                 return NextResponse.json({ error: 'No active storage connector found' }, { status: 404 })
             }
-            {
-                const permissionAdapter = await getPermissionAdapter(connector.id)
-                const folderIds = permissionAdapter
-                    ? await permissionAdapter.getEngagementFolderIds(connector.id, engagement.slug, {
+            const memberPersona = engagement.members[0]?.role ?? null
+            // Whether the caller might be impersonating is decided by their own role, which the
+            // engagement lookup above already carries — so the cookie read below is only skipped
+            // for a genuine EC/EV member, exactly as before.
+            const mayBeViewingAs = memberPersona !== 'eng_ext_collaborator' && memberPersona !== 'eng_viewer'
+            /*
+             * The folder ids and the view-as cookie have nothing to do with each other, so they are
+             * resolved together. Both used to be awaited in turn ahead of the listing, and the folder-id
+             * resolution can reach the provider itself on a connector whose subfolders aren't cached
+             * yet — leaving a cookie read sitting behind a round trip to Drive.
+             */
+            const [folderIds, cookieViewAs] = await Promise.all([
+                getPermissionAdapter(connector.id).then((permissionAdapter) => permissionAdapter
+                    ? permissionAdapter.getEngagementFolderIds(connector.id, engagement.slug, {
                         projectName: engagement.name,
                         clientSlug: engagement.client.slug,
                         clientName: engagement.client.name,
                         projectFolderId: engagement.connectorRootFolderId ?? undefined
                     })
-                    : { generalFolderId: null, confidentialFolderId: null, stagingFolderId: null }
-                const userMember = engagement.members[0]
-                engagementContext = {
-                    projectId: engagement.id,
-                    clientId: engagement.clientId,
-                    generalFolderId: folderIds.generalFolderId,
-                    confidentialFolderId: folderIds.confidentialFolderId,
-                    personaName: userMember?.role ?? null,
-                    personaSlug: userMember?.role ?? null,
-                    firmId: engagement.firmId
-                }
+                    : { generalFolderId: null, confidentialFolderId: null, stagingFolderId: null }),
+                mayBeViewingAs ? getViewAsPersonaFromCookie() : Promise.resolve(null),
+            ])
+            engagementContext = {
+                projectId: engagement.id,
+                clientId: engagement.clientId,
+                generalFolderId: folderIds.generalFolderId,
+                confidentialFolderId: folderIds.confidentialFolderId,
+                personaName: memberPersona,
+                personaSlug: memberPersona,
+                firmId: engagement.firmId
             }
 
             const userEmail = user.email || undefined
-            const listLimit = typeof bodyPageSize === 'number' && bodyPageSize > 0 ? Math.min(500, bodyPageSize) : 100
+            /*
+             * 500, not 100: a folder of a few hundred is ordinary in an engagement, and the old cap
+             * cut it off silently. The listing's rows are windowed (use-row-window.ts), so the cost
+             * of the larger page is this request and the reads below it, not five hundred mounted rows.
+             */
+            const listLimit = typeof bodyPageSize === 'number' && bodyPageSize > 0 ? Math.min(500, bodyPageSize) : 500
 
             // Detect EC/Guest persona. Fast path: genuine member role requires no extra DB/cookie calls.
             // Slow path: view-as impersonation (RBAC admins only) — check body first, then cookie.
             let personaSlugToFilter: 'eng_ext_collaborator' | 'eng_viewer' | null = null
             if (bodyEngagementId) {
-                if (engagementContext?.personaSlug === 'eng_ext_collaborator' || engagementContext?.personaSlug === 'eng_viewer') {
-                    personaSlugToFilter = engagementContext.personaSlug as 'eng_ext_collaborator' | 'eng_viewer'
+                if (!mayBeViewingAs) {
+                    personaSlugToFilter = memberPersona as 'eng_ext_collaborator' | 'eng_viewer'
                 } else {
                     const bodyViewAsIsEC = bodyViewAs === 'eng_ext_collaborator' || bodyViewAs === 'eng_viewer'
-                    const cookieViewAs = await getViewAsPersonaFromCookie()
                     if (bodyViewAsIsEC || cookieViewAs) {
                         const canUseViewAs = await canAccessRbacAdmin(user.id)
                         if (canUseViewAs) {
@@ -279,6 +293,16 @@ export async function POST(request: NextRequest) {
             }
 
             let files: any[] = []
+            /*
+             * Whether this folder holds more than we are returning.
+             *
+             * The provider listing asks for listLimit items and there is no page token, so a folder
+             * with more than that silently lost the rest — and the list's own counter read "500
+             * items", which was simply wrong. A listing that comes back exactly full is reported as
+             * truncated, which is the honest signal available without paging: it may be exactly 500,
+             * and the list says "the first 500" rather than claiming there are only 500.
+             */
+            let truncated = false
 
             if (personaSlugToFilter && engagementContext) {
                 // EC/Guest: fully DB-driven listing — no Drive API call for listing.
@@ -431,7 +455,7 @@ export async function POST(request: NextRequest) {
                 // that file's header for the two documented gaps (no activity badges, no
                 // explicit-Graph-permission secondary check).
                 // The provider listing and the database reads that don't depend on it run together.
-                const [listed, intakePendingRows, elMembers, linkRows] = await Promise.all([
+                const [listed, intakePendingRows, elMembers, linkRows, enrichByParent] = await Promise.all([
                     isOneDrive(connector)
                         ? listOneDriveFiles(connector.id, folderId, listLimit, engagementContext)
                         : googleDriveConnector.listFiles(
@@ -468,8 +492,25 @@ export async function POST(request: NextRequest) {
                         },
                         select: { id: true, externalId: true, fileName: true, mimeType: true, externalUrl: true, metadata: true, settings: true, status: true, docId: true, createdBy: true },
                     }),
+                    /*
+                     * The rows behind this folder's listing — the internal id, stage, due date, lock and
+                     * deliverable flags each listed file is shown with.
+                     *
+                     * By parentId, so it runs beside the provider listing rather than after it. It used
+                     * to ask for `externalId IN (the ids Drive just returned)`, which meant it could not
+                     * start until the provider answered, putting a whole database round trip on the
+                     * critical path of every folder a user opens. The DB mirrors the provider's tree, so
+                     * this returns the same rows; where it doesn't — a row whose parentId hasn't caught
+                     * up with a move yet — the top-up read below asks for exactly what's missing, which
+                     * is normally nothing at all.
+                     */
+                    prisma.engagementDocument.findMany({
+                        where: { engagementId: bodyEngagementId, parentId: folderId },
+                        select: { id: true, externalId: true, isFolder: true, settings: true, status: true, dueDate: true, docId: true, createdBy: true },
+                    }),
                 ])
                 files = listed
+                truncated = listed.length >= listLimit
 
                 // Attach internal projectDocument UUIDs for UI deeplinks (never expose Drive id in URL).
                 // Also surface PENDING intake shadow rows not yet in the Drive listing.
@@ -478,12 +519,25 @@ export async function POST(request: NextRequest) {
                         ? Array.from(new Set(files.map((f: { id: string }) => f.id).filter(Boolean)))
                         : []
 
-                    const enrichRows = driveIds.length > 0
+                    // What the parentId read already covers, plus a top-up for any listed file it
+                    // missed (a row whose parent is stale). The top-up is skipped when nothing is
+                    // missing, which is the ordinary case.
+                    const enrichedIds = new Set(enrichByParent.map((r: any) => r.externalId))
+                    const missingIds = driveIds.filter((id) => !enrichedIds.has(id))
+                    const topUpRows = missingIds.length > 0
                         ? await prisma.engagementDocument.findMany({
-                            where: { engagementId: bodyEngagementId, externalId: { in: driveIds } },
+                            where: { engagementId: bodyEngagementId, externalId: { in: missingIds } },
                             select: { id: true, externalId: true, isFolder: true, settings: true, status: true, dueDate: true, docId: true, createdBy: true },
                         })
                         : []
+                    // Only the rows this listing is about: a row still filed under this folder whose
+                    // file is no longer in the provider's answer must not add a map entry, exactly as
+                    // when this read was keyed on the listed ids.
+                    const listedIdSet = new Set(driveIds)
+                    const enrichRows = [
+                        ...enrichByParent.filter((r: any) => listedIdSet.has(r.externalId)),
+                        ...topUpRows,
+                    ]
 
                     const internalByExternal = new Map<string, string>(enrichRows.map((r: any) => [r.externalId, r.id]))
                     const settingsByExternal = new Map<string, unknown>(enrichRows.map((r: any) => [r.externalId, r.settings]))
@@ -659,7 +713,8 @@ export async function POST(request: NextRequest) {
                 }
             }
 
-            return NextResponse.json({ files })
+            // The DB-driven EC/Guest listing above has no limit of its own, so it is never truncated.
+            return NextResponse.json({ files, truncated, limit: truncated ? listLimit : null })
         }
 
         if (action === 'create-folder') {

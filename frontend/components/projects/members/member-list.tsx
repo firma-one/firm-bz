@@ -29,6 +29,7 @@ import { cn, formatFullDate } from '@/lib/utils'
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Label } from "@/components/ui/label"
 import { removeMember, revokeInvitation, updateMemberPersona } from '@/lib/actions/members'
+import { forgetEngagementMembers } from '@/lib/engagement-members'
 import { resendInvitation } from '@/lib/actions/invitations'
 import { useToast } from "@/components/ui/toast"
 import { failureReason } from '@/lib/files/action-failure'
@@ -97,6 +98,9 @@ export function MemberList({ members, invitations, personas, onRefresh, canManag
             }
             if (result.warning) addToast({ type: 'warning', title: 'Role changed', message: result.warning })
             else addToast({ type: 'success', title: 'Role changed', message: 'Their access in storage is updated in the background.' })
+            // Who is on the engagement just changed: drop the shared list so the header, the
+            // Assignee column and the panes don't go on offering someone who was removed.
+            forgetEngagementMembers()
             onRefresh()
             setEditingMember(null)
         } catch (e) {
@@ -120,6 +124,9 @@ export function MemberList({ members, invitations, personas, onRefresh, canManag
             }
             if (result.warning) addToast({ type: 'warning', title: 'Member removed', message: result.warning })
             else addToast({ type: 'success', title: 'Member removed', message: 'Their access has been taken back.' })
+            // Who is on the engagement just changed: drop the shared list so the header, the
+            // Assignee column and the panes don't go on offering someone who was removed.
+            forgetEngagementMembers()
             onRefresh()
         } catch (e) {
             console.error(e)
@@ -141,6 +148,9 @@ export function MemberList({ members, invitations, personas, onRefresh, canManag
                 return
             }
             addToast({ type: 'success', title: 'Invitation canceled', message: 'The invitation has been revoked.' })
+            // Who is on the engagement just changed: drop the shared list so the header, the
+            // Assignee column and the panes don't go on offering someone who was removed.
+            forgetEngagementMembers()
             onRefresh()
         } catch (e) {
             console.error(e)

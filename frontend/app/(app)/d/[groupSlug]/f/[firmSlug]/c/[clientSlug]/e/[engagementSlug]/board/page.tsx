@@ -83,12 +83,8 @@ export default async function EngagementBoardPage({ params }: PageProps) {
   const projectRole = applyViewAs ? viewAsSlug : memberPersona
   const restrictToSharedOnly = projectRole ? !['eng_admin', 'eng_member'].includes(projectRole) : false
 
-  const [projectPersonas, connectorMeta, fileCount, sharesCount, commentsCount, engMemberCount, engInviteCount, auditCount, wikiPageCount] = await Promise.all([
-    // Only legacy proj_* roles have a display name to look up.
-    typeof projectRole === 'string' && projectRole.startsWith('proj_') ? getProjectPersonas() : Promise.resolve([]),
-    client.connectorId
-      ? prisma.connector.findUnique({ where: { id: client.connectorId }, select: { workspaceRootLocation: true } })
-      : Promise.resolve(null),
+  // The tab row's numbers, loaded but not waited for — see the engagement page for why.
+  const badgeCountsPromise = Promise.all([
     projectRole === 'eng_ext_collaborator' || projectRole === 'eng_viewer'
       ? getAccessibleFileCountForPersona(project.id, projectRole)
       : (basePrisma as any).engagementDocument.count({ where: { engagementId: project.id, isFolder: false } }),
@@ -106,6 +102,23 @@ export default async function EngagementBoardPage({ params }: PageProps) {
     (basePrisma as any).engagementInvitation.count({ where: { engagementId: project.id, status: { not: 'JOINED' } } }),
     (basePrisma as any).platformAuditEvent.count({ where: { engagementId: project.id, scope: 'PROJECT' } }),
     (prisma as any).engagementWikiPage.count({ where: { engagementId: project.id } }),
+  ])
+    .then(([fileCount, sharesCount, commentsCount, engMemberCount, engInviteCount, auditCount, wikiPageCount]) => ({
+      fileCount,
+      sharesCount,
+      commentsCount,
+      memberCount: engMemberCount + engInviteCount,
+      auditCount,
+      wikiPageCount,
+    }))
+    .catch(() => null)
+
+  const [projectPersonas, connectorMeta] = await Promise.all([
+    // Only legacy proj_* roles have a display name to look up.
+    typeof projectRole === 'string' && projectRole.startsWith('proj_') ? getProjectPersonas() : Promise.resolve([]),
+    client.connectorId
+      ? prisma.connector.findUnique({ where: { id: client.connectorId }, select: { workspaceRootLocation: true } })
+      : Promise.resolve(null),
   ])
 
   const projectPersonaDisplayName =
@@ -150,12 +163,7 @@ export default async function EngagementBoardPage({ params }: PageProps) {
           engagementSlug={engagementSlug}
           firmSandboxOnly={org.sandboxOnly ?? false}
           enableBetaFeatures={enableBetaFeatures}
-          fileCount={fileCount}
-          sharesCount={sharesCount}
-          commentsCount={commentsCount}
-          memberCount={engMemberCount + engInviteCount}
-          auditCount={auditCount}
-          wikiPageCount={wikiPageCount}
+          badgeCounts={badgeCountsPromise}
         />
       </ErrorBoundary>
     </div>

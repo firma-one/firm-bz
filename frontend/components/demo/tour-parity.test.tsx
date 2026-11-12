@@ -50,13 +50,13 @@ function renderAppRow(file: Record<string, unknown>, overrides: Partial<Engageme
     const noop = vi.fn()
     const props = {
         file: { projectDocumentId: 'd1', documentType: 'FILE', ...file },
-        isSelected: false, selectedFileIdsSize: 0, canEdit: true, canManage: true, isProjectLead: true, loading: false,
-        activeCommentDocId: null, activeInfoDocId: null, activePreviewDocId: null, highlightedFileId: null,
-        draggedItem: null, dragOverFolderId: null, restrictToSharedOnly: false, viewAsPersonaSlug: null,
-        currentFolderType: 'general', generalFolderId: 'g', projectId: 'p', orgSlug: 'firm', isActionMenuOpen: false, isRegrantingId: null,
+        isSelected: false, hasSelection: false, canEdit: true, canManage: true, isProjectLead: true, loading: false,
+        isCommentPaneOpen: false, isInfoPaneOpen: false, isPreviewPaneOpen: false, isHighlighted: false,
+        isDragged: false, isDragOver: false, restrictToSharedOnly: false, viewAsPersonaSlug: null,
+        currentFolderType: 'general', generalFolderId: 'g', projectId: 'p', orgSlug: 'firm', isActionMenuOpen: false, isProcessing: false,
         sharedExternalIds: empty, ancestorFolderIds: empty, sharedExternalIdsForEC: empty, ancestorFolderIdsForEC: empty,
         sharedExternalIdsForGuest: empty, ancestorFolderIdsForGuest: empty, descendantIds: empty, descendantIdsForEC: empty,
-        descendantIdsForGuest: empty, processingFileIds: empty, roleSlug: 'eng_admin',
+        descendantIdsForGuest: empty, roleSlug: 'eng_admin',
         onToggleSelect: noop, onClearHighlight: noop, onDragStart: noop, onDragEnd: noop, onDragOver: noop, onDragLeave: noop, onDrop: noop,
         onItemClick: noop, onActionMenuOpenChange: noop, onOpenComments: noop, onOpenRename: noop, onDuplicate: noop, onOpenCopyMove: noop,
         onOpenCrossEngagement: noop, onTrash: noop, onPrivacy: noop, onShareSaved: noop, onMarkAsDeliverable: noop, onUntagAsDeliverable: noop,

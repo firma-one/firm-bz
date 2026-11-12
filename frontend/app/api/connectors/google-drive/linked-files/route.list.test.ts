@@ -142,7 +142,7 @@ describe('linked-files list — access', () => {
 
     it('lists a viewable engagement on its own connector, with the caller\'s engagement role', async () => {
         expect((await list({ projectId: 'e1' })).status).toBe(200)
-        expect(oneDrive.listOneDriveFiles).toHaveBeenCalledWith('conn1', 'F', 100, expect.objectContaining({ projectId: 'e1', personaSlug: 'eng_member', generalFolderId: 'G', confidentialFolderId: 'C' }))
+        expect(oneDrive.listOneDriveFiles).toHaveBeenCalledWith('conn1', 'F', 500, expect.objectContaining({ projectId: 'e1', personaSlug: 'eng_member', generalFolderId: 'G', confidentialFolderId: 'C' }))
     })
 
     it('refuses signed out', async () => {
@@ -167,7 +167,7 @@ describe('linked-files list — a folder that is gone or refused', () => {
         state.engagement = engagementOn('GOOGLE_DRIVE', 'eng_admin')
         drive.listFiles.mockRejectedValueOnce(storageFailure('busy', 'Google Drive'))
         const res = await list({ projectId: 'e1' })
-        expect(drive.listFiles).toHaveBeenCalledWith('conn1', 'F', 100, 'u1@firm.test', expect.anything(), { missingFolder: 'throw' })
+        expect(drive.listFiles).toHaveBeenCalledWith('conn1', 'F', 500, 'u1@firm.test', expect.anything(), { missingFolder: 'throw' })
         expect(res.status).toBe(503)
         expect((await res.json()).code).toBe('busy')
     })
@@ -361,5 +361,84 @@ describe('linked-files duplicate, copy and move', () => {
             expect((await res.json()).code).toBe('locked')
             expect(oneDrive.copyOneDriveFile).not.toHaveBeenCalled()
         })
+    })
+})
+
+describe('linked-files list — a folder bigger than one listing', () => {
+    /*
+     * The provider listing is capped and has no paging, so a folder with more items than the cap
+     * returns a partial answer. It used to do that silently, and the list's counter presented the
+     * first hundred as the whole folder. The cap is 500 now; the rows are windowed client-side.
+     */
+    const rows = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `d${i}`, name: `Doc ${i}.docx`, mimeType: 'application/pdf' }))
+
+    it('says a listing is truncated when it comes back full, and names the cap', async () => {
+        oneDrive.listOneDriveFiles.mockResolvedValueOnce(rows(500) as any)
+        const body = await (await list({ projectId: 'e1' })).json()
+        expect(body.truncated).toBe(true)
+        expect(body.limit).toBe(500)
+        expect(body.files).toHaveLength(500)
+    })
+
+    it('says nothing of the sort for a folder that fits', async () => {
+        oneDrive.listOneDriveFiles.mockResolvedValueOnce(rows(7) as any)
+        const body = await (await list({ projectId: 'e1' })).json()
+        expect(body.truncated).toBe(false)
+        expect(body.limit).toBeNull()
+    })
+
+    // The old cap. A folder of this size is returned whole now and says nothing about truncation.
+    it('returns a folder of a hundred whole', async () => {
+        oneDrive.listOneDriveFiles.mockResolvedValueOnce(rows(100) as any)
+        const body = await (await list({ projectId: 'e1' })).json()
+        expect(body.files).toHaveLength(100)
+        expect(body.truncated).toBe(false)
+    })
+
+    it('will not go past 500 however large a pageSize is asked for', async () => {
+        oneDrive.listOneDriveFiles.mockResolvedValueOnce(rows(500) as any)
+        await list({ projectId: 'e1', pageSize: 5000 })
+        expect(oneDrive.listOneDriveFiles).toHaveBeenCalledWith('conn1', 'F', 500, expect.anything())
+    })
+
+    it('measures the cap the caller asked for, not the default', async () => {
+        oneDrive.listOneDriveFiles.mockResolvedValueOnce(rows(25) as any)
+        const body = await (await list({ projectId: 'e1', pageSize: 25 })).json()
+        expect(oneDrive.listOneDriveFiles).toHaveBeenCalledWith('conn1', 'F', 25, expect.anything())
+        expect(body.truncated).toBe(true)
+        expect(body.limit).toBe(25)
+    })
+})
+
+describe('linked-files list — the enrichment read', () => {
+    /*
+     * The rows a listing is decorated with are read by parentId, so the read runs beside the
+     * provider listing instead of waiting for it. Asking for `externalId IN (what Drive returned)`
+     * put a whole database round trip on the critical path of opening a folder.
+     */
+    const wheres = async () => {
+        const { prisma } = await import('@/lib/prisma')
+        return (prisma.engagementDocument.findMany as any).mock.calls.map((c: any[]) => c[0]?.where)
+    }
+
+    it('reads this folder\'s rows by parent, without waiting to learn the listed ids', async () => {
+        oneDrive.listOneDriveFiles.mockResolvedValueOnce([{ id: 'd1', name: 'Plan.docx', mimeType: 'application/pdf' }] as any)
+        await list({ projectId: 'e1' })
+        expect(await wheres()).toEqual(expect.arrayContaining([
+            expect.objectContaining({ engagementId: 'e1', parentId: 'F' }),
+        ]))
+    })
+
+    it('tops up only the listed files the parent read did not cover', async () => {
+        // The stub answers the by-parent read with nothing, which is the stale-parentId case: both
+        // listed files are then asked for by id, and nothing else is.
+        oneDrive.listOneDriveFiles.mockResolvedValueOnce([
+            { id: 'd1', name: 'Plan.docx', mimeType: 'application/pdf' },
+            { id: 'd2', name: 'Notes.docx', mimeType: 'application/pdf' },
+        ] as any)
+        await list({ projectId: 'e1' })
+        const topUps = (await wheres()).filter((w: any) => w?.externalId?.in)
+        expect(topUps).toHaveLength(1)
+        expect(topUps[0].externalId.in).toEqual(['d1', 'd2'])
     })
 })

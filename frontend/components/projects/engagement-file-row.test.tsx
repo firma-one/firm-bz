@@ -6,7 +6,9 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 // Open follow the ⋮ menu's rules. The internal only mark is only a mark.
 
 vi.mock('@/lib/right-pane-context', () => ({ useRightPane: () => ({}) }))
-vi.mock('@/components/ui/document-action-menu', () => ({ DocumentActionMenu: () => null }))
+const { menuRenders } = vi.hoisted(() => ({ menuRenders: vi.fn() }))
+// Counts renders of the row: the row draws this on every one of them.
+vi.mock('@/components/ui/document-action-menu', () => ({ DocumentActionMenu: () => { menuRenders(); return null } }))
 vi.mock('@/components/files/asset-details-pane', () => ({ openAssetDetailsPane: vi.fn() }))
 vi.mock('@/components/projects/file-property-cells', () => ({ FileAssigneeCell: () => null, FileDueDateCell: () => null, FileStatusCell: () => null }))
 
@@ -20,13 +22,13 @@ const handlers = { onOpenRename: vi.fn(), onOpenDocument: vi.fn(), onPrivacy: vi
 
 function renderRow(overrides: Partial<EngagementFileRowProps> = {}) {
     const props = {
-        file: FILE, isSelected: false, selectedFileIdsSize: 0, canEdit: true, canManage: true, isProjectLead: true, loading: false,
-        activeCommentDocId: null, activeInfoDocId: null, activePreviewDocId: null, highlightedFileId: null,
-        draggedItem: null, dragOverFolderId: null, restrictToSharedOnly: false, viewAsPersonaSlug: null,
-        currentFolderType: 'general', generalFolderId: 'g', projectId: 'p', isActionMenuOpen: false, isRegrantingId: null,
+        file: FILE, isSelected: false, hasSelection: false, canEdit: true, canManage: true, isProjectLead: true, loading: false,
+        isCommentPaneOpen: false, isInfoPaneOpen: false, isPreviewPaneOpen: false, isHighlighted: false,
+        isDragged: false, isDragOver: false, restrictToSharedOnly: false, viewAsPersonaSlug: null,
+        currentFolderType: 'general', generalFolderId: 'g', projectId: 'p', isActionMenuOpen: false, isProcessing: false,
         sharedExternalIds: empty, ancestorFolderIds: empty, sharedExternalIdsForEC: empty, ancestorFolderIdsForEC: empty,
         sharedExternalIdsForGuest: empty, ancestorFolderIdsForGuest: empty, descendantIds: empty, descendantIdsForEC: empty,
-        descendantIdsForGuest: empty, processingFileIds: empty,
+        descendantIdsForGuest: empty,
         ...handlers,
         ...overrides,
     } as unknown as EngagementFileRowProps
@@ -92,7 +94,7 @@ describe('Open', () => {
     it('opens the document through the secure open', () => {
         renderRow()
         fireEvent.click(screen.getByRole('button', { name: 'Open', hidden: true }))
-        expect(handlers.onOpenDocument).toHaveBeenCalledWith(FILE)
+        expect(handlers.onOpenDocument).toHaveBeenCalledWith(FILE, FILE)
     })
 
     it('goes straight to the address of a link', () => {
@@ -136,5 +138,49 @@ describe('the internal only mark', () => {
     it('only marks the file inside an approved deliverable, as the menu has it', () => {
         renderRow({ file: PRIVATE, isInsideApprovedDeliverable: true })
         expect(screen.queryByRole('button', { name: /^Internal only/, hidden: true })).toBeNull()
+    })
+})
+
+describe('one row, one render', () => {
+    /*
+     * The listing holds 69 pieces of state and hands each row ~50 props. Before the row was
+     * memoized, any one of them — a hover, a checkbox, a dragover, a finished poll — re-rendered
+     * every row on screen. Two things keep that fixed, and a regression in either is silent: the
+     * memo itself, and props that describe one row rather than the whole listing.
+     */
+    const ROW = {
+        file: FILE, isSelected: false, hasSelection: false, canEdit: true, canManage: true,
+        isProjectLead: true, loading: false, isCommentPaneOpen: false, isInfoPaneOpen: false,
+        isPreviewPaneOpen: false, isHighlighted: false, isDragged: false, isDragOver: false,
+        restrictToSharedOnly: false, viewAsPersonaSlug: null, currentFolderType: 'general',
+        generalFolderId: 'g', projectId: 'p', isActionMenuOpen: false, isProcessing: false,
+        sharedExternalIds: empty, ancestorFolderIds: empty, sharedExternalIdsForEC: empty,
+        ancestorFolderIdsForEC: empty, sharedExternalIdsForGuest: empty,
+        ancestorFolderIdsForGuest: empty, descendantIds: empty, descendantIdsForEC: empty,
+        descendantIdsForGuest: empty, ...handlers,
+    } as unknown as EngagementFileRowProps
+
+    const draw = (props: EngagementFileRowProps) => (
+        <TooltipProvider><EngagementFileRow {...props} /></TooltipProvider>
+    )
+
+    it('is memoized', () => {
+        expect((EngagementFileRow as unknown as { $$typeof: symbol }).$$typeof)
+            .toBe(Symbol.for('react.memo'))
+    })
+
+    it('does not render again when nothing about it changed', () => {
+        const { rerender } = render(draw(ROW))
+        menuRenders.mockClear()
+        // A new props object holding the same values — what a parent re-render hands every row.
+        rerender(draw({ ...ROW }))
+        expect(menuRenders).not.toHaveBeenCalled()
+    })
+
+    it('renders again when something about it does change', () => {
+        const { rerender } = render(draw(ROW))
+        menuRenders.mockClear()
+        rerender(draw({ ...ROW, isSelected: true }))
+        expect(menuRenders).toHaveBeenCalled()
     })
 })

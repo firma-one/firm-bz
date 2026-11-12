@@ -33,6 +33,7 @@ vi.mock('@/components/ui/toast', () => ({ useToast: () => ({ addToast: (t: { typ
 
 import { DeliverableDetailPanel } from './deliverable-detail-panel'
 import { createPanePreview } from './pane-preview'
+import { forgetEngagementMembers } from '@/lib/engagement-members'
 
 const subtask = (id: string, status: string | null, extra: object = {}) => ({
     id, documentId: id, fileName: `${id}.docx`, docId: id.toUpperCase(), dueDate: null,
@@ -48,6 +49,9 @@ let members: any[] = []
 let sharing: unknown = { sharing: { settings: {} } }
 
 beforeEach(() => {
+    // The member list is shared and cached across the page, so one case's answer must not stand in
+    // for the next one's.
+    forgetEngagementMembers()
     stageCalls = []
     refusals = {}
     writes = []
