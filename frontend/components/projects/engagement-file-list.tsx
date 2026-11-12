@@ -79,6 +79,8 @@ import { consumeDeeplinkHighlight, type BreadcrumbItem } from '@/lib/files-folde
 import { useSecureOpenDocument } from '@/lib/use-secure-open-document'
 import { SecureAccessModal } from '@/components/projects/shares/secure-access-modal'
 import { ProfileBubbleWithPopup } from '@/components/ui/profile-bubble-popup'
+import { loadEngagementMembers } from '@/lib/engagement-members'
+import { useRowWindow } from '@/components/projects/hooks/use-row-window'
 import { EngagementFileRow } from '@/components/projects/engagement-file-row'
 import { FilesDropPill, FilesDropRow, FILES_DROP_ZONE_ACTIVE_CLASS } from '@/components/projects/files-drop-zone'
 import { CopyMoveDialog, CopyToEngagementDialog, RenameDialog, UploadConflictDialog, type DeliverableKind } from '@/components/projects/file-organize-dialogs'
@@ -613,15 +615,16 @@ export function EngagementFileList({ projectId, initialFolderData, connectorRoot
     // Who a lead may assign from the Assignee column.
     const [assignableMembers, setAssignableMembers] = useState<PersonOption[]>([])
     useEffect(() => {
-        const token = session?.access_token
-        if (!isProjectLead || !token) return
+        if (!isProjectLead) return
         let cancelled = false
-        fetch(`/api/projects/${projectId}/members`, { headers: { Authorization: `Bearer ${token}` } })
-            .then((res) => (res.ok ? res.json() : null))
-            .then((data) => { if (!cancelled && data) setAssignableMembers(assignablePeople(data.members ?? [])) })
+        // The same list the engagement header above is already loading: shared, so the Files page
+        // asks the server once rather than twice. No token — the route reads the session cookie,
+        // which is also why this no longer waits for one to arrive before it can start.
+        loadEngagementMembers(projectId)
+            .then((members) => { if (!cancelled) setAssignableMembers(assignablePeople(members)) })
             .catch(() => {})
         return () => { cancelled = true }
-    }, [isProjectLead, projectId, session?.access_token])
+    }, [isProjectLead, projectId])
     const [isLoadingFolders, setIsLoadingFolders] = useState(true)
     const [currentFolderType, setCurrentFolderType] = useState<'general' | 'confidential' | 'staging'>('general')
     // Tracks whether the current folder is an approved deliverable (locks write ops)
@@ -639,6 +642,14 @@ export function EngagementFileList({ projectId, initialFolderData, connectorRoot
     const [breadcrumbs, setBreadcrumbs] = useState<BreadcrumbItem[]>([])
     // When the trail is wider than the pane, keep its end (the folder you're in) in view
     const breadcrumbStripRef = useRef<HTMLDivElement>(null)
+    /** The scrolling element the rows live in — measured by useRowWindow to window them. */
+    const listScrollRef = useRef<HTMLDivElement>(null)
+    /*
+     * scrollRowIntoView, reached through a ref. It is defined below sortedFiles (which it needs to
+     * find a row's index), while two of its callers are declared above — the same reason
+     * handleFolderClickRef exists further down.
+     */
+    const scrollRowIntoViewRef = useRef<((fileId: string) => void) | null>(null)
     useLayoutEffect(() => {
         const strip = breadcrumbStripRef.current
         if (strip) strip.scrollLeft = strip.scrollWidth
@@ -1040,6 +1051,50 @@ export function EngagementFileList({ projectId, initialFolderData, connectorRoot
 
     // Row-level processing state
     const [processingFileIds, setProcessingFileIds] = useState<Set<string>>(new Set())
+
+    /*
+     * The row's callbacks, declared once.
+     *
+     * These were inline arrows at the EngagementFileRow call site, so every one of them was a new
+     * function on every render of this component — which, with 69 pieces of state here, is very
+     * often. React.memo on the row cannot hold against a prop that changes identity each time, so
+     * each of these is a useCallback, and the ones that used to close over the row's `file` take it
+     * as an argument instead.
+     */
+    const toggleRowSelect = useCallback((fileId: string) => {
+        setSelectedFileIds(prev => {
+            const next = new Set(prev)
+            if (next.has(fileId)) next.delete(fileId)
+            else next.add(fileId)
+            return next
+        })
+    }, [])
+    const clearRowHighlight = useCallback(() => setHighlightedFileId(null), [])
+    const handleActionMenuOpenChange = useCallback((fileId: string, open: boolean) => {
+        setActionMenuOpenFileId(open ? fileId : null)
+    }, [])
+    const openCommentPane = useCallback((docId: string) => setActiveCommentDocId(docId), [])
+    const openInfoPane = useCallback((docId: string) => setActiveInfoDocId(docId), [])
+    const openPreviewPane = useCallback((docId: string, rowFile: DriveFile) => {
+        openPreviewForFile(docId, rowFile)
+    }, [openPreviewForFile])
+    const openRowDocument = useCallback((doc: DriveFile, rowFile: DriveFile) => {
+        const docId = doc.id ?? rowFile.id
+        handleSecureOpen(
+            {
+                documentId: docId,
+                fileName: doc.name ?? '',
+                mimeType: doc.mimeType,
+                externalId: docId,
+                firmId,
+                webViewLink: doc.webViewLink || `https://drive.google.com/file/d/${docId}/view`,
+            },
+            docId
+        )
+    }, [handleSecureOpen, firmId])
+    const addRowToast = useCallback((toast: { type: string; title: string; message: string }) => {
+        addToast(toast as any)
+    }, [addToast])
 
 
     const handleBulkDownload = useCallback(async () => {
@@ -1494,12 +1549,30 @@ export function EngagementFileList({ projectId, initialFolderData, connectorRoot
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only; refs keep latest rightPane/openSearchPanel to avoid infinite re-renders from setHeaderActions
     }, [])
 
-    const handleItemClick = (file: DriveFile) => {
+    /*
+     * Stable for the lifetime of the component, because every row in the memoized listing holds it.
+     *
+     * It goes through a ref rather than depending on handleFolderClick: that is declared hundreds of
+     * lines below, so naming it in a deps array here would read it inside its own TDZ. The same
+     * pattern as fetchFilesRef.
+     */
+    const handleFolderClickRef = useRef<((file: DriveFile) => void) | null>(null)
+    const handleItemClick = useCallback((file: DriveFile) => {
         // Keep folder navigation; remove click-to-open for documents in FILES tab.
         if (file.mimeType === 'application/vnd.google-apps.folder') {
-            handleFolderClick(file)
+            handleFolderClickRef.current?.(file)
         }
-    }
+    }, [])
+
+    /*
+     * This folder holds more than the listing returned.
+     *
+     * The provider listing is capped and has no paging, so a folder with more items than the cap
+     * quietly lost the rest while the counter still read a flat "100 items". The cap hasn't moved;
+     * what's changed is that the list now says so instead of presenting a partial folder as a
+     * whole one.
+     */
+    const [listTruncatedAt, setListTruncatedAt] = useState<number | null>(null)
 
     // Items just moved out of a folder, for a minute: the provider's folder listing can still return
     // them for a few seconds after the move, and the refresh that follows put the moved row back.
@@ -1542,6 +1615,7 @@ export function EngagementFileList({ projectId, initialFolderData, connectorRoot
                 return away.folderId !== folderId
             })
             setFiles(loadedFiles)
+            setListTruncatedAt(data.truncated ? (data.limit ?? loadedFiles.length) : null)
             refreshFileCount(loadedFiles)
         } catch (err) {
             logger.error('Folder listing failed', err instanceof Error ? err : new Error(String(err)))
@@ -1858,10 +1932,7 @@ export function EngagementFileList({ projectId, initialFolderData, connectorRoot
         const file = files.find(f => f.name === fileName)
         if (file) {
             setHighlightedFileId(file.id)
-            setTimeout(() => {
-                const el = document.querySelector(`[data-file-id="${file.id}"]`)
-                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-            }, 100)
+            setTimeout(() => scrollRowIntoViewRef.current?.(file.id), 100)
         }
     }, [files])
 
@@ -1919,11 +1990,10 @@ export function EngagementFileList({ projectId, initialFolderData, connectorRoot
     useEffect(() => {
         if (!highlightedFileId) return
         if (loading || isLoadingFolders) return
-        const scrollToTarget = () => {
-            const el = document.querySelector(`[data-file-id="${highlightedFileId}"]`)
-            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-        }
+        const scrollToTarget = () => scrollRowIntoViewRef.current?.(highlightedFileId)
         scrollToTarget()
+        // Second pass: when the first one only scrolled a windowed row into existence, by now it
+        // is mounted and this one centers it.
         const raf = requestAnimationFrame(scrollToTarget)
         return () => cancelAnimationFrame(raf)
     }, [highlightedFileId, loading, isLoadingFolders])
@@ -2267,6 +2337,7 @@ const handleRefresh = async () => {
             window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#${newHash}`)
         }
     }
+    handleFolderClickRef.current = handleFolderClick
 
     const handleBreadcrumbClick = (index: number, id: string) => {
         const item = breadcrumbs[index]
@@ -2450,6 +2521,33 @@ const handleRefresh = async () => {
         return result.sort(cmp)
     }, [files, sortConfig, filterTypes, filterStatuses, filterOwner, filterModified, deliverablesOnly, internalOnlyIds, internalOnlyAncestorIds, sharedExternalIds, ancestorFolderIds, descendantIds, descendantIdsForEC, descendantIdsForGuest, restrictToSharedOnly, canEdit, viewAsPersonaSlug, currentFolderIsApprovedDeliverable, listingInsideDeliverable, session?.user?.email, session?.user?.id, breadcrumbs])
 
+    /*
+     * Render the rows on screen rather than all of them. A folder now returns up to 500 items and
+     * mounting 500 of a row this wide is what made a big folder feel slow, memoized or not. Under
+     * VIRTUALIZE_ABOVE rows this is inert and every row renders, which is nearly every folder.
+     */
+    const rowWindow = useRowWindow(listScrollRef, sortedFiles.length)
+    const visibleRows = useMemo(
+        () => (rowWindow.virtualized ? sortedFiles.slice(rowWindow.start, rowWindow.end) : sortedFiles),
+        [sortedFiles, rowWindow.virtualized, rowWindow.start, rowWindow.end],
+    )
+
+    /*
+     * Put a row on screen by id. A windowed list may not have the row in the DOM at all, so when
+     * the element isn't there we scroll to where it will be and let it mount; callers that retry
+     * on the next frame then find it and centre it properly.
+     */
+    const scrollRowIntoView = useCallback((fileId: string) => {
+        const el = document.querySelector(`[data-file-id="${fileId}"]`)
+        if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+            return
+        }
+        const index = sortedFiles.findIndex(f => f.id === fileId)
+        if (index >= 0) rowWindow.scrollToIndex(index)
+    }, [sortedFiles, rowWindow])
+    scrollRowIntoViewRef.current = scrollRowIntoView
+
     /** Notion-style column header: muted small text with a column-type icon. */
     return (
         <div className="flex flex-col h-full overflow-hidden"
@@ -2478,9 +2576,17 @@ const handleRefresh = async () => {
                                 index === breadcrumbs.length - 1 && !loading && files.length > 0 ? (
                                     <span
                                         className="ml-1.5 inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full bg-surface px-1 text-[11px] font-medium leading-none tabular-nums text-fg-muted shadow-[inset_0_0_0_1px_var(--ui-line)]"
-                                        aria-label={sortedFiles.length === files.length ? `${files.length} items` : `${sortedFiles.length} of ${files.length} items`}
+                                        aria-label={
+                                            sortedFiles.length !== files.length
+                                                ? `${sortedFiles.length} of ${files.length} items`
+                                                : listTruncatedAt !== null
+                                                    ? `The first ${listTruncatedAt} items in this folder`
+                                                    : `${files.length} items`
+                                        }
                                     >
-                                        {sortedFiles.length === files.length ? files.length : `${sortedFiles.length} of ${files.length}`}
+                                        {sortedFiles.length !== files.length
+                                            ? `${sortedFiles.length} of ${files.length}`
+                                            : listTruncatedAt !== null ? `${files.length}+` : files.length}
                                     </span>
                                 ) : null
                             // The root, then every folder below it; a deep trail folds its upper folders into a "…" menu
@@ -3131,7 +3237,7 @@ const handleRefresh = async () => {
                 {NEW_DROP_ZONE && isDragging && (
                     <FilesDropPill count={dragFileCount} folderName={dropTargetFolder?.name ?? currentFolderName} />
                 )}
-                <div className={cn("subtle-scrollbar relative flex-1 overflow-y-auto", NEW_DROP_ZONE && isDragging && !dropTargetFolder && FILES_DROP_ZONE_ACTIVE_CLASS)}>
+                <div ref={listScrollRef} className={cn("subtle-scrollbar relative flex-1 overflow-y-auto", NEW_DROP_ZONE && isDragging && !dropTargetFolder && FILES_DROP_ZONE_ACTIVE_CLASS)}>
                     {deeplinkResolving || loading || isLoadingFolders ? (
                         // Rows shaped like the table that is coming (same grid as the header and
                         // FileRow), so nothing jumps when the files arrive.
@@ -3252,26 +3358,25 @@ const handleRefresh = async () => {
                         </div>
                     ) : (
                         <>
-                        <div className={cn("divide-y divide-line border-b border-line", isUploading && "opacity-50 transition-opacity")}>
-                            {sortedFiles.map((file) => (
+                        <div className={cn(isUploading && "opacity-50 transition-opacity")}>
+                            {/* Stands in for the rows above the window, so the scrollbar is the full list's. */}
+                            {rowWindow.padTop > 0 && <div style={{ height: rowWindow.padTop }} aria-hidden="true" />}
+                            {visibleRows.map((file) => (
                                 <EngagementFileRow
                                     key={file.id}
                                     file={file}
                                     isSelected={selectedFileIds.has(file.id)}
-                                    selectedFileIdsSize={selectedFileIds.size}
-                                    onToggleSelect={(fileId) => setSelectedFileIds(prev => {
-                                        const next = new Set(prev)
-                                        if (next.has(fileId)) next.delete(fileId)
-                                        else next.add(fileId)
-                                        return next
-                                    })}
-                                    activeCommentDocId={activeCommentDocId}
-                                    activeInfoDocId={activeInfoDocId}
-                                    activePreviewDocId={activePreviewDocId}
-                                    highlightedFileId={highlightedFileId}
-                                    onClearHighlight={() => setHighlightedFileId(null)}
-                                    draggedItem={draggedItem}
-                                    dragOverFolderId={dragOverFolderId}
+                                    hasSelection={selectedFileIds.size > 0}
+                                    onToggleSelect={toggleRowSelect}
+                                    // Compared here, so each row is told only about itself: a pane
+                                    // opening or a dragover re-renders the rows that changed, not all of them.
+                                    isCommentPaneOpen={activeCommentDocId === file.id}
+                                    isInfoPaneOpen={activeInfoDocId === file.id}
+                                    isPreviewPaneOpen={activePreviewDocId === file.id}
+                                    isHighlighted={highlightedFileId === file.id}
+                                    onClearHighlight={clearRowHighlight}
+                                    isDragged={draggedItem?.id === file.id}
+                                    isDragOver={dragOverFolderId === file.id}
                                     canEdit={canEdit}
                                     loading={loading}
                                     onDragStart={handleItemDragStart}
@@ -3304,9 +3409,8 @@ const handleRefresh = async () => {
                                     descendantIdsForEC={descendantIdsForEC}
                                     descendantIdsForGuest={descendantIdsForGuest}
                                     isActionMenuOpen={actionMenuOpenFileId === file.id}
-                                    onActionMenuOpenChange={(open) => setActionMenuOpenFileId(open ? file.id : null)}
-                                    processingFileIds={processingFileIds}
-                                    isRegrantingId={isRegrantingId}
+                                    onActionMenuOpenChange={handleActionMenuOpenChange}
+                                    isProcessing={processingFileIds.has(file.id) || isRegrantingId === file.id}
                                     onOpenComments={openCommentsForFile}
                                     onOpenRename={openRenameModal}
                                     onDuplicate={handleDuplicate}
@@ -3318,24 +3422,11 @@ const handleRefresh = async () => {
                                     onMarkAsDeliverable={handleMarkAsDeliverable}
                                     onUntagAsDeliverable={handleUntagAsDeliverable}
                                     onUnlockConfirm={setUnlockConfirmFile}
-                                    onOpenDocument={(doc) => {
-                                        const docId = doc.id ?? file.id
-                                        handleSecureOpen(
-                                            {
-                                                documentId: docId,
-                                                fileName: doc.name ?? '',
-                                                mimeType: doc.mimeType,
-                                                externalId: docId,
-                                                firmId,
-                                                webViewLink: doc.webViewLink || `https://drive.google.com/file/d/${docId}/view`,
-                                            },
-                                            docId
-                                        )
-                                    }}
-                                    onOpenCommentPane={(docId) => setActiveCommentDocId(docId)}
-                                    onOpenInfoPane={(docId) => setActiveInfoDocId(docId)}
-                                    onOpenPreviewPane={(docId) => openPreviewForFile(docId, file)}
-                                    onAddToast={(toast) => addToast(toast as any)}
+                                    onOpenDocument={openRowDocument}
+                                    onOpenCommentPane={openCommentPane}
+                                    onOpenInfoPane={openInfoPane}
+                                    onOpenPreviewPane={openPreviewPane}
+                                    onAddToast={addRowToast}
                                     connectorAccountEmail={connectorAccountEmail}
                                     isOneDriveClient={isOneDriveClient}
                                     bookmarkId={bookmarkIdByDocumentId.get(file.projectDocumentId ?? '')}
@@ -3344,7 +3435,26 @@ const handleRefresh = async () => {
                                     isMoveTarget={NEW_DROP_ZONE && dragOverFolderId === file.id}
                                 />
                             ))}
+                            {rowWindow.padBottom > 0 && <div style={{ height: rowWindow.padBottom }} aria-hidden="true" />}
                         </div>
+                        {/*
+                          * A folder with more items than one listing returns says so, rather than
+                          * presenting its first hundred as all of it. Engagement search reaches every
+                          * file, so that is where to send someone looking for one that isn't here.
+                          */}
+                        {listTruncatedAt !== null && !loading && (
+                            <div className="px-3 py-2 text-small text-fg-muted border-t border-line">
+                                Showing the first {listTruncatedAt} items in this folder · use{' '}
+                                <button
+                                    type="button"
+                                    onClick={openSearchPanel}
+                                    className="underline underline-offset-2 hover:text-fg"
+                                >
+                                    search
+                                </button>{' '}
+                                to find anything else
+                            </div>
+                        )}
                         {/* Always somewhere to drop, once a folder has files (an empty one says so itself) */}
                         {NEW_DROP_ZONE && canUploadHere && (
                             <FilesDropRow

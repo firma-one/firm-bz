@@ -8,6 +8,7 @@ vi.mock('@/components/ui/toast', () => ({ useToast: () => ({ addToast: vi.fn() }
 vi.mock('@/lib/supabase', () => ({ getSession: async () => ({ access_token: 't' }) }))
 
 import { AssetDetailsPane, assetDetailsTabs, isAssetDetailsPaneContent, openAssetDetailsPane, type AssetDetailsEditing } from './asset-details-pane'
+import { forgetEngagementMembers } from '@/lib/engagement-members'
 
 const RECORD = '7b2b0f3e-1111-4222-8333-944455556666'
 const FILE = {
@@ -24,6 +25,8 @@ const MEMBERS = [
 
 const fetchMock = vi.fn()
 beforeEach(() => {
+    // The member list is shared and cached across the page: one case must not answer the next.
+    forgetEngagementMembers()
     fetchMock.mockReset()
     fetchMock.mockImplementation(async (url: string) => {
         if (url.endsWith('/sharing')) return new Response(JSON.stringify({ sharing: { settings: { assigneeUserId: 'u-ana', description: 'Sizing model for the Q2 plan' } } }))

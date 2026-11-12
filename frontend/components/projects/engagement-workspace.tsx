@@ -23,6 +23,16 @@ import { EngagementHeader } from './engagement-header'
 import { EngagementTabsList, engagementChromeKey, engagementTabGuide, rememberEngagementChrome, type EngagementTabsConfig } from './engagement-tabs'
 import { HorizontalScroll } from '@/components/ui/horizontal-scroll'
 
+/** The counts the tab row shows beside its labels. Loaded behind the page, never waited for. */
+export type EngagementBadgeCounts = {
+    fileCount: number
+    sharesCount: number
+    commentsCount: number
+    memberCount: number
+    auditCount: number
+    wikiPageCount: number
+}
+
 export interface ProjectPathSegments {
     tab: string
     viewMode: 'list' | 'board' | 'grid'
@@ -80,12 +90,13 @@ interface EngagementWorkspaceProps {
     connectorAccountEmail?: string | null
     /** The Files tab's root folder ids, resolved on the server. */
     initialFolderData?: EngagementFolderData | null
-    fileCount?: number
-    sharesCount?: number
-    commentsCount?: number
-    memberCount?: number
-    auditCount?: number
-    wikiPageCount?: number
+    /*
+     * The numbers on the tab row, as a promise the page did not wait for.
+     *
+     * They are read after this component has painted, so a slow count never holds up the page. Until
+     * it resolves every count is undefined, and EngagementTabsList draws the tab label alone.
+     */
+    badgeCounts?: Promise<EngagementBadgeCounts | null>
 }
 
 const projectBase = (groupSlug: string, orgSlug: string, clientSlug: string, projectSlug: string, useEngagement = false) =>
@@ -129,12 +140,7 @@ export function EngagementWorkspace({
     workspaceRootLocation,
     connectorAccountEmail,
     initialFolderData,
-    fileCount,
-    sharesCount,
-    commentsCount,
-    memberCount,
-    auditCount,
-    wikiPageCount,
+    badgeCounts,
 }: EngagementWorkspaceProps) {
     const pathname = usePathname()
     const router = useRouter()
@@ -144,7 +150,19 @@ export function EngagementWorkspace({
     // Read only for everyone, as the server enforces. Settings and Members stay: they're how it's reopened and who has access.
     const completed = engagementStatus === 'COMPLETED'
     const isExternalPersona = restrictToSharedOnly || viewAsPersonaSlug === 'eng_ext_collaborator' || viewAsPersonaSlug === 'eng_viewer'
-    const [liveFileCount, setLiveFileCount] = useState<number | undefined>(fileCount)
+    const [counts, setCounts] = useState<EngagementBadgeCounts | null>(null)
+    useEffect(() => {
+        if (!badgeCounts) return
+        let cancelled = false
+        // Read in an effect rather than with use(): use() would suspend this component, which is the
+        // whole page, and waiting for the counts here is exactly what this change is undoing.
+        void Promise.resolve(badgeCounts)
+            .then((v) => { if (!cancelled) setCounts(v) })
+            .catch(() => { /* the tabs stay bare */ })
+        return () => { cancelled = true }
+    }, [badgeCounts])
+    const { fileCount, sharesCount, commentsCount, memberCount, auditCount, wikiPageCount } = counts ?? {}
+    const [liveFileCount, setLiveFileCount] = useState<number | undefined>(undefined)
     useEffect(() => { setLiveFileCount(fileCount) }, [fileCount])
     const [filesNavSlot, setFilesNavSlot] = useState<HTMLDivElement | null>(null)
     const [pendingTab, setPendingTab] = useState<string | null>(null)

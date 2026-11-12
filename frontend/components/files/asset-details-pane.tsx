@@ -26,6 +26,7 @@ import { failureFrom, failureReason } from "@/lib/files/action-failure"
 import type { useRightPane } from "@/lib/right-pane-context"
 import type { EngagementRoleSlug } from "@/lib/deliverable-stage-roles"
 import type { ActivityStatus } from "@/lib/sharing-settings"
+import { loadEngagementMembers } from '@/lib/engagement-members'
 
 /**
  * A document's Details in one right pane, laid out as the Board's pane lays out a deliverable
@@ -161,21 +162,21 @@ function useAssetRecord(projectId: string | undefined, recordId: string | undefi
         setError(null)
         ;(async () => {
             const headers = await authHeaders()
-            const [sharingRes, membersRes] = await Promise.all([
+            const [sharingRes, memberList] = await Promise.all([
                 fetch(`/api/projects/${projectId}/documents/${recordId}/sharing`, { headers }),
-                fetch(`/api/projects/${projectId}/members`, { headers }),
+                // Shared with the header and the file list: opening this pane over the Files page
+                // normally costs no request at all. It throws its own reason when the list fails.
+                loadEngagementMembers(projectId),
             ])
             if (cancelled) return
             // Both, or it's a failed load: without the people, a set assignee reads as "No assignee".
             if (!sharingRes.ok) throw await failureFrom(sharingRes)
-            if (!membersRes.ok) throw await failureFrom(membersRes)
             const settings = (await sharingRes.json()).sharing?.settings ?? {}
-            const data = await membersRes.json()
             if (cancelled) return
             setAssigneeId(typeof settings.assigneeUserId === 'string' ? settings.assigneeUserId : null)
             setDescription(typeof settings.description === 'string' ? settings.description : '')
             setApprovals(approvalsOf(settings))
-            setMembers(data.members ?? [])
+            setMembers(memberList)
             setState('ready')
         })().catch((e) => {
             if (cancelled) return

@@ -147,19 +147,17 @@ export default async function EngagementPage({ params }: PageProps) {
 
   const ecGuestPersona = (projectRole === 'eng_ext_collaborator' || projectRole === 'eng_viewer') ? projectRole : null
 
-  const [projectPersonas, connectorMeta, initialFolderData, fileCount, sharesCount, commentsCount, engMemberCount, engInviteCount, auditCount, wikiPageCount] = await Promise.all([
-    // Only legacy proj_* roles have a display name to look up.
-    typeof projectRole === 'string' && projectRole.startsWith('proj_') ? getProjectPersonas() : Promise.resolve([]),
-    client.connectorId
-      ? prisma.connector.findUnique({ where: { id: client.connectorId }, select: { workspaceRootLocation: true, settings: true } })
-      : Promise.resolve(null),
-    // The Files tab's root folders, so its first listing needn't wait on a lookup from the browser.
-    pathSegments.tab === 'files' && client.connectorId
-      ? getEngagementFolderIds(project.id).catch((e: unknown) => {
-        logger.warn('[EngagementPage] folder ids not resolved; the file list will ask', { projectId: project.id, error: e instanceof Error ? e.message : String(e) })
-        return null
-      })
-      : Promise.resolve(null),
+  /*
+   * The numbers on the tab row, loaded but not waited for.
+   *
+   * Six counts — files, shares, comments, members, audit events, wiki pages — used to sit in the
+   * same Promise.all as the data the page is built from, so nothing rendered until the slowest of
+   * them came back. Five of the six are decoration on tabs the reader isn't looking at, and
+   * sharesCount is a COUNT(DISTINCT) over a left join. They now stream in behind the page: the
+   * workspace reads this promise after it has painted, and a tab with no number yet simply shows
+   * its label (EngagementTabsList renders nothing for an undefined count).
+   */
+  const badgeCountsPromise = Promise.all([
     ecGuestPersona
       ? getAccessibleFileCountForPersona(project.id, ecGuestPersona)
       : (basePrisma as any).engagementDocument.count({ where: { engagementId: project.id, isFolder: false } }),
@@ -178,7 +176,35 @@ export default async function EngagementPage({ params }: PageProps) {
     (basePrisma as any).platformAuditEvent.count({ where: { engagementId: project.id, scope: 'PROJECT' } }),
     (prisma as any).engagementWikiPage.count({ where: { engagementId: project.id } }),
   ])
-  const engagementMemberCount = engMemberCount + engInviteCount
+    .then(([fileCount, sharesCount, commentsCount, engMemberCount, engInviteCount, auditCount, wikiPageCount]) => ({
+      fileCount,
+      sharesCount,
+      commentsCount,
+      memberCount: engMemberCount + engInviteCount,
+      auditCount,
+      wikiPageCount,
+    }))
+    // A count that fails leaves the tabs bare rather than breaking the page, and must not surface as
+    // an unhandled rejection in the stream.
+    .catch((e: unknown) => {
+      logger.warn('[EngagementPage] tab counts not loaded', { projectId: project.id, error: e instanceof Error ? e.message : String(e) })
+      return null
+    })
+
+  const [projectPersonas, connectorMeta, initialFolderData] = await Promise.all([
+    // Only legacy proj_* roles have a display name to look up.
+    typeof projectRole === 'string' && projectRole.startsWith('proj_') ? getProjectPersonas() : Promise.resolve([]),
+    client.connectorId
+      ? prisma.connector.findUnique({ where: { id: client.connectorId }, select: { workspaceRootLocation: true, settings: true } })
+      : Promise.resolve(null),
+    // The Files tab's root folders, so its first listing needn't wait on a lookup from the browser.
+    pathSegments.tab === 'files' && client.connectorId
+      ? getEngagementFolderIds(project.id).catch((e: unknown) => {
+        logger.warn('[EngagementPage] folder ids not resolved; the file list will ask', { projectId: project.id, error: e instanceof Error ? e.message : String(e) })
+        return null
+      })
+      : Promise.resolve(null),
+  ])
 
   const projectPersonaDisplayName =
     projectRole && typeof projectRole === 'string' && projectRole.startsWith('proj_')
@@ -230,12 +256,7 @@ export default async function EngagementPage({ params }: PageProps) {
           engagementSlug={engagementSlug}
           firmSandboxOnly={org.sandboxOnly ?? false}
           enableBetaFeatures={enableBetaFeatures}
-          fileCount={fileCount}
-          sharesCount={sharesCount}
-          commentsCount={commentsCount}
-          memberCount={engagementMemberCount}
-          auditCount={auditCount}
-          wikiPageCount={wikiPageCount}
+          badgeCounts={badgeCountsPromise}
         />
       </ErrorBoundary>
     </div>

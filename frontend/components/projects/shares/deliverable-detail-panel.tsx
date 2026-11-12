@@ -46,6 +46,7 @@ import { versionName } from '@/lib/files/approvals'
 import { failureFrom, failureReason } from '@/lib/files/action-failure'
 import { LoadFailed } from '@/components/ui/load-failed'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { loadEngagementMembers } from '@/lib/engagement-members'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -716,16 +717,16 @@ export function DeliverableDetailPanel({
       // Internal users (EL/admin) always see all files.
       const persona = isExternalViewer ? 'ev' : isExternalCollaborator ? 'ec' : 'all'
 
-      const [sharingRes, subRes, membersRes] = await Promise.all([
+      const [sharingRes, subRes, memberList] = await Promise.all([
         fetch(`/api/projects/${projectId}/documents/${documentId}/sharing`, {
           headers: { Authorization: `Bearer ${session.access_token}` },
         }),
         fetch(`/api/projects/${projectId}/documents/${documentId}/subtasks?persona=${persona}`, {
           headers: { Authorization: `Bearer ${session.access_token}` },
         }),
-        fetch(`/api/projects/${projectId}/members`, {
-          headers: { Authorization: `Bearer ${session.access_token}` },
-        }),
+        // Shared with the header and the file list. Its own catch, because the people not
+        // loading has never failed this panel — the rest of it still reads.
+        loadEngagementMembers(projectId).catch(() => null),
       ])
 
       if (sharingRes.ok) {
@@ -758,9 +759,8 @@ export function DeliverableDetailPanel({
         setDocsLoad({ state: 'failed', reason: (await failureFrom(subRes)).message })
       }
 
-      if (membersRes.ok) {
-        const membersData = await membersRes.json()
-        setMembers(membersData.members ?? [])
+      if (memberList) {
+        setMembers(memberList)
       }
     } catch (e) {
       const reason = failureReason(e)

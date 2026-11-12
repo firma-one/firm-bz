@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { DriveFile } from '@/lib/types'
 import { type ToastType } from '@/components/ui/toast'
 import { setRowDragImage } from '@/components/projects/files-drop-zone'
@@ -57,12 +57,20 @@ export function useEngagementDragDrop({
     /** How many files are being dragged in, for the pill naming where they'll land. */
     const [dragFileCount, setDragFileCount] = useState(0)
 
-    const endFileDrag = () => {
+    /*
+     * Every handler below is a useCallback.
+     *
+     * They are handed to every row in the listing, which is memoized: a handler recreated on each
+     * render would change identity on each render and defeat that memo entirely. handleItemDragOver
+     * is the one that mattered most — it fires on every dragover event, and while it was a fresh
+     * function each time, a single drag across the list re-rendered every row on screen repeatedly.
+     */
+    const endFileDrag = useCallback(() => {
         setIsDragging(false)
         setDropTargetFolder(null)
-    }
+    }, [])
 
-    const uploadDropped = async (e: React.DragEvent, targetFolder: DriveFile | null) => {
+    const uploadDropped = useCallback(async (e: React.DragEvent, targetFolder: DriveFile | null) => {
         if (hasDirectory(e)) {
             addToast({
                 type: 'info',
@@ -74,9 +82,9 @@ export function useEngagementDragDrop({
         const fileList = e.dataTransfer.files
         if (!fileList || fileList.length === 0) return
         await processUploads(fileList, targetFolder?.id)
-    }
+    }, [addToast, processUploads])
 
-    const handleDragOver = (e: React.DragEvent) => {
+    const handleDragOver = useCallback((e: React.DragEvent) => {
         e.preventDefault()
         // Only show external upload overlay if dragging actual files from OS
         if (isFileDrag(e) && canUpload) {
@@ -86,38 +94,38 @@ export function useEngagementDragDrop({
             setDropTargetFolder(null)
             e.dataTransfer.dropEffect = 'copy'
         }
-    }
+    }, [canUpload])
 
-    const handleDragLeave = (e: React.DragEvent) => {
+    const handleDragLeave = useCallback((e: React.DragEvent) => {
         e.preventDefault()
         if (e.currentTarget.contains(e.relatedTarget as Node)) return
         endFileDrag()
-    }
+    }, [endFileDrag])
 
-    const handleDrop = async (e: React.DragEvent) => {
+    const handleDrop = useCallback(async (e: React.DragEvent) => {
         e.preventDefault()
         endFileDrag()
         if (!canUpload) return
         await uploadDropped(e, null)
-    }
+    }, [canUpload, endFileDrag, uploadDropped])
 
     // Internal Item Drag Handlers
-    const handleItemDragStart = (e: React.DragEvent, item: DriveFile) => {
+    const handleItemDragStart = useCallback((e: React.DragEvent, item: DriveFile) => {
         if (!canEdit) return
         setDraggedItem(item)
         setIsInternalDragging(true)
         e.dataTransfer.setData('application/x-pockett-item', item.id)
         e.dataTransfer.effectAllowed = 'move'
         if (compactDragImage) setRowDragImage(e, item.name, item.mimeType === FOLDER_MIME)
-    }
+    }, [canEdit, compactDragImage])
 
-    const handleItemDragEnd = () => {
+    const handleItemDragEnd = useCallback(() => {
         setDraggedItem(null)
         setDragOverFolderId(null)
         setIsInternalDragging(false)
-    }
+    }, [])
 
-    const handleItemDragOver = (e: React.DragEvent, targetFolder: DriveFile) => {
+    const handleItemDragOver = useCallback((e: React.DragEvent, targetFolder: DriveFile) => {
         e.preventDefault()
         e.stopPropagation() // Prevent triggering the container's external upload handler
 
@@ -138,9 +146,9 @@ export function useEngagementDragDrop({
             e.dataTransfer.dropEffect = 'move'
             setDragOverFolderId(targetFolder.id)
         }
-    }
+    }, [draggedItem, canUpload, canUploadIntoFolders])
 
-    const handleItemDragLeave = (e: React.DragEvent) => {
+    const handleItemDragLeave = useCallback((e: React.DragEvent) => {
         e.stopPropagation()
         // Only clear highlight if we're actually leaving the row (not just entering a child)
         const rect = e.currentTarget.getBoundingClientRect()
@@ -148,9 +156,9 @@ export function useEngagementDragDrop({
         if (isOutside) {
             setDragOverFolderId(null)
         }
-    }
+    }, [])
 
-    const handleItemDrop = async (e: React.DragEvent, targetFolder: DriveFile) => {
+    const handleItemDrop = useCallback(async (e: React.DragEvent, targetFolder: DriveFile) => {
         e.preventDefault()
         e.stopPropagation() // Prevent triggering the container's external upload handler
 
@@ -173,7 +181,7 @@ export function useEngagementDragDrop({
 
         // Reuse our existing move logic, but pass item explicitly to avoid race condition
         handleCopyMoveToFolder(targetId, item, 'move')
-    }
+    }, [draggedItem, canUpload, canUploadIntoFolders, uploadDropped, endFileDrag, handleItemDragEnd, handleCopyMoveToFolder])
 
     return {
         draggedItem,

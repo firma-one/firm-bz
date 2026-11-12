@@ -62,18 +62,25 @@ export interface EngagementFileRowProps {
     file: DriveFile
     // Selection
     isSelected: boolean
-    selectedFileIdsSize: number
+    /** Anything at all is selected, so a click toggles this row rather than opening a folder. */
+    hasSelection: boolean
     onToggleSelect: (fileId: string) => void
-    // Active pane tracking
-    activeCommentDocId: string | null
-    activeInfoDocId: string | null
-    activePreviewDocId: string | null
-    // Highlight
-    highlightedFileId: string | null
+    /*
+     * This row's own state, never the listing's.
+     *
+     * These were the ids themselves — activePreviewDocId, highlightedFileId, dragOverFolderId —
+     * each compared against file.id here. That made every one of them a prop that changes on every
+     * row whenever any single row's state changes, so opening a pane, or one dragover event,
+     * re-rendered the whole listing. The parent does the comparing now and this row is told only
+     * about itself, which is what lets React.memo below actually hold.
+     */
+    isCommentPaneOpen: boolean
+    isInfoPaneOpen: boolean
+    isPreviewPaneOpen: boolean
+    isHighlighted: boolean
     onClearHighlight: () => void
-    // Drag & drop
-    draggedItem: DriveFile | null
-    dragOverFolderId: string | null
+    isDragged: boolean
+    isDragOver: boolean
     canEdit: boolean
     loading: boolean
     onDragStart: (e: React.DragEvent, item: DriveFile) => void
@@ -106,10 +113,10 @@ export interface EngagementFileRowProps {
     descendantIdsForGuest: Set<string>
     // Action menu state
     isActionMenuOpen: boolean
-    onActionMenuOpenChange: (open: boolean) => void
+    onActionMenuOpenChange: (fileId: string, open: boolean) => void
     // Processing
-    processingFileIds: Set<string>
-    isRegrantingId: string | null
+    /** A file action or a re-grant is running on this row: it wears the progress line. */
+    isProcessing: boolean
     // File operation handlers
     onOpenComments: (file: DriveFile) => void
     onOpenRename: (doc: DriveFile) => void
@@ -122,10 +129,10 @@ export interface EngagementFileRowProps {
     onMarkAsDeliverable?: (doc: any) => void
     onUntagAsDeliverable?: (doc: any) => void
     onUnlockConfirm: (file: DriveFile) => void
-    onOpenDocument: (doc: DriveFile) => void
+    onOpenDocument: (doc: DriveFile, rowFile: DriveFile) => void
     onOpenCommentPane: (docId: string) => void
     onOpenInfoPane: (docId: string) => void
-    onOpenPreviewPane: (docId: string) => void
+    onOpenPreviewPane: (docId: string, rowFile: DriveFile) => void
     onAddToast: (toast: { type: string; title: string; message: string }) => void
     /** Connector account email — passed to DocumentActionMenu for Google Drive authuser param. */
     connectorAccountEmail?: string | null
@@ -152,18 +159,18 @@ export interface EngagementFileRowProps {
     assignablePeople?: PersonOption[]
 }
 
-export function EngagementFileRow({
+function EngagementFileRowInner({
     file,
     isSelected,
-    selectedFileIdsSize,
+    hasSelection,
     onToggleSelect,
-    activeCommentDocId,
-    activeInfoDocId,
-    activePreviewDocId,
-    highlightedFileId,
+    isCommentPaneOpen,
+    isInfoPaneOpen,
+    isPreviewPaneOpen,
+    isHighlighted,
     onClearHighlight,
-    draggedItem,
-    dragOverFolderId,
+    isDragged,
+    isDragOver,
     canEdit,
     loading,
     onDragStart,
@@ -192,8 +199,7 @@ export function EngagementFileRow({
     descendantIdsForGuest,
     isActionMenuOpen,
     onActionMenuOpenChange,
-    processingFileIds,
-    isRegrantingId,
+    isProcessing,
     onOpenComments,
     onOpenRename,
     onDuplicate,
@@ -224,7 +230,6 @@ export function EngagementFileRow({
 }: EngagementFileRowProps) {
     // The row's ⋮ menu already reads the pane; the Details icon opens the same pane it does.
     const rightPane = useRightPane()
-    const isDeeplinkHighlight = file.id === highlightedFileId
     const isFolder = (file.mimeType ?? (file as { type?: string }).type) === 'application/vnd.google-apps.folder'
     const isIntakeRow = !!file.isPendingApproval
     // isEC/isGuest: covers both genuine EC/EV users (restrictToSharedOnly=true) and admin view-as impersonation
@@ -267,7 +272,7 @@ export function EngagementFileRow({
         && !locked && !isIntakeRow && !isFolderApproved && !isInsideApprovedDeliverable
     const isIndexing = !isFolder && !!file.projectDocumentId && file.indexingStatus === 'PROCESSING'
     // Row tools appear on hover or keyboard focus, and stay while the row is in use.
-    const toolsPinned = isActionMenuOpen || isSelected || isIndexing || file.id === activePreviewDocId || file.id === highlightedFileId
+    const toolsPinned = isActionMenuOpen || isSelected || isIndexing || isPreviewPaneOpen || isHighlighted
     // Details, from the row icon and the ⋮ menu alike: Info edits what this row's own cells may.
     const openDetails = () => {
         onOpenInfoPane(file.id)
@@ -316,7 +321,7 @@ export function EngagementFileRow({
     }
 
     // A folder opens from its ID and Name cells only. In selection mode the click toggles the row instead.
-    const opensFolder = isFolder && selectedFileIdsSize === 0
+    const opensFolder = isFolder && !hasSelection
     const openFromCell = () => {
         if (opensFolder) onItemClick(file)
     }
@@ -333,22 +338,25 @@ export function EngagementFileRow({
             onDragLeave={onDragLeave}
             onDrop={(e) => onDrop(e, file)}
             className={`${FILE_TABLE_GRID_COLS_CLASS} ${cn(
-                "group grid gap-4 h-[34px] overflow-hidden pl-1 pr-2 transition-colors items-center cursor-default relative text-ui",
+                // The row owns its own bottom line (34px + 1px = the 35px pitch in use-row-window.ts)
+                // rather than taking it from a `divide-y` on the listing, so that a windowed list
+                // can replace the rows it is not rendering with plain spacers.
+                "group grid gap-4 h-[35px] border-b border-line overflow-hidden pl-1 pr-2 transition-colors items-center cursor-default relative text-ui",
                 (isFolderApproved || isInsideApprovedDeliverable) && "bg-primary/5 hover:bg-primary/10",
                 (isIntakeRow || file.lock?.type === 'finalize' || (file.isPrivate && !isFolder)) ? "hover:bg-surface-hover opacity-60" : !(isFolderApproved || isInsideApprovedDeliverable) && "hover:bg-surface-hover",
                 !isIntakeRow && isSelected && "bg-surface-selected hover:bg-surface-selected",
                 !isIntakeRow && isActionMenuOpen && "bg-surface-muted",
-                !isIntakeRow && (file.id === activeCommentDocId || file.id === activeInfoDocId || file.id === activePreviewDocId) && "bg-surface-muted",
-                draggedItem?.id === file.id && "opacity-40 grayscale",
-                dragOverFolderId === file.id && !isMoveTarget && "bg-line ring-2 ring-inset ring-line z-[1]",
+                !isIntakeRow && (isCommentPaneOpen || isInfoPaneOpen || isPreviewPaneOpen) && "bg-surface-muted",
+                isDragged && "opacity-40 grayscale",
+                isDragOver && !isMoveTarget && "bg-line ring-2 ring-inset ring-line z-[1]",
                 (isUploadTarget || isMoveTarget) && `${FILES_DROP_TARGET_ROW_CLASS} z-[1]`
             )}`}
             onMouseEnter={() => {
-                if (isDeeplinkHighlight) onClearHighlight()
+                if (isHighlighted) onClearHighlight()
             }}
             onClick={() => {
                 // In selection mode: clicking anywhere on row toggles selection
-                if (selectedFileIdsSize > 0) onToggleSelect(file.id)
+                if (hasSelection) onToggleSelect(file.id)
             }}
         >
             {/* Checkbox Column */}
@@ -400,7 +408,7 @@ export function EngagementFileRow({
                     <Tooltip>
                         <TooltipTrigger asChild>
                                 <div className="flex min-w-0 w-full flex-col">
-                                {isDeeplinkHighlight ? (
+                                {isHighlighted ? (
                                     <div className="flex w-full min-w-0 items-center gap-3">
                                         <mark
                                             className={cn(
@@ -418,7 +426,7 @@ export function EngagementFileRow({
                                             strokeWidth={2}
                                         />
                                     </div>
-                                ) : (file.id === activeCommentDocId || file.id === activeInfoDocId || file.id === activePreviewDocId) && !isFolder ? (
+                                ) : (isCommentPaneOpen || isInfoPaneOpen || isPreviewPaneOpen) && !isFolder ? (
                                     <div className="flex w-full min-w-0 items-center gap-3">
                                         <span
                                             className={cn(
@@ -558,12 +566,12 @@ export function EngagementFileRow({
                                         type="button"
                                         className={cn(
                                             'h-7 w-7 rounded-md inline-flex items-center justify-center disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-fg-muted',
-                                            file.id === activeInfoDocId
+                                            isInfoPaneOpen
                                                 ? 'text-fg-muted bg-surface-muted'
                                                 : 'text-fg-muted hover:text-fg-muted hover:bg-surface-hover'
                                         )}
                                         aria-label="Details"
-                                        aria-pressed={file.id === activeInfoDocId}
+                                        aria-pressed={isInfoPaneOpen}
                                         disabled={isIntakeRow}
                                         onClick={openDetails}
                                     >
@@ -599,14 +607,14 @@ export function EngagementFileRow({
                                         type="button"
                                         className={cn(
                                             'h-7 w-7 rounded-md inline-flex items-center justify-center disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-fg-muted',
-                                            file.id === activePreviewDocId
+                                            isPreviewPaneOpen
                                                 ? 'text-fg-muted bg-surface-muted'
                                                 : 'text-fg-muted hover:text-fg-muted hover:bg-surface-hover'
                                         )}
                                         aria-label="Preview"
-                                        aria-pressed={file.id === activePreviewDocId}
+                                        aria-pressed={isPreviewPaneOpen}
                                         disabled={isIntakeRow}
-                                        onClick={() => onOpenPreviewPane(file.id)}
+                                        onClick={() => onOpenPreviewPane(file.id, file)}
                                     >
                                         <ScanEye className="h-4 w-4" />
                                     </button>
@@ -630,7 +638,7 @@ export function EngagementFileRow({
                                                 window.open(file.externalUrl, '_blank', 'noopener,noreferrer')
                                                 return
                                             }
-                                            onOpenDocument(file)
+                                            onOpenDocument(file, file)
                                         }}
                                     >
                                         <ExternalLink className="h-4 w-4" />
@@ -647,12 +655,12 @@ export function EngagementFileRow({
                                     className={cn(
                                         'h-7 w-7 rounded-md inline-flex items-center justify-center disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-fg-muted',
                                         'hidden @[49rem]/file-table:inline-flex',
-                                        file.id === highlightedFileId
+                                        isHighlighted
                                             ? 'text-fg-muted bg-surface-muted'
                                             : 'text-fg-muted hover:text-fg-muted hover:bg-surface-hover'
                                     )}
                                     aria-label="Copy link"
-                                    aria-pressed={file.id === highlightedFileId}
+                                    aria-pressed={isHighlighted}
                                     disabled={isIntakeRow}
                                     onClick={() => {
                                         const docId = file.projectDocumentId || file.id
@@ -720,11 +728,8 @@ export function EngagementFileRow({
                             onDeleteDocument={canMutateFile ? (doc) => onTrash(doc as DriveFile) : undefined}
                             onMakePrivate={canManage && !locked && !isIntakeRow && !file.isPrivate && isInsideDeliverable ? () => onPrivacy(file, true) : undefined}
                             onMakePublic={canManage && !locked && !isIntakeRow && file.isPrivate ? () => onPrivacy(file, false) : undefined}
-                            onOpenChange={(open) => onActionMenuOpenChange(open)}
-                            onOpenDocument={(doc) => {
-                                const d = doc as DriveFile
-                                onOpenDocument(d)
-                            }}
+                            onOpenChange={(open) => onActionMenuOpenChange(file.id, open)}
+                            onOpenDocument={(doc) => onOpenDocument(doc as DriveFile, file)}
                             connectorAccountEmail={connectorAccountEmail}
                             isOneDriveClient={isOneDriveClient}
                         />
@@ -857,7 +862,7 @@ export function EngagementFileRow({
                 )}
             </div>
 
-            {(processingFileIds.has(file.id) || isRegrantingId === file.id) && (
+            {isProcessing && (
                 <div className="absolute bottom-0 left-0 right-0 z-10 pointer-events-none">
                     <div className="h-[2px] w-full bg-primary/20 overflow-hidden">
                         <div className="h-full bg-primary animate-indeterminate-progress" />
@@ -867,3 +872,11 @@ export function EngagementFileRow({
         </div>
     )
 }
+
+/*
+ * One row, one render. The listing holds 69 pieces of state and hands this component ~50 props, so
+ * without memo any one of them — a hover, a checkbox, a dragover, a finished poll — re-rendered
+ * every row on screen. Its props are now either stable (the id Sets are useState, the callbacks are
+ * useCallback) or about this row alone, so a change that concerns one row costs one render.
+ */
+export const EngagementFileRow = React.memo(EngagementFileRowInner)

@@ -14,6 +14,7 @@ vi.mock('@/components/ui/tooltip', () => ({
 }))
 
 import { EngagementHeader } from './engagement-header'
+import { forgetEngagementMembers } from '@/lib/engagement-members'
 
 const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ members: [
     { userId: 'u1', name: 'Pat Lee', role: 'eng_admin', avatarUrl: null, isAgent: false },
@@ -28,6 +29,8 @@ const props = {
 }
 
 beforeEach(() => {
+    // The member list is shared and cached across the page: one case must not answer the next.
+    forgetEngagementMembers()
     vi.clearAllMocks()
     vi.stubGlobal('fetch', fetchMock)
 })
