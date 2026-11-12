@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation"
 import { getShellSidebarData, type ShellSidebarData } from "@/lib/actions/shell"
 import { getInboxCounts, type InboxCounts } from "@/lib/actions/inbox"
 import { INBOX_CHANGED_EVENT } from "@/components/inbox/inbox-items"
+import { useVisiblePoll } from "@/lib/hooks/use-visible-poll"
 import { useSidebarFirms } from "@/lib/sidebar-firms-context"
 import { useViewAs } from "@/lib/view-as-context"
 import { failureFrom, failureReason } from "@/lib/files/action-failure"
@@ -88,17 +89,29 @@ export function ShellDataProvider({ children }: { children: ReactNode }) {
         if (counts) setInboxCounts(counts)
     }, [])
 
-    // Badges: on load, whenever the Inbox changes something, and every minute.
+    // Badges: on load, whenever the Inbox changes something, and whenever the tab is brought
+    // back. The timer behind it is only a backstop for a tab left open and in front for hours,
+    // so it runs every five minutes rather than every minute — getInboxCounts fans out across
+    // the user's firms, reminders and work, which is far too much to spend once a minute on a
+    // badge that changes a few times a day.
     useEffect(() => {
-        void loadCounts()
         const onChange = () => void loadCounts()
         window.addEventListener(INBOX_CHANGED_EVENT, onChange)
-        const id = setInterval(onChange, 60_000)
-        return () => {
-            window.removeEventListener(INBOX_CHANGED_EVENT, onChange)
-            clearInterval(id)
-        }
+        return () => window.removeEventListener(INBOX_CHANGED_EVENT, onChange)
     }, [loadCounts])
+
+    useVisiblePoll(loadCounts, 5 * 60_000)
+
+    // Moving around the app refreshes the badge too, so someone actively working sees a count
+    // that keeps up with them rather than one that waits for the backstop above. The first
+    // pathname is skipped: useVisiblePoll has already loaded once on mount.
+    const countedPath = useRef<string | null>(null)
+    useEffect(() => {
+        if (countedPath.current === null) { countedPath.current = pathname; return }
+        if (countedPath.current === pathname) return
+        countedPath.current = pathname
+        void loadCounts()
+    }, [pathname, loadCounts])
 
     const load = useCallback(async () => {
         if (!firmSlug) {

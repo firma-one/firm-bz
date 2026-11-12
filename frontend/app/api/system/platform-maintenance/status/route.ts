@@ -9,7 +9,29 @@ import {
 
 export const dynamic = 'force-dynamic'
 
+/**
+ * Every signed-in tab polls this once a minute for one global boolean, so without a cache the
+ * read count scales with open tabs. Answers are reused for CACHE_TTL_MS per running instance:
+ * turning maintenance on or off can therefore take up to that long to reach a client, which is
+ * well inside the grace period the feature already gives people.
+ */
+const CACHE_TTL_MS = 30_000
+let cached: { at: number; body: PlatformMaintenanceStatusBody } | null = null
+
+type PlatformMaintenanceStatusBody = {
+  active: boolean
+  pendingGrace: boolean
+  graceEndsAt: string | null
+  scheduledFrom: string | null
+  scheduledTo: string | null
+  message: string | null
+}
+
 export async function GET() {
+  if (cached && Date.now() - cached.at < CACHE_TTL_MS) {
+    return NextResponse.json(cached.body)
+  }
+
   let config = await getPlatformMaintenanceConfig()
 
   // Lazy activation fallback: if the Inngest job didn't fire (e.g. dev env without
@@ -38,12 +60,14 @@ export async function GET() {
     })()
   }
 
-  return NextResponse.json({
+  const body: PlatformMaintenanceStatusBody = {
     active: config?.active ?? false,
     pendingGrace: (config?.gracePeriod ?? false) && !(config?.active ?? false),
     graceEndsAt: config?.graceEndsAt ?? null,
     scheduledFrom: config?.scheduledFrom ?? null,
     scheduledTo: config?.scheduledTo ?? null,
     message: config?.message ?? null,
-  })
+  }
+  cached = { at: Date.now(), body }
+  return NextResponse.json(body)
 }

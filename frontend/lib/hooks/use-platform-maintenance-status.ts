@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
+import { useVisiblePoll } from './use-visible-poll'
 
 export type PlatformMaintenanceStatus = {
   active: boolean
@@ -11,25 +12,23 @@ export type PlatformMaintenanceStatus = {
   message: string | null
 }
 
+/**
+ * The platform-wide maintenance flag. Polled only while the tab is visible; the route itself
+ * answers from a short-lived cache, so a minute's cadence across many open tabs is a handful
+ * of reads rather than one per tab per minute.
+ */
 export function usePlatformMaintenanceStatus(pollIntervalMs = 60_000): PlatformMaintenanceStatus | null {
   const [status, setStatus] = useState<PlatformMaintenanceStatus | null>(null)
 
-  useEffect(() => {
-    let cancelled = false
+  const fetchStatus = useCallback(async () => {
+    try {
+      const res = await fetch('/api/system/platform-maintenance/status', { cache: 'no-store' })
+      if (!res.ok) return
+      setStatus(await res.json() as PlatformMaintenanceStatus)
+    } catch { /* non-fatal */ }
+  }, [])
 
-    async function fetch_() {
-      try {
-        const res = await fetch('/api/system/platform-maintenance/status', { cache: 'no-store' })
-        if (!res.ok || cancelled) return
-        const data = await res.json() as PlatformMaintenanceStatus
-        if (!cancelled) setStatus(data)
-      } catch { /* non-fatal */ }
-    }
-
-    fetch_()
-    const id = setInterval(fetch_, pollIntervalMs)
-    return () => { cancelled = true; clearInterval(id) }
-  }, [pollIntervalMs])
+  useVisiblePoll(fetchStatus, pollIntervalMs)
 
   return status
 }
