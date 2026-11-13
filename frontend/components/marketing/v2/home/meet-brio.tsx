@@ -111,13 +111,13 @@ export function MeetBrioSection() {
                 <BrioOnDark />
               </span>{' '}
               reads the delivery data in your workspace (deliverables, due dates, statuses, who’s involved) and turns
-              it into the brief you’d write yourself if you had the time. It writes your day, drafts the client update,
-              the reply and the nudge, keeps the <RaidTerm tone="dark">RAID log</RaidTerm>
+              it into the brief you’d write yourself if you had the time. It tells you each morning what needs you, drafts the
+              client update, the reply and the nudge, keeps the <RaidTerm tone="dark">RAID log</RaidTerm>
               {FILES_AGENT_PUBLIC ? ', turns call notes into actions and keeps your files tidy' : ' and turns call notes into actions'},
               and it always waits for you before anything changes.
             </p>
             <p className="mk-brio-lede mk-brio-narrow">
-              It writes your day, drafts your client updates and replies, keeps the <RaidTerm tone="dark">RAID log</RaidTerm>
+              It tells you each morning what needs you, drafts your client updates and replies, keeps the <RaidTerm tone="dark">RAID log</RaidTerm>
               {FILES_AGENT_PUBLIC ? ' and your files tidy' : ''}, and it always waits for you before anything changes.
             </p>
             <HearBrio />
@@ -175,8 +175,8 @@ export function MeetBrioSection() {
           <span className="mk-brio-credits-name">
             <BrioOnDark />
           </span>{' '}
-          credits a month on the free plan, 500 on Standard. One credit is one answer, summary or draft. Your day is free;
-          Brio for Reviewers is off until you turn it on.
+          credits a month on the free plan, 500 on Standard. One credit is one answer, summary or draft. Brio’s morning
+          rundown of what needs you is free, and your clients can ask Brio only once you turn that on.
         </p>
       </div>
     </Band>

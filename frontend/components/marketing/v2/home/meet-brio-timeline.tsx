@@ -181,7 +181,7 @@ function AskStory({ question, answer, e, live }: { question: string; answer: str
   );
 }
 
-/** 8:30 AM: Your day on Home, written as the visitor watches. */
+/** 8:30 AM: the morning rundown (Your day, on Home), written as the visitor watches. The card keeps the app's name. */
 function YourDayStory({ text, e, live }: { text: string; e: number; live: boolean }) {
   const typed = words(text, e, 300, 85);
   return (
@@ -395,9 +395,9 @@ function dayMoments(D: DemoDates): MomentDef[] {
   return [
     {
       minutes: 510,
-      label: '8:30 AM · Your day',
+      label: '8:30 AM · Your morning rundown',
       isNew: true,
-      ariaLabel: 'Your day on Home: two things need you today, a client question to answer and a deliverable due soon.',
+      ariaLabel: 'Brio’s morning rundown on Home: two things need you today, a client question to answer and a deliverable due soon.',
       foot: 'You · start with what needs you',
       footAt: 2900,
       story: (e, live) => <YourDayStory text={dayText} e={e} live={live} />,
