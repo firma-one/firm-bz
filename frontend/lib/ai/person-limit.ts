@@ -12,7 +12,7 @@ import { AiCreditLimitError } from './credit-cap'
  *
  * The credit windows (credit-cap.ts) are per billing group and count credits from the usage ledger,
  * which is written when a call finishes. That leaves three holes this closes:
- * - a free action (Your day) skips them, so nothing bounded it;
+ * - a free action (Your brief) skips them, so nothing bounded it;
  * - one person, or a script with their session, could spend the whole group's allowance;
  * - requests sent at once all read the same count before any of them is recorded.
  *
@@ -30,8 +30,8 @@ const DAY_MS = 24 * 60 * 60 * 1000
 
 /** What a person is told when a limit stops them: which limit, and when it frees up. */
 const FEATURE_WORDS: Partial<Record<AiFeature, (n: number) => string>> = {
-    dayBrief: () => `Your day has already been written twice today. ${ASSISTANT.name} writes a new one tomorrow.`,
-    dayBriefRewrite: (n) => `You've rewritten Your day ${n} times today, the most for one day. ${ASSISTANT.name} writes a new one tomorrow.`,
+    dayBrief: () => `Your brief has already been written twice today. ${ASSISTANT.name} writes a new one tomorrow.`,
+    dayBriefRewrite: (n) => `You've rewritten your brief ${n} times today, the most for one day. ${ASSISTANT.name} writes a new one tomorrow.`,
 }
 
 function featureWords(feature: AiFeature, n: number): string {

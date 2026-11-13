@@ -90,7 +90,7 @@ describe('useFirmBrief', () => {
     it('a failed load keeps the card and says so quietly, rather than the brief vanishing', async () => {
         load = () => ({ ok: false, status: 500, json: async () => ({ error: 'Something went wrong on our side. Try again.' }) } as Response)
         render(<Harness />)
-        expect(await screen.findByText("Couldn't load today's brief · Something went wrong on our side. Try again.")).toBeTruthy()
+        expect(await screen.findByText("Couldn't load the firm brief · Something went wrong on our side. Try again.")).toBeTruthy()
         expect(screen.queryByText('No brief card')).toBeNull()
 
         load = () => ({ ok: true, json: async () => ({ brief: OLD, configured: true }) } as Response)
@@ -101,7 +101,7 @@ describe('useFirmBrief', () => {
     it('no brief because the route couldn’t write one: says why', async () => {
         load = () => ({ ok: true, json: async () => ({ brief: null, configured: true, reason: "You have used this month's 500 AI credits. They refill on Dec 1. Upgrade your plan for more." }) } as Response)
         render(<Harness />)
-        expect(await screen.findByText(/Couldn't load today's brief · You have used this month's 500 AI credits/)).toBeTruthy()
+        expect(await screen.findByText(/Couldn't load the firm brief · You have used this month's 500 AI credits/)).toBeTruthy()
     })
 
     it('leaves the card out when AI isn’t configured', async () => {

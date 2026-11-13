@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils"
 import { HomeEmptyLine, HomeSection } from "./home-section"
 
 /*
- * "Your day": Brio's few lines at the top of Home, above Needs you
+ * "Your brief" (was "Your day"): Brio's few lines at the top of Home, above Needs you
  * (.claude/plans/brio-features-round-2.md, §3.2). Fetched after the page renders, so the rest of Home
  * never waits for it: a quiet skeleton while it loads, Brio's failure words with Try again if it
  * can't be written. Its heading is a Home section's, with the Brio mark where the icon goes.
@@ -137,7 +137,7 @@ function DayBriefSection({ written, rewrite, children }: { written?: string | nu
             // The Brio mark in the icon's place. The slot sizes icons to 16px; the sparkle keeps its own
             // size beside the name.
             icon={<Brio className="text-ui text-action" iconClassName="!h-[0.82em] !w-[0.82em]" />}
-            title="Your day"
+            title="Your brief"
             actions={
                 label || rewrite ? (
                     // When it was written, then the sparkle that rewrites it, as on the Overview's Summary.
@@ -184,7 +184,7 @@ function DayBriefCard({ brief, rewriting, note }: { brief: DayBriefShown; rewrit
 function DayBriefSkeleton() {
     return (
         <div className="flex flex-col gap-2.5 rounded-card border border-line bg-surface px-4 py-4" aria-busy="true">
-            <LoadingAnnouncement label={`${ASSISTANT.name} is writing your day`} />
+            <LoadingAnnouncement label={`${ASSISTANT.name} is writing your brief`} />
             <ShimmerBar className="w-full" />
             <ShimmerBar className="w-[92%]" />
             <ShimmerBar className="w-[64%]" />
@@ -395,7 +395,7 @@ export function demoDayBriefText(work: MyWork, now: Date): string | null {
 }
 
 /**
- * "Your day" on the tour's Home: the same section and card, written from the demo's data after
+ * "Your brief" on the tour's Home: the same section and card, written from the demo's data after
  * mount (it reads "today", and the server's day may not be the visitor's). Rewrite answers as the
  * app does when nothing has changed.
  */

@@ -505,7 +505,7 @@ function SteerScreen() {
       <span style={{ ...CHIP, right: 0, bottom: 0, maxWidth: 560 }}>
         <BrioUi />
         <span>
-          <strong style={{ fontWeight: 600 }}>Today’s brief:</strong> Horizon FinTech carries the largest share, $44.5K. Q2 – Product Launch finishes
+          <strong style={{ fontWeight: 600 }}>Firm brief:</strong> Horizon FinTech carries the largest share, $44.5K. Q2 – Product Launch finishes
           next, in 14 days.
         </span>
       </span>

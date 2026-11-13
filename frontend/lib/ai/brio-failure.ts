@@ -23,8 +23,8 @@ export const BRIO_BRIEF_FAILED = `${ASSISTANT.name} couldn't write a new brief. 
 /** A draft (status update, reply, nudge) could not be written. Nothing was sent. */
 export const BRIO_DRAFT_FAILED = `${ASSISTANT.name} couldn't write a draft. Try again.`
 
-/** Your day on Home could not be written. */
-export const BRIO_DAY_FAILED = `${ASSISTANT.name} couldn't write your day. Try again.`
+/** Your brief on Home could not be written. */
+export const BRIO_DAY_FAILED = `${ASSISTANT.name} couldn't write your brief. Try again.`
 
 /** No actions could be read from the notes. Nothing was changed. */
 export const BRIO_PROPOSALS_FAILED = `${ASSISTANT.name} couldn't read actions from these notes. Nothing was changed.`

@@ -31,7 +31,7 @@ import { DayBrief, DemoDayBrief, NEEDS_YOU_ANCHOR } from "./day-brief"
  *
  * Every section has the same heading (HomeSection) and sits 40px from the next; an empty one is a
  * single quiet line. Needs you always comes first, so the page keeps its order whatever the day
- * holds (.claude/plans/app-design-refinements.md, section 13), with only Brio's "Your day" above it:
+ * holds (.claude/plans/app-design-refinements.md, section 13), with only Brio's "Your brief" above it:
  * a few lines on what Needs you and the Agenda hold (.claude/plans/brio-features-round-2.md, §3.2).
  */
 
@@ -156,7 +156,7 @@ export function HomeView({
     /** Where "Open calendar" goes, when it isn't the one firm's calendar page (the public demo). */
     calendarHref?: string
     /**
-     * No write actions: bookmarks can't be removed (the public demo). "Your day" is then written
+     * No write actions: bookmarks can't be removed (the public demo). "Your brief" is then written
      * from the sample data in the page, with no model call.
      */
     readOnly?: boolean
@@ -237,7 +237,7 @@ export function HomeView({
                     {readOnly ? <DemoDayBrief work={work} firmName={firms[0]?.name} /> : <DayBrief />}
 
                     {/* First, always: what is waiting on you. The order never changes with the day's state.
-                        Your day points down to it; its id keeps links into Home (#needs-you) working. */}
+                        Your brief points down to it; its id keeps links into Home (#needs-you) working. */}
                     <div id={NEEDS_YOU_ANCHOR} className="scroll-mt-6" data-demo-tour="home-needs-you">
                         <NeedsYouSection items={work.needsYou} label={label} loadFailed={failed.work || failed.reminders} />
                     </div>

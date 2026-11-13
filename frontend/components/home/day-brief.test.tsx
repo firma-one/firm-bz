@@ -41,7 +41,7 @@ describe('DayBrief', () => {
         expect(lead.tagName).toBe('STRONG')
         // Bold is the first paragraph's lead phrase only.
         expect(screen.getByText('QSR-12 · Pricing is due tomorrow.').querySelector('strong')).toBeNull()
-        expect(screen.getByRole('heading', { name: 'Your day' })).toBeTruthy()
+        expect(screen.getByRole('heading', { name: 'Your brief' })).toBeTruthy()
         expect(screen.getByText(/^Written .+ · .+/)).toBeTruthy()
         // Where the items are, in words: no link or button down to them.
         expect(screen.getByText(DAY_BRIEF_ITEMS_LINE)).toBeTruthy()
@@ -58,16 +58,16 @@ describe('DayBrief', () => {
         let answer: (r: Response) => void = () => {}
         fetchMock.mockReturnValue(new Promise<Response>((resolve) => { answer = resolve }))
         render(<DayBrief />)
-        expect(screen.getByRole('status').textContent).toBe('Brio is writing your day')
+        expect(screen.getByRole('status').textContent).toBe('Brio is writing your brief')
         answer(ok({ brief: BRIEF }))
         expect(await screen.findByText('Two client threads have waited since Monday')).toBeTruthy()
     })
 
     it('says why it failed, once, and Try again asks again', async () => {
-        fetchMock.mockResolvedValueOnce(ok({ error: "Brio couldn't write your day. Try again." }, 500))
+        fetchMock.mockResolvedValueOnce(ok({ error: "Brio couldn't write your brief. Try again." }, 500))
         render(<DayBrief />)
         const alert = await screen.findByRole('alert')
-        expect(alert.textContent).toBe("Brio couldn't write your day.Try again")
+        expect(alert.textContent).toBe("Brio couldn't write your brief.Try again")
 
         fetchMock.mockResolvedValueOnce(ok({ brief: BRIEF }))
         fireEvent.click(within(alert).getByRole('button', { name: 'Try again' }))
@@ -125,9 +125,9 @@ describe('DayBrief', () => {
         render(<DayBrief />)
         await screen.findByText('Two client threads have waited since Monday')
 
-        fetchMock.mockResolvedValueOnce(ok({ error: "Brio couldn't write your day. Try again." }, 500))
+        fetchMock.mockResolvedValueOnce(ok({ error: "Brio couldn't write your brief. Try again." }, 500))
         fireEvent.click(screen.getByRole('button', { name: 'Rewrite with Brio' }))
-        expect((await screen.findByRole('alert')).textContent).toBe("Brio couldn't write your day. Try again.")
+        expect((await screen.findByRole('alert')).textContent).toBe("Brio couldn't write your brief. Try again.")
         expect(screen.getByText('Two client threads have waited since Monday')).toBeTruthy()
     })
 })
@@ -151,7 +151,7 @@ const demoWork: MyWork = {
     dueSoon: [],
 }
 
-describe('the tour\'s Your day', () => {
+describe('the tour\'s Your brief', () => {
     it('is written from the demo\'s own data, in the shape Brio writes it', () => {
         const text = demoDayBriefText(demoWork, new Date('2026-11-12T08:00:00'))!
         const [first, second] = text.split('\n\n')
@@ -204,15 +204,15 @@ describe('on Home', () => {
         fetchMock.mockResolvedValue(ok({ brief: BRIEF }))
         home()
         const headings = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)
-        expect(headings.indexOf('Your day')).toBe(0)
-        expect(headings.indexOf('Your day')).toBeLessThan(headings.indexOf('Needs you'))
+        expect(headings.indexOf('Your brief')).toBe(0)
+        expect(headings.indexOf('Your brief')).toBeLessThan(headings.indexOf('Needs you'))
         expect(screen.getByText('Q3 Report').closest('#needs-you')).toBeTruthy()
         expect(await screen.findByText(DAY_BRIEF_ITEMS_LINE)).toBeTruthy()
     })
 
     it('on the public demo, is written from the sample data with no call', () => {
         home(true)
-        expect(screen.getByRole('heading', { name: 'Your day' })).toBeTruthy()
+        expect(screen.getByRole('heading', { name: 'Your brief' })).toBeTruthy()
         expect(screen.getByText('One deliverable is waiting for your approval')).toBeTruthy()
         expect(fetchMock).not.toHaveBeenCalled()
     })

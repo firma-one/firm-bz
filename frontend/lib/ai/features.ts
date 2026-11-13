@@ -85,7 +85,7 @@ export const AI_PERSON_LIMITS = {
     /** Calls in any 24 hours across every Brio feature. */
     perDay: 200,
     /**
-     * Calls in any 24 hours for a feature that needs its own cap. Your day: the morning brief (twice
+     * Calls in any 24 hours for a feature that needs its own cap. Your brief: the morning brief (twice
      * covers a timezone change) and four rewrites. Brio for Reviewers keeps its own daily cap
      * (REVIEWER_DAILY_ANSWERS), counted in its route.
      */

@@ -19,7 +19,7 @@ import {
 } from '@/lib/ai/day-brief'
 
 /*
- * "Your day" on Home (.claude/plans/brio-features-round-2.md, §3.2), for the signed-in person only:
+ * "Your brief" on Home (.claude/plans/brio-features-round-2.md, §3.2), for the signed-in person only:
  * the user comes from the Supabase session, never from the request.
  *
  * GET   today's brief. Served from UserPersonalization.dayBrief when it was written for today (in

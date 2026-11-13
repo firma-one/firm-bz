@@ -47,8 +47,8 @@ const open = (html: string) => `<span style="color:#A86A06;">&#9675;</span> <spa
 function moments(ctx: CampaignContext): string {
   return [
     timelineMoment({
-      label: '8:30 AM · Your morning rundown',
-      card: `${cardHead(ctx, 'Your day')}Two things need you today. Dana’s question on Creative &amp; Landing Page Assets is waiting for your reply, and PR &amp; Media Outreach Pack is due this week.`,
+      label: '8:30 AM · Your brief',
+      card: `${cardHead(ctx, 'Your brief')}Two things need you today. Dana’s question on Creative &amp; Landing Page Assets is waiting for your reply, and PR &amp; Media Outreach Pack is due this week.`,
       foot: 'You · start with what needs you',
     }),
     timelineMoment({

@@ -87,17 +87,17 @@ describe('assertWithinPersonLimits', () => {
         await expect(call()).resolves.toBeUndefined()
     })
 
-    it("caps Your day: the day's first brief twice, rewrites four times, free or not", async () => {
+    it("caps Your brief: the day's first brief twice, rewrites four times, free or not", async () => {
         await call('dayBrief')
         await call('dayBrief')
-        await expect(call('dayBrief')).rejects.toMatchObject({ message: expect.stringMatching(/^Your day has already been written twice today\./) })
+        await expect(call('dayBrief')).rejects.toMatchObject({ message: expect.stringMatching(/^Your brief has already been written twice today\./) })
         for (let i = 0; i < 4; i++) await call('dayBriefRewrite')
         await expect(call('dayBriefRewrite')).rejects.toMatchObject({
-            message: "You've rewritten Your day 4 times today, the most for one day. Brio writes a new one tomorrow.",
+            message: "You've rewritten your brief 4 times today, the most for one day. Brio writes a new one tomorrow.",
             limit: 4,
             used: 4,
         })
-        // Another feature isn't held by Your day's cap.
+        // Another feature isn't held by Your brief's cap.
         await expect(call('chat')).resolves.toBeUndefined()
     })
 

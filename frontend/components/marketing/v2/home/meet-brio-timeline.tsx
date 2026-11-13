@@ -36,7 +36,7 @@ const STORY_MS = 3700;
 const WORKDAY_END = 1110;
 const EVENING = 1300;
 
-/** Your day's own pointer to the lists below it (components/home/day-brief.tsx). */
+/** Your brief's own pointer to the lists below it (components/home/day-brief.tsx). */
 const DAY_ITEMS_LINE = 'The items are below, in Needs you and Agenda.';
 
 const DOT_POP = 'mkDotPop 700ms var(--mk-ease) both';
@@ -181,12 +181,12 @@ function AskStory({ question, answer, e, live }: { question: string; answer: str
   );
 }
 
-/** 8:30 AM: the morning rundown (Your day, on Home), written as the visitor watches. The card keeps the app's name. */
+/** 8:30 AM: Your brief on Home, written as the visitor watches. */
 function YourDayStory({ text, e, live }: { text: string; e: number; live: boolean }) {
   const typed = words(text, e, 300, 85);
   return (
     <>
-      <CardHead title="Your day" meta="Home" />
+      <CardHead title="Your brief" meta="Home" />
       <div className="mk-brio-brief">
         {typed}
         {live && e >= 300 && typed.length < text.length && <span className="mk-brio-caret" />}
@@ -395,9 +395,9 @@ function dayMoments(D: DemoDates): MomentDef[] {
   return [
     {
       minutes: 510,
-      label: '8:30 AM · Your morning rundown',
+      label: '8:30 AM · Your brief',
       isNew: true,
-      ariaLabel: 'Brio’s morning rundown on Home: two things need you today, a client question to answer and a deliverable due soon.',
+      ariaLabel: 'Your brief on Home: two things need you today, a client question to answer and a deliverable due soon.',
       foot: 'You · start with what needs you',
       footAt: 2900,
       story: (e, live) => <YourDayStory text={dayText} e={e} live={live} />,

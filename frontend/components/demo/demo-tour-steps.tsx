@@ -141,7 +141,7 @@ export const NODE_STEPS: Record<TourNodeId, TourStep[]> = {
         },
         {
             target: '[data-demo-tour="firm-brief"]',
-            title: "Today's brief",
+            title: "Firm brief",
             content: <p><Brio />, Firma&apos;s AI assistant, writes a daily brief from your firm&apos;s own data: where things stand, what needs attention and what&apos;s worth watching.</p>,
             route: at(firm, { tab: 'analytics' }),
             placement: 'bottom',

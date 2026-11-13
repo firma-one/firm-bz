@@ -152,7 +152,7 @@ export async function assertWithinAiCreditCap(params: {
 }): Promise<void> {
     if (!enforceAiCreditCaps()) return
     // A free action cannot breach a credit limit, and a group already over its allowance keeps it.
-    // Its own route guards it instead (Your day: once per person per day).
+    // Its own route guards it instead (Your brief: once per person per day).
     if (CREDIT_WEIGHTS[params.feature] === 0) return
 
     let groupId = params.groupId ?? null
