@@ -275,8 +275,8 @@ Open: memos edited in storage aren't noticed by the cron's candidate query; noth
 model; needs the build to apply the migration and a dev-server restart.
 
 **Later on 2026-11-13 (Deepak: "simplify", like the Overview's Summary):** the toolbar is icons now: a
-status (✓ Up to date, quiet / ⚠ Out of date, orange; nothing when there is nothing to read), then + (Add
-an item) and Brio's sparkle (Check with Brio), 28px with Hints; when it last checked is the status's
+status (✓ Up to date, quiet / ⚠ Out of date, orange; nothing when there is nothing to read), then Brio's
+sparkle (Check with Brio) and, last, + (Add an item), 28px with Hints; when it last checked is the status's
 tooltip. Up to date comes from a fingerprint (`lib/raid/raid-fingerprint.ts`): every check stores in
 `settings.raid.fingerprint` a hash of the conversation it covered (per threaded document, message count
 and newest; per memo, when made or last changed), and GET compares it with now. A memo edited in storage

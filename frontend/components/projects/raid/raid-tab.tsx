@@ -450,11 +450,6 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
                 ) : (
                     <div className="flex shrink-0 items-center gap-0.5">
                         <CheckStatus state={log.conversation} lastCheckedAt={log.lastCheckedAt} checking={checking} now={now} />
-                        <Hint label="Add an item">
-                            <button type="button" onClick={() => setAdding(true)} disabled={adding} aria-label="Add an item" className={ICON_BUTTON}>
-                                <Plus className="h-4 w-4" />
-                            </button>
-                        </Hint>
                         <Hint label={log.canCheck ? <>Check with <Brio /></> : `${ASSISTANT.name} isn't available right now`}>
                             {/* aria-disabled, not disabled, when Brio is off: a disabled button shows no tooltip. */}
                             <button
@@ -466,6 +461,12 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
                             >
                                 {/* Brio's sparkle, in Brio's green. */}
                                 <Sparkles className={cn('h-4 w-4', checking && 'animate-pulse')} style={{ color: BRIO_GREEN }} />
+                            </button>
+                        </Hint>
+                        {/* Last in the row: the status and Brio's check read together, then adding your own. */}
+                        <Hint label="Add an item">
+                            <button type="button" onClick={() => setAdding(true)} disabled={adding} aria-label="Add an item" className={ICON_BUTTON}>
+                                <Plus className="h-4 w-4" />
                             </button>
                         </Hint>
                     </div>
