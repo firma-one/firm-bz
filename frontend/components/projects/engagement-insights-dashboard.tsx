@@ -1222,6 +1222,29 @@ function scrollToRing(ringId: string) {
     window.setTimeout(() => el.classList.remove('ring-pulse'), 1400)
 }
 
+/**
+ * A link to one of the Overview's charts (`…/analytics#ring-pace`, from a Health entry in the RAID log)
+ * lands once the charts are on the page: they arrive with the data, after the browser looked for the
+ * anchor. Only on the first load, so a refresh never pulls the page back to it; a later change of
+ * hash on the page jumps again.
+ */
+export function useRingAnchor(chartsShown: boolean) {
+    const jumped = useRef(false)
+    useEffect(() => {
+        if (!chartsShown) return
+        const jump = () => {
+            const id = window.location.hash.slice(1)
+            if (id.startsWith('ring-')) scrollToRing(id)
+        }
+        if (!jumped.current) {
+            jumped.current = true
+            jump()
+        }
+        window.addEventListener('hashchange', jump)
+        return () => window.removeEventListener('hashchange', jump)
+    }, [chartsShown])
+}
+
 interface ActionRowItem extends ActionItem {
     ringId?: string                 // if set, the row gets a hover-only "show in …" button
     ringLabel?: string
@@ -2429,6 +2452,7 @@ export function EngagementInsightsDashboard({
     /** Whether an Overview is on screen, read by the load's catch without re-running the load. */
     const loadedRef = useRef(false)
     useEffect(() => { loadedRef.current = data !== null }, [data])
+    useRingAnchor(!loading && data !== null)
     const [refreshTick, setRefreshTick] = useState(0)
     const [shareState, setShareState] = useState<'idle' | 'capturing' | 'confirm' | 'sending' | 'sent' | 'error'>('idle')
     const [shareError, setShareError] = useState<string | null>(null)

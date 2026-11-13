@@ -591,6 +591,28 @@
 }
 
 /*
+ * An Overview chart the page just scrolled to: the Action Center's "show in …", or a link to
+ * …/analytics#ring-pace from the RAID log. A brief outline in the action color, then gone
+ * (scrollToRing removes the class after 1.4s).
+ */
+@keyframes ring-pulse {
+  0%,
+  50% {
+    outline-color: hsl(var(--ui-action) / 0.45);
+  }
+  100% {
+    outline-color: hsl(var(--ui-action) / 0);
+  }
+}
+
+.ring-pulse {
+  outline: 2px solid hsl(var(--ui-action) / 0);
+  outline-offset: 6px;
+  border-radius: var(--ui-radius-card);
+  animation: ring-pulse 1.4s ease-out;
+}
+
+/*
  * A wavy horizontal rule, for the seam between a restored chat thread and the current one.
  *
  * A straight line reads as structure — a section break, something the layout imposed. A wave reads

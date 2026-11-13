@@ -14,6 +14,7 @@ import {
     autoLineFor,
     isAutoSource,
     liveStatusFor,
+    overviewSectionOf,
     parseSignalKey,
     shortDay,
     type RaidItemView,
@@ -213,7 +214,10 @@ export async function loadRaidLog(engagementId: string): Promise<{ items: RaidIt
             const docRef = documentId ? refOf.get(documentId) : null
             return { kind, label: docRef ? `Thread · ${docRef}` : 'Thread', documentId, memoId: null, quote: null, internal: false }
         }
-        return { kind, label: kind === 'HEALTH' ? 'Health' : 'Board', documentId, memoId: null, quote: null, internal: false }
+        if (kind === 'HEALTH') {
+            return { kind, label: 'Health', documentId: null, memoId: null, quote: null, internal: false, overviewSection: overviewSectionOf(r.signalKey) }
+        }
+        return { kind, label: 'Board', documentId, memoId: null, quote: null, internal: false }
     }
 
     const byId = new Map(rows.map((r) => [r.id, r]))

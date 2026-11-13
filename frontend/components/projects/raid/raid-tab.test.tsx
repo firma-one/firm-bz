@@ -76,12 +76,20 @@ describe('RaidTabView', { timeout: 20_000 }, () => {
     it('shows where each kept entry comes from and how it closes, and an overdue Issue in the danger tone', () => {
         render(<RaidTabView log={demoRaidLog(NOW)} engagementBase="" readOnly={false} now={NOW} {...handlers()} />)
         const overdue = screen.getByTestId('raid-row-raid-overdue')
-        expect(within(overdue).getByText('From status · closes itself when approved')).toBeTruthy()
+        // Single-line rows like the Files table: how it closes is the Source cell's tooltip.
+        expect(within(overdue).getByTitle('From status · closes itself when approved')).toBeTruthy()
         expect(within(overdue).getByText('Open').closest('span[class*="bg-tag-red-bg"]')).toBeTruthy()
         const waiting = screen.getByTestId('raid-row-raid-waiting')
         expect(within(waiting).getByText('Open').closest('span[class*="bg-tag-yellow-bg"]')).toBeTruthy()
         expect(within(screen.getByTestId('raid-row-raid-scope')).getByText('Recorded').closest('span[class*="bg-tag-blue-bg"]')).toBeTruthy()
         expect(within(screen.getByTestId('raid-row-raid-planning')).getByText('Add a mitigation')).toBeTruthy()
+    })
+
+    it('links a Health entry to the Overview chart it comes from', () => {
+        render(<RaidTabView log={demoRaidLog(NOW)} engagementBase="/d/e/q2" readOnly={false} now={NOW} {...handlers()} />)
+        const healthLink = (id: string) => within(screen.getByTestId(id)).getByRole('link', { name: 'Health' }).getAttribute('href')
+        expect(healthLink('raid-row-raid-pace')).toBe('/d/e/q2/analytics#ring-pace')
+        expect(healthLink('raid-row-raid-planning')).toBe('/d/e/q2/analytics#ring-planning')
     })
 
     it('says when Brio last checked, and what Check now found', async () => {

@@ -99,6 +99,17 @@ export interface RaidSourceView {
     quote: string | null
     /** An internal note or a memo. */
     internal: boolean
+    /** A health source: the Overview chart it comes from, which the chip links to. */
+    overviewSection?: RaidOverviewSection
+}
+
+/** The Overview charts a health entry comes from: Pace, and Planning hygiene. */
+export type RaidOverviewSection = 'pace' | 'planning'
+
+/** The Overview chart a signal reads, for a health entry; none for anything else. */
+export function overviewSectionOf(signalKey: string | null | undefined): RaidOverviewSection | undefined {
+    const kind = parseSignalKey(signalKey)?.kind
+    return kind === 'pace' || kind === 'planning' ? kind : undefined
 }
 
 export interface RaidItemView {
@@ -277,10 +288,15 @@ export function raidLogHref(engagementBase: string): string {
     return engagementBase ? `${engagementBase}/comments?view=raid` : '?tab=comments&view=raid'
 }
 
-/** Where a source chip goes: the discussion, the memo in Files, or the item on the Board. */
-export function sourceHref(engagementBase: string, source: Pick<RaidSourceView, 'kind' | 'documentId' | 'memoId' | 'label'>): string | null {
+/**
+ * Where a source chip goes: the discussion, the memo in Files, the item on the Board, or for health the
+ * Overview chart it comes from (`…/analytics`, the Overview's own path: the bare engagement URL reopens
+ * the last tab). The Overview scrolls to `#ring-…` once its charts load.
+ */
+export function sourceHref(engagementBase: string, source: Pick<RaidSourceView, 'kind' | 'documentId' | 'memoId' | 'label' | 'overviewSection'>): string | null {
     if (!engagementBase) return null
     if (source.kind === 'MEMO') return source.memoId ? `${engagementBase}/files#doc-file:${source.memoId}` : null
+    if (source.kind === 'HEALTH') return `${engagementBase}/analytics${source.overviewSection ? `#ring-${source.overviewSection}` : ''}`
     if (!source.documentId) return null
     if (source.kind === 'THREAD' || source.label.startsWith('Thread')) return `${engagementBase}/comments#doc-comment:${source.documentId}`
     if (source.kind === 'STATUS' || source.kind === 'BOARD') return `${engagementBase}/board#doc-file:${source.documentId}`

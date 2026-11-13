@@ -14,6 +14,7 @@ import {
 } from '@/lib/raid/raid-shared'
 import { RaidSourceChip, RaidTypeBadge } from './raid-tab'
 import { LoadingAnnouncement, ShimmerBar, ShimmerBlock } from '@/components/ui/shimmer'
+import { InfoHint } from '@/components/projects/overview-charts'
 
 /**
  * The RAID card on the engagement Overview (.claude/plans/brio-features-round-2.md, §9): counts by type,
@@ -66,6 +67,10 @@ export function RaidOverviewView({ log, engagementBase, loadError, onRetry }: {
         <section aria-labelledby={headingId} className="rounded-card border border-line bg-surface px-4 py-3" data-no-export="">
             <div className="flex flex-wrap items-center gap-2.5">
                 <h2 id={headingId} className="text-[16px] font-semibold leading-6 text-fg">RAID</h2>
+                <InfoHint
+                    label="About the RAID log"
+                    text="Risks, Assumptions, Issues and Decisions: what could go wrong, what the plan relies on, what has gone wrong, and what people agreed. Internal only."
+                />
                 <Tag color="gray">Internal only</Tag>
                 <span className="flex-1" />
                 {overview && overview.suggestionCount > 0 && (

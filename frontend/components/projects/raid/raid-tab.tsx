@@ -1,9 +1,19 @@
 'use client'
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
-import { AlertCircle, Loader2, MoreHorizontal, Plus, Sparkles } from 'lucide-react'
+import { AlertCircle, CircleDot, Clock3, Link2, ListChecks, Loader2, MoreHorizontal, Plus, Shapes, Sparkles, Type as TypeIcon, UserRound } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { LoadingAnnouncement, ShimmerBar, ShimmerBlock } from '@/components/ui/shimmer'
+import {
+    NotionTable,
+    NotionTableActions,
+    NotionTableActionsHead,
+    NotionTableBody,
+    NotionTableCell,
+    NotionTableHead,
+    NotionTableHeader,
+    NotionTableRow,
+} from '@/components/ui/notion-table'
 import { Input } from '@/components/ui/input'
 import { Tag } from '@/components/ui/tag'
 import { Brio } from '@/components/ui/brio'
@@ -309,9 +319,9 @@ function RaidLogSkeleton() {
             <div className="flex gap-1.5">
                 {['w-12', 'w-16', 'w-24', 'w-14', 'w-20'].map((w, i) => <ShimmerBar key={i} className={`h-6 rounded-control ${w}`} />)}
             </div>
-            <div className="rounded-card border border-line">
+            <div className="border-t border-line">
                 {titleWidths.map((w, i) => (
-                    <div key={i} className="flex items-center gap-4 border-t border-line px-3 py-3 first:border-t-0">
+                    <div key={i} className="flex h-[34px] items-center gap-4 border-b border-line px-2.5">
                         <ShimmerBlock className="h-[22px] w-[22px]" />
                         <div className="flex-1"><ShimmerBar className={w} /></div>
                         <ShimmerBar className="h-5 w-20 rounded-control" />
@@ -374,7 +384,7 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
     return (
         <div className="flex flex-col gap-4" data-no-export="">
             <div className="flex flex-wrap items-center gap-2">
-                <Tag color="gray">Internal only</Tag>
+                <span className="text-small text-fg-muted">Risks, Assumptions, Issues and Decisions · Internal only</span>
                 <span className="flex-1" />
                 <span className="text-small text-fg-muted">{checkedLine(log.lastCheckedAt, now)}</span>
                 {!readOnly && (
@@ -509,70 +519,69 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
                 ))}
             </div>
 
-            <section className="overflow-x-auto rounded-card border border-line bg-surface" aria-label="RAID log">
+            {/* The standard table (components/ui/notion-table.tsx, the grid the Files list follows): icon and
+                label headers, hairlines between columns, single-line rows, the row menu on hover. How an
+                automatic entry closes is the Source cell's tooltip; why a closed one closed, the Status's. */}
+            <section aria-label="RAID log">
                 {rows.length === 0 ? (
-                    <p className="px-4 py-3 text-small text-fg-muted">
+                    <p className="border-y border-line px-2.5 py-2.5 text-small text-fg-muted">
                         {log.items.length === 0
                             ? 'Nothing in the log yet. Status, health and Board items appear here on their own.'
                             : stateFilter === 'open' ? 'Nothing open here.' : 'Nothing closed here yet.'}
                     </p>
                 ) : (
-                    <table className="w-full border-collapse text-small">
-                        <thead>
-                            <tr className="border-b border-line-strong text-left text-fg-muted">
-                                <th scope="col" className="w-9 px-2.5 py-2 font-medium"><span className="sr-only">Type</span></th>
-                                <th scope="col" className="px-2.5 py-2 font-medium">Item</th>
-                                <th scope="col" className="whitespace-nowrap px-2.5 py-2 font-medium">Source</th>
-                                <th scope="col" className="whitespace-nowrap px-2.5 py-2 font-medium">Owner</th>
-                                <th scope="col" className="whitespace-nowrap px-2.5 py-2 font-medium">Mitigation · next step</th>
-                                <th scope="col" className="whitespace-nowrap px-2.5 py-2 font-medium">Status</th>
-                                <th scope="col" className="whitespace-nowrap px-2.5 py-2 font-medium">Raised</th>
-                                {!readOnly && <th scope="col" className="w-9 px-2.5 py-2"><span className="sr-only">Actions</span></th>}
-                            </tr>
-                        </thead>
-                        <tbody>
+                    <NotionTable>
+                        <NotionTableHeader>
+                            <NotionTableHead icon={<Shapes />} className="w-[72px]">Type</NotionTableHead>
+                            <NotionTableHead icon={<TypeIcon />}>Item</NotionTableHead>
+                            <NotionTableHead icon={<Link2 />}>Source</NotionTableHead>
+                            <NotionTableHead icon={<UserRound />}>Owner</NotionTableHead>
+                            <NotionTableHead icon={<ListChecks />}>Mitigation · next step</NotionTableHead>
+                            <NotionTableHead icon={<CircleDot />}>Status</NotionTableHead>
+                            <NotionTableHead icon={<Clock3 />}>Raised</NotionTableHead>
+                            {!readOnly && <NotionTableActionsHead />}
+                        </NotionTableHeader>
+                        <NotionTableBody>
                             {rows.map((item) => {
                                 const auto = isAutoSource(item.sourceKind)
-                                const line = item.status === 'CLOSED' ? item.closedReason : item.autoLine
                                 const source = item.sources[0]
                                 const more = item.sources.length - 1
                                 return (
-                                    <tr key={item.id} className="border-b border-line align-top last:border-b-0" data-testid={`raid-row-${item.id}`}>
-                                        <td className="px-2.5 py-2"><RaidTypeBadge type={item.type} /></td>
-                                        <td className="min-w-[14rem] px-2.5 py-2">
+                                    <NotionTableRow key={item.id} data-testid={`raid-row-${item.id}`}>
+                                        <NotionTableCell><RaidTypeBadge type={item.type} /></NotionTableCell>
+                                        <NotionTableCell className="min-w-[16rem] max-w-[28rem]">
                                             {readOnly || auto ? (
-                                                <strong className="font-semibold text-fg">{item.title}</strong>
+                                                <span className="block truncate font-medium text-fg" title={item.title}>{item.title}</span>
                                             ) : (
                                                 <InlineText
                                                     value={item.title}
                                                     placeholder="Add a title"
                                                     label="Title"
                                                     maxLength={RAID_TITLE_MAX}
-                                                    className="font-semibold text-fg"
+                                                    className="font-medium text-fg"
                                                     onSave={async (next) => (next ? run(item, () => handlers.onEdit(item, { title: next })) : false)}
                                                 />
                                             )}
-                                            {line && <div className="mt-0.5 text-[11px] leading-4 text-fg-subtle">{line}</div>}
-                                        </td>
-                                        <td className="px-2.5 py-2">
-                                            <div className="flex flex-wrap items-center gap-1">
+                                        </NotionTableCell>
+                                        <NotionTableCell className="whitespace-nowrap">
+                                            <span className="inline-flex items-center gap-1" title={item.autoLine ?? undefined}>
                                                 {source && <RaidSourceChip source={source} engagementBase={engagementBase} />}
                                                 {more > 0 && <span className="text-caption text-fg-subtle" title={item.sources.slice(1).map((s) => s.label).join('\n')}>+{more}</span>}
-                                            </div>
-                                        </td>
-                                        <td className="whitespace-nowrap px-2.5 py-2">
+                                            </span>
+                                        </NotionTableCell>
+                                        <NotionTableCell className="whitespace-nowrap">
                                             <OwnerCell
                                                 item={item}
                                                 members={log.members}
                                                 readOnly={readOnly}
                                                 onChange={(ownerUserId) => void run(item, () => handlers.onEdit(item, { ownerUserId }))}
                                             />
-                                        </td>
-                                        <td className="min-w-[12rem] px-2.5 py-2">
+                                        </NotionTableCell>
+                                        <NotionTableCell className="min-w-[12rem] max-w-[22rem]">
                                             {item.type === 'DECISION' ? (
                                                 <span className="text-fg-subtle">·</span>
                                             ) : readOnly || !isLive(item) ? (
-                                                item.notes ? <span>{item.notes}</span> : <span className="text-fg-subtle">·</span>
+                                                item.notes ? <span className="block truncate" title={item.notes}>{item.notes}</span> : <span className="text-fg-subtle">·</span>
                                             ) : (
                                                 <InlineText
                                                     value={item.notes}
@@ -582,11 +591,15 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
                                                     onSave={(next) => run(item, () => handlers.onEdit(item, { notes: next }))}
                                                 />
                                             )}
-                                        </td>
-                                        <td className="px-2.5 py-2"><RaidStatusTag item={item} /></td>
-                                        <td className="whitespace-nowrap px-2.5 py-2 text-fg-muted">{shortDay(item.raisedAt)}</td>
+                                        </NotionTableCell>
+                                        <NotionTableCell className="whitespace-nowrap">
+                                            <span title={item.status === 'CLOSED' ? item.closedReason ?? undefined : undefined}>
+                                                <RaidStatusTag item={item} />
+                                            </span>
+                                        </NotionTableCell>
+                                        <NotionTableCell className="whitespace-nowrap text-fg-muted">{shortDay(item.raisedAt)}</NotionTableCell>
                                         {!readOnly && (
-                                            <td className="px-2.5 py-2">
+                                            <NotionTableActions>
                                                 {(isLive(item) || item.canReopen) && (
                                                     <DropdownMenu>
                                                         <DropdownMenuTrigger asChild>
@@ -601,13 +614,13 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
                                                         </DropdownMenuContent>
                                                     </DropdownMenu>
                                                 )}
-                                            </td>
+                                            </NotionTableActions>
                                         )}
-                                    </tr>
+                                    </NotionTableRow>
                                 )
                             })}
-                        </tbody>
-                    </table>
+                        </NotionTableBody>
+                    </NotionTable>
                 )}
             </section>
 
