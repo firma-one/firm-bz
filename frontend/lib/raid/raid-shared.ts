@@ -6,6 +6,10 @@
  * Safe to import from client components: no database, no SDK.
  */
 
+/** What RAID stands for, in one line: the Overview card's hint and the website's RAID info tip. */
+export const RAID_MEANING =
+    'Risks, Assumptions, Issues and Decisions: what could go wrong, what the plan relies on, what has gone wrong, and what people agreed.'
+
 export type RaidType = 'RISK' | 'ASSUMPTION' | 'ISSUE' | 'DECISION'
 export type RaidStatus = 'SUGGESTED' | 'OPEN' | 'CLOSED' | 'RECORDED' | 'DISMISSED'
 export type RaidSourceKind = 'STATUS' | 'HEALTH' | 'BOARD' | 'THREAD' | 'MEMO' | 'MANUAL'

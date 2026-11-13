@@ -6,9 +6,9 @@
  * Opening fades the answer in; the chevron turns.
  */
 import { ChevronDown } from 'lucide-react';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 
-export type FaqEntry = { q: string; a: string[] };
+export type FaqEntry = { q: string; a: ReactNode[] };
 
 export function FaqAccordion({ items }: { items: FaqEntry[] }) {
   const [open, setOpen] = useState(0);

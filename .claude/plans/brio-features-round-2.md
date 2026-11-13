@@ -342,3 +342,33 @@ is in Home's own firm list (a member who can open it), else the firm with the mo
 tooltip names it: "Uses 1 FirmaOne credit, only when your items have changed". Revisit when someone
 belongs to several firm groups (a Reviewer or external Contributor invited by firms in different
 groups): then Home may need to follow the selected group, which also suits custom domains.
+
+## 12. Website copy for round 2 (mocked and built 2026-11-13)
+
+Mock: https://claude.ai/artifact/UeemgFc42vm91QpdYADwH8 (Meet Brio band, home FAQ, copy elsewhere).
+The site still promises Brio never reads a comment's text (`meet-brio.tsx` lane box, `faq.tsx`,
+`data/faq-data.ts`, `trust-map-data.ts`, the Hear Brio line). Reply drafts, the RAID check and Find
+actions now do, so the promise becomes "never opens the files you deliver; reads comments and internal
+memos only to draft a reply, log a risk or find actions". The full FAQ also says a client comment
+cannot influence what Brio says, which is no longer true. A day with Brio grows to eight moments
+(Your day, Ask, reply draft, call notes, client update, nudge, RAID, a Reviewer asking at 9:40 PM).
+Hear Brio needs a new recording.
+
+**Built (Deepak approved, 2026-11-13).** All of the above, plus an info tip on every RAID mention
+(Deepak's ask): `components/marketing/v2/raid-tip.tsx` (`RaidTip`, `RaidTerm`, `withRaidTip`) on the
+pricing comparison's `InfoTip`, whose styles moved to `pricing/info-tip.css` and whose bubble now renders
+into the page's `.mk` root, so a tip can sit inside a paragraph. The meaning is `RAID_MEANING` in
+`lib/raid/raid-shared.ts`, which the app's RAID card uses too. One tip per block, on its first RAID; the
+full FAQ's HTML answers mark it `[[RAID:RAID check]]`; inside a tooltip (`config/pricing.ts`) RAID is
+spelled out, since a tip can't open another. Where: the Meet Brio lede, the 5:00 PM moment, two home
+FAQ answers, two full FAQ answers, the pricing FAQ's credits answer and the Trust Center's Brio card.
+
+The timeline follows one engagement (Q2 – Product Launch Campaign, Dana Whitfield reviewing), two rows
+of four, each row its own scroll-drawn line; cards in a row line up with subgrid. Dana's 9:40 PM
+question only touches stages a Reviewer sees (lib/ai/reviewer-context.ts). The 2:00 PM card is the
+status update as it ships (approved, in review, next steps yours, Send to Dana), not the summary's
+sections. Once the Files agent is public, Tidy the files takes the 3:30 PM slot. Hear Brio was
+re-recorded with `scripts/tour-narration/generate.py`.
+
+Not changed: the campaign email's Brio band (`lib/email-templates/campaigns/brio-band.ts`) still says
+Brio never reads a comment.

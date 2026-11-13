@@ -10,6 +10,7 @@ import type { ReactNode } from 'react';
 import { Brio } from '@/components/ui/brio';
 import { FILES_AGENT_PUBLIC } from '../config';
 import { Band } from '../primitives';
+import { RaidTerm } from '../raid-tip';
 import { HearBrio } from './hear-brio';
 import { MeetBrioTimeline } from './meet-brio-timeline';
 import './meet-brio.css';
@@ -40,7 +41,7 @@ const LANE: { icon: ReactNode; text: string }[] = [
         <circle cx="12" cy="12" r="3" />
       </>
     ),
-    text: 'Reads names, statuses and dates, never what’s inside a document or a comment.',
+    text: 'Never opens the files you deliver. Reads comments and internal memos only to draft a reply, log a risk or find actions.',
   },
   {
     icon: (
@@ -53,7 +54,16 @@ const LANE: { icon: ReactNode; text: string }[] = [
   },
   {
     icon: <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />,
-    text: 'Nothing reaches a client until a person on your team publishes it.',
+    text: 'Nothing reaches a client until a person on your team sends or publishes it.',
+  },
+  {
+    icon: (
+      <>
+        <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
+        <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+      </>
+    ),
+    text: 'Your clients get answers only from what they can already see, never your internal notes.',
   },
   {
     icon: (
@@ -67,9 +77,9 @@ const LANE: { icon: ReactNode; text: string }[] = [
 ];
 
 const LANE_PHONE = [
-  'Never reads what’s inside a document.',
+  'Never opens the files you deliver.',
   'Never changes anything without your consent.',
-  'Nothing reaches a client until you publish it.',
+  'Nothing reaches a client until you send or publish it.',
 ];
 
 /** Brio on the dark band: the name follows the text color, the sparkle is electric green. */
@@ -101,13 +111,14 @@ export function MeetBrioSection() {
                 <BrioOnDark />
               </span>{' '}
               reads the delivery data in your workspace (deliverables, due dates, statuses, who’s involved) and turns
-              it into the brief you’d write yourself if you had the time. It answers in plain words
-              {FILES_AGENT_PUBLIC ? ', drafts the client update, and keeps your files tidy' : ' and drafts the client update'}, and it
-              always waits for you before anything changes.
+              it into the brief you’d write yourself if you had the time. It writes your day, drafts the client update,
+              the reply and the nudge, keeps the <RaidTerm tone="dark">RAID log</RaidTerm>
+              {FILES_AGENT_PUBLIC ? ', turns call notes into actions and keeps your files tidy' : ' and turns call notes into actions'},
+              and it always waits for you before anything changes.
             </p>
             <p className="mk-brio-lede mk-brio-narrow">
-              It answers in plain words, drafts the client update
-              {FILES_AGENT_PUBLIC ? ' and keeps your files tidy' : ''}, and it always waits for you before anything changes.
+              It writes your day, drafts your client updates and replies, keeps the <RaidTerm tone="dark">RAID log</RaidTerm>
+              {FILES_AGENT_PUBLIC ? ' and your files tidy' : ''}, and it always waits for you before anything changes.
             </p>
             <HearBrio />
           </div>
@@ -131,7 +142,7 @@ export function MeetBrioSection() {
           <h3 id="mk-brio-day">
             A day with <BrioOnDark />
           </h3>
-          <p>Four real moments from the demo firm. You make every call.</p>
+          <p>Eight real moments from the demo firm. You make every call.</p>
         </div>
 
         <MeetBrioTimeline labelledBy="mk-brio-day" />
@@ -164,7 +175,8 @@ export function MeetBrioSection() {
           <span className="mk-brio-credits-name">
             <BrioOnDark />
           </span>{' '}
-          credits a month on the free plan, 500 on Standard. One credit is one brief, summary or answer.
+          credits a month on the free plan, 500 on Standard. One credit is one answer, summary or draft. Your day is free;
+          Brio for Reviewers is off until you turn it on.
         </p>
       </div>
     </Band>

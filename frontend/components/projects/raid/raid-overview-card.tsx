@@ -6,6 +6,7 @@ import { Button, buttonVariants } from '@/components/ui/button'
 import { Tag } from '@/components/ui/tag'
 import { failureFrom, failureReason } from '@/lib/files/action-failure'
 import {
+    RAID_MEANING,
     raidLogHref,
     raidOverviewOf,
     shortDay,
@@ -69,7 +70,7 @@ export function RaidOverviewView({ log, engagementBase, loadError, onRetry }: {
                 <h2 id={headingId} className="text-[16px] font-semibold leading-6 text-fg">RAID</h2>
                 <InfoHint
                     label="About the RAID log"
-                    text="Risks, Assumptions, Issues and Decisions: what could go wrong, what the plan relies on, what has gone wrong, and what people agreed. Internal only."
+                    text={`${RAID_MEANING} Internal only.`}
                 />
                 <Tag color="gray">Internal only</Tag>
                 <span className="flex-1" />
