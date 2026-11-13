@@ -2,6 +2,15 @@ import { prisma } from '@/lib/prisma'
 
 const CONSONANTS = new Set('bcdfghjklmnpqrstvwxyzBCDFGHJKLMNPQRSTVWXYZ')
 
+/**
+ * Whether a search query reads as a doc ID ("FRM-198", "frm-19"): the engagement's prefix, a hyphen,
+ * digits. A prefix may carry a digit when another engagement in the firm took it first ("FRM2-4").
+ * Firm Doc Search and an engagement's Files search both use this, so they agree on what counts.
+ */
+export function looksLikeDocId(query: string): boolean {
+  return /^[a-z][a-z0-9]{1,7}-\d+$/i.test(query.trim())
+}
+
 /** Derive a 3-char uppercase prefix from an engagement name (first 3 consonants, fallback to first 3 chars). */
 export function deriveDocIdPrefix(name: string): string {
   const consonants = name.split('').filter((c) => CONSONANTS.has(c))

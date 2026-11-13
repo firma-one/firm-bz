@@ -11,6 +11,9 @@ const { st } = vi.hoisted(() => ({
         locked: [] as string[],
         visible: null as Set<string> | null,
         hidden: new Set<string>(),
+        /** What the doc-ID search finds, in its order (the exact id first). */
+        docIdHits: [] as { externalId: string; docId: string }[],
+        docIdCalls: [] as { organizationId: string; projectId: string; query: string }[],
     },
 }))
 
@@ -41,6 +44,10 @@ vi.mock('@/lib/services/search-service', () => ({
         // An indexed hit, filtered for locks in its own query
         searchByFileName: async () => [{ externalId: 'indexed', score: 1 }],
         searchByFileNameTerms: async () => [],
+        searchByDocId: async (p: { organizationId: string; projectId: string; query: string }) => {
+            st.docIdCalls.push({ organizationId: p.organizationId, projectId: p.projectId, query: p.query })
+            return st.docIdHits.map((h) => ({ ...h, score: 0.92, updatedAt: new Date('2020-01-01') }))
+        },
     },
 }))
 vi.mock('@/lib/prisma', () => ({
@@ -60,9 +67,10 @@ vi.mock('@/lib/prisma', () => ({
 
 import { GET } from './route'
 
-const search = async () => {
-    const res = await GET({ url: 'http://x/api/projects/p/search?q=budget' } as any, { params: Promise.resolve({ projectId: 'p' }) })
-    return { status: res.status, ids: ((await res.json()).files ?? []).map((f: { id: string }) => f.id).sort() }
+const search = async (q = 'budget') => {
+    const res = await GET({ url: `http://x/api/projects/p/search?q=${encodeURIComponent(q)}` } as any, { params: Promise.resolve({ projectId: 'p' }) })
+    const ordered = ((await res.json()).files ?? []).map((f: { id: string }) => f.id) as string[]
+    return { status: res.status, ordered, ids: [...ordered].sort() }
 }
 
 beforeEach(() => {
@@ -71,6 +79,8 @@ beforeEach(() => {
     st.locked = []
     st.visible = null
     st.hidden = new Set()
+    st.docIdHits = []
+    st.docIdCalls = []
 })
 
 describe('engagement search', () => {
@@ -95,5 +105,39 @@ describe('engagement search', () => {
         st.visible = new Set(['shared', 'indexed'])
         st.hidden = new Set(['indexed'])
         expect((await search()).ids).toEqual(['shared'])
+    })
+})
+
+// A doc ID ("FRM-198") is known only to Firma's index. Firm Doc Search found a document by it; the
+// engagement's Files search didn't look, so the same id came back empty.
+describe('engagement search by doc ID', () => {
+    it('asks the doc-ID search with the query, scoped to this engagement', async () => {
+        await search('FRM-198')
+        expect(st.docIdCalls).toEqual([{ organizationId: 'f', projectId: 'p', query: 'FRM-198' }])
+    })
+
+    it('lists the document with that id first, ahead of newer name and Drive hits', async () => {
+        st.docIdHits = [{ externalId: 'frm-198', docId: 'FRM-198' }, { externalId: 'frm-1980', docId: 'FRM-1980' }]
+        const { ordered } = await search('frm-198')
+        expect(ordered.slice(0, 2)).toEqual(['frm-198', 'frm-1980'])
+        expect(ordered).toHaveLength(5)
+    })
+
+    it("shows a client a doc-ID match only when it's shared with them and not inside something private", async () => {
+        st.role = 'eng_viewer'
+        st.docIdHits = [
+            { externalId: 'shared-by-id', docId: 'FRM-198' },
+            { externalId: 'unshared-by-id', docId: 'FRM-1981' },
+            { externalId: 'private-by-id', docId: 'FRM-1982' },
+        ]
+        st.visible = new Set(['shared-by-id', 'private-by-id'])
+        st.hidden = new Set(['private-by-id'])
+        expect((await search('FRM-198')).ids).toEqual(['shared-by-id'])
+    })
+
+    it('leaves out a doc-ID match whose own lock is private or intake', async () => {
+        st.docIdHits = [{ externalId: 'locked-by-id', docId: 'FRM-198' }]
+        st.locked = ['locked-by-id']
+        expect((await search('FRM-198')).ids).not.toContain('locked-by-id')
     })
 })
