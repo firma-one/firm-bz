@@ -178,7 +178,7 @@ export async function POST(
       if (config.events.newDocumentIntake.email && leads.length > 0) {
         Promise.resolve().then(async () => {
           const ctx = await resolveEntity('platform.engagements.shares', projectId)
-          const ctaUrl = buildAbsoluteUrl(ctx?.ctaUrl ?? null)
+          const ctaUrl = await buildAbsoluteUrl(ctx?.ctaUrl ?? null, { engagementId: projectId })
           await Promise.all(leads.map((lead) => sendEventEmailToUser(lead.userId, () =>
             renderDocumentIntakeEmail({ fileName, engagementName: project.name, ctaUrl })
           )))

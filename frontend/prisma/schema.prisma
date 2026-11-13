@@ -218,8 +218,65 @@ model Group {
   subscriptions Subscription[]
   aiUsage       PlatformAiUsage[]
   aiFeedback    PlatformAiFeedback[]
+  domains       GroupDomain[]
 
   @@map("groups")
+  @@schema("platform")
+}
+
+/// A branded address for a Firm Group: a Firma subdomain (acme.firma.bz) or the customer's own domain
+/// (portal.acme.com). A Group admin requests it, a System Admin sets it up on Vercel by hand and
+/// approves it (.claude/plans/branded-host-email-links.md). Once approved, sign-in hands people over
+/// to it and email links use it. Rows are never deleted: rejected, cancelled and removed ones are
+/// history. Partial unique indexes (migration 20261113120000) keep one live row per Group and per host.
+model GroupDomain {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  groupId        String    @db.Uuid
+  /// Lowercase host, no scheme or port: "acme.firma.bz", "portal.acme.com".
+  host           String
+  /// SUBDOMAIN (a *.firma.bz name) | CUSTOM (the customer's own domain)
+  kind           String
+  /// REQUESTED | APPROVED | REJECTED | CANCELLED | REMOVED
+  status         String
+  /// The daily reachability check (APPROVED rows only). False turns off hand-off and email links.
+  reachable      Boolean   @default(true)
+  lastCheckedAt  DateTime? @db.Timestamptz(6)
+  lastCheckError String?
+  requestedBy    String    @db.Uuid
+  requestedAt    DateTime  @default(now()) @db.Timestamptz(6)
+  reviewedBy     String?   @db.Uuid
+  reviewedAt     DateTime? @db.Timestamptz(6)
+  reviewNote     String?
+  updatedAt      DateTime  @updatedAt @db.Timestamptz(6)
+
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@index([groupId])
+  @@index([status])
+  @@map("group_domains")
+  @@schema("platform")
+}
+
+/// A one-time ticket that carries a fresh sign-in from www to a Group's approved domain. The URL holds
+/// only this row's id; the Supabase token stays here. Single use, expires in 60 seconds. Kept after
+/// use so signing out on either host can end the session on the other (originSessionId and
+/// targetSessionId).
+model SignInHandoff {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId          String    @db.Uuid
+  host            String
+  nextPath        String
+  tokenHash       String?
+  originSessionId String?   @db.Uuid
+  targetSessionId String?   @db.Uuid
+  expiresAt       DateTime  @db.Timestamptz(6)
+  usedAt          DateTime? @db.Timestamptz(6)
+  createdAt       DateTime  @default(now()) @db.Timestamptz(6)
+
+  @@index([userId])
+  @@index([originSessionId])
+  @@index([targetSessionId])
+  @@map("sign_in_handoffs")
   @@schema("platform")
 }
 
@@ -490,6 +547,7 @@ model Engagement {
   notifications         Notification[]
   wikiPages             EngagementWikiPage[]
   contacts              ClientContact[]
+  raidItems             EngagementRaidItem[]
 
   @@unique([clientId, slug])
   @@map("engagements")
@@ -779,6 +837,11 @@ model UserPersonalization {
   /// { shell: 'v1' | 'v2', sidebarCollapsed, sidebarSections, lastTabByEngagement } — see
   /// .claude/plans/ui-ux-overhaul.md. One JSON column so future UI prefs need no migration.
   uiPrefs           Json     @default("{}")
+  /// { date: "YYYY-MM-DD" in the user's timezone, text, fingerprint, generatedAt } — Brio's "Your
+  /// day" on Home, written once per local day (lib/ai/day-brief.ts, .claude/plans/brio-features-round-2.md
+  /// §3.2). Its own column, not a key in uiPrefs, so writing it never races a prefs write. Null until
+  /// the first brief.
+  dayBrief          Json?
 
   @@map("user_personalizations")
   @@schema("platform")
@@ -930,6 +993,103 @@ model DocCommentRead {
   @@schema("platform")
 }
 
+/// What a RAID log entry is (.claude/plans/brio-features-round-2.md, section 9).
+enum RaidItemType {
+  RISK
+  ASSUMPTION
+  ISSUE
+  DECISION
+
+  @@schema("platform")
+}
+
+/// SUGGESTED: Brio's, waiting for a person to accept or dismiss it. OPEN and CLOSED: a risk, an
+/// assumption or an issue in the log. RECORDED: a decision in the log. DISMISSED: a suggestion a
+/// person turned down, kept so the same source isn't suggested again.
+enum RaidItemStatus {
+  SUGGESTED
+  OPEN
+  CLOSED
+  RECORDED
+  DISMISSED
+
+  @@schema("platform")
+}
+
+/// Where an entry came from. STATUS, HEALTH and BOARD entries are kept current from the engagement's
+/// own signals (free, lib/raid/raid-signals.ts); THREAD and MEMO are Brio's suggestions from the
+/// conversation; MANUAL is a person's.
+enum RaidSourceKind {
+  STATUS
+  HEALTH
+  BOARD
+  THREAD
+  MEMO
+  MANUAL
+
+  @@schema("platform")
+}
+
+/// One entry in an engagement's RAID log: Risks, Assumptions, Issues and Decisions. Internal only:
+/// Leads and Contributors · Full Access read and change it; Reviewers and Limited Access contributors
+/// never see it (lib/raid/raid-access.ts).
+///
+/// The title and notes are the firm's words. A quote is kept only for THREAD sources, whose comment
+/// text is already in doc_comment_messages; memo text is never stored here (Deepak, 2026-11-12): a
+/// MEMO entry links to its memo instead.
+model EngagementRaidItem {
+  id             String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  createdAt      DateTime       @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime       @default(now()) @updatedAt @db.Timestamptz(6)
+  createdBy      String?        @db.Uuid
+  updatedBy      String?        @db.Uuid
+
+  firmId         String         @db.Uuid
+  engagementId   String         @db.Uuid
+
+  type           RaidItemType
+  /// Short, in the firm's words. Rewritten by the sync for STATUS, HEALTH and BOARD entries.
+  title          String
+  /// Mitigation or next step: a person's, never written by Brio or the sync.
+  notes          String?
+  ownerUserId    String?        @db.Uuid
+  status         RaidItemStatus
+
+  sourceKind     RaidSourceKind
+  /// The signal key (STATUS, HEALTH, BOARD), the comment message id (THREAD) or the memo's
+  /// EngagementDocument id (MEMO). Null for MANUAL.
+  sourceRef      String?
+  /// The signal key again for STATUS, HEALTH and BOARD entries, null for every other: what makes one
+  /// entry per signal unique (Postgres lets NULLs repeat, so many entries may cite one message).
+  signalKey      String?
+  /// True when any source is an internal note or a memo, so a future Reviewer-facing view can never
+  /// share the entry by accident.
+  internalSource Boolean        @default(false)
+  /// The comment's words, for THREAD sources only. Never set for a MEMO source.
+  quote          String?
+  /// Sources merged in when a suggestion was accepted onto this entry:
+  /// [{ kind: 'THREAD' | 'MEMO', ref, quote? (THREAD only), internal, at }].
+  extraSources   Json           @default("[]")
+  /// A suggestion that adds to an existing entry rather than making a new one.
+  attachedToId   String?        @db.Uuid
+
+  raisedAt       DateTime       @db.Timestamptz(6)
+  closedAt       DateTime?      @db.Timestamptz(6)
+  /// "Resolved · approved Nov 14" when the sync closed it; "Closed by Alex" when a person did.
+  closedReason   String?
+  /// Who closed it; null when the sync did, which is what lets the sync reopen it.
+  closedBy       String?        @db.Uuid
+
+  engagement     Engagement           @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+  attachedTo     EngagementRaidItem?  @relation("RaidAttachment", fields: [attachedToId], references: [id], onDelete: SetNull)
+  attachments    EngagementRaidItem[] @relation("RaidAttachment")
+
+  @@unique([engagementId, signalKey])
+  @@index([engagementId, status])
+  @@map("engagement_raid_items")
+  @@schema("platform")
+}
+
 enum PlatformAuditScope {
   PROJECT     // legacy — kept for existing rows
   FIRM
@@ -973,6 +1133,21 @@ model PlatformAiUsage {
   @@index([firmId, createdAt])
   @@index([feature, createdAt])
   @@map("platform_ai_usage")
+  @@schema("platform")
+}
+
+/// One row per AI call a person starts, for the per-person limits (lib/ai/person-limit.ts): calls a
+/// minute, calls a day, and a day's cap on some features. Written when the call starts, not when it
+/// finishes like the usage ledger, so requests sent at once can't all pass on the same count.
+/// Rows older than a day are deleted on that person's next call.
+model AiCallStart {
+  id        BigInt   @id @default(autoincrement())
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  userId    String   @db.Uuid
+  feature   String
+
+  @@index([userId, createdAt])
+  @@map("ai_call_starts")
   @@schema("platform")
 }
 

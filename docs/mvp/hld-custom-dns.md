@@ -1,112 +1,108 @@
-# HLD: Custom DNS / Client Subdomains
+# HLD: Custom Domains for a Firm Group
 
 ## Overview
 
-Firma supports client-specific subdomains (e.g. `datasentry.firma.bz`) that rewrite to a scoped path within the main app (e.g. `/d`) while keeping the subdomain in the browser address bar.
+A Firm Group (workspace) can open at its own address:
 
-This is implemented via Vercel rewrites — not redirects — so the URL does not change after navigation.
+| Kind | Example | Plan (from `/pricing`) |
+|---|---|---|
+| Firma subdomain | `acme.firma.bz` | Pro and up ("Custom subdomain") |
+| Own domain | `portal.acme.com` | Enterprise ("Custom DNS domain") |
+
+The Group admin requests it on **Billing**, Firma checks the name is free, a System Admin sets it up on
+Vercel by hand and approves it at **/system/custom-domains**. From then on:
+
+- the domain's root opens the app, keeping the address (`proxy.ts`);
+- sign-in on www hands the session over to the domain (the "sign-in hand-off");
+- every email and invite link for that workspace uses the domain (`appLink`).
+
+Plan and review history: `.claude/plans/branded-host-email-links.md`. UI mock:
+`.claude/plans/custom-domains-mock.html`.
+
+This replaces the old per-subdomain setup (a Vercel dashboard rewrite plus the hard-coded
+`CLIENT_SUBDOMAINS` list in `proxy.ts`). Neither is needed any more.
 
 ---
 
 ## Architecture
 
 ```
-datasentry.firma.bz  →  Vercel (rewrite)  →  www.firma.bz/d
+portal.acme.com ──CNAME──▶ Vercel (project firma-bz, same deployment as www)
+                               │
+                               ▼
+                         proxy.ts: host isn't one of Firma's own
+                         (lib/custom-domains/hosts.ts) → "/" rewrites to /d?entry=auth
 ```
 
-- DNS: CNAME in Hostinger pointing subdomain to Vercel
-- Routing: Vercel rewrite rule scoped by `host` header
-- No separate deployment — same Vercel project serves all subdomains
+- **Data:** `platform.group_domains` (`GroupDomain`): host, kind, status
+  (REQUESTED · APPROVED · REJECTED · CANCELLED · REMOVED), reachability. Partial unique indexes keep one
+  live row per Group and per host. Rows are never deleted.
+- **Rules:** `lib/custom-domains/domain-rules.ts` (names, reserved labels, the plan gate read from
+  `PRICING_COMPARISON`), `lib/custom-domains/hosts.ts` (which hosts are Firma's own).
+- **Service:** `lib/custom-domains/group-domains.ts` (server only). Actions: `lib/actions/custom-domains.ts`
+  (Group admin, Billing) and `lib/actions/system-custom-domains.ts` (System Admin).
+- **Reachability:** `lib/custom-domains/reachability.ts` fetches `https://<domain>/api/custom-domains/health`,
+  which only this app answers with `{ service: 'firma' }`. Approve requires it. An Inngest job
+  (`recheck-custom-domains-daily`, 03:00 UTC) re-checks every approved domain; one that fails is marked
+  unreachable, which turns off its hand-off and email links (they fall back to www), and the Group admin
+  and System Admins are emailed.
+- **Links:** `lib/navigation/app-link.ts` `appLink(path, scope)` is the only builder of absolute links to
+  workspace pages; `platformLink` (www) is for platform pages. A guard test enforces it.
+- **Production only:** branded hosts are used only when `VERCEL_ENV === 'production'`, so local and preview
+  never link to production domains (`CUSTOM_DOMAINS_IN_DEV=true` overrides for testing).
+
+### Sign-in hand-off
+
+Sign-in cookies belong to one host. After sign-in on www, if the person lands in a workspace with an
+approved, reachable domain (`/d?entry=auth` and `/auth/callback`):
+
+1. www asks Supabase for a one-time magic-link token (`admin.generateLink`, no email sent), stores its hash
+   in `platform.sign_in_handoffs` (60-second expiry, single use) and redirects to
+   `https://<domain>/auth/handoff?t=<ticket id>`.
+2. The domain uses the ticket, verifies the token (`verifyOtp`), which sets its own cookie, and opens the page.
+
+Only from Firma's own hosts, only to a workspace the person belongs to, `next` is always a path. Any failure
+leaves the person on www, signed in. Signing out on either host ends the linked session on the other
+(`DELETE /api/auth/linked-sessions`).
+
+### Storage connect popups
+
+Google Drive and OneDrive OAuth callbacks stay on www (their registered redirect URIs). The popup posts its
+result to the opener's origin when that origin is an approved custom domain
+(`lib/custom-domains/popup-origin.ts`), so connecting storage works from a branded address.
 
 ---
 
-## Implementation Steps
+## Setting up a domain (System Admin)
 
-### 1. Vercel — Add Domain
+`/system/custom-domains` shows the checklist for each request, with copy buttons:
 
-In the Vercel project dashboard → **Settings → Domains**, add the client subdomain (e.g. `datasentry.firma.bz`). Vercel provides a CNAME target.
+**Firma subdomain** (`acme.firma.bz`)
+1. Hostinger → Domains → firma.bz → DNS: `CNAME acme → cname.vercel-dns.com`
+2. Vercel → project firma-bz → Settings → Domains: add `acme.firma.bz` (use the CNAME value Vercel shows, if different)
+3. Google Cloud Console → Firma Auth app → Authorized JavaScript origins: `https://acme.firma.bz`
+4. Supabase: nothing; `https://*.firma.bz/auth/callback` already covers it.
 
-### 2. Hostinger — Add DNS Record
+**Own domain** (`portal.acme.com`)
+1. The customer adds `CNAME portal.acme.com → cname.vercel-dns.com` at their DNS provider (Billing shows them the record).
+2. Vercel: add `portal.acme.com`.
+3. Google Cloud Console: authorized origin `https://portal.acme.com`.
+4. Supabase → Authentication → URL Configuration → Redirect URLs: `https://portal.acme.com/auth/callback`.
 
-In Hostinger → **Domains → firma.bz → DNS**:
+Then **Check** until it reports reachable, and **Approve**. No code change and no deploy.
 
-| Type  | Name        | Value                  | TTL  |
-|-------|-------------|------------------------|------|
-| CNAME | datasentry  | cname.vercel-dns.com   | 3600 |
+### Existing subdomains
 
-### 3. Rewrite the subdomain root to `/d`
-
-Two things are needed here, not one — a routing-layer rewrite AND an app-code change:
-
-**3a. Vercel rewrite rule.** There is no `vercel.json` in this repo — this rule is configured directly in the Vercel dashboard (Settings → Rewrites), not checked into git. Scope it by `host`:
-```json
-{
-  "source": "/",
-  "destination": "/d",
-  "has": [{ "type": "host", "value": "datasentry.firma.bz" }]
-}
-```
-
-**3b. `frontend/proxy.ts` — add the subdomain to `CLIENT_SUBDOMAINS`.** This *is* checked into git and *is* a required code change (see "What Does NOT Need Changing" below — a prior version of this doc incorrectly claimed no code change was needed):
-```ts
-const CLIENT_SUBDOMAINS = ['app.firma.bz', 'datasentry.firma.bz', 'keithmeyer.firma.bz', 'scarbluu.firma.bz']
-```
-This list gates both the `/` → `/d` rewrite and the unauthenticated → `/signin?redirect=/d` bounce for that host (`frontend/proxy.ts`, search `CLIENT_SUBDOMAINS`). A subdomain added only in Vercel/DNS but missing here will resolve and load the app shell, but won't get the subdomain-specific auth-redirect/rewrite behavior this middleware provides.
-
-### 4. Google Cloud Console — Firma Auth App
-
-Add to **Authorized JavaScript Origins**:
-```
-https://datasentry.firma.bz
-```
-
-Required because the browser is on the subdomain when the auth flow initiates.
-
-### 5. Supabase — Auth URL Configuration
-
-In Supabase dashboard → **Authentication → URL Configuration → Redirect URLs**, add:
-```
-https://datasentry.firma.bz/auth/callback
-```
-
-Required for magic link / email auth to redirect back to the correct domain. Do not change the Site URL — it stays as `https://www.firma.bz`.
-
-> Tip: use `https://*.firma.bz/auth/callback` as a single wildcard entry to cover all future client subdomains at once.
+`datasentry`, `keithmeyer` and `scarbluu` `.firma.bz` predate this. They keep working (any non-Firma host
+opens the app). To tie each to its workspace, use **Add for a group** on `/system/custom-domains` with the
+Group's slug. `app.firma.bz` stays a neutral alias, assigned to no Group.
 
 ---
 
-## What Does NOT Need Changing
+## What stays on www
 
-| Item | Reason |
+| Item | Why |
 |---|---|
-| Google Cloud Console — GDrive app redirect URI | `NEXT_PUBLIC_APP_URL=https://www.firma.bz` is always set, so `getAppUrl()` always returns `www.firma.bz` regardless of the browser's current host. GDrive OAuth callback always goes to `www.firma.bz/api/connectors/google-drive/callback`. |
-| Vercel environment variables | `NEXT_PUBLIC_APP_URL` stays as `www.firma.bz`; no per-client env var needed. |
-| Supabase redirect URL entries per-subdomain | Covered by the existing `https://*.firma.bz/auth/callback` wildcard — no per-subdomain entry needed. |
-
-**Correction (2026-07-27):** this section previously also listed "Next.js app code — no changes required." That was wrong on two counts, both since fixed:
-- `frontend/proxy.ts`'s `CLIENT_SUBDOMAINS` array **is** a required code change per new subdomain — see step 3b above. Without it, the subdomain loads the app shell but doesn't get the `/` → `/d` auth-aware rewrite.
-- Separately, `frontend/lib/auth-context.tsx`'s `signInWithGoogle`/`signInWithMicrosoft` had a latent bug where the OAuth `redirectTo` was hardcoded to `www.firma.bz` instead of the browser's actual current host, breaking Google/Microsoft sign-in with `AuthPKCECodeVerifierMissingError` on any client subdomain (the PKCE `code_verifier` cookie is host-scoped, so a mismatched redirect origin means the callback never finds it). Fixed to always use `getOAuthRedirectOrigin()` (current origin). This was unrelated to onboarding a *new* subdomain — it affected all existing client subdomains — but is documented here since it's part of the same subdomain-auth surface.
-
----
-
-## Adding a New Client Subdomain
-
-To onboard a new client subdomain:
-
-1. Add CNAME record in Hostinger (same `cname.vercel-dns.com` target)
-2. Add domain in Vercel dashboard
-3. Add a rewrite rule for the host in the Vercel dashboard (Settings → Rewrites — not `vercel.json`, which doesn't exist in this repo), **and** add the subdomain to `CLIENT_SUBDOMAINS` in `frontend/proxy.ts`
-4. Add the new subdomain to Google Cloud Console (Authorized JavaScript Origins, Firma Auth app) — Supabase needs no per-subdomain change, already covered by the `https://*.firma.bz/auth/callback` wildcard
-5. Deploy
-
----
-
-## Example: datasentry.firma.bz
-
-| Item | Value |
-|---|---|
-| Subdomain | `datasentry.firma.bz` |
-| Destination path | `/d` |
-| Client | DataSentry |
-| Google origin added | `https://datasentry.firma.bz` |
-| Supabase redirect added | `https://datasentry.firma.bz` |
+| Google Drive and OneDrive OAuth redirect URIs | Registered with Google and Microsoft; the popup result is forwarded to the opener (above). |
+| Supabase Site URL | Stays `https://www.firma.bz`. |
+| Platform emails and links (support replies, waitlist, referrals, billing portal, System Admin sign-up, /system) | They belong to no workspace (`platformLink`). |

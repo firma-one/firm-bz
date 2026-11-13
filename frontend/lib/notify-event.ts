@@ -3,6 +3,7 @@ import { logger } from '@/lib/logger'
 import { sendPushToUser } from '@/lib/push'
 import { isAgentUserId } from '@/lib/ai/files-agent/agent-identity'
 import { isAgentEmail } from '@/lib/ai/agent-email'
+import { appLinkOrNull, type LinkScope } from '@/lib/navigation/app-link'
 
 /**
  * Shared dispatch helpers for the per-event notification toggles in Firm Settings
@@ -87,8 +88,10 @@ export async function sendEventEmailToUser(
   }
 }
 
-export function buildAbsoluteUrl(relativePath: string | null | undefined): string | null {
-  if (!relativePath) return null
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ''
-  return `${appUrl}${relativePath}`
+/**
+ * An email's link to a page in a workspace: on the workspace's approved custom domain when it has one,
+ * else the main address (lib/navigation/app-link.ts). `scope` names what the page belongs to.
+ */
+export async function buildAbsoluteUrl(relativePath: string | null | undefined, scope: LinkScope | null): Promise<string | null> {
+  return appLinkOrNull(relativePath, scope)
 }

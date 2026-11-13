@@ -33,6 +33,8 @@ import {
 } from '@/components/projects/engagement-overview-sections'
 import { countFilesInFolder, type DemoEngagement } from '@/lib/demo/static-demo-data'
 import { DemoSummaryCard } from '@/components/demo/demo-summary-card'
+import { WaitingOnClient } from '@/components/projects/waiting-on-client'
+import { DemoRaidOverviewCard } from '@/components/demo/demo-raid'
 import { getDemoDeliverables } from '@/lib/demo/demo-deliverables'
 
 const DAY = 86400000
@@ -173,7 +175,25 @@ export function DemoEngagementOverview({ engagement }: { engagement: DemoEngagem
                         { title: 'Housekeeping', items: housekeeping },
                     ]}
                 />
+                {/* As the app: deliverables in review for a while, with Brio's nudge to the Reviewer. */}
+                <WaitingOnClient
+                    projectId="tour"
+                    engagementBase=""
+                    deliverables={m.deliverables.map((d) => ({
+                        ...d,
+                        // In review for six days, so the sample has something to nudge about.
+                        stageSince: d.stage === 'in_review' && today ? new Date(today.getTime() - 6 * DAY).toISOString() : null,
+                    }))}
+                    demo={{
+                        recipients: [{ userId: 'tour-reviewer', name: 'Dana Whitfield', role: 'Reviewer' }],
+                        draft: (c, first) => `Hi ${first}, a quick check-in on ${c.name}${c.docId ? ` (${c.docId})` : ''}. It's been with you for review for ${c.daysWaiting} days.\n\nIf anything needs changing, a comment here is the quickest way to get it to us.`,
+                    }}
+                />
+                {/* As the app: the RAID log's short form under the Action Center. */}
+                <DemoRaidOverviewCard />
             </div>
+
+            {/* As the app: internal memos moved to Discussions › Memos (demo-memos.tsx); their card is no longer mounted here. */}
 
             <InsightCard
                 title="Engagement Health"

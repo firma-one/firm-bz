@@ -377,7 +377,8 @@ ${FOLLOWUP_MARKER}
    - They must FOLLOW ON from the answer you just gave — go one step deeper, or to the obvious next
      concern. If you reported four unassigned documents, a good follow-up asks which deliverable
      they sit under or what else is unplanned; a bad one changes the subject.
-   - Phrase them as the USER would ask them, in first person where natural ("Who should own these?").
+   - Phrase them as the USER would ask them, in first person where natural ("Which of these have a
+     due date?").
    - Before offering a question, ANSWER IT TO YOURSELF from the snapshot. If you could not answer
      it — for any reason — do not offer it. This is the test that matters; the two cases below are
      only the ones that go wrong most often.
@@ -386,9 +387,10 @@ ${FOLLOWUP_MARKER}
      engagement lead's calls, not yours. Ask about state ("What's the status of scope
      confirmation?"), never about judgment ("Which should be prioritized first?").
    - Do not suggest questions about data the snapshot does not carry. It holds counts, statuses,
-     stages, dates and DOC-IDs. It does NOT hold: individual document names, people's names or
-     emails, comment text, file contents, or anything about other engagements or clients. Asking
-     "which documents exactly?" when only a count is given leads straight to a dead end.
+     stages, dates, deliverable names and DOC-IDs, and file names only where a FILES section is
+     present. It does NOT hold: people's names or emails, comment text, file contents, or anything
+     about other engagements or clients. Without a FILES section, asking "which files exactly?"
+     when only a count is given leads straight to a dead end.
    - Do not repeat a question already asked in this conversation.
    - If the answer genuinely closes the topic and nothing follows, write the marker with no
      questions after it.

@@ -1,9 +1,9 @@
 'use client'
 
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
-import { AtSign, Search, ArrowUpRight, MessagesSquare, Reply, CheckCircle2, RotateCcw, Lock } from 'lucide-react'
+import { AtSign, Search, ArrowUpRight, MessagesSquare, Reply, CheckCircle2, RotateCcw } from 'lucide-react'
 import { Input } from '@/components/ui/input'
-import { cn } from '@/lib/utils'
+import { cn, formatFullDate } from '@/lib/utils'
 import { RelativeDateTime } from '@/components/ui/relative-date-time'
 import { PersonAvatar } from '@/components/ui/property-cells'
 import { DeliverableIcon } from '@/components/ui/deliverable-icon'
@@ -16,8 +16,12 @@ import { useRightPane } from '@/lib/right-pane-context'
 import { useAuth } from '@/lib/auth-context'
 import { CommentText, type CommentPerson } from '@/components/comments/comment-text'
 import { DocumentDocCommentsPane, type TaggableDocument } from '@/components/projects/document-doc-comments-pane'
-import { formatDisplayName } from '@/lib/comments/mentions'
+import { ENGAGEMENT_ROLE_LABEL, formatDisplayName } from '@/lib/comments/mentions'
+import { canWriteInternalNote } from '@/lib/comments/internal-notes'
 import type { TaggedDocument } from '@/lib/comments/tagged-documents'
+import { statusOf } from '@/lib/ui/status'
+import { DiscussionsSubTabs, useDiscussionsUrlState } from '@/components/projects/discussions-switch'
+import { EngagementMemosTab, useEngagementMemos } from '@/components/projects/engagement-memos'
 
 /*
  * The engagement's Discussions page (.claude/plans/board-pane-comments-redesign.md): one row per
@@ -25,6 +29,10 @@ import type { TaggedDocument } from '@/lib/comments/tagged-documents'
  * it's unread. Clicking a row opens the whole discussion, with its composer, in the right pane, where
  * it can be resolved; "Show N earlier" peeks at the last five in place. Views: All (open), Awaiting
  * reply (a client or external collaborator spoke last), Mentions (yours), Resolved.
+ *
+ * Leads and Full Access contributors get Threads | Memos | RAID above it (discussions-switch.tsx,
+ * .claude/plans/brio-features-round-2.md §8): Threads is this page, Memos the engagement's internal
+ * memos (engagement-memos.tsx), RAID the log when one is passed in. Everyone else gets this page alone.
  */
 
 const FOLDER_MIME = 'application/vnd.google-apps.folder'
@@ -60,6 +68,32 @@ export type DocRow = {
 
 export type CommentsView = 'all' | 'awaiting' | 'mentions' | 'resolved'
 
+/** A discussion's title in its pane: "QSR-9 · Market report", as the thread names its document. */
+export function discussionTitle(row: Pick<DocRow, 'docId' | 'documentName'>): string {
+  return row.docId ? `${row.docId} · ${row.documentName}` : row.documentName
+}
+
+/**
+ * The line under a discussion's title: its deliverable's stage and due date ("In review · due Nov 21,
+ * 2026"), naming the deliverable when the discussion is on one of its documents.
+ */
+export function discussionSubtitle(
+  kind: DocRow['kind'],
+  deliverable: { docId?: string | null; status?: string | null; dueDate?: string | null } | null | undefined,
+): string {
+  if (!deliverable) return ''
+  return [
+    kind !== 'deliverable' && deliverable.docId ? `Deliverable ${deliverable.docId}` : null,
+    deliverable.status ? statusOf('deliverable', deliverable.status).label : null,
+    deliverable.dueDate ? `due ${formatFullDate(deliverable.dueDate)}` : null,
+  ].filter(Boolean).join(' · ')
+}
+
+/** The role shown beside a client-side author's name (Reviewer, Limited Access); none for the firm's own. */
+export function clientRoleLabel(role: string | null | undefined): string | null {
+  return role && !canWriteInternalNote(role) ? ENGAGEMENT_ROLE_LABEL[role] ?? null : null
+}
+
 /**
  * The page's views — All, Awaiting reply, Mentions, Resolved — as small toggles like the Inbox's,
  * with search on the same row: it looks a discussion up by ID (its document's or its deliverable's)
@@ -92,7 +126,8 @@ export function CommentsToolbar({
     >
       {icon}
       {label}
-      {counts[id] ? <span className="tabular-nums text-fg-subtle">{counts[id]}</span> : null}
+      {/* What's awaiting a reply is state, in the waiting color; other counts stay quiet. */}
+      {counts[id] ? <span className={cn('tabular-nums', id === 'awaiting' ? 'font-medium text-status-waiting-fg' : 'text-fg-subtle')}>{counts[id]}</span> : null}
     </button>
   )
   return (
@@ -173,16 +208,103 @@ export type TextKit = {
   docFor: (docId: string) => TaggedDocument | undefined
 }
 
-export function EngagementCommentsTab({
-  projectId,
-  boardUrl,
-  readOnly = false,
-}: {
+export interface EngagementCommentsTabProps {
   projectId: string
   orgSlug?: string
   boardUrl?: string
   /** The engagement is completed: discussions read, and can't be resolved or reopened. */
   readOnly?: boolean
+  /**
+   * Threads | Memos | RAID at the top (discussions-switch.tsx): a Lead or a Contributor · Full Access
+   * only (hasInternalDiscussions). Without it the page is Threads alone, as it always was: no switch, no
+   * counts, and nothing of Memos or RAID in the page.
+   */
+  internalSubTabs?: boolean
+  /** The engagement's path, for opening a memo in Files when storage gives no link. */
+  engagementBase?: string
+  /**
+   * The RAID log's body, shown under the switch once RAID is chosen. Absent: no RAID option. It may put
+   * its own controls on the switch's row with DiscussionsBarPortal.
+   */
+  renderRaid?: () => React.ReactNode
+  /** RAID's number on the switch. */
+  raidCount?: number
+}
+
+export function EngagementCommentsTab({
+  internalSubTabs = false,
+  engagementBase,
+  renderRaid,
+  raidCount,
+  ...threads
+}: EngagementCommentsTabProps) {
+  if (!internalSubTabs) return <EngagementThreads {...threads} />
+  return <InternalDiscussions {...threads} engagementBase={engagementBase} renderRaid={renderRaid} raidCount={raidCount} />
+}
+
+/** Discussions for a Lead or a Contributor · Full Access: the switch, Threads, Memos, and RAID when there is one. */
+function InternalDiscussions({
+  projectId,
+  orgSlug,
+  boardUrl,
+  readOnly = false,
+  engagementBase,
+  renderRaid,
+  raidCount,
+}: Omit<EngagementCommentsTabProps, 'internalSubTabs'>) {
+  const { subTab, setSubTab, memoId, setMemoId } = useDiscussionsUrlState(!!renderRaid)
+  const [threadsCount, setThreadsCount] = useState<number | null>(null)
+  const memos = useEngagementMemos(projectId)
+
+  return (
+    <>
+      <DiscussionsSubTabs
+        value={subTab}
+        onChange={setSubTab}
+        counts={{ threads: threadsCount, memos: memos.memos?.length ?? null, raid: raidCount ?? null }}
+        threads={
+          <EngagementThreads
+            projectId={projectId}
+            orgSlug={orgSlug}
+            boardUrl={boardUrl}
+            readOnly={readOnly}
+            active={subTab === 'threads'}
+            onOpenCount={setThreadsCount}
+          />
+        }
+        memos={
+          <EngagementMemosTab
+            projectId={projectId}
+            memos={memos}
+            engagementBase={engagementBase}
+            readOnly={readOnly}
+            selectedId={memoId}
+            onSelect={setMemoId}
+          />
+        }
+        raid={renderRaid ?? null}
+      />
+      {memos.dueDialog}
+    </>
+  )
+}
+
+/** Today's Discussions page: the views, search, the rows, and the open thread in the right pane. */
+function EngagementThreads({
+  projectId,
+  boardUrl,
+  readOnly = false,
+  active = true,
+  onOpenCount,
+}: {
+  projectId: string
+  orgSlug?: string
+  boardUrl?: string
+  readOnly?: boolean
+  /** Shown: false while another sub-tab is, when a thread open in the right pane is closed. */
+  active?: boolean
+  /** The open discussions, unsearched, for the switch's count; null while loading. */
+  onOpenCount?: (count: number | null) => void
 }) {
   const rightPane = useRightPane()
   const { user } = useAuth()
@@ -368,11 +490,12 @@ export function EngagementCommentsTab({
     // Opening it reads it; the pane tells the server.
     setRows((prev) => prev.map((x) => (x.projectDocumentId === r.projectDocumentId ? { ...x, unread: false } : x)))
     rightPane.setBeforeClose(null)
-    rightPane.setTitle(r.docId ?? 'Discussion')
+    // Named as the thread names its document; the deliverable's stage and due date follow once loaded.
+    rightPane.setTitle(discussionTitle(r))
     rightPane.setHeaderIcon(r.kind === 'deliverable'
       ? <DeliverableIcon className="h-4 w-4" />
       : <DocumentIcon mimeType={r.kind === 'folder' ? FOLDER_MIME : r.mimeType ?? undefined} className="h-4 w-4" />)
-    rightPane.setHeaderSubtitle(r.documentName)
+    rightPane.setHeaderSubtitle('')
     rightPane.setContent(
       <DiscussionPane
         key={r.projectDocumentId}
@@ -383,6 +506,9 @@ export function EngagementCommentsTab({
       />
     )
   }
+
+  /** A comment author's role, for naming the client side's people in an opened row. */
+  const roleOf = useCallback((userId: string | null) => (userId ? memberById.get(userId)?.role ?? null : null), [memberById])
 
   // The pane's header follows the open discussion's state (resolved or not) as the list refreshes.
   const openRow = openId ? rows.find((x) => x.projectDocumentId === openId) : undefined
@@ -404,6 +530,19 @@ export function EngagementCommentsTab({
   useEffect(() => {
     if (!paneOpen) setOpenId(null)
   }, [paneOpen])
+
+  // Another sub-tab is shown (Memos, RAID): the thread open beside this list closes with it.
+  useEffect(() => {
+    if (!active && openId) rightPane.clearPane()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active])
+
+  // The switch's count: open discussions, as the tab row counts them. A search narrows the rows, so
+  // the count stays at what it was before it.
+  useEffect(() => {
+    if (!onOpenCount || query.trim()) return
+    onOpenCount(loading || error ? null : rowsInView(rows, 'all').length)
+  }, [onOpenCount, query, loading, error, rows])
 
   const shownRows = useMemo(() => rowsInView(rows, activeTab), [rows, activeTab])
   // Mentions are few, so search narrows them here, the same way: by ID (a leading "#" ignored), or by who wrote them.
@@ -460,6 +599,7 @@ export function EngagementCommentsTab({
                     thread={threads[r.projectDocumentId]}
                     text={text}
                     authorOf={authorOf}
+                    roleOf={roleOf}
                     onToggle={() => toggle(r.projectDocumentId)}
                     onRetry={() => loadThread(r.projectDocumentId)}
                     onOpen={() => openDiscussion(r)}
@@ -587,6 +727,7 @@ function DiscussionPane({
 }) {
   const deliverableId = row.kind === 'deliverable' ? row.projectDocumentId : row.deliverable?.id
   const [taggable, setTaggable] = useState<TaggableDocument[] | undefined>(undefined)
+  const { setHeaderSubtitle } = useRightPane()
   useEffect(() => {
     if (!deliverableId) return
     let cancelled = false
@@ -597,10 +738,12 @@ function DiscussionPane({
         setTaggable((data.subtasks ?? []).map((t: any) => ({
           documentId: t.documentId, docId: t.docId ?? null, fileName: t.fileName, mimeType: t.mimeType ?? null, breadcrumb: t.breadcrumb,
         })))
+        // The deliverable's stage and due date under the title; a nicety, so a failed load just leaves it out.
+        setHeaderSubtitle(discussionSubtitle(row.kind, data.deliverable))
       })
       .catch(() => {})
     return () => { cancelled = true }
-  }, [projectId, deliverableId, persona])
+  }, [projectId, deliverableId, persona, row.kind, setHeaderSubtitle])
 
   return (
     <DocumentDocCommentsPane
@@ -610,7 +753,21 @@ function DiscussionPane({
       documentMimeType={row.mimeType ?? undefined}
       taggableDocuments={taggable}
       onChange={onChange}
+      // As the row stood when opened: a resolved discussion awaits no reply, so Brio offers no draft.
+      resolved={!!row.resolved}
     />
+  )
+}
+
+/** The neutral tag on an internal note, as the discussion pane draws it. */
+function InternalTag() {
+  return (
+    <span
+      title="Only Leads and Full Access contributors see this"
+      className="inline-flex h-4 shrink-0 items-center rounded-[4px] bg-tag-gray-bg px-1 text-[10px] font-semibold leading-none text-tag-gray-fg"
+    >
+      Internal
+    </span>
   )
 }
 
@@ -627,6 +784,7 @@ export function ThreadRow({
   thread,
   text,
   authorOf,
+  roleOf,
   onToggle,
   onRetry,
   onOpen,
@@ -639,6 +797,8 @@ export function ThreadRow({
   thread: Thread | undefined
   text: TextKit
   authorOf: (userId: string | null, name: string | null, email: string | null) => CommentPerson | null
+  /** A comment author's engagement role: the client side's people are named with theirs. */
+  roleOf?: (userId: string | null, name: string | null) => string | null
   onToggle: () => void
   onRetry: () => void
   onOpen: () => void
@@ -700,13 +860,14 @@ export function ThreadRow({
               Resolved
             </span>
           ) : r.latest?.authorIsExternal ? (
-              <span
-                  className="shrink-0 inline-flex items-center gap-0.5 rounded-full bg-amber-50 border border-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-600 leading-none"
-                  title="Last message is from a Limited Access contributor or Reviewer · awaiting your reply."
-              >
-                  <Reply className="h-2.5 w-2.5" />
-                  Awaiting reply
-              </span>
+            // State, in the status language's waiting color (lib/ui/status.ts).
+            <span
+              className="shrink-0 inline-flex h-[18px] items-center gap-1 rounded-control bg-status-waiting-bg pl-1 pr-1.5 text-[11px] font-medium leading-none text-status-waiting-fg"
+              title="Last message is from a Limited Access contributor or Reviewer · awaiting your reply."
+            >
+              <Reply className="h-3 w-3 text-status-waiting-icon" />
+              Awaiting reply
+            </span>
           ) : null}
         </div>
 
@@ -719,9 +880,7 @@ export function ThreadRow({
               {author && <span className="font-medium text-fg-muted">{author.name}</span>}
               {author && <span aria-hidden>·</span>}
               <RelativeDateTime date={preview.createdAt} iconClassName="hidden" />
-              {r.latest?.isInternal && (
-                <span className="inline-flex items-center gap-0.5 font-medium text-tag-yellow-fg"><span aria-hidden>·</span><Lock className="h-2.5 w-2.5" /> Internal</span>
-              )}
+              {r.latest?.isInternal && <InternalTag />}
               {r.resolved && (
                 <>
                   <span aria-hidden>·</span>
@@ -766,21 +925,23 @@ export function ThreadRow({
                 <ol className="flex flex-col gap-3">
                   {shown.map((m, i) => {
                     const who = authorOf(m.authorUserId, m.authorName ?? null, m.authorEmail)
+                    const role = clientRoleLabel(roleOf?.(m.authorUserId, m.authorName ?? null))
                     return (
                       <li key={m.id} className="grid grid-cols-[20px_minmax(0,1fr)] gap-x-2">
                         <PersonAvatar person={{ name: who?.name ?? '?', avatarUrl: who?.avatarUrl ?? null }} size={20} />
-                        <div className="min-w-0">
+                        {/* An internal note as the pane draws it: a dashed box, tagged, muted. */}
+                        <div className={cn('min-w-0', m.isInternal && 'rounded-control border border-dashed border-line-strong bg-surface-subtle px-2 py-1.5')}>
                           <div className="flex items-center gap-1.5 text-xs">
                             <span className="font-medium text-fg">{who?.name ?? 'Unknown'}</span>
+                            {m.isInternal && <InternalTag />}
+                            {role && <span className="text-[10px] text-fg-subtle">· {role}</span>}
+                            <span aria-hidden className="text-[10px] text-fg-subtle">·</span>
                             <RelativeDateTime date={m.createdAt} iconClassName="hidden" className="text-[10px] text-fg-subtle" />
-                            {m.isInternal && (
-                              <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-tag-yellow-fg"><Lock className="h-2.5 w-2.5" /> Internal</span>
-                            )}
                             {i === shown.length - 1 && (
                               <span className="text-[10px] text-fg-subtle">· Latest</span>
                             )}
                           </div>
-                          <p className="mt-0.5 line-clamp-3 whitespace-pre-wrap break-words text-xs leading-relaxed text-fg">
+                          <p className={cn('mt-0.5 line-clamp-3 whitespace-pre-wrap break-words text-xs leading-relaxed', m.isInternal ? 'text-fg-muted' : 'text-fg')}>
                             <CommentText content={m.content} {...text} />
                           </p>
                         </div>

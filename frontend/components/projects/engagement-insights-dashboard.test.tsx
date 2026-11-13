@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { act, render, renderHook, screen, fireEvent } from '@testing-library/react'
 
 // The engagement Overview: a failed load is never zero counts (P1-66); Brio's summary failures say
-// why, the credit limit in its own words (P1-77).
+// why, the credit limit in its own words (P1-77); a link to one of its charts lands once they load.
 
 const { addToast } = vi.hoisted(() => ({ addToast: vi.fn() }))
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ session: { access_token: 't', user: { email: 'me@firm.com' } } }) }))
@@ -14,7 +14,7 @@ vi.mock('@/lib/actions/project', () => ({
 }))
 vi.mock('@/components/projects/floating-ai-chat', () => ({ FloatingAiChat: () => null }))
 
-import { EngagementInsightsDashboard, overviewFailureText, summaryFailureNote } from './engagement-insights-dashboard'
+import { EngagementInsightsDashboard, overviewFailureText, summaryFailureNote, useRingAnchor } from './engagement-insights-dashboard'
 
 const fetchMock = vi.fn()
 beforeEach(() => {
@@ -72,5 +72,47 @@ describe('summaryFailureNote (P1-77)', () => {
         expect(await summaryFailureNote(answer(403, { error: 'Forbidden' }))).toMatch(/^You can't ask .+ for a summary on this engagement\.$/)
         expect(await summaryFailureNote(answer(409, { error: 'This engagement is completed. It is read only.' }))).toBe('This engagement is completed. It is read only.')
         expect(await summaryFailureNote(answer(500, {}))).toMatch(/couldn't write a summary\. Try again\.$/)
+    })
+})
+
+describe('useRingAnchor', () => {
+    afterEach(() => {
+        document.body.innerHTML = ''
+        window.history.replaceState(null, '', '/')
+    })
+
+    it("scrolls to the chart a link names (the RAID log's Health entries) once the charts are shown, once", () => {
+        const chart = document.createElement('div')
+        chart.id = 'ring-pace'
+        chart.scrollIntoView = vi.fn()
+        document.body.appendChild(chart)
+        window.history.replaceState(null, '', '/e/q2/analytics#ring-pace')
+
+        const { rerender } = renderHook(({ shown }) => useRingAnchor(shown), { initialProps: { shown: false } })
+        expect(chart.scrollIntoView).not.toHaveBeenCalled()
+        rerender({ shown: true })
+        expect(chart.scrollIntoView).toHaveBeenCalledTimes(1)
+        expect(chart.classList.contains('ring-pulse')).toBe(true)
+
+        // A refresh hides and shows the charts again: the page stays where the reader is.
+        rerender({ shown: false })
+        rerender({ shown: true })
+        expect(chart.scrollIntoView).toHaveBeenCalledTimes(1)
+    })
+
+    it('jumps again when the hash changes on the page, and ignores a hash that is not a chart', () => {
+        const chart = document.createElement('div')
+        chart.id = 'ring-planning'
+        chart.scrollIntoView = vi.fn()
+        document.body.appendChild(chart)
+        window.history.replaceState(null, '', '/e/q2/analytics#summary')
+
+        renderHook(() => useRingAnchor(true))
+        expect(chart.scrollIntoView).not.toHaveBeenCalled()
+        act(() => {
+            window.history.replaceState(null, '', '/e/q2/analytics#ring-planning')
+            window.dispatchEvent(new HashChangeEvent('hashchange'))
+        })
+        expect(chart.scrollIntoView).toHaveBeenCalledTimes(1)
     })
 })

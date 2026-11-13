@@ -23,6 +23,14 @@ const FEATURE_LABELS: Record<string, string> = {
     brief: 'Firm briefs',
     searchInterpret: 'Doc Search',
     filesAgent: 'Files agent',
+    firmChat: 'Firm assistant',
+    statusUpdate: 'Client status updates',
+    replyDraft: 'Reply drafts',
+    nudgeDraft: 'Nudge drafts',
+    notesProposals: 'Notes into actions',
+    reviewerChat: 'Reviewer questions',
+    dayBrief: 'Your day',
+    raidCheck: 'RAID check',
 }
 
 /**

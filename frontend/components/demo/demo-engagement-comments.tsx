@@ -1,9 +1,11 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { AtSign } from 'lucide-react'
+import { DiscussionsSubTabs, useDiscussionsUrlState, type DiscussionsSubTab } from '@/components/projects/discussions-switch'
+import { DemoMemosTab, useDemoMemos } from '@/components/demo/demo-memos'
 import { DemoEngagement, DemoFolder } from '@/lib/demo/static-demo-data'
-import { DELIVERABLE_ACTORS, getDemoDeliverables } from '@/lib/demo/demo-deliverables'
+import { DELIVERABLE_ACTORS, getDemoDeliverables, type DemoDeliverable } from '@/lib/demo/demo-deliverables'
 import { MIME_BY_TYPE } from '@/components/demo/demo-file-list'
 import { DemoDeliverableComments, type DemoComment } from '@/components/demo/demo-deliverable-comments'
 import { DeliverableIcon } from '@/components/ui/deliverable-icon'
@@ -11,7 +13,7 @@ import { DocumentIcon } from '@/components/ui/document-icon'
 import { mentionedNames } from '@/lib/comments/mentions'
 import { useRightPane } from '@/lib/right-pane-context'
 import {
-    CommentsToolbar, DiscussionActions, EmptyDiscussions, PEEK, ThreadRow, rowsInView,
+    CommentsToolbar, DiscussionActions, EmptyDiscussions, PEEK, ThreadRow, discussionSubtitle, discussionTitle, rowsInView,
     type CommentsView, type DocRow, type TextKit, type ThreadMessage,
 } from '@/components/projects/engagement-comments-tab'
 
@@ -38,9 +40,18 @@ const ME = 'Demo User'
  * each, over sample comments with a mention and a document tag. A row opens its discussion in the
  * right pane with the tour's composer, where it can be resolved; opening it clears its unread dot.
  * Everything changes only on screen. Mentions shows its real empty state.
+ *
+ * The tour shows a Lead's view, so it has the app's Threads | Memos | RAID switch: Memos over canned
+ * memos in memory (demo-memos.tsx), RAID when `renderRaid` is passed, as in the app.
  */
-export function DemoEngagementComments({ engagement }: { engagement: DemoEngagement }) {
+export function DemoEngagementComments({ engagement, renderRaid, raidCount }: {
+    engagement: DemoEngagement
+    /** RAID's body on the tour; absent, there's no RAID option. */
+    renderRaid?: () => ReactNode
+    raidCount?: number
+}) {
     const rightPane = useRightPane()
+    const { subTab, setSubTab, memoId, setMemoId } = useDiscussionsUrlState(!!renderRaid)
     const [view, setView] = useState<CommentsView>('all')
     const [query, setQuery] = useState('')
     const [expanded, setExpanded] = useState<Set<string>>(new Set())
@@ -52,18 +63,26 @@ export function DemoEngagementComments({ engagement }: { engagement: DemoEngagem
     // Relative to now, so set after mount to keep server and client markup equal.
     const [now, setNow] = useState<number | null>(null)
     useEffect(() => setNow(Date.now()), [])
+    const today = useMemo(() => (now === null ? null : new Date(now)), [now])
+    const memos = useDemoMemos(engagement, today)
 
     const files = useMemo(() => engagement.folders.flatMap((f) => f.files), [engagement])
     /** What the threads are on: two deliverables and a document in each, as on a real engagement. */
     const subjects = useMemo(() => {
-        const [a, b] = getDemoDeliverables(engagement).map((d) => d.folder)
+        const [a, b] = getDemoDeliverables(engagement)
         const tagIn = (f: DemoFolder) => (f.files[1] ?? f.files[0])?.docId ?? f.docId
         const taggable = (f: DemoFolder) => f.files.map((x) => ({ id: x.id, docId: x.docId, name: x.name, mimeType: MIME_BY_TYPE[x.type] ?? 'application/octet-stream' }))
-        const deliverable = (f: DemoFolder) => ({ id: f.id, docId: f.docId, name: f.name, kind: 'deliverable' as const, mimeType: null, in: null, tag: tagIn(f), taggable: taggable(f) })
-        const document = (f: DemoFolder) => {
+        // The deliverable's stage and due date, for the line under the open discussion's title.
+        const stageOf = (d: DemoDeliverable) => ({ docId: d.folder.docId, status: d.status, dueDate: d.dueDate })
+        const deliverable = (d: DemoDeliverable) => {
+            const f = d.folder
+            return { id: f.id, docId: f.docId, name: f.name, kind: 'deliverable' as const, mimeType: null, in: null, tag: tagIn(f), taggable: taggable(f), stage: stageOf(d) }
+        }
+        const document = (d: DemoDeliverable) => {
+            const f = d.folder
             const file = f.files[0]
             return file
-                ? { id: file.id, docId: file.docId, name: file.name, kind: 'file' as const, mimeType: MIME_BY_TYPE[file.type] ?? 'application/octet-stream', in: { id: f.id, docId: f.docId, name: f.name }, tag: tagIn(f), taggable: taggable(f) }
+                ? { id: file.id, docId: file.docId, name: file.name, kind: 'file' as const, mimeType: MIME_BY_TYPE[file.type] ?? 'application/octet-stream', in: { id: f.id, docId: f.docId, name: f.name }, tag: tagIn(f), taggable: taggable(f), stage: stageOf(d) }
                 : null
         }
         return [a && deliverable(a), b && deliverable(b), a && document(a), b && document(b)].filter((x): x is NonNullable<typeof x> => !!x)
@@ -155,16 +174,18 @@ export function DemoEngagementComments({ engagement }: { engagement: DemoEngagem
         setOpenId(row.projectDocumentId)
         setRead((prev) => new Set(prev).add(row.projectDocumentId))
         rightPane.setBeforeClose(null)
-        rightPane.setTitle(row.docId ?? 'Discussion')
+        // As the app names it: "DOC-ID · name", the deliverable's stage and due date under it.
+        rightPane.setTitle(discussionTitle(row))
         rightPane.setHeaderIcon(row.kind === 'deliverable'
             ? <DeliverableIcon className="h-4 w-4" />
             : <DocumentIcon mimeType={row.mimeType ?? undefined} className="h-4 w-4" />)
-        rightPane.setHeaderSubtitle(row.documentName)
+        rightPane.setHeaderSubtitle(discussionSubtitle(row.kind, t.subject.stage))
         rightPane.setContent(
             <DemoDeliverableComments
                 key={row.projectDocumentId}
                 documents={t.subject.taggable}
                 thread={t.messages.map((m): DemoComment => ({ id: m.id, author: m.authorName ?? ME, at: m.createdAt, content: m.content }))}
+                resolved={!!row.resolved}
                 onPost={(c) => {
                     setPosted((prev) => ({
                         ...prev,
@@ -193,7 +214,13 @@ export function DemoEngagementComments({ engagement }: { engagement: DemoEngagem
         if (!paneOpen) setOpenId(null)
     }, [paneOpen])
 
-    return (
+    /** As the app: another sub-tab closes the thread open beside the list. */
+    const showSubTab = (next: DiscussionsSubTab) => {
+        if (next !== 'threads' && openId) rightPane.clearPane()
+        setSubTab(next)
+    }
+
+    const threadsBody = (
         <div className="flex flex-col gap-3">
             <div data-demo-tour="discussions-views">
                 <CommentsToolbar
@@ -226,6 +253,7 @@ export function DemoEngagementComments({ engagement }: { engagement: DemoEngagem
                                     thread={{ status: 'ready', messages: messagesOf(row.projectDocumentId).slice(-PEEK) }}
                                     text={text}
                                     authorOf={(_id, name) => (name ? { name } : null)}
+                                    roleOf={(_id, name) => (name && EXTERNAL.has(name) ? 'eng_ext_collaborator' : null)}
                                     onToggle={() => toggle(row.projectDocumentId)}
                                     onRetry={() => {}}
                                     onOpen={() => openDiscussion(row)}
@@ -246,5 +274,21 @@ export function DemoEngagementComments({ engagement }: { engagement: DemoEngagem
                 </div>
             )}
         </div>
+    )
+
+    return (
+        <DiscussionsSubTabs
+            value={subTab}
+            onChange={showSubTab}
+            counts={{
+                // Open discussions, unsearched, as the app counts them.
+                threads: now === null ? null : rowsInView(threads.map((t) => t.row), 'all').length,
+                memos: memos.memos?.length ?? null,
+                raid: raidCount ?? null,
+            }}
+            threads={threadsBody}
+            memos={<DemoMemosTab memos={memos} selectedId={memoId} onSelect={setMemoId} />}
+            raid={renderRaid ?? null}
+        />
     )
 }

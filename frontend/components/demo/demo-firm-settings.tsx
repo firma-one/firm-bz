@@ -1,7 +1,9 @@
 'use client'
 
 import { useId, useState, type ReactNode } from 'react'
-import { AtSign, Bell, BarChart2, Building2, DollarSign, Factory, FileText, Globe, Lock, MessagesSquare, Palette, RefreshCw, Shield, Trash2, Type, User, Users2 } from 'lucide-react'
+import { AtSign, Bell, BarChart2, Building2, DollarSign, Factory, FileText, Globe, Lock, MessagesSquare, Palette, RefreshCw, Shield, Sparkles, Trash2, Type, User, Users2 } from 'lucide-react'
+import { Brio } from '@/components/ui/brio'
+import { REVIEWER_DAILY_ANSWERS } from '@/lib/ai/features'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -206,6 +208,12 @@ export function DemoFirmSettings({ firm }: { firm: DemoFirm }) {
                         <SwitchRow icon={<BarChart2 />} title="Engagement health" initial={true} />
                         <SwitchRow icon={<BarChart2 />} title="File organization" initial={false} />
                         <SwitchRow icon={<BarChart2 />} title="Document activity" initial={true} />
+                        <SwitchRow
+                            icon={<Sparkles />}
+                            title={<>Let them ask <Brio /></>}
+                            description={`Answers come only from what they can already see: the published summary, deliverables at their stages and the discussions with them. Never internal notes, private files or the memo. Up to ${REVIEWER_DAILY_ANSWERS} answers per person a day, from your firm's credits.`}
+                            initial={false}
+                        />
                     </section>
                     <div><InertSave /></div>
                 </div>

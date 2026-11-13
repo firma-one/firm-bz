@@ -27,6 +27,7 @@ vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), error: vi.fn(), warn: 
 vi.mock('@/lib/ai/client', () => ({
     isAiConfigured: () => true,
     AI_MODEL: 'test-model',
+    AI_EFFORT: { summary: 'medium' },
     getAnthropic: () => ({ messages: { create } }),
 }))
 vi.mock('@/lib/ai/credit-cap', () => ({ assertWithinAiCreditCap: creditCap, AiCreditLimitError: LimitError }))
@@ -34,15 +35,21 @@ vi.mock('@/lib/ai/usage', () => ({ recordAiUsage: vi.fn() }))
 vi.mock('@/lib/insights/engagement-insights', () => ({ computeEngagementInsights: async () => ({}) }))
 vi.mock('@/lib/ai/engagement-chat', () => ({ buildEngagementContext: () => 'snapshot' }))
 vi.mock('@/lib/ai/engagement-summary', () => ({
+    SUMMARY_MAX_TOKENS: 3000,
     SUMMARY_SYSTEM_PROMPT: 'system',
     fingerprintInsights: () => 'fp',
     readInsightsSummary: () => ({ draft: null }),
+}))
+const { engagementUpdate, findUnique } = vi.hoisted(() => ({
+    engagementUpdate: vi.fn(async () => ({})),
+    findUnique: vi.fn(async () => ({ settings: {} as Record<string, unknown> })),
 }))
 vi.mock('@/lib/prisma', () => ({
     prisma: {
         engagement: {
             findFirst: async () => ({ settings: {}, name: 'Audit', description: null, tags: [], contractType: null, client: { name: 'Acme' } }),
-            update: vi.fn(async () => ({})),
+            findUnique,
+            update: engagementUpdate,
         },
     },
 }))
@@ -60,6 +67,9 @@ beforeEach(() => {
     creditCap.mockReset()
     creditCap.mockResolvedValue(undefined)
     create.mockReset()
+    engagementUpdate.mockClear()
+    findUnique.mockReset()
+    findUnique.mockResolvedValue({ settings: {} })
 })
 
 describe('POST /api/projects/[projectId]/ai-summary', () => {
@@ -89,5 +99,23 @@ describe('POST /api/projects/[projectId]/ai-summary', () => {
         const out = await lines(await post())
         expect(out.map((l) => l.type)).toEqual(['meta', 'delta', 'error'])
         expect(out[2].message).toBe("Brio couldn't write a summary. Try again.")
+    })
+
+    it('saves onto the settings as they are when the stream ends, not as they were when it began', async () => {
+        // A memo saved while the summary was being written must survive the save.
+        findUnique.mockResolvedValue({ settings: { internalMemo: 'saved meanwhile' } })
+        create.mockResolvedValue({
+            controller: { abort: vi.fn() },
+            async *[Symbol.asyncIterator]() {
+                yield { type: 'message_start', message: { usage: { input_tokens: 10 } } }
+                yield { type: 'content_block_delta', delta: { type: 'text_delta', text: '## Summary\nOn track.' } }
+                yield { type: 'message_delta', usage: { output_tokens: 5 } }
+            },
+        })
+        const out = await lines(await post())
+        expect(out.map((l) => l.type)).toEqual(['meta', 'delta', 'done'])
+        expect(engagementUpdate).toHaveBeenCalledWith(expect.objectContaining({
+            data: { settings: expect.objectContaining({ internalMemo: 'saved meanwhile' }) },
+        }))
     })
 })

@@ -4,6 +4,7 @@ import { FirmsView } from '@/components/projects/firms-view'
 import { getUserFirms, shouldShowSwitchWorkspace, type FirmOption } from '@/lib/actions/firms'
 import { resolveDefaultFirmLandingPath } from '@/lib/landing/default-landing-path'
 import { getSessionUser } from '@/lib/auth/session-user'
+import { handoffForCurrentRequest } from '@/lib/auth/sign-in-handoff'
 import { GroupPicker } from './group-picker'
 
 /**
@@ -59,7 +60,10 @@ export default async function FirmsPage({
                 )
             }
             if (path) {
-                redirect(path)
+                // A workspace with an approved custom domain: carry the fresh sign-in over to it
+                // (lib/auth/sign-in-handoff.ts). Null keeps them here, as before.
+                const handoff = await handoffForCurrentRequest(path)
+                redirect(handoff ?? path)
             }
         } catch (e) {
             if (isRedirectError(e)) throw e

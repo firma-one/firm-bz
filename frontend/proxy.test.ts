@@ -79,3 +79,37 @@ describe('proxy — a deploy signs nobody out', () => {
         expect(res.headers.get('location')).toBeNull()
     })
 })
+
+/**
+ * A workspace's custom domain (.claude/plans/branded-host-email-links.md): any host that isn't one of
+ * Firma's own opens the app at its root, keeping the address, with no hard-coded list.
+ */
+describe('proxy — custom domains', () => {
+    function on(host: string, path = '/') {
+        return new NextRequest(new URL(path, `https://${host}`), { headers: { host } })
+    }
+
+    it('opens the app at a custom domain\'s root, resolving the workspace', async () => {
+        auth.user = { id: 'u1', email: 'pat@acme.test' }
+        for (const host of ['datasentry.firma.bz', 'acme.firma.bz', 'portal.acme.com']) {
+            const res = await proxy(on(host))
+            expect(res.headers.get('x-middleware-rewrite')).toBe(`https://${host}/d?entry=auth`)
+        }
+    })
+
+    it('sends a signed-out visitor at a custom domain to sign in there', async () => {
+        const res = await proxy(on('portal.acme.com'))
+        expect(res.headers.get('location')).toBe('https://portal.acme.com/signin?redirect=%2Fd')
+    })
+
+    it('leaves Firma\'s own hosts and other paths alone', async () => {
+        auth.user = { id: 'u1', email: 'pat@acme.test' }
+        for (const host of ['www.firma.bz', 'firma.bz', 'preview.firma.bz', 'localhost:3000', 'firm-bz-git-dev.vercel.app']) {
+            const res = await proxy(on(host))
+            expect(res.headers.get('x-middleware-rewrite')).toBeNull()
+            expect(res.headers.get('location')).toBeNull()
+        }
+        const pricing = await proxy(on('portal.acme.com', '/pricing'))
+        expect(pricing.headers.get('x-middleware-rewrite')).toBeNull()
+    })
+})

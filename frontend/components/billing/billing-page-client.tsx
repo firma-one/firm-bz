@@ -17,6 +17,7 @@ import { failureFrom, failureReason } from '@/lib/files/action-failure'
 import { LoadFailed } from '@/components/ui/load-failed'
 import { shouldShowSandboxUpgradeMarketing } from '@/lib/billing/subscription-display'
 import { PageHeading } from '@/components/ui/page-heading'
+import { CustomDomainSection } from '@/components/billing/custom-domain-section'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { EmptyPanel } from '@/components/ui/empty-panel'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
@@ -433,6 +434,9 @@ export function BillingPageClient({
                     />
                 </section>
             ) : null}
+
+            {/* Group admins only: the section renders nothing for anyone else. */}
+            {selectedFirm && !isOnboardingSubscribe ? <CustomDomainSection firmId={selectedFirm.id} /> : null}
 
             {/* How paying works: quiet reference text under a hairline, not marketing cards. */}
             <section aria-labelledby="billing-payments-heading" className="space-y-4 border-t border-line pt-6">

@@ -5,6 +5,7 @@ import { useAuth } from '@/lib/auth-context'
 import { RefreshCw, LineChart } from 'lucide-react'
 import type { FirmInsightsResponse } from '@/app/api/firms/[firmId]/insights/route'
 import { FirmBriefCard, useFirmBrief } from '@/components/dashboard/ai-firm-brief'
+import { FloatingAiChat } from '@/components/projects/floating-ai-chat'
 import { InsightCard } from '@/components/dashboard/insight-card'
 import { FirmEngagementsList, FirmOverviewTop, FirmPipelineSection, type FirmOverviewData } from '@/components/dashboard/firm-overview-sections'
 import { FirmActions, type FirmActionLinks } from '@/components/dashboard/firm-actions'
@@ -163,6 +164,16 @@ export function FirmBusinessInsights({ firmId, firmSlug, groupSlug }: FirmBusine
                 </div>
             )}
         </InsightCard>
+        {/* Ask Brio about the firm (.claude/plans/brio-features-round-2.md §3.4): the engagement
+            Overview's floating panel, with the firm as its subject. Shown where the brief is (not
+            where AI isn't configured) and once the insights it starts from have loaded. Collapsed
+            to its launcher on arrival: the brief leads this page, and an open panel would cover
+            the cards beside it. Portalled to the body, so where it sits here doesn't matter. */}
+        {brief.available && overview && (
+            <FloatingAiChat
+                subject={{ kind: 'firm', firmId, groupSlug, firmSlug, accessToken: session?.access_token, data }}
+            />
+        )}
         </div>
     )
 }

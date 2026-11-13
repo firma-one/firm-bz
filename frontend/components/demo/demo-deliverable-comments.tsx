@@ -1,8 +1,8 @@
 'use client'
 
-import { useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { formatDistanceToNowStrict } from 'date-fns'
-import { AtSign, Eye, Hash, Lock, MessagesSquare, Send, Smile } from 'lucide-react'
+import { AtSign, Eye, Hash, Lock, MessagesSquare, Send, Smile, Sparkles, Square } from 'lucide-react'
 import { PersonAvatar } from '@/components/ui/property-cells'
 import { DocumentIcon } from '@/components/ui/document-icon'
 import { Hint } from '@/components/ui/tooltip'
@@ -12,6 +12,10 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/compon
 import { FilterMenuLabel, FilterMenuRow, FilterPill, summarizePicks } from '@/components/ui/filter-pill'
 import { cn } from '@/lib/utils'
 import { caretOffset } from '@/lib/ui/caret-offset'
+import { awaitsFirmReply } from '@/lib/comments/internal-notes'
+import { ASSISTANT, BRIO_GREEN } from '@/lib/ai/assistant'
+import { BrioDraftLabel } from '@/components/brio/brio-draft-label'
+import { REPLY_DRAFT_NOTE, countDraftPlaceholders, withDraft } from '@/components/projects/document-doc-comments-pane'
 import {
     ENGAGEMENT_ROLE_LABEL, findMentionQuery, findTagQuery, insertMention, insertTag, mentionedNames, splitDocTags, splitMentions,
 } from '@/lib/comments/mentions'
@@ -20,8 +24,9 @@ import {
  * The tour's deliverable comments: the app's composer (document-doc-comments-pane.tsx) over sample
  * comments, with @ to mention a teammate and # to tag one of the deliverable's documents. As in the
  * app, the firm can post an internal note (only its team sees it), filter the thread by who sees
- * what, and, opened from one of the documents, see the comments about that file first. Posting adds
- * to the thread on screen only; nothing is sent.
+ * what, and, opened from one of the documents, see the comments about that file first. On a
+ * discussion awaiting the firm's reply, "Draft reply" writes a sample Brio draft into the box, as the
+ * app's does (no request is made). Posting adds to the thread on screen only; nothing is sent.
  */
 
 export type DemoTaggableDocument = { id: string; docId: string; name: string; mimeType: string }
@@ -72,6 +77,15 @@ const VISIBILITY_LABEL: Record<Visibility, string> = { reply: 'Replies', interna
 const visibilityOf = (c: Comment): Visibility => (c.internal ? 'internal' : 'reply')
 /** The client's roles: never offered for a mention in an internal note, which they can't see. */
 const CLIENT_ROLES = new Set(['eng_ext_collaborator', 'eng_viewer'])
+const roleOfName = (name: string) => TEAM.find((p) => p.name === name)?.role
+
+/** The tour's stand-in for Brio's reply draft: the shape the app's takes, placeholders and all. */
+function sampleReplyDraft(to: string): string {
+    const first = to.split(/\s+/)[0]
+    return `Thanks, ${first}. Good to hear the figures match. We'll move this to review once [confirm the final check is done], and share it with you by [date].`
+}
+
+const DRAFT_BUTTON = 'inline-flex h-7 shrink-0 items-center gap-1 rounded-control px-2 text-small text-fg-muted hover:bg-surface-hover hover:text-fg'
 
 // The text box and the chip layer behind it share this box exactly, so each chip sits under its text.
 const COMPOSER_TEXT = 'max-h-48 w-full overflow-y-auto whitespace-pre-wrap break-words px-3 pb-1 pt-2.5 text-ui leading-relaxed [scrollbar-gutter:stable]'
@@ -80,7 +94,7 @@ const COMPOSER_TEXT = 'max-h-48 w-full overflow-y-auto whitespace-pre-wrap break
  * `thread` starts the pane on a given discussion (the tour's Discussions page passes the row's) instead
  * of the sample; `onPost` hears each comment posted, so that page's row can follow.
  */
-export function DemoDeliverableComments({ documents, thread, onPost, focusDocId, initialDraft = '' }: {
+export function DemoDeliverableComments({ documents, thread, onPost, focusDocId, initialDraft = '', resolved = false }: {
     documents: DemoTaggableDocument[]
     thread?: DemoComment[]
     onPost?: (comment: DemoComment) => void
@@ -88,6 +102,8 @@ export function DemoDeliverableComments({ documents, thread, onPost, focusDocId,
     focusDocId?: string
     /** What a new comment starts with: that document's tag. */
     initialDraft?: string
+    /** The discussion is resolved: it awaits no reply, so no draft is offered. */
+    resolved?: boolean
 }) {
     const [comments, setComments] = useState<Comment[]>(() => thread ?? sampleThread(documents, new Date()))
     // The visitor is the firm's lead, so the Reply / Internal note choice is theirs, as in the app.
@@ -115,6 +131,45 @@ export function DemoDeliverableComments({ documents, thread, onPost, focusDocId,
     const endRef = useRef<HTMLDivElement>(null)
 
     const docByDocId = useMemo(() => new Map(documents.map((d) => [d.docId, d])), [documents])
+
+    // ── The sample reply draft, as the app's composer offers Brio's ─────────────
+    // The visitor is the firm's lead, so it's offered on a discussion the client side spoke last in.
+    const awaiting = !resolved && awaitsFirmReply(comments.map((c) => ({ authorUserId: c.author, isInternal: c.internal })), roleOfName)
+    const lastClient = [...comments].reverse().find((c) => !c.internal && CLIENT_ROLES.has(roleOfName(c.author) ?? ''))
+    const [drafting, setDrafting] = useState<{ before: string } | null>(null)
+    const [streaming, setStreaming] = useState(false)
+    const timer = useRef<ReturnType<typeof setInterval> | null>(null)
+    const stopStream = () => {
+        if (timer.current) clearInterval(timer.current)
+        timer.current = null
+        setStreaming(false)
+    }
+    useEffect(() => () => { if (timer.current) clearInterval(timer.current) }, [])
+    /** Writes the sample draft in a few words at a time, as a draft streams in the app. */
+    const startDraft = () => {
+        stopStream()
+        const before = drafting ? drafting.before : text
+        setDrafting({ before })
+        setInternalMode(false)
+        setMention(null)
+        setTag(null)
+        const words = sampleReplyDraft(lastClient?.author ?? '').match(/\S+\s*/g) ?? []
+        let shown = 0
+        setText(withDraft(before, '', initialDraft))
+        setStreaming(true)
+        timer.current = setInterval(() => {
+            shown = Math.min(words.length, shown + 3)
+            setText(withDraft(before, words.slice(0, shown).join(''), initialDraft))
+            if (shown >= words.length) stopStream()
+        }, 60)
+    }
+    const discardDraft = () => {
+        stopStream()
+        if (drafting) setText(drafting.before)
+        setDrafting(null)
+    }
+    const placeholders = drafting ? countDraftPlaceholders(text) : 0
+    const draftBlocksSend = !!drafting && (streaming || placeholders > 0)
 
     // Grows with the text, up to about eight lines.
     useLayoutEffect(() => {
@@ -187,12 +242,13 @@ export function DemoDeliverableComments({ documents, thread, onPost, focusDocId,
 
     const send = () => {
         const content = text.trim()
-        if (!content) return
+        if (!content || draftBlocksSend) return
         const posted: Comment = { id: `c-${Date.now()}`, author: ME, at: new Date().toISOString(), content, ...(internalMode ? { internal: true } : {}) }
         setComments((prev) => [...prev, posted])
         onPost?.(posted)
         // About a file, the next comment starts with its tag again.
         setText(initialDraft)
+        setDrafting(null)
         setPicked([])
         setMention(null)
         setTag(null)
@@ -222,7 +278,9 @@ export function DemoDeliverableComments({ documents, thread, onPost, focusDocId,
                 {splitDocTags(t.value).map((d, j) =>
                     d.type === 'doc' && docByDocId.has(d.docId)
                         ? <mark key={j} className="-mx-0.5 rounded-[4px] bg-surface-muted px-0.5 text-transparent [box-decoration-break:clone]">{d.value}</mark>
-                        : <span key={j}>{d.value}</span>
+                        : <span key={j}>{!drafting ? d.value : d.value.split(/(\[[^\]]+\])/g).map((part, k) => k % 2 === 1
+                            ? <mark key={k} className="-mx-0.5 rounded-[3px] bg-status-waiting-bg px-0.5 text-transparent [box-decoration-break:clone]">{part}</mark>
+                            : <Fragment key={k}>{part}</Fragment>)}</span>
                 )}
             </span>
         )
@@ -282,21 +340,23 @@ export function DemoDeliverableComments({ documents, thread, onPost, focusDocId,
                     const count = (key: ReactionKey) => (c.reactions?.[key] ?? 0) + (myKeys.includes(key) ? 1 : 0)
                     const reacted = REACTIONS.filter((r) => count(r.key) > 0)
                     return (
-                    <li key={c.id} className={cn('group relative grid grid-cols-[24px_minmax(0,1fr)] gap-x-2.5', c.internal && '-mx-2 rounded-control bg-tag-yellow-bg px-2 py-2')}>
+                    <li key={c.id} className="group relative grid grid-cols-[24px_minmax(0,1fr)] gap-x-2.5">
                         <PersonAvatar person={{ name: c.author, avatarUrl: null }} size={24} />
-                        <div className="min-w-0">
-                            <div className="flex items-center gap-1.5 text-small">
+                        {/* As in the app: an internal note in a dashed box, tagged and muted; the client side's people named with their role. */}
+                        <div className={cn('min-w-0', c.internal && 'rounded-control border border-dashed border-line-strong bg-surface-subtle px-2.5 py-2')}>
+                            <div className="flex items-baseline gap-1.5 pr-7 text-small">
                                 <span className="font-medium text-fg">{c.author === ME ? 'You' : c.author}</span>
-                                <span className="text-fg-subtle" suppressHydrationWarning>{Date.now() - Date.parse(c.at) < 60_000 ? 'just now' : formatDistanceToNowStrict(new Date(c.at), { addSuffix: true })}</span>
                                 {c.internal && (
                                     <Hint label="Only Leads and Full Access contributors see this">
-                                        <span className="inline-flex items-center gap-1 text-caption font-medium text-tag-yellow-fg">
-                                            <Lock className="h-2.5 w-2.5" /> Internal
-                                        </span>
+                                        <span className="inline-flex h-[18px] shrink-0 items-center self-center rounded-[4px] bg-tag-gray-bg px-1.5 text-[11px] font-semibold text-tag-gray-fg">Internal</span>
                                     </Hint>
                                 )}
+                                <span className="shrink-0 whitespace-nowrap text-caption text-fg-subtle" suppressHydrationWarning>
+                                    {CLIENT_ROLES.has(roleOfName(c.author) ?? '') && <>· {ENGAGEMENT_ROLE_LABEL[roleOfName(c.author)!]} </>}
+                                    · {Date.now() - Date.parse(c.at) < 60_000 ? 'just now' : formatDistanceToNowStrict(new Date(c.at), { addSuffix: true })}
+                                </span>
                             </div>
-                            <p className="mt-0.5 whitespace-pre-wrap break-words text-ui leading-relaxed text-fg">{render(c.content)}</p>
+                            <p className={cn('mt-0.5 whitespace-pre-wrap break-words text-ui leading-relaxed', c.internal ? 'text-fg-muted' : 'text-fg')}>{render(c.content)}</p>
                             {/* Reactions, as the app draws them (components/comments/reactions.tsx) */}
                             {reacted.length > 0 && (
                                 <div className="mt-1.5 flex flex-wrap items-center gap-1">
@@ -370,15 +430,19 @@ export function DemoDeliverableComments({ documents, thread, onPost, focusDocId,
                         role="radio"
                         aria-checked={internalMode}
                         onClick={() => setInternalMode(true)}
-                        className={cn('inline-flex items-center gap-1 rounded-[4px] px-2 py-0.5 transition-colors', internalMode ? 'bg-tag-yellow-bg text-tag-yellow-fg' : 'text-fg-muted hover:text-fg')}
+                        className={cn('inline-flex items-center gap-1 rounded-[4px] px-2 py-0.5 transition-colors', internalMode ? 'bg-surface-muted text-fg' : 'text-fg-muted hover:text-fg')}
                     >
                         <Lock className="h-3 w-3" /> Internal note
                     </button>
                 </div>
                 <div ref={composerRef} className={cn(
                     'relative rounded-control border border-line-strong bg-surface focus-within:border-action/60 focus-within:ring-2 focus-within:ring-action/20',
-                    internalMode && 'border-tag-yellow-fg/40 bg-tag-yellow-bg focus-within:border-tag-yellow-fg/60 focus-within:ring-tag-yellow-fg/20',
+                    internalMode && 'border-dashed bg-surface-subtle',
                 )}>
+                    {drafting && (streaming || text !== drafting.before) && (
+                        <div className="px-3 pt-2"><BrioDraftLabel>{REPLY_DRAFT_NOTE}</BrioDraftLabel></div>
+                    )}
+                    <div className="relative">
                     <div ref={backdropRef} aria-hidden className={cn(COMPOSER_TEXT, 'pointer-events-none absolute inset-x-0 top-0 overflow-hidden text-transparent')}>
                         {backdrop}
                         {text.endsWith('\n') && '​'}
@@ -391,6 +455,8 @@ export function DemoDeliverableComments({ documents, thread, onPost, focusDocId,
                         placeholder={internalMode ? 'Internal note · only Leads and Full Access contributors see this…' : 'Leave a comment… @ to mention, # to tag a document'}
                         onScroll={(e) => { if (backdropRef.current) backdropRef.current.scrollTop = e.currentTarget.scrollTop }}
                         onChange={(e) => {
+                            // Theirs from the first keystroke: a draft still being written stops where it is.
+                            if (streaming) stopStream()
                             setText(e.target.value)
                             sync(e.target.value, e.target.selectionStart ?? e.target.value.length)
                         }}
@@ -421,6 +487,7 @@ export function DemoDeliverableComments({ documents, thread, onPost, focusDocId,
                         }}
                         className={cn(COMPOSER_TEXT, 'relative block resize-none bg-transparent text-fg outline-none placeholder:text-fg-subtle')}
                     />
+                    </div>
                     <div className="flex items-center gap-0.5 px-1.5 pb-1.5">
                         <Hint label="Mention someone (@)">
                             <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => start('@')} aria-label="Mention someone" className="flex h-7 w-7 items-center justify-center rounded-control text-fg-subtle hover:bg-surface-hover hover:text-fg-muted">
@@ -432,16 +499,50 @@ export function DemoDeliverableComments({ documents, thread, onPost, focusDocId,
                                 <Hash className="h-3.5 w-3.5" />
                             </button>
                         </Hint>
-                        <span className="ml-auto hidden pr-1.5 text-caption text-fg-subtle sm:inline">⌘↵ to send</span>
-                        <button
-                            type="submit"
-                            disabled={!text.trim()}
-                            aria-label="Send comment"
-                            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-control bg-action text-action-fg transition-colors hover:bg-action-hover disabled:cursor-not-allowed disabled:opacity-40"
-                        >
-                            <Send className="h-3.5 w-3.5" />
-                        </button>
+                        {awaiting && !drafting && (
+                            <Hint label={`${ASSISTANT.name} drafts a reply from the thread for you to edit. Internal notes are never used.`}>
+                                <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={startDraft} className="ml-auto inline-flex h-7 shrink-0 items-center gap-1 rounded-control px-1.5 text-small text-fg-muted hover:bg-surface-hover hover:text-fg">
+                                    <Sparkles className="h-3.5 w-3.5" style={{ color: BRIO_GREEN }} aria-hidden />
+                                    Draft reply
+                                </button>
+                            </Hint>
+                        )}
+                        {!drafting && (
+                            <>
+                                <span className={cn('hidden pr-1.5 text-caption text-fg-subtle sm:inline', !awaiting && 'ml-auto')}>⌘↵ to send</span>
+                                <button
+                                    type="submit"
+                                    disabled={!text.trim()}
+                                    aria-label="Send comment"
+                                    className={cn('flex h-7 w-7 shrink-0 items-center justify-center rounded-control bg-action text-action-fg transition-colors hover:bg-action-hover disabled:cursor-not-allowed disabled:opacity-40', awaiting && 'ml-1')}
+                                >
+                                    <Send className="h-3.5 w-3.5" />
+                                </button>
+                            </>
+                        )}
                     </div>
+
+                    {/* The draft's own row, as in the app: what's left to fill, Discard draft, Rewrite (Stop while it writes), Reply. */}
+                    {drafting && (
+                        <div className="flex items-center gap-1 border-t border-line py-1.5 pl-3 pr-1.5">
+                            <span aria-live="polite" className="min-w-0 flex-1 truncate text-small text-fg-muted">
+                                {streaming ? 'Writing…' : placeholders > 0 ? `${placeholders} ${placeholders === 1 ? 'placeholder' : 'placeholders'} to fill` : ''}
+                            </span>
+                            <button type="button" onClick={discardDraft} className={DRAFT_BUTTON}>Discard draft</button>
+                            {streaming ? (
+                                <button type="button" onClick={stopStream} className={DRAFT_BUTTON}><Square className="h-3 w-3" aria-hidden /> Stop</button>
+                            ) : (
+                                <button type="button" onClick={startDraft} className={DRAFT_BUTTON}>Rewrite</button>
+                            )}
+                            <button
+                                type="submit"
+                                disabled={!text.trim() || draftBlocksSend}
+                                className="ml-0.5 inline-flex h-7 shrink-0 items-center rounded-control bg-action px-2.5 text-small font-medium text-action-fg transition-colors hover:bg-action-hover disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                                {internalMode ? 'Post note' : 'Reply'}
+                            </button>
+                        </div>
+                    )}
 
                     {tag && (
                         <div role="listbox" aria-label="Tag a document" className="absolute bottom-full z-[200] mb-1.5 w-80 overflow-hidden rounded-card border border-line bg-surface p-1 shadow-popover" style={menuLeft(tag.left, 320)}>

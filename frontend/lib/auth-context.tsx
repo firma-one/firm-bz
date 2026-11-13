@@ -239,6 +239,14 @@ export function AuthProvider({ children, initialSession }: { children: ReactNode
       // Stale rows are pruned server-side on the next failed send anyway.
     }
 
+    // A sign-in carried over to a workspace's custom domain left a twin session on the other host
+    // (lib/auth/sign-in-handoff.ts): end it too, so signing out here signs out there. Best-effort.
+    try {
+      await fetch('/api/auth/linked-sessions', { method: 'DELETE' })
+    } catch {
+      // Never block sign-out on it.
+    }
+
     // This browser only. Supabase's default ('global') also signed out the person's other devices,
     // which then bounced to /signin with no visible cause.
     markSigningOut()

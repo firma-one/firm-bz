@@ -5,13 +5,14 @@ import { prisma } from '@/lib/prisma'
 import { resolveProjectContext } from '@/lib/resolve-project-context'
 import { canManageProject } from '@/lib/permission-helpers'
 import { logger } from '@/lib/logger'
-import { getAnthropic, isAiConfigured, AI_MODEL } from '@/lib/ai/client'
-import { recordAiUsage } from '@/lib/ai/usage'
+import { isAiConfigured, AI_EFFORT, AI_MODEL } from '@/lib/ai/client'
 import { getGuardedAnthropic, meterAiCall, aiFailureResponse } from '@/lib/ai/guarded-client'
 import { BRIO_SUMMARY_FAILED } from '@/lib/ai/brio-failure'
 import { computeEngagementInsights } from '@/lib/insights/engagement-insights'
 import { buildEngagementContext } from '@/lib/ai/engagement-chat'
-import { SUMMARY_SYSTEM_PROMPT, fingerprintInsights, readInsightsSummary } from '@/lib/ai/engagement-summary'
+import {
+    SUMMARY_MAX_TOKENS, SUMMARY_SYSTEM_PROMPT, fingerprintInsights, readInsightsSummary,
+} from '@/lib/ai/engagement-summary'
 
 /**
  * POST /api/projects/[projectId]/ai-summary
@@ -83,8 +84,8 @@ export async function POST(
 
         const modelStream = await client.messages.create({
             model: AI_MODEL,
-            max_tokens: 700,
-            temperature: 0.3,
+            max_tokens: SUMMARY_MAX_TOKENS,
+            output_config: { effort: AI_EFFORT.summary },
             system: SUMMARY_SYSTEM_PROMPT,
             messages: [{
                 role: 'user',
@@ -118,11 +119,13 @@ export async function POST(
                     // output with message_delta at the end.
                     let inputTokens = 0
                     let outputTokens = 0
+                    let stopReason: string | null = null
                     for await (const event of modelStream) {
                         if (event.type === 'message_start') {
                             inputTokens = event.message.usage?.input_tokens ?? 0
                         } else if (event.type === 'message_delta') {
                             outputTokens = event.usage?.output_tokens ?? 0
+                            stopReason = event.delta?.stop_reason ?? stopReason
                         } else if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
                             full += event.delta.text
                             controller.enqueue(line({ type: 'delta', text: event.delta.text }))
@@ -131,7 +134,9 @@ export async function POST(
 
                     if (cancelled) return
                     const content = full.trim()
-                    if (!content) {
+                    // A declined or cut-off summary is not saved as a draft: a Lead could approve
+                    // half a summary without noticing its last sections are missing.
+                    if (!content || stopReason === 'refusal' || stopReason === 'max_tokens') {
                         controller.enqueue(line({ type: 'error', message: BRIO_SUMMARY_FAILED }))
                         return
                     }
@@ -142,13 +147,22 @@ export async function POST(
 
                     // Persist only after a complete stream, so an aborted generation leaves no
                     // half-written draft behind.
+                    //
+                    // Settings are read again here, not reused from before the stream: generation
+                    // can take two minutes, and writing the old copy back would revert anything saved
+                    // meanwhile, an internal memo or an approval of the previous draft.
+                    const fresh = await prisma.engagement.findUnique({
+                        where: { id: projectId },
+                        select: { settings: true },
+                    })
+                    const latest = (fresh?.settings as Record<string, unknown> | null) ?? {}
                     await prisma.engagement.update({
                         where: { id: projectId },
                         data: {
                             settings: {
-                                ...settings,
+                                ...latest,
                                 insightsSummary: {
-                                    ...current,
+                                    ...readInsightsSummary(latest),
                                     draft: {
                                         text: content,
                                         generatedAt,

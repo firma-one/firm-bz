@@ -56,9 +56,19 @@ export interface Conversation {
     pinned?: boolean
 }
 
-/** One list per engagement per surface, matching how threads were already keyed. */
+/**
+ * One list per engagement per surface, matching how threads were already keyed. The firm Overview's
+ * conversations (Ask Brio about the firm) are kept the same way, by firm id under `FIRM_CHAT_SURFACE`.
+ */
 const KEY = (engagementId: string, surface: string) =>
     `fm_chat_conversations_${surface}_${engagementId}`
+
+/**
+ * The surface firm conversations are kept under, with the firm's id in place of an engagement's.
+ * Its own word, never an engagement surface (`overview`, `files`), so a firm's list and an
+ * engagement's can never share a key.
+ */
+export const FIRM_CHAT_SURFACE = 'firm'
 
 /**
  * How many conversations survive.

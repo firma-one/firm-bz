@@ -1,5 +1,6 @@
 'use server'
 
+import { appLink } from '@/lib/navigation/app-link'
 import { prisma } from "@/lib/prisma"
 import { createClient } from "@/utils/supabase/server"
 import { upsertFollowUpReminder, removeRemindersByEntity } from '@/lib/reminders/reminder-service'
@@ -107,7 +108,7 @@ async function inviteMemberOrThrow(projectId: string, email: string, personaId: 
 
         await maybeProvisionInviteeAccount(normalizedEmail, inviteeName)
 
-        const inviteUrl = `${process.env.NEXT_PUBLIC_APP_URL}/invite/${token}`
+        const inviteUrl = await appLink(`/invite/${token}`, { engagementId: projectId })
         let warning: string | undefined
         try {
             const { subject, html } = renderInviteEmail({
@@ -166,7 +167,7 @@ async function inviteMemberOrThrow(projectId: string, email: string, personaId: 
 
     await maybeProvisionInviteeAccount(normalizedEmail, inviteeName)
 
-    const inviteUrl = `${process.env.NEXT_PUBLIC_APP_URL}/invite/${token}`
+    const inviteUrl = await appLink(`/invite/${token}`, { engagementId: projectId })
     let warning: string | undefined
     try {
         const { subject, html } = renderInviteEmail({
@@ -239,7 +240,7 @@ async function resendInvitationOrThrow(invitationId: string): Promise<void> {
         data: { token, updatedAt: new Date(), status: InvitationStatus.PENDING, expireAt }
     })
 
-    const inviteUrl = `${process.env.NEXT_PUBLIC_APP_URL}/invite/${token}`
+    const inviteUrl = await appLink(`/invite/${token}`, { engagementId: invite.engagementId })
     const engDetails = await prisma.engagement.findFirst({
         where: { id: invite.engagementId },
         select: { slug: true, name: true, client: { select: { slug: true, name: true, firm: { select: { id: true, slug: true, name: true, group: { select: { slug: true } } } } } } },

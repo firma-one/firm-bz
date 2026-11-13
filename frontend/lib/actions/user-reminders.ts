@@ -218,5 +218,8 @@ async function createManualReminderOrThrow(params: ManualReminder): Promise<void
         firmId: params.firmId,
         ctaUrl: params.ctaUrl,
         note: params.note,
+        // A manual reminder is its own thing: a second one on the same engagement is added, not
+        // written over the first. Same action again still updates it.
+        matchAction: true,
     })
 }

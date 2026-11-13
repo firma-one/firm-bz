@@ -300,7 +300,7 @@ export async function POST(
           const relativeUrl = groupSlug && firmSlug && clientSlug && engSlug
             ? engagementDocCommentPath(groupSlug, firmSlug, clientSlug, engSlug, docCtx.id, message.id)
             : null
-          const ctaUrl = buildAbsoluteUrl(relativeUrl)
+          const ctaUrl = await buildAbsoluteUrl(relativeUrl, { engagementId: projectId })
           const commenterName = user.email ?? 'A client'
           const commentPreview = content.slice(0, 140)
 

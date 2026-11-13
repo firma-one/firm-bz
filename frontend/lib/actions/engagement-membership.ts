@@ -10,6 +10,7 @@ import 'server-only'
  * Lives under lib/actions/ for history; it is not a server action.
  */
 
+import { appLink } from '@/lib/navigation/app-link'
 import { prisma } from "@/lib/prisma"
 import { logger } from '@/lib/logger'
 import { sendEmail } from '@/lib/email'
@@ -218,7 +219,7 @@ export async function joinEngagementForUser(
                     invite.engagement.slug,
                     { tab: 'members' }
                 )
-                const ctaUrl = buildAbsoluteUrl(relativeUrl)
+                const ctaUrl = await buildAbsoluteUrl(relativeUrl, { firmId })
                 const memberName = userEmail || 'A new member'
 
                 if (eventCfg.inApp) {
@@ -291,7 +292,7 @@ export async function provisionAndNotifyExistingUser(
     // address cannot be deleted on an erasure request. Browsers carry the fragment across the
     // guard's 302 (RFC 7231 7.1.2), so it survives to /signin, where use-sign-in-flow.ts reads
     // it. This also means proxy.ts needs no knowledge of it at all.
-    const engagementUrl = `${process.env.NEXT_PUBLIC_APP_URL}${result.redirectUrl}#email=${encodeURIComponent(normalizedEmail)}`
+    const engagementUrl = `${await appLink(result.redirectUrl, { engagementId: invite.engagementId })}#email=${encodeURIComponent(normalizedEmail)}`
     try {
         const { subject, html } = renderAddedToEngagementEmail({
             firmName: projectOrg.client.firm.name ?? BRAND_NAME,

@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Custom Domains Mock</title>
+<style>
+  /* App tokens, from frontend/app/ui-tokens.css and tailwind.config.js. */
+  :root {
+    --surface: #ffffff; --surface-subtle: #fbfbfa; --surface-muted: #f1f1ef; --surface-hover: rgba(55,53,47,.06);
+    --canvas: #f7f7f5;
+    --fg: #37352f; --fg-muted: #6f6e69; --fg-subtle: #a5a4a1;
+    --line: rgba(55,53,47,.09); --line-strong: rgba(55,53,47,.16);
+    --action: hsl(163 94% 24%); --action-10: hsl(163 94% 24% / .10);
+    --danger: hsl(3 53% 50%); --danger-10: hsl(3 53% 50% / .08);
+    --amber: #b45309; --amber-10: rgba(180,83,9,.08);
+    --r-control: 4px; --r-card: 6px;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--canvas); color: var(--fg); font: 14px/20px -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif; }
+  main { max-width: 1120px; margin: 0 auto; padding: 32px 16px 80px; }
+  .doc-h1 { font-size: 20px; line-height: 28px; font-weight: 600; margin: 0 0 4px; }
+  .doc-lede { color: var(--fg-muted); margin: 0 0 32px; max-width: 760px; }
+  .part { margin: 48px 0 16px; font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--fg-muted); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 480px), 1fr)); gap: 28px 24px; }
+  .state > h3 { font-size: 13px; line-height: 18px; margin: 0 0 2px; font-weight: 600; }
+  .state > p.note { font-size: 12px; line-height: 16px; color: var(--fg-muted); margin: 0 0 10px; }
+
+  /* App primitives */
+  .page { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card); padding: 20px; }
+  .sec-h { font-size: 14px; font-weight: 600; margin: 0 0 4px; display: flex; align-items: center; gap: 8px; }
+  .sec-d { font-size: 13px; line-height: 18px; color: var(--fg-muted); margin: 0 0 16px; }
+  .small { font-size: 13px; line-height: 18px; }
+  .caption { font-size: 12px; line-height: 16px; font-weight: 500; }
+  .muted { color: var(--fg-muted); }
+  .subtle { color: var(--fg-subtle); }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }
+  .ico { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+  .ico.sm { width: 14px; height: 14px; }
+  .btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: var(--r-control); border: 1px solid var(--line-strong); background: var(--surface); color: var(--fg); font: 500 13px/1 inherit; font-family: inherit; cursor: pointer; white-space: nowrap; }
+  .btn:hover { background: var(--surface-hover); }
+  .btn.primary { background: var(--action); border-color: var(--action); color: #fff; }
+  .btn.primary:hover { filter: brightness(.95); }
+  .btn.primary[disabled] { opacity: .45; cursor: not-allowed; }
+  .btn.ghost { border-color: transparent; background: none; }
+  .btn.ghost:hover { background: var(--surface-hover); }
+  .btn.danger { color: var(--danger); }
+  .row { display: flex; align-items: center; gap: 8px; }
+  .between { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .stack { display: flex; flex-direction: column; gap: 12px; }
+  .chip { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 6px; border-radius: var(--r-control); font-size: 12px; font-weight: 500; background: var(--surface-muted); color: var(--fg-muted); white-space: nowrap; }
+  .chip.ok { background: var(--action-10); color: var(--action); }
+  .chip.wait { background: var(--amber-10); color: var(--amber); }
+  .chip.bad { background: var(--danger-10); color: var(--danger); }
+
+  /* Inputs */
+  .seg { display: inline-flex; align-self: flex-start; max-width: 100%; border: 1px solid var(--line-strong); border-radius: var(--r-control); overflow: hidden; }
+  .seg button { height: 30px; padding: 0 12px; border: 0; background: var(--surface); color: var(--fg-muted); font: 500 13px/1 inherit; font-family: inherit; display: inline-flex; gap: 6px; align-items: center; }
+  .seg button + button { border-left: 1px solid var(--line-strong); }
+  .seg button.on { background: var(--surface-muted); color: var(--fg); }
+  .seg button[disabled] { color: var(--fg-subtle); }
+  .field { display: flex; align-items: center; height: 34px; border: 1px solid var(--line-strong); border-radius: var(--r-control); background: var(--surface); overflow: hidden; }
+  .field:focus-within { outline: 2px solid hsl(163 94% 24% / .35); outline-offset: -1px; }
+  .field input { flex: 1; min-width: 0; height: 100%; border: 0; padding: 0 10px; font: 14px inherit; font-family: inherit; color: var(--fg); background: none; outline: none; }
+  .field .suffix { padding: 0 10px; height: 100%; display: flex; align-items: center; color: var(--fg-muted); background: var(--surface-subtle); border-left: 1px solid var(--line); font-size: 13px; }
+  .check { display: flex; align-items: center; gap: 6px; font-size: 13px; line-height: 18px; margin-top: 6px; }
+  .check.ok { color: var(--action); } .check.bad { color: var(--danger); } .check.wait { color: var(--fg-muted); }
+  .addr { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--r-card); background: var(--surface-subtle); }
+  .addr .host { font-weight: 500; }
+  .hint { display: flex; gap: 8px; align-items: flex-start; padding: 8px 12px; border: 1px solid var(--line); border-radius: var(--r-card); background: var(--surface-subtle); font-size: 13px; line-height: 18px; color: var(--fg-muted); }
+  .dns { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+  .dns th { text-align: left; font-weight: 500; color: var(--fg-muted); font-size: 12px; padding: 4px 8px; border-bottom: 1px solid var(--line); }
+  .dns td { padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  .copy { color: var(--fg-subtle); cursor: pointer; vertical-align: -3px; }
+  .spin { animation: spin 1s linear infinite; } @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* /system page */
+  .sys { display: grid; grid-template-columns: 1fr; gap: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card); overflow: hidden; }
+  @media (min-width: 900px) { .sys { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); } }
+  .sys-list { border-right: 1px solid var(--line); min-width: 0; }
+  .sys-head { padding: 16px 20px 12px; border-bottom: 1px solid var(--line); }
+  .tabs { display: flex; gap: 2px; margin-top: 12px; overflow-x: auto; }
+  .tabs button { height: 28px; padding: 0 10px; border: 0; border-radius: var(--r-control); background: none; color: var(--fg-muted); font: 500 13px/1 inherit; font-family: inherit; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .tabs button.on { background: var(--surface-muted); color: var(--fg); }
+  .tabs .n { color: var(--fg-subtle); font-variant-numeric: tabular-nums; }
+  .lrow { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 4px 12px; padding: 10px 20px; border-bottom: 1px solid var(--line); cursor: default; }
+  .lrow:hover { background: var(--surface-hover); }
+  .lrow.sel { background: var(--surface-muted); }
+  .lrow .h { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lrow .m { grid-column: 1 / -1; font-size: 12px; line-height: 16px; color: var(--fg-muted); }
+  .detail { padding: 20px; min-width: 0; }
+  .kv { display: grid; grid-template-columns: 110px minmax(0,1fr); gap: 6px 12px; font-size: 13px; margin: 12px 0 20px; }
+  .kv dt { color: var(--fg-muted); } .kv dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+  .steps { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+  .steps li { display: flex; gap: 10px; align-items: flex-start; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 13px; line-height: 18px; }
+  .box { width: 16px; height: 16px; border: 1px solid var(--line-strong); border-radius: 3px; flex: none; margin-top: 1px; display: grid; place-items: center; }
+  .box.on { background: var(--fg); border-color: var(--fg); color: #fff; }
+  .steps .t { font-weight: 500; }
+  .live { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--r-card); margin: 16px 0; font-size: 13px; flex-wrap: wrap; }
+  textarea { width: 100%; min-height: 64px; border: 1px solid var(--line-strong); border-radius: var(--r-control); padding: 8px 10px; font: 13px/18px inherit; font-family: inherit; color: var(--fg); resize: vertical; }
+
+  .notes { margin: 40px 0 0; padding: 16px 20px 16px 36px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card); font-size: 13px; line-height: 20px; max-width: 820px; }
+  .notes li { margin: 4px 0; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></symbol>
+  <symbol id="ok" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></symbol>
+  <symbol id="bad" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></symbol>
+  <symbol id="clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></symbol>
+  <symbol id="lock" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+  <symbol id="warn" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
+  <symbol id="ext" viewBox="0 0 24 24"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></symbol>
+  <symbol id="copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></symbol>
+  <symbol id="loader" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-6.22-8.56"/></symbol>
+  <symbol id="tick" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="plus" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+  <symbol id="refresh" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></symbol>
+</svg>
+
+<main>
+  <h1 class="doc-h1">Custom domains · mock</h1>
+  <p class="doc-lede">Part 1 is a new section on Billing (<span class="mono">/d/billing</span>), shown only to Group admins, below Current plan. Part 2 is a new System Admin page, <span class="mono">/system/custom-domains</span>. Neutral throughout; color only for state: green available or live, amber waiting, red taken, rejected or unreachable.</p>
+
+  <!-- ───────────────────────── PART 1 ───────────────────────── -->
+  <div class="part">Part 1 · Billing page, Custom domain section</div>
+  <div class="grid">
+
+    <div class="state">
+      <h3>1 · Plan doesn't include it (Standard)</h3>
+      <p class="note">The tier comes from the /pricing comparison: "Custom subdomain" Pro and up, "Custom DNS domain" Enterprise.</p>
+      <div class="page">
+        <h2 class="sec-h">Custom domain</h2>
+        <p class="sec-d">Open your workspace at your own address, such as acme.firma.bz. Emails and sign-in take people there.</p>
+        <div class="between hint" style="align-items:center">
+          <span class="row"><svg class="ico sm"><use href="#lock"/></svg>Available on Pro and up. Your own domain is on Enterprise.</span>
+          <button class="btn">See plans</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="state">
+      <h3>2 · Request a subdomain (Pro) · available</h3>
+      <p class="note">Checked as they type, after a short pause. "Your own domain" is shown but locked below Enterprise.</p>
+      <div class="page">
+        <h2 class="sec-h">Custom domain</h2>
+        <p class="sec-d">Open your workspace at your own address. Emails and sign-in take people there.</p>
+        <div class="stack">
+          <div class="seg" role="tablist">
+            <button class="on">Firma subdomain</button>
+            <button disabled><svg class="ico sm"><use href="#lock"/></svg>Your own domain · Enterprise</button>
+          </div>
+          <div>
+            <div class="field"><input value="acme" aria-label="Subdomain"><span class="suffix">.firma.bz</span></div>
+            <div class="check ok"><svg class="ico sm"><use href="#ok"/></svg>acme.firma.bz is available</div>
+          </div>
+          <div class="between">
+            <span class="small muted">A Firma admin sets it up, usually within one business day.</span>
+            <button class="btn primary">Request acme.firma.bz</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="state">
+      <h3>2b · Availability answers</h3>
+      <p class="note">One line under the field. Reserved names never say "taken", so they don't hint at Firma's own hosts.</p>
+      <div class="page stack">
+        <div><div class="field"><input value="datasentry" aria-label="Subdomain"><span class="suffix">.firma.bz</span></div>
+          <div class="check bad"><svg class="ico sm"><use href="#bad"/></svg>Already in use · try another</div></div>
+        <div><div class="field"><input value="admin" aria-label="Subdomain"><span class="suffix">.firma.bz</span></div>
+          <div class="check bad"><svg class="ico sm"><use href="#bad"/></svg>Not available · try another</div></div>
+        <div><div class="field"><input value="acme_co" aria-label="Subdomain"><span class="suffix">.firma.bz</span></div>
+          <div class="check bad"><svg class="ico sm"><use href="#bad"/></svg>Use letters, numbers and hyphens · 3 to 40 characters</div></div>
+        <div><div class="field"><input value="acmeco" aria-label="Subdomain"><span class="suffix">.firma.bz</span></div>
+          <div class="check wait"><svg class="ico sm spin"><use href="#loader"/></svg>Checking…</div></div>
+      </div>
+    </div>
+
+    <div class="state">
+      <h3>3 · Request your own domain (Enterprise)</h3>
+      <p class="note">They add the DNS record themselves; the request shows it, and so does the waiting state.</p>
+      <div class="page">
+        <h2 class="sec-h">Custom domain</h2>
+        <p class="sec-d">Open your workspace at your own address. Emails and sign-in take people there.</p>
+        <div class="stack">
+          <div class="seg"><button>Firma subdomain</button><button class="on">Your own domain</button></div>
+          <div>
+            <div class="field"><input value="portal.acme.com" aria-label="Domain"></div>
+            <div class="check ok"><svg class="ico sm"><use href="#ok"/></svg>portal.acme.com can be used</div>
+          </div>
+          <div class="hint" style="display:block">
+            At your DNS provider, add this record. Firma approves once it resolves.
+            <table class="dns"><thead><tr><th>Type</th><th>Name</th><th>Value</th></tr></thead>
+              <tbody><tr><td>CNAME</td><td class="mono">portal</td><td class="mono">cname.vercel-dns.com <svg class="ico sm copy"><use href="#copy"/></svg></td></tr></tbody></table>
+          </div>
+          <div class="between"><span class="small muted">Use a subdomain of your site, not the bare domain.</span><button class="btn primary">Request portal.acme.com</button></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="state">
+      <h3>4 · Waiting for approval</h3>
+      <p class="note">One request at a time per workspace. Cancel frees the name at once.</p>
+      <div class="page">
+        <h2 class="sec-h">Custom domain</h2>
+        <p class="sec-d">Open your workspace at your own address. Emails and sign-in take people there.</p>
+        <div class="addr between">
+          <span class="row"><svg class="ico subtle"><use href="#globe"/></svg><span class="host">acme.firma.bz</span><span class="chip wait"><svg class="ico sm"><use href="#clock"/></svg>Waiting for approval</span></span>
+          <button class="btn ghost">Cancel request</button>
+        </div>
+        <p class="small muted" style="margin:8px 0 0">Requested by Morgan Ellis · Nov 13. We email you when it's ready.</p>
+      </div>
+    </div>
+
+    <div class="state">
+      <h3>5 · Live</h3>
+      <p class="note">From here, sign-in hands people over to this address and every email links to it.</p>
+      <div class="page">
+        <h2 class="sec-h">Custom domain</h2>
+        <p class="sec-d">Open your workspace at your own address. Emails and sign-in take people there.</p>
+        <div class="addr between">
+          <span class="row"><svg class="ico subtle"><use href="#globe"/></svg><a class="host" href="#" style="color:inherit">acme.firma.bz</a><svg class="ico sm subtle"><use href="#ext"/></svg><span class="chip ok"><svg class="ico sm"><use href="#ok"/></svg>Live</span></span>
+          <button class="btn ghost danger">Remove</button>
+        </div>
+        <p class="small muted" style="margin:8px 0 0">Approved Nov 14. Removing it sends everyone back to www.firma.bz and frees the name.</p>
+      </div>
+    </div>
+
+    <div class="state">
+      <h3>6 · Live but unreachable</h3>
+      <p class="note">The daily check failed. Links and sign-in fall back to www until it's reachable again.</p>
+      <div class="page">
+        <h2 class="sec-h">Custom domain</h2>
+        <p class="sec-d">Open your workspace at your own address. Emails and sign-in take people there.</p>
+        <div class="addr between">
+          <span class="row"><svg class="ico subtle"><use href="#globe"/></svg><span class="host">portal.acme.com</span><span class="chip bad"><svg class="ico sm"><use href="#warn"/></svg>Unreachable</span></span>
+          <button class="btn ghost danger">Remove</button>
+        </div>
+        <p class="small muted" style="margin:8px 0 0">Not reachable since Nov 20 · the CNAME record for portal no longer points to Firma. Until it does, people use www.firma.bz.</p>
+      </div>
+    </div>
+
+    <div class="state">
+      <h3>7 · Not approved</h3>
+      <p class="note">Shows the admin's note. The field comes back, so they can ask for another name.</p>
+      <div class="page">
+        <h2 class="sec-h">Custom domain</h2>
+        <p class="sec-d">Open your workspace at your own address. Emails and sign-in take people there.</p>
+        <div class="hint" style="margin-bottom:12px"><svg class="ico sm" style="color:var(--danger);margin-top:2px"><use href="#bad"/></svg><span><b style="color:var(--fg);font-weight:500">acme.firma.bz wasn't approved.</b> "Please use your company name; Acme is another customer's trademark." · Firma, Nov 14</span></div>
+        <div class="field"><input placeholder="yourcompany" aria-label="Subdomain"><span class="suffix">.firma.bz</span></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ───────────────────────── PART 2 ───────────────────────── -->
+  <div class="part">Part 2 · /system/custom-domains</div>
+  <div class="sys">
+    <div class="sys-list">
+      <div class="sys-head">
+        <div class="between">
+          <div><div class="sec-h" style="margin:0">Custom domains</div><div class="small muted">Requests from Group admins. Set each one up on Vercel, then approve.</div></div>
+          <button class="btn"><svg class="ico sm"><use href="#plus"/></svg>Add for a group</button>
+        </div>
+        <div class="tabs">
+          <button class="on">Waiting <span class="n">2</span></button>
+          <button>Live <span class="n">4</span></button>
+          <button>Unreachable <span class="n">1</span></button>
+          <button>All</button>
+        </div>
+      </div>
+      <div class="lrow sel">
+        <span class="h">portal.acme.com</span><span class="chip">Own domain</span>
+        <span class="m">Acme Advisory · Enterprise · Morgan Ellis · 2 hours ago</span>
+      </div>
+      <div class="lrow">
+        <span class="h">northwind.firma.bz</span><span class="chip">Subdomain</span>
+        <span class="m">Northwind Partners · Pro · Sam Rivera · yesterday</span>
+      </div>
+    </div>
+
+    <div class="detail">
+      <div class="between"><div class="sec-h" style="margin:0">portal.acme.com</div><span class="chip wait"><svg class="ico sm"><use href="#clock"/></svg>Waiting</span></div>
+      <dl class="kv">
+        <dt>Workspace</dt><dd>Acme Advisory <span class="muted">· acme-advisory</span></dd>
+        <dt>Plan</dt><dd>Enterprise <span class="muted">· includes own domain</span></dd>
+        <dt>Requested</dt><dd>Morgan Ellis · Nov 13, 10:42</dd>
+      </dl>
+
+      <div class="caption muted" style="margin-bottom:6px">Set up · your own checklist, not saved</div>
+      <ol class="steps">
+        <li><span class="box on"><svg class="ico sm" style="stroke-width:3"><use href="#tick"/></svg></span><span><span class="t">Customer's DNS</span><br><span class="muted">CNAME <span class="mono">portal.acme.com → cname.vercel-dns.com</span> · checked automatically below</span></span></li>
+        <li><span class="box on"><svg class="ico sm" style="stroke-width:3"><use href="#tick"/></svg></span><span><span class="t">Vercel · add domain</span><br><span class="muted">Project firma-bz · Settings · Domains <svg class="ico sm copy"><use href="#copy"/></svg></span></span></li>
+        <li><span class="box"></span><span><span class="t">Google Cloud · authorized origin</span><br><span class="muted mono">https://portal.acme.com</span> <svg class="ico sm copy"><use href="#copy"/></svg></span></li>
+        <li><span class="box"></span><span><span class="t">Supabase · redirect URL</span><br><span class="muted mono">https://portal.acme.com/auth/callback</span> <svg class="ico sm copy"><use href="#copy"/></svg><br><span class="muted">Own domains only; *.firma.bz is already covered.</span></span></li>
+      </ol>
+
+      <div class="live">
+        <svg class="ico" style="color:var(--danger)"><use href="#bad"/></svg>
+        <span style="flex:1;min-width:200px"><b style="font-weight:500">Not reachable yet.</b> <span class="muted">portal.acme.com answers, but not from Firma (certificate pending on Vercel).</span></span>
+        <button class="btn"><svg class="ico sm"><use href="#refresh"/></svg>Check again</button>
+      </div>
+
+      <div class="caption muted" style="margin-bottom:6px">Note to the Group admin · required to reject</div>
+      <textarea placeholder="Optional when approving"></textarea>
+      <div class="between" style="margin-top:12px">
+        <button class="btn ghost danger">Reject</button>
+        <span class="row"><span class="small muted">Approve unlocks once the check passes</span><button class="btn primary" disabled>Approve</button></span>
+      </div>
+    </div>
+  </div>
+
+  <ul class="notes">
+    <li><b>Who sees what:</b> the section appears only to Group admins (the people who manage billing). Members and clients never see it.</li>
+    <li><b>Emails:</b> a System Admin gets one when a request arrives; the Group admin gets one when it's approved, not approved, or becomes unreachable.</li>
+    <li><b>"Add for a group":</b> opens the same form with a workspace picker and skips approval. That's how datasentry, keithmeyer and scarbluu get assigned after deploy. app.firma.bz stays neutral.</li>
+    <li><b>Sign-in hand-off</b> has no screen of its own: it's a server redirect of under a second. If it fails, people simply stay on www.firma.bz, signed in.</li>
+    <li><b>Not in this round:</b> adding the Vercel domain through the API, and a branded address showing only its own workspace.</li>
+  </ul>
+</main>
+</body>
+</html>

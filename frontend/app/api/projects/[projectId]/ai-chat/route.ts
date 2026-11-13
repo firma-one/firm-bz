@@ -4,8 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { resolveProjectContext } from '@/lib/resolve-project-context'
 import { canViewProject, canViewProjectInternalTabs } from '@/lib/permission-helpers'
 import { logger } from '@/lib/logger'
-import { getAnthropic, isAiConfigured, AI_MODEL } from '@/lib/ai/client'
-import { recordAiUsage } from '@/lib/ai/usage'
+import { isAiConfigured, AI_EFFORT, AI_MODEL } from '@/lib/ai/client'
 import { getGuardedAnthropic, meterAiCall, aiFailureResponse } from '@/lib/ai/guarded-client'
 import { BRIO_ANSWER_FAILED, BRIO_DATA_UNREADABLE } from '@/lib/ai/brio-failure'
 import {
@@ -36,6 +35,9 @@ function isClientDisconnect(error: unknown): boolean {
     const message = error instanceof Error ? error.message : ''
     return /invalid state|already closed|aborted|cancel/i.test(message)
 }
+
+/** Room for thinking as well as the answer: thinking counts toward `max_tokens`. */
+const CHAT_MAX_TOKENS = 2500
 
 /** Doc IDs look like "QSR-49": a short uppercase prefix, a hyphen, a number. */
 const DOC_ID_PATTERN = /\b[A-Z][A-Z0-9]{1,7}-\d{1,6}\b/g
@@ -175,8 +177,9 @@ export async function POST(
 
         const stream = await client.messages.create({
             model: AI_MODEL,
-            max_tokens: 700,
-            temperature: 0.2,
+            // An answer runs to ~150 words; the rest is room for thinking, which counts toward the cap.
+            max_tokens: CHAT_MAX_TOKENS,
+            output_config: { effort: AI_EFFORT.chat },
             // The system prompt and snapshot are identical on every turn of a conversation and run
             // to a few thousand tokens, so they are marked cacheable: a cache write costs 1.25x,
             // every later read 0.1x. A multi-turn conversation therefore pays full price once
@@ -211,6 +214,7 @@ export async function POST(
                 let outputTokens = 0
                 // The answer as it streamed, so the doc IDs it cited can be resolved once it ends.
                 let answerText = ''
+                let stopReason: string | null = null
                 try {
                     // Streaming reports tokens across two events: the input count arrives with
                     // message_start, the output count with message_delta at the end.
@@ -227,12 +231,20 @@ export async function POST(
                                 + (u?.cache_read_input_tokens ?? 0)
                         } else if (event.type === 'message_delta') {
                             outputTokens = event.usage?.output_tokens ?? 0
+                            stopReason = event.delta?.stop_reason ?? stopReason
                         } else if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
                             answerText += event.delta.text
                             controller.enqueue(encoder.encode(event.delta.text))
                         }
                     }
                     await meterAiCall(meterScope, { inputTokens, outputTokens })
+
+                    // A declined answer ends like a broken stream, not a clean close: a clean close
+                    // would present whatever came before the decline as a complete answer.
+                    if (stopReason === 'refusal') {
+                        controller.error(new Error('Answer declined'))
+                        return
+                    }
 
                     // The sources line (.claude/plans/brio-panel-redesign.md, item 7): the documents
                     // behind the doc IDs the answer cited, resolved within THIS engagement only, and

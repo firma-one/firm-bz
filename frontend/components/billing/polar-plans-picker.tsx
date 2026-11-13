@@ -1,5 +1,6 @@
 'use client'
 
+import type { AiFeature } from '@/lib/ai/features'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import type { BillingCatalogPlan } from '@/lib/billing/billing-catalog.types'
@@ -45,7 +46,7 @@ export type BillingPlanUsage = {
     clientContacts: number | null
     aiCredits?: {
         used: number
-        byFeature: Record<'brief' | 'summary' | 'chat' | 'searchInterpret' | 'filesAgent', number>
+        byFeature: Record<AiFeature, number>
         periodStartIso: string
         /** Period allowance from `entitledAiCredits`; null when none resolved. */
         allowance: number | null

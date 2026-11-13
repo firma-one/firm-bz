@@ -220,7 +220,7 @@ export const PRICING_COMPARISON: PricingComparisonCategory[] = [
             {
                 feature: "Credits included",
                 featureIcon: 'ai',
-                tooltip: "One credit is one AI action — an engagement summary, a firm brief, or a chat answer. Natural language document search (describe the document instead of assembling filters) costs half a credit. Every plan includes all four; the allowance is what differs. Credits reset each billing period and do not roll over.",
+                tooltip: "One credit is one AI action: an engagement summary, a firm brief, a chat answer, a drafted status update, reply or nudge, or a daily RAID check of new messages and memos. Your day on Home is free. Every plan includes every Brio feature; the allowance is what differs. Credits reset each billing period and do not roll over.",
                 values: {
                     Sandbox: "25 / month",
                     Standard: "500 / month",

@@ -5,9 +5,10 @@ vi.mock('@/lib/billing/open-polar-customer-portal', () => ({ openPolarCustomerPo
 
 import { AiCreditsRow } from './current-plan-summary'
 import type { BillingPlanUsage } from './polar-plans-picker'
+import { emptyFeatureCounts, type AiFeature } from '@/lib/ai/features'
 
-function usage(byFeature: Partial<Record<'brief' | 'summary' | 'chat' | 'searchInterpret' | 'filesAgent', number>>): BillingPlanUsage {
-    const full = { brief: 0, summary: 0, chat: 0, searchInterpret: 0, filesAgent: 0, ...byFeature }
+function usage(byFeature: Partial<Record<AiFeature, number>>): BillingPlanUsage {
+    const full = { ...emptyFeatureCounts(), ...byFeature }
     return {
         firms: null, clients: null, engagements: null, documents: null, clientContacts: null,
         aiCredits: {
@@ -21,9 +22,16 @@ function usage(byFeature: Partial<Record<'brief' | 'summary' | 'chat' | 'searchI
 }
 
 describe('AiCreditsRow', () => {
+    it('counts the newer features in the row they belong with, so the rows add up to the total', () => {
+        render(<AiCreditsRow usage={usage({ brief: 1, firmChat: 2, summary: 1, statusUpdate: 1, replyDraft: 1, chat: 1, reviewerChat: 3 })} />)
+        const bar = screen.getByLabelText(/Briefs and assistant: 3/)
+        expect(bar.getAttribute('aria-label')).toMatch(/Engagement summaries and drafts: 3/)
+        expect(bar.getAttribute('aria-label')).toMatch(/Engagement assistant chat: 4/)
+    })
+
     it('leaves Doc Search out now that Ask Brio is hidden', () => {
         render(<AiCreditsRow usage={usage({ brief: 1, chat: 2 })} />)
-        expect(screen.getByText('Firm briefs')).toBeTruthy()
+        expect(screen.getByText('Briefs and assistant')).toBeTruthy()
         expect(screen.getByText('Engagement assistant chat')).toBeTruthy()
         expect(screen.queryByText('Firm Doc Search')).toBeNull()
     })

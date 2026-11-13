@@ -11,6 +11,10 @@ import { ASSISTANT, BRIO_GREEN } from '@/lib/ai/assistant'
  * Not for attribute strings (aria-label, placeholder, title) or model prompts — those take
  * `ASSISTANT.name` directly, since a React element cannot go in a string and a screen reader
  * should hear "Brio", not "Brio A I".
+ *
+ * Color: where the mark HEADS a Brio surface (a panel or section header, the chat launcher, "Brio
+ * found N actions", a draft's label) pass `text-action`, the primary color, as the chat panel does.
+ * Inside a sentence ("let Brio draft it") it inherits the text's color. Deepak, 2026-11-12.
  */
 export function Brio({
     className = '',

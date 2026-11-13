@@ -15,7 +15,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog'
-import { AtSign, BarChart2, Bell, Building2, CalendarClock, ChevronDown, Check, DollarSign, Factory, FileText, FlaskConical, Globe, ImageIcon, ImagePlus, Linkedin, Lock, MapPin, MessagesSquare, Palette, PanelTop, RefreshCw, Repeat, RotateCcw, Shield, Trash2, Type, User, Users2, X } from 'lucide-react'
+import { AtSign, BarChart2, Bell, Building2, CalendarClock, ChevronDown, Check, DollarSign, Factory, FileText, FlaskConical, Globe, ImageIcon, ImagePlus, Linkedin, Lock, MapPin, MessagesSquare, Palette, PanelTop, RefreshCw, Repeat, RotateCcw, Shield, Sparkles, Trash2, Type, User, Users2, X } from 'lucide-react'
 import { PropertyList, PropertyRow, PROPERTY_FIELD_CLASS, PROPERTY_HINT_CLASS, PROPERTY_TEXTAREA_CLASS, SETTINGS_SECTION_HEADING_CLASS } from '@/components/ui/property-list'
 import { NotionTable, NotionTableBody, NotionTableCell, NotionTableHead, NotionTableHeader, NotionTableRow } from '@/components/ui/notion-table'
 import { Textarea } from '@/components/ui/textarea'
@@ -31,6 +31,8 @@ import { SelectWithCustomEntry } from '@/components/ui/select-with-custom-entry'
 import { FirmDriveSection } from '@/components/connectors/firm-drive-section'
 import { LoadFailed } from '@/components/ui/load-failed'
 import { failureFrom, failureReason } from '@/lib/files/action-failure'
+import { Brio } from '@/components/ui/brio'
+import { REVIEWER_DAILY_ANSWERS } from '@/lib/ai/features'
 
 function normaliseUrl(raw: string): string {
     const v = raw.trim()
@@ -194,6 +196,7 @@ export function FirmSettingsForm({
     const [extEngagementHealth, setExtEngagementHealth] = useState(true)
     const [extFileOrganization, setExtFileOrganization] = useState(false)
     const [extDocumentActivity, setExtDocumentActivity] = useState(false)
+    const [extBrioForReviewers, setExtBrioForReviewers] = useState(false)
     const [saving, setSaving] = useState(false)
     const [mainDirty, setMainDirty] = useState(false)
     const [appDirty, setAppDirty] = useState(false)
@@ -305,6 +308,7 @@ export function FirmSettingsForm({
                     setExtEngagementHealth(es.engagementHealth ?? true)
                     setExtFileOrganization(es.fileOrganization ?? false)
                     setExtDocumentActivity(es.documentActivity ?? false)
+                    setExtBrioForReviewers(es.brioForReviewers ?? false)
                     const savedDomainAccess = firm.allowDomainAccess === true
                     const savedDomain = firm.allowedEmailDomain ?? ''
                     if (!savedDomainAccess && !savedDomain) {
@@ -482,6 +486,7 @@ export function FirmSettingsForm({
                     engagementHealth: extEngagementHealth,
                     fileOrganization: extFileOrganization,
                     documentActivity: extDocumentActivity,
+                    brioForReviewers: extBrioForReviewers,
                 },
             })
             if (!result.ok) {
@@ -890,6 +895,14 @@ export function FirmSettingsForm({
                         ]).map(({ label, value, set }) => (
                             <SettingSwitchRow key={label} icon={<BarChart2 />} title={label} checked={value} onChange={(v) => { set(v); setAppDirty(true) }} disabled={!loaded} />
                         ))}
+                        <SettingSwitchRow
+                            icon={<Sparkles />}
+                            title={<>Let them ask <Brio /></>}
+                            description={`Answers come only from what they can already see: the published summary, deliverables at their stages and the discussions with them. Never internal notes, private files or the memo. Up to ${REVIEWER_DAILY_ANSWERS} answers per person a day, from your firm's credits.`}
+                            checked={extBrioForReviewers}
+                            onChange={(v) => { setExtBrioForReviewers(v); setAppDirty(true) }}
+                            disabled={!loaded}
+                        />
                     </section>
 
                     <section>

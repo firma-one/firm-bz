@@ -1,5 +1,5 @@
 import 'server-only'
-import { AI_MODEL } from '@/lib/ai/client'
+import { AI_EFFORT, AI_MODEL } from '@/lib/ai/client'
 import { getGuardedAnthropic, meterAiCall, type AiScope } from '@/lib/ai/guarded-client'
 import { logger } from '@/lib/logger'
 import { detectMissingFolders, type AnalysisSummary, type FileNode, type Finding } from './analyze'
@@ -258,8 +258,10 @@ export async function runFilesReview(params: {
         try {
             message = await client.messages.create({
                 model: AI_MODEL,
-                max_tokens: 2000,
-                temperature: 0,
+                // Room for thinking plus a batch of proposals: thinking counts toward the cap, and a
+                // cap sized for the proposals alone would push most reviews into a continuation.
+                max_tokens: 8000,
+                output_config: { effort: AI_EFFORT.filesAgent },
                 system: SYSTEM,
                 tools: TOOLS as any,
                 messages,
@@ -280,14 +282,27 @@ export async function runFilesReview(params: {
             outputTokens: message.usage?.output_tokens ?? 0,
         })
 
+        // A declined request has no proposals in it; say so rather than reading it as "nothing to change".
+        if (message.stop_reason === 'refusal') {
+            modelFailed = true
+            break
+        }
+
         const toolCalls = message.content.filter((b) => b.type === 'tool_use')
         if (toolCalls.length === 0) break
 
+        // What each call yielded, for the tool results a continuation has to send back.
+        const recorded: Array<{ id: string; text: string }> = []
         for (const call of toolCalls) {
             if (call.type !== 'tool_use') continue
             const result = validateProposals(call.name, call.input, params.nodes)
             proposals.push(...result.proposals)
             dropped += result.dropped
+            recorded.push({
+                id: call.id,
+                text: `Recorded ${result.proposals.length}.`
+                    + (result.dropped > 0 ? ` ${result.dropped} could not be used.` : ''),
+            })
         }
 
         // The model has answered; there is no further state for it to discover. Ending the turn
@@ -296,9 +311,18 @@ export async function runFilesReview(params: {
         // deliberately is not.
         if (message.stop_reason !== 'max_tokens') break
 
-        // Only when output was truncated mid-batch is another turn warranted.
+        // Only when output was truncated mid-batch is another turn warranted. The API requires every
+        // tool call to be answered by a tool result in the next user message, so the continuation
+        // carries one per call, then the instruction. A bare "Continue" after tool calls is refused
+        // outright, which used to end every large review as failed and drop the rest of its proposals.
         messages.push({ role: 'assistant', content: message.content })
-        messages.push({ role: 'user', content: 'Continue with any remaining proposals.' })
+        messages.push({
+            role: 'user',
+            content: [
+                ...recorded.map((r) => ({ type: 'tool_result' as const, tool_use_id: r.id, content: r.text })),
+                { type: 'text' as const, text: 'Continue with any remaining proposals. Do not repeat ones already recorded.' },
+            ],
+        })
     }
 
     return {

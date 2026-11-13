@@ -2,7 +2,7 @@
 
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { ArrowUpDown, AtSign, BellRing, CalendarClock, Check, Eye, Hash, Link2, Loader2, Lock, MessagesSquare, Send, Smile, Trash2, UserCheck, Users, X } from 'lucide-react'
+import { ArrowUpDown, AtSign, BellRing, CalendarClock, Check, Eye, Hash, Link2, Loader2, Lock, MessagesSquare, Send, Smile, Sparkles, Square, Trash2, UserCheck, Users, X } from 'lucide-react'
 import { cn, formatDateTimeWithTZ, formatRelativeTime } from '@/lib/utils'
 import { useRightPane } from '@/lib/right-pane-context'
 import { useAuth } from '@/lib/auth-context'
@@ -29,10 +29,14 @@ import { CommentText } from '@/components/comments/comment-text'
 import { REACTIONS, ReactionMark, type ReactionKey } from '@/components/comments/reactions'
 import { DocumentIcon } from '@/components/ui/document-icon'
 import { caretOffset } from '@/lib/ui/caret-offset'
-import { canBeRemindedOfInternalNote, canWriteInternalNote } from '@/lib/comments/internal-notes'
+import { awaitsFirmReply, canBeRemindedOfInternalNote, canWriteInternalNote } from '@/lib/comments/internal-notes'
 import { useToast } from '@/components/ui/toast'
 import { LoadFailed } from '@/components/ui/load-failed'
 import { failureFrom, failureReason } from '@/lib/files/action-failure'
+import { useBrioDraft } from '@/components/brio/use-brio-draft'
+import { BrioDraftLabel } from '@/components/brio/brio-draft-label'
+import { BRIO_DRAFT_FAILED } from '@/lib/ai/brio-failure'
+import { ASSISTANT, BRIO_GREEN } from '@/lib/ai/assistant'
 
 /*
  * Comments on a document or deliverable (.claude/plans/board-pane-comments-redesign.md). Shared
@@ -43,9 +47,34 @@ import { failureFrom, failureReason } from '@/lib/files/action-failure'
  * - Reminders: the composer's Remind button schedules that notification for everyone mentioned.
  * - Document tags: typing "#" opens a menu of the deliverable's documents (`taggableDocuments`);
  *   picking inserts "#DOC-ID ". In the thread a tag is a chip with the document's ID (its name on hover), which opens it.
- * - The thread: avatar and name (email on hover), relative time, actions on hover; filters and
- *   sorting in one compact row, once a thread is long enough to need them.
+ * - The thread: avatar and name (email on hover), the role of an author on the client side, relative
+ *   time, actions on hover; an internal note in a dashed box, tagged and muted; filters and sorting
+ *   in one compact row, once a thread is long enough to need them.
+ * - Reply drafts (.claude/plans/brio-features-round-2.md, §3.3): on a discussion awaiting the firm's
+ *   reply, Leads and Full Access contributors can have Brio draft one into the box, from the shared
+ *   comments only. It is theirs to edit from the first keystroke and goes nowhere until they press Reply.
  */
+
+/** A spot a Brio draft leaves for the sender to fill: "[date]", "[confirm the price]". */
+export const DRAFT_PLACEHOLDER = /\[[^\]]+\]/g
+
+export function countDraftPlaceholders(text: string): number {
+  return (text.match(DRAFT_PLACEHOLDER) ?? []).length
+}
+
+/**
+ * The composer's text with Brio's draft in it. What was there stays: an untouched starting tag
+ * ("#QSR-16 ") leads the draft, and anything the person had written stays above it, so a draft never
+ * replaces their words; "Discard draft" brings back exactly what was there.
+ */
+export function withDraft(before: string, draft: string, initialDraft = ''): string {
+  if (!before.trim()) return draft
+  if (before === initialDraft) return before + draft
+  return `${before.trimEnd()}\n\n${draft}`
+}
+
+/** The words over a reply Brio drafted. */
+export const REPLY_DRAFT_NOTE = 'drafted this from the thread. Internal notes are never used. Nothing is sent until you press Reply.'
 
 /** A document that can be tagged with "#" — one of the deliverable's, as its viewer may see them. */
 export type TaggableDocument = {
@@ -72,6 +101,11 @@ export interface DocumentDocCommentsPaneProps {
   initialDraft?: string
   /** A document of the thread to focus on: "About this file" shows only the comments tagging it. */
   focusDocId?: string
+  /**
+   * The discussion is resolved, where the host knows (the Discussions page): it awaits no reply, so
+   * Brio offers no draft. Elsewhere the latest shared comment decides alone.
+   */
+  resolved?: boolean
 }
 
 type CommentMessage = {
@@ -117,7 +151,7 @@ function nextMondayNineAm(): string {
 }
 const shortDateTime = (iso: string) => new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
 
-export function DocumentDocCommentsPane({ engagementId, documentId, documentName, documentMimeType, taggableDocuments, onOpenDocument, onChange, initialDraft, focusDocId }: DocumentDocCommentsPaneProps) {
+export function DocumentDocCommentsPane({ engagementId, documentId, documentName, documentMimeType, taggableDocuments, onOpenDocument, onChange, initialDraft, focusDocId, resolved = false }: DocumentDocCommentsPaneProps) {
   const rightPane = useRightPane()
   const { user } = useAuth()
   const myEmail = user?.email ?? ''
@@ -237,6 +271,21 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
   /** Every name a mention can be written with, for finding mentions in comments. */
   const knownNames = useMemo(() => firmMembers.flatMap((m) => [displayNameOf(m), m.name]).filter(Boolean), [firmMembers, displayNameOf])
 
+  // ── Brio's reply draft ─────────────────────────────────────────────────────
+  // Offered to the people who reply to the client for the firm (Leads and Full Access contributors),
+  // on a discussion whose latest shared comment is the client side's. The route reads the thread
+  // itself, shared comments only; nothing of this pane's is sent with it.
+  const awaitingReply = useMemo(
+    () => !resolved && awaitsFirmReply(messages, (userId) => memberById.get(userId)?.role),
+    [resolved, messages, memberById],
+  )
+  const draft = useBrioDraft(BRIO_DRAFT_FAILED)
+  /** A draft is in the box: what the box held before it, for "Discard draft" and "Rewrite". */
+  const [drafting, setDrafting] = useState<{ before: string } | null>(null)
+  /** The box follows the draft as it streams, until the person types: then the text is theirs. */
+  const followDraft = useRef(false)
+  const draftLabelId = `reply-draft-${documentId}`
+
   const fetchMessages = useCallback(async () => {
     setLoading(true)
     setLoadError(null)
@@ -340,6 +389,8 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
     if (!el) return
     el.style.height = 'auto'
     el.style.height = `${Math.min(el.scrollHeight, 192)}px`
+    // A draft being written stays in view as it grows past the box.
+    if (followDraft.current) el.scrollTop = el.scrollHeight
   }, [newContent])
 
   /** Opens, narrows or closes the mention menu from where the caret is. */
@@ -522,10 +573,68 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
     })
   }
 
+  // ── Brio's reply draft in the box ─────────────────────────────────────────
+
+  // As the draft streams, the box shows it after what was already there.
+  useEffect(() => {
+    if (!followDraft.current || !drafting) return
+    setNewContent(withDraft(drafting.before, draft.text, initialDraft ?? ''))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft.text])
+
+  /** Draft reply, and Rewrite: a fresh draft after what the box held before the first one. */
+  const startDraft = () => {
+    const before = drafting ? drafting.before : newContent
+    setDrafting({ before })
+    // A draft is a reply to the client, never an internal note.
+    setInternalMode(false)
+    setMentionQuery(null)
+    setTagQuery(null)
+    followDraft.current = true
+    void draft.start(`/api/projects/${engagementId}/documents/${documentId}/ai-reply-draft`)
+  }
+
+  /** Takes the draft out: the box holds what it did before, and nothing was sent. */
+  const discardDraft = () => {
+    followDraft.current = false
+    draft.reset()
+    if (drafting) setNewContent(drafting.before)
+    setDrafting(null)
+    requestAnimationFrame(() => textareaRef.current?.focus())
+  }
+
+  /** The person typed: from here the text is theirs. A draft still being written stops where it is. */
+  const takeOverDraft = () => {
+    if (!drafting || !followDraft.current) return
+    followDraft.current = false
+    if (draft.status !== 'streaming') return
+    if (draft.text) {
+      draft.stop()
+    } else {
+      // Nothing written yet: there's no draft, only what they're typing.
+      draft.reset()
+      setDrafting(null)
+    }
+  }
+
+  // A draft belongs to its discussion: opening another one in this pane takes it out.
+  const draftDocumentId = useRef(documentId)
+  useEffect(() => {
+    if (draftDocumentId.current === documentId) return
+    draftDocumentId.current = documentId
+    if (drafting) discardDraft()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [documentId])
+
+  const draftPlaceholders = drafting ? countDraftPlaceholders(newContent) : 0
+  /** A draft is sent once it's written and its [placeholders] are filled in. */
+  const draftBlocksSend = !!drafting && (draft.status === 'streaming' || draftPlaceholders > 0)
+  const canDraftReply = canNote && !readOnly && !loading && !loadError && awaitingReply
+
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault()
     const content = newContent.trim()
-    if (!content || submitting) return
+    if (!content || submitting || draftBlocksSend) return
     const recipients = internalMode
       ? currentMentions.filter(({ userId }) => canBeRemindedOfInternalNote(memberById.get(userId)?.role))
       : currentMentions
@@ -542,6 +651,11 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
       const newMsg = data.message
       setMessages((prev) => [...prev, newMsg])
       setNewContent(initialDraft ?? '')
+      if (drafting) {
+        followDraft.current = false
+        draft.reset()
+        setDrafting(null)
+      }
       setMentionQuery(null)
       setTagQuery(null)
       setMentionedUsers([])
@@ -912,6 +1026,13 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
     () => splitMentions(newContent, currentMentions.map((u) => u.name)),
     [newContent, currentMentions],
   )
+  /** In a draft, the [placeholders] left to fill are marked behind the text, as mentions are. */
+  const markPlaceholders = (text: string) => !drafting ? text : text.split(/(\[[^\]]+\])/g).map((part, k) => k % 2 === 1
+    ? <mark key={k} className="-mx-0.5 rounded-[3px] bg-status-waiting-bg px-0.5 text-transparent [box-decoration-break:clone]">{part}</mark>
+    : <React.Fragment key={k}>{part}</React.Fragment>)
+  /** The box holds a draft of Brio's: it says so above the text, until it's sent or discarded. */
+  const showDraftNote = !!drafting && (draft.status === 'streaming' || !!draft.text)
+  const ghostButton = 'inline-flex h-7 shrink-0 items-center gap-1 rounded-control px-2 text-small text-fg-muted hover:bg-surface-hover hover:text-fg disabled:opacity-40'
   const Composer = readOnly ? (
     <p className="shrink-0 text-small text-fg-muted">This engagement is completed, so it&apos;s read only.</p>
   ) : (
@@ -934,7 +1055,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
             role="radio"
             aria-checked={internalMode}
             onClick={() => setInternalMode(true)}
-            className={cn('inline-flex items-center gap-1 rounded-[4px] px-2 py-0.5 transition-colors', internalMode ? 'bg-tag-yellow-bg text-tag-yellow-fg' : 'text-fg-muted hover:text-fg')}
+            className={cn('inline-flex items-center gap-1 rounded-[4px] px-2 py-0.5 transition-colors', internalMode ? 'bg-surface-muted text-fg' : 'text-fg-muted hover:text-fg')}
           >
             <Lock className="h-3 w-3" /> Internal note
           </button>
@@ -956,10 +1077,17 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
         ref={composerRef}
         className={cn(
           'relative rounded-control border border-line-strong bg-surface focus-within:border-action/60 focus-within:ring-2 focus-within:ring-action/20',
-          internalMode && 'border-tag-yellow-fg/40 bg-tag-yellow-bg focus-within:border-tag-yellow-fg/60 focus-within:ring-tag-yellow-fg/20',
+          // An internal note is written in the box it's shown in: dashed, on the quieter surface.
+          internalMode && 'border-dashed bg-surface-subtle',
           submitting && 'opacity-60',
         )}
       >
+        {showDraftNote && (
+          <div id={draftLabelId} className="px-3 pt-2">
+            <BrioDraftLabel>{REPLY_DRAFT_NOTE}</BrioDraftLabel>
+          </div>
+        )}
+        <div className="relative">
         {/* Chips behind the mentioned names (react-mentions' approach): this layer mirrors the text
             box's text, transparent, and only the mention backgrounds show through the text box. */}
         <div ref={backdropRef} aria-hidden className={cn(COMPOSER_TEXT, 'pointer-events-none absolute inset-x-0 top-0 overflow-hidden text-transparent')}>
@@ -969,7 +1097,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
               <span key={i}>
                 {splitDocTags(t.value).map((d, j) => d.type === 'doc' && docByDocId.has(d.docId)
                   ? <mark key={j} className="-mx-0.5 rounded-[4px] bg-surface-muted px-0.5 text-transparent [box-decoration-break:clone]">{d.value}</mark>
-                  : <span key={j}>{d.value}</span>)}
+                  : <span key={j}>{markPlaceholders(d.value)}</span>)}
               </span>
             ))}
           {/* A trailing new line needs a character to take up its line, as it does in the text box. */}
@@ -983,7 +1111,10 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
           disabled={submitting}
           placeholder={internalMode ? 'Internal note · only Leads and Full Access contributors see this…' : 'Leave a comment…'}
           aria-label={internalMode ? 'Internal note' : 'Comment'}
+          aria-describedby={showDraftNote ? draftLabelId : undefined}
+          aria-busy={drafting && draft.status === 'streaming' ? true : undefined}
           onChange={(e) => {
+            takeOverDraft()
             setNewContent(e.target.value)
             syncQueries(e.target.value, e.target.selectionStart ?? e.target.value.length)
           }}
@@ -1037,6 +1168,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
           }}
           className={cn(COMPOSER_TEXT, 'relative block resize-none bg-transparent text-fg outline-none placeholder:text-fg-subtle disabled:cursor-not-allowed')}
         />
+        </div>
         <div className="flex items-center gap-0.5 px-1.5 pb-1.5">
           <Hint label="Mention someone (@)">
             <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={startMention} aria-label="Mention someone" className="flex h-7 w-7 items-center justify-center rounded-control text-fg-subtle hover:bg-surface-hover hover:text-fg-muted">
@@ -1080,21 +1212,74 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
               </div>
               {remindAt && (
                 <button type="button" onClick={() => { setRemindAt(''); setRemindOpen(false) }} className="mt-1 flex h-8 w-full items-center gap-2 rounded-control px-2 text-small text-fg-muted hover:bg-surface-hover">
-                  <X className="h-3.5 w-3.5" /> No reminder — notify now
+                  <X className="h-3.5 w-3.5" /> No reminder · notify now
                 </button>
               )}
             </PopoverContent>
           </Popover>
-          <span className="ml-auto hidden pr-1.5 text-caption text-fg-subtle sm:inline">⌘↵ to send</span>
-          <button
-            type="submit"
-            disabled={submitting || !newContent.trim()}
-            aria-label="Send comment"
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-control bg-action text-action-fg transition-colors hover:bg-action-hover disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-          </button>
+          {canDraftReply && !drafting && (
+            <Hint label={`${ASSISTANT.name} drafts a reply from the thread for you to edit. Internal notes are never used.`}>
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={startDraft}
+                className="ml-auto inline-flex h-7 shrink-0 items-center gap-1 rounded-control px-1.5 text-small text-fg-muted hover:bg-surface-hover hover:text-fg"
+              >
+                <Sparkles className="h-3.5 w-3.5" style={{ color: BRIO_GREEN }} aria-hidden />
+                Draft reply
+              </button>
+            </Hint>
+          )}
+          {/* With a draft in the box, it's sent from the draft's own row below. */}
+          {!drafting && (
+            <>
+              <span className={cn('hidden pr-1.5 text-caption text-fg-subtle sm:inline', !canDraftReply && 'ml-auto')}>⌘↵ to send</span>
+              <button
+                type="submit"
+                disabled={submitting || !newContent.trim()}
+                aria-label="Send comment"
+                className={cn('flex h-7 w-7 shrink-0 items-center justify-center rounded-control bg-action text-action-fg transition-colors hover:bg-action-hover disabled:cursor-not-allowed disabled:opacity-40', canDraftReply && 'ml-1')}
+              >
+                {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+              </button>
+            </>
+          )}
         </div>
+
+        {/* Brio's draft: what's left to fill, or why it couldn't be written, and what to do with it. */}
+        {drafting && (
+          <div className="flex items-center gap-1 border-t border-line py-1.5 pl-3 pr-1.5">
+            {draft.status === 'error' && draft.error ? (
+              <p role="alert" className="min-w-0 flex-1 text-small text-danger">{draft.error}</p>
+            ) : (
+              <span aria-live="polite" className="min-w-0 flex-1 truncate text-small text-fg-muted">
+                {draft.status === 'streaming'
+                  ? 'Writing…'
+                  : draftPlaceholders > 0
+                    ? `${draftPlaceholders} ${draftPlaceholders === 1 ? 'placeholder' : 'placeholders'} to fill`
+                    : ''}
+              </span>
+            )}
+            <button type="button" onClick={discardDraft} className={ghostButton}>Discard draft</button>
+            {draft.status === 'streaming' ? (
+              <button type="button" onClick={draft.stop} className={ghostButton}>
+                <Square className="h-3 w-3" aria-hidden /> Stop
+              </button>
+            ) : (
+              <button type="button" onClick={startDraft} disabled={submitting} className={ghostButton}>
+                {draft.status === 'error' && !draft.text ? 'Try again' : 'Rewrite'}
+              </button>
+            )}
+            <button
+              type="submit"
+              disabled={submitting || !newContent.trim() || draftBlocksSend}
+              className="ml-0.5 inline-flex h-7 shrink-0 items-center gap-1.5 rounded-control bg-action px-2.5 text-small font-medium text-action-fg transition-colors hover:bg-action-hover disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />}
+              {internalMode ? 'Post note' : 'Reply'}
+            </button>
+          </div>
+        )}
 
         {/* The document menu: just above the composer, where "#" was typed. */}
         {tagQuery && (
@@ -1210,6 +1395,9 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
                 const canDelete = !readOnly && isMine && isLastMsg && !hasMention
                 const isConfirmingDelete = deleteConfirmId === msg.id
                 const name = authorName(msg)
+                // Someone on the client side is named with their role, so who's asking is plain.
+                const authorRole = authorMember(msg)?.role
+                const clientRole = authorRole && !canWriteInternalNote(authorRole) ? ENGAGEMENT_ROLE_LABEL[authorRole] ?? null : null
                 const reacted = REACTIONS.filter((r) => (msg.reactions?.[r.key]?.count ?? 0) > 0)
                 return (
                   <div
@@ -1217,34 +1405,36 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
                     id={`comment-${msg.id}`}
                     className={cn(
                       'group relative flex gap-2.5 rounded-control px-2 py-2.5 transition-colors hover:bg-surface-hover',
-                      msg.isInternal && 'bg-tag-yellow-bg hover:bg-tag-yellow-bg',
                       focusedCommentId === msg.id && 'bg-surface-selected',
                       mentionedMe && 'shadow-[inset_2px_0_0_hsl(var(--ui-action))]',
                     )}
                   >
                     <div className="pt-0.5"><PersonAvatar person={{ name, avatarUrl: authorAvatar(msg) }} size={24} /></div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-baseline gap-2 pr-24">
+                    {/* An internal note sits in a dashed box, tagged and muted: never mistaken for a reply. */}
+                    <div className={cn('min-w-0 flex-1', msg.isInternal && 'rounded-control border border-dashed border-line-strong bg-surface-subtle px-2.5 py-2')}>
+                      <div className="flex items-baseline gap-1.5 pr-24">
                         <Hint label={msg.authorEmail ?? name}>
                           <span className="truncate text-small font-medium text-fg">{name}</span>
                         </Hint>
-                        <Hint label={formatDateTimeWithTZ(msg.createdAt)}>
-                          <span className="shrink-0 cursor-default text-caption text-fg-subtle">{formatRelativeTime(msg.createdAt)}</span>
-                        </Hint>
                         {msg.isInternal && (
                           <Hint label="Only Leads and Full Access contributors see this">
-                            <span className="inline-flex shrink-0 items-center gap-1 self-center text-caption font-medium text-tag-yellow-fg">
-                              <Lock className="h-2.5 w-2.5" /> Internal
-                            </span>
+                            <span className="inline-flex h-[18px] shrink-0 items-center self-center rounded-[4px] bg-tag-gray-bg px-1.5 text-[11px] font-semibold text-tag-gray-fg">Internal</span>
                           </Hint>
                         )}
+                        <span className="shrink-0 whitespace-nowrap text-caption text-fg-subtle">
+                          {clientRole && <>· {clientRole} </>}
+                          {'· '}
+                          <Hint label={formatDateTimeWithTZ(msg.createdAt)}>
+                            <span className="cursor-default">{formatRelativeTime(msg.createdAt)}</span>
+                          </Hint>
+                        </span>
                         {/* The reminder is state, not an action: it stays visible. */}
                         {reminderDates.has(msg.id) && (() => {
                           const due = reminderDates.get(msg.id)!
                           const when = `${new Date(due) > new Date() ? 'Reminder' : 'Reminded'} ${shortDateTime(due)}`
                           // Only the comment's author changes its reminder; others see when it is.
                           return isMine && !readOnly ? (
-                            <Hint label={`${when} — click to change`}>
+                            <Hint label={`${when} · click to change`}>
                               <button type="button" aria-label="Edit reminder" onClick={(e) => openReminderEdit(msg, e.currentTarget)} className="inline-flex h-5 w-5 shrink-0 items-center justify-center self-center rounded-[4px] text-tag-orange-fg hover:bg-tag-orange-bg">
                                 <BellRing className="h-3 w-3" />
                               </button>
@@ -1258,7 +1448,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
                           )
                         })()}
                       </div>
-                      <p className="mt-0.5 max-w-[700px] whitespace-pre-wrap break-words text-ui leading-[1.6] text-fg">
+                      <p className={cn('mt-0.5 max-w-[700px] whitespace-pre-wrap break-words text-ui leading-[1.6]', msg.isInternal ? 'text-fg-muted' : 'text-fg')}>
                         {renderContentWithMentions(msg.content)}
                       </p>
                       {reacted.length > 0 && (

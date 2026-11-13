@@ -1461,8 +1461,8 @@ export const sendReminderEmail = inngest.createFunction(
             const email = data?.user?.email
             if (!email) return { skipped: 'no-email' }
 
-            const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ''
-            const ctaUrl = event.data.ctaUrl ? `${appUrl}${event.data.ctaUrl}` : null
+            const { appLinkOrNull } = await import('@/lib/navigation/app-link')
+            const ctaUrl = await appLinkOrNull(event.data.ctaUrl, event.data.firmId ? { firmId: event.data.firmId } : null)
             const { subject, html } = renderReminderEmail({
                 entityName: event.data.entityName,
                 action: event.data.action,
@@ -1730,8 +1730,8 @@ export const sendRecurringReminderEmails = inngest.createFunction(
             const email = data?.user?.email
             if (!email) return { skipped: 'no-email' }
 
-            const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ''
-            const ctaUrl = event.data.ctaUrl ? `${appUrl}${event.data.ctaUrl}` : null
+            const { appLinkOrNull } = await import('@/lib/navigation/app-link')
+            const ctaUrl = await appLinkOrNull(event.data.ctaUrl, event.data.firmId ? { firmId: event.data.firmId } : null)
             const { subject, html } = renderReminderEmail({
                 entityName: event.data.entityName,
                 action: event.data.action,
@@ -1911,8 +1911,8 @@ export const sendDeliverableDueReminder = inngest.createFunction(
             const { sendEmail } = await import("@/lib/email")
             const { renderReminderEmail } = await import("@/lib/email-templates/reminder")
             const admin = createAdminClient()
-            const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ''
-            const cta = boardUrl ? `${appUrl}${boardUrl}` : null
+            const { appLinkOrNull } = await import('@/lib/navigation/app-link')
+            const cta = await appLinkOrNull(boardUrl, firmId ? { firmId } : { documentId })
             const { subject, html } = renderReminderEmail({
                 entityName,
                 action,
@@ -2023,5 +2023,42 @@ export const sendDeliverableDueReminder = inngest.createFunction(
         await step.run("send-overdue", () => fireOverdue())
 
         return { documentId, dueDate }
+    }
+)
+
+// ---------------------------------------------------------------------------
+// RAID log: Brio's daily check (Daily Cron)
+// ---------------------------------------------------------------------------
+
+/**
+ * Once a day, Brio reads each engagement's new comment messages and memos and suggests RAID log
+ * entries for a person to accept or dismiss (lib/raid/raid-check.ts, .claude/plans/brio-features-round-2.md §9).
+ *
+ * Only engagements with a comment message or a memo since their own last check run at all; deleted
+ * and completed engagements never do. So an engagement costs at most one credit per active day, plus
+ * any Check now a person presses. Each engagement is its own step: one that fails, or whose group is
+ * over its credit allowance, is skipped without stopping the rest, and its last check stays put.
+ */
+export const checkRaidLogsDaily = inngest.createFunction(
+    { id: "check-raid-logs-daily", triggers: [{ cron: "0 7 * * *" }] },
+    async ({ step }) => {
+        const candidates = await step.run("find-engagements-with-new-activity", async () => {
+            const { raidCheckCandidates } = await import("@/lib/raid/raid-check")
+            const { isAiConfigured } = await import("@/lib/ai/client")
+            return isAiConfigured() ? raidCheckCandidates() : []
+        })
+
+        const counts: Record<string, number> = {}
+        for (const candidate of candidates) {
+            if (!candidate) continue
+            const { id, firmId } = candidate
+            const result = await step.run(`check-${id}`, async () => {
+                const { runScheduledRaidCheck } = await import("@/lib/raid/raid-check")
+                return runScheduledRaidCheck({ id, firmId })
+            })
+            counts[result.status] = (counts[result.status] ?? 0) + 1
+        }
+
+        return { candidates: candidates.length, ...counts }
     }
 )

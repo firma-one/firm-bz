@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { SHARED_COMMENTS } from '@/lib/comments/internal-notes'
 import { assessOrganization } from '@/lib/ai/files-agent/assess'
+import { withoutMemoTree } from '@/lib/memos/memo-shared'
 import { googleDriveConnector } from '@/lib/google-drive-connector'
 import { overdueDeliverablesPenalty, planningGapCount } from './health-penalties'
 
@@ -108,6 +109,11 @@ export interface DeliverableProgress {
   isOverdue: boolean          // dueDate < now AND not yet approved
   createdAt: string | null    // settings.share.createdAt — when marked a Deliverable (bar start on the timeline)
   finalizedAt: string | null  // settings.share.finalizedAt — when approved (bar end for completed bars)
+  /**
+   * When it moved into its current stage (settings.activity.updatedAt), so "in review for 6 days"
+   * can be said. Null for deliverables never moved since that field was written.
+   */
+  stageSince?: string | null
 }
 
 export interface DeliveryPenalty {
@@ -707,8 +713,9 @@ export async function computeEngagementInsights(
       if (settings?.guest) sharesProgress.externalViewers++
     }
 
-    // Folder health (convert bigint fileSize to number)
-    const folderHealth = buildFolderHealthReport(docs.map((d) => ({
+    // Folder health (convert bigint fileSize to number). The memos folder is Firma's filing, not the
+    // firm's, so it is left out, as the Files agent leaves it out (lib/memos/memo-shared.ts).
+    const folderHealth = buildFolderHealthReport(withoutMemoTree(docs).map((d) => ({
       id: d.id,
       externalId: d.externalId,
       fileName: d.fileName,
@@ -946,6 +953,9 @@ export async function computeEngagementInsights(
         isOverdue: dueMs != null && stage !== 'approved' && dueMs < nowMs,
         createdAt: createdRaw ? new Date(createdRaw).toISOString() : null,
         finalizedAt: finalizedRaw ? new Date(finalizedRaw).toISOString() : null,
+        stageSince: st?.activity?.updatedAt && !Number.isNaN(new Date(st.activity.updatedAt).getTime())
+          ? new Date(st.activity.updatedAt).toISOString()
+          : null,
       }
     })
 

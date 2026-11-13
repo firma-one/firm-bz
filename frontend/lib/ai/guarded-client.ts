@@ -2,6 +2,7 @@ import 'server-only'
 import type Anthropic from '@anthropic-ai/sdk'
 import { getAnthropic } from './client'
 import { assertWithinAiCreditCap, AiCreditLimitError } from './credit-cap'
+import { assertWithinPersonLimits } from './person-limit'
 import { recordAiUsage, type AiFeature } from './usage'
 import { logger } from '@/lib/logger'
 
@@ -26,12 +27,15 @@ export interface AiScope {
  * This matters because metering was wired at three of four call sites for two days and nobody
  * noticed. Nothing enforced it. Now the only way to reach the model is through here.
  *
- * Throws `AiCreditLimitError` when over budget — before any tokens are spent.
+ * Throws `AiCreditLimitError` when over budget, or over the person's own limits (kind 'person',
+ * lib/ai/person-limit.ts, every feature, free ones included) — before any tokens are spent.
  */
 export async function getGuardedAnthropic(scope: AiScope): Promise<Anthropic | null> {
     const client = getAnthropic()
     if (!client) return null
     await assertWithinAiCreditCap({ firmId: scope.firmId, groupId: scope.groupId, feature: scope.feature })
+    // After the group's credits: a refusal there shouldn't count as a call the person started.
+    await assertWithinPersonLimits({ userId: scope.userId, feature: scope.feature })
     return client
 }
 

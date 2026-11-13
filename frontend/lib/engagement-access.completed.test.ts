@@ -65,10 +65,14 @@ const countOf = (source: string) => (source.match(/blockIfEngagement(FileMutatio
 // A route that forgets the check still works, so nothing else would say so. A new write route fails here
 // until it takes a side.
 const REFUSES: Record<string, number> = {
+    'ai-notes-proposals': 1, // Proposals only, but none could be applied to a read-only engagement.
+    'ai-status-update': 1, // Drafts an update to the client; sending one is refused too.
     'ai-summary': 1,
     'documents/create-link': 1,
     'documents/[documentId]': 1,
     'documents/[documentId]/assignee': 1,
+    'documents/[documentId]/ai-nudge-draft': 1, // Drafts a comment, and comments are refused once completed.
+    'documents/[documentId]/ai-reply-draft': 1, // Drafts a comment, and comments are refused once completed.
     'documents/[documentId]/blocked': 1,
     'documents/[documentId]/doc-comments': 3,
     'documents/[documentId]/doc-comments/reactions': 1,
@@ -84,10 +88,16 @@ const REFUSES: Record<string, number> = {
     'documents/[documentId]/sharing/unlock': 1,
     'files-agent/apply': 1,
     'files-agent/scaffold': 1,
+    'memos': 1, // Saving an internal memo writes a file to the engagement's storage.
+    'memos/[documentId]/applied': 1, // Notes an applied action on a memo, and applying is refused too.
+    'raid': 1, // Adding to the RAID log; a completed engagement's log is read only.
+    'raid/[itemId]': 1, // Accept, dismiss, edit, close or reopen an entry.
+    'raid/check': 1, // Check now: nothing found could enter a read-only log.
     'shares/order': 1,
 }
 const STAYS_OPEN = [
     'ai-chat', // Asking changes nothing in the engagement.
+    'ai-chat/reviewer', // Asking changes nothing, for Reviewers and Limited Access contributors either.
     'ai-feedback',
     'documents/bulk-download',
     'documents/[documentId]/doc-comments/read', // One person's own state.

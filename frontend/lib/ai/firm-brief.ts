@@ -2,9 +2,10 @@ import { createHash } from 'crypto'
 import type { FirmInsightsResponse } from '@/app/api/firms/[firmId]/insights/route'
 import { logger } from '@/lib/logger'
 import { engagementPace, PACE_META, type PaceKey } from '@/lib/insights/firm-engagement-pace'
-import { AI_MODEL, completeText } from './client'
+import { AI_EFFORT, AI_MODEL, completeText } from './client'
 import { getGuardedAnthropic, meterAiCall } from './guarded-client'
 import { assertWithinAiCreditCap } from './credit-cap'
+import { assertWithinPersonLimits } from './person-limit'
 
 export interface FirmBrief {
     content: string
@@ -228,8 +229,8 @@ export function buildSnapshot(data: FirmInsightsResponse): string {
     return lines.join('\n')
 }
 
-const BRIEF_MAX_TOKENS = 500
-const BRIEF_TEMPERATURE = 0.4
+/** The brief is ~150 words; the rest is room for thinking, which counts toward the cap. */
+const BRIEF_MAX_TOKENS = 2000
 
 /** What the model is asked: today's date and the firm's snapshot. */
 function briefRequest(data: FirmInsightsResponse): string {
@@ -253,11 +254,13 @@ export async function generateFirmBrief(
     if (meta?.firmId) {
         await assertWithinAiCreditCap({ firmId: meta.firmId, feature: 'brief' })
     }
+    // The person's own limits too, as getGuardedAnthropic would (lib/ai/person-limit.ts).
+    await assertWithinPersonLimits({ userId: meta?.userId, feature: 'brief' })
     return completeText({
         system: SYSTEM,
         userMessage: briefRequest(data),
         maxTokens: BRIEF_MAX_TOKENS,
-        temperature: BRIEF_TEMPERATURE,
+        effort: AI_EFFORT.brief,
         label: 'firm-brief',
         onUsage: meta?.firmId
             ? (u) => meterAiCall(
@@ -289,7 +292,7 @@ export async function streamFirmBrief(
     const stream = await client.messages.create({
         model: AI_MODEL,
         max_tokens: BRIEF_MAX_TOKENS,
-        temperature: BRIEF_TEMPERATURE,
+        output_config: { effort: AI_EFFORT.brief },
         system: SYSTEM,
         messages: [{ role: 'user', content: briefRequest(data) }],
         stream: true,
@@ -298,13 +301,16 @@ export async function streamFirmBrief(
     let full = ''
     let inputTokens = 0
     let outputTokens = 0
+    let stopReason: string | null = null
     try {
         // Streaming reports tokens across two events: input with message_start, output with
         // message_delta at the end.
         for await (const event of stream) {
             if (event.type === 'message_start') inputTokens = event.message.usage?.input_tokens ?? 0
-            else if (event.type === 'message_delta') outputTokens = event.usage?.output_tokens ?? 0
-            else if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+            else if (event.type === 'message_delta') {
+                outputTokens = event.usage?.output_tokens ?? 0
+                stopReason = event.delta?.stop_reason ?? stopReason
+            } else if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
                 full += event.delta.text
                 onDelta(event.delta.text)
             }
@@ -316,7 +322,8 @@ export async function streamFirmBrief(
     if (signal?.aborted) return null
 
     const content = full.trim()
-    if (!content) return null
+    // A declined brief is not saved, even when some text came before the decline.
+    if (!content || stopReason === 'refusal') return null
     try {
         await meterAiCall(scope, { inputTokens, outputTokens })
     } catch (error) {

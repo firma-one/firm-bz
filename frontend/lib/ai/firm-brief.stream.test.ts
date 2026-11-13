@@ -5,7 +5,7 @@ vi.mock('./guarded-client', () => ({
     getGuardedAnthropic: async () => ({ messages: { create } }),
     meterAiCall: meter,
 }))
-vi.mock('./client', () => ({ AI_MODEL: 'model', completeText: vi.fn() }))
+vi.mock('./client', () => ({ AI_MODEL: 'model', AI_EFFORT: { brief: 'low' }, completeText: vi.fn() }))
 vi.mock('./credit-cap', () => ({ assertWithinAiCreditCap: vi.fn() }))
 
 import { streamFirmBrief } from './firm-brief'

@@ -4,7 +4,35 @@ import { logger } from '@/lib/logger'
 
 // Haiku is the default for every call in this codebase so far: the work is short-form
 // summarization and grounded Q&A over a pre-computed payload, not deep reasoning.
-export const AI_MODEL = 'claude-haiku-4-5-20251001'
+//
+// Haiku 5.5, moved from Haiku 4.5 on 2026-11-12: a tenth of the price per token. Two things changed
+// with it, and every call site follows both:
+// - No `temperature`, `top_p` or `top_k`. Haiku 5.5 refuses non-default values with a 400, and so
+//   does every model once the SDK moves to API version 2026-10-21. Tone comes from the prompt.
+// - It thinks before answering, and thinking counts toward `max_tokens`. Each surface sets an
+//   effort level (AI_EFFORT) and a cap with room for the thinking as well as the answer; the old
+//   caps were sized for the answer alone and would cut answers off.
+export const AI_MODEL = 'claude-haiku-5-5'
+
+/**
+ * How much Brio thinks on each surface. Lower is faster and cheaper; the model may skip thinking
+ * entirely on a simple request.
+ *
+ * `low` where the answer is short and grounded in a payload it is handed. `medium` where the output
+ * must follow a strict shape (the summary's seven fixed headings and placeholder lines) or weigh
+ * judgments (the Files agent's proposals).
+ */
+export const AI_EFFORT = {
+    chat: 'low',
+    brief: 'low',
+    summary: 'medium',
+    interpret: 'low',
+    filesAgent: 'medium',
+    draft: 'low',
+    dayBrief: 'low',
+    proposals: 'medium',
+    raid: 'medium',
+} as const satisfies Record<string, 'low' | 'medium' | 'high'>
 
 let cached: Anthropic | null = null
 
@@ -34,8 +62,9 @@ export function extractText(message: Anthropic.Message): string {
 export async function completeText(params: {
     system: string
     userMessage: string
+    /** Room for the thinking as well as the answer: thinking counts toward it. */
     maxTokens: number
-    temperature?: number
+    effort: 'low' | 'medium' | 'high'
     label: string
     /**
      * Called with the token counts when the call succeeds, so the caller can meter it.
@@ -52,10 +81,16 @@ export async function completeText(params: {
         const message = await client.messages.create({
             model: AI_MODEL,
             max_tokens: params.maxTokens,
-            temperature: params.temperature ?? 0.3,
+            output_config: { effort: params.effort },
             system: params.system,
             messages: [{ role: 'user', content: params.userMessage }],
         })
+        // A declined request is a normal 200 with no answer in it: treat it as no result, the same
+        // as a failure, so the page renders without the AI section.
+        if (message.stop_reason === 'refusal') {
+            logger.warn(`AI completion declined (${params.label})`)
+            return null
+        }
         if (params.onUsage) {
             try {
                 await params.onUsage({

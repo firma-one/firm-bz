@@ -2,6 +2,8 @@ import { ASSISTANT } from '@/lib/ai/assistant'
 import { DemoClient, DemoEngagement, DemoFirm, countFilesInFolder } from './static-demo-data'
 import { DemoDeliverable, DeliverableStatus, getDemoDeliverables } from './demo-deliverables'
 import type { OpeningFact } from '@/lib/ai/chat-suggestions'
+import type { FirmChatLink, FirmChatSources } from '@/lib/ai/firm-chat'
+import { sortByPace, PACE_META, type FirmEngagementRow } from '@/lib/insights/firm-engagement-pace'
 
 /**
  * What Brio "says" in the public demo. The demo has no backend and no model, so the firm brief and
@@ -109,6 +111,11 @@ export function buildDemoFirmBrief(firm: DemoFirm): string {
 export interface DemoChatTurn {
     question: string
     answer: string
+    /**
+     * A firm answer's links line, as the firm chat route appends it: the engagements the answer
+     * quotes (the panel links them to the tour's pages) and how many it drew on. Firm Overview only.
+     */
+    sources?: FirmChatSources
 }
 
 /**
@@ -208,3 +215,98 @@ export function filesChat(engagement: DemoEngagement): DemoChatTurn[] {
 export const DEMO_FREEFORM_REPLY =
     `This is a demo, so ${ASSISTANT.name} answers the suggested questions from the sample data. `
     + `Sign up to ask about your own engagements.`
+
+// ─── Firm chat ───────────────────────────────────────────────────────────────
+
+const FIRM_SLIPPING = 'Which engagements are slipping?'
+const FIRM_DUE_THIS_WEEK = 'What is due across the firm this week?'
+const FIRM_UNTRACKED = "Which engagements can't be tracked yet?"
+/** The firm Overview's prompt hints, in the order the panel offers them. */
+export const DEMO_FIRM_CHAT_QUESTIONS = [FIRM_SLIPPING, FIRM_DUE_THIS_WEEK, FIRM_UNTRACKED]
+
+/** The firm Overview's reply to anything typed rather than picked. */
+export const DEMO_FIRM_FREEFORM_REPLY =
+    `This is a demo, so ${ASSISTANT.name} answers the suggested questions from the sample data. `
+    + 'Sign up to ask about your own firm.'
+
+const firmLink = (r: FirmEngagementRow): FirmChatLink => ({ name: r.name, clientSlug: r.clientSlug, slug: r.slug })
+
+export interface DemoFirmCanned {
+    answer: string
+    named: FirmEngagementRow[]
+}
+
+/**
+ * Canned answers for the firm Overview in the shape the model writes them (quoted names, a table),
+ * built from the sample firm's rows, so the tour shows what the app does without a model call.
+ * `named` is the engagements the answer quotes: what the route would resolve into links.
+ */
+export function demoFirmCannedAnswer(question: string, rows: FirmEngagementRow[], nowMs: number): DemoFirmCanned | null {
+    const paced = sortByPace(rows, nowMs)
+    if (question === FIRM_SLIPPING) {
+        const slipping = paced.filter((r) => ['overdue', 'behind', 'slightly_behind'].includes(r.pace.key) || r.deliverables.overdue > 0)
+        if (slipping.length === 0) {
+            return { answer: 'Nothing is slipping. Every engagement in progress is on pace, or can\'t be tracked yet.', named: [] }
+        }
+        const late = slipping.filter((r) => r.pace.key === 'overdue').length
+        const table = [
+            '| Engagement | Client | Pace | Overdue | Due date |',
+            '|---|---|---|---|---|',
+            ...slipping.map((r) => {
+                const due = r.dueDate ? `${shortDate(r.dueDate)}${r.pace.key === 'overdue' ? ' · passed' : ''}` : 'Not set'
+                const overdue = r.deliverables.overdue > 0 ? plural(r.deliverables.overdue, 'deliverable') : 'None'
+                return `| "${r.name}" | ${r.clientName} | ${PACE_META[r.pace.key].label} | ${overdue} | ${due} |`
+            }),
+        ].join('\n')
+        return {
+            answer: `**${plural(slipping.length, 'engagement')}** ${slipping.length === 1 ? 'is' : 'are'} slipping`
+                + (late > 0 ? `; ${late} ${late === 1 ? 'is' : 'are'} past ${late === 1 ? 'its' : 'their'} due date.` : '.')
+                + `\n\n${table}`,
+            named: slipping,
+        }
+    }
+    if (question === FIRM_DUE_THIS_WEEK) {
+        const week = paced.filter((r) => r.pace.daysLeft != null && r.pace.daysLeft >= 0 && r.pace.daysLeft <= 7)
+        if (week.length > 0) {
+            return {
+                answer: `**${plural(week.length, 'engagement')}** ${week.length === 1 ? 'is' : 'are'} due in the next 7 days:\n\n`
+                    + week.map((r) => `- "${r.name}" for "${r.clientName}", due ${shortDate(r.dueDate!)}, `
+                        + `${plural(r.deliverables.total - r.deliverables.approved, 'deliverable')} not yet approved`).join('\n'),
+                named: week,
+            }
+        }
+        const next = paced
+            .filter((r) => r.pace.daysLeft != null && r.pace.daysLeft > 7)
+            .sort((a, b) => (a.pace.daysLeft ?? 0) - (b.pace.daysLeft ?? 0))[0]
+        return {
+            answer: 'No engagement is due in the next 7 days.'
+                + (next ? ` The next is "${next.name}" for "${next.clientName}", due ${shortDate(next.dueDate!)}, in ${plural(next.pace.daysLeft ?? 0, 'day')}.` : ''),
+            named: next ? [next] : [],
+        }
+    }
+    if (question === FIRM_UNTRACKED) {
+        const untracked = paced.filter((r) => r.pace.key === 'no_due_date' || r.pace.key === 'no_deliverables')
+        if (untracked.length === 0) {
+            return { answer: 'Every engagement in progress has a due date and deliverables, so each one can be tracked for pace.', named: [] }
+        }
+        return {
+            answer: `**${plural(untracked.length, 'engagement')}** can't be tracked yet:\n\n`
+                + untracked.map((r) => `- "${r.name}" for "${r.clientName}": ${r.pace.key === 'no_due_date' ? 'no due date' : 'no deliverables yet'}`).join('\n'),
+            named: untracked,
+        }
+    }
+    return null
+}
+
+/**
+ * Prompt hints and their answers for the firm Overview (Ask Brio about the firm), each with the
+ * links line the route would send. Computed relative to `nowMs`, so call it in the browser.
+ */
+export function firmChat(rows: FirmEngagementRow[], nowMs: number): DemoChatTurn[] {
+    return DEMO_FIRM_CHAT_QUESTIONS.flatMap((question) => {
+        const canned = demoFirmCannedAnswer(question, rows, nowMs)
+        return canned
+            ? [{ question, answer: canned.answer, sources: { engagements: canned.named.map(firmLink), drewOn: rows.length } }]
+            : []
+    })
+}

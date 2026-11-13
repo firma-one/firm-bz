@@ -147,13 +147,21 @@ export function AiCreditsRow({ usage }: { usage: BillingPlanUsage | null | undef
     // Doc Search's Ask Brio mode is hidden (2026-10-15), so it no longer spends credits and its row
     // is left out — unless this period already has credits from it, which stay listed so the rows
     // still add up to the total. It drops off by itself when the period rolls over.
-    const AI_FEATURES: Array<{ key: keyof typeof ai.byFeature; label: string; fill: string }> = [
-        { key: 'brief' as const, label: 'Firm briefs', fill: chart('slate') },
-        { key: 'searchInterpret' as const, label: 'Firm Doc Search', fill: chart('teal') },
-        { key: 'summary' as const, label: 'Engagement summaries', fill: chart('purple') },
-        { key: 'chat' as const, label: 'Engagement assistant chat', fill: chart('pink') },
-        { key: 'filesAgent' as const, label: 'Files agent', fill: chart('brown') },
-    ].filter((f) => f.key !== 'searchInterpret' || (ai.byFeature.searchInterpret ?? 0) > 0)
+    // A row may total several features. The features added 2026-11-12 join the row they belong
+    // with rather than taking new hues (the palette above has no more to spare): the firm assistant
+    // and Your day's rewrites with firm briefs, drafts, notes and the RAID check with the
+    // engagement's other writing, Reviewers' questions with the engagement chat. Every
+    // credit-spending feature is in a row, so the rows still add up to the total. Your day's morning
+    // brief is free (weight 0) and never has credits to show.
+    const sumOf = (keys: readonly (keyof typeof ai.byFeature)[]) => keys.reduce((n, k) => n + (ai.byFeature[k] ?? 0), 0)
+    const featureRows: Array<{ key: string; keys: readonly (keyof typeof ai.byFeature)[]; label: string; fill: string }> = [
+        { key: 'brief', keys: ['brief', 'firmChat', 'dayBriefRewrite'], label: 'Briefs and assistant', fill: chart('slate') },
+        { key: 'searchInterpret', keys: ['searchInterpret'], label: 'Firm Doc Search', fill: chart('teal') },
+        { key: 'summary', keys: ['summary', 'statusUpdate', 'replyDraft', 'nudgeDraft', 'notesProposals', 'raidCheck'], label: 'Engagement summaries and drafts', fill: chart('purple') },
+        { key: 'chat', keys: ['chat', 'reviewerChat'], label: 'Engagement assistant chat', fill: chart('pink') },
+        { key: 'filesAgent', keys: ['filesAgent'], label: 'Files agent', fill: chart('brown') },
+    ]
+    const AI_FEATURES = featureRows.filter((f) => f.key !== 'searchInterpret' || sumOf(f.keys) > 0)
     const fmt = (n: number) => (n % 1 === 0 ? String(n) : n.toFixed(1))
     const since = new Date(ai.periodStartIso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
 
@@ -198,10 +206,10 @@ export function AiCreditsRow({ usage }: { usage: BillingPlanUsage | null | undef
                 <div
                     className="mb-3 flex h-2 w-full gap-px overflow-hidden rounded-full bg-surface-muted"
                     role="img"
-                    aria-label={AI_FEATURES.map(({ key, label }) => `${label}: ${fmt(ai.byFeature[key] ?? 0)}`).join(', ')}
+                    aria-label={AI_FEATURES.map(({ keys, label }) => `${label}: ${fmt(sumOf(keys))}`).join(', ')}
                 >
-                    {AI_FEATURES.map(({ key, label, fill }) => {
-                        const value = ai.byFeature[key] ?? 0
+                    {AI_FEATURES.map(({ key, keys, label, fill }) => {
+                        const value = sumOf(keys)
                         if (value <= 0) return null
                         const denominator = hasLiveCap ? ai.allowance! : ai.used
                         const pct = denominator > 0 ? (value / denominator) * 100 : 0
@@ -231,7 +239,7 @@ export function AiCreditsRow({ usage }: { usage: BillingPlanUsage | null | undef
                 const denominator = hasLiveCap ? ai.allowance! : ai.used
                 const share = (n: number) => (denominator > 0 ? `${((n / denominator) * 100).toFixed(1)}%` : '—')
                 const rows = [
-                    ...AI_FEATURES.map(({ key, label, fill }) => ({ key: String(key), label, fill, value: ai.byFeature[key] ?? 0 })),
+                    ...AI_FEATURES.map(({ key, keys, label, fill }) => ({ key, label, fill, value: sumOf(keys) })),
                     ...(hasLiveCap ? [{ key: 'remaining', label: 'Remaining', fill: 'var(--ui-surface-muted)', value: remaining! }] : []),
                 ]
                 return (

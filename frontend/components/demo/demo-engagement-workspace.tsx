@@ -15,6 +15,9 @@ import { DemoFileList } from '@/components/demo/demo-file-list'
 import { DemoEngagementOverview } from '@/components/demo/demo-engagement-overview'
 import { DemoEngagementBoard } from '@/components/demo/demo-engagement-board'
 import { DemoEngagementComments } from '@/components/demo/demo-engagement-comments'
+import { DemoRaidTab, demoRaidLog } from '@/components/demo/demo-raid'
+import { raidOpenCount } from '@/lib/raid/raid-shared'
+import { DISCUSSIONS_MEMO_PARAM, DISCUSSIONS_VIEW_PARAM } from '@/components/projects/discussions-switch'
 import { DemoEngagementAudit } from '@/components/demo/demo-engagement-audit'
 import { DemoEngagementMembers } from '@/components/demo/demo-engagement-members'
 import { DemoBrioChat } from '@/components/demo/demo-brio-chat'
@@ -46,6 +49,9 @@ export function DemoEngagementWorkspace({ client, engagement }: DemoEngagementWo
     const handleTabChange = (value: string) => {
         const params = new URLSearchParams(searchParams.toString())
         params.set('tab', value)
+        // Discussions' sub-tab and open memo belong to that tab, as the app's path navigation drops them.
+        params.delete(DISCUSSIONS_VIEW_PARAM)
+        params.delete(DISCUSSIONS_MEMO_PARAM)
         router.push(`${pathname}?${params.toString()}`, { scroll: false })
     }
 
@@ -117,7 +123,11 @@ export function DemoEngagementWorkspace({ client, engagement }: DemoEngagementWo
                         <DemoEngagementBoard engagement={engagement} />
                     </TabsContent>
                     <TabsContent value="comments" className="m-0">
-                        <DemoEngagementComments engagement={engagement} />
+                        <DemoEngagementComments
+                            engagement={engagement}
+                            raidCount={raidOpenCount(demoRaidLog().items)}
+                            renderRaid={() => <DemoRaidTab />}
+                        />
                     </TabsContent>
                     <TabsContent value="audit" className="m-0 flex min-h-0 flex-1 flex-col data-[state=inactive]:hidden">
                         <DemoEngagementAudit engagement={engagement} />

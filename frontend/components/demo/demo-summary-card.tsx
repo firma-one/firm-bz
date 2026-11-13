@@ -18,12 +18,44 @@ import {
 import { useRightPane } from '@/lib/right-pane-context'
 import { findUnfilledSections } from '@/lib/ai/summary-sections'
 import { buildDemoSummary, type DemoSummaryInput } from '@/lib/demo/demo-summary'
+import { StatusUpdateAction } from '@/components/projects/status-update-action'
+import type { StatusUpdateComposer } from '@/lib/actions/status-update'
 
 const CONTROL = 'inline-flex h-7 items-center gap-1.5 rounded-control border border-line bg-surface px-2 text-small transition-colors hover:border-line-strong hover:bg-surface-hover'
 /** The header's actions, as in the app: 28px icon buttons named by a Hint and an aria-label. */
 const ICON_BUTTON = 'inline-flex h-7 w-7 items-center justify-center rounded-control text-fg-muted transition-colors duration-ui-fast hover:bg-surface-hover hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action/30'
 /** The tour's signed-in person, who published the sample and publishes any rewrite. */
 const TOUR_PUBLISHER = 'Demo User'
+
+/** The tour's status update: the sample's own deliverables, a canned draft, nobody emailed. */
+function statusUpdateDemo(input: DemoSummaryInput, today: Date): { composer: StatusUpdateComposer; draft: string } {
+    const ref = (d: { docId: string | null; name: string }) => (d.docId ? `${d.docId} · ${d.name}` : d.name)
+    const approved = input.deliverables.filter((d) => d.stage === 'approved')
+    const inReview = input.deliverables.filter((d) => d.stage === 'in_review')
+    const changes = [
+        ...(approved.length ? [{ kind: 'approved' as const, text: `${approved.map(ref).join(', ')} approved` }] : []),
+        ...(inReview.length ? [{ kind: 'inReview' as const, text: `${inReview.map(ref).join(', ')} in review` }] : []),
+        ...(input.resolvedThreads ? [{ kind: 'resolved' as const, text: `${input.resolvedThreads} threads resolved` }] : []),
+    ]
+    const name = (d: { docId: string | null; name: string }) => (d.docId ? `${d.name} (${d.docId})` : d.name)
+    const draft = [
+        approved.length
+            ? `Since our last update, ${approved.map(name).join(' and ')} ${approved.length === 1 ? 'has' : 'have'} been approved.`
+            : `Since our last update, work on ${input.engagementName} has moved forward.`,
+        inReview.length ? `${inReview.map(name).join(' and ')} ${inReview.length === 1 ? 'is' : 'are'} now with you for review.` : '',
+        '[Add next steps]',
+    ].filter(Boolean).join('\n\n')
+    return {
+        composer: {
+            changes,
+            since: new Date(today.getTime() - 14 * 86400000).toISOString(),
+            sinceIsLastUpdate: true,
+            hasSummary: true,
+            recipients: [{ userId: 'tour-reviewer', name: 'Dana Whitfield', role: 'Reviewer' }],
+        },
+        draft,
+    }
+}
 
 /**
  * The tour's Engagement Summary: a sample already "published" two days ago, and a Rewrite with
@@ -188,6 +220,10 @@ export function DemoSummaryCard({ input, today }: { input: DemoSummaryInput; tod
                         </div>
                     ) : (
                         <div className="flex shrink-0 items-center gap-0.5">
+                            {/* As the app: an update to the client, drafted from the published summary. */}
+                            <div className="mr-1.5">
+                                <StatusUpdateAction projectId="tour" firmName="Your firm" demo={statusUpdateDemo(input, today)} />
+                            </div>
                             <Hint label={copied === 'published' ? 'Copied' : 'Copy as Markdown'}>
                                 <button type="button" onClick={() => copy(published.content, 'published')} aria-label="Copy the summary as Markdown" className={ICON_BUTTON}>
                                     {copied === 'published' ? <Check className="h-4 w-4 text-status-done-icon" /> : <Copy className="h-4 w-4" />}

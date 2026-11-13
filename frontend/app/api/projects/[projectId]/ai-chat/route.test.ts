@@ -26,6 +26,7 @@ vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), error: vi.fn(), warn: 
 vi.mock('@/lib/ai/client', () => ({
     isAiConfigured: () => true,
     AI_MODEL: 'test-model',
+    AI_EFFORT: { chat: 'low' },
     getAnthropic: () => ({ messages: { create } }),
 }))
 vi.mock('@/lib/ai/credit-cap', () => ({ assertWithinAiCreditCap: creditCap, AiCreditLimitError: LimitError }))

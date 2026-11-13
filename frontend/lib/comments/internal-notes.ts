@@ -36,3 +36,25 @@ export function canWriteInternalNote(role: EngagementRole | string | null | unde
 export function canBeRemindedOfInternalNote(role: EngagementRole | string | null | undefined): boolean {
     return canWriteInternalNote(role)
 }
+
+/**
+ * Whether a discussion awaits the firm's reply: its latest shared comment (rule 3, internal notes
+ * don't count) is by a Limited Access contributor or a Reviewer. The rule behind the Discussions
+ * page's "Awaiting reply" and the insights' unanswered threads, as a function for the places that
+ * hold the comments themselves: the comments pane and Brio's reply drafts.
+ *
+ * `comments` oldest first. `roleOf` is the author's engagement role; someone no longer on the
+ * engagement has none and awaits nothing. A resolved discussion awaits no one either: callers that
+ * know it's resolved check that too.
+ */
+export function awaitsFirmReply(
+    comments: readonly { isInternal?: boolean | null; authorUserId: string | null }[],
+    roleOf: (userId: string) => EngagementRole | string | null | undefined,
+): boolean {
+    for (let i = comments.length - 1; i >= 0; i--) {
+        const c = comments[i]
+        if (c.isInternal) continue
+        return !!c.authorUserId && isExternal(roleOf(c.authorUserId))
+    }
+    return false
+}

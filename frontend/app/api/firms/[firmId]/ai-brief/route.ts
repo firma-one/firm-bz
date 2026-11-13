@@ -127,7 +127,6 @@ type Regenerated =
 async function regenerate(
     request: NextRequest,
     firmId: string,
-    existingSettings: Record<string, unknown>,
     userId?: string,
     /** Already loaded by the caller (GET compares them with the cached brief first). */
     loaded?: FirmInsightsResponse | null,
@@ -148,13 +147,27 @@ async function regenerate(
     const insights = loaded ?? await loadInsights(request, firmId)
     if (!insights) return { brief: null, reason: BRIO_DATA_UNREADABLE, status: 502 }
 
-    const content = await generateFirmBrief(insights, { firmId, userId })
+    // The person's own limits are checked inside (lib/ai/person-limit.ts): over them, the same answer
+    // as the group's credits, so GET falls back to the brief it has and POST says why.
+    let content: string | null
+    try {
+        content = await generateFirmBrief(insights, { firmId, userId })
+    } catch (error) {
+        if (error instanceof AiCreditLimitError) {
+            logger.info(`AI brief skipped for firm ${firmId}: ${error.kind} limit reached`)
+            return { brief: null, reason: error.message, status: 429 }
+        }
+        throw error
+    }
     if (!content) return { brief: null, reason: BRIO_BRIEF_FAILED, status: 502 }
 
     const brief: FirmBrief = { content, generatedAt: new Date().toISOString(), fingerprint: briefFingerprint(insights) }
+    // Settings read again here, after generation, as the streaming path does: the call takes
+    // seconds, and writing back a copy read before it would revert anything saved meanwhile.
+    const { settings } = await readCachedBrief(firmId)
     await prisma.firm.update({
         where: { id: firmId },
-        data: { settings: { ...existingSettings, aiBrief: brief } as never },
+        data: { settings: { ...settings, aiBrief: brief } as never },
     })
     return { brief }
 }
@@ -172,14 +185,14 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
         if (!isAiConfigured()) return NextResponse.json({ brief: null, configured: false })
 
-        const { settings, brief } = await readCachedBrief(firmId)
+        const { brief } = await readCachedBrief(firmId)
         const insights = isBriefFresh(brief) ? await loadInsights(request, firmId) : null
         // Without insights to compare (the fetch failed), an age-fresh brief is served as before.
         if (isBriefFresh(brief, insights ? briefFingerprint(insights) : undefined)) {
             return NextResponse.json({ brief, configured: true })
         }
 
-        const fresh = await regenerate(request, firmId, settings, auth.userId, insights)
+        const fresh = await regenerate(request, firmId, auth.userId, insights)
         if (fresh.brief) return NextResponse.json({ brief: fresh.brief, configured: true })
         // Fall back to the stale brief rather than showing nothing when generation fails. With none
         // to fall back on, say why (the credit limit, or Brio's failure), so the card doesn't vanish.
@@ -201,8 +214,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
         if (request.nextUrl.searchParams.get('stream') === '1') return await streamRewrite(request, firmId, auth.userId)
 
-        const { settings } = await readCachedBrief(firmId)
-        const fresh = await regenerate(request, firmId, settings, auth.userId)
+        const fresh = await regenerate(request, firmId, auth.userId)
         if (!fresh.brief) return NextResponse.json({ error: fresh.reason }, { status: fresh.status })
 
         return NextResponse.json({ brief: fresh.brief, configured: true })
