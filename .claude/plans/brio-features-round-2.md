@@ -307,3 +307,26 @@ Overview card's skeleton (counts + rows), `MemosSkeleton` (list rows beside a bo
 `live` ref was only cleared on unmount, never set again on React's dev double-mount, so the loaded log
 was dropped. Now set on every mount; a StrictMode test fails without the fix. /tour never showed it
 because the tour uses `DemoRaidTab`, which doesn't fetch.
+
+## 11. Per-person AI limits, and Rewrite charged (Deepak, 2026-11-13: "it should be there")
+
+Your day was free, so it skipped both credit windows, and Rewrite called Brio whenever the items had
+changed, with no count. The credit windows were per billing group and read from the ledger, which is
+written when a call finishes. So: free features were unbounded, one person could drain a group, and
+parallel requests all passed on the same count.
+
+**As built:** `lib/ai/person-limit.ts`, called from the one gate (`getGuardedAnthropic`, after the
+credit cap) and from `generateFirmBrief`, which calls the model by its own route. Every call a person
+starts is written to `platform.ai_call_starts` (migration `20261113140000_ai_call_starts`), then
+counted oldest first: 10 a minute and 200 in any 24 hours across all features, plus Your day's own caps
+(the day's first brief twice, rewrites four times). Numbers in `AI_PERSON_LIMITS` (`lib/ai/features.ts`).
+A refused call deletes its own row; a person's rows older than a day are deleted on their next call.
+Refusals are `AiCreditLimitError` with kind `person`, so every route already answers 429 in the limit's
+words. Calls without a person (the daily RAID check) aren't limited here. If the table can't be read or
+written the call goes ahead and the failure is logged, so until the migration is applied every AI call
+logs "AI person limit not checked".
+
+Rewrite that replaces today's brief is its own feature, `dayBriefRewrite`, 1 credit, billed under
+"Briefs and assistant" (was "Firm briefs and assistant"); the morning brief stays free. The Rewrite
+button's tooltip says "1 credit, only when your items have changed". Brio for Reviewers keeps its own
+10 a day in its route.

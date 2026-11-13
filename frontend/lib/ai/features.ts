@@ -18,6 +18,7 @@ export const AI_FEATURES = [
     'notesProposals',
     'reviewerChat',
     'dayBrief',
+    'dayBriefRewrite',
     'raidCheck',
 ] as const
 
@@ -53,9 +54,12 @@ export const CREDIT_WEIGHTS: Record<AiFeature, number> = {
     // Free, decided 2026-11-12. Brio writes it unasked, once per person per day, so charging it
     // would drain a group's shared allowance without anyone choosing to spend: 2 users on the
     // 25-credit Sandbox plan would use it all on this alone. Still recorded, so its token cost
-    // stays visible in the ledger. One-per-day is its guard, since a free action never trips the
-    // burst cap.
+    // stays visible in the ledger. A free action skips the credit windows, so its guard is the
+    // per-person limit below (AI_PERSON_LIMITS): at most twice a day.
     dayBrief: 0,
+    // Rewrite is a person's choice, so it costs what any other Brio action costs (Deepak,
+    // 2026-11-13). Only when their items changed: an unchanged day answers without a model call.
+    dayBriefRewrite: 1,
     // The RAID log's Brio check (.claude/plans/brio-features-round-2.md, §9): one batched call per
     // engagement over its new comment messages and memos. At most one run per engagement per active
     // day (the daily check runs only where there is something new since the last one), plus each
@@ -68,6 +72,28 @@ export const CREDIT_WEIGHTS: Record<AiFeature, number> = {
  * spend its credits freely. Here rather than in the route so Settings can say it.
  */
 export const REVIEWER_DAILY_ANSWERS = 10
+
+/**
+ * Per-person limits on AI calls, for every feature, free or paid (lib/ai/person-limit.ts). The credit
+ * windows in credit-cap.ts are per billing group and count credits; these count one person's calls, so
+ * nobody (or no script with their session) can drain a group, and a free action can't loop unbounded.
+ * Sized above what a person does by hand: in normal use they never fire.
+ */
+export const AI_PERSON_LIMITS = {
+    /** Calls a minute across every Brio feature. */
+    perMinute: 10,
+    /** Calls in any 24 hours across every Brio feature. */
+    perDay: 200,
+    /**
+     * Calls in any 24 hours for a feature that needs its own cap. Your day: the morning brief (twice
+     * covers a timezone change) and four rewrites. Brio for Reviewers keeps its own daily cap
+     * (REVIEWER_DAILY_ANSWERS), counted in its route.
+     */
+    perFeaturePerDay: {
+        dayBrief: 2,
+        dayBriefRewrite: 4,
+    } as Partial<Record<AiFeature, number>>,
+}
 
 /** A zeroed count per feature, for summing ledger rows. */
 export function emptyFeatureCounts(): Record<AiFeature, number> {

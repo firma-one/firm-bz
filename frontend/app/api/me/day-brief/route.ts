@@ -26,6 +26,11 @@ import {
  *       the person's timezone); written when the day has changed since, so at most once a day.
  * POST  Rewrite. Writes a new one only when what a person changed has changed since today's
  *       (fingerprintDayBrief); otherwise answers today's with `unchanged: true` and no model call.
+ *       Replacing today's brief costs a credit (`dayBriefRewrite`); with none today yet, it writes
+ *       the day's first, free, as GET would.
+ *
+ * Both go through the person's own limits (lib/ai/person-limit.ts): two first briefs and four
+ * rewrites a day. Over them, or over the group's credits, the answer is 429 with the limit's words.
  *
  * Either way, nothing waiting, overdue or on this week's calendar means no brief and no model call:
  * `empty: true`.
@@ -81,7 +86,7 @@ async function write(userId: string, timezone: string, now: Date, todays: DayBri
         return answer({ brief: null, empty: true })
     }
 
-    const result = await generateDayBrief(input, { userId })
+    const result = await generateDayBrief(input, { userId }, todays ? 'dayBriefRewrite' : 'dayBrief')
     if (!result.ok) {
         if (result.reason === 'unconfigured') return answer({ brief: null, available: false })
         logger.warn('Day brief: the model returned no brief (declined, cut off or empty)')

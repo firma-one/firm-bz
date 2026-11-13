@@ -149,12 +149,13 @@ export function AiCreditsRow({ usage }: { usage: BillingPlanUsage | null | undef
     // still add up to the total. It drops off by itself when the period rolls over.
     // A row may total several features. The features added 2026-11-12 join the row they belong
     // with rather than taking new hues (the palette above has no more to spare): the firm assistant
-    // with firm briefs, drafts, notes and the RAID check with the engagement's other writing, Reviewers' questions
-    // with the engagement chat. Every credit-spending feature is in a row, so the rows still add up
-    // to the total. Your day is free (weight 0) and never has credits to show.
+    // and Your day's rewrites with firm briefs, drafts, notes and the RAID check with the
+    // engagement's other writing, Reviewers' questions with the engagement chat. Every
+    // credit-spending feature is in a row, so the rows still add up to the total. Your day's morning
+    // brief is free (weight 0) and never has credits to show.
     const sumOf = (keys: readonly (keyof typeof ai.byFeature)[]) => keys.reduce((n, k) => n + (ai.byFeature[k] ?? 0), 0)
     const featureRows: Array<{ key: string; keys: readonly (keyof typeof ai.byFeature)[]; label: string; fill: string }> = [
-        { key: 'brief', keys: ['brief', 'firmChat'], label: 'Firm briefs and assistant', fill: chart('slate') },
+        { key: 'brief', keys: ['brief', 'firmChat', 'dayBriefRewrite'], label: 'Briefs and assistant', fill: chart('slate') },
         { key: 'searchInterpret', keys: ['searchInterpret'], label: 'Firm Doc Search', fill: chart('teal') },
         { key: 'summary', keys: ['summary', 'statusUpdate', 'replyDraft', 'nudgeDraft', 'notesProposals', 'raidCheck'], label: 'Engagement summaries and drafts', fill: chart('purple') },
         { key: 'chat', keys: ['chat', 'reviewerChat'], label: 'Engagement assistant chat', fill: chart('pink') },

@@ -59,7 +59,8 @@ function enforceAiCreditCaps(): boolean {
 export class AiCreditLimitError extends Error {
     constructor(
         message: string,
-        readonly kind: 'period' | 'burst',
+        /** 'person': one person's own limits (lib/ai/person-limit.ts), not the group's credits. */
+        readonly kind: 'period' | 'burst' | 'person',
         readonly limit: number,
         readonly used: number,
     ) {

@@ -6,7 +6,7 @@ import type { MyWork } from '@/lib/home/my-work'
  * Home loaders and the model are stand-ins. Nothing reaches Anthropic.
  */
 
-const { who, store, data, create, recordAiUsage, cfg } = vi.hoisted(() => ({
+const { who, store, data, create, recordAiUsage, cfg, personLimit } = vi.hoisted(() => ({
     who: { user: { id: 'u1' } as { id: string } | null },
     store: { dayBrief: null as unknown, timezone: 'Europe/London' },
     data: {
@@ -16,6 +16,7 @@ const { who, store, data, create, recordAiUsage, cfg } = vi.hoisted(() => ({
     create: vi.fn(),
     recordAiUsage: vi.fn(async () => {}),
     cfg: { configured: true },
+    personLimit: vi.fn(async (_p: { userId?: string | null; feature: string }) => {}),
 }))
 
 vi.mock('@/utils/supabase/server', () => ({
@@ -62,8 +63,10 @@ vi.mock('@/lib/ai/client', () => ({
 }))
 vi.mock('@/lib/ai/credit-cap', () => ({ assertWithinAiCreditCap: vi.fn(async () => {}), AiCreditLimitError: class extends Error {} }))
 vi.mock('@/lib/ai/usage', () => ({ recordAiUsage }))
+vi.mock('@/lib/ai/person-limit', () => ({ assertWithinPersonLimits: personLimit }))
 
 import { GET, POST } from './route'
+import { AiCreditLimitError } from '@/lib/ai/credit-cap'
 
 const DOC = '11111111-1111-4111-8111-111111111111'
 
@@ -88,6 +91,7 @@ beforeEach(() => {
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date('2026-11-12T08:00:00Z'))
     who.user = { id: 'u1' }
+    personLimit.mockClear()
     store.dayBrief = null
     store.timezone = 'Europe/London'
     data.work = oneThread
@@ -147,12 +151,34 @@ describe('/api/me/day-brief', () => {
         expect(create).toHaveBeenCalledTimes(1)
     })
 
-    it('Rewrite after a change writes a new brief', async () => {
+    it('Rewrite after a change writes a new brief, for a credit, within the person\'s limits', async () => {
         await GET()
+        expect(personLimit).toHaveBeenLastCalledWith({ userId: 'u1', feature: 'dayBrief' })
         data.work = { ...oneThread, needsYou: [...oneThread.needsYou, { ...oneThread.needsYou[0], id: 'review:x', kind: 'deliverable_review', title: 'Pricing' }] }
         const { body } = await json(await POST())
         expect(body.unchanged).toBeUndefined()
         expect(create).toHaveBeenCalledTimes(2)
+        // The morning brief is free; a rewrite is a choice, so it is its own, charged, feature.
+        expect(personLimit).toHaveBeenLastCalledWith({ userId: 'u1', feature: 'dayBriefRewrite' })
+        expect(recordAiUsage).toHaveBeenLastCalledWith(expect.objectContaining({ feature: 'dayBriefRewrite', userId: 'u1' }))
+    })
+
+    it('Rewrite with no brief today yet writes the day\'s first, free', async () => {
+        const { body } = await json(await POST())
+        expect(body.brief).toMatchObject({ date: '2026-11-12' })
+        expect(recordAiUsage).toHaveBeenLastCalledWith(expect.objectContaining({ feature: 'dayBrief' }))
+    })
+
+    it('Rewrite over the day\'s limit answers 429 in the limit\'s words, and keeps today\'s brief', async () => {
+        await GET()
+        const saved = store.dayBrief
+        data.work = { ...oneThread, needsYou: [...oneThread.needsYou, { ...oneThread.needsYou[0], id: 'review:x', kind: 'deliverable_review', title: 'Pricing' }] }
+        personLimit.mockRejectedValueOnce(new AiCreditLimitError("You've rewritten Your day 4 times today, the most for one day.", 'person', 4, 4))
+        const { status, body } = await json(await POST())
+        expect(status).toBe(429)
+        expect(body.error).toBe("You've rewritten Your day 4 times today, the most for one day.")
+        expect(create).toHaveBeenCalledTimes(1)
+        expect(store.dayBrief).toBe(saved)
     })
 
     it('with nothing to brief, answers empty and never calls the model', async () => {

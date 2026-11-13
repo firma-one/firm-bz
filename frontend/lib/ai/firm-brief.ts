@@ -5,6 +5,7 @@ import { engagementPace, PACE_META, type PaceKey } from '@/lib/insights/firm-eng
 import { AI_EFFORT, AI_MODEL, completeText } from './client'
 import { getGuardedAnthropic, meterAiCall } from './guarded-client'
 import { assertWithinAiCreditCap } from './credit-cap'
+import { assertWithinPersonLimits } from './person-limit'
 
 export interface FirmBrief {
     content: string
@@ -253,6 +254,8 @@ export async function generateFirmBrief(
     if (meta?.firmId) {
         await assertWithinAiCreditCap({ firmId: meta.firmId, feature: 'brief' })
     }
+    // The person's own limits too, as getGuardedAnthropic would (lib/ai/person-limit.ts).
+    await assertWithinPersonLimits({ userId: meta?.userId, feature: 'brief' })
     return completeText({
         system: SYSTEM,
         userMessage: briefRequest(data),

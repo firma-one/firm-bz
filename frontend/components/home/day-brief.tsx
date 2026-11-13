@@ -5,6 +5,7 @@ import { AlertCircle, Loader2 } from "lucide-react"
 import { Brio } from "@/components/ui/brio"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { LoadingAnnouncement, ShimmerBar } from "@/components/ui/shimmer"
+import { Hint } from "@/components/ui/tooltip"
 import { ASSISTANT, ASSISTANT_POLICY } from "@/lib/ai/assistant"
 import { BRIO_DAY_FAILED, BRIO_TOO_SLOW, BRIO_UNREACHABLE_RETRY } from "@/lib/ai/brio-failure"
 import { AI_TIMEOUT_MS, AiTimeoutError, fetchWithTimeout } from "@/lib/ai/fetch-timeout"
@@ -25,6 +26,9 @@ import { HomeEmptyLine, HomeSection } from "./home-section"
 
 /** The Needs you section's anchor, for "Show the items". */
 export const NEEDS_YOU_ANCHOR = "needs-you"
+
+/** Rewrite's tooltip: what it costs. */
+export const DAY_BRIEF_REWRITE_HINT = "1 credit, only when your items have changed"
 
 /** What Rewrite says when nothing has changed since the brief was written. */
 export const DAY_BRIEF_UNCHANGED = `Nothing has changed since ${ASSISTANT.name} wrote this.`
@@ -115,10 +119,14 @@ function DayBriefCard({
                 <a href={`#${needsYouId}`} className={buttonVariants({ variant: "outline", size: "sm" })}>
                     Show the items
                 </a>
-                <Button type="button" variant="ghost" size="sm" onClick={onRewrite} disabled={rewriting}>
-                    {rewriting && <Loader2 aria-hidden className="h-3.5 w-3.5 animate-spin" />}
-                    {rewriting ? "Rewriting…" : "Rewrite"}
-                </Button>
+                {/* The morning brief is free; a rewrite is a choice, so it costs a credit, and only
+                    when the items changed (an unchanged day answers without asking Brio). */}
+                <Hint label={DAY_BRIEF_REWRITE_HINT}>
+                    <Button type="button" variant="ghost" size="sm" onClick={onRewrite} disabled={rewriting}>
+                        {rewriting && <Loader2 aria-hidden className="h-3.5 w-3.5 animate-spin" />}
+                        {rewriting ? "Rewriting…" : "Rewrite"}
+                    </Button>
+                </Hint>
                 <span className="ml-auto text-caption font-normal text-fg-muted">{ASSISTANT_POLICY.short}</span>
             </div>
             {note && (

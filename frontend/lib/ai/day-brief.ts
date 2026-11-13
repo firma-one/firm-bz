@@ -505,13 +505,18 @@ export type DayBriefResult =
     | { ok: false; reason: 'unconfigured' | 'failed' }
 
 /**
- * Writes the brief. Through getGuardedAnthropic (the one gate) and meterAiCall (the ledger): free,
- * but still recorded, on the group of the firm the brief draws most from. A refusal, an answer cut
- * off at the token cap, or an empty answer is a failure, never a brief. Provider errors throw, for
- * the route's catch.
+ * Writes the brief. Through getGuardedAnthropic (the one gate, with the person's own limits) and
+ * meterAiCall (the ledger), on the group of the firm the brief draws most from. The day's first brief
+ * is free (`dayBrief`); a Rewrite that replaces it costs a credit (`dayBriefRewrite`). A refusal, an
+ * answer cut off at the token cap, or an empty answer is a failure, never a brief. Provider errors and
+ * limits throw, for the route's catch.
  */
-export async function generateDayBrief(input: DayBriefInput, who: { userId: string }): Promise<DayBriefResult> {
-    const scope: AiScope = { firmId: input.topFirmId, userId: who.userId, feature: 'dayBrief' }
+export async function generateDayBrief(
+    input: DayBriefInput,
+    who: { userId: string },
+    feature: 'dayBrief' | 'dayBriefRewrite' = 'dayBrief',
+): Promise<DayBriefResult> {
+    const scope: AiScope = { firmId: input.topFirmId, userId: who.userId, feature }
     const client = await getGuardedAnthropic(scope)
     if (!client) return { ok: false, reason: 'unconfigured' }
 

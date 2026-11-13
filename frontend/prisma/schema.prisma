@@ -1136,6 +1136,21 @@ model PlatformAiUsage {
   @@schema("platform")
 }
 
+/// One row per AI call a person starts, for the per-person limits (lib/ai/person-limit.ts): calls a
+/// minute, calls a day, and a day's cap on some features. Written when the call starts, not when it
+/// finishes like the usage ledger, so requests sent at once can't all pass on the same count.
+/// Rows older than a day are deleted on that person's next call.
+model AiCallStart {
+  id        BigInt   @id @default(autoincrement())
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  userId    String   @db.Uuid
+  feature   String
+
+  @@index([userId, createdAt])
+  @@map("ai_call_starts")
+  @@schema("platform")
+}
+
 /// Thumbs up/down on an individual AI answer.
 ///
 /// Records the QUESTION but never the ANSWER. The question is text the user typed knowing it went

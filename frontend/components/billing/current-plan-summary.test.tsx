@@ -24,14 +24,14 @@ function usage(byFeature: Partial<Record<AiFeature, number>>): BillingPlanUsage 
 describe('AiCreditsRow', () => {
     it('counts the newer features in the row they belong with, so the rows add up to the total', () => {
         render(<AiCreditsRow usage={usage({ brief: 1, firmChat: 2, summary: 1, statusUpdate: 1, replyDraft: 1, chat: 1, reviewerChat: 3 })} />)
-        const bar = screen.getByLabelText(/Firm briefs and assistant: 3/)
+        const bar = screen.getByLabelText(/Briefs and assistant: 3/)
         expect(bar.getAttribute('aria-label')).toMatch(/Engagement summaries and drafts: 3/)
         expect(bar.getAttribute('aria-label')).toMatch(/Engagement assistant chat: 4/)
     })
 
     it('leaves Doc Search out now that Ask Brio is hidden', () => {
         render(<AiCreditsRow usage={usage({ brief: 1, chat: 2 })} />)
-        expect(screen.getByText('Firm briefs and assistant')).toBeTruthy()
+        expect(screen.getByText('Briefs and assistant')).toBeTruthy()
         expect(screen.getByText('Engagement assistant chat')).toBeTruthy()
         expect(screen.queryByText('Firm Doc Search')).toBeNull()
     })
