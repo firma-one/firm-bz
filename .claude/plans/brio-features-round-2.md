@@ -76,8 +76,10 @@ Pricing copy changes with it: the "Credits included" tooltip in `config/pricing.
 
 ### 3.2 Your day on Home (feature 2)
 
-- **Where:** top of `/d/u/home`, above "Needs you". Three lines at most, then "Show the items" scrolls
-  to Needs you. Every signed-in user, any role.
+- **Where:** top of `/d/u/home`, above "Needs you". Three lines at most, then a line saying the items are
+  below, in Needs you and Agenda (no link: they are a scroll away). Rewrite is the Brio sparkle at the
+  heading's right, after when it was written, as on the Overview's Summary (changed 2026-11-13; it was a
+  "Show the items" button and a Rewrite button). Every signed-in user, any role.
 - **Brio is given:** the user's own Needs you items, this week's agenda, and their reminders (with
   notes), across all their firms. Per user, so reminders are fine here (the firm brief must omit them).
 - **Cached:** once per user per local day (timezone from `notificationPrefs`). New column
@@ -282,7 +284,9 @@ tooltip. Up to date comes from a fingerprint (`lib/raid/raid-fingerprint.ts`): e
 and newest; per memo, when made or last changed), and GET compares it with now. A memo edited in storage
 does show as Out of date, so the sparkle catches what the cron misses. A log checked before fingerprints
 existed is compared by time. The RAID table matches Files (NotionTable grid); Health sources link to the
-Overview's Pace or Planning hygiene chart (`…/analytics#ring-pace`).
+Overview's Pace or Planning hygiene chart (`…/analytics#ring-pace`). On /tour (2026-11-13) the sources link too:
+Health to the tour Overview's chart (`?tab=analytics#ring-pace`, `useRingAnchor` from `ring-anchor.ts`), the
+rest to their tab (no item ids there); `RaidLink` moves in the page, as a full load would reopen the tour panel.
 
 ## 10. Skeleton loaders (asked 2026-11-12 "for tomo"; DONE 2026-11-13)
 

@@ -2,6 +2,7 @@
 
 import { ROLE_SHORT_NAME } from '@/lib/persona-ui-groups'
 import React, { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback, useSyncExternalStore } from 'react'
+import { scrollToRing, useRingAnchor } from './ring-anchor'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '@/lib/auth-context'
@@ -1213,37 +1214,8 @@ const SUMMARY_ICON_BUTTON = 'inline-flex h-7 w-7 items-center justify-center rou
 
 // ─── Action Center V2 — Delivery Actions + Housekeeping ─────────────────────
 
-// Scroll to a ring on click, then pulse it briefly so the user can locate what's referenced.
-function scrollToRing(ringId: string) {
-    const el = document.getElementById(ringId)
-    if (!el) return
-    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    el.classList.add('ring-pulse')
-    window.setTimeout(() => el.classList.remove('ring-pulse'), 1400)
-}
-
-/**
- * A link to one of the Overview's charts (`…/analytics#ring-pace`, from a Health entry in the RAID log)
- * lands once the charts are on the page: they arrive with the data, after the browser looked for the
- * anchor. Only on the first load, so a refresh never pulls the page back to it; a later change of
- * hash on the page jumps again.
- */
-export function useRingAnchor(chartsShown: boolean) {
-    const jumped = useRef(false)
-    useEffect(() => {
-        if (!chartsShown) return
-        const jump = () => {
-            const id = window.location.hash.slice(1)
-            if (id.startsWith('ring-')) scrollToRing(id)
-        }
-        if (!jumped.current) {
-            jumped.current = true
-            jump()
-        }
-        window.addEventListener('hashchange', jump)
-        return () => window.removeEventListener('hashchange', jump)
-    }, [chartsShown])
-}
+// scrollToRing and useRingAnchor live in ./ring-anchor, shared with the tour's Overview.
+export { useRingAnchor } from './ring-anchor'
 
 interface ActionRowItem extends ActionItem {
     ringId?: string                 // if set, the row gets a hover-only "show in …" button

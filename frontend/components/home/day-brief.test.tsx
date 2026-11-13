@@ -8,7 +8,7 @@ vi.mock('next/navigation', () => ({ usePathname: () => '/d/u/home', useSearchPar
 const shell = vi.hoisted(() => ({ value: null as null | { firms: Array<{ id: string; name: string; slug: string }>; firmSlug: string | null } }))
 vi.mock('@/components/shell/shell-data-context', () => ({ useOptionalShellData: () => shell.value }))
 
-import { DayBrief, DemoDayBrief, DAY_BRIEF_EMPTY, DAY_BRIEF_UNCHANGED, demoDayBriefText, briefParagraphs, rewriteHint } from './day-brief'
+import { DayBrief, DemoDayBrief, DAY_BRIEF_EMPTY, DAY_BRIEF_ITEMS_LINE, DAY_BRIEF_UNCHANGED, demoDayBriefText, briefParagraphs, rewriteHint } from './day-brief'
 import { HomeView } from './home-view'
 import type { MyWork } from '@/lib/home/my-work'
 
@@ -33,7 +33,7 @@ afterEach(() => {
 })
 
 describe('DayBrief', () => {
-    it('shows Brio\'s day: the lead phrase in bold, when it was written, Show the items and the policy line', async () => {
+    it('shows Brio\'s day: the lead phrase in bold, when it was written, where the items are and the policy line', async () => {
         fetchMock.mockResolvedValue(ok({ brief: BRIEF }))
         render(<DayBrief />)
 
@@ -43,8 +43,14 @@ describe('DayBrief', () => {
         expect(screen.getByText('QSR-12 · Pricing is due tomorrow.').querySelector('strong')).toBeNull()
         expect(screen.getByRole('heading', { name: 'Your day' })).toBeTruthy()
         expect(screen.getByText(/^Written .+ · .+/)).toBeTruthy()
-        expect(screen.getByRole('link', { name: 'Show the items' }).getAttribute('href')).toBe('#needs-you')
+        // Where the items are, in words: no link or button down to them.
+        expect(screen.getByText(DAY_BRIEF_ITEMS_LINE)).toBeTruthy()
+        expect(screen.queryByRole('link')).toBeNull()
         expect(screen.getByText('Brio reports what the data shows. Decisions stay with you.')).toBeTruthy()
+        // Rewrite is the sparkle at the heading's right, an icon with no words of its own.
+        const rewrite = screen.getByRole('button', { name: 'Rewrite with Brio' })
+        expect(rewrite.textContent).toBe('')
+        expect(rewrite.closest('section')?.querySelector('h2')?.parentElement?.contains(rewrite)).toBe(true)
         expect(fetchMock).toHaveBeenCalledWith('/api/me/day-brief', expect.objectContaining({ method: 'GET' }))
     })
 
@@ -78,7 +84,7 @@ describe('DayBrief', () => {
         fetchMock.mockResolvedValue(ok({ brief: null, empty: true }))
         render(<DayBrief />)
         expect(await screen.findByText(DAY_BRIEF_EMPTY)).toBeTruthy()
-        expect(screen.queryByRole('button', { name: 'Rewrite' })).toBeNull()
+        expect(screen.queryByRole('button', { name: 'Rewrite with Brio' })).toBeNull()
     })
 
     it('is left out when Brio is not configured', async () => {
@@ -93,7 +99,7 @@ describe('DayBrief', () => {
         render(<DayBrief />)
         await screen.findByText('Two client threads have waited since Monday')
         expect(fetchMock).toHaveBeenCalledWith('/api/me/day-brief?firm=f2', expect.objectContaining({ method: 'GET' }))
-        fireEvent.click(screen.getByRole('button', { name: 'Rewrite' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Rewrite with Brio' }))
         await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/me/day-brief?firm=f2', expect.objectContaining({ method: 'POST' })))
     })
 
@@ -108,7 +114,7 @@ describe('DayBrief', () => {
         await screen.findByText('Two client threads have waited since Monday')
 
         fetchMock.mockResolvedValueOnce(ok({ brief: BRIEF, unchanged: true }))
-        fireEvent.click(screen.getByRole('button', { name: 'Rewrite' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Rewrite with Brio' }))
         expect(await screen.findByText(DAY_BRIEF_UNCHANGED)).toBeTruthy()
         expect(fetchMock).toHaveBeenLastCalledWith('/api/me/day-brief', expect.objectContaining({ method: 'POST' }))
         expect(screen.getByText('Two client threads have waited since Monday')).toBeTruthy()
@@ -120,7 +126,7 @@ describe('DayBrief', () => {
         await screen.findByText('Two client threads have waited since Monday')
 
         fetchMock.mockResolvedValueOnce(ok({ error: "Brio couldn't write your day. Try again." }, 500))
-        fireEvent.click(screen.getByRole('button', { name: 'Rewrite' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Rewrite with Brio' }))
         expect((await screen.findByRole('alert')).textContent).toBe("Brio couldn't write your day. Try again.")
         expect(screen.getByText('Two client threads have waited since Monday')).toBeTruthy()
     })
@@ -159,7 +165,11 @@ describe('the tour\'s Your day', () => {
         try {
             render(<DemoDayBrief work={demoWork} />)
             expect(screen.getByText('Two deliverables are waiting for your approval').tagName).toBe('STRONG')
-            fireEvent.click(screen.getByRole('button', { name: 'Rewrite' }))
+            const sparkle = screen.getByRole('button', { name: 'Rewrite with Brio' })
+            fireEvent.click(sparkle)
+            // While it writes, the heading says so in the time's place and the sparkle waits.
+            expect(screen.getByText('Brio is rewriting…')).toBeTruthy()
+            expect(sparkle.getAttribute('aria-disabled')).toBe('true')
             vi.advanceTimersByTime(1000)
             expect(await vi.waitFor(() => screen.getByText(DAY_BRIEF_UNCHANGED))).toBeTruthy()
         } finally {
@@ -190,14 +200,14 @@ describe('on Home', () => {
             />,
         )
 
-    it('sits above Needs you, whose anchor Show the items goes to', async () => {
+    it('sits above Needs you, and says the items are below', async () => {
         fetchMock.mockResolvedValue(ok({ brief: BRIEF }))
         home()
         const headings = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)
         expect(headings.indexOf('Your day')).toBe(0)
         expect(headings.indexOf('Your day')).toBeLessThan(headings.indexOf('Needs you'))
         expect(screen.getByText('Q3 Report').closest('#needs-you')).toBeTruthy()
-        expect((await screen.findByRole('link', { name: 'Show the items' })).getAttribute('href')).toBe('#needs-you')
+        expect(await screen.findByText(DAY_BRIEF_ITEMS_LINE)).toBeTruthy()
     })
 
     it('on the public demo, is written from the sample data with no call', () => {

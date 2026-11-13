@@ -39,3 +39,19 @@ describe('the Overview without Internal memos', () => {
         expect(tour).not.toMatch(/<DemoInternalMemos\b/)
     })
 })
+
+describe('a Health link from the RAID log, on /tour', () => {
+    afterEach(() => window.history.replaceState(null, '', '/'))
+
+    it('lands on the Overview chart it names, once the dated sections are in', async () => {
+        window.history.replaceState(null, '', '/tour?tab=analytics#ring-pace')
+        const scrolled = vi.fn()
+        Element.prototype.scrollIntoView = scrolled
+        render(<TooltipProvider><DemoEngagementOverview engagement={DEMO_FIRM.clients[0].engagements[0]} /></TooltipProvider>)
+        await act(async () => { await new Promise((r) => setTimeout(r, 20)) })
+        const pace = document.getElementById('ring-pace')
+        expect(pace).toBeTruthy()
+        expect(scrolled.mock.contexts).toContain(pace)
+        expect(pace!.classList.contains('ring-pulse')).toBe(true)
+    })
+})

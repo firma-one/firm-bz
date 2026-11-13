@@ -1,13 +1,12 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
-import { AlertCircle, Loader2 } from "lucide-react"
+import { AlertCircle, Sparkles } from "lucide-react"
 import { Brio } from "@/components/ui/brio"
-import { Button, buttonVariants } from "@/components/ui/button"
 import { LoadingAnnouncement, ShimmerBar } from "@/components/ui/shimmer"
 import { Hint } from "@/components/ui/tooltip"
 import { useOptionalShellData } from "@/components/shell/shell-data-context"
-import { ASSISTANT, ASSISTANT_POLICY } from "@/lib/ai/assistant"
+import { ASSISTANT, ASSISTANT_POLICY, BRIO_GREEN } from "@/lib/ai/assistant"
 import { BRIO_DAY_FAILED, BRIO_TOO_SLOW, BRIO_UNREACHABLE_RETRY } from "@/lib/ai/brio-failure"
 import { AI_TIMEOUT_MS, AiTimeoutError, fetchWithTimeout } from "@/lib/ai/fetch-timeout"
 import type { MyWork } from "@/lib/home/my-work"
@@ -25,8 +24,14 @@ import { HomeEmptyLine, HomeSection } from "./home-section"
  * model configured the section is left out.
  */
 
-/** The Needs you section's anchor, for "Show the items". */
+/** The Needs you section's anchor (#needs-you), kept for links into Home. */
 export const NEEDS_YOU_ANCHOR = "needs-you"
+
+/**
+ * Where the brief's items are: the sections below it, which the person scrolls to. Agenda too, as the
+ * brief also covers what is due this week.
+ */
+export const DAY_BRIEF_ITEMS_LINE = "The items are below, in Needs you and Agenda."
 
 /**
  * Rewrite's tooltip: what it costs, and whose credits. Home spans every firm, so a rewrite is billed to
@@ -82,14 +87,66 @@ export function writtenLabel(iso: string): string {
 
 // ─── Layout ──────────────────────────────────────────────────────────────────
 
-function DayBriefSection({ written, children }: { written?: string | null; children: ReactNode }) {
+/** Rewrite, as the sparkle at the heading's right: the brief on screen, and whether one is being written. */
+type RewriteControl = {
+    rewriting: boolean
+    onRewrite: () => void
+    /** The firm a rewrite is billed to, for the tooltip. */
+    firmName?: string | null
+}
+
+/** A 28px icon button, as on the Overview's Summary and the RAID log. */
+const ICON_BUTTON =
+    "inline-flex h-7 w-7 items-center justify-center rounded-control text-fg-muted transition-colors duration-ui-fast hover:bg-surface-hover hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action/30"
+
+function RewriteButton({ rewriting, onRewrite, firmName }: RewriteControl) {
+    return (
+        // The morning brief is free; a rewrite is a choice, so it costs a credit, and only when the
+        // items changed (an unchanged day answers without asking Brio).
+        <Hint
+            label={
+                <span className="flex flex-col gap-0.5">
+                    <span>
+                        Rewrite with <Brio />
+                    </span>
+                    <span className="opacity-70">{rewriteHint(firmName)}</span>
+                </span>
+            }
+        >
+            {/* aria-disabled, not disabled, while rewriting: a disabled button shows no tooltip. */}
+            <button
+                type="button"
+                onClick={() => {
+                    if (!rewriting) onRewrite()
+                }}
+                aria-disabled={rewriting}
+                aria-label={`Rewrite with ${ASSISTANT.name}`}
+                className={cn(ICON_BUTTON, rewriting && "cursor-default hover:bg-transparent")}
+            >
+                {/* Brio's sparkle, in Brio's green. */}
+                <Sparkles aria-hidden className={cn("h-4 w-4", rewriting && "animate-pulse")} style={{ color: BRIO_GREEN }} />
+            </button>
+        </Hint>
+    )
+}
+
+function DayBriefSection({ written, rewrite, children }: { written?: string | null; rewrite?: RewriteControl; children: ReactNode }) {
+    const label = rewrite?.rewriting ? `${ASSISTANT.name} is rewriting…` : written
     return (
         <HomeSection
             // The Brio mark in the icon's place. The slot sizes icons to 16px; the sparkle keeps its own
             // size beside the name.
             icon={<Brio className="text-ui text-action" iconClassName="!h-[0.82em] !w-[0.82em]" />}
             title="Your day"
-            actions={written ? <span className="text-caption font-normal text-fg-muted">{written}</span> : undefined}
+            actions={
+                label || rewrite ? (
+                    // When it was written, then the sparkle that rewrites it, as on the Overview's Summary.
+                    <span className="flex items-center gap-1.5">
+                        {label && <span className="text-caption font-normal text-fg-muted">{label}</span>}
+                        {rewrite && <RewriteButton {...rewrite} />}
+                    </span>
+                ) : undefined
+            }
         >
             {children}
         </HomeSection>
@@ -101,22 +158,7 @@ type Note = { tone: "info" | "error"; text: string }
 /** Words with a Try again button after them don't also need to say "Try again.". */
 const withoutTryAgain = (words: string) => words.replace(/\s*Try again\.$/, "")
 
-function DayBriefCard({
-    brief,
-    needsYouId,
-    rewriting,
-    onRewrite,
-    note,
-    firmName,
-}: {
-    brief: DayBriefShown
-    needsYouId: string
-    rewriting: boolean
-    onRewrite: () => void
-    note: Note | null
-    /** The firm a rewrite is billed to, for the tooltip. */
-    firmName?: string | null
-}) {
+function DayBriefCard({ brief, rewriting, note }: { brief: DayBriefShown; rewriting: boolean; note: Note | null }) {
     return (
         <div className="flex flex-col gap-2.5 rounded-card border border-line bg-surface px-4 py-3.5 text-ui text-fg" aria-busy={rewriting}>
             <div className={cn("flex flex-col gap-2.5 transition-opacity", rewriting && "opacity-60")}>
@@ -124,19 +166,10 @@ function DayBriefCard({
                     <p key={i}>{p}</p>
                 ))}
             </div>
-            <div className="flex flex-wrap items-center gap-2 pt-0.5">
-                <a href={`#${needsYouId}`} className={buttonVariants({ variant: "outline", size: "sm" })}>
-                    Show the items
-                </a>
-                {/* The morning brief is free; a rewrite is a choice, so it costs a credit, and only
-                    when the items changed (an unchanged day answers without asking Brio). */}
-                <Hint label={rewriteHint(firmName)}>
-                    <Button type="button" variant="ghost" size="sm" onClick={onRewrite} disabled={rewriting}>
-                        {rewriting && <Loader2 aria-hidden className="h-3.5 w-3.5 animate-spin" />}
-                        {rewriting ? "Rewriting…" : "Rewrite"}
-                    </Button>
-                </Hint>
-                <span className="ml-auto text-caption font-normal text-fg-muted">{ASSISTANT_POLICY.short}</span>
+            {/* No link down to them: the sections are right below, a scroll away. */}
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-0.5 text-caption font-normal text-fg-muted">
+                <span>{DAY_BRIEF_ITEMS_LINE}</span>
+                <span className="ml-auto">{ASSISTANT_POLICY.short}</span>
             </div>
             {note && (
                 <p role={note.tone === "error" ? "alert" : "status"} className="flex items-center gap-1.5 text-small text-fg-muted">
@@ -227,7 +260,7 @@ function stateOf(d: DayBriefResponse): State {
 }
 
 /** The signed-in person's day, from /api/me/day-brief. */
-export function DayBrief({ needsYouId = NEEDS_YOU_ANCHOR }: { needsYouId?: string }) {
+export function DayBrief() {
     const [state, setState] = useState<State>({ kind: "loading" })
     // The firm selected in the sidebar pays for the brief. Read through a ref so the sidebar's firms
     // arriving after the first render don't ask for the brief a second time.
@@ -277,7 +310,10 @@ export function DayBrief({ needsYouId = NEEDS_YOU_ANCHOR }: { needsYouId?: strin
 
     if (state.kind === "hidden") return null
     return (
-        <DayBriefSection written={state.kind === "brief" ? writtenLabel(state.brief.generatedAt) : null}>
+        <DayBriefSection
+            written={state.kind === "brief" ? writtenLabel(state.brief.generatedAt) : null}
+            rewrite={state.kind === "brief" ? { rewriting, onRewrite: rewrite, firmName: firm?.name } : undefined}
+        >
             {state.kind === "loading" ? (
                 <DayBriefSkeleton />
             ) : state.kind === "failed" ? (
@@ -291,7 +327,7 @@ export function DayBrief({ needsYouId = NEEDS_YOU_ANCHOR }: { needsYouId?: strin
             ) : state.kind === "empty" ? (
                 <HomeEmptyLine>{DAY_BRIEF_EMPTY}</HomeEmptyLine>
             ) : (
-                <DayBriefCard brief={state.brief} needsYouId={needsYouId} rewriting={rewriting} onRewrite={rewrite} note={note} firmName={firm?.name} />
+                <DayBriefCard brief={state.brief} rewriting={rewriting} note={note} />
             )}
         </DayBriefSection>
     )
@@ -363,9 +399,8 @@ export function demoDayBriefText(work: MyWork, now: Date): string | null {
  * mount (it reads "today", and the server's day may not be the visitor's). Rewrite answers as the
  * app does when nothing has changed.
  */
-export function DemoDayBrief({ work, needsYouId = NEEDS_YOU_ANCHOR, firmName }: {
+export function DemoDayBrief({ work, firmName }: {
     work: MyWork
-    needsYouId?: string
     /** The tour's firm, named in Rewrite's tooltip as the app names the sidebar's. */
     firmName?: string | null
 }) {
@@ -394,13 +429,16 @@ export function DemoDayBrief({ work, needsYouId = NEEDS_YOU_ANCHOR, firmName }: 
     }
 
     return (
-        <DayBriefSection written={brief ? writtenLabel(brief.generatedAt) : null}>
+        <DayBriefSection
+            written={brief ? writtenLabel(brief.generatedAt) : null}
+            rewrite={brief ? { rewriting, onRewrite: rewrite, firmName } : undefined}
+        >
             {brief === undefined ? (
                 <DayBriefSkeleton />
             ) : brief === null ? (
                 <HomeEmptyLine>{DAY_BRIEF_EMPTY}</HomeEmptyLine>
             ) : (
-                <DayBriefCard brief={brief} needsYouId={needsYouId} rewriting={rewriting} onRewrite={rewrite} note={note} firmName={firmName} />
+                <DayBriefCard brief={brief} rewriting={rewriting} note={note} />
             )}
         </DayBriefSection>
     )

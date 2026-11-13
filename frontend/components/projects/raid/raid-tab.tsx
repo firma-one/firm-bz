@@ -1,6 +1,7 @@
 'use client'
 
-import { useCallback, useEffect, useId, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useRef, useState, type ComponentProps } from 'react'
+import Link from 'next/link'
 import { AlertCircle, AlertTriangle, Check, CircleDot, Clock3, Link2, ListChecks, Loader2, MoreHorizontal, Plus, Shapes, Sparkles, Type as TypeIcon, UserRound } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { LoadingAnnouncement, ShimmerBar, ShimmerBlock } from '@/components/ui/shimmer'
@@ -88,15 +89,24 @@ export function RaidTypeBadge({ type, decorative = false }: { type: RaidType; /*
     )
 }
 
+/**
+ * A link out of the RAID log. In the app, a plain link to another tab's path. On /tour, where links are
+ * a query of the page's own (`?tab=…`, raid-shared.ts), it moves in the page as the tour's tabs do: a
+ * full load would start the tour over, its panel open again.
+ */
+export function RaidLink({ href, ...rest }: ComponentProps<'a'> & { href: string }) {
+    return href.startsWith('?') ? <Link href={href} {...rest} /> : <a href={href} {...rest} />
+}
+
 /** Where an entry came from, linked to it when it can be: the thread, the memo, the item on the Board. */
 export function RaidSourceChip({ source, engagementBase }: { source: RaidSourceView; engagementBase: string }) {
     const href = sourceHref(engagementBase, source)
     const className = 'inline-flex h-5 max-w-full items-center whitespace-nowrap rounded-control bg-surface-muted px-1.5 text-caption text-fg-muted'
     if (!href) return <span className={className}><span className="truncate">{source.label}</span></span>
     return (
-        <a href={href} className={cn(className, 'hover:text-fg hover:underline')} title={source.kind === 'MEMO' ? 'Open the memo' : undefined}>
+        <RaidLink href={href} className={cn(className, 'hover:text-fg hover:underline')} title={source.kind === 'MEMO' ? 'Open the memo' : undefined}>
             <span className="truncate">{source.label}</span>
-        </a>
+        </RaidLink>
     )
 }
 
@@ -526,9 +536,9 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
                                         {source?.quote ? (
                                             <blockquote className="mt-1 border-l-2 border-line-strong pl-2 text-small text-fg-muted">“{source.quote}”</blockquote>
                                         ) : source?.kind === 'MEMO' && sourceHref(engagementBase, source) ? (
-                                            <a href={sourceHref(engagementBase, source)!} className="mt-1 inline-block text-small text-action hover:underline">
+                                            <RaidLink href={sourceHref(engagementBase, source)!} className="mt-1 inline-block text-small text-action hover:underline">
                                                 Read it in the memo
-                                            </a>
+                                            </RaidLink>
                                         ) : null}
                                     </div>
                                     {!readOnly && (
