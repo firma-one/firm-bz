@@ -119,7 +119,9 @@ export async function GET(
         const searchTerms = filtered.filter((w, i) => filtered.indexOf(w) === i)
         const significantTerms = searchTerms.length > 0 ? searchTerms : rawWords.slice(0, 3)
 
-        const [driveFiles, vectorResultsRaw, dbNameResultsFull, dbNameResultsTerms] = await Promise.all([
+        // A doc ID ("FRM-198") lives only in Firma's index: Drive and the name and meaning searches
+        // can't find a file by it. searchByDocId answers nothing for a query that isn't one.
+        const [driveFiles, vectorResultsRaw, dbNameResultsFull, dbNameResultsTerms, docIdResults] = await Promise.all([
             permissionAdapter.searchFiles(connector.id, query, {
                 parentFolderIds: allParentFolderIds,
                 limit: 50
@@ -144,6 +146,12 @@ export async function GET(
                 projectId,
                 terms: significantTerms.slice(0, 5),
                 limit: 25
+            }),
+            SearchService.searchByDocId({
+                organizationId: project.firmId,
+                projectId,
+                query,
+                limit: 10
             })
         ])
 
@@ -151,9 +159,10 @@ export async function GET(
         const MIN_SEMANTIC_SCORE = 0.38
         const vectorResults = vectorResultsRaw.filter(r => (r.score ?? 0) >= MIN_SEMANTIC_SCORE).slice(0, 40)
 
-        // Merge filename results: full query match first, then any-term matches, dedupe by externalId
-        const dbNameById = new Map(dbNameResultsFull.map(r => [r.externalId, r]))
-        for (const r of dbNameResultsTerms) {
+        // Merge name results: doc-ID matches first, then full query match, then any-term matches,
+        // dedupe by externalId. A doc-ID hit shows as a name match.
+        const dbNameById = new Map(docIdResults.map(r => [r.externalId, r]))
+        for (const r of [...dbNameResultsFull, ...dbNameResultsTerms]) {
             if (!dbNameById.has(r.externalId)) dbNameById.set(r.externalId, r)
         }
         const dbNameResults = Array.from(dbNameById.values())
@@ -275,7 +284,13 @@ export async function GET(
         const compositeScore = (f: any) =>
             (f.score || 0) * 0.7 + getRecencyBoost(f.updatedAt || f.modifiedTime) * 0.2 + matchTypeBonus(f)
 
+        // A doc-ID match ranks above everything else, in searchByDocId's order (the exact id first),
+        // as on firm Doc Search: someone typing an id wants that document, not the newest file.
+        const docIdRank = new Map(docIdResults.map((r, i) => [r.externalId, i]))
+        const rankOf = (f: any) => docIdRank.get(f.id) ?? Number.MAX_SAFE_INTEGER
         finalFiles.sort((a: any, b: any) => {
+            const docIdOrder = rankOf(a) - rankOf(b)
+            if (docIdOrder !== 0) return docIdOrder
             const timeA = getTime(a)
             const timeB = getTime(b)
             if (timeB !== timeA) return timeB - timeA
