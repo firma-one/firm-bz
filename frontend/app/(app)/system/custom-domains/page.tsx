@@ -2,15 +2,18 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { AlertTriangle, Check, CheckCircle2, ChevronRight, Clock, Copy, Loader2, Plus, RefreshCw, XCircle } from 'lucide-react'
+import { AlertTriangle, Check, CheckCircle2, ChevronRight, Clock, Copy, Globe, Loader2, Plus, RefreshCw, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { getPlatformBrandDomain } from '@/config/platform-domain'
 import { useToast } from '@/components/ui/toast'
 import { cn } from '@/lib/utils'
 import { CNAME_TARGET } from '@/lib/custom-domains/domain-rules'
 import type { SystemDomainFilter, SystemDomainRow } from '@/lib/custom-domains/group-domains'
 import type { ReachabilityResult } from '@/lib/custom-domains/reachability'
 import {
-    addCustomDomainForGroup, approveCustomDomain, checkCustomDomain, listCustomDomains, rejectCustomDomain,
+    addCustomDomainForGroup, approveCustomDomain, checkCustomDomain, listCustomDomains, listGroupsForCustomDomains, rejectCustomDomain,
+    type DomainGroupOption,
 } from '@/lib/actions/system-custom-domains'
 
 /**
@@ -248,20 +251,42 @@ export default function CustomDomainsPage() {
 
 function AddForGroup({ onDone }: { onDone: (added: boolean) => void }) {
     const { addToast } = useToast()
-    const [slug, setSlug] = useState('')
+    const [groups, setGroups] = useState<DomainGroupOption[] | null>(null)
+    const [loadError, setLoadError] = useState<string | null>(null)
+    const [search, setSearch] = useState('')
+    const [slug, setSlug] = useState<string | null>(null)
     const [kind, setKind] = useState<'SUBDOMAIN' | 'CUSTOM'>('SUBDOMAIN')
     const [value, setValue] = useState('')
     const [busy, setBusy] = useState(false)
-    const submit = async (e: React.FormEvent) => {
+    const [confirming, setConfirming] = useState(false)
+
+    useEffect(() => {
+        void listGroupsForCustomDomains().then((r) => (r.ok ? setGroups(r.data) : setLoadError(r.error)))
+    }, [])
+
+    const q = search.trim().toLowerCase()
+    const shown = (groups ?? []).filter((g) => !q || [g.name, g.slug, g.adminEmail ?? ''].some((x) => x.toLowerCase().includes(q)))
+    const chosen = groups?.find((g) => g.slug === slug) ?? null
+
+    // What the domain will be, for the confirmation: "datasentry" → "datasentry.firma.bz".
+    const host = kind === 'SUBDOMAIN' ? `${value.trim().toLowerCase()}.${getPlatformBrandDomain()}` : value.trim().toLowerCase()
+
+    const submit = (e: React.FormEvent) => {
         e.preventDefault()
+        if (chosen && value.trim()) setConfirming(true)
+    }
+
+    const add = async () => {
+        if (!chosen) return
         setBusy(true)
-        const r = await addCustomDomainForGroup(slug, kind, value)
+        const r = await addCustomDomainForGroup(chosen.slug, kind, value)
         setBusy(false)
         if (!r.ok) {
             addToast({ type: 'error', title: r.error })
             return
         }
-        addToast({ type: 'success', title: 'Domain added and live' })
+        setConfirming(false)
+        addToast({ type: 'success', title: `${host} added for ${chosen.name}` })
         onDone(true)
     }
     const field = 'h-8 rounded-control border border-line-strong bg-surface px-2.5 text-small text-fg outline-none placeholder:text-fg-subtle focus:ring-2 focus:ring-action/35'
@@ -269,18 +294,80 @@ function AddForGroup({ onDone }: { onDone: (added: boolean) => void }) {
         <form onSubmit={submit} className="space-y-3 rounded-card border border-line bg-surface p-4">
             <div>
                 <h2 className="text-ui font-semibold text-fg">Add a domain for a group</h2>
-                <p className="text-small text-fg-muted">Approved at once, no request. Set it up on Vercel first: it must pass the reachability check.</p>
+                <p className="text-small text-fg-muted">Approved at once, no request, and not limited by plan. Set it up on Vercel first: it must pass the reachability check.</p>
             </div>
+
+            <div className="overflow-hidden rounded-card border border-line">
+                <input className="h-8 w-full border-b border-line bg-surface px-2.5 text-small text-fg outline-none placeholder:text-fg-subtle"
+                    placeholder="Search by workspace, slug or admin email" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Search workspaces" />
+                <div role="radiogroup" aria-label="Workspace" className="max-h-56 overflow-y-auto">
+                    {loadError ? <p className="px-3 py-2 text-small text-danger">{loadError}</p>
+                        : groups === null ? <p className="flex items-center gap-2 px-3 py-2 text-small text-fg-muted"><Loader2 className="h-3.5 w-3.5 animate-spin" />Loading workspaces…</p>
+                        : shown.length === 0 ? <p className="px-3 py-2 text-small text-fg-muted">No workspace matches.</p>
+                        : shown.map((g) => {
+                            const taken = !!g.liveHost
+                            const on = g.slug === slug
+                            return (
+                                <button key={g.slug} type="button" role="radio" aria-checked={on} disabled={taken} onClick={() => setSlug(g.slug)}
+                                    className={cn('grid w-full grid-cols-[16px_minmax(0,1fr)] items-start gap-x-2.5 border-b border-line px-3 py-2 text-left last:border-b-0',
+                                        on ? 'bg-surface-muted' : 'hover:bg-surface-hover', taken && 'cursor-not-allowed opacity-60 hover:bg-transparent')}>
+                                    <span className={cn('mt-0.5 grid h-4 w-4 place-items-center rounded-full border', on ? 'border-fg' : 'border-line-strong')}>
+                                        {on ? <span className="h-2 w-2 rounded-full bg-fg" /> : null}
+                                    </span>
+                                    <span className="min-w-0">
+                                        <span className="text-small font-medium text-fg">{g.name}</span>
+                                        <span className="text-small text-fg-muted"> · {g.slug}</span>
+                                        <span className="block truncate text-caption font-normal text-fg-muted">
+                                            {g.adminEmail ?? 'No admin email'} · {g.plan ?? 'No plan'}{taken ? ` · has ${g.liveHost}` : ''}
+                                        </span>
+                                    </span>
+                                </button>
+                            )
+                        })}
+                </div>
+            </div>
+
+            {chosen ? (
+                <p className="text-small text-fg-muted">
+                    Adding to <span className="font-medium text-fg">{chosen.name}</span> · {chosen.slug} · admin{' '}
+                    <span className="font-medium text-fg">{chosen.adminEmail ?? 'unknown'}</span>
+                </p>
+            ) : null}
+
             <div className="flex flex-wrap items-center gap-2">
-                <input className={cn(field, 'w-48')} placeholder="Group slug" value={slug} onChange={(e) => setSlug(e.target.value)} aria-label="Group slug" required />
                 <select className={field} value={kind} onChange={(e) => setKind(e.target.value as 'SUBDOMAIN' | 'CUSTOM')} aria-label="Kind">
                     <option value="SUBDOMAIN">Subdomain</option>
                     <option value="CUSTOM">Own domain</option>
                 </select>
                 <input className={cn(field, 'w-56')} placeholder={kind === 'SUBDOMAIN' ? 'datasentry' : 'portal.acme.com'} value={value} onChange={(e) => setValue(e.target.value)} aria-label="Domain" required />
-                <Button type="submit" size="sm" disabled={busy}>{busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}Add</Button>
+                <Button type="submit" size="sm" disabled={busy || !chosen || !value.trim()}>{busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}{chosen ? `Add for ${chosen.name}` : 'Add'}</Button>
                 <Button type="button" variant="ghost" size="sm" onClick={() => onDone(false)}>Cancel</Button>
             </div>
+            {chosen ? (
+                <ConfirmDialog
+                    open={confirming}
+                    onOpenChange={setConfirming}
+                    icon={<Globe className="h-4 w-4" />}
+                    iconVariant="primary"
+                    title={`Add ${host}?`}
+                    description={
+                        <span className="block space-y-1">
+                            <span className="block">It goes live at once for this workspace, with no request:</span>
+                            <span className="block text-fg"><span className="font-medium">{chosen.name}</span> · {chosen.slug}</span>
+                            <span className="block text-fg">Admin <span className="font-medium">{chosen.adminEmail ?? 'unknown'}</span></span>
+                            <span className="block">{chosen.plan ?? 'No plan'}</span>
+                        </span>
+                    }
+                    confirmLabel="Add"
+                    confirmVariant="primary"
+                    loading={busy}
+                    onCancel={() => setConfirming(false)}
+                    onConfirm={add}
+                />
+            ) : null}
+            {chosen && !chosen.planIncludes[kind] ? (
+                <p className="text-small text-fg-muted">{chosen.plan ?? 'No plan'} doesn&apos;t include {kind === 'CUSTOM' ? 'an own domain' : 'a custom subdomain'} on /pricing. You can still add it.</p>
+            ) : null}
         </form>
     )
 }
