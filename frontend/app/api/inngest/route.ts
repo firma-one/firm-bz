@@ -28,6 +28,7 @@ import {
     purgeDeletedEngagements,
     sendDeliverableDueReminder,
     sendDailyReminderDigest,
+    checkRaidLogsDaily,
 } from "@/lib/inngest/functions";
 
 export const { GET, POST, PUT } = serve({
@@ -60,5 +61,6 @@ export const { GET, POST, PUT } = serve({
         purgeDeletedEngagements,
         sendDeliverableDueReminder,
         sendDailyReminderDigest,
+        checkRaidLogsDaily,
         ],
 });

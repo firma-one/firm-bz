@@ -2,30 +2,10 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { logger } from '@/lib/logger'
 import { AI_MODEL } from './client'
+import { CREDIT_WEIGHTS, emptyFeatureCounts, type AiFeature } from './features'
 
-export type AiFeature = 'brief' | 'summary' | 'chat' | 'searchInterpret' | 'filesAgent'
-
-/**
- * Credits charged per action.
- *
- * Derived by the standard anchoring rule (one credit = the cheapest action sold) applied to
- * measured costs. The four actions span only ~2.7x, so whole-number weights stay honest without
- * a token-conversion formula users could not reason about. Search interpretation is weighted
- * below 1 because it is genuinely cheaper (~0.37x a chat answer) and the highest-frequency action.
- *
- * Recorded per row at call time, so re-weighting later does not retroactively change history.
- */
-export const CREDIT_WEIGHTS: Record<AiFeature, number> = {
-    brief: 1,
-    summary: 1,
-    chat: 1,
-    searchInterpret: 0.5,
-    // The first feature whose cost is NOT one row per user action: an agent run records one row
-    // per model turn, so a single review may write several. Weighted at 1 so the unit stays "a
-    // credit is an answer" rather than introducing a second pricing concept — the run's total is
-    // bounded by MAX_AGENT_TURNS and shown to the user before it starts.
-    filesAgent: 1,
-}
+// The feature list and weights live in `features.ts`, which client components can import too.
+export { CREDIT_WEIGHTS, type AiFeature }
 
 /**
  * Appends one row to the usage ledger.
@@ -186,7 +166,7 @@ export async function aiCreditUsageForGroup(
         _sum: { credits: true },
     })
 
-    const byFeature: Record<AiFeature, number> = { brief: 0, summary: 0, chat: 0, searchInterpret: 0, filesAgent: 0 }
+    const byFeature = emptyFeatureCounts()
     let used = 0
     for (const r of rows) {
         const feature = r.feature as AiFeature

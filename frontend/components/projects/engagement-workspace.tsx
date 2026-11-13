@@ -17,11 +17,13 @@ import { EngagementSearchProvider } from './engagement-search-context'
 import { useViewAs } from '@/lib/view-as-context'
 import { EngagementAuditPane } from './engagement-audit-pane'
 import { EngagementCommentsTab } from './engagement-comments-tab'
+import { hasInternalDiscussions } from './discussions-switch'
 import { EngagementWikiTab } from './wiki/engagement-wiki-tab'
 import type { LwCrmEngagementStatus } from '@/lib/actions/project'
 import { EngagementHeader } from './engagement-header'
 import { EngagementTabsList, engagementChromeKey, engagementTabGuide, rememberEngagementChrome, type EngagementTabsConfig } from './engagement-tabs'
 import { HorizontalScroll } from '@/components/ui/horizontal-scroll'
+import { RaidTab, useRaidCount } from './raid/raid-tab'
 
 /** The counts the tab row shows beside its labels. Loaded behind the page, never waited for. */
 export type EngagementBadgeCounts = {
@@ -440,12 +442,25 @@ export function EngagementWorkspace({
                     {currentTab === 'comments' && (
                         <div className="py-1 h-full">
                             <ErrorBoundary context="ProjectComments">
-                                <EngagementCommentsTab
-                                    projectId={projectId}
-                                    readOnly={completed}
-                                    orgSlug={orgSlug}
-                                    boardUrl={`${projectBase(groupSlug, orgSlug, clientSlug, projectSlug, useEngagement)}/board`}
-                                />
+                                {hasInternalDiscussions({ canEdit, canViewInternal: canViewInternalTabs, viewingAsRestrictedRole: isExternalPersona }) ? (
+                                    // Threads | Memos | RAID: Leads and Full Access contributors only.
+                                    <DiscussionsWithRaid
+                                        projectId={projectId}
+                                        readOnly={completed}
+                                        orgSlug={orgSlug}
+                                        boardUrl={`${projectBase(groupSlug, orgSlug, clientSlug, projectSlug, useEngagement)}/board`}
+                                        engagementBase={base}
+                                    />
+                                ) : (
+                                    <EngagementCommentsTab
+                                        projectId={projectId}
+                                        readOnly={completed}
+                                        orgSlug={orgSlug}
+                                        boardUrl={`${projectBase(groupSlug, orgSlug, clientSlug, projectSlug, useEngagement)}/board`}
+                                        internalSubTabs={false}
+                                        engagementBase={base}
+                                    />
+                                )}
                             </ErrorBoundary>
                         </div>
                     )}
@@ -480,5 +495,32 @@ export function EngagementWorkspace({
                 )}
             </Tabs>
         </div>
+    )
+}
+
+/**
+ * Discussions with its internal sub-tabs, RAID included. Its own component so the RAID count is
+ * read only for the people who get the switch (Leads and Full Access contributors), never for a
+ * Reviewer or a Limited Access contributor, whose route would refuse it anyway.
+ */
+function DiscussionsWithRaid({ projectId, readOnly, orgSlug, boardUrl, engagementBase }: {
+    projectId: string
+    readOnly: boolean
+    orgSlug: string
+    boardUrl: string
+    engagementBase: string
+}) {
+    const raidCount = useRaidCount(projectId)
+    return (
+        <EngagementCommentsTab
+            projectId={projectId}
+            readOnly={readOnly}
+            orgSlug={orgSlug}
+            boardUrl={boardUrl}
+            internalSubTabs
+            engagementBase={engagementBase}
+            raidCount={raidCount ?? undefined}
+            renderRaid={() => <RaidTab projectId={projectId} engagementBase={engagementBase} readOnly={readOnly} />}
+        />
     )
 }

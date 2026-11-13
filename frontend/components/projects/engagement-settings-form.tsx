@@ -19,6 +19,7 @@ import { SelectWithCustomEntry } from '@/components/ui/select-with-custom-entry'
 import { DateTimePicker } from '@/components/ui/date-time-picker'
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden'
 import { clientTabPath } from '@/lib/navigation/firm-paths'
+import { NotesProposalsPanel } from './notes-proposals-panel'
 
 export interface EngagementSettingsFormProps {
     projectId: string
@@ -306,6 +307,10 @@ export function EngagementSettingsForm({
                                 className={textareaFieldCls}
                             />
                             <p className="px-2 text-caption text-fg-subtle">Internal only.</p>
+                            {/* Brio reads the memo as it stands here, saved or not (§3.5). Settings is
+                                shown to Leads only, so no role check is needed here; the route
+                                checks for itself. */}
+                            <NotesProposalsPanel projectId={projectId} notes={internalMemo} disabled={disabled} />
                         </div>
                     </PropertyRow>
                 </PropertyList>

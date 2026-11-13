@@ -21,6 +21,7 @@ import { LandingArrival } from "@/components/app/landing-arrival"
 import { FirmFilter, UnavailableFirmsNote } from "./firm-filter"
 import { HomeEmptyLine, HomeSection } from "./home-section"
 import { HomeLoadFailed, HomeLoadNote, type HomeLoadProblems } from "./home-load-failed"
+import { DayBrief, DemoDayBrief, NEEDS_YOU_ANCHOR } from "./day-brief"
 
 /**
  * The cross-firm Home at `/d/u/home` (.claude/plans/cross-firm-home-inbox.md): Needs you, Continue,
@@ -30,7 +31,8 @@ import { HomeLoadFailed, HomeLoadNote, type HomeLoadProblems } from "./home-load
  *
  * Every section has the same heading (HomeSection) and sits 40px from the next; an empty one is a
  * single quiet line. Needs you always comes first, so the page keeps its order whatever the day
- * holds (.claude/plans/app-design-refinements.md, section 13).
+ * holds (.claude/plans/app-design-refinements.md, section 13), with only Brio's "Your day" above it:
+ * a few lines on what Needs you and the Agenda hold (.claude/plans/brio-features-round-2.md, §3.2).
  */
 
 /** Each row leads with what the item is; its action button says what it needs. A reminder about nothing in particular keeps its bell. */
@@ -153,7 +155,10 @@ export function HomeView({
     bookmarks: HomeBookmark[]
     /** Where "Open calendar" goes, when it isn't the one firm's calendar page (the public demo). */
     calendarHref?: string
-    /** No write actions: bookmarks can't be removed (the public demo). */
+    /**
+     * No write actions: bookmarks can't be removed (the public demo). "Your day" is then written
+     * from the sample data in the page, with no model call.
+     */
     readOnly?: boolean
     /** What didn't load: each part says so in place of its empty line (EM-2). */
     failed?: HomeLoadProblems
@@ -228,8 +233,12 @@ export function HomeView({
                 />
             ) : (
                 <>
-                    {/* First, always: what is waiting on you. The order never changes with the day's state. */}
-                    <div data-demo-tour="home-needs-you">
+                    {/* Brio's few lines on the day, above what they sum up. Loads on its own, after the page. */}
+                    {readOnly ? <DemoDayBrief work={work} /> : <DayBrief />}
+
+                    {/* First, always: what is waiting on you. The order never changes with the day's state.
+                        Its id is the target of "Show the items" in Your day. */}
+                    <div id={NEEDS_YOU_ANCHOR} className="scroll-mt-6" data-demo-tour="home-needs-you">
                         <NeedsYouSection items={work.needsYou} label={label} loadFailed={failed.work || failed.reminders} />
                     </div>
 

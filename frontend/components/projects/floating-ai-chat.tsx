@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronDown, GripVertical } from 'lucide-react'
 import type { ChatScope } from '@/lib/ai/engagement-chat'
-import { EngagementAiChat, type ChatThreadApi } from '@/components/projects/engagement-ai-chat'
+import { EngagementAiChat, chatSubjectOf, type ChatSubjectProps, type ChatThreadApi } from '@/components/projects/engagement-ai-chat'
 import { Brio } from '@/components/ui/brio'
 import { Hint } from '@/components/ui/tooltip'
 import type { ChatAction } from '@/components/projects/chat-action-row'
@@ -27,6 +27,13 @@ import type { EngagementInsightsResponse } from '@/lib/insights/engagement-insig
  *
  * Desktop only. The app is not built for mobile today; this degrades to a narrower panel at small
  * widths rather than pretending to be a mobile sheet.
+ *
+ * ## Subject
+ *
+ * The same panel serves the firm Overview (`subject={{ kind: 'firm', … }}`, Ask Brio about the firm)
+ * and every engagement page (`projectId`). The chrome is identical; what differs is decided in
+ * EngagementAiChat from the subject, plus two things here: the launcher's words, and that a firm
+ * panel never reopens itself, docked or not (the brief leads that page).
  */
 
 /** Which corner the panel and launcher occupy. A workspace preference, not a per-engagement one. */
@@ -173,21 +180,8 @@ function writeStored(key: string, value: string): void {
     }
 }
 
-export function FloatingAiChat({
-    projectId,
-    data,
-    engagementName,
-    clientName,
-    title,
-    aboveThread,
-    surface,
-    threadRef,
-    suggestionsOverride,
-    actions,
-    placeholder,
-    capabilityNote,
-}: {
-    projectId: string
+export function FloatingAiChat(props: ChatSubjectProps & {
+    /** Engagement subject only — see EngagementAiChat. */
     data?: EngagementInsightsResponse | null
     engagementName?: string | null
     clientName?: string | null
@@ -212,6 +206,30 @@ export function FloatingAiChat({
     /** One line in the header saying what this panel can do here — see EngagementAiChat. */
     capabilityNote?: React.ReactNode
 }) {
+    const {
+        data,
+        engagementName,
+        clientName,
+        title,
+        aboveThread,
+        surface,
+        threadRef,
+        suggestionsOverride,
+        actions,
+        placeholder,
+        capabilityNote,
+    } = props
+    const subject = chatSubjectOf(props)
+    const isFirm = subject.kind === 'firm'
+    /** Changes when the panel is pointed at something else, so stored preferences are read again. */
+    const subjectKey = subject.kind === 'firm' ? `firm:${subject.firmId}` : `engagement:${subject.projectId}`
+    /**
+     * Whether a docked pane comes back open. Engagement pages only: the firm Overview's panel always
+     * starts collapsed, docked or not, because the brief leads that page. It neither reads nor
+     * writes the engagement pages' docked-open state, so using it changes nothing there.
+     */
+    const remembersDockOpen = !isFirm
+
     const [side, setSide] = useState<Side>('right')
     /**
      * A FLOATING panel always starts collapsed, on every page and every load.
@@ -242,8 +260,8 @@ export function FloatingAiChat({
         if (storedSide === 'left' || storedSide === 'right') setSide(storedSide)
         const storedLayout = readStored(LAYOUT_KEY)
         if (storedLayout === 'float' || storedLayout === 'dock') setLayout(storedLayout)
-        if (storedLayout === 'dock' && readStored(DOCK_OPEN_KEY) === '1') setOpen(true)
-    }, [projectId])
+        if (remembersDockOpen && storedLayout === 'dock' && readStored(DOCK_OPEN_KEY) === '1') setOpen(true)
+    }, [subjectKey, remembersDockOpen])
 
     const changeLayout = useCallback((next: Layout) => {
         setLayout(next)
@@ -254,8 +272,8 @@ export function FloatingAiChat({
     // written while docked: the first render is always floating and collapsed, so nothing is written
     // before the stored state has been read back.
     useEffect(() => {
-        if (docked) writeStored(DOCK_OPEN_KEY, open ? '1' : '0')
-    }, [docked, open])
+        if (docked && remembersDockOpen) writeStored(DOCK_OPEN_KEY, open ? '1' : '0')
+    }, [docked, open, remembersDockOpen])
 
     /**
      * Publishes the panel's footprint so the shared upload/download progress panels can sit above
@@ -672,14 +690,14 @@ export function FloatingAiChat({
                         : { left: `${GUTTER}px` }),
                 }}
                 className={`fixed bottom-6 z-40 flex animate-in fade-in zoom-in-95 items-center gap-2 rounded-full border border-line bg-surface py-2 pl-3 pr-3.5 shadow-popover duration-200 transition-colors hover:border-line-strong hover:bg-surface-hover`}
-                aria-label="Open the engagement assistant"
+                aria-label={isFirm ? 'Open the firm assistant' : 'Open the engagement assistant'}
             >
                 {/* Labelled rather than icon-only: a bare sparkle is now ambiguous beside the AI
                     credits indicator in the top bar. The Brio mark is the only glyph — a second
                     sparkle beside it reads as two things rather than one brand. */}
                 <span className="text-sm font-medium text-fg">
                     Ask <Brio className="text-sm text-action" />
-                    {title ? <span className="ml-1 text-fg-subtle">· {title}</span> : null}
+                    {isFirm ? ' about the firm' : title ? <span className="ml-1 text-fg-subtle">· {title}</span> : null}
                 </span>
                 {/* Something is still running behind the collapsed pill. Without this the panel
                     looks idle while an answer is arriving, and the user has no reason to reopen
@@ -842,7 +860,7 @@ export function FloatingAiChat({
 
             {/* Kept mounted while open so the thread, ratings and suggestions survive a dock flip. */}
             <EngagementAiChat
-                projectId={projectId}
+                subject={subject}
                 data={data}
                 engagementName={engagementName}
                 clientName={clientName}
@@ -855,7 +873,8 @@ export function FloatingAiChat({
                 // surface="files" and switchable={true} would be self-contradictory. The Files
                 // page IS the file scope and stays there; the broader page is the one that may
                 // want to reach into the detail without navigating away.
-                scopeSwitchable={(surface ?? 'overview') === 'overview'}
+                // A firm has no file scope to switch to.
+                scopeSwitchable={!isFirm && (surface ?? 'overview') === 'overview'}
                 threadRef={threadRef}
                 // A docked pane does not move, so its header is not a drag handle.
                 onStartDrag={docked ? undefined : startDrag}

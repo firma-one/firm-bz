@@ -152,6 +152,13 @@ export async function upsertFollowUpReminder(params: {
     firmId: string
     ctaUrl: string | null
     note?: string | null
+    /**
+     * Match an existing reminder on its action too, so two different reminders can sit on the same
+     * entity. Manual reminders pass it: "Call Dana" and "Chase the 1099-B" on one engagement are two
+     * reminders, and without this the second overwrote the first's date and note while keeping its
+     * title. Reminders tied to a date field (dateKey) or one per document keep replacing, as before.
+     */
+    matchAction?: boolean
 }): Promise<void> {
     // Agents are firm members, so "remind every lead" lists include Brio — and writing a reminder
     // for it would create a UserPersonalization row that nothing ever reads or clears. Guarded in
@@ -168,7 +175,8 @@ export async function upsertFollowUpReminder(params: {
         const existing = items.find(
             (r) => r.entityKey === params.entityKey &&
                    r.entityValue === params.entityValue &&
-                   r.dateKey === params.dateKey
+                   r.dateKey === params.dateKey &&
+                   (!params.matchAction || r.action === params.action)
         )
 
         if (!params.dateValue && params.dateKey !== null) {

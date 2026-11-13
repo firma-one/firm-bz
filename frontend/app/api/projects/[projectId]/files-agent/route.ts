@@ -15,6 +15,7 @@ import { resolveEngagementConnector } from '@/lib/connectors/resolve-client-conn
 import { getStorageAdapter } from '@/lib/connectors/registry'
 import { readScaffoldFingerprint, readEngagementKind, writeEngagementKind } from '@/lib/connectors/pockett-structure.service'
 import type { FileNode } from '@/lib/ai/files-agent/analyze'
+import { withoutMemoTree } from '@/lib/memos/memo-shared'
 import { logger } from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
@@ -61,7 +62,7 @@ export async function GET(
                 where: { engagementId: projectId, status: { not: 'ARCHIVED' } },
                 select: {
                     externalId: true, fileName: true, isFolder: true,
-                    parentId: true, docId: true, mimeType: true,
+                    parentId: true, docId: true, mimeType: true, settings: true,
                 },
             }),
             prisma.engagement.findUnique({
@@ -70,7 +71,8 @@ export async function GET(
             }),
         ])
 
-        const nodes: FileNode[] = docs.map((d) => ({
+        // The memos folder is Firma's filing, not the firm's: never a finding, never moved (lib/memos).
+        const nodes: FileNode[] = withoutMemoTree(docs).map((d) => ({
             externalId: d.externalId,
             fileName: d.fileName,
             isFolder: d.isFolder,
@@ -113,7 +115,7 @@ export async function POST(
             where: { engagementId: projectId, status: { not: 'ARCHIVED' } },
             select: {
                 externalId: true, fileName: true, isFolder: true,
-                parentId: true, docId: true, mimeType: true,
+                parentId: true, docId: true, mimeType: true, settings: true,
             },
         })
 
@@ -123,7 +125,8 @@ export async function POST(
             })
         }
 
-        const nodes: FileNode[] = docs.map((d) => ({
+        // The memos folder is Firma's filing, not the firm's: never a finding, never moved (lib/memos).
+        const nodes: FileNode[] = withoutMemoTree(docs).map((d) => ({
             externalId: d.externalId,
             fileName: d.fileName,
             isFolder: d.isFolder,

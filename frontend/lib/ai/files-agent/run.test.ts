@@ -8,7 +8,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const { create, meter } = vi.hoisted(() => ({ create: vi.fn(), meter: vi.fn(async () => {}) }))
 
-vi.mock('@/lib/ai/client', () => ({ AI_MODEL: 'test-model' }))
+vi.mock('@/lib/ai/client', () => ({ AI_MODEL: 'test-model', AI_EFFORT: { filesAgent: 'medium' } }))
 vi.mock('@/lib/ai/guarded-client', () => ({
     getGuardedAnthropic: async () => ({ messages: { create } }),
     meterAiCall: meter,
@@ -49,5 +49,38 @@ describe('runFilesReview', () => {
         const result = await runFilesReview({ nodes: NODES, rootId: 'R', scope })
         expect(result!.modelFailed).toBe(false)
         expect(meter).toHaveBeenCalledTimes(1)
+    })
+
+    it('a declined turn is reported as failed', async () => {
+        create.mockResolvedValue({ content: [], stop_reason: 'refusal', usage: { input_tokens: 10, output_tokens: 0 } })
+        const result = await runFilesReview({ nodes: NODES, rootId: 'R', scope })
+        expect(result!.modelFailed).toBe(true)
+    })
+
+    it('a truncated turn continues with a tool result for every call, then the instruction', async () => {
+        const toolUse = (id: string) => ({
+            type: 'tool_use', id, name: 'propose_renames',
+            input: { renames: [{ externalId: 'f2', proposedName: 'Report-v2.docx', reason: 'copy suffix' }] },
+        })
+        create
+            .mockResolvedValueOnce({
+                content: [toolUse('call_1'), toolUse('call_2')],
+                stop_reason: 'max_tokens',
+                usage: { input_tokens: 10, output_tokens: 5 },
+            })
+            .mockResolvedValueOnce({ content: [], stop_reason: 'end_turn', usage: { input_tokens: 10, output_tokens: 5 } })
+
+        const result = await runFilesReview({ nodes: NODES, rootId: 'R', scope })
+
+        expect(create).toHaveBeenCalledTimes(2)
+        const second = create.mock.calls[1][0]
+        const last = second.messages[second.messages.length - 1]
+        expect(last.role).toBe('user')
+        expect(Array.isArray(last.content)).toBe(true)
+        // Every tool call answered, in order, before the instruction: the API refuses anything else.
+        expect(last.content.slice(0, 2).map((b: { type: string; tool_use_id: string }) => [b.type, b.tool_use_id]))
+            .toEqual([['tool_result', 'call_1'], ['tool_result', 'call_2']])
+        expect(last.content[2].type).toBe('text')
+        expect(result!.modelFailed).toBe(false)
     })
 })

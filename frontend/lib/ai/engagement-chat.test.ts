@@ -380,8 +380,19 @@ describe('follow-up suggestions must be answerable', () => {
     })
 
     it('names the data the snapshot does not carry', () => {
-        expect(CHAT_SYSTEM_PROMPT).toMatch(/does not carry[\s\S]*individual document names/i)
-        expect(CHAT_SYSTEM_PROMPT).toMatch(/comment text, file contents/i)
+        expect(CHAT_SYSTEM_PROMPT).toMatch(/does not carry[\s\S]*people's names or\s+emails, comment text, file contents/i)
+    })
+
+    it('does not deny the file names the FILES section carries', () => {
+        // The route adds a FILES section with names and rule 5a says to use them, so the follow-up
+        // rule must not tell the model names are missing: it steered chips away from answerable questions.
+        expect(CHAT_SYSTEM_PROMPT).not.toMatch(/does NOT hold: individual document names/)
+        expect(CHAT_SYSTEM_PROMPT).toMatch(/file names only where a FILES section is\s+present/)
+    })
+
+    it('never models a decision question as a good follow-up', () => {
+        // The example sat one line above the rule that forbids "who should own something".
+        expect(CHAT_SYSTEM_PROMPT).not.toMatch(/Who should own these\?/)
     })
 })
 

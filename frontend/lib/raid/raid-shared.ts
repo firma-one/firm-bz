@@ -1,0 +1,295 @@
+/**
+ * The RAID log (.claude/plans/brio-features-round-2.md, §9): Risks, Assumptions, Issues and Decisions
+ * for one engagement, internal only. What the tab, the Overview card and /tour share: the shapes the
+ * route answers, the words for each type, status and source, and the pure helpers that filter and count.
+ *
+ * Safe to import from client components: no database, no SDK.
+ */
+
+export type RaidType = 'RISK' | 'ASSUMPTION' | 'ISSUE' | 'DECISION'
+export type RaidStatus = 'SUGGESTED' | 'OPEN' | 'CLOSED' | 'RECORDED' | 'DISMISSED'
+export type RaidSourceKind = 'STATUS' | 'HEALTH' | 'BOARD' | 'THREAD' | 'MEMO' | 'MANUAL'
+
+export const RAID_TYPES: readonly RaidType[] = ['RISK', 'ASSUMPTION', 'ISSUE', 'DECISION']
+
+export const RAID_TYPE_LETTER: Record<RaidType, string> = { RISK: 'R', ASSUMPTION: 'A', ISSUE: 'I', DECISION: 'D' }
+export const RAID_TYPE_LABEL: Record<RaidType, string> = { RISK: 'Risk', ASSUMPTION: 'Assumption', ISSUE: 'Issue', DECISION: 'Decision' }
+export const RAID_TYPE_PLURAL: Record<RaidType, string> = { RISK: 'Risks', ASSUMPTION: 'Assumptions', ISSUE: 'Issues', DECISION: 'Decisions' }
+
+export const RAID_STATUS_LABEL: Record<RaidStatus, string> = {
+    SUGGESTED: 'Suggested',
+    OPEN: 'Open',
+    CLOSED: 'Closed',
+    RECORDED: 'Recorded',
+    DISMISSED: 'Dismissed',
+}
+
+/** Kept current from the engagement's own signals, free: no person or model wrote them. */
+export function isAutoSource(kind: RaidSourceKind): boolean {
+    return kind === 'STATUS' || kind === 'HEALTH' || kind === 'BOARD'
+}
+
+/** Raised in conversation: Brio read it in a thread or a memo. */
+export function isConversationSource(kind: RaidSourceKind): boolean {
+    return kind === 'THREAD' || kind === 'MEMO'
+}
+
+/** A decision is recorded rather than opened; everything else opens. */
+export function liveStatusFor(type: RaidType): 'OPEN' | 'RECORDED' {
+    return type === 'DECISION' ? 'RECORDED' : 'OPEN'
+}
+
+// ── Limits ────────────────────────────────────────────────────────────────────────────────────
+
+export const RAID_TITLE_MAX = 200
+export const RAID_NOTES_MAX = 1000
+
+// ── Signals ───────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The signal keys of STATUS, HEALTH and BOARD entries (lib/raid/raid-signals.ts). One per thing the
+ * engagement's own data says, so an entry is found again on every sync.
+ */
+export const SIGNAL = {
+    overdue: (deliverableId: string) => `overdue:${deliverableId}`,
+    blocked: (documentId: string) => `blocked:${documentId}`,
+    review: (deliverableId: string) => `review:${deliverableId}`,
+    waiting: (documentId: string) => `waiting:${documentId}`,
+    approved: (deliverableId: string) => `approved:${deliverableId}`,
+    pace: 'pace',
+    planning: 'planning',
+} as const
+
+export type SignalKind = 'overdue' | 'blocked' | 'review' | 'waiting' | 'approved' | 'pace' | 'planning'
+
+/** A signal key, read back: what kind it is and the document it names, if any. */
+export function parseSignalKey(key: string | null | undefined): { kind: SignalKind; documentId: string | null } | null {
+    if (!key) return null
+    if (key === 'pace' || key === 'planning') return { kind: key, documentId: null }
+    const m = /^(overdue|blocked|review|waiting|approved):(.+)$/.exec(key)
+    return m ? { kind: m[1] as SignalKind, documentId: m[2] } : null
+}
+
+/** The line under an entry the sync keeps: where it comes from and when it goes away. */
+export function autoLineFor(signalKey: string | null | undefined): string | null {
+    switch (parseSignalKey(signalKey)?.kind) {
+        case 'overdue': return 'From status · closes itself when approved'
+        case 'review': return 'From status · closes itself when approved'
+        case 'blocked': return 'From status · closes itself when unblocked'
+        case 'waiting': return 'From discussions · closes itself when answered'
+        case 'pace': return 'From health · updates daily'
+        case 'planning': return 'From health · closes itself when planned'
+        case 'approved': return 'From the Board'
+        default: return null
+    }
+}
+
+// ── What the route answers ────────────────────────────────────────────────────────────────────
+
+/** One source of an entry, as its chip shows it. */
+export interface RaidSourceView {
+    kind: RaidSourceKind
+    /** "Thread · QSR-9 · Dana · Nov 11", "Memo · Call with Dana · Nov 12", "Board", "Health". */
+    label: string
+    /** The discussion's document (a thread), or the deliverable or document a status entry is about. */
+    documentId: string | null
+    /** The memo's document id, for a memo source: the chip links to the memo, since its words aren't kept. */
+    memoId: string | null
+    /** The comment's words: thread sources only, never a memo's. */
+    quote: string | null
+    /** An internal note or a memo. */
+    internal: boolean
+}
+
+export interface RaidItemView {
+    id: string
+    type: RaidType
+    title: string
+    notes: string | null
+    ownerUserId: string | null
+    ownerName: string | null
+    status: RaidStatus
+    sourceKind: RaidSourceKind
+    /** The entry's own source first, then any merged in. */
+    sources: RaidSourceView[]
+    internalSource: boolean
+    /** For entries the sync keeps: "From status · closes itself when approved". */
+    autoLine: string | null
+    /** An Issue about a deliverable past its due date: shown in the danger tone. */
+    overdue: boolean
+    /** A suggestion that adds to an entry already in the log. */
+    attachedTo: { id: string; type: RaidType; title: string } | null
+    /** ISO. */
+    raisedAt: string
+    closedAt: string | null
+    closedReason: string | null
+    /**
+     * A closed entry a person may reopen: anything a person closed, and any entry the sync didn't keep.
+     * One the sync closed opens again by itself when its signal returns.
+     */
+    canReopen: boolean
+}
+
+/** A Lead or a Contributor · Full Access: who an entry can be given to. */
+export interface RaidMember {
+    userId: string
+    name: string
+}
+
+export interface RaidLogPayload {
+    /** The log: open, recorded and closed entries. */
+    items: RaidItemView[]
+    /** Brio's suggestions, waiting for a person. */
+    suggestions: RaidItemView[]
+    members: RaidMember[]
+    /** ISO, when Brio last read the conversation for this engagement; null before the first check. */
+    lastCheckedAt: string | null
+    /** A completed engagement: listed, nothing changed. */
+    readOnly: boolean
+    /** Brio is configured, so Check now can run. */
+    canCheck: boolean
+}
+
+// ── Reading it ────────────────────────────────────────────────────────────────────────────────
+
+/** In the log and not closed: open, or a recorded decision. What the "Open" filter shows. */
+export function isLive(item: Pick<RaidItemView, 'status'>): boolean {
+    return item.status === 'OPEN' || item.status === 'RECORDED'
+}
+
+/** The number beside RAID on the Discussions switch: everything live in the log. */
+export function raidOpenCount(items: readonly Pick<RaidItemView, 'status'>[]): number {
+    return items.filter(isLive).length
+}
+
+export type RaidTone = 'late' | 'open' | 'closed' | 'recorded' | 'suggested'
+
+/** The status pill's tone: waiting for open, danger for an overdue issue, done for closed, neutral blue for a decision. */
+export function raidTone(item: Pick<RaidItemView, 'status' | 'type' | 'overdue'>): RaidTone {
+    if (item.status === 'CLOSED' || item.status === 'DISMISSED') return 'closed'
+    if (item.status === 'RECORDED') return 'recorded'
+    if (item.status === 'SUGGESTED') return 'suggested'
+    return item.type === 'ISSUE' && item.overdue ? 'late' : 'open'
+}
+
+export type RaidTypeFilter = RaidType | 'ALL'
+export type RaidStateFilter = 'open' | 'closed'
+
+function inState(item: Pick<RaidItemView, 'status'>, state: RaidStateFilter): boolean {
+    return state === 'open' ? isLive(item) : item.status === 'CLOSED'
+}
+
+/** The table's rows for a type and Open or Closed, newest first. */
+export function filterRaidItems<T extends Pick<RaidItemView, 'status' | 'type' | 'raisedAt'>>(
+    items: readonly T[],
+    type: RaidTypeFilter,
+    state: RaidStateFilter,
+): T[] {
+    return items
+        .filter((i) => inState(i, state) && (type === 'ALL' || i.type === type))
+        .sort((a, b) => b.raisedAt.localeCompare(a.raisedAt))
+}
+
+/** The counts beside each type filter, for Open or Closed. */
+export function raidCountsByType(items: readonly Pick<RaidItemView, 'status' | 'type'>[], state: RaidStateFilter): Record<RaidTypeFilter, number> {
+    const counts: Record<RaidTypeFilter, number> = { ALL: 0, RISK: 0, ASSUMPTION: 0, ISSUE: 0, DECISION: 0 }
+    for (const i of items) {
+        if (!inState(i, state)) continue
+        counts.ALL += 1
+        counts[i.type] += 1
+    }
+    return counts
+}
+
+/** Issues before risks before assumptions: what a reader acts on first. */
+const OVERVIEW_ORDER: Record<RaidType, number> = { ISSUE: 0, RISK: 1, ASSUMPTION: 2, DECISION: 3 }
+
+export interface RaidOverview {
+    counts: { openRisks: number; assumptions: number; openIssues: number; decisions: number }
+    /** The top open entries raised in conversation (threads and memos). */
+    conversation: RaidItemView[]
+    /** The newest decision people recorded (not the Board's approvals, which the Board shows). */
+    latestDecision: RaidItemView | null
+    suggestionCount: number
+}
+
+/**
+ * The Overview card: counts by type, the top open entries raised in conversation and the latest
+ * decision. It leaves out what the Action Center already shows (overdue work, planning gaps, pace,
+ * waiting threads), so status and health entries are never among its rows.
+ */
+export function raidOverviewOf(log: Pick<RaidLogPayload, 'items' | 'suggestions'>, maxRows = 3): RaidOverview {
+    const live = log.items.filter(isLive)
+    const latestDecision = live
+        .filter((i) => i.type === 'DECISION' && !isAutoSource(i.sourceKind))
+        .sort((a, b) => b.raisedAt.localeCompare(a.raisedAt))[0] ?? null
+    const conversation = live
+        .filter((i) => i.status === 'OPEN' && isConversationSource(i.sourceKind))
+        .sort((a, b) => (OVERVIEW_ORDER[a.type] - OVERVIEW_ORDER[b.type]) || b.raisedAt.localeCompare(a.raisedAt))
+        .slice(0, Math.max(0, maxRows - (latestDecision ? 1 : 0)))
+    return {
+        counts: {
+            openRisks: live.filter((i) => i.type === 'RISK' && i.status === 'OPEN').length,
+            assumptions: live.filter((i) => i.type === 'ASSUMPTION' && i.status === 'OPEN').length,
+            openIssues: live.filter((i) => i.type === 'ISSUE' && i.status === 'OPEN').length,
+            decisions: live.filter((i) => i.type === 'DECISION').length,
+        },
+        conversation,
+        latestDecision,
+        suggestionCount: log.suggestions.length,
+    }
+}
+
+// ── Words ─────────────────────────────────────────────────────────────────────────────────────
+
+/** "Nov 11": a day, as the table shows it. */
+export function shortDay(iso: string | Date | null | undefined): string {
+    if (!iso) return ''
+    const d = typeof iso === 'string' ? new Date(iso) : iso
+    if (Number.isNaN(d.getTime())) return ''
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
+}
+
+/** "Checked today 08:02", "Checked Nov 11", or "Not checked yet": when Brio last read the conversation. */
+export function checkedLine(lastCheckedAt: string | null, now: Date = new Date()): string {
+    if (!lastCheckedAt) return 'Not checked yet'
+    const at = new Date(lastCheckedAt)
+    if (Number.isNaN(at.getTime())) return 'Not checked yet'
+    const sameDay = at.getFullYear() === now.getFullYear() && at.getMonth() === now.getMonth() && at.getDate() === now.getDate()
+    if (sameDay) {
+        const hh = String(at.getHours()).padStart(2, '0')
+        const mm = String(at.getMinutes()).padStart(2, '0')
+        return `Checked today ${hh}:${mm}`
+    }
+    return `Checked ${at.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+}
+
+/** "the open Issue “QSR-9 overdue”": what an attaching suggestion adds to. */
+export function attachPhrase(target: { type: RaidType; title: string }): string {
+    const state = target.type === 'DECISION' ? 'recorded' : 'open'
+    return `adds to the ${state} ${RAID_TYPE_LABEL[target.type]} “${target.title}”`
+}
+
+/** Where the Discussions RAID sub-tab is. The param may change with the Discussions switch. */
+export function raidLogHref(engagementBase: string): string {
+    // Without a base (/tour), the page's own query: the tour switches tabs with ?tab=, so the link
+    // names the Discussions tab too, or it would stay on the Overview it was clicked from.
+    return engagementBase ? `${engagementBase}/comments?view=raid` : '?tab=comments&view=raid'
+}
+
+/** Where a source chip goes: the discussion, the memo in Files, or the item on the Board. */
+export function sourceHref(engagementBase: string, source: Pick<RaidSourceView, 'kind' | 'documentId' | 'memoId' | 'label'>): string | null {
+    if (!engagementBase) return null
+    if (source.kind === 'MEMO') return source.memoId ? `${engagementBase}/files#doc-file:${source.memoId}` : null
+    if (!source.documentId) return null
+    if (source.kind === 'THREAD' || source.label.startsWith('Thread')) return `${engagementBase}/comments#doc-comment:${source.documentId}`
+    if (source.kind === 'STATUS' || source.kind === 'BOARD') return `${engagementBase}/board#doc-file:${source.documentId}`
+    return null
+}
+
+/** Sent when the log changes on this page, so the switch's count follows without a refetch. */
+export const RAID_CHANGED_EVENT = 'firma:raid-changed'
+export interface RaidChangedDetail {
+    projectId: string
+    count: number
+}

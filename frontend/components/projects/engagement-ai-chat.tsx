@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
-import { Send, Copy, Check, RotateCcw, History, ThumbsUp, ThumbsDown, ClipboardList, Square, Clock, GripVertical, ChevronDown, Trash2, Pin, PinOff, SquarePen, Info, MessageSquare, CornerDownRight, Briefcase, Folder } from 'lucide-react'
+import { Send, Copy, Check, RotateCcw, History, ThumbsUp, ThumbsDown, ClipboardList, Square, Clock, GripVertical, ChevronDown, Trash2, Pin, PinOff, SquarePen, Info, MessageSquare, CornerDownRight, Briefcase, Folder, Building2 } from 'lucide-react'
 import { WindowGlyph } from '@/components/ui/window-glyph'
 import { ASSISTANT } from '@/lib/ai/assistant'
 import { Brio } from '@/components/ui/brio'
@@ -12,7 +12,7 @@ import { StreamingText } from '@/components/ui/streaming-text'
 import { ChatMarkdown } from '@/components/ui/chat-markdown'
 import {
     listConversations, saveConversation, getConversation, deleteConversation,
-    setConversationPinned, clearConversations, MAX_PINNED, MAX_AGE_DAYS,
+    setConversationPinned, clearConversations, MAX_PINNED, MAX_AGE_DAYS, FIRM_CHAT_SURFACE,
     type Conversation,
 } from '@/lib/ai/chat-conversations'
 import { ElapsedTime } from '@/components/ui/elapsed-time'
@@ -29,7 +29,56 @@ import { useToast } from '@/components/ui/toast'
 import { buildChatTranscript } from '@/lib/ai/chat-transcript'
 import { buildChatSuggestions, buildOpeningFacts, type OpeningFact } from '@/lib/ai/chat-suggestions'
 import { isObviouslyOutOfScope, OUT_OF_SCOPE_REPLY, parseChatReply, stripSources } from '@/lib/ai/engagement-chat'
+import {
+    FIRM_CHAT_CAPABILITY, FIRM_CHAT_PLACEHOLDER, FIRM_OUT_OF_SCOPE_REPLY,
+    buildFirmChatStarters, parseFirmChatReply, type FirmChatLink,
+} from '@/lib/ai/firm-chat'
+import { engagementPath } from '@/lib/navigation/firm-paths'
+import { FirmChatAnswer } from '@/components/brio/firm-chat-answer'
 import type { EngagementInsightsResponse } from '@/lib/insights/engagement-insights'
+import type { FirmInsightsResponse } from '@/app/api/firms/[firmId]/insights/route'
+
+/**
+ * What Brio answers about: one engagement (its Overview and Files pages), or the whole firm (the
+ * firm Overview). One panel serves both; everything that differs between them is decided from this:
+ * the route a question goes to and its auth, how an answer's sources read, the starting questions,
+ * where conversations are kept, the words, and which engagement-only controls exist at all.
+ */
+export type ChatSubject = EngagementChatSubject | FirmChatSubject
+
+export interface EngagementChatSubject {
+    kind: 'engagement'
+    projectId: string
+}
+
+/**
+ * Ask Brio about the firm (.claude/plans/brio-features-round-2.md §3.4), for firm admins. Talks to
+ * POST /api/firms/{firmId}/ai-chat. Compared with an engagement: no file scope to switch to, no
+ * Files-agent tasks, no document chips, and no rating thumbs (the feedback route is per engagement).
+ */
+export interface FirmChatSubject {
+    kind: 'firm'
+    firmId: string
+    /** The firm's place in the app's paths, for the engagement links an answer carries. */
+    groupSlug: string
+    firmSlug: string
+    /** Sent as a bearer token, as the firm brief sends it; the route also reads the session cookie. */
+    accessToken?: string | null
+    /** The insights the Overview already holds, for the data-aware starting questions. */
+    data?: FirmInsightsResponse | null
+}
+
+/**
+ * How a host names the subject: an engagement by `projectId`, as every engagement page does, or
+ * any subject by `subject`. One or the other, never both.
+ */
+export type ChatSubjectProps =
+    | { projectId: string; subject?: undefined }
+    | { subject: ChatSubject; projectId?: undefined }
+
+export function chatSubjectOf(props: ChatSubjectProps): ChatSubject {
+    return props.subject === undefined ? { kind: 'engagement', projectId: props.projectId } : props.subject
+}
 
 /** What a panel rendered inside the thread can do to it. */
 export interface ChatThreadApi {
@@ -261,6 +310,8 @@ const SCOPE_LABEL: Record<ChatScope, { label: string; detail: string; icon: type
     overview: { label: 'This engagement', detail: 'Deliverables, dates, comments and progress', icon: Briefcase },
     files: { label: 'Files', detail: 'File and folder names, structure and dates', icon: Folder },
 }
+/** The firm subject's chip: named, never switched (a firm has no file scope). */
+const FIRM_SCOPE_LABEL = { label: 'This firm', detail: 'Engagements, clients and deadlines', icon: Building2 }
 
 /** The dot beside an opening fact, by how much it demands attention. */
 const FACT_TONE: Record<OpeningFact['tone'], string> = {
@@ -295,32 +346,11 @@ function SuggestionRow({ leading, label, onClick, disabled }: {
     )
 }
 
-export function EngagementAiChat({
-    projectId,
-    data,
-    engagementName,
-    clientName,
-    chrome = 'card',
-    suggestionsOverride,
-    actions,
-    aboveThread,
-    placeholder,
-    capabilityNote,
-    surface = 'overview',
-    scopeSwitchable = false,
-    threadRef,
-    onBusyChange,
-    onStartDrag,
-    dragging = false,
-    onCollapse,
-    onHistoryOpenChange,
-    dockSide = 'right',
-    layout,
-    onLayoutChange,
-    shortcutLabel,
-}: {
-    projectId: string
-    /** Insights payload the page already holds; drives data-aware suggestions. */
+export function EngagementAiChat(props: ChatSubjectProps & {
+    /**
+     * Insights payload the page already holds; drives data-aware suggestions. Engagement subject
+     * only: a firm subject carries its own (`FirmChatSubject.data`).
+     */
     data?: EngagementInsightsResponse | null
     /** Titles the exported transcript. Optional — it falls back to "this engagement". */
     engagementName?: string | null
@@ -434,6 +464,38 @@ export function EngagementAiChat({
     /** The open/collapse shortcut ("⌘J"), shown in the collapse button's hint. */
     shortcutLabel?: string
 }) {
+    const {
+        data,
+        engagementName,
+        clientName,
+        chrome = 'card',
+        suggestionsOverride,
+        aboveThread,
+        placeholder,
+        capabilityNote,
+        surface = 'overview',
+        scopeSwitchable = false,
+        threadRef,
+        onBusyChange,
+        onStartDrag,
+        dragging = false,
+        onCollapse,
+        onHistoryOpenChange,
+        dockSide = 'right',
+        layout,
+        onLayoutChange,
+        shortcutLabel,
+    } = props
+    const subject = chatSubjectOf(props)
+    /** Set for the firm subject; every firm-only branch below reads this. */
+    const firm = subject.kind === 'firm' ? subject : null
+    /** The same, as a value hooks can depend on: `firm` is a fresh object on every render. */
+    const isFirm = firm !== null
+    /** Set for the engagement subject: the feedback route and the scope chip are engagement-only. */
+    const projectId = subject.kind === 'engagement' ? subject.projectId : null
+    // A firm has no Files agent, so it never shows a task, whatever a host passes.
+    const actions = firm ? undefined : props.actions
+
     /**
      * The LIVE scope: what Brio is answering about, which is not always the page you are on.
      *
@@ -448,6 +510,13 @@ export function EngagementAiChat({
     const [scope, setScope] = useState(surface)
     useEffect(() => { setScope(surface) }, [surface])
 
+    /**
+     * Where this subject's conversations are kept: an engagement's per scope, as before; a firm's
+     * under its own surface, so the two lists can never share a key (lib/ai/chat-conversations.ts).
+     */
+    const storeId = subject.kind === 'firm' ? subject.firmId : subject.projectId
+    const storeSurface = firm ? FIRM_CHAT_SURFACE : scope
+
     const [messages, setMessages] = useState<Message[]>([])
 
     /**
@@ -458,7 +527,7 @@ export function EngagementAiChat({
      * the server's markup.
      */
     useEffect(() => {
-        const all = listConversations(projectId, scope)
+        const all = listConversations(storeId, storeSurface)
         setConversations(all)
         // Resume the most recent conversation rather than opening a blank one: continuing where
         // you left off is the common case, and a new thread is one click away.
@@ -467,7 +536,7 @@ export function EngagementAiChat({
         setMessages(latest?.messages ?? [])
         // Everything restored was produced before this page load, so the divider sits above it.
         setRestoredCount(latest?.messages.length ?? 0)
-    }, [projectId, scope])
+    }, [storeId, storeSurface])
 
     /** How many leading turns came from storage, so the divider knows where "now" begins. */
     const [restoredCount, setRestoredCount] = useState(0)
@@ -495,15 +564,15 @@ export function EngagementAiChat({
         // Skip the empty pass that a fresh mount or a "new chat" produces, so an untouched panel
         // does not delete the conversation it has not loaded yet.
         if (messages.length === 0) return
-        const id = saveConversation(projectId, scope, activeId, messages)
+        const id = saveConversation(storeId, storeSurface, activeId, messages)
         // A first write mints the id, so adopt it — otherwise the next turn would start a second
         // conversation instead of appending to this one.
         if (id && id !== activeId) setActiveId(id)
-        setConversations(listConversations(projectId, scope))
+        setConversations(listConversations(storeId, storeSurface))
         // `activeId` is deliberately out of the deps: it is SET by this effect, and including it
         // would run the whole save again on the render that adopts the new id.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [messages, streaming, projectId, scope])
+    }, [messages, streaming, storeId, storeSurface])
     const [error, setError] = useState<string | null>(null)
     // Set when the API reports AI is unavailable (no key) — hides the panel entirely.
     const [unavailable, setUnavailable] = useState(false)
@@ -551,7 +620,7 @@ export function EngagementAiChat({
      *
      * Minted here rather than server-side because the chat endpoint is stateless: it receives the
      * whole message array each turn and holds no continuity, so a server-minted id would be fresh
-     * on every request, which is the opposite of grouping. Keyed on `projectId` so switching
+     * on every request, which is the opposite of grouping. Keyed on the subject so switching
      * engagements starts a new thread rather than merging two conversations.
      */
     /**
@@ -564,13 +633,15 @@ export function EngagementAiChat({
     const abortRef = useRef<AbortController | null>(null)
 
     const threadIdRef = useRef<{ key: string; id: string } | null>(null)
-    if (threadIdRef.current?.key !== projectId) {
-        threadIdRef.current = { key: projectId, id: crypto.randomUUID() }
+    const subjectKey = `${subject.kind}:${storeId}`
+    if (threadIdRef.current?.key !== subjectKey) {
+        threadIdRef.current = { key: subjectKey, id: crypto.randomUUID() }
     }
 
     useEffect(() => {
-        setConversations(listConversations(projectId, scope))
-    }, [projectId])
+        setConversations(listConversations(storeId, storeSurface))
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [storeId])
 
     /** Pinned conversations, for the pin cap. They are listed first in Conversations. */
     const pinnedConversations = useMemo(() => conversations.filter((c) => c.pinned), [conversations])
@@ -629,11 +700,17 @@ export function EngagementAiChat({
     // asynchronously (Files fetches them server-side) passes `[]` while they load, and showing the
     // engagement set in that gap made the chips visibly swap out from under the user. An absent
     // override — Overview, which has no prompts of its own — still gets the engagement chips.
+    //
+    // The firm subject's starters come from the firm's own insights, by the same rule: each is
+    // offered only when the firm has something to answer it with.
+    const firmData = firm?.data
     const dataSuggestions = useMemo(
         () => suggestionsOverride
             ? suggestionsOverride.filter((q) => !asked.has(q))
-            : buildChatSuggestions(data, asked),
-        [suggestionsOverride, data, asked],
+            : isFirm
+                ? buildFirmChatStarters(firmData).filter((q) => !asked.has(q))
+                : buildChatSuggestions(data, asked),
+        [suggestionsOverride, data, asked, isFirm, firmData],
     )
 
     const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant')
@@ -651,11 +728,19 @@ export function EngagementAiChat({
      * Falls back to the standing promise rather than to nothing: a surface that says nothing
      * specific about what the assistant can do here should still say what it will not do.
      */
-    const headerNote = capabilityNote ?? (
+    const headerNote = capabilityNote ?? (firm ? FIRM_CHAT_CAPABILITY : (
         <>
             <Brio /> answers from this engagement&apos;s data, and never changes anything without
             your consent.
         </>
+    ))
+
+    /** Where an engagement link in a firm answer goes: that engagement's Overview. */
+    const firmGroupSlug = firm?.groupSlug
+    const firmSlug = firm?.firmSlug
+    const firmHref = useCallback(
+        (link: FirmChatLink) => engagementPath(firmGroupSlug ?? '', firmSlug ?? '', link.clientSlug, link.slug, { tab: 'analytics' }),
+        [firmGroupSlug, firmSlug],
     )
 
     /**
@@ -697,6 +782,14 @@ export function EngagementAiChat({
         return () => cancelAnimationFrame(frame)
     }, [messages, streaming, aboveThread])
 
+    /**
+     * Where a question goes. An engagement's route takes the live scope; the firm's route reads the
+     * session as the firm brief does, from the cookie and a bearer token, which it forwards to the
+     * insights it answers from.
+     */
+    const chatUrl = subject.kind === 'firm' ? `/api/firms/${subject.firmId}/ai-chat` : `/api/projects/${subject.projectId}/ai-chat`
+    const firmAccessToken = firm?.accessToken ?? null
+
     const ask = useCallback(async (question: string) => {
         const trimmed = question.trim()
         if (!trimmed || streaming) return
@@ -713,7 +806,7 @@ export function EngagementAiChat({
             setMessages((prev) => [
                 ...prev,
                 { role: 'user', content: trimmed, at: Date.now() },
-                { role: 'assistant', content: OUT_OF_SCOPE_REPLY, at: Date.now(), answerId: crypto.randomUUID() },
+                { role: 'assistant', content: isFirm ? FIRM_OUT_OF_SCOPE_REPLY : OUT_OF_SCOPE_REPLY, at: Date.now(), answerId: crypto.randomUUID() },
             ])
             inputRef.current?.focus()
             return
@@ -739,13 +832,15 @@ export function EngagementAiChat({
         let received = false
 
         try {
-            const res = await fetchWithTimeout(`/api/projects/${projectId}/ai-chat`, {
+            const res = await fetchWithTimeout(chatUrl, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: firmAccessToken
+                    ? { 'Content-Type': 'application/json', Authorization: `Bearer ${firmAccessToken}` }
+                    : { 'Content-Type': 'application/json' },
                 // The page the reader is on. Shapes the prompt and trims the file listing
                 // server-side; the server narrows it, so an unknown value degrades to the
-                // broader scope rather than failing.
-                body: JSON.stringify({ question: trimmed, history, scope }),
+                // broader scope rather than failing. The firm route has no scope.
+                body: JSON.stringify(isFirm ? { question: trimmed, history } : { question: trimmed, history, scope }),
             }, AI_TIMEOUT_MS.stream, controller.signal)
 
             phase = 'response'
@@ -830,7 +925,7 @@ export function EngagementAiChat({
             // when someone spends one, and this is the moment that happened.
             window.dispatchEvent(new Event('firma-ai-credit-spent'))
         }
-    }, [projectId, messages, streaming])
+    }, [chatUrl, firmAccessToken, isFirm, scope, messages, streaming])
 
     /**
      * Stops the answer currently streaming.
@@ -884,6 +979,8 @@ export function EngagementAiChat({
      * answer is not stored either.
      */
     const rate = useCallback(async (assistantIndex: number, helpful: boolean, reason?: FeedbackReason) => {
+        // The feedback route is per engagement; a firm answer shows no thumbs to rate it with.
+        if (!projectId) return
         const previous = ratings[assistantIndex]
         setRatings((prev) => ({ ...prev, [assistantIndex]: { helpful, reason } }))
 
@@ -938,7 +1035,7 @@ export function EngagementAiChat({
      * worse clipboard.
      */
     const copyTranscript = useCallback(async () => {
-        const text = buildChatTranscript(messages, {
+        const text = buildChatTranscript(messages, isFirm ? { about: 'firm' } : {
             engagementName: engagementName ?? undefined,
             clientName: clientName ?? undefined,
         })
@@ -951,7 +1048,7 @@ export function EngagementAiChat({
         } catch {
             // Clipboard blocked (permissions, insecure context). Nothing useful to say.
         }
-    }, [messages, engagementName, clientName])
+    }, [messages, isFirm, engagementName, clientName])
 
     /** Copies the visible answer — parsed, so the follow-up sentinel never lands on the clipboard. */
     const copyAnswer = useCallback(async (index: number, content: string) => {
@@ -1040,7 +1137,7 @@ export function EngagementAiChat({
                     <button
                         type="button"
                         onClick={() => setConversations(
-                            setConversationPinned(projectId, scope, c.id, !c.pinned),
+                            setConversationPinned(storeId, storeSurface, c.id, !c.pinned),
                         )}
                         // Disabled at the cap rather than evicting the oldest pin: silently
                         // dropping something deliberately kept is the failure pinning prevents.
@@ -1064,7 +1161,7 @@ export function EngagementAiChat({
                 <button
                     type="button"
                     onClick={() => {
-                        setConversations(deleteConversation(projectId, scope, c.id))
+                        setConversations(deleteConversation(storeId, storeSurface, c.id))
                         // Deleting what is on screen leaves the panel showing a conversation that
                         // no longer exists, and the next turn would silently recreate it.
                         if (c.id === activeId) startNewConversation()
@@ -1162,7 +1259,7 @@ export function EngagementAiChat({
             <button
                 type="button"
                 onClick={() => {
-                    setConversations(clearConversations(projectId, scope))
+                    setConversations(clearConversations(storeId, storeSurface))
                     startNewConversation()
                 }}
                 // Clearing only removes the unpinned ones, so there is nothing to do when
@@ -1193,8 +1290,8 @@ export function EngagementAiChat({
      * facts are about deliverables and comments, not files.
      */
     const openingFacts = useMemo(
-        () => (scope === 'overview' && !suggestionsOverride ? buildOpeningFacts(data) : []),
-        [scope, suggestionsOverride, data],
+        () => (scope === 'overview' && !suggestionsOverride && !isFirm ? buildOpeningFacts(data) : []),
+        [scope, suggestionsOverride, data, isFirm],
     )
 
     // Below every hook, so the hook order never changes when Brio reports itself unavailable.
@@ -1224,7 +1321,7 @@ export function EngagementAiChat({
     /** The answer the "Ask next" list hangs under: the newest one. */
     let lastAssistantIndex = -1
     messages.forEach((m, i) => { if (m.role === 'assistant') lastAssistantIndex = i })
-    const scopeInfo = SCOPE_LABEL[scope]
+    const scopeInfo = isFirm ? FIRM_SCOPE_LABEL : SCOPE_LABEL[scope]
     const ScopeIcon = scopeInfo.icon
     /** The header is the drag surface, so its controls must not start a drag. */
     const noDrag = (e: React.PointerEvent) => e.stopPropagation()
@@ -1404,7 +1501,7 @@ export function EngagementAiChat({
                     <div className="flex min-h-full flex-col justify-end gap-4">
                         <div className="px-2">
                             <p className="text-ui font-medium text-fg">
-                                Ask <Brio noIcon /> about {scope === 'files' ? 'these files' : 'this engagement'}
+                                Ask <Brio noIcon /> about {isFirm ? 'the firm' : scope === 'files' ? 'these files' : 'this engagement'}
                             </p>
                             <p className="mt-0.5 text-small leading-snug text-fg-muted">{headerNote}</p>
                         </div>
@@ -1449,9 +1546,15 @@ export function EngagementAiChat({
 
                 {messages.map((m, i) => {
                     const parsed = m.role === 'assistant' ? parseChatReply(m.content) : null
+                    // A firm answer's sources line is its own shape: the engagements it named, as
+                    // links, and how many engagements it drew on. The answer text is the same parse.
+                    const firmReply = isFirm && m.role === 'assistant' ? parseFirmChatReply(m.content) : null
+                    const drewOn = firmReply?.sources?.drewOn ?? 0
                     // Settled: not the answer still arriving.
                     const settled = !(streaming && i === messages.length - 1)
-                    const based = parsed?.sources
+                    const based = firmReply
+                        ? (drewOn > 0 ? [`${drewOn} engagement${drewOn === 1 ? '' : 's'}`] : [])
+                        : parsed?.sources
                         ? [
                             parsed.sources.deliverables > 0 && `${parsed.sources.deliverables} deliverable${parsed.sources.deliverables === 1 ? '' : 's'}`,
                             parsed.sources.files > 0 && `${parsed.sources.files} file${parsed.sources.files === 1 ? '' : 's'}`,
@@ -1480,7 +1583,12 @@ export function EngagementAiChat({
                         >
                             {m.content ? (
                                 m.role === 'assistant' && settled ? (
-                                    <ChatMarkdown content={parsed!.answer} sources={parsed!.sources?.items} />
+                                    firmReply ? (
+                                        // Engagement links instead of document chips, opening in place.
+                                        <FirmChatAnswer answer={firmReply.answer} links={firmReply.sources?.engagements} hrefFor={firmHref} />
+                                    ) : (
+                                        <ChatMarkdown content={parsed!.answer} sources={parsed!.sources?.items} />
+                                    )
                                 ) : (
                                     /* `pre-line` only on raw text — the answer still streaming, and
                                        the user's own words — where a newline is a line break. NOT on
@@ -1511,7 +1619,7 @@ export function EngagementAiChat({
                             {/* Says plainly that the answer is incomplete. */}
                             {m.stopped && (
                                 <p className="mt-1 text-caption italic text-fg-subtle">
-                                    Stopped — this answer is incomplete.
+                                    Stopped · this answer is incomplete.
                                 </p>
                             )}
                             {m.cutOff && (
@@ -1532,7 +1640,8 @@ export function EngagementAiChat({
                                     copied={copiedIndex === i}
                                     rating={ratings[i]}
                                     disabled={streaming}
-                                    rateable={!m.stopped && !m.cutOff}
+                                    // Never on a firm answer: the feedback route is per engagement.
+                                    rateable={!m.stopped && !m.cutOff && !isFirm}
                                     onCopy={() => void copyAnswer(i, m.content)}
                                     onRetry={() => retry(i)}
                                     onRate={(helpful, reason) => void rate(i, helpful, reason)}
@@ -1587,7 +1696,7 @@ export function EngagementAiChat({
                                 void ask(input)
                             }
                         }}
-                        placeholder={placeholder ?? `Ask ${ASSISTANT.name} about this engagement…`}
+                        placeholder={placeholder ?? (isFirm ? FIRM_CHAT_PLACEHOLDER : `Ask ${ASSISTANT.name} about this engagement…`)}
                         disabled={streaming}
                         maxLength={1000}
                         rows={1}
@@ -1598,7 +1707,7 @@ export function EngagementAiChat({
                         {/* SCOPE CHIP (item 4): what Brio is answering about, where the eye is
                             while asking. On Overview it switches between the engagement and its
                             files; on Files the page is the scope, so it only names it. */}
-                        {scopeSwitchable ? (
+                        {scopeSwitchable && !isFirm ? (
                             <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
                                     <button

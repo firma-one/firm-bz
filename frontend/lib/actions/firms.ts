@@ -518,7 +518,7 @@ export type FirmReminderEmailConfig = {
 // settings by id and is called from crons and webhooks with no session, so it can't be a server action.
 
 
-export type FirmUpdate = { name?: string; branding?: FirmBranding; currency?: FirmCurrency; betaFeatures?: Record<string, boolean>; internalMemo?: string | null; industry?: string | null; companySizeBracket?: string | null; companyWebsite?: string | null; linkedInUrl?: string | null; billingAddress?: string | null; notes?: string | null; allowDomainAccess?: boolean; allowedEmailDomain?: string | null; reminderEmailConfig?: FirmReminderEmailConfig; externalSections?: { engagementHealth: boolean; fileOrganization: boolean; documentActivity: boolean } }
+export type FirmUpdate = { name?: string; branding?: FirmBranding; currency?: FirmCurrency; betaFeatures?: Record<string, boolean>; internalMemo?: string | null; industry?: string | null; companySizeBracket?: string | null; companyWebsite?: string | null; linkedInUrl?: string | null; billingAddress?: string | null; notes?: string | null; allowDomainAccess?: boolean; allowedEmailDomain?: string | null; reminderEmailConfig?: FirmReminderEmailConfig; externalSections?: { engagementHealth: boolean; fileOrganization: boolean; documentActivity: boolean; brioForReviewers?: boolean } }
 
 export async function updateFirm(firmSlug: string, data: FirmUpdate): Promise<ActionResult> {
     return asResult('updateFirm', () => updateFirmOrThrow(firmSlug, data))

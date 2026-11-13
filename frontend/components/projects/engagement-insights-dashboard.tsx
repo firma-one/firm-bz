@@ -95,6 +95,10 @@ import {
     type ReportInputs,
 } from './engagement-overview-sections'
 import { DeliverablesTimeline } from './deliverables-timeline'
+import { StatusUpdateAction } from './status-update-action'
+import { WaitingOnClient } from './waiting-on-client'
+import { ReviewerBrioPanel } from './reviewer-brio-panel'
+import { RaidOverviewCard } from './raid/raid-overview-card'
 import type { ChartSegment } from './overview-charts'
 
 // ─── Ring Registry ────────────────────────────────────────────────────────────
@@ -1319,12 +1323,14 @@ function EngagementActionList({ groups, engagementBase }: {
     )
 }
 
-function EngagementActionCenterV2({ data, loading, engagementBase, setRefreshTick }: {
+function EngagementActionCenterV2({ data, loading, engagementBase, projectId, setRefreshTick, canNudge = false }: {
     data: EngagementInsightsResponse | null
     loading: boolean
     engagementBase: string
     projectId: string
     setRefreshTick: React.Dispatch<React.SetStateAction<number>>
+    /** Leads see "Waiting on Reviewers" with Brio's nudge drafts under the list. */
+    canNudge?: boolean
 }) {
     const [drilldown, setDrilldown] = useState<'duplicates' | null>(null)
 
@@ -1476,13 +1482,22 @@ function EngagementActionCenterV2({ data, loading, engagementBase, setRefreshTic
                     />
                 ) : (
                     // One list, Linear-style: what needs doing first, everything clear behind "N checks passed".
-                    <EngagementActionList
-                        groups={[
-                            { title: 'Delivery', items: delivery },
-                            { title: 'Housekeeping', items: housekeeping },
-                        ]}
-                        engagementBase={engagementBase}
-                    />
+                    <>
+                        <EngagementActionList
+                            groups={[
+                                { title: 'Delivery', items: delivery },
+                                { title: 'Housekeeping', items: housekeeping },
+                            ]}
+                            engagementBase={engagementBase}
+                        />
+                        {canNudge && (
+                            <WaitingOnClient
+                                projectId={projectId}
+                                deliverables={data.deliverables ?? []}
+                                engagementBase={engagementBase}
+                            />
+                        )}
+                    </>
                 )}
             </div>
 
@@ -3013,7 +3028,10 @@ export function EngagementInsightsDashboard({
             then the report. The Action Center used to be a sticky rail on the right, beside the
             report rather than ahead of it, and it cost the report a fifth of its width. */}
         <div className="flex min-w-0 flex-col gap-10 pb-6">
-            <EngagementActionCenterV2 data={data} loading={loading} engagementBase={engagementBase} projectId={projectId} setRefreshTick={setRefreshTick} />
+            <EngagementActionCenterV2 data={data} loading={loading} engagementBase={engagementBase} projectId={projectId} setRefreshTick={setRefreshTick} canNudge={isFirmAdmin} />
+            {/* The RAID log's short form; the full log is Discussions › RAID. Internal viewers only. */}
+            {data?.isInternalViewer && <RaidOverviewCard projectId={projectId} engagementBase={engagementBase} />}
+            {/* Internal memos moved to Discussions › Memos (engagement-memos.tsx); their card is no longer mounted here. */}
                 {/* Engagement Health — Health Score · Delivery Status · Delivery Schedule (Phase 7 & 8) */}
                 {!loading && data && (() => {
                     const inFlightIds = new Set((data.deliverables ?? []).filter((d) => d.stage !== 'approved').map((d) => d.id))
@@ -3200,6 +3218,13 @@ export function EngagementInsightsDashboard({
                                     yet (for firm admins), as the one place to add or generate one, and stays
                                     while a draft is reviewed in the pane. */}
                                 <div className="flex flex-col gap-8 px-6 pt-4 pb-6">
+                                    {/* Reviewers and Limited Access contributors: what is with them, and
+                                        Brio's answers when the firm has turned it on. Not in exports. */}
+                                    {data.isInternalViewer === false && (
+                                        <div data-no-export="">
+                                            <ReviewerBrioPanel projectId={projectId} engagementBase={engagementBase} />
+                                        </div>
+                                    )}
                                     <OverviewTop
                                         report={report}
                                         // Without a right pane (none outside /d) the draft review sits above the
@@ -3302,6 +3327,13 @@ export function EngagementInsightsDashboard({
                                                         // 28px icon buttons, each named by a Hint and an aria-label (the tooltip
                                                         // isn't announced as the button's name).
                                                         <div data-no-export="" className="flex shrink-0 items-center gap-0.5">
+                                                            {/* A status update is written from the APPROVED summary, so it is
+                                                                offered only once one is published. */}
+                                                            {data.insightsSummary && data.insightsSummaryPublishedAt && (
+                                                                <div className="mr-1.5">
+                                                                    <StatusUpdateAction projectId={projectId} firmName={firmName} />
+                                                                </div>
+                                                            )}
                                                             {data.insightsSummary && (
                                                                 <Hint label={summaryCopied === 'published' ? 'Copied' : 'Copy as Markdown'}>
                                                                     <button

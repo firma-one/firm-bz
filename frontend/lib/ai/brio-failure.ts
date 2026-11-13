@@ -20,6 +20,21 @@ export const BRIO_SUMMARY_FAILED = `${ASSISTANT.name} couldn't write a summary. 
 /** The firm brief could not be written. */
 export const BRIO_BRIEF_FAILED = `${ASSISTANT.name} couldn't write a new brief. Try again.`
 
+/** A draft (status update, reply, nudge) could not be written. Nothing was sent. */
+export const BRIO_DRAFT_FAILED = `${ASSISTANT.name} couldn't write a draft. Try again.`
+
+/** Your day on Home could not be written. */
+export const BRIO_DAY_FAILED = `${ASSISTANT.name} couldn't write your day. Try again.`
+
+/** No actions could be read from the notes. Nothing was changed. */
+export const BRIO_PROPOSALS_FAILED = `${ASSISTANT.name} couldn't read actions from these notes. Nothing was changed.`
+
+/** The RAID check could not read the conversation. Nothing was added to the log. */
+export const BRIO_RAID_FAILED = `${ASSISTANT.name} couldn't read the new messages and memos for the RAID log. Nothing was added.`
+
+/** Brio took longer than the surface allows. */
+export const BRIO_TOO_SLOW = `${ASSISTANT.name} took too long. Try again.`
+
 /** The data Brio writes from could not be read. */
 export const BRIO_DATA_UNREADABLE = `${ASSISTANT.name} couldn't read the data it works from. Try again.`
 

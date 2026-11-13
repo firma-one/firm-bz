@@ -1,5 +1,5 @@
 import 'server-only'
-import { AI_MODEL } from './client'
+import { AI_EFFORT, AI_MODEL } from './client'
 import { getGuardedAnthropic, type AiScope } from './guarded-client'
 import { logger } from '@/lib/logger'
 import { resolvePeriod } from '@/lib/search/period'
@@ -181,8 +181,10 @@ export async function interpretSearchQuery(
     try {
         const message = await client.messages.create({
             model: AI_MODEL,
-            max_tokens: 400,
-            temperature: 0,
+            // A forced tool call skips thinking on Haiku 5.5, so this is the call alone; raised from
+            // 400 because the newer tokenizer counts the same text as about 30% more tokens.
+            max_tokens: 1024,
+            output_config: { effort: AI_EFFORT.interpret },
             system: SYSTEM,
             tools: [TOOL],
             tool_choice: { type: 'tool', name: 'apply_filters' },

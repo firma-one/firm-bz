@@ -8,6 +8,8 @@ import { ShimmerBlock } from '@/components/ui/shimmer'
 import { buildDemoFirmActions, buildDemoFirmOverview } from '@/lib/demo/demo-firm-overview'
 import type { DemoFirm } from '@/lib/demo/static-demo-data'
 import { DemoFirmBrief } from '@/components/demo/demo-firm-brief'
+import { DemoBrioChat, type DemoChatSubject } from '@/components/demo/demo-brio-chat'
+import { firmChat } from '@/lib/demo/demo-brio'
 import { FirmActions, type FirmActionLinks } from '@/components/dashboard/firm-actions'
 
 /** The tour's own pages for the Action Center's rows. */
@@ -15,6 +17,9 @@ const TOUR_LINKS: FirmActionLinks = {
     engagement: (clientSlug, engagementSlug, tab) => `/tour/${clientSlug}/${engagementSlug}${tab && tab !== 'analytics' ? `?tab=${tab}` : ''}`,
     client: (clientSlug, tab) => `/tour/${clientSlug}${tab ? `?tab=${tab}` : ''}`,
 }
+
+/** The firm panel's subject: answers link the engagements they name to the tour's own pages. */
+const FIRM_CHAT_SUBJECT: DemoChatSubject = { kind: 'firm', hrefFor: (l) => `/tour/${l.clientSlug}/${l.slug}` }
 
 /**
  * Static counterpart to the firm Overview (firm-clients-view.tsx → FirmBusinessInsights, which
@@ -26,6 +31,7 @@ export function DemoFirmOverview({ firm }: { firm: DemoFirm }) {
     useEffect(() => setNowMs(Date.now()), [])
     const data = useMemo(() => (nowMs === null ? null : buildDemoFirmOverview(firm, nowMs)), [firm, nowMs])
     const actions = useMemo(() => (nowMs === null ? null : buildDemoFirmActions(firm, nowMs)), [firm, nowMs])
+    const chatTurns = useMemo(() => (data ? firmChat(data.engagementRows, data.nowMs) : []), [data])
 
     return (
         <div className="flex flex-col gap-10 pb-6">
@@ -44,6 +50,9 @@ export function DemoFirmOverview({ firm }: { firm: DemoFirm }) {
                     </div>
                 )}
             </InsightCard>
+            {/* As in the app (firm-business-insights.tsx): Ask Brio about the firm is the floating
+                panel, collapsed to its launcher, once the sample firm's rows are ready. */}
+            {data && <DemoBrioChat subject={FIRM_CHAT_SUBJECT} turns={chatTurns} />}
         </div>
     )
 }

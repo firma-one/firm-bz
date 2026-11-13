@@ -1,6 +1,6 @@
 import { createHash } from 'crypto'
 import type { EngagementInsightsResponse } from '@/lib/insights/engagement-insights'
-import { completeText } from './client'
+import { AI_EFFORT, completeText } from './client'
 import { buildEngagementContext, PLATFORM_DATA_MODEL } from './engagement-chat'
 
 /**
@@ -210,6 +210,12 @@ empty — an empty section reads as an oversight.`
 
 
 
+/**
+ * Seven short sections run to ~500 tokens; the rest is room for thinking, which counts toward the
+ * cap. A summary cut off at the cap would lose its last sections, the ones a Lead fills in.
+ */
+export const SUMMARY_MAX_TOKENS = 3000
+
 export async function generateEngagementSummary(
     data: EngagementInsightsResponse,
     meta: { clientName?: string; engagementName?: string },
@@ -217,8 +223,8 @@ export async function generateEngagementSummary(
     return completeText({
         system: SUMMARY_SYSTEM_PROMPT,
         userMessage: `Engagement snapshot:\n${buildEngagementContext(data, meta)}`,
-        maxTokens: 700,
-        temperature: 0.3,
+        maxTokens: SUMMARY_MAX_TOKENS,
+        effort: AI_EFFORT.summary,
         label: 'engagement-summary',
     })
 }
