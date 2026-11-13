@@ -44,9 +44,12 @@ export async function GET(
         const rootInPath = path.find((p: { id: string }) => rootIds.includes(p.id))
         if (rootInPath) {
             projectRootFolderId = rootInPath.id
-        } else if (path.length > 0 && rootIds.length > 0) {
+        } else if (rootIds.length > 0) {
             // Path doesn't include the project root (e.g. root folder not in engagement_documents). Look up parent of top-most segment.
-            const topId = path[0].id
+            // With no ancestors at all, the item itself is the top-most: one sitting right in the
+            // root folder (a deliverable folder there, say) has an empty path, and without this the
+            // page landed on the root anyway but said the file "may have been moved or deleted".
+            const topId = path.length > 0 ? path[0].id : fileId
             const doc = await prisma.engagementDocument.findFirst({
                 where: { firmId: authResult.ctx.orgId, engagementId: projectId, externalId: topId },
                 select: { parentId: true }
