@@ -1403,18 +1403,26 @@ export function EngagementFileList({ projectId, initialFolderData, connectorRoot
                 lastHandledDeeplinkHashRef.current = hash
                 return
             }
+            // Wait for the folders, as doc-file does above. navigateToItem places the file against the
+            // engagement's root folders, and the folder load opens no folder while a link is in the
+            // URL (this handler owns navigation). Handling the link before the folders arrived marked
+            // it done with nothing open: an empty list reading "Storage not connected" and no
+            // highlighted row. This run returns; the next, when isLoadingFolders turns false, lands.
+            if (isLoadingFolders) return
+            // Claimed before the await, so a run the files or loading changes start meanwhile doesn't
+            // land it a second time. navigateToItem always lands somewhere (its last resort is the root).
+            lastHandledDeeplinkHashRef.current = hash
+
             // Navigate to the file's folder so it's visible and highlighted in the list.
             // navigateToItem is awaited but the file list re-render it triggers is async,
             // so the comments pane below may open slightly before the row appears — intentional,
             // since the comment is the primary destination and the highlight is best-effort.
-            if (!isLoadingFolders) {
-                await navigateToItem({
-                    id: externalId, name: fileName ?? 'Document',
-                    mimeType: 'application/octet-stream', webViewLink: '', iconLink: '',
-                    modifiedTime: new Date().toISOString(),
-                } as DriveFile)
-                setHighlightedFileId(externalId)
-            }
+            await navigateToItem({
+                id: externalId, name: fileName ?? 'Document',
+                mimeType: 'application/octet-stream', webViewLink: '', iconLink: '',
+                modifiedTime: new Date().toISOString(),
+            } as DriveFile)
+            setHighlightedFileId(externalId)
 
             setDeeplinkResolving(false)
 
