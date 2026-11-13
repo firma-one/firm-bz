@@ -274,6 +274,16 @@ stored for thread sources only, memo suggestions link to the memo. Code: `lib/ra
 Open: memos edited in storage aren't noticed by the cron's candidate query; nothing run against a live
 model; needs the build to apply the migration and a dev-server restart.
 
+**Later on 2026-11-13 (Deepak: "simplify", like the Overview's Summary):** the toolbar is icons now: a
+status (✓ Up to date, quiet / ⚠ Out of date, orange; nothing when there is nothing to read), then + (Add
+an item) and Brio's sparkle (Check with Brio), 28px with Hints; when it last checked is the status's
+tooltip. Up to date comes from a fingerprint (`lib/raid/raid-fingerprint.ts`): every check stores in
+`settings.raid.fingerprint` a hash of the conversation it covered (per threaded document, message count
+and newest; per memo, when made or last changed), and GET compares it with now. A memo edited in storage
+does show as Out of date, so the sparkle catches what the cron misses. A log checked before fingerprints
+existed is compared by time. The RAID table matches Files (NotionTable grid); Health sources link to the
+Overview's Pace or Planning hygiene chart (`…/analytics#ring-pace`).
+
 ## 10. Skeleton loaders (asked 2026-11-12 "for tomo"; DONE 2026-11-13)
 
 **Skeleton loaders for RAID and individual memos.** Today each shows a line of text while loading:

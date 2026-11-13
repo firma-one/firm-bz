@@ -147,6 +147,9 @@ export interface RaidMember {
     name: string
 }
 
+/** The conversation Brio reads against its last check: read, changed since, or none to read. */
+export type RaidConversationState = 'current' | 'changed' | 'none'
+
 export interface RaidLogPayload {
     /** The log: open, recorded and closed entries. */
     items: RaidItemView[]
@@ -155,6 +158,11 @@ export interface RaidLogPayload {
     members: RaidMember[]
     /** ISO, when Brio last read the conversation for this engagement; null before the first check. */
     lastCheckedAt: string | null
+    /**
+     * Whether Brio has read the conversation as it is now (lib/raid/raid-fingerprint.ts): the threads and
+     * memos match the fingerprint of the last check, have changed since, or there are none.
+     */
+    conversation: RaidConversationState
     /** A completed engagement: listed, nothing changed. */
     readOnly: boolean
     /** Brio is configured, so Check now can run. */
@@ -262,17 +270,14 @@ export function shortDay(iso: string | Date | null | undefined): string {
 }
 
 /** "Checked today 08:02", "Checked Nov 11", or "Not checked yet": when Brio last read the conversation. */
-export function checkedLine(lastCheckedAt: string | null, now: Date = new Date()): string {
-    if (!lastCheckedAt) return 'Not checked yet'
+/** "today 08:02" or "Nov 12": when Brio last checked, for the log's status tooltip; null before the first. */
+export function lastCheckedPhrase(lastCheckedAt: string | null, now: Date = new Date()): string | null {
+    if (!lastCheckedAt) return null
     const at = new Date(lastCheckedAt)
-    if (Number.isNaN(at.getTime())) return 'Not checked yet'
+    if (Number.isNaN(at.getTime())) return null
     const sameDay = at.getFullYear() === now.getFullYear() && at.getMonth() === now.getMonth() && at.getDate() === now.getDate()
-    if (sameDay) {
-        const hh = String(at.getHours()).padStart(2, '0')
-        const mm = String(at.getMinutes()).padStart(2, '0')
-        return `Checked today ${hh}:${mm}`
-    }
-    return `Checked ${at.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+    if (sameDay) return `today ${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`
+    return at.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
 /** "the open Issue “QSR-9 overdue”": what an attaching suggestion adds to. */

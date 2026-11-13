@@ -33,6 +33,18 @@ vi.mock('@/lib/prisma', () => ({
         docCommentMessage: {
             findMany: async () => [...h.messages].sort((a, b) => (b.createdAt as Date).getTime() - (a.createdAt as Date).getTime()),
             count: async () => h.messages.length,
+            // The conversation's fingerprint (lib/raid/raid-fingerprint.ts): per document, how many and the newest.
+            groupBy: async (args: { where: { createdAt?: { lte?: Date } } }) => {
+                const until = args.where.createdAt?.lte
+                const byDoc = new Map<string, { count: number; latest: Date }>()
+                for (const m of h.messages) {
+                    const at = m.createdAt as Date
+                    if (until && at > until) continue
+                    const g = byDoc.get(m.projectDocumentId as string)
+                    byDoc.set(m.projectDocumentId as string, { count: (g?.count ?? 0) + 1, latest: g && g.latest > at ? g.latest : at })
+                }
+                return Array.from(byDoc).map(([projectDocumentId, g]) => ({ projectDocumentId, _count: { _all: g.count }, _max: { createdAt: g.latest } }))
+            },
         },
         engagementDocument: {
             findMany: async (args: { where?: { id?: { in?: string[] } } }) => {
@@ -221,7 +233,19 @@ describe('runRaidCheck', () => {
             ['RISK', 'SUGGESTED', 'THREAD', M2],
         ])
         expect(h.meter).toHaveBeenCalledWith(expect.objectContaining({ feature: 'raidCheck', firmId: 'f1', userId: 'u-alex' }), { inputTokens: 3000, outputTokens: 400 })
-        expect(h.executeRaw).toHaveBeenCalledWith(expect.stringContaining("'lastCheckedAt'"), NOW.toISOString(), 'p1')
+        // The check notes when it ran and the fingerprint of what it covered, so the log can say "Up to date".
+        expect(h.executeRaw).toHaveBeenCalledWith(expect.stringContaining("'fingerprint'"), NOW.toISOString(), expect.stringMatching(/^[0-9a-f]{32}$/), 'p1')
+    })
+
+    it('fingerprints what the check covered: a message written after it began shows as new afterwards', async () => {
+        h.create.mockResolvedValue(toolAnswer([]))
+        await runRaidCheck({ engagementId: 'p1', firmId: 'f1', userId: 'u-alex', now: NOW })
+        const fingerprintWritten = () => (h.executeRaw.mock.calls as unknown as unknown[][])[0][2]
+        const covered = fingerprintWritten()
+        h.executeRaw.mockClear()
+        h.messages = [...h.messages, { id: 'm-late', projectDocumentId: 'doc-9', authorUserId: 'u-dana', content: 'One more thing.', createdAt: new Date(NOW.getTime() + 60_000), isInternal: false }]
+        await runRaidCheck({ engagementId: 'p1', firmId: 'f1', userId: 'u-alex', now: NOW })
+        expect(fingerprintWritten()).toBe(covered)
     })
 
     it("never stores a memo's words: a memo suggestion keeps no quote and nothing of the memo's text", async () => {
@@ -262,7 +286,8 @@ describe('runRaidCheck', () => {
         expect(out).toEqual({ ok: true, status: 'nothing_new', lastCheckedAt: NOW.toISOString() })
         expect(h.guard).not.toHaveBeenCalled()
         expect(h.create).not.toHaveBeenCalled()
-        expect(h.executeRaw).toHaveBeenCalledWith(expect.any(String), NOW.toISOString(), 'p1')
+        // No conversation at all: no fingerprint to store.
+        expect(h.executeRaw).toHaveBeenCalledWith(expect.any(String), NOW.toISOString(), '', 'p1')
     })
 
     it('leaves out a memo that was not changed since the last check', async () => {
@@ -328,14 +353,14 @@ describe('the daily check', () => {
         h.memos = []
         expect(await runScheduledRaidCheck({ id: 'p1', firmId: 'f1' }, NOW)).toEqual({ engagementId: 'p1', status: 'nothing_new' })
         expect(h.create).not.toHaveBeenCalled()
-        expect(h.executeRaw).toHaveBeenCalledWith(expect.any(String), NOW.toISOString(), 'p1')
+        expect(h.executeRaw).toHaveBeenCalledWith(expect.any(String), NOW.toISOString(), '', 'p1')
     })
 
     it('checks one with new messages, charged to the firm with no user, and writes its last check', async () => {
         h.create.mockResolvedValue(toolAnswer([ANSWER[0]]))
         expect(await runScheduledRaidCheck({ id: 'p1', firmId: 'f1' }, NOW)).toEqual({ engagementId: 'p1', status: 'checked', suggested: 1 })
         expect(h.guard).toHaveBeenCalledWith({ firmId: 'f1', userId: null, feature: 'raidCheck' })
-        expect(h.executeRaw).toHaveBeenCalledWith(expect.any(String), NOW.toISOString(), 'p1')
+        expect(h.executeRaw).toHaveBeenCalledWith(expect.any(String), NOW.toISOString(), expect.stringMatching(/^[0-9a-f]{32}$/), 'p1')
     })
 
     it('over the allowance, skips the engagement and leaves its last check where it was', async () => {

@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
-import { AlertCircle, CircleDot, Clock3, Link2, ListChecks, Loader2, MoreHorizontal, Plus, Shapes, Sparkles, Type as TypeIcon, UserRound } from 'lucide-react'
+import { AlertCircle, AlertTriangle, Check, CircleDot, Clock3, Link2, ListChecks, Loader2, MoreHorizontal, Plus, Shapes, Sparkles, Type as TypeIcon, UserRound } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { LoadingAnnouncement, ShimmerBar, ShimmerBlock } from '@/components/ui/shimmer'
 import {
@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/notion-table'
 import { Input } from '@/components/ui/input'
 import { Tag } from '@/components/ui/tag'
+import { Hint, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Brio } from '@/components/ui/brio'
 import {
     DropdownMenu,
@@ -40,16 +41,17 @@ import {
     RAID_TYPE_LETTER,
     RAID_TYPE_PLURAL,
     attachPhrase,
-    checkedLine,
     filterRaidItems,
     isAutoSource,
     isLive,
+    lastCheckedPhrase,
     raidCountsByType,
     raidOpenCount,
     raidTone,
     shortDay,
     sourceHref,
     type RaidChangedDetail,
+    type RaidConversationState,
     type RaidItemView,
     type RaidLogPayload,
     type RaidMember,
@@ -259,6 +261,63 @@ function AddItemForm({ onAdd, onCancel }: { onAdd: (input: RaidNewItem) => Promi
     )
 }
 
+// ── Brio's check ──────────────────────────────────────────────────────────────────────────────
+
+/** 28px icon buttons, each named by a Hint and an aria-label, as on the Overview's Summary. */
+const ICON_BUTTON = 'inline-flex h-7 w-7 items-center justify-center rounded-control text-fg-muted transition-colors duration-ui-fast hover:bg-surface-hover hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action/30 disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent'
+
+/** The status's tooltip: what Brio has read, and when it last checked. */
+export function checkStatusTip(state: Exclude<RaidConversationState, 'none'>, lastCheckedAt: string | null, now?: Date): string {
+    const when = lastCheckedPhrase(lastCheckedAt, now)
+    const name = ASSISTANT.name
+    if (state === 'current') return `${name} has read every thread message and memo.${when ? ` Last checked ${when}.` : ''}`
+    return when
+        ? `Threads or memos changed since ${name} last checked, ${when}. ${name} reads them once a day, or now with the sparkle, at most 1 credit.`
+        : `${name} hasn't read this engagement's threads and memos yet. It reads them once a day, or now with the sparkle, at most 1 credit.`
+}
+
+/**
+ * Whether Brio has read the threads and memos as they are now, as the Summary says it is out of date:
+ * quiet when it has, orange when they changed since its last check (lib/raid/raid-fingerprint.ts).
+ * When it last checked is in the tooltip. Nothing to read: nothing shown.
+ */
+function CheckStatus({ state, lastCheckedAt, checking, now }: {
+    state: RaidConversationState
+    lastCheckedAt: string | null
+    checking: boolean
+    now?: Date
+}) {
+    if (checking) {
+        return (
+            <span className="mr-1.5 inline-flex items-center gap-1 text-caption text-fg-muted" aria-live="polite">
+                <Brio className="animate-pulse" /> is checking…
+            </span>
+        )
+    }
+    if (state === 'none') return null
+    const tip = checkStatusTip(state, lastCheckedAt, now)
+    return (
+        <TooltipProvider delayDuration={300}>
+            <Tooltip>
+                <TooltipTrigger asChild>
+                    {state === 'current' ? (
+                        <span className="mr-1.5 inline-flex shrink-0 cursor-default items-center gap-1 text-caption text-fg-subtle">
+                            <Check className="h-3 w-3" aria-hidden />
+                            Up to date
+                        </span>
+                    ) : (
+                        <span className="mr-1.5 inline-flex shrink-0 cursor-default items-center gap-1 text-caption font-medium text-tag-orange-fg">
+                            <AlertTriangle className="h-3 w-3" aria-hidden />
+                            Out of date
+                        </span>
+                    )}
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-[260px] text-xs">{tip}</TooltipContent>
+            </Tooltip>
+        </TooltipProvider>
+    )
+}
+
 // ── The view ──────────────────────────────────────────────────────────────────────────────────
 
 /** What changes an entry: each answers with the words to show when it didn't work, or null. */
@@ -298,9 +357,9 @@ function RaidLogSkeleton() {
             <div className="flex items-center gap-2">
                 <ShimmerBar className="h-5 w-24 rounded-control" />
                 <span className="flex-1" />
-                <ShimmerBar className="h-3 w-28" />
-                <ShimmerBar className="h-7 w-24 rounded-control" />
-                <ShimmerBar className="h-7 w-20 rounded-control" />
+                <ShimmerBar className="h-3 w-20" />
+                <ShimmerBlock className="h-7 w-7" />
+                <ShimmerBlock className="h-7 w-7" />
             </div>
             <div className="rounded-card border border-line">
                 <div className="px-3.5 py-3"><ShimmerBar className="w-48" /></div>
@@ -386,29 +445,31 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
             <div className="flex flex-wrap items-center gap-2">
                 <span className="text-small text-fg-muted">Risks, Assumptions, Issues and Decisions · Internal only</span>
                 <span className="flex-1" />
-                <span className="text-small text-fg-muted">{checkedLine(log.lastCheckedAt, now)}</span>
-                {!readOnly && (
-                    <>
-                        <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => void checkNow()}
-                            disabled={checking || !log.canCheck}
-                            title={log.canCheck ? `${ASSISTANT.name} reads new messages and memos now: 1 credit when there is something new` : `${ASSISTANT.name} isn't available right now`}
-                        >
-                            {checking
-                                ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-                                : <Sparkles className="h-3.5 w-3.5" style={{ color: BRIO_GREEN }} aria-hidden />}
-                            {checking ? 'Checking…' : 'Check now'}
-                        </Button>
-                        <Button type="button" size="sm" onClick={() => setAdding(true)} disabled={adding}>
-                            <Plus className="h-3.5 w-3.5" aria-hidden />
-                            Add item
-                        </Button>
-                    </>
+                {readOnly ? (
+                    <span className="text-small text-fg-subtle">Read only · completed</span>
+                ) : (
+                    <div className="flex shrink-0 items-center gap-0.5">
+                        <CheckStatus state={log.conversation} lastCheckedAt={log.lastCheckedAt} checking={checking} now={now} />
+                        <Hint label="Add an item">
+                            <button type="button" onClick={() => setAdding(true)} disabled={adding} aria-label="Add an item" className={ICON_BUTTON}>
+                                <Plus className="h-4 w-4" />
+                            </button>
+                        </Hint>
+                        <Hint label={log.canCheck ? <>Check with <Brio /></> : `${ASSISTANT.name} isn't available right now`}>
+                            {/* aria-disabled, not disabled, when Brio is off: a disabled button shows no tooltip. */}
+                            <button
+                                type="button"
+                                onClick={() => { if (log.canCheck && !checking) void checkNow() }}
+                                aria-disabled={!log.canCheck || checking}
+                                aria-label={`Check with ${ASSISTANT.name}`}
+                                className={cn(ICON_BUTTON, checking && 'cursor-default', !log.canCheck && 'cursor-default opacity-50 hover:bg-transparent')}
+                            >
+                                {/* Brio's sparkle, in Brio's green. */}
+                                <Sparkles className={cn('h-4 w-4', checking && 'animate-pulse')} style={{ color: BRIO_GREEN }} />
+                            </button>
+                        </Hint>
+                    </div>
                 )}
-                {readOnly && <span className="text-small text-fg-subtle">Read only · completed</span>}
             </div>
 
             {checkNote && (
@@ -626,7 +687,7 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
 
             <p className="text-small text-fg-muted">
                 Status, health and Board items are free and keep themselves current. <Brio noIcon /> reads threads with new messages and new
-                memos once a day, or when you press Check now: at most 1 credit per engagement per active day. <Brio noIcon /> records what
+                memos once a day, or when you check with the sparkle: at most 1 credit per engagement per active day. <Brio noIcon /> records what
                 people decided; it never decides.
             </p>
         </div>

@@ -4,7 +4,7 @@ import { DemoRaidOverviewCard, DemoRaidTab } from './demo-raid'
 
 /**
  * The RAID log on /tour: the app's own tab and card over canned entries in memory. Accept, Dismiss and
- * Check now work, and nothing reaches the network.
+ * Check with Brio work, and nothing reaches the network.
  */
 
 const fetchSpy = vi.fn()
@@ -47,13 +47,15 @@ describe('DemoRaidTab', { timeout: 20_000 }, () => {
         expect(screen.getAllByTestId(/^raid-row-/)).toHaveLength(7)
     })
 
-    it('Check now finds nothing new, in memory', async () => {
+    it('Check with Brio finds nothing new, in memory', async () => {
         vi.useFakeTimers()
         render(<DemoRaidTab />)
-        fireEvent.click(screen.getByRole('button', { name: 'Check now' }))
-        expect(screen.getByRole('button', { name: 'Checking…' })).toBeTruthy()
+        expect(screen.getByText('Up to date')).toBeTruthy()
+        fireEvent.click(screen.getByRole('button', { name: 'Check with Brio' }))
+        expect(screen.getByText('is checking…')).toBeTruthy()
         await act(async () => { await vi.advanceTimersByTimeAsync(800) })
         expect(screen.getByRole('status').textContent).toBe('Nothing new since the last check.')
+        expect(screen.getByText('Up to date')).toBeTruthy()
         expect(fetchSpy).not.toHaveBeenCalled()
     })
 })

@@ -54,6 +54,10 @@ vi.mock('@/lib/ai/credit-cap', () => ({ assertWithinAiCreditCap: vi.fn(), AiCred
 vi.mock('@/lib/ai/usage', () => ({ recordAiUsage: vi.fn() }))
 vi.mock('@/lib/raid/raid-sync', () => ({ syncRaidSignals: h.sync }))
 vi.mock('@/lib/raid/raid-check', () => ({ runRaidCheck: h.runRaidCheck }))
+vi.mock('@/lib/raid/raid-fingerprint', () => ({
+    loadConversationStamps: async () => ({ threads: [], memos: [] }),
+    conversationStateOf: () => 'changed',
+}))
 vi.mock('@/lib/raid/raid-store', () => ({
     loadRaidLog: h.loadRaidLog,
     addRaidItem: h.addRaidItem,
@@ -133,7 +137,7 @@ describe('who', () => {
     it('a Lead reads the log, synced first, with when Brio last checked', async () => {
         const res = await get()
         expect(res.status).toBe(200)
-        expect((await res.json()).data).toEqual({ ...LOG, lastCheckedAt: '2026-11-12T08:02:00.000Z', readOnly: false, canCheck: true })
+        expect((await res.json()).data).toEqual({ ...LOG, lastCheckedAt: '2026-11-12T08:02:00.000Z', conversation: 'changed', readOnly: false, canCheck: true })
         expect(h.sync).toHaveBeenCalledWith('p1', 'f1')
     })
 

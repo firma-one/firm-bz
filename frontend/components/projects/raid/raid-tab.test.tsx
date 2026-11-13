@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { act, render, screen, within, fireEvent, cleanup, renderHook, waitFor } from '@testing-library/react'
 import { StrictMode } from 'react'
-import { RaidTab, RaidTabView, useRaidCount, type RaidHandlers } from './raid-tab'
+import { RaidTab, RaidTabView, checkStatusTip, useRaidCount, type RaidHandlers } from './raid-tab'
 import { demoRaidLog } from '@/components/demo/demo-raid'
 import { RAID_CHANGED_EVENT } from '@/lib/raid/raid-shared'
 
@@ -92,20 +92,49 @@ describe('RaidTabView', { timeout: 20_000 }, () => {
         expect(healthLink('raid-row-raid-planning')).toBe('/d/e/q2/analytics#ring-planning')
     })
 
-    it('says when Brio last checked, and what Check now found', async () => {
+    it("says whether Brio has read the threads and memos as they are now, as the Summary says it's out of date", () => {
+        const { rerender } = render(<RaidTabView log={{ ...demoRaidLog(NOW), conversation: 'current' }} engagementBase="" readOnly={false} now={NOW} {...handlers()} />)
+        expect(screen.getByText('Up to date')).toBeTruthy()
+        expect(screen.queryByText('Out of date')).toBeNull()
+        rerender(<RaidTabView log={{ ...demoRaidLog(NOW), conversation: 'changed' }} engagementBase="" readOnly={false} now={NOW} {...handlers()} />)
+        expect(screen.getByText('Out of date')).toBeTruthy()
+        // Nothing to read: nothing to say.
+        rerender(<RaidTabView log={{ ...demoRaidLog(NOW), conversation: 'none' }} engagementBase="" readOnly={false} now={NOW} {...handlers()} />)
+        expect(screen.queryByText('Up to date')).toBeNull()
+        expect(screen.queryByText('Out of date')).toBeNull()
+    })
+
+    it('says when Brio last checked in the tooltip', () => {
+        const at = new Date(2026, 10, 12, 8, 2).toISOString()
+        const later = new Date(2026, 10, 12, 15, 0)
+        expect(checkStatusTip('current', at, later)).toBe('Brio has read every thread message and memo. Last checked today 08:02.')
+        expect(checkStatusTip('changed', at, later)).toBe('Threads or memos changed since Brio last checked, today 08:02. Brio reads them once a day, or now with the sparkle, at most 1 credit.')
+        expect(checkStatusTip('changed', null, later)).toMatch(/^Brio hasn't read this engagement's threads and memos yet\./)
+    })
+
+    it('checks with the sparkle, and says what it found', async () => {
         const h = handlers()
-        render(<RaidTabView log={{ ...demoRaidLog(NOW), lastCheckedAt: new Date(2026, 10, 12, 8, 2).toISOString() }} engagementBase="" readOnly={false} now={new Date(2026, 10, 12, 15, 0)} {...h} />)
-        expect(screen.getByText('Checked today 08:02')).toBeTruthy()
-        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Check now' })) })
+        render(<RaidTabView log={demoRaidLog(NOW)} engagementBase="" readOnly={false} now={NOW} {...h} />)
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Check with Brio' })) })
         expect(h.onCheckNow).toHaveBeenCalled()
         expect(screen.getByRole('status').textContent).toBe('Nothing new since the last check.')
+    })
+
+    it("offers no check while Brio isn't available", async () => {
+        const h = handlers()
+        render(<RaidTabView log={{ ...demoRaidLog(NOW), canCheck: false }} engagementBase="" readOnly={false} now={NOW} {...h} />)
+        const sparkle = screen.getByRole('button', { name: 'Check with Brio' })
+        expect(sparkle.getAttribute('aria-disabled')).toBe('true')
+        await act(async () => { fireEvent.click(sparkle) })
+        expect(h.onCheckNow).not.toHaveBeenCalled()
     })
 
     it('a completed engagement offers nothing to change', () => {
         render(<RaidTabView log={{ ...demoRaidLog(NOW), readOnly: true }} engagementBase="" readOnly={false} now={NOW} {...handlers()} />)
         expect(screen.getByText('Read only · completed')).toBeTruthy()
-        expect(screen.queryByRole('button', { name: 'Check now' })).toBeNull()
-        expect(screen.queryByRole('button', { name: /Add item/ })).toBeNull()
+        expect(screen.queryByRole('button', { name: 'Check with Brio' })).toBeNull()
+        expect(screen.queryByRole('button', { name: 'Add an item' })).toBeNull()
+        expect(screen.queryByText('Up to date')).toBeNull()
         expect(screen.queryByRole('button', { name: /^Accept / })).toBeNull()
         expect(screen.queryByText('Add a mitigation')).toBeNull()
     })
@@ -113,7 +142,7 @@ describe('RaidTabView', { timeout: 20_000 }, () => {
     it('adds an entry through its handler', async () => {
         const h = handlers()
         render(<RaidTabView log={demoRaidLog(NOW)} engagementBase="" readOnly={false} now={NOW} {...h} />)
-        fireEvent.click(screen.getByRole('button', { name: /Add item/ }))
+        fireEvent.click(screen.getByRole('button', { name: 'Add an item' }))
         fireEvent.click(screen.getByRole('radio', { name: 'Issue' }))
         fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Brand guidelines missing' } })
         await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Add to the log' })) })

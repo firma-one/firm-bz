@@ -170,6 +170,8 @@ export function demoRaidLog(now: Date = new Date()): RaidLogPayload {
         suggestions,
         members: MEMBERS,
         lastCheckedAt: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 8, 2)).toISOString(),
+        // The suggestions above came from that check, and nothing was said since.
+        conversation: 'current',
         readOnly: false,
         canCheck: true,
     }
@@ -187,7 +189,7 @@ export function DemoRaidTab({ engagementBase = '' }: { engagementBase?: string }
     const handlers: RaidHandlers = {
         onCheckNow: async () => {
             await wait(700)
-            update((l) => ({ ...l, lastCheckedAt: new Date().toISOString() }))
+            update((l) => ({ ...l, lastCheckedAt: new Date().toISOString(), conversation: 'current' }))
             return { message: 'Nothing new since the last check.', error: null }
         },
         onAccept: async (s) => {

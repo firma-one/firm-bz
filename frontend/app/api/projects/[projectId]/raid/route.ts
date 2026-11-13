@@ -5,6 +5,7 @@ import { isAiConfigured } from '@/lib/ai/client'
 import { raidFailureResponse, raidRouteAccess } from '@/lib/raid/raid-access'
 import { syncRaidSignals } from '@/lib/raid/raid-sync'
 import { addRaidItem, lastCheckedAtOf, loadRaidLog, raidActor, raidOpenCountFor } from '@/lib/raid/raid-store'
+import { conversationStateOf, loadConversationStamps } from '@/lib/raid/raid-fingerprint'
 import type { RaidLogPayload } from '@/lib/raid/raid-shared'
 
 export const dynamic = 'force-dynamic'
@@ -13,10 +14,10 @@ export const dynamic = 'force-dynamic'
  * GET /api/projects/[projectId]/raid
  *
  * The engagement's RAID log (.claude/plans/brio-features-round-2.md, §9): its entries, Brio's
- * suggestions, the people an entry can be given to, and when Brio last read the conversation. The free
- * entries (status, health, the Board) are brought up to date first (lib/raid/raid-sync.ts), except on a
- * completed engagement, which is read only. `?view=count` answers only the number of live entries, for
- * the Discussions switch.
+ * suggestions, the people an entry can be given to, when Brio last read the conversation and whether it
+ * has changed since (lib/raid/raid-fingerprint.ts). The free entries (status, health, the Board) are
+ * brought up to date first (lib/raid/raid-sync.ts), except on a completed engagement, which is read
+ * only. `?view=count` answers only the number of live entries, for the Discussions switch.
  *
  * POST /api/projects/[projectId]/raid
  *
@@ -42,10 +43,11 @@ export async function GET(
             return NextResponse.json({ data: { count: await raidOpenCountFor(projectId) } })
         }
 
-        const log = await loadRaidLog(projectId)
+        const [log, stamps] = await Promise.all([loadRaidLog(projectId), loadConversationStamps(projectId)])
         const data: RaidLogPayload = {
             ...log,
             lastCheckedAt: lastCheckedAtOf(engagement?.settings),
+            conversation: conversationStateOf(stamps, engagement?.settings),
             readOnly,
             canCheck: isAiConfigured(),
         }

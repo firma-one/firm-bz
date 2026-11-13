@@ -10,6 +10,7 @@ import { ROLE_NAME, isPersonaUiSlug } from '@/lib/persona-ui-groups'
 import { logger } from '@/lib/logger'
 import { RAID_TYPES, type RaidType } from './raid-shared'
 import { extraSourcesOf, lastCheckedAtOf } from './raid-store'
+import { fingerprintConversation, loadConversationStamps } from './raid-fingerprint'
 
 /**
  * The RAID log's Brio check (.claude/plans/brio-features-round-2.md, §9): once a day for an engagement
@@ -455,16 +456,20 @@ async function withoutKnown(engagementId: string, suggestions: RaidSuggestion[])
         : `N|${s.sourceRef}|${normalizeForMatch(s.title)}`))
 }
 
-/** Writes `settings.raid.lastCheckedAt` and nothing else, so no other setting saved meanwhile is lost. */
-export async function writeLastCheckedAt(engagementId: string, at: Date): Promise<void> {
+/**
+ * Writes `settings.raid.lastCheckedAt` and the fingerprint of the conversation the check covered
+ * (lib/raid/raid-fingerprint.ts), and nothing else, so no other setting saved meanwhile is lost.
+ */
+export async function writeLastCheckedAt(engagementId: string, at: Date, fingerprint: string | null): Promise<void> {
     await prisma.$executeRawUnsafe(
         `UPDATE platform.engagements
             SET settings = COALESCE(settings, '{}'::jsonb) || jsonb_build_object(
                 'raid',
                 CASE WHEN jsonb_typeof(settings -> 'raid') = 'object' THEN settings -> 'raid' ELSE '{}'::jsonb END
-                    || jsonb_build_object('lastCheckedAt', $1::text))
-          WHERE id = $2::uuid`,
+                    || jsonb_build_object('lastCheckedAt', $1::text, 'fingerprint', $2::text))
+          WHERE id = $3::uuid`,
         at.toISOString(),
+        fingerprint ?? '',
         engagementId,
     )
 }
@@ -494,12 +499,15 @@ export async function runRaidCheck(params: { engagementId: string; firmId: strin
     if (engagement.status === 'COMPLETED') return { ok: false, reason: 'completed' }
 
     const since = checkSince(engagement.settings, now)
-    const [{ messages, omitted }, changedMemos] = await Promise.all([
+    const [{ messages, omitted }, changedMemos, stamps] = await Promise.all([
         loadNewMessages(params.engagementId, since, now),
         loadChangedMemos(params.engagementId, since),
+        loadConversationStamps(params.engagementId, now),
     ])
+    // What this check covers, so the log can tell when the conversation moves on from it.
+    const fingerprint = fingerprintConversation(stamps)
     if (messages.length === 0 && changedMemos.length === 0) {
-        await writeLastCheckedAt(params.engagementId, now)
+        await writeLastCheckedAt(params.engagementId, now, fingerprint)
         return { ok: true, status: 'nothing_new', lastCheckedAt: now.toISOString() }
     }
 
@@ -522,7 +530,7 @@ export async function runRaidCheck(params: { engagementId: string; firmId: strin
         memos.push({ ref: `N${memos.length + 1}`, id: m.id, title: m.title, date: m.date, text: text.length > MAX_MEMO_CHARS ? `${text.slice(0, MAX_MEMO_CHARS)}…` : text })
     }
     if (messages.length === 0 && memos.length === 0) {
-        await writeLastCheckedAt(params.engagementId, now)
+        await writeLastCheckedAt(params.engagementId, now, fingerprint)
         return { ok: true, status: 'checked', suggested: 0, dropped: 0, unreadMemos, lastCheckedAt: now.toISOString() }
     }
 
@@ -561,7 +569,7 @@ export async function runRaidCheck(params: { engagementId: string; firmId: strin
             data: suggestionRows({ engagementId: params.engagementId, firmId: params.firmId, userId: params.userId, suggestions: fresh }),
         })
     }
-    await writeLastCheckedAt(params.engagementId, now)
+    await writeLastCheckedAt(params.engagementId, now, fingerprint)
     return {
         ok: true,
         status: 'checked',
