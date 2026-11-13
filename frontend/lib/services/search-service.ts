@@ -4,7 +4,7 @@ import { descriptionOf } from '../files/description'
 import { generateSummary } from '../summarization'
 import { extractSnippet } from '../snippet'
 import { logger } from '../logger'
-import { assignDocId } from '../doc-id'
+import { assignDocId, looksLikeDocId } from '../doc-id'
 import type { IConnectorContentAdapter } from '../connectors/types'
 
 const MAX_INDEXABLE_TEXT_SIZE_BYTES = 15 * 1024 * 1024
@@ -835,10 +835,6 @@ export class SearchService {
             .filter(w => !isPureNumeric(w) && (w.length >= 3 || isShortAlphanumeric(w)))
         const significantTerms = Array.from(new Set(words)).slice(0, 5)
 
-        // A docId looks like "NVQ-7" (letters, hyphen, digits) — only attempt the dedicated
-        // exact-match branch when the query plausibly looks like one, so a normal semantic
-        // query never pays for an extra no-op DB round-trip.
-        const looksLikeDocId = /^[a-z]{2,6}-\d+$/i.test(trimmedQuery)
 
         // Each branch that runs may fail on its own (the embedding service down, one query timing out):
         // the others' results still stand. When every branch that ran failed, the search couldn't run,
@@ -860,7 +856,9 @@ export class SearchService {
             branch(trimmedQuery && significantTerms.length > 0
                 ? () => SearchService.searchGlobalFileNameTerms({ firmId, userId, terms: significantTerms, fullAccessEngagementIds, grantGatedEngagementIds, clientId, engagementId, deliverableDocumentIds, dateRange, dateField, strictDueDate, limit: 25 })
                 : null),
-            branch(looksLikeDocId
+            // A docId looks like "NVQ-7": only attempt the dedicated branch when the query plausibly
+            // is one, so a normal semantic query never pays for an extra no-op DB round-trip.
+            branch(looksLikeDocId(trimmedQuery)
                 ? () => SearchService.searchGlobalDocId({ firmId, userId, query: trimmedQuery, fullAccessEngagementIds, grantGatedEngagementIds, clientId, engagementId, deliverableDocumentIds, dateRange, dateField, strictDueDate, limit: 10 })
                 : null),
         ])
@@ -1069,11 +1067,70 @@ export class SearchService {
     }
 
     /**
-     * Exact/prefix match against docId (e.g. "NVQ-7") — a short human-readable identifier,
-     * not previously searchable anywhere in the app. Matched as ILIKE prefix rather than full
-     * substring so "NVQ-7" doesn't also match "NVQ-71", and treated as a high-confidence exact
-     * signal (same 0.92 flat score convention as searchGlobalFileName) since a docId match is
-     * unambiguous by construction, unlike a filename substring.
+     * How a doc-ID query ("FRM-19") matches: as a prefix, so a half-typed id still lists FRM-19
+     * and FRM-190…199, with the exact id first, then the most recently changed. Case is ignored.
+     * Firm Doc Search and an engagement's Files search share this. Callers check looksLikeDocId
+     * first, so the query holds no LIKE wildcards.
+     */
+    private static docIdMatchSql(query: string, push: (value: any) => string): { where: string; orderBy: string } {
+        const trimmed = query.trim()
+        const pattern = push(`${trimmed}%`)
+        const exact = push(trimmed)
+        return {
+            where: `d."docId" ILIKE ${pattern}`,
+            orderBy: `(UPPER(d."docId") = UPPER(${exact})) DESC, d."updatedAt" DESC`,
+        }
+    }
+
+    /**
+     * An engagement's documents whose doc ID ("FRM-198") starts with the query, for the Files tab's
+     * search. Nothing private or awaiting review (intake) is returned, as in the name search; the
+     * route then narrows to what the searcher may see. A query that isn't a doc ID returns nothing
+     * without a database read. A failed read is logged and returns nothing, like the engagement's
+     * other search branches, so the rest of the search still answers.
+     */
+    static async searchByDocId(params: {
+        organizationId: string
+        projectId: string
+        query: string
+        limit?: number
+    }): Promise<VectorSearchResult[]> {
+        if (!looksLikeDocId(params.query)) return []
+        try {
+            const queryParams: any[] = []
+            let paramIndex = 1
+            const push = (value: any) => { queryParams.push(value); return `$${paramIndex++}` }
+            const firmIdParam = push(params.organizationId)
+            const projectIdParam = push(params.projectId)
+            const docIdMatch = SearchService.docIdMatchSql(params.query, push)
+            const limitParam = push(params.limit ?? 10)
+
+            const results = await prisma.$queryRawUnsafe<any[]>(`
+        SELECT d."externalId", d."fileName", d."updatedAt", d."metadata", d."isFolder", d."docId"
+        FROM platform.engagement_documents d
+        WHERE d."firmId" = ${firmIdParam}::uuid
+          AND d."engagementId" = ${projectIdParam}::uuid
+          AND ${docIdMatch.where}
+          AND (d.settings->>'locked') IS DISTINCT FROM 'private'
+          AND COALESCE(d.settings->'lock'->>'type', '') NOT IN ('private', 'intake')
+        ORDER BY ${docIdMatch.orderBy}
+        LIMIT ${limitParam}
+      `, ...queryParams)
+
+            return results.map(r => ({
+                externalId: r.externalId, fileName: r.fileName, updatedAt: new Date(r.updatedAt),
+                score: 0.92, metadata: r.metadata, isFolder: Boolean(r.isFolder), docId: r.docId,
+            }))
+        } catch (error) {
+            logger.error('Engagement docId search failed:', error as Error)
+            return []
+        }
+    }
+
+    /**
+     * Prefix match against docId (e.g. "NVQ-7"), a short human-readable identifier, treated as a
+     * high-confidence signal (same 0.92 flat score convention as searchGlobalFileName) since a docId
+     * match is unambiguous by construction, unlike a filename substring. See docIdMatchSql.
      */
     private static async searchGlobalDocId(params: {
         firmId: string
@@ -1095,7 +1152,7 @@ export class SearchService {
             const push = (value: any) => { queryParams.push(value); return `$${paramIndex++}` }
 
             const firmIdParam = push(params.firmId)
-            const docIdPattern = push(`${params.query}%`)
+            const docIdMatch = SearchService.docIdMatchSql(params.query, push)
             const scopeFilter = SearchService.buildGlobalScopeFilter({ ...params, push })
             const limitParam = push(params.limit)
 
@@ -1105,10 +1162,10 @@ export class SearchService {
         FROM platform.engagement_documents d
         WHERE d."firmId" = ${firmIdParam}::uuid
           ${scopeFilter}
-          AND d."docId" ILIKE ${docIdPattern}
+          AND ${docIdMatch.where}
           AND (d.settings->>'locked') IS DISTINCT FROM 'private'
           AND COALESCE(d.settings->'lock'->>'type', '') NOT IN ('private', 'intake')
-        ORDER BY d."updatedAt" DESC
+        ORDER BY ${docIdMatch.orderBy}
         LIMIT ${limitParam}
       `, ...queryParams)
 
