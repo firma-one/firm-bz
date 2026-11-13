@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import type { MyWork } from '@/lib/home/my-work'
 
 /**
- * Your day's route, with the real day-brief module behind it: only the session, the database, the
+ * Your brief's route, with the real day-brief module behind it: only the session, the database, the
  * Home loaders and the model are stand-ins. Nothing reaches Anthropic.
  */
 
@@ -184,10 +184,10 @@ describe('/api/me/day-brief', () => {
         await GET(req())
         const saved = store.dayBrief
         data.work = { ...oneThread, needsYou: [...oneThread.needsYou, { ...oneThread.needsYou[0], id: 'review:x', kind: 'deliverable_review', title: 'Pricing' }] }
-        personLimit.mockRejectedValueOnce(new AiCreditLimitError("You've rewritten Your day 4 times today, the most for one day.", 'person', 4, 4))
+        personLimit.mockRejectedValueOnce(new AiCreditLimitError("You've rewritten your brief 4 times today, the most for one day.", 'person', 4, 4))
         const { status, body } = await json(await POST(req()))
         expect(status).toBe(429)
-        expect(body.error).toBe("You've rewritten Your day 4 times today, the most for one day.")
+        expect(body.error).toBe("You've rewritten your brief 4 times today, the most for one day.")
         expect(create).toHaveBeenCalledTimes(1)
         expect(store.dayBrief).toBe(saved)
     })
@@ -213,7 +213,7 @@ describe('/api/me/day-brief', () => {
         create.mockResolvedValue(reply('refusal'))
         const { status, body } = await json(await GET(req()))
         expect(status).toBe(500)
-        expect(body.error).toBe("Brio couldn't write your day. Try again.")
+        expect(body.error).toBe("Brio couldn't write your brief. Try again.")
         expect(store.dayBrief).toBeNull()
     })
 
@@ -221,7 +221,7 @@ describe('/api/me/day-brief', () => {
         create.mockRejectedValue(new Error('529 overloaded_error'))
         const { status, body } = await json(await GET(req()))
         expect(status).toBe(500)
-        expect(body.error).toBe("Brio couldn't write your day. Try again.")
+        expect(body.error).toBe("Brio couldn't write your brief. Try again.")
     })
 
     it('when Home\'s data does not load, says so and writes nothing', async () => {

@@ -372,3 +372,10 @@ re-recorded with `scripts/tour-narration/generate.py`.
 
 Not changed: the campaign email's Brio band (`lib/email-templates/campaigns/brio-band.ts`) still says
 Brio never reads a comment.
+
+**Names (Deepak, 2026-11-13).** Home's brief is **"Your brief"** (was "Your day") and the Firm Overview
+card is **"Firm brief"** (was "Today's brief"): each says whose it is, and "Your day" meant nothing to
+someone who hadn't seen the app. Labels only: the feature keys stay `dayBrief`, `dayBriefRewrite` and
+`brief`. Renamed across the app, its limit and failure messages, the /tour (the Firm Overview step's
+narration was re-recorded), the website and the campaign email. Website copy that explains it to
+newcomers says "tells you each morning what needs you" / "morning rundown".

@@ -240,7 +240,7 @@ describe('renderDayBriefRequest', () => {
 
 describe('cleanDayBrief', () => {
     it('keeps three paragraphs of prose, bold only in the first, no bullets, headings or em dashes', () => {
-        const raw = '# Your day\n\n**Two threads** wait — since Monday.\n\n- QSR-12 is due **tomorrow**.\n\nThird.\n\nFourth.'
+        const raw = '# Your brief\n\n**Two threads** wait — since Monday.\n\n- QSR-12 is due **tomorrow**.\n\nThird.\n\nFourth.'
         expect(cleanDayBrief(raw)).toBe('**Two threads** wait, since Monday.\n\nQSR-12 is due tomorrow.\n\nThird.')
     })
 })

@@ -179,7 +179,7 @@ const CONTROL = 'inline-flex h-7 items-center gap-1.5 rounded-control border bor
 const ICON_BUTTON = 'inline-flex h-7 w-7 items-center justify-center rounded-control text-fg-muted transition-colors duration-ui-fast hover:bg-surface-hover hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action/30 disabled:cursor-default disabled:opacity-50'
 
 /**
- * Today's brief as a card, with the Engagement Summary's header: title, how old it is, Copy, and
+ * The Firm brief (was "Today's brief") as a card, with the Engagement Summary's header: title, how old it is, Copy, and
  * "Rewrite with Brio". Presentational: the Overview feeds it from useFirmBrief, the tour from its
  * sample data.
  */
@@ -226,7 +226,7 @@ export function FirmBriefCard({ brief, loading = false, refreshing = false, stre
         <div data-firm-brief className="flex min-w-0 flex-col overflow-hidden rounded-card border border-line bg-surface">
             <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-line px-4 pb-2 pt-3">
                 <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
-                    <span className="text-small font-medium text-fg-muted">Today&apos;s brief</span>
+                    <span className="text-small font-medium text-fg-muted">Firm brief</span>
                     {refreshing ? (
                         <span className="inline-flex shrink-0 items-center gap-1 text-caption text-fg-muted">
                             <Brio className="animate-pulse" /> is writing a new brief…
@@ -275,7 +275,7 @@ export function FirmBriefCard({ brief, loading = false, refreshing = false, stre
                 // Not a shimmer forever, and not a card that vanishes: a quiet line with the reason.
                 <div role="status" className="flex flex-wrap items-center gap-x-2 gap-y-1 px-4 py-4 text-small text-fg-muted">
                     <AlertCircle className="h-3.5 w-3.5 shrink-0 text-tag-yellow-fg" />
-                    <span>Couldn&apos;t load today&apos;s brief · {loadError}</span>
+                    <span>Couldn&apos;t load the firm brief · {loadError}</span>
                     {onReload && (
                         <button type="button" onClick={onReload} className="text-small font-medium text-fg underline-offset-2 hover:underline">
                             Try again

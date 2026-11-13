@@ -60,7 +60,7 @@ const isOpen = (d: DemoDeliverable) => d.status !== 'approved'
 
 // ─── Firm brief ──────────────────────────────────────────────────────────────
 
-/** The firm Overview's "Today's brief", in the `## Heading` + prose shape BrioSections renders. */
+/** The firm Overview's "Firm brief", in the `## Heading` + prose shape BrioSections renders. */
 export function buildDemoFirmBrief(firm: DemoFirm): string {
     const active = firm.clients.filter((c) => c.status === 'ACTIVE')
     const engagements = firm.clients.flatMap((c) => c.engagements.map((e) => ({ client: c, engagement: e })))

@@ -29,7 +29,7 @@ const FEATURE_LABELS: Record<string, string> = {
     nudgeDraft: 'Nudge drafts',
     notesProposals: 'Notes into actions',
     reviewerChat: 'Reviewer questions',
-    dayBrief: 'Your day',
+    dayBrief: 'Your brief',
     raidCheck: 'RAID check',
 }
 
