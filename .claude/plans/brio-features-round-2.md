@@ -330,3 +330,11 @@ Rewrite that replaces today's brief is its own feature, `dayBriefRewrite`, 1 cre
 "Briefs and assistant" (was "Firm briefs and assistant"); the morning brief stays free. The Rewrite
 button's tooltip says "1 credit, only when your items have changed". Brio for Reviewers keeps its own
 10 a day in its route.
+
+**Who pays on Home (Deepak, 2026-11-13).** Home stays cross-firm (the October decision,
+`cross-firm-home-inbox.md`). As a shortcut, per-person AI usage on Home is billed to the firm
+selected in the sidebar: Your day sends it as `?firm=<id>`, and the route bills it only when the firm
+is in Home's own firm list (a member who can open it), else the firm with the most items. The Rewrite
+tooltip names it: "Uses 1 FirmaOne credit, only when your items have changed". Revisit when someone
+belongs to several firm groups (a Reviewer or external Contributor invited by firms in different
+groups): then Home may need to follow the selected group, which also suits custom domains.

@@ -4,7 +4,11 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
 vi.mock('next/link', () => ({ default: ({ href, children, ...rest }: React.ComponentProps<'a'>) => <a href={href} {...rest}>{children}</a> }))
 vi.mock('next/navigation', () => ({ usePathname: () => '/d/u/home', useSearchParams: () => new URLSearchParams(), useRouter: () => ({ replace: vi.fn(), push: vi.fn(), refresh: vi.fn() }) }))
 
-import { DayBrief, DemoDayBrief, DAY_BRIEF_EMPTY, DAY_BRIEF_UNCHANGED, demoDayBriefText, briefParagraphs } from './day-brief'
+// The sidebar's firm on Home: none (outside the app shell) unless a test sets one.
+const shell = vi.hoisted(() => ({ value: null as null | { firms: Array<{ id: string; name: string; slug: string }>; firmSlug: string | null } }))
+vi.mock('@/components/shell/shell-data-context', () => ({ useOptionalShellData: () => shell.value }))
+
+import { DayBrief, DemoDayBrief, DAY_BRIEF_EMPTY, DAY_BRIEF_UNCHANGED, demoDayBriefText, briefParagraphs, rewriteHint } from './day-brief'
 import { HomeView } from './home-view'
 import type { MyWork } from '@/lib/home/my-work'
 
@@ -19,6 +23,7 @@ const ok = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
 const fetchMock = vi.fn()
 
 beforeEach(() => {
+    shell.value = null
     fetchMock.mockReset()
     vi.stubGlobal('fetch', fetchMock)
 })
@@ -80,6 +85,21 @@ describe('DayBrief', () => {
         fetchMock.mockResolvedValue(ok({ brief: null, available: false }))
         const { container } = render(<DayBrief />)
         await waitFor(() => expect(container.innerHTML).toBe(''))
+    })
+
+    it("asks for the brief, and rewrites it, billed to the firm selected in the sidebar", async () => {
+        shell.value = { firms: [{ id: 'f1', name: 'FirmaOne', slug: 'firmaone' }, { id: 'f2', name: 'Halden', slug: 'halden' }], firmSlug: 'halden' }
+        fetchMock.mockResolvedValue(ok({ brief: BRIEF }))
+        render(<DayBrief />)
+        await screen.findByText('Two client threads have waited since Monday')
+        expect(fetchMock).toHaveBeenCalledWith('/api/me/day-brief?firm=f2', expect.objectContaining({ method: 'GET' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Rewrite' }))
+        await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/me/day-brief?firm=f2', expect.objectContaining({ method: 'POST' })))
+    })
+
+    it("names whose credits a rewrite uses", () => {
+        expect(rewriteHint('FirmaOne')).toBe('Uses 1 FirmaOne credit, only when your items have changed')
+        expect(rewriteHint(null)).toBe('1 credit, only when your items have changed')
     })
 
     it('Rewrite with nothing changed keeps the brief and says so', async () => {

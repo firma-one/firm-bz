@@ -195,8 +195,13 @@ export type DayBriefInput = {
     overdue: DayBriefItem[]
     /** Today and the next six days: the Agenda's week, with their reminders. */
     week: DayBriefItem[]
-    /** The firm most of it comes from: the ledger row's firm (and so its billing group). */
-    topFirmId: string | null
+    /**
+     * The ledger row's firm, and so its billing group: the firm selected in the sidebar when Home
+     * asked, when the person can open it; else the firm most of it comes from. Home spans every firm,
+     * so the selected firm stands in for "who pays" (Deepak, 2026-11-13: a shortcut until people
+     * belong to several firm groups).
+     */
+    billFirmId: string | null
 }
 
 export type DayBriefSources = {
@@ -237,7 +242,10 @@ const reminderIdOf = (key: string) => (key.startsWith('reminder:') ? key.slice('
  * without a database. `now` decides which day is today and which week is this week; nothing else
  * about the clock reaches the input's items (relative words are worded at render time).
  */
-export function buildDayBriefInput(sources: DayBriefSources, opts: { timezone: string; now: Date }): DayBriefInput {
+export function buildDayBriefInput(
+    sources: DayBriefSources,
+    opts: { timezone: string; now: Date; /** The firm selected in Home's sidebar, as the page sent it. */ selectedFirmId?: string | null },
+): DayBriefInput {
     const { timezone, now } = opts
     const today = localDay(now, timezone)
     const firmIds = new Set(sources.firms.map((f) => f.id))
@@ -344,7 +352,10 @@ export function buildDayBriefInput(sources: DayBriefSources, opts: { timezone: s
         .sort((a, b) => (a.dueAt ?? '').localeCompare(b.dueAt ?? ''))
         .slice(0, MAX_WEEK)
 
-    return { today, timezone, firmNames, needsYou, overdue, week, topFirmId: topFirm([...needsYou, ...overdue, ...week], sources.firms) }
+    // Checked against Home's own firm list, built on the server: a firm id the page sent is billed only
+    // when the person is a member of it and can open it.
+    const selected = opts.selectedFirmId && sources.firms.some((f) => f.id === opts.selectedFirmId) ? opts.selectedFirmId : null
+    return { today, timezone, firmNames, needsYou, overdue, week, billFirmId: selected ?? topFirm([...needsYou, ...overdue, ...week], sources.firms) }
 }
 
 /** A reminder the person set for a time; one that watches a due date (dateKey) is a date. */
@@ -516,7 +527,7 @@ export async function generateDayBrief(
     who: { userId: string },
     feature: 'dayBrief' | 'dayBriefRewrite' = 'dayBrief',
 ): Promise<DayBriefResult> {
-    const scope: AiScope = { firmId: input.topFirmId, userId: who.userId, feature }
+    const scope: AiScope = { firmId: input.billFirmId, userId: who.userId, feature }
     const client = await getGuardedAnthropic(scope)
     if (!client) return { ok: false, reason: 'unconfigured' }
 

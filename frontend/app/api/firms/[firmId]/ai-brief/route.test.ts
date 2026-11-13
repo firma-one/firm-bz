@@ -39,6 +39,7 @@ vi.mock('@/lib/ai/firm-brief', () => ({
 }))
 
 import { GET, POST } from './route'
+import { generateFirmBrief } from '@/lib/ai/firm-brief'
 
 const post = (query = '?stream=1') =>
     POST(new NextRequest(`http://localhost/api/firms/f1/ai-brief${query}`, { method: 'POST' }), { params: Promise.resolve({ firmId: 'f1' }) })
@@ -109,5 +110,15 @@ describe('GET /api/firms/[firmId]/ai-brief', () => {
         const body = await (await get()).json()
         expect(body.brief).toBeNull()
         expect(body.reason).toBe("You have used this month's 500 AI credits. They refill on Dec 1. Upgrade your plan for more.")
+    })
+
+    it("over the person's own limit, says so in the limit's words, never as a server error", async () => {
+        // Checked inside generateFirmBrief (lib/ai/person-limit.ts), after the route's credit check.
+        vi.mocked(generateFirmBrief).mockRejectedValueOnce(new LimitError("That's a lot of Brio requests in a minute. Wait a moment and try again."))
+        const res = await get()
+        expect(res.status).toBe(200)
+        const body = await res.json()
+        expect(body.brief).toBeNull()
+        expect(body.reason).toBe("That's a lot of Brio requests in a minute. Wait a moment and try again.")
     })
 })

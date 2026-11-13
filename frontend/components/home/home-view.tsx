@@ -234,7 +234,7 @@ export function HomeView({
             ) : (
                 <>
                     {/* Brio's few lines on the day, above what they sum up. Loads on its own, after the page. */}
-                    {readOnly ? <DemoDayBrief work={work} /> : <DayBrief />}
+                    {readOnly ? <DemoDayBrief work={work} firmName={firms[0]?.name} /> : <DayBrief />}
 
                     {/* First, always: what is waiting on you. The order never changes with the day's state.
                         Its id is the target of "Show the items" in Your day. */}

@@ -164,10 +164,18 @@ describe('buildDayBriefInput', () => {
         expect(renderDayBriefRequest(two)).toContain('FIRM: "Halden"')
     })
 
-    it('charges the ledger row to the firm with the most items', () => {
+    it("charges the firm selected in Home's sidebar, when the person can open it", () => {
+        const s = sources({ firms: [HALDEN, NORTHPOINT], events: ['a', 'b', 'c', 'd', 'e'].map((id) => event({ firmId: 'f2', id })) })
+        // Most of the day is Northpoint's, but Halden is the firm on screen: Halden pays.
+        expect(buildDayBriefInput(s, { timezone: TZ, now: NOW, selectedFirmId: 'f1' }).billFirmId).toBe('f1')
+        // A firm the person isn't in, or can't open right now, is never billed: back to the most items.
+        expect(buildDayBriefInput(s, { timezone: TZ, now: NOW, selectedFirmId: 'f9' }).billFirmId).toBe('f2')
+    })
+
+    it('without a selected firm, charges the firm with the most items', () => {
         const s = sources({ firms: [HALDEN, NORTHPOINT], events: [event({ firmId: 'f2', id: 'a' }), event({ firmId: 'f2', id: 'b' }), event({ firmId: 'f2', id: 'c' }), event({ firmId: 'f2', id: 'd' }), event({ firmId: 'f2', id: 'e' })] })
-        expect(build(s).topFirmId).toBe('f2')
-        expect(build().topFirmId).toBe('f1')
+        expect(build(s).billFirmId).toBe('f2')
+        expect(build().billFirmId).toBe('f1')
     })
 
     it('is empty with nothing waiting, overdue or this week', () => {

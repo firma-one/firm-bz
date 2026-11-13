@@ -6,6 +6,7 @@ import { Brio } from "@/components/ui/brio"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { LoadingAnnouncement, ShimmerBar } from "@/components/ui/shimmer"
 import { Hint } from "@/components/ui/tooltip"
+import { useOptionalShellData } from "@/components/shell/shell-data-context"
 import { ASSISTANT, ASSISTANT_POLICY } from "@/lib/ai/assistant"
 import { BRIO_DAY_FAILED, BRIO_TOO_SLOW, BRIO_UNREACHABLE_RETRY } from "@/lib/ai/brio-failure"
 import { AI_TIMEOUT_MS, AiTimeoutError, fetchWithTimeout } from "@/lib/ai/fetch-timeout"
@@ -27,8 +28,13 @@ import { HomeEmptyLine, HomeSection } from "./home-section"
 /** The Needs you section's anchor, for "Show the items". */
 export const NEEDS_YOU_ANCHOR = "needs-you"
 
-/** Rewrite's tooltip: what it costs. */
-export const DAY_BRIEF_REWRITE_HINT = "1 credit, only when your items have changed"
+/**
+ * Rewrite's tooltip: what it costs, and whose credits. Home spans every firm, so a rewrite is billed to
+ * the firm selected in the sidebar (app/api/me/day-brief/route.ts).
+ */
+export function rewriteHint(firmName?: string | null): string {
+    return firmName ? `Uses 1 ${firmName} credit, only when your items have changed` : "1 credit, only when your items have changed"
+}
 
 /** What Rewrite says when nothing has changed since the brief was written. */
 export const DAY_BRIEF_UNCHANGED = `Nothing has changed since ${ASSISTANT.name} wrote this.`
@@ -101,12 +107,15 @@ function DayBriefCard({
     rewriting,
     onRewrite,
     note,
+    firmName,
 }: {
     brief: DayBriefShown
     needsYouId: string
     rewriting: boolean
     onRewrite: () => void
     note: Note | null
+    /** The firm a rewrite is billed to, for the tooltip. */
+    firmName?: string | null
 }) {
     return (
         <div className="flex flex-col gap-2.5 rounded-card border border-line bg-surface px-4 py-3.5 text-ui text-fg" aria-busy={rewriting}>
@@ -121,7 +130,7 @@ function DayBriefCard({
                 </a>
                 {/* The morning brief is free; a rewrite is a choice, so it costs a credit, and only
                     when the items changed (an unchanged day answers without asking Brio). */}
-                <Hint label={DAY_BRIEF_REWRITE_HINT}>
+                <Hint label={rewriteHint(firmName)}>
                     <Button type="button" variant="ghost" size="sm" onClick={onRewrite} disabled={rewriting}>
                         {rewriting && <Loader2 aria-hidden className="h-3.5 w-3.5 animate-spin" />}
                         {rewriting ? "Rewriting…" : "Rewrite"}
@@ -178,8 +187,10 @@ type State =
 /** The route's own words for a failure, carried to the card. */
 class DayBriefRequestError extends Error {}
 
-async function requestDayBrief(method: "GET" | "POST"): Promise<DayBriefResponse> {
-    const res = await fetchWithTimeout("/api/me/day-brief", { method, cache: "no-store" }, AI_TIMEOUT_MS.brief)
+/** `firmId`: the firm selected in the sidebar, which pays for what the brief costs; the server checks it. */
+async function requestDayBrief(method: "GET" | "POST", firmId: string | null): Promise<DayBriefResponse> {
+    const url = firmId ? `/api/me/day-brief?firm=${encodeURIComponent(firmId)}` : "/api/me/day-brief"
+    const res = await fetchWithTimeout(url, { method, cache: "no-store" }, AI_TIMEOUT_MS.brief)
     const body = (await res.json().catch(() => null)) as (DayBriefResponse & { error?: string }) | null
     if (!res.ok || !body) {
         // A signed-out answer ("Unauthorized") isn't words for a person.
@@ -193,8 +204,8 @@ async function requestDayBrief(method: "GET" | "POST"): Promise<DayBriefResponse
  * shares the request in flight instead of asking for a second brief on a new day.
  */
 let pendingGet: Promise<DayBriefResponse> | null = null
-function getDayBrief(): Promise<DayBriefResponse> {
-    pendingGet ??= requestDayBrief("GET").finally(() => {
+function getDayBrief(firmId: string | null): Promise<DayBriefResponse> {
+    pendingGet ??= requestDayBrief("GET", firmId).finally(() => {
         pendingGet = null
     })
     return pendingGet
@@ -218,6 +229,12 @@ function stateOf(d: DayBriefResponse): State {
 /** The signed-in person's day, from /api/me/day-brief. */
 export function DayBrief({ needsYouId = NEEDS_YOU_ANCHOR }: { needsYouId?: string }) {
     const [state, setState] = useState<State>({ kind: "loading" })
+    // The firm selected in the sidebar pays for the brief. Read through a ref so the sidebar's firms
+    // arriving after the first render don't ask for the brief a second time.
+    const shell = useOptionalShellData()
+    const firm = shell?.firms.find((f) => f.slug === shell.firmSlug) ?? null
+    const firmIdRef = useRef<string | null>(null)
+    firmIdRef.current = firm?.id ?? null
     const [loadTick, setLoadTick] = useState(0)
     const [rewriting, setRewriting] = useState(false)
     const [note, setNote] = useState<Note | null>(null)
@@ -233,7 +250,7 @@ export function DayBrief({ needsYouId = NEEDS_YOU_ANCHOR }: { needsYouId?: strin
     // Starts in "loading"; Try again sets it before asking again.
     useEffect(() => {
         let cancelled = false
-        getDayBrief()
+        getDayBrief(firmIdRef.current)
             .then((d) => !cancelled && setState(stateOf(d)))
             .catch((e) => !cancelled && setState({ kind: "failed", reason: failureWords(e) }))
         return () => {
@@ -246,7 +263,7 @@ export function DayBrief({ needsYouId = NEEDS_YOU_ANCHOR }: { needsYouId?: strin
         setRewriting(true)
         setNote(null)
         try {
-            const d = await requestDayBrief("POST")
+            const d = await requestDayBrief("POST", firmIdRef.current)
             if (!mounted.current) return
             setState(stateOf(d))
             if (d.unchanged) setNote({ tone: "info", text: DAY_BRIEF_UNCHANGED })
@@ -274,7 +291,7 @@ export function DayBrief({ needsYouId = NEEDS_YOU_ANCHOR }: { needsYouId?: strin
             ) : state.kind === "empty" ? (
                 <HomeEmptyLine>{DAY_BRIEF_EMPTY}</HomeEmptyLine>
             ) : (
-                <DayBriefCard brief={state.brief} needsYouId={needsYouId} rewriting={rewriting} onRewrite={rewrite} note={note} />
+                <DayBriefCard brief={state.brief} needsYouId={needsYouId} rewriting={rewriting} onRewrite={rewrite} note={note} firmName={firm?.name} />
             )}
         </DayBriefSection>
     )
@@ -346,7 +363,12 @@ export function demoDayBriefText(work: MyWork, now: Date): string | null {
  * mount (it reads "today", and the server's day may not be the visitor's). Rewrite answers as the
  * app does when nothing has changed.
  */
-export function DemoDayBrief({ work, needsYouId = NEEDS_YOU_ANCHOR }: { work: MyWork; needsYouId?: string }) {
+export function DemoDayBrief({ work, needsYouId = NEEDS_YOU_ANCHOR, firmName }: {
+    work: MyWork
+    needsYouId?: string
+    /** The tour's firm, named in Rewrite's tooltip as the app names the sidebar's. */
+    firmName?: string | null
+}) {
     const [brief, setBrief] = useState<DayBriefShown | null | undefined>(undefined)
     const [rewriting, setRewriting] = useState(false)
     const [note, setNote] = useState<Note | null>(null)
@@ -378,7 +400,7 @@ export function DemoDayBrief({ work, needsYouId = NEEDS_YOU_ANCHOR }: { work: My
             ) : brief === null ? (
                 <HomeEmptyLine>{DAY_BRIEF_EMPTY}</HomeEmptyLine>
             ) : (
-                <DayBriefCard brief={brief} needsYouId={needsYouId} rewriting={rewriting} onRewrite={rewrite} note={note} />
+                <DayBriefCard brief={brief} needsYouId={needsYouId} rewriting={rewriting} onRewrite={rewrite} note={note} firmName={firmName} />
             )}
         </DayBriefSection>
     )

@@ -147,7 +147,18 @@ async function regenerate(
     const insights = loaded ?? await loadInsights(request, firmId)
     if (!insights) return { brief: null, reason: BRIO_DATA_UNREADABLE, status: 502 }
 
-    const content = await generateFirmBrief(insights, { firmId, userId })
+    // The person's own limits are checked inside (lib/ai/person-limit.ts): over them, the same answer
+    // as the group's credits, so GET falls back to the brief it has and POST says why.
+    let content: string | null
+    try {
+        content = await generateFirmBrief(insights, { firmId, userId })
+    } catch (error) {
+        if (error instanceof AiCreditLimitError) {
+            logger.info(`AI brief skipped for firm ${firmId}: ${error.kind} limit reached`)
+            return { brief: null, reason: error.message, status: 429 }
+        }
+        throw error
+    }
     if (!content) return { brief: null, reason: BRIO_BRIEF_FAILED, status: 502 }
 
     const brief: FirmBrief = { content, generatedAt: new Date().toISOString(), fingerprint: briefFingerprint(insights) }

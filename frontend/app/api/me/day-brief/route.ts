@@ -32,6 +32,9 @@ import {
  * Both go through the person's own limits (lib/ai/person-limit.ts): two first briefs and four
  * rewrites a day. Over them, or over the group's credits, the answer is 429 with the limit's words.
  *
+ * Both take `?firm=<firm id>`, the firm selected in Home's sidebar: what a brief costs is billed to
+ * that firm's group when the person can open it, else to the firm most of the brief comes from.
+ *
  * Either way, nothing waiting, overdue or on this week's calendar means no brief and no model call:
  * `empty: true`.
  */
@@ -56,6 +59,12 @@ const answer = (body: DayBriefResponse) => NextResponse.json(body)
 /** What the card needs; the fingerprint stays on the server. */
 const shown = (b: DayBriefCache): DayBriefShown => ({ text: b.text, date: b.date, generatedAt: b.generatedAt })
 
+/** The firm selected in Home's sidebar, as the page sent it; checked against Home's own firms later. */
+function selectedFirmOf(request: Request): string | null {
+    const firm = new URL(request.url).searchParams.get('firm')
+    return firm && firm.length <= 64 ? firm : null
+}
+
 async function sessionUserId(): Promise<string | null> {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
@@ -66,7 +75,7 @@ async function sessionUserId(): Promise<string | null> {
  * Loads the person's day and writes its brief, unless `todays` (the brief already written today)
  * was written from the same items.
  */
-async function write(userId: string, timezone: string, now: Date, todays: DayBriefCache | null): Promise<Response> {
+async function write(userId: string, timezone: string, now: Date, todays: DayBriefCache | null, selectedFirmId: string | null): Promise<Response> {
     let sources
     try {
         sources = await loadDayBriefSources(userId, now)
@@ -76,7 +85,7 @@ async function write(userId: string, timezone: string, now: Date, todays: DayBri
         return NextResponse.json({ error: BRIO_DATA_UNREADABLE }, { status: 502 })
     }
 
-    const input = buildDayBriefInput(sources, { timezone, now })
+    const input = buildDayBriefInput(sources, { timezone, now, selectedFirmId })
     const fingerprint = fingerprintDayBrief(input)
     if (todays && todays.fingerprint === fingerprint) return answer({ brief: shown(todays), unchanged: true })
 
@@ -102,7 +111,7 @@ async function write(userId: string, timezone: string, now: Date, todays: DayBri
     return answer({ brief: shown(saved) })
 }
 
-export async function GET() {
+export async function GET(request: Request) {
     const userId = await sessionUserId()
     if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     if (!isAiConfigured()) return answer({ brief: null, available: false })
@@ -112,13 +121,13 @@ export async function GET() {
         const [timezone, cached] = await Promise.all([dayBriefTimezone(userId), loadDayBriefCache(userId)])
         if (cached && cached.date === localDay(now, timezone)) return answer({ brief: shown(cached) })
         // A new day (or the first): written once, then served from the cache until tomorrow.
-        return await write(userId, timezone, now, null)
+        return await write(userId, timezone, now, null, selectedFirmOf(request))
     } catch (error) {
         return aiFailureResponse(error, BRIO_DAY_FAILED, 'Day brief (GET) failed:')
     }
 }
 
-export async function POST() {
+export async function POST(request: Request) {
     const userId = await sessionUserId()
     if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     if (!isAiConfigured()) return answer({ brief: null, available: false })
@@ -127,7 +136,7 @@ export async function POST() {
         const now = new Date()
         const [timezone, cached] = await Promise.all([dayBriefTimezone(userId), loadDayBriefCache(userId)])
         const todays = cached && cached.date === localDay(now, timezone) ? cached : null
-        return await write(userId, timezone, now, todays)
+        return await write(userId, timezone, now, todays, selectedFirmOf(request))
     } catch (error) {
         return aiFailureResponse(error, BRIO_DAY_FAILED, 'Day brief (POST) failed:')
     }
