@@ -40,6 +40,14 @@ describe('DemoRaidTab', { timeout: 20_000 }, () => {
         expect(screen.getAllByTestId(/^raid-row-/)).toHaveLength(8)
     })
 
+    it('links each source to where it came from on the tour: Health to the Overview chart', () => {
+        render(<DemoRaidTab />)
+        const link = (rowId: string, name: string) => within(screen.getByTestId(rowId)).getByRole('link', { name }).getAttribute('href')
+        expect(link('raid-row-raid-pace', 'Health')).toBe('?tab=analytics#ring-pace')
+        expect(link('raid-row-raid-planning', 'Health')).toBe('?tab=analytics#ring-planning')
+        expect(link('raid-row-raid-overdue', 'Board')).toBe('?tab=board')
+    })
+
     it('dismissing a suggestion drops it', async () => {
         render(<DemoRaidTab />)
         await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Dismiss Rental depreciation is scoped separately' })) })

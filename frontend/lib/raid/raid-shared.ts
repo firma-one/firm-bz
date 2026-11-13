@@ -6,6 +6,10 @@
  * Safe to import from client components: no database, no SDK.
  */
 
+/** What RAID stands for, in one line: the Overview card's hint and the website's RAID info tip. */
+export const RAID_MEANING =
+    'Risks, Assumptions, Issues and Decisions: what could go wrong, what the plan relies on, what has gone wrong, and what people agreed.'
+
 export type RaidType = 'RISK' | 'ASSUMPTION' | 'ISSUE' | 'DECISION'
 export type RaidStatus = 'SUGGESTED' | 'OPEN' | 'CLOSED' | 'RECORDED' | 'DISMISSED'
 export type RaidSourceKind = 'STATUS' | 'HEALTH' | 'BOARD' | 'THREAD' | 'MEMO' | 'MANUAL'
@@ -297,14 +301,29 @@ export function raidLogHref(engagementBase: string): string {
  * Where a source chip goes: the discussion, the memo in Files, the item on the Board, or for health the
  * Overview chart it comes from (`…/analytics`, the Overview's own path: the bare engagement URL reopens
  * the last tab). The Overview scrolls to `#ring-…` once its charts load.
+ *
+ * Without a base (/tour), the tab it came from on the tour's own page (tourSourceHref).
  */
 export function sourceHref(engagementBase: string, source: Pick<RaidSourceView, 'kind' | 'documentId' | 'memoId' | 'label' | 'overviewSection'>): string | null {
-    if (!engagementBase) return null
+    if (!engagementBase) return tourSourceHref(source)
     if (source.kind === 'MEMO') return source.memoId ? `${engagementBase}/files#doc-file:${source.memoId}` : null
     if (source.kind === 'HEALTH') return `${engagementBase}/analytics${source.overviewSection ? `#ring-${source.overviewSection}` : ''}`
     if (!source.documentId) return null
     if (source.kind === 'THREAD' || source.label.startsWith('Thread')) return `${engagementBase}/comments#doc-comment:${source.documentId}`
     if (source.kind === 'STATUS' || source.kind === 'BOARD') return `${engagementBase}/board#doc-file:${source.documentId}`
+    return null
+}
+
+/**
+ * The same places on /tour, which switches tabs with `?tab=` and has no item ids to link to: the
+ * Overview chart for health, as in the app, then the tab itself for the rest (Discussions, its Memos,
+ * the Board). Like raidLogHref, the page's own query.
+ */
+function tourSourceHref(source: Pick<RaidSourceView, 'kind' | 'label' | 'overviewSection'>): string | null {
+    if (source.kind === 'HEALTH') return `?tab=analytics${source.overviewSection ? `#ring-${source.overviewSection}` : ''}`
+    if (source.kind === 'MEMO') return '?tab=comments&view=memos'
+    if (source.kind === 'THREAD' || source.label.startsWith('Thread')) return '?tab=comments'
+    if (source.kind === 'STATUS' || source.kind === 'BOARD') return '?tab=board'
     return null
 }
 

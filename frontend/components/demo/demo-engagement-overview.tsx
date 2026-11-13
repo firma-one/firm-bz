@@ -36,6 +36,7 @@ import { DemoSummaryCard } from '@/components/demo/demo-summary-card'
 import { WaitingOnClient } from '@/components/projects/waiting-on-client'
 import { DemoRaidOverviewCard } from '@/components/demo/demo-raid'
 import { getDemoDeliverables } from '@/lib/demo/demo-deliverables'
+import { useRingAnchor } from '@/components/projects/ring-anchor'
 
 const DAY = 86400000
 
@@ -54,6 +55,9 @@ function startOfToday(): Date {
 export function DemoEngagementOverview({ engagement }: { engagement: DemoEngagement }) {
     const [today, setToday] = useState<Date | null>(null)
     useEffect(() => setToday(startOfToday()), [])
+    // A Health entry in the RAID log links here (`?tab=analytics#ring-pace`), as in the app: the jump
+    // waits for the dated sections, which arrive after mount and would push the chart down.
+    useRingAnchor(today !== null)
 
     const m = useMemo(() => {
         const demo = getDemoDeliverables(engagement)

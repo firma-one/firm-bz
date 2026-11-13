@@ -9,21 +9,24 @@
  * visible one. Opening fades the answer in (opacity and transform only, none with reduced motion).
  *
  * Answers render the data's `displayAnswer` HTML (falling back to the plain `answer`); the
- * `[[POLAR_LINK]]` placeholder becomes the inline Polar link, as it did in `FaqGrid`.
+ * `[[POLAR_LINK]]` placeholder becomes the inline Polar link, as it did in `FaqGrid`, and
+ * `[[RAID:RAID check]]` becomes that term with RAID's info tip (`../raid-tip.tsx`).
  */
-import { Fragment, useId, useMemo, useState, type ReactNode } from 'react';
+import { useId, useMemo, useState, type ReactNode } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { BillingPolarExplainInline } from '@/components/billing/billing-polar-inline';
 import { BRAND_NAME } from '@/config/brand';
 import type { FAQItem } from '@/data/faq-data';
 import { DEMO_BOOKING_URL } from '../config';
 import { PageGuides, PillLink } from '../primitives';
+import { RaidTerm } from '../raid-tip';
 import { slugify } from './format';
 import './reading.css';
 import './reference.css';
 
 const ALL = 'All';
-const POLAR_LINK_PLACEHOLDER = '[[POLAR_LINK]]';
+/** The answer HTML's placeholders: the Polar link, and a RAID term with its tip. */
+const PLACEHOLDER = /(\[\[POLAR_LINK\]\]|\[\[RAID:[^\]]+\]\])/;
 
 const topicOf = (item: FAQItem) => item.category || 'General';
 const keyOf = (item: FAQItem) => `${topicOf(item)}::${item.question}`;
@@ -37,16 +40,20 @@ const plainBrandName = (html: string) => html.replace(/<span data-brand-name sty
 function Answer({ item }: { item: FAQItem }) {
   const html = item.displayAnswer ? plainBrandName(item.displayAnswer) : undefined;
   if (!html) return <p>{item.answer}</p>;
-  if (!html.includes(POLAR_LINK_PLACEHOLDER)) return <p dangerouslySetInnerHTML={{ __html: html }} />;
-  const parts = html.split(POLAR_LINK_PLACEHOLDER);
+  if (!PLACEHOLDER.test(html)) return <p dangerouslySetInnerHTML={{ __html: html }} />;
+  // split() with a capturing group: the HTML between placeholders at even indexes, each placeholder at odd.
+  const parts = html.split(PLACEHOLDER);
   return (
     <p>
-      {parts.map((part, i) => (
-        <Fragment key={i}>
-          <span dangerouslySetInnerHTML={{ __html: part }} />
-          {i < parts.length - 1 ? <BillingPolarExplainInline className="mx-0.5" /> : null}
-        </Fragment>
-      ))}
+      {parts.map((part, i) =>
+        i % 2 === 0 ? (
+          <span key={i} dangerouslySetInnerHTML={{ __html: part }} />
+        ) : part === '[[POLAR_LINK]]' ? (
+          <BillingPolarExplainInline key={i} className="mx-0.5" />
+        ) : (
+          <RaidTerm key={i}>{part.slice('[[RAID:'.length, -2)}</RaidTerm>
+        ),
+      )}
     </p>
   );
 }

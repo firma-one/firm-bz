@@ -237,7 +237,7 @@ export function HomeView({
                     {readOnly ? <DemoDayBrief work={work} firmName={firms[0]?.name} /> : <DayBrief />}
 
                     {/* First, always: what is waiting on you. The order never changes with the day's state.
-                        Its id is the target of "Show the items" in Your day. */}
+                        Your day points down to it; its id keeps links into Home (#needs-you) working. */}
                     <div id={NEEDS_YOU_ANCHOR} className="scroll-mt-6" data-demo-tour="home-needs-you">
                         <NeedsYouSection items={work.needsYou} label={label} loadFailed={failed.work || failed.reminders} />
                     </div>

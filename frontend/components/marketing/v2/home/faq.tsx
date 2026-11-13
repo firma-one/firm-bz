@@ -1,6 +1,6 @@
 /**
- * 10 · FAQ. White band. The six questions firms ask first, as a disclosure list (all open, as on the
- * board), and the way to every other answer.
+ * 10 · FAQ. White band. The questions firms ask first, as a disclosure list (all open, as on the
+ * board), and the way to every other answer. RAID gets its info tip on its first mention in an answer.
  *
  * The Files agent (Brio renaming and moving files) is not public yet, so the line about approving
  * renames and moves shows only once `FILES_AGENT_PUBLIC` flips (proposal decision 7).
@@ -8,8 +8,10 @@
 import type { ReactNode } from 'react';
 import { Brio } from '@/components/ui/brio';
 import { BRAND_NAME } from '@/config/brand';
+import { REVIEWER_DAILY_ANSWERS } from '@/lib/ai/features';
 import { FILES_AGENT_PUBLIC } from '../config';
 import { Band, ChevronLink } from '../primitives';
+import { withRaidTip } from '../raid-tip';
 import { FaqItem } from './faq-item';
 import './faq.css';
 
@@ -22,7 +24,9 @@ const QUESTIONS: { q: ReactNode; a: ReactNode }[] = [
         Does <BrioMark /> read my clients’ documents?
       </>
     ),
-    a: 'No. Brio reads delivery data only: deliverable and file names, statuses, due dates, comment counts and who is on the engagement. It never receives a document’s contents or a comment’s text.',
+    a: withRaidTip(
+      `No. Brio never opens the files you deliver. It works from delivery data: deliverable and file names, statuses, due dates and who is on the engagement. It reads words only where a job needs them: a thread’s comments when you ask for a reply draft, new comments and your internal memos when it checks the RAID log, and a memo’s call notes when you ask it to find actions. ${BRAND_NAME} keeps no copy of a memo’s text.`,
+    ),
   },
   {
     q: (
@@ -30,9 +34,19 @@ const QUESTIONS: { q: ReactNode; a: ReactNode }[] = [
         Can <BrioMark /> change anything on its own?
       </>
     ),
-    a: FILES_AGENT_PUBLIC
-      ? 'No. Brio drafts and suggests; a person approves. Summaries wait for someone to publish them, and file renames or moves run only after you preview and approve the batch.'
-      : 'No. Brio drafts and suggests; a person approves. Summaries wait for someone to publish them.',
+    a: withRaidTip(
+      FILES_AGENT_PUBLIC
+        ? 'No. Brio drafts and suggests; a person approves. Replies, nudges and client updates wait for someone on your team to send them, summaries for someone to publish them, and RAID entries and call-note actions for someone to accept them. File renames or moves run only after you preview and approve the batch.'
+        : 'No. Brio drafts and suggests; a person approves. Replies, nudges and client updates wait for someone on your team to send them, summaries for someone to publish them, and RAID entries and call-note actions for someone to accept them.',
+    ),
+  },
+  {
+    q: (
+      <>
+        Can my clients ask <BrioMark /> too?
+      </>
+    ),
+    a: `Yes, once you turn it on. A Reviewer can ask Brio about their own engagement, and it answers only from what they can already see: the published summary, deliverables at their stages and the discussions they’re part of. Never internal notes, private files or memos. Up to ${REVIEWER_DAILY_ANSWERS} answers per person a day, from your firm’s credits.`,
   },
   {
     q: 'Do you store my files?',

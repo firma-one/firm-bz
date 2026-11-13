@@ -6,13 +6,14 @@ import { Button, buttonVariants } from '@/components/ui/button'
 import { Tag } from '@/components/ui/tag'
 import { failureFrom, failureReason } from '@/lib/files/action-failure'
 import {
+    RAID_MEANING,
     raidLogHref,
     raidOverviewOf,
     shortDay,
     type RaidItemView,
     type RaidLogPayload,
 } from '@/lib/raid/raid-shared'
-import { RaidSourceChip, RaidTypeBadge } from './raid-tab'
+import { RaidLink, RaidSourceChip, RaidTypeBadge } from './raid-tab'
 import { LoadingAnnouncement, ShimmerBar, ShimmerBlock } from '@/components/ui/shimmer'
 import { InfoHint } from '@/components/projects/overview-charts'
 
@@ -69,19 +70,19 @@ export function RaidOverviewView({ log, engagementBase, loadError, onRetry }: {
                 <h2 id={headingId} className="text-[16px] font-semibold leading-6 text-fg">RAID</h2>
                 <InfoHint
                     label="About the RAID log"
-                    text="Risks, Assumptions, Issues and Decisions: what could go wrong, what the plan relies on, what has gone wrong, and what people agreed. Internal only."
+                    text={`${RAID_MEANING} Internal only.`}
                 />
                 <Tag color="gray">Internal only</Tag>
                 <span className="flex-1" />
                 {overview && overview.suggestionCount > 0 && (
-                    <a href={href} className="text-small font-medium text-action hover:underline">
+                    <RaidLink href={href} className="text-small font-medium text-action hover:underline">
                         {overview.suggestionCount} {plural(overview.suggestionCount, 'suggestion', 'suggestions')} to review
-                    </a>
+                    </RaidLink>
                 )}
-                <a href={href} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+                <RaidLink href={href} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
                     Open RAID log
                     <ArrowRight className="h-3.5 w-3.5" aria-hidden />
-                </a>
+                </RaidLink>
             </div>
 
             {loadError && !log ? (

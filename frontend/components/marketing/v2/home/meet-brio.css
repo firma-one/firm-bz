@@ -688,3 +688,172 @@
     animation: none;
   }
 }
+
+/* ── Round 2 moments (Your day, reply, call notes, status update, nudge, RAID, Dana's view) ──── */
+
+/* The second row of four: below the first; on the vertical timeline it continues the first's line. */
+.mk-brio-tl + .mk-brio-tl {
+  margin-top: 56px;
+}
+@media (max-width: 1023px) {
+  .mk-brio-tl + .mk-brio-tl {
+    margin-top: 26px;
+  }
+}
+
+.mk-brio-muted {
+  color: #6b6964;
+  font-size: 11.5px;
+  transition: opacity 600ms var(--mk-ease), transform 700ms var(--mk-ease);
+}
+.mk-brio-strong {
+  font-weight: 600;
+}
+.mk-brio-split {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 2px 8px;
+}
+.mk-brio-to,
+.mk-brio-memo {
+  font-size: 12px;
+}
+.mk-brio-memo {
+  font-weight: 600;
+}
+.mk-brio-tag {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: #efeee9;
+  color: #5f5d58;
+  font-size: 11px;
+  font-weight: 400;
+}
+
+/* Dana's comment, then Brio's draft in a pale green box with its [blanks] in yellow. */
+.mk-brio-cmt {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  transition: opacity 600ms var(--mk-ease), transform 700ms var(--mk-ease);
+}
+.mk-brio-cmt > span:last-child {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.mk-brio-avatar {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 11px;
+  background: #e6eefc;
+  color: #2b4a8f;
+  font-size: 10px;
+  font-weight: 700;
+}
+.mk-brio-cmt-who {
+  font-size: 12px;
+  font-weight: 600;
+}
+.mk-brio-draft {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 92px;
+  padding: 9px 11px;
+  border-radius: 8px;
+  background: #f2faf6;
+  border: 1px solid #cfeadc;
+  transition: opacity 500ms var(--mk-ease);
+}
+.mk-brio-draft-who {
+  font-size: 12px;
+  font-weight: 600;
+  color: #009669;
+}
+.mk-brio-blank {
+  padding: 0 3px;
+  border-radius: 3px;
+  background: #fff1c2;
+  color: #5c4300;
+}
+.mk-brio-actions--center {
+  align-items: center;
+  gap: 10px;
+}
+.mk-brio-actions {
+  transition: opacity 600ms var(--mk-ease), transform 700ms var(--mk-ease);
+}
+
+/* Call-note actions and RAID suggestions: a checkbox or a type badge, then the line. */
+.mk-brio-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  line-height: 1.45;
+  transition: opacity 600ms var(--mk-ease), transform 700ms var(--mk-ease);
+}
+.mk-brio-box {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin-top: 2px;
+  border-radius: 3px;
+  border: 1.5px solid #9a988f;
+}
+.mk-brio-box--on {
+  border-color: #047857;
+  background: #047857
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E")
+    center / 10px no-repeat;
+}
+.mk-brio-badge {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  background: #efeee9;
+  color: #37352f;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+.mk-brio-src {
+  display: inline-block;
+  margin-top: 3px;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: #f1f1ef;
+  color: #5f5d58;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+/* A row's dots, labels and cards share three grid rows, so a label that wraps (a long one, or NEW and
+   NOW together) never pushes its card below the others. Browsers without subgrid keep the flex column. */
+@media (min-width: 1024px) {
+  @supports (grid-template-rows: subgrid) {
+    .mk-brio-moments {
+      grid-template-rows: auto auto 1fr;
+      row-gap: 14px;
+    }
+    .mk-brio-m {
+      display: grid;
+      grid-row: span 3;
+      grid-template-rows: subgrid;
+      gap: 14px 0;
+    }
+    .mk-brio-label {
+      align-self: start;
+    }
+  }
+}

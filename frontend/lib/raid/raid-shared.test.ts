@@ -24,8 +24,16 @@ describe('sourceHref', () => {
         expect(sourceHref(BASE, source({ kind: 'MANUAL' }))).toBeNull()
     })
 
-    it('links nothing on /tour, which has no engagement path', () => {
-        expect(sourceHref('', source({ kind: 'HEALTH', overviewSection: 'pace' }))).toBeNull()
+    it('on /tour, which switches tabs with ?tab=, sends health to the Overview chart and the rest to their tab', () => {
+        expect(sourceHref('', source({ kind: 'HEALTH', overviewSection: 'pace' }))).toBe('?tab=analytics#ring-pace')
+        expect(sourceHref('', source({ kind: 'HEALTH', overviewSection: 'planning' }))).toBe('?tab=analytics#ring-planning')
+        expect(sourceHref('', source({ kind: 'HEALTH' }))).toBe('?tab=analytics')
+        // The tour's entries carry no ids: the tab, not the item.
+        expect(sourceHref('', source({ kind: 'THREAD' }))).toBe('?tab=comments')
+        expect(sourceHref('', source({ kind: 'STATUS', label: 'Thread · QSR-14' }))).toBe('?tab=comments')
+        expect(sourceHref('', source({ kind: 'MEMO' }))).toBe('?tab=comments&view=memos')
+        expect(sourceHref('', source({ kind: 'STATUS', label: 'Board' }))).toBe('?tab=board')
+        expect(sourceHref('', source({ kind: 'MANUAL' }))).toBeNull()
     })
 })
 

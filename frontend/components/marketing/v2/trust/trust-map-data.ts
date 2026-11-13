@@ -70,10 +70,10 @@ export function trustMapNodes(brand: string): TrustMapNode[] {
       id: 'brio',
       kind: 'Assistant',
       title: 'Brio',
-      subtitle: 'Reads delivery data only',
+      subtitle: 'Never opens your deliverables',
       detail:
-        'Brio, the assistant for client delivery, reads names, statuses, dates and who is involved, never what is inside a document or a comment. It never changes anything without your consent, and nothing reaches a client until a person on your team publishes it.',
-      points: ['Never reads document contents', 'Never changes anything without your consent', 'Nothing reaches a client until you publish it'],
+        'Brio, the assistant for client delivery, works from names, statuses, dates and who is involved, and never opens the files you deliver. It reads comment text and internal memos only to draft a reply, suggest RAID entries or find actions in call notes. It never changes anything without your consent, and nothing reaches a client until a person on your team sends or publishes it.',
+      points: ['Never opens the files you deliver', 'Never changes anything without your consent', 'Nothing reaches a client until your team sends it'],
     },
   ];
 }
@@ -83,7 +83,7 @@ export const TRUST_MAP_EDGES: TrustMapEdge[] = [
   { id: 'client-firma', source: 'client', target: 'firma', label: 'Only what you share' },
   { id: 'firma-storage', source: 'firma', target: 'storage', label: 'OAuth 2.0 · no copy' },
   { id: 'firma-metadata', source: 'firma', target: 'metadata', label: 'AES-256-GCM' },
-  { id: 'firma-brio', source: 'firma', target: 'brio', label: 'Never contents' },
+  { id: 'firma-brio', source: 'firma', target: 'brio', label: 'Never file contents' },
 ];
 
 export type TrustMapDirection = 'RIGHT' | 'DOWN';

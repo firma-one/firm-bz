@@ -7,6 +7,7 @@
  */
 import dynamic from 'next/dynamic';
 import { useCallback, useEffect, useState } from 'react';
+import { withRaidTip } from '../raid-tip';
 import type { TrustMapDirection, TrustMapLayout, TrustMapNode, TrustMapNodeId } from './trust-map-data';
 import './trust-map.css';
 
@@ -53,7 +54,7 @@ export function TrustMap({ nodes, layouts }: { nodes: TrustMapNode[]; layouts: R
       <aside id="mk-trust-map-panel" className="mk-trust-map-panel" aria-live="polite" aria-label={`${node.title}: details`}>
         <p className="mk-trust-map-panel-kind">{node.kind}</p>
         <h3 className="mk-trust-map-panel-title">{node.title}</h3>
-        <p className="mk-trust-map-panel-detail">{node.detail}</p>
+        <p className="mk-trust-map-panel-detail">{withRaidTip(node.detail)}</p>
         <ul className="mk-trust-map-panel-points">
           {node.points.map((p) => (
             <li key={p}>{p}</li>

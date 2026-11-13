@@ -1,12 +1,13 @@
 /**
  * 3 · FAQ (white). The questions the board shows, read from `data/faq-data.ts` (Billing, plus the
- * AI-credits question from Features). Answers are the data's plain `answer` text, as on the board. If a
- * question is ever renamed in the data, the list falls back to the Billing category rather than
- * showing a gap.
+ * AI-credits question from Features). Answers are the data's plain `answer` text, as on the board, with
+ * RAID's info tip on its first mention. If a question is ever renamed in the data, the list falls back
+ * to the Billing category rather than showing a gap.
  */
 import Link from 'next/link';
 import { FAQ_DATA, type FAQItem } from '@/data/faq-data';
 import { Band } from '../primitives';
+import { withRaidTip } from '../raid-tip';
 import { FaqAccordion, type FaqEntry } from './faq-accordion';
 
 const BOARD_QUESTIONS = [
@@ -22,7 +23,8 @@ const toEntry = (f: FAQItem): FaqEntry => ({
   a: f.answer
     .split(/\n\s*\n/)
     .map((p) => p.trim())
-    .filter(Boolean),
+    .filter(Boolean)
+    .map((p) => withRaidTip(p)),
 });
 
 function pricingFaqs(): FaqEntry[] {
