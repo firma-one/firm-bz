@@ -8,6 +8,7 @@ import { mergeLeanAppMetadata } from '@/lib/auth/supabase-jwt-metadata'
 import { FirmService } from '@/lib/firm-service'
 import { userSettingsPlus } from '@/lib/user-settings-plus'
 import { reconcileUserNames } from '@/lib/auth/reconcile-names'
+import { createHandoff, sessionIdOfAccessToken } from '@/lib/auth/sign-in-handoff'
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
@@ -97,6 +98,19 @@ export async function GET(request: Request) {
         redirectUrl = `https://${forwardedHost}${next}`
       } else {
         redirectUrl = `${origin}${next}`
+      }
+
+      // A workspace with an approved custom domain: carry the sign-in over to it (lib/auth/sign-in-handoff.ts).
+      // Only for the landing this route resolved itself, never an explicit ?next= deep link.
+      if (!requestedNext && !redirectUrl.startsWith('http://')) {
+        const handoff = await createHandoff({
+          userId,
+          email: user.email,
+          currentHost: forwardedHost ?? url.host,
+          nextPath: next,
+          originSessionId: sessionIdOfAccessToken(data.session.access_token),
+        })
+        if (handoff) redirectUrl = handoff
       }
 
       const response = NextResponse.redirect(redirectUrl)

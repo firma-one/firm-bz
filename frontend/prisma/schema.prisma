@@ -218,8 +218,65 @@ model Group {
   subscriptions Subscription[]
   aiUsage       PlatformAiUsage[]
   aiFeedback    PlatformAiFeedback[]
+  domains       GroupDomain[]
 
   @@map("groups")
+  @@schema("platform")
+}
+
+/// A branded address for a Firm Group: a Firma subdomain (acme.firma.bz) or the customer's own domain
+/// (portal.acme.com). A Group admin requests it, a System Admin sets it up on Vercel by hand and
+/// approves it (.claude/plans/branded-host-email-links.md). Once approved, sign-in hands people over
+/// to it and email links use it. Rows are never deleted: rejected, cancelled and removed ones are
+/// history. Partial unique indexes (migration 20261113120000) keep one live row per Group and per host.
+model GroupDomain {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  groupId        String    @db.Uuid
+  /// Lowercase host, no scheme or port: "acme.firma.bz", "portal.acme.com".
+  host           String
+  /// SUBDOMAIN (a *.firma.bz name) | CUSTOM (the customer's own domain)
+  kind           String
+  /// REQUESTED | APPROVED | REJECTED | CANCELLED | REMOVED
+  status         String
+  /// The daily reachability check (APPROVED rows only). False turns off hand-off and email links.
+  reachable      Boolean   @default(true)
+  lastCheckedAt  DateTime? @db.Timestamptz(6)
+  lastCheckError String?
+  requestedBy    String    @db.Uuid
+  requestedAt    DateTime  @default(now()) @db.Timestamptz(6)
+  reviewedBy     String?   @db.Uuid
+  reviewedAt     DateTime? @db.Timestamptz(6)
+  reviewNote     String?
+  updatedAt      DateTime  @updatedAt @db.Timestamptz(6)
+
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@index([groupId])
+  @@index([status])
+  @@map("group_domains")
+  @@schema("platform")
+}
+
+/// A one-time ticket that carries a fresh sign-in from www to a Group's approved domain. The URL holds
+/// only this row's id; the Supabase token stays here. Single use, expires in 60 seconds. Kept after
+/// use so signing out on either host can end the session on the other (originSessionId and
+/// targetSessionId).
+model SignInHandoff {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId          String    @db.Uuid
+  host            String
+  nextPath        String
+  tokenHash       String?
+  originSessionId String?   @db.Uuid
+  targetSessionId String?   @db.Uuid
+  expiresAt       DateTime  @db.Timestamptz(6)
+  usedAt          DateTime? @db.Timestamptz(6)
+  createdAt       DateTime  @default(now()) @db.Timestamptz(6)
+
+  @@index([userId])
+  @@index([originSessionId])
+  @@index([targetSessionId])
+  @@map("sign_in_handoffs")
   @@schema("platform")
 }
 

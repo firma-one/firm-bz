@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { popupTargetOrigin } from '@/lib/custom-domains/popup-origin'
 import { OneDriveConnector } from '@/lib/connectors/onedrive-connector'
 import { prisma } from '@/lib/prisma'
 import { config, getRedirectUrl, getMicrosoftOAuthServerCredentials, isMicrosoftConnectorEnabledForFirm } from '@/lib/config'
@@ -66,7 +67,7 @@ function appPathWithError(appPath: string, errorCode: string, detail?: string | 
 
 /**
  * OAuth popup completion page: postMessage to opener using this document's origin.
- * Mirrors google-drive/callback's popupHtml() — see that file for the origin-matching rationale.
+ * Mirrors google-drive/callback's popupHtml(, popupOrigin) — see that file for the origin-matching rationale.
  */
 function popupHtml(payload: {
   ok: boolean
@@ -76,12 +77,12 @@ function popupHtml(payload: {
   organizationId?: string
   email?: string
   nonce?: string
-}) {
+}, targetOrigin: string | null) {
   const payloadStr = JSON.stringify(payload).replace(/</g, '\\u003c').replace(/>/g, '\\u003e')
   return `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body><script>
 (function() {
   var payload = ${payloadStr};
-  var targetOrigin = window.location.origin;
+  var targetOrigin = ${JSON.stringify(targetOrigin)} || window.location.origin;
   if (window.opener && !window.opener.closed) {
     window.opener.postMessage({ type: 'onedrive_oauth', ok: payload.ok, error: payload.error, errorDescription: payload.errorDescription, connectionId: payload.connectionId, organizationId: payload.organizationId, email: payload.email, nonce: payload.nonce }, targetOrigin);
   }
@@ -93,6 +94,8 @@ function popupHtml(payload: {
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
+    // The opener's origin when it's an approved custom domain (lib/custom-domains/popup-origin.ts).
+    const popupOrigin = await popupTargetOrigin(parseStateFlow(searchParams.get('state')).openerOrigin)
     const code = searchParams.get('code')
     const state = searchParams.get('state')
     const error = searchParams.get('error')
@@ -101,7 +104,7 @@ export async function GET(request: NextRequest) {
 
     if (!(await isMicrosoftConnectorEnabledForFirm(stateOrgId))) {
       if (isPopup) {
-        return new NextResponse(popupHtml({ ok: false, error: 'not_enabled', nonce: stateNonce }), {
+        return new NextResponse(popupHtml({ ok: false, error: 'not_enabled', nonce: stateNonce }, popupOrigin), {
           headers: { 'Content-Type': 'text/html; charset=utf-8' },
         })
       }
@@ -115,7 +118,7 @@ export async function GET(request: NextRequest) {
       const providerDetail = oauthErrorDetail(searchParams.get('error_description'))
       logger.warn('OneDrive OAuth callback: Microsoft answered an error', { error, providerCode, detail: providerDetail })
       if (isPopup) {
-        return new NextResponse(popupHtml({ ok: false, error: providerCode, errorDescription: providerDetail, nonce: stateNonce }), {
+        return new NextResponse(popupHtml({ ok: false, error: providerCode, errorDescription: providerDetail, nonce: stateNonce }, popupOrigin), {
           headers: { 'Content-Type': 'text/html; charset=utf-8' },
         })
       }
@@ -124,7 +127,7 @@ export async function GET(request: NextRequest) {
 
     if (!code) {
       if (isPopup) {
-        return new NextResponse(popupHtml({ ok: false, error: 'no_code', nonce: stateNonce }), {
+        return new NextResponse(popupHtml({ ok: false, error: 'no_code', nonce: stateNonce }, popupOrigin), {
           headers: { 'Content-Type': 'text/html; charset=utf-8' },
         })
       }
@@ -133,7 +136,7 @@ export async function GET(request: NextRequest) {
 
     const oauthFailureBase = resolveOAuthFailureRedirectPath(state)
     const fail = (errorCode: string) => isPopup
-      ? new NextResponse(popupHtml({ ok: false, error: errorCode, nonce: stateNonce }), { headers: { 'Content-Type': 'text/html; charset=utf-8' } })
+      ? new NextResponse(popupHtml({ ok: false, error: errorCode, nonce: stateNonce }, popupOrigin), { headers: { 'Content-Type': 'text/html; charset=utf-8' } })
       : NextResponse.redirect(getRedirectUrl(appPathWithError(oauthFailureBase, errorCode)))
 
     // Trust the state only if we signed it, it's fresh, and it belongs to whoever is signed in —
@@ -159,7 +162,7 @@ export async function GET(request: NextRequest) {
       const msg = e instanceof Error ? e.message : String(e)
       logger.error('Microsoft OAuth credentials missing for OneDrive callback', new Error(msg))
       if (isPopup) {
-        return new NextResponse(popupHtml({ ok: false, error: 'oauth_not_configured', nonce: stateNonce }), {
+        return new NextResponse(popupHtml({ ok: false, error: 'oauth_not_configured', nonce: stateNonce }, popupOrigin), {
           headers: { 'Content-Type': 'text/html; charset=utf-8' },
         })
       }
@@ -186,7 +189,7 @@ export async function GET(request: NextRequest) {
       const unreachable = isTransientNetworkError(tokenErr)
       const errCode = unreachable ? 'microsoft_oauth_unreachable' : 'token_exchange_failed'
       if (isPopup) {
-        return new NextResponse(popupHtml({ ok: false, error: errCode, nonce: stateNonce }), {
+        return new NextResponse(popupHtml({ ok: false, error: errCode, nonce: stateNonce }, popupOrigin), {
           headers: { 'Content-Type': 'text/html; charset=utf-8' },
         })
       }
@@ -203,7 +206,7 @@ export async function GET(request: NextRequest) {
       const tokenCode = mapped === 'oauth_error' ? 'token_exchange_failed' : mapped
       const tokenDetail = oauthErrorDetail(tokenErr.error_description)
       if (isPopup) {
-        return new NextResponse(popupHtml({ ok: false, error: tokenCode, errorDescription: tokenDetail, nonce: stateNonce }), {
+        return new NextResponse(popupHtml({ ok: false, error: tokenCode, errorDescription: tokenDetail, nonce: stateNonce }, popupOrigin), {
           headers: { 'Content-Type': 'text/html; charset=utf-8' },
         })
       }
@@ -238,7 +241,7 @@ export async function GET(request: NextRequest) {
       const unreachable = isTransientNetworkError(userFetchErr)
       const errCode = unreachable ? 'microsoft_oauth_unreachable' : 'user_info_failed'
       if (isPopup) {
-        return new NextResponse(popupHtml({ ok: false, error: errCode, nonce: stateNonce }), {
+        return new NextResponse(popupHtml({ ok: false, error: errCode, nonce: stateNonce }, popupOrigin), {
           headers: { 'Content-Type': 'text/html; charset=utf-8' },
         })
       }
@@ -249,7 +252,7 @@ export async function GET(request: NextRequest) {
       const txt = await userResponse.text()
       logger.error('Graph /me fetch failed', new Error(txt))
       if (isPopup) {
-        return new NextResponse(popupHtml({ ok: false, error: 'user_info_failed', nonce: stateNonce }), {
+        return new NextResponse(popupHtml({ ok: false, error: 'user_info_failed', nonce: stateNonce }, popupOrigin), {
           headers: { 'Content-Type': 'text/html; charset=utf-8' },
         })
       }
@@ -281,7 +284,7 @@ export async function GET(request: NextRequest) {
     } catch (e) {
       logger.error('Failed to parse OneDrive OAuth state', e instanceof Error ? e : new Error(String(e)))
       if (isPopup) {
-        return new NextResponse(popupHtml({ ok: false, error: 'no_user_id', nonce: stateNonce }), {
+        return new NextResponse(popupHtml({ ok: false, error: 'no_user_id', nonce: stateNonce }, popupOrigin), {
           headers: { 'Content-Type': 'text/html; charset=utf-8' },
         })
       }
@@ -290,7 +293,7 @@ export async function GET(request: NextRequest) {
 
     if (!userId) {
       if (isPopup) {
-        return new NextResponse(popupHtml({ ok: false, error: 'no_user_id', nonce: stateNonce }), {
+        return new NextResponse(popupHtml({ ok: false, error: 'no_user_id', nonce: stateNonce }, popupOrigin), {
           headers: { 'Content-Type': 'text/html; charset=utf-8' },
         })
       }
@@ -349,7 +352,7 @@ export async function GET(request: NextRequest) {
           const idMismatch = existing.externalAccountId && userInfo.id !== existing.externalAccountId
           if (emailMismatch || idMismatch) {
             if (isPopup) {
-              return new NextResponse(popupHtml({ ok: false, error: 'account_mismatch', nonce: stateNonce }), {
+              return new NextResponse(popupHtml({ ok: false, error: 'account_mismatch', nonce: stateNonce }, popupOrigin), {
                 headers: { 'Content-Type': 'text/html' },
               })
             }
@@ -409,7 +412,7 @@ export async function GET(request: NextRequest) {
           throw storeErr
         }
         if (isPopup) {
-          return new NextResponse(popupHtml({ ok: false, error: 'reconnect_failed', nonce: stateNonce }), {
+          return new NextResponse(popupHtml({ ok: false, error: 'reconnect_failed', nonce: stateNonce }, popupOrigin), {
             headers: { 'Content-Type': 'text/html; charset=utf-8' },
           })
         }
@@ -436,7 +439,7 @@ export async function GET(request: NextRequest) {
             organizationId: organization?.id,
             email: userEmail,
             nonce: stateNonce,
-          }),
+          }, popupOrigin),
           { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
         )
       }
@@ -447,7 +450,7 @@ export async function GET(request: NextRequest) {
     } catch (dbError) {
       logger.error('OneDrive database error during connection', dbError instanceof Error ? dbError : new Error(String(dbError)))
       if (isPopup) {
-        return new NextResponse(popupHtml({ ok: false, error: 'database_error', nonce: stateNonce }), {
+        return new NextResponse(popupHtml({ ok: false, error: 'database_error', nonce: stateNonce }, popupOrigin), {
           headers: { 'Content-Type': 'text/html; charset=utf-8' },
         })
       }
@@ -457,7 +460,7 @@ export async function GET(request: NextRequest) {
     logger.error('OneDrive callback error', error instanceof Error ? error : new Error(String(error)))
     const { flow: errFlow, nonce: errNonce } = parseStateFlow(new URL(request.url).searchParams.get('state'))
     if (errFlow === 'popup') {
-      return new NextResponse(popupHtml({ ok: false, error: 'callback_error', nonce: errNonce }), {
+      return new NextResponse(popupHtml({ ok: false, error: 'callback_error', nonce: errNonce }, await popupTargetOrigin(parseStateFlow(new URL(request.url).searchParams.get('state')).openerOrigin)), {
         headers: { 'Content-Type': 'text/html; charset=utf-8' },
       })
     }

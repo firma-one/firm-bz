@@ -25,6 +25,8 @@ vi.mock('@/lib/actions/firms', () => ({
     getUserFirms: vi.fn(async () => [{ id: 'f1', slug: 'acme', name: 'Acme', isDefault: true, groupSlug: 'acme', groupName: 'Acme' }]),
 }))
 vi.mock('react-joyride', () => ({ Joyride: () => null, EVENTS: {}, STATUS: {} }))
+// Its own server actions and toasts; covered by custom-domain-section's own tests.
+vi.mock('@/components/billing/custom-domain-section', () => ({ CustomDomainSection: () => null }))
 
 import { BillingPageClient } from './billing-page-client'
 import { upgradeCopy } from '@/lib/billing/upgrade-copy'

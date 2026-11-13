@@ -30,6 +30,7 @@ import {
     sendDailyReminderDigest,
     checkRaidLogsDaily,
 } from "@/lib/inngest/functions";
+import { recheckCustomDomainsDaily } from "@/lib/inngest/custom-domain-functions";
 
 export const { GET, POST, PUT } = serve({
     client: inngest,
@@ -62,5 +63,6 @@ export const { GET, POST, PUT } = serve({
         sendDeliverableDueReminder,
         sendDailyReminderDigest,
         checkRaidLogsDaily,
+        recheckCustomDomainsDaily,
         ],
 });

@@ -1,5 +1,6 @@
 'use server'
 
+import { appLink } from '@/lib/navigation/app-link'
 import { createClient } from '@/utils/supabase/server'
 import { createClient as createSupabaseAdmin } from '@supabase/supabase-js'
 import { revalidatePath } from 'next/cache'
@@ -176,7 +177,7 @@ async function inviteClientMemberOrThrow(firmId: string, clientId: string, email
 
     await maybeProvisionInviteeAccount(normalizedEmail, inviteeName)
 
-    const inviteUrl = `${process.env.NEXT_PUBLIC_APP_URL}/invite/${token}`
+    const inviteUrl = await appLink(`/invite/${token}`, { firmId: client.firmId })
     let warning: string | undefined
     try {
         const { subject, html } = renderInviteEmail({
@@ -239,7 +240,7 @@ async function resendClientInvitationOrThrow(invitationId: string): Promise<void
 
     await maybeProvisionInviteeAccount(invite.email)
 
-    const inviteUrl = `${process.env.NEXT_PUBLIC_APP_URL}/invite/${token}`
+    const inviteUrl = await appLink(`/invite/${token}`, { firmId: invite.client.firmId })
     try {
         const { subject, html } = renderInviteEmail({
             firmName: invite.client.firm?.name ?? '',

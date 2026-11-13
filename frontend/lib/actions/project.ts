@@ -583,7 +583,7 @@ async function updateEngagementOrThrow(
 
                 // Critical email: due within 24 hours (best-effort; sendEventEmailToUser never throws)
                 if (hours <= 24) {
-                    const link = buildAbsoluteUrl(engCtaUrl)
+                    const link = await buildAbsoluteUrl(engCtaUrl, { engagementId: projectId })
                     await Promise.all(members.map((m) =>
                         sendEventEmailToUser(m.userId, () => ({
                             subject: 'Engagement due soon',

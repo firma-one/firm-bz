@@ -4,7 +4,8 @@ import { prisma } from '@/lib/prisma'
 import { canAccessSupportTicket } from '@/lib/support-ticket-auth'
 import { isFirmaAuthor, isMemberOfFirm } from '@/lib/support/enrich-requests'
 import { splitDescription } from '@/lib/support/ticket-view'
-import { buildAbsoluteUrl, createEventNotifications, sendEventEmailToUser } from '@/lib/notify-event'
+import { createEventNotifications, sendEventEmailToUser } from '@/lib/notify-event'
+import { platformLink } from '@/lib/navigation/platform-link'
 import { renderSupportReplyEmail } from '@/lib/email-templates/support-reply'
 import { logger } from '@/lib/logger'
 import { resolveDisplayName } from '@/lib/auth/display-name'
@@ -84,7 +85,7 @@ async function notifyRequester(p: { ticketNumber: string; requesterId: string; f
   const preview = p.reply.length > 200 ? `${p.reply.slice(0, 199)}…` : p.reply
   await Promise.all([
     sendEventEmailToUser(p.requesterId, () =>
-      renderSupportReplyEmail({ ticketNumber: p.ticketNumber, title: p.title, replyPreview: preview, ctaUrl: buildAbsoluteUrl(relativeUrl) })
+      renderSupportReplyEmail({ ticketNumber: p.ticketNumber, title: p.title, replyPreview: preview, ctaUrl: relativeUrl ? platformLink(relativeUrl) : null })
     ),
     p.firmId
       ? createEventNotifications([{

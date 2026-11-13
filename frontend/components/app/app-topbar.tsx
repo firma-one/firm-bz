@@ -4,7 +4,7 @@ import Logo, { type OrganizationBranding } from "@/components/Logo"
 import { hexToHsl, hexToRgbStr, getContrastForegroundHsl } from "@/lib/color-utils"
 
 import { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { supabase } from "@/lib/supabase"
 import { Bell, Bookmark, Briefcase, ChevronDown, ChevronRight, ChevronUp, History, Info, Megaphone, MapPinned as MapIcon, Search, Send, SquareX, Trash2, X, ArrowUpRight } from "lucide-react"
@@ -208,6 +208,7 @@ export function AppTopbar() {
   const { user } = useAuth()
   const { addToast } = useToast()
   const pathname = usePathname()
+  const router = useRouter()
   const [, setFirmName] = useState<string>('')
   const [branding, setBranding] = useState<OrganizationBranding | null>(null)
   const [, setLoading] = useState(true)
@@ -1129,13 +1130,14 @@ export function AppTopbar() {
                         }
                         if (n.projectId && n.documentId) {
                           const url = await resolveDeeplink({ kind: 'document', projectId: n.projectId, documentId: n.documentId })
-                          if (url) { window.location.href = url; return }
+                          if (url) { router.push(url); return }
                         }
                         if (n.projectId && !n.documentId) {
                           const url = await resolveDeeplink({ kind: 'project', projectId: n.projectId })
-                          if (url) { window.location.href = url; return }
+                          if (url) { router.push(url); return }
                         }
-                        if (n.ctaUrl) window.location.href = n.ctaUrl
+                        // Stored as a path: the client router follows it, no full page load.
+                        if (n.ctaUrl) router.push(n.ctaUrl)
                       }}
                       onKeyDown={async (e) => {
                         if (e.key === 'Enter' || e.key === ' ') {

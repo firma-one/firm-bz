@@ -3,7 +3,8 @@
  * Parse comma-separated emails, trim spaces, case-insensitive comparison.
  */
 
-function getSystemAdminEmails(): string[] {
+/** Every System Admin's address, lowercase: who gets platform notices such as a custom-domain request. */
+export function getSystemAdminEmails(): string[] {
   const adminEmailsEnv = process.env.SYSTEM_ADMIN_EMAILS || ''
   if (!adminEmailsEnv) return []
 

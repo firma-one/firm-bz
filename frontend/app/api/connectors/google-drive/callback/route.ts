@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { popupTargetOrigin } from '@/lib/custom-domains/popup-origin'
 import { createClient } from '@supabase/supabase-js'
 import { googleDriveConnector } from '@/lib/google-drive-connector'
 import { prisma } from '@/lib/prisma'
@@ -75,12 +76,12 @@ function isPersonalGoogleAccount(idToken: string | undefined): boolean {
  * Matches the parent window when both run on the same deployment (avoids NEXT_PUBLIC_APP_URL drift).
  * Requires window.opener — do not open the auth popup with noopener/noreferrer.
  */
-function popupHtml(payload: { ok: boolean; error?: string; errorDescription?: string | null; connectionId?: string; organizationId?: string; email?: string; nonce?: string }) {
+function popupHtml(payload: { ok: boolean; error?: string; errorDescription?: string | null; connectionId?: string; organizationId?: string; email?: string; nonce?: string }, targetOrigin: string | null) {
   const payloadStr = JSON.stringify(payload).replace(/</g, '\\u003c').replace(/>/g, '\\u003e')
   return `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body><script>
 (function() {
   var payload = ${payloadStr};
-  var targetOrigin = window.location.origin;
+  var targetOrigin = ${JSON.stringify(targetOrigin)} || window.location.origin;
   if (window.opener && !window.opener.closed) {
     window.opener.postMessage({ type: 'google_drive_oauth', ok: payload.ok, error: payload.error, errorDescription: payload.errorDescription, connectionId: payload.connectionId, organizationId: payload.organizationId, email: payload.email, nonce: payload.nonce }, targetOrigin);
   }
@@ -92,6 +93,8 @@ function popupHtml(payload: { ok: boolean; error?: string; errorDescription?: st
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
+    // The opener's origin when it's an approved custom domain (lib/custom-domains/popup-origin.ts).
+    const popupOrigin = await popupTargetOrigin(parseStateFlow(searchParams.get('state')).openerOrigin)
     const code = searchParams.get('code')
     const state = searchParams.get('state')
     const error = searchParams.get('error')
@@ -105,7 +108,7 @@ export async function GET(request: NextRequest) {
       const providerDetail = oauthErrorDetail(searchParams.get('error_description'))
       logger.warn('Google Drive OAuth callback: Google answered an error', { error, providerCode, detail: providerDetail })
       if (isPopup) {
-        const html = popupHtml({ ok: false, error: providerCode, errorDescription: providerDetail, nonce: stateNonce })
+        const html = popupHtml({ ok: false, error: providerCode, errorDescription: providerDetail, nonce: stateNonce }, popupOrigin)
         return new NextResponse(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } })
       }
       // Back where the flow started, which reads the error (P2-32); `/d` read nothing.
@@ -114,7 +117,7 @@ export async function GET(request: NextRequest) {
 
     if (!code) {
       if (isPopup) {
-        const html = popupHtml({ ok: false, error: 'no_code', nonce: stateNonce })
+        const html = popupHtml({ ok: false, error: 'no_code', nonce: stateNonce }, popupOrigin)
         return new NextResponse(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } })
       }
       return NextResponse.redirect(getRedirectUrl(appPathWithError(resolveOAuthFailureRedirectPath(state), 'no_code')))
@@ -122,7 +125,7 @@ export async function GET(request: NextRequest) {
 
     const oauthFailureBase = resolveOAuthFailureRedirectPath(state)
     const fail = (errorCode: string) => isPopup
-      ? new NextResponse(popupHtml({ ok: false, error: errorCode, nonce: stateNonce }), { headers: { 'Content-Type': 'text/html; charset=utf-8' } })
+      ? new NextResponse(popupHtml({ ok: false, error: errorCode, nonce: stateNonce }, popupOrigin), { headers: { 'Content-Type': 'text/html; charset=utf-8' } })
       : NextResponse.redirect(getRedirectUrl(appPathWithError(oauthFailureBase, errorCode)))
 
     // Trust the state only if we signed it, it's fresh, and it belongs to whoever is signed in —
@@ -149,7 +152,7 @@ export async function GET(request: NextRequest) {
       const msg = e instanceof Error ? e.message : String(e)
       logger.error('Google Drive OAuth credentials missing for callback', new Error(msg))
       if (isPopup) {
-        const html = popupHtml({ ok: false, error: 'oauth_not_configured', nonce: stateNonce })
+        const html = popupHtml({ ok: false, error: 'oauth_not_configured', nonce: stateNonce }, popupOrigin)
         return new NextResponse(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } })
       }
       return NextResponse.redirect(getRedirectUrl(appPathWithError(resolveOAuthFailureRedirectPath(state), 'oauth_not_configured')))
@@ -192,7 +195,7 @@ export async function GET(request: NextRequest) {
           ok: false,
           error: unreachable ? 'google_oauth_unreachable' : 'token_exchange_failed',
           nonce: stateNonce,
-        })
+        }, popupOrigin)
         return new NextResponse(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } })
       }
       return NextResponse.redirect(
@@ -211,7 +214,7 @@ export async function GET(request: NextRequest) {
       const tokenCode = mapped === 'oauth_error' ? 'token_exchange_failed' : mapped
       const tokenDetail = oauthErrorDetail(tokenErr.error_description)
       if (isPopup) {
-        const html = popupHtml({ ok: false, error: tokenCode, errorDescription: tokenDetail, nonce: stateNonce })
+        const html = popupHtml({ ok: false, error: tokenCode, errorDescription: tokenDetail, nonce: stateNonce }, popupOrigin)
         return new NextResponse(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } })
       }
       return NextResponse.redirect(getRedirectUrl(appPathWithError(oauthFailureBase, tokenCode, tokenDetail)))
@@ -259,7 +262,7 @@ export async function GET(request: NextRequest) {
           ok: false,
           error: unreachable ? 'google_oauth_unreachable' : 'user_info_failed',
           nonce: stateNonce,
-        })
+        }, popupOrigin)
         return new NextResponse(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } })
       }
       return NextResponse.redirect(
@@ -273,7 +276,7 @@ export async function GET(request: NextRequest) {
       const txt = await userResponse.text()
       logger.error('User info fetch failed', new Error(txt))
       if (isPopup) {
-        const html = popupHtml({ ok: false, error: 'user_info_failed', nonce: stateNonce })
+        const html = popupHtml({ ok: false, error: 'user_info_failed', nonce: stateNonce }, popupOrigin)
         return new NextResponse(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } })
       }
       return NextResponse.redirect(getRedirectUrl(appPathWithError(oauthFailureBase, 'user_info_failed')))
@@ -324,7 +327,7 @@ export async function GET(request: NextRequest) {
     if (!userId) {
       logger.error('No user ID in state parameter')
       if (isPopup) {
-        const html = popupHtml({ ok: false, error: 'no_user_id', nonce: stateNonce })
+        const html = popupHtml({ ok: false, error: 'no_user_id', nonce: stateNonce }, popupOrigin)
         return new NextResponse(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } })
       }
       return NextResponse.redirect(getRedirectUrl(appPathWithError(oauthFailureBase, 'no_user_id')))
@@ -417,7 +420,7 @@ export async function GET(request: NextRequest) {
           const idMismatch = existing.externalAccountId && userInfo.id !== existing.externalAccountId
           if (emailMismatch || idMismatch) {
             if (isPopup) {
-              const html = popupHtml({ ok: false, error: 'account_mismatch', nonce: stateNonce })
+              const html = popupHtml({ ok: false, error: 'account_mismatch', nonce: stateNonce }, popupOrigin)
               return new NextResponse(html, { headers: { 'Content-Type': 'text/html' } })
             }
             return NextResponse.redirect(
@@ -485,7 +488,7 @@ export async function GET(request: NextRequest) {
           throw storeErr
         }
         if (isPopup) {
-          const html = popupHtml({ ok: false, error: 'reconnect_failed', nonce: stateNonce })
+          const html = popupHtml({ ok: false, error: 'reconnect_failed', nonce: stateNonce }, popupOrigin)
           return new NextResponse(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } })
         }
         return NextResponse.redirect(getRedirectUrl(appPathWithError(oauthFailureBase, 'reconnect_failed')))
@@ -636,7 +639,7 @@ export async function GET(request: NextRequest) {
           organizationId: organization?.id,
           email: userInfo.email,
           nonce: stateNonce
-        })
+        }, popupOrigin)
         return new NextResponse(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } })
       }
 
@@ -650,7 +653,7 @@ export async function GET(request: NextRequest) {
     } catch (dbError) {
       logger.error('Google Drive Database error during connection', dbError instanceof Error ? dbError : new Error(String(dbError)))
       if (isPopup) {
-        const html = popupHtml({ ok: false, error: 'database_error', nonce: stateNonce })
+        const html = popupHtml({ ok: false, error: 'database_error', nonce: stateNonce }, popupOrigin)
         return new NextResponse(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } })
       }
       return NextResponse.redirect(getRedirectUrl(`${redirectPath}?error=database_error`))
@@ -660,7 +663,7 @@ export async function GET(request: NextRequest) {
     logger.error('Google Drive callback error', error instanceof Error ? error : new Error(String(error)))
     const { flow: errFlow, nonce: errNonce } = parseStateFlow(new URL(request.url).searchParams.get('state'))
     if (errFlow === 'popup') {
-      const html = popupHtml({ ok: false, error: 'callback_error', nonce: errNonce })
+      const html = popupHtml({ ok: false, error: 'callback_error', nonce: errNonce }, await popupTargetOrigin(parseStateFlow(new URL(request.url).searchParams.get('state')).openerOrigin))
       return new NextResponse(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } })
     }
     return NextResponse.redirect(getRedirectUrl(appPathWithError(resolveOAuthFailureRedirectPath(new URL(request.url).searchParams.get('state')), 'callback_error')))

@@ -145,7 +145,7 @@ export async function sendStatusUpdate(
             ctaUrl: path,
             dedupeKey: `status-update:${engagementId}:${sentAt}:${userId}`,
         })))
-        const ctaUrl = buildAbsoluteUrl(path)
+        const ctaUrl = await buildAbsoluteUrl(path, { engagementId })
         await Promise.all(ids.map((userId) => sendEventEmailToUser(userId, () => renderStatusUpdateEmail({
             firmName: firm.name,
             engagementName: engagement.name,

@@ -1461,8 +1461,8 @@ export const sendReminderEmail = inngest.createFunction(
             const email = data?.user?.email
             if (!email) return { skipped: 'no-email' }
 
-            const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ''
-            const ctaUrl = event.data.ctaUrl ? `${appUrl}${event.data.ctaUrl}` : null
+            const { appLinkOrNull } = await import('@/lib/navigation/app-link')
+            const ctaUrl = await appLinkOrNull(event.data.ctaUrl, event.data.firmId ? { firmId: event.data.firmId } : null)
             const { subject, html } = renderReminderEmail({
                 entityName: event.data.entityName,
                 action: event.data.action,
@@ -1730,8 +1730,8 @@ export const sendRecurringReminderEmails = inngest.createFunction(
             const email = data?.user?.email
             if (!email) return { skipped: 'no-email' }
 
-            const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ''
-            const ctaUrl = event.data.ctaUrl ? `${appUrl}${event.data.ctaUrl}` : null
+            const { appLinkOrNull } = await import('@/lib/navigation/app-link')
+            const ctaUrl = await appLinkOrNull(event.data.ctaUrl, event.data.firmId ? { firmId: event.data.firmId } : null)
             const { subject, html } = renderReminderEmail({
                 entityName: event.data.entityName,
                 action: event.data.action,
@@ -1911,8 +1911,8 @@ export const sendDeliverableDueReminder = inngest.createFunction(
             const { sendEmail } = await import("@/lib/email")
             const { renderReminderEmail } = await import("@/lib/email-templates/reminder")
             const admin = createAdminClient()
-            const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ''
-            const cta = boardUrl ? `${appUrl}${boardUrl}` : null
+            const { appLinkOrNull } = await import('@/lib/navigation/app-link')
+            const cta = await appLinkOrNull(boardUrl, firmId ? { firmId } : { documentId })
             const { subject, html } = renderReminderEmail({
                 entityName,
                 action,

@@ -215,7 +215,7 @@ export async function applyStageChange(
             const link = opts.internalOnly
                 ? entityCtx?.ctaUrl?.replace(/\/shares$/, `/files#doc-file:${row.id}`) ?? null
                 : entityCtx?.ctaUrl ?? null
-            const ctaUrl = buildAbsoluteUrl(link)
+            const ctaUrl = await buildAbsoluteUrl(link, { engagementId: projectId })
             const notifType = isRejection ? 'DOCUMENT_REJECTED' : 'DOCUMENT_STATUS_CHANGED'
             const title = isRejection
                 ? `Changes requested: "${row.fileName}"`

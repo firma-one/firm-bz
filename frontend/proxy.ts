@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { resolvePostAuthTarget } from "@/lib/auth/post-auth-target";
 import { isSystemAdminEmail } from "@/lib/system/admin-check";
+import { isPlatformHost } from "@/lib/custom-domains/hosts";
 
 /** Forward pathname to Server Components (e.g. `/d` layout entry redirect). */
 const INVOKE_PATH_HEADER = "x-invoke-path";
@@ -117,11 +118,12 @@ export async function proxy(request: NextRequest) {
         return NextResponse.redirect(new URL(resolvePostAuthTarget(request.nextUrl.searchParams), request.url))
     }
 
-    // Rewrite client subdomains (e.g. datasentry.firma.bz) to /d, preserving the URL.
-    // Auth is checked first above — unauthenticated users get redirected to /signin.
+    // A workspace's custom domain (acme.firma.bz, portal.acme.com): its root opens the app, keeping the
+    // address. Any host that isn't one of Firma's own counts (lib/custom-domains/hosts.ts), so a domain
+    // approved in /system/custom-domains needs no code change here, and no database lookup: /d?entry=auth
+    // already resolves the person's workspace. (Replaces the hard-coded CLIENT_SUBDOMAINS list.)
     const host = request.headers.get('host') ?? ''
-    const CLIENT_SUBDOMAINS = ['app.firma.bz', 'datasentry.firma.bz', 'keithmeyer.firma.bz', 'scarbluu.firma.bz']
-    if (CLIENT_SUBDOMAINS.includes(host) && pathname === '/') {
+    if (pathname === '/' && host && !isPlatformHost(host)) {
         if (!user) {
             const loginUrl = new URL('/signin', request.url)
             loginUrl.searchParams.set('redirect', '/d')
@@ -129,6 +131,7 @@ export async function proxy(request: NextRequest) {
         }
         const url = request.nextUrl.clone()
         url.pathname = '/d'
+        url.searchParams.set('entry', 'auth')
         return NextResponse.rewrite(url)
     }
 

@@ -336,8 +336,8 @@ async function sendImmediateReminderEmail(
         const email = data?.user?.email
         if (!email) return
 
-        const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ''
-        const ctaUrl = params.ctaUrl ? `${appUrl}${params.ctaUrl}` : null
+        const { appLinkOrNull } = await import('@/lib/navigation/app-link')
+        const ctaUrl = await appLinkOrNull(params.ctaUrl, { firmId: params.firmId })
         const { subject, html } = renderReminderEmail({
             entityName: params.entityName,
             action: params.action,

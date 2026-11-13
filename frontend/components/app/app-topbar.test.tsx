@@ -9,7 +9,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 const { addToast, auth } = vi.hoisted(() => ({ addToast: vi.fn(), auth: { user: { id: 'u1', email: 'pat@acme.test', user_metadata: {} } } }))
 // Mounted on onboarding today, where it skips loading the list; the load is checked on a firm page.
 let pathname = '/d/onboarding'
-vi.mock('next/navigation', () => ({ usePathname: () => pathname }))
+vi.mock('next/navigation', () => ({ usePathname: () => pathname, useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }) }))
 vi.mock('next/link', () => ({ default: ({ children, ...rest }: any) => <a {...rest}>{children}</a> }))
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => auth }))
 vi.mock('@/lib/supabase', () => ({ supabase: { auth: { getSession: async () => ({ data: { session: { access_token: 't' } } }) } } }))
