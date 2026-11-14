@@ -65,11 +65,16 @@ weaker template than it looks, though; item 1 must not copy these four things:
   already covers the whole subtree. Each failed call is dropped without a log (`:263`). That costs
   throttling headroom and hides outages.
 
+*Since then (checked 2026-11-14):* `599016ea` sorts a doc-ID match ahead of everything (route
+`:291`), then by date as before, so provider hits are still not first. `d11ecfda` made the lock
+filter fail closed for a Contributor · Limited Access or a Reviewer (`:238`). For the firm's own
+people it still fails open, on purpose (its test: "keeps the firm's results when the lock filter
+can't run"). The 50-folder cap is now at `:95`; the OneDrive adapter is unchanged.
+
 ## Open — the leftover work
 
-Ranked. Item 4 is now confirmed by reading the code and goes first: it is an access-control bug,
-not a gap in search quality. After it, items 1 and 2 are the ones that make the shipped state
-incomplete.
+Ranked. Item 4 was fixed on 2026-11-09 (see below), apart from the Lead's preview. Items 1 and 2
+are now the ones that make the shipped state incomplete.
 
 ### 1. Firm-wide Doc Search has no content matching at all
 
@@ -200,46 +205,39 @@ filter `embedding IS NOT NULL` today; add it so nulled rows aren't ranked with a
 this, the privacy sentence can go in the same change as the migration rather than waiting on the
 re-index.
 
-### 4. Verify: no per-document visibility filter on engagement search results
+### 4. Fixed: engagement search showed documents not shared with the searcher
 
-`app/api/projects/[projectId]/search/route.ts` gates on `requireProjectView` → `canViewProject`,
-which is a project-level `can_view` check. The route then filters only **locked** documents. It
-does not call `visibleDocumentIdsFor` or any external-member grant check, on the provider results
-or the DB ones.
+**Status (2026-11-14): fixed by `d11ecfda`, PR #148, live since 2026-11-09, except the Lead's
+"view as" preview, which is still open.**
 
-Elsewhere, external collaborators and viewers are explicitly restricted per document —
-`lib/comments/discussions.ts` and the doc-comments route both intersect with
-`visibleDocumentIdsFor(projectId, role)`, and `quick-search.ts` notes "the grant check
-SearchService applies for EC/EV".
+What was wrong (confirmed by reading the code on 2026-10-26): a Contributor · Limited Access or a
+Reviewer could search an engagement's Files tab and get the names and metadata of documents
+nobody had shared with them. The route only checked `project:can_view`, which both roles have
+(`lib/permissions/persona-map.ts:57`, `:63`). Its index branches carried no grant clause, and the
+provider hits were only lock-filtered, by a filter that failed open.
 
-**Confirmed by reading the code (2026-10-26); not yet reproduced in the app.**
+What shipped in `app/api/projects/[projectId]/search/route.ts`:
+- The searcher's engagement role is resolved (`requireEngagementMember`, `:31`), and
+  `isExternalEngagementRole` picks out the two limited roles (`:32`).
+- For those two roles every result, from the index or the provider, must be in
+  `visibleDocumentIdsFor(projectId, role)` and not in `privateExternalIds(projectId)`, which also
+  removes anything inside a private folder (`:249–250`). If either check fails, the search fails;
+  nothing is listed unchecked.
+- The lock filter fails closed for them (`:238`) and stays as it was for the firm's own people.
+- `route.test.ts` covers it, including doc-ID matches (from `599016ea`): shared only, nothing
+  inside something private, and the lock-filter failure case.
 
-- External roles reach the endpoint. `eng_ext_collaborator` and `eng_viewer` both have
-  `project:can_view: true` (`lib/permissions/persona-map.ts:57`, `:63`), and that is all
-  `requireProjectView` checks. The Files tab mounts the search for every role.
-- The local branches it calls (`searchSimilarityHierarchy` `:382`, `searchByFileName` `:455`,
-  `searchByFileNameTerms` `:510`) exclude locked documents but carry no grant clause. Only the
-  firm-wide builder has one (`search-service.ts:695`).
-- Provider hits are only lock-filtered, and that filter fails open (route `:219`).
-- When a lead previews the engagement as an external, the UI sends `viewAs=eng_ext_collaborator`
-  or `eng_viewer` (`components/projects/engagement-search-context.tsx:129–130`). The route never
-  reads `viewAs`, so the preview shows everything too, which is why it looked fine when checked
-  from a lead's seat.
+It went in differently from the fix sketched in this plan (one index query, as in item 1 step c).
+It filters the merged list in code with the existing helpers instead. That is equivalent for this
+single-engagement route; item 1 should still use the single query, because it spans many
+engagements and roles at once.
 
-So an external member searching the Files tab can be shown the names and metadata of documents
-not shared with them. To reproduce: as an `eng_viewer` member, search the engagement for the name
-of a document with no grant to that user.
-
-Fix, before item 1:
-- Resolve the caller's engagement role.
-- For external roles, run the route's final list (provider and local hits alike) through one index
-  query with the grant clause and the lock exclusions, as in item 1 step c, scoped to this
-  engagement. Fail closed.
-- Honor `viewAs` only for callers allowed to preview (the engagement lead).
-- Tests: an external member with an ungranted document gets nothing for it, from either source; a
-  failed check returns no results; a lead with `viewAs` sees the external's view.
-
-It is an access-control bug, so it takes priority over everything above.
+**Still open: the Lead's preview.** When a Lead uses "view as" to preview a Reviewer or a
+Contributor · Limited Access, the Files search sends `viewAs`
+(`components/projects/engagement-search-context.tsx:129–130`). The route never reads it, so the
+preview lists everything the Lead can see. Real Reviewers and contributors are filtered
+correctly; only the preview misrepresents what they get. Fix: honor `viewAs` only for a caller
+allowed to preview (the Lead), by running the same visibility filter for that role, with a test.
 
 ### 5. Display snippets
 
