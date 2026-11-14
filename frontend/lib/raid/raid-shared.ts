@@ -259,8 +259,38 @@ export function raidOverviewOf(log: Pick<RaidLogPayload, 'items' | 'suggestions'
         },
         conversation,
         latestDecision,
-        suggestionCount: log.suggestions.length,
+        // A memo's suggestions wait on the memo (waitsOnMemo); its row in Memos counts them.
+        suggestionCount: log.suggestions.filter((s) => !waitsOnMemo(s)).length,
     }
+}
+
+/**
+ * A suggestion Brio made from a memo waits on that memo, to accept or dismiss there with its action
+ * items: a memo reviewed in one place (.claude/plans/brio-features-round-2.md, §13). The RAID tab and
+ * the Overview card leave it out and point to the memo instead.
+ */
+export function waitsOnMemo(s: Pick<RaidItemView, 'sourceKind'>): boolean {
+    return s.sourceKind === 'MEMO'
+}
+
+/** The memos that have suggestions waiting on them, each once, in the order the suggestions came. */
+export function memoSuggestionGroups(suggestions: RaidItemView[]): { memoId: string | null; title: string; count: number }[] {
+    const groups = new Map<string, { memoId: string | null; title: string; count: number }>()
+    for (const s of suggestions) {
+        if (!waitsOnMemo(s)) continue
+        const source = s.sources.find((x) => x.kind === 'MEMO')
+        const key = source?.memoId ?? source?.label ?? 'memo'
+        const group = groups.get(key) ?? { memoId: source?.memoId ?? null, title: (source?.label ?? '').replace(/^Memo( · )?/, ''), count: 0 }
+        group.count += 1
+        groups.set(key, group)
+    }
+    return Array.from(groups.values())
+}
+
+/** Where a memo is reviewed: Discussions › Memos with it open (on /tour, the page's own query). */
+export function memoReviewHref(engagementBase: string, memoId: string | null): string {
+    const memo = memoId ? `&memo=${encodeURIComponent(memoId)}` : ''
+    return engagementBase ? `${engagementBase}/comments?view=memos${memo}` : `?tab=comments&view=memos${memo}`
 }
 
 // ── Words ─────────────────────────────────────────────────────────────────────────────────────
@@ -290,11 +320,10 @@ export function attachPhrase(target: { type: RaidType; title: string }): string 
     return `adds to the ${state} ${RAID_TYPE_LABEL[target.type]} “${target.title}”`
 }
 
-/** Where the Discussions RAID sub-tab is. The param may change with the Discussions switch. */
+/** Where the RAID log is: the engagement's RAID tab (it was a Discussions sub-tab until 2026-11-14). */
 export function raidLogHref(engagementBase: string): string {
-    // Without a base (/tour), the page's own query: the tour switches tabs with ?tab=, so the link
-    // names the Discussions tab too, or it would stay on the Overview it was clicked from.
-    return engagementBase ? `${engagementBase}/comments?view=raid` : '?tab=comments&view=raid'
+    // Without a base (/tour), the page's own query: the tour switches tabs with ?tab=.
+    return engagementBase ? `${engagementBase}/raid` : '?tab=raid'
 }
 
 /**
@@ -306,7 +335,7 @@ export function raidLogHref(engagementBase: string): string {
  */
 export function sourceHref(engagementBase: string, source: Pick<RaidSourceView, 'kind' | 'documentId' | 'memoId' | 'label' | 'overviewSection'>): string | null {
     if (!engagementBase) return tourSourceHref(source)
-    if (source.kind === 'MEMO') return source.memoId ? `${engagementBase}/files#doc-file:${source.memoId}` : null
+    if (source.kind === 'MEMO') return source.memoId ? memoReviewHref(engagementBase, source.memoId) : null
     if (source.kind === 'HEALTH') return `${engagementBase}/analytics${source.overviewSection ? `#ring-${source.overviewSection}` : ''}`
     if (!source.documentId) return null
     if (source.kind === 'THREAD' || source.label.startsWith('Thread')) return `${engagementBase}/comments#doc-comment:${source.documentId}`

@@ -46,11 +46,14 @@ import {
     isAutoSource,
     isLive,
     lastCheckedPhrase,
+    memoReviewHref,
+    memoSuggestionGroups,
     raidCountsByType,
     raidOpenCount,
     raidTone,
     shortDay,
     sourceHref,
+    waitsOnMemo,
     type RaidChangedDetail,
     type RaidConversationState,
     type RaidItemView,
@@ -64,7 +67,7 @@ import {
 } from '@/lib/raid/raid-shared'
 
 /**
- * Discussions › RAID (.claude/plans/brio-features-round-2.md, §9): the engagement's Risks, Assumptions,
+ * The RAID tab (.claude/plans/brio-features-round-2.md, §9; a Discussions sub-tab until 2026-11-14): the engagement's Risks, Assumptions,
  * Issues and Decisions, internal only. Status, health and Board entries keep themselves current; Brio's
  * suggestions from threads and memos wait in a strip until a person accepts or dismisses them; people
  * add their own, own them and write the mitigation.
@@ -448,7 +451,9 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
 
     const counts = raidCountsByType(log.items, stateFilter)
     const rows = filterRaidItems(log.items, typeFilter, stateFilter)
-    const suggestions = log.suggestions
+    // A memo's suggestions wait on the memo, with its action items (§13): here, only a line to it.
+    const suggestions = log.suggestions.filter((s) => !waitsOnMemo(s))
+    const memoGroups = memoSuggestionGroups(log.suggestions)
 
     return (
         <div className="flex flex-col gap-4" data-no-export="">
@@ -515,7 +520,7 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
                     <div className="flex flex-wrap items-center gap-2 px-3.5 py-2.5">
                         <span id={strip} className="inline-flex flex-wrap items-baseline gap-x-1.5 text-small text-fg">
                             <Brio className="text-ui text-action" />
-                            <span><strong className="font-semibold">suggests {suggestions.length}</strong> from new messages and memos</span>
+                            <span><strong className="font-semibold">suggests {suggestions.length}</strong> from new messages</span>
                         </span>
                         <span className="flex-1" />
                         <span className="text-caption font-normal text-fg-muted">Nothing enters the log until someone accepts it</span>
@@ -556,6 +561,22 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
                         })}
                     </ul>
                 </section>
+            )}
+
+            {memoGroups.length > 0 && (
+                <ul aria-label="Suggestions waiting on memos" className="flex flex-col gap-1">
+                    {memoGroups.map((g) => (
+                        <li key={g.memoId ?? g.title} className="flex flex-wrap items-baseline gap-x-1.5 text-small text-fg-muted">
+                            <span>
+                                <strong className="font-semibold text-fg">{g.count} {g.count === 1 ? 'suggestion waits' : 'suggestions wait'}</strong>{' '}
+                                on the memo{g.title ? ` “${g.title}”` : ''}, with its action items.
+                            </span>
+                            <RaidLink href={memoReviewHref(engagementBase, g.memoId)} className="text-action hover:underline">
+                                Review in Memos
+                            </RaidLink>
+                        </li>
+                    ))}
+                </ul>
             )}
 
             <div className="flex flex-wrap items-center gap-1" role="toolbar" aria-label="Filter the RAID log">
@@ -699,7 +720,8 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
             <p className="text-small text-fg-muted">
                 Status, health and Board items are free and keep themselves current. <Brio noIcon /> reads threads with new messages once a
                 day, or when you check with the sparkle: at most 1 credit per engagement per active day. A memo is read once, when it&apos;s
-                added, and its suggestions wait on the memo too. <Brio noIcon /> records what people decided; it never decides.
+                added, and its suggestions wait on the memo, to accept or dismiss there with its action items. <Brio noIcon /> records
+                what people decided; it never decides.
             </p>
         </div>
     )
@@ -721,7 +743,7 @@ function announce(projectId: string, count: number) {
 }
 
 /**
- * The RAID sub-tab of Discussions. Leads and Contributors · Full Access only: the route refuses everyone
+ * The engagement's RAID tab. Leads and Contributors · Full Access only: the route refuses everyone
  * else, and the switch shouldn't offer it to them.
  */
 export function RaidTab({ projectId, engagementBase, readOnly = false }: {
@@ -823,12 +845,14 @@ export function RaidTab({ projectId, engagementBase, readOnly = false }: {
 }
 
 /**
- * The number beside RAID on the Discussions switch: entries open or recorded. Null until it loads, and
+ * The number beside the RAID tab: entries open or recorded. Null until it loads, and
  * for anyone the log isn't for. Follows changes made in the tab on this page without asking again.
  */
-export function useRaidCount(projectId: string): number | null {
+export function useRaidCount(projectId: string | null): number | null {
     const [count, setCount] = useState<number | null>(null)
     useEffect(() => {
+        // No engagement: a viewer who doesn't get the RAID tab, whose route would refuse the count anyway.
+        if (!projectId) return
         let alive = true
         void (async () => {
             try {

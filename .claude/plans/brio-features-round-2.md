@@ -406,6 +406,14 @@ Accept, as before. The daily RAID check and Check now read threads only, so a me
 - **Never applies.** The job writes proposals and SUGGESTED rows only: no reminder, no due date, no
   accepted RAID entry. A test pins it.
 
+**Memo suggestions wait on the memo only (Deepak, 2026-11-14: "why is it showing directly on RAID").**
+A memo's RAID suggestions are accepted or dismissed on the memo, with its action items. The RAID tab's
+strip lists thread suggestions only ("suggests N from new messages"), plus one line per memo: "N
+suggestions wait on the memo “Title · date”, with its action items · Review in Memos". The Overview
+card's "N suggestions to review" leaves memo ones out (the memo's row counts them). A memo source chip
+opens Discussions › Memos with the memo, not Files (`waitsOnMemo`, `memoSuggestionGroups`,
+`memoReviewHref` in lib/raid/raid-shared.ts).
+
 ## 14. Next, from Deepak (2026-11-14, for the next session)
 
 0. **First: commit and push** the uncommitted round on `dev` (about 50 files: memos in three fixed-height
@@ -418,6 +426,11 @@ Accept, as before. The daily RAID check and Check now read threads only, so a me
    Overview's RAID card and every `raidLogHref` link point at it; /tour too. Later, optional: a firm-level
    card on Firm Overview listing open risks and issues across engagements, each linking to its tab.
    (The zero-credit `memoRaid` feature from §13 is already in the AI feature list.)
+   **Built 2026-11-14 (uncommitted):** `…/raid` after Discussions (ShieldAlert, open count, internal-only
+   lock), guarded on the page for a Lead or a Contributor · Full Access (`canEdit && canViewInternalTabs`,
+   as the RAID routes); `…/comments?view=raid` redirects there; Discussions is Threads | Memos (the switch
+   still takes a RAID option if one is passed); `raidLogHref` → `/raid` or `?tab=raid`; header crumb;
+   /tour mirrored. Firm-level card not built.
 2. **Native comment threads from inside documents.** Read Google Docs/Sheets/Slides comments (Drive API
    `comments.list`, also works for Office files kept in Drive) and Microsoft Office comments on OneDrive
    (Graph has no comments API for Word/Excel/PowerPoint: the file would have to be downloaded and its
@@ -425,6 +438,17 @@ Accept, as before. The daily RAID check and Check now read threads only, so a me
    action items in them as it does for internal memos. **Decide first:** reading them, above all
    downloading an Office file to do it, conflicts with the published promise that Brio "never opens the
    files you deliver" (website, FAQ, Trust Center, email). The copy and the promise need to change with it.
+   **Do this one last (Deepak, 2026-11-15).** Feasible without the .NET Open XML SDK: an Office file is a
+   ZIP of XML parts, read in Node with `jszip` (already a dependency) plus a small XML parser.
+   - Excel: threaded comments in `xl/threadedComments/*.xml` + `xl/persons/person.xml` (sheet and cell
+     ref); notes in `xl/comments*.xml` (skip the legacy "[Threaded comment]" placeholders). Graph's Excel
+     workbook API may list threaded comments with no parsing: confirm when building.
+   - PowerPoint: `ppt/comments/modernComment_*.xml` + `ppt/authors.xml` (replies, resolved); older decks
+     `ppt/comments/comment*.xml` + `ppt/commentAuthors.xml`. Word: `word/comments.xml` + `commentsExtended.xml`.
+   - Read only the comment parts: range requests for the ZIP's central directory, then just those parts,
+     so a deck full of images costs a few kilobytes. Read only (reply opens the file in Office); re-read
+     when the file's modified time moves. Anchors shown as "Sheet2!B14" or "Slide 4", not the body text.
+   - Promise wording to change first, e.g. "reads comments people left on files; never the files' content".
 3. **Edit a memo.** Rename its title, re-upload the whole transcript or minutes, or edit the notes in
    place. Risks to handle, given §13:
    - *Waiting action items* keep their quotes as positions in the memo (anchors); after an edit a moved
@@ -440,3 +464,70 @@ Accept, as before. The daily RAID check and Check now read threads only, so a me
    - *Rename* renames the file in Drive or OneDrive (date-title.md) and the row; RAID source labels and
      links that name the memo must follow (or be computed from the row when shown).
    - Every edit is audited; a memo edited in storage directly is the same case as an in-app edit.
+   - **Mocked 2026-11-14, waiting for Deepak's OK** (memos canvas, "Edit memo · the sheet" and "· after
+     saving"): Edit beside Open in Drive opens the Add sheet filled in; a "When you save" box says what
+     changes (rename; old waiting items and RAID suggestions stop waiting; applied ones kept) with
+     "Identify action items in the new notes · 1 credit" ticked. Title or date only: no new review.
+4. **Reword the claims, not the code (Deepak, 2026-11-15).** Nothing is removed. An applied action keeps
+   the line of the memo it came from (lowercase, `settings.memo.applied[].quote`) as its citation: useful,
+   so it stays, and the copy stops saying "firmä keeps no copy of a memo's text" (home FAQ) or anything
+   like it. Waiting action items keep quotes as anchors (§13) as built. The file promise is worded as
+   "keep", never "touch": files stream through our servers for preview, download and upload but are never
+   saved, so "we never keep a copy of what's in your files" is accurate. Proposed promise, for when the
+   document comments ship: "Your files stay in your Drive. We never keep a copy of what's in them, and
+   Brio never reads the files you deliver. It works from their names, dates and status, the comments people
+   leave, and the internal memos you write for it." Say plainly that text Brio reads (a memo, a comment)
+   goes to Anthropic for that one request. Before publishing, confirm preview keeps no cache and Sentry
+   never records file bodies.
+5. **De-identify before Brio reads free text (Deepak asked 2026-11-14; designed, not built).**
+   - **Sent today, with nothing masked:**
+     - Memo review (`buildNotesContext`): the memo's text, plus deliverable names and dates.
+     - RAID check (`buildRaidContext`): comment text, author names and roles, document names and the
+       engagement name.
+     - Privacy policy §05 is wrong on two counts. It says "the contents of your documents are never sent".
+       It also says Anthropic "does not retain": its default is up to 30 days, and zero only under a Zero
+       Data Retention (ZDR) agreement. Fix both with #4.
+   - **Layer 1, the contract (Deepak).** Ask Anthropic for ZDR. Haiku 5.5 is eligible; the Fable and Mythos
+     5.x models are carved out and keep 30 days. Until it's signed, the policy says 30 days.
+   - **Layer 2, `lib/ai/pseudonymize.ts`** (server-only, pure, no network, no extra provider):
+     - **The vault.** Built from what we already know: engagement members' names, first names, last names
+       and emails; the client and its contacts; the firm and group names. Longest match first, at word
+       boundaries, possessives included ("Dana's"), case-insensitive.
+     - **Patterns.**
+       - Emails and URLs, internal ones included.
+       - Phone numbers: formatted ones only, never a bare 10 digits. Salesforce documents an order number
+         masked as a phone, which spoiled the answer.
+       - SSN, EIN and ITIN.
+       - Card numbers (Luhn check) and IBANs.
+     - **One vault per prompt.** The memo, deliverable names, authors, document names and engagement name
+       are all masked with the same vault. Otherwise "Smith" masked in the notes but left in
+       "Smith Family Trust Return" re-links them, and due-date matching breaks.
+     - **Placeholder tokens.** Typed and stable within a call: `[CLIENT]`, `[FIRM]`, `[PERSON_3]`,
+       `[EMAIL_1]`, `[LINK_2]`, `[PHONE_1]`, `[TAX_ID_1]`. Roles already in the prompt stay. One prompt
+       line: "Text in square brackets like [PERSON_1] stands for a real value. Copy it exactly; never guess
+       what it stands for."
+     - **Unmasking.** Put the real values back into titles, quotes and reasons, then ground quotes against
+       the original text as today (`groundedQuote`, `anchorQuote`). A proposal with a token the vault
+       doesn't know is dropped and counted in `dropped`.
+     - **The vault never lasts beyond its call.** It lives in memory for that one call; it is never
+       logged, never stored and never in a Sentry breadcrumb.
+     - **Streaming surfaces (chat, briefs), later.** Hold back output from an open `[` until its `]`.
+   - **Order of work.**
+     1. Memo review and the memo RAID pass: free text, highest risk.
+     2. The thread RAID check.
+     3. Reply and nudge drafts, and chat. These need the real names back in text people send.
+   - **Firm switch.** Settings › Brio › "Replace names, emails and links before Brio reads", on by default.
+   - **Honest copy.** "Brio replaces the names, emails, links and ID numbers it recognizes before it reads."
+     Never "anonymized": names we don't know get through, context can still identify someone, and under
+     GDPR pseudonymized data is still personal data.
+   - **Layer 3, only if a regulated customer asks:**
+     - Name recognition for names we don't know: Presidio as a sidecar, or Bedrock Guardrails'
+       sensitive-information filters.
+     - Or call Claude through Bedrock in a chosen region, the Slack-style boundary.
+   - **Tests.**
+     - A masked value comes back unchanged after unmasking.
+     - Possessives.
+     - Two people named Dana.
+     - A phone number vs. an order number.
+     - A token the model invented is dropped.
+     - A guard test that every free-text AI feature masks.

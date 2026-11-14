@@ -4,7 +4,7 @@ import { Fragment, type ReactNode } from "react"
 import Link from "next/link"
 import { ShimmerBar } from "@/components/ui/shimmer"
 import { usePathname, useSearchParams } from "next/navigation"
-import { BarChart3, Briefcase, Building2, CalendarDays, ChevronRight, ClipboardList, CreditCard, Folder, Home, Inbox, LayoutGrid, LifeBuoy, Menu, MessagesSquare, PenTool, Search, Settings, UserCircle, Users } from "lucide-react"
+import { BarChart3, Briefcase, Building2, CalendarDays, ChevronRight, ClipboardList, CreditCard, Folder, Home, Inbox, LayoutGrid, LifeBuoy, Menu, MessagesSquare, ShieldAlert, PenTool, Search, Settings, UserCircle, Users } from "lucide-react"
 import { WindowGlyph } from '@/components/ui/window-glyph'
 import { ClientIcon } from "@/components/ui/client-icon"
 import { AiCreditsIndicator } from "@/components/app/ai-credits-indicator"
@@ -33,6 +33,7 @@ const ENGAGEMENT_TABS: Record<string, { label: string; icon: ReactNode }> = {
     shares: { label: "Board", icon: <LayoutGrid /> },
     board: { label: "Board", icon: <LayoutGrid /> },
     comments: { label: "Discussions", icon: <MessagesSquare /> },
+    raid: { label: "RAID", icon: <ShieldAlert /> },
     wiki: { label: "Dossier", icon: <PenTool /> },
     audit: { label: "Audit", icon: <ClipboardList /> },
     members: { label: "Members", icon: <Users /> },

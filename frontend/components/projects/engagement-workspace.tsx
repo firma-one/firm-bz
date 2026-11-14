@@ -201,6 +201,9 @@ export function EngagementWorkspace({
 
     // What sits above the tab body. The route's loading state redraws it from this snapshot, so a tab
     // switch keeps the header and tab row on screen and only the body shows a skeleton.
+    // The RAID log has its own tab (it was Discussions › RAID): for the same people as Memos.
+    const canViewRaid = hasInternalDiscussions({ canEdit, canViewInternal: canViewInternalTabs, viewingAsRestrictedRole: isExternalPersona })
+    const raidCount = useRaidCount(canViewRaid ? projectId : null)
     const tabsConfig: EngagementTabsConfig = {
         clientConnectorType,
         sharesCount,
@@ -208,8 +211,10 @@ export function EngagementWorkspace({
         wikiPageCount,
         auditCount,
         memberCount,
+        raidCount: raidCount ?? undefined,
         enableBetaFeatures,
         canViewInternalTabs: Boolean(canViewInternalTabs),
+        canViewRaid,
         canManage: Boolean(canManage),
         canViewSettings: Boolean(canViewSettings),
     }
@@ -442,25 +447,22 @@ export function EngagementWorkspace({
                     {currentTab === 'comments' && (
                         <div className="py-1 h-full">
                             <ErrorBoundary context="ProjectComments">
-                                {hasInternalDiscussions({ canEdit, canViewInternal: canViewInternalTabs, viewingAsRestrictedRole: isExternalPersona }) ? (
-                                    // Threads | Memos | RAID: Leads and Full Access contributors only.
-                                    <DiscussionsWithRaid
-                                        projectId={projectId}
-                                        readOnly={completed}
-                                        orgSlug={orgSlug}
-                                        boardUrl={`${projectBase(groupSlug, orgSlug, clientSlug, projectSlug, useEngagement)}/board`}
-                                        engagementBase={base}
-                                    />
-                                ) : (
-                                    <EngagementCommentsTab
-                                        projectId={projectId}
-                                        readOnly={completed}
-                                        orgSlug={orgSlug}
-                                        boardUrl={`${projectBase(groupSlug, orgSlug, clientSlug, projectSlug, useEngagement)}/board`}
-                                        internalSubTabs={false}
-                                        engagementBase={base}
-                                    />
-                                )}
+                                {/* Threads | Memos for Leads and Full Access contributors; Threads alone for the rest. */}
+                                <EngagementCommentsTab
+                                    projectId={projectId}
+                                    readOnly={completed}
+                                    orgSlug={orgSlug}
+                                    boardUrl={`${projectBase(groupSlug, orgSlug, clientSlug, projectSlug, useEngagement)}/board`}
+                                    internalSubTabs={canViewRaid}
+                                    engagementBase={base}
+                                />
+                            </ErrorBoundary>
+                        </div>
+                    )}
+                    {currentTab === 'raid' && canViewRaid && (
+                        <div className="py-1 h-full">
+                            <ErrorBoundary context="ProjectRaid">
+                                <RaidTab projectId={projectId} engagementBase={base} readOnly={completed} />
                             </ErrorBoundary>
                         </div>
                     )}
@@ -495,32 +497,5 @@ export function EngagementWorkspace({
                 )}
             </Tabs>
         </div>
-    )
-}
-
-/**
- * Discussions with its internal sub-tabs, RAID included. Its own component so the RAID count is
- * read only for the people who get the switch (Leads and Full Access contributors), never for a
- * Reviewer or a Limited Access contributor, whose route would refuse it anyway.
- */
-function DiscussionsWithRaid({ projectId, readOnly, orgSlug, boardUrl, engagementBase }: {
-    projectId: string
-    readOnly: boolean
-    orgSlug: string
-    boardUrl: string
-    engagementBase: string
-}) {
-    const raidCount = useRaidCount(projectId)
-    return (
-        <EngagementCommentsTab
-            projectId={projectId}
-            readOnly={readOnly}
-            orgSlug={orgSlug}
-            boardUrl={boardUrl}
-            internalSubTabs
-            engagementBase={engagementBase}
-            raidCount={raidCount ?? undefined}
-            renderRaid={() => <RaidTab projectId={projectId} engagementBase={engagementBase} readOnly={readOnly} />}
-        />
     )
 }

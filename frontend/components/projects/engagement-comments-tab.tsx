@@ -30,7 +30,7 @@ import { EngagementMemosTab, useEngagementMemos } from '@/components/projects/en
  * it can be resolved; "Show N earlier" peeks at the last five in place. Views: All (open), Awaiting
  * reply (a client or external collaborator spoke last), Mentions (yours), Resolved.
  *
- * Leads and Full Access contributors get Threads | Memos | RAID above it (discussions-switch.tsx,
+ * Leads and Full Access contributors get Threads | Memos above it (discussions-switch.tsx,
  * .claude/plans/brio-features-round-2.md §8): Threads is this page, Memos the engagement's internal
  * memos (engagement-memos.tsx), RAID the log when one is passed in. Everyone else gets this page alone.
  */
@@ -215,7 +215,7 @@ export interface EngagementCommentsTabProps {
   /** The engagement is completed: discussions read, and can't be resolved or reopened. */
   readOnly?: boolean
   /**
-   * Threads | Memos | RAID at the top (discussions-switch.tsx): a Lead or a Contributor · Full Access
+   * Threads | Memos at the top (discussions-switch.tsx): a Lead or a Contributor · Full Access
    * only (hasInternalDiscussions). Without it the page is Threads alone, as it always was: no switch, no
    * counts, and nothing of Memos or RAID in the page.
    */

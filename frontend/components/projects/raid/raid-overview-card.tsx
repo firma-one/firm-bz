@@ -20,7 +20,7 @@ import { InfoHint } from '@/components/projects/overview-charts'
 /**
  * The RAID card on the engagement Overview (.claude/plans/brio-features-round-2.md, §9): counts by type,
  * the top open entries raised in conversation (threads and memos), the latest decision people recorded,
- * how many of Brio's suggestions wait, and the way to the full log in Discussions.
+ * how many of Brio's suggestions wait, and the way to the full log on its tab.
  *
  * It leaves out on purpose what the Action Center above it already shows: overdue work, planning gaps,
  * pace and waiting threads. Those are in the full log. Leads and Contributors · Full Access only.

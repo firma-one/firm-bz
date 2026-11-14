@@ -136,13 +136,15 @@ export function demoRaidLog(now: Date = new Date()): RaidLogPayload {
 
     const suggestions: RaidItemView[] = [
         item({
-            id: 'raid-suggest-depreciation',
-            type: 'DECISION',
-            title: 'Rental depreciation is scoped separately',
+            // The suggestion waiting on the tour's newest memo (demo-memos.tsx), so the RAID tab's line to
+            // it lands on the same memo, with the same entry.
+            id: 'tour-raid-weekly-1',
+            type: 'RISK',
+            title: 'The signed change order may hold up the launch',
             sourceKind: 'MEMO',
             status: 'SUGGESTED',
-            sources: [chip('MEMO', `Memo · Call with Dana · ${shortDay(day(-1, now))}`)],
-            raisedAt: day(-1, now),
+            sources: [chip('MEMO', `Memo · Weekly check-in · ${shortDay(day(-2, now))}`, { memoId: 'tour-memo-weekly' })],
+            raisedAt: day(-2, now),
         }),
         item({
             id: 'raid-suggest-1099',
@@ -179,7 +181,7 @@ export function demoRaidLog(now: Date = new Date()): RaidLogPayload {
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
-/** Discussions › RAID on /tour. */
+/** The RAID tab on /tour. */
 export function DemoRaidTab({ engagementBase = '' }: { engagementBase?: string }) {
     const [log, setLog] = useState<RaidLogPayload>(() => demoRaidLog())
     const update = (fn: (l: RaidLogPayload) => RaidLogPayload) => setLog((l) => fn(l))

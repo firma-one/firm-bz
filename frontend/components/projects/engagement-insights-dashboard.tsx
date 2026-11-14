@@ -3025,7 +3025,7 @@ export function EngagementInsightsDashboard({
             report rather than ahead of it, and it cost the report a fifth of its width. */}
         <div className="flex min-w-0 flex-col gap-10 pb-6">
             <EngagementActionCenterV2 data={data} loading={loading} engagementBase={engagementBase} projectId={projectId} setRefreshTick={setRefreshTick} canNudge={isFirmAdmin} />
-            {/* The RAID log's short form; the full log is Discussions › RAID. Internal viewers only. */}
+            {/* The RAID log's short form; the full log is the RAID tab. Internal viewers only. */}
             {data?.isInternalViewer && <RaidOverviewCard projectId={projectId} engagementBase={engagementBase} />}
             {/* Internal memos moved to Discussions › Memos (engagement-memos.tsx); their card is no longer mounted here. */}
                 {/* Engagement Health — Health Score · Delivery Status · Delivery Schedule (Phase 7 & 8) */}

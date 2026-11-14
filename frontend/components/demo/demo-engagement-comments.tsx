@@ -41,7 +41,7 @@ const ME = 'Demo User'
  * right pane with the tour's composer, where it can be resolved; opening it clears its unread dot.
  * Everything changes only on screen. Mentions shows its real empty state.
  *
- * The tour shows a Lead's view, so it has the app's Threads | Memos | RAID switch: Memos over canned
+ * The tour shows a Lead's view, so it has the app's Threads | Memos switch: Memos over canned
  * memos in memory (demo-memos.tsx), RAID when `renderRaid` is passed, as in the app.
  */
 export function DemoEngagementComments({ engagement, renderRaid, raidCount }: {

@@ -7,7 +7,8 @@ import { AccessLock } from '@/components/ui/access-lock'
 import { cn } from '@/lib/utils'
 
 /*
- * Discussions › Threads | Memos | RAID (.claude/plans/brio-features-round-2.md, §8 and §9).
+ * Discussions › Threads | Memos (.claude/plans/brio-features-round-2.md, §8 and §9). RAID was a third
+ * sub-tab until it got a tab of its own (2026-11-14); the switch still takes it when it's passed.
  *
  * Leads and Full Access contributors get a switch at the top of Discussions: Threads (the page as it
  * was), Memos (call and meeting notes kept as files) and RAID (risks, assumptions, issues, decisions).

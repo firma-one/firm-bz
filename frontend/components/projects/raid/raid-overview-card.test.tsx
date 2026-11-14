@@ -16,7 +16,7 @@ afterEach(() => {
 })
 
 describe('RaidOverviewView', { timeout: 20_000 }, () => {
-    it('counts each type, and links the suggestions and the full log to the Discussions RAID sub-tab', () => {
+    it('counts each type, and links the suggestions and the full log to the RAID tab', () => {
         render(<RaidOverviewView log={demoRaidLog(NOW)} engagementBase="/d/e/q2" />)
         expect(screen.getByRole('heading', { name: 'RAID' })).toBeTruthy()
         expect(screen.getByText('Internal only')).toBeTruthy()
@@ -24,8 +24,9 @@ describe('RaidOverviewView', { timeout: 20_000 }, () => {
         expect(screen.getByText('assumption').previousSibling?.textContent).toBe('1')
         expect(screen.getByText('open issues').previousSibling?.textContent).toBe('2')
         expect(screen.getByText('decisions').previousSibling?.textContent).toBe('2')
-        expect(screen.getByRole('link', { name: '3 suggestions to review' }).getAttribute('href')).toBe('/d/e/q2/comments?view=raid')
-        expect(screen.getByRole('link', { name: /Open RAID log/ }).getAttribute('href')).toBe('/d/e/q2/comments?view=raid')
+        // A memo's suggestion waits on the memo, so it isn't one to review here.
+        expect(screen.getByRole('link', { name: '2 suggestions to review' }).getAttribute('href')).toBe('/d/e/q2/raid')
+        expect(screen.getByRole('link', { name: /Open RAID log/ }).getAttribute('href')).toBe('/d/e/q2/raid')
     })
 
     it('leaves out status and health entries: only what was raised in threads and memos, and the latest decision people recorded', () => {

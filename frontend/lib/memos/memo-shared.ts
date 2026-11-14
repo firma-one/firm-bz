@@ -23,9 +23,10 @@ export const MEMO_APPLIED_MAX = 100
 
 export type MemoSource = 'notes' | 'transcript'
 
-// No memo text is kept in the database, not even a preview (decided 2026-11-12): the published
-// promise is that Firma doesn't store file contents, and memos needn't be searchable. A row holds
-// who, when, what kind and what was applied; the words stay in the file in the firm's storage.
+// No memo text is kept in the database, not even a preview (decided 2026-11-12), with one exception:
+// an applied action keeps the line it came from, normalized, as its citation (Deepak, 2026-11-15:
+// useful, so the copy says so rather than claiming no copy). Waiting action items keep anchors only (§13).
+// A row holds who, when, what kind and what was applied; the words stay in the file in the firm's storage.
 
 /** An action applied from a memo's proposals: matched on kind, target and date when Brio reads it again. */
 export interface MemoAppliedAction {

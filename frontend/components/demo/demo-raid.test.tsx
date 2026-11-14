@@ -22,9 +22,11 @@ afterEach(() => {
 
 // Rendering the table's selects and menus is slow on a busy machine.
 describe('DemoRaidTab', { timeout: 20_000 }, () => {
-    it('shows the mock: three suggestions and seven entries', () => {
+    it('shows the mock: two suggestions from threads, one waiting on a memo, and seven entries', () => {
         render(<DemoRaidTab />)
-        expect(screen.getByText('suggests 3')).toBeTruthy()
+        expect(screen.getByText('suggests 2')).toBeTruthy()
+        expect(within(screen.getByRole('list', { name: 'Suggestions waiting on memos' })).getByRole('link', { name: 'Review in Memos' }).getAttribute('href'))
+            .toBe('?tab=comments&view=memos&memo=tour-memo-weekly')
         expect(screen.getAllByTestId(/^raid-row-/)).toHaveLength(7)
     })
 
@@ -32,7 +34,7 @@ describe('DemoRaidTab', { timeout: 20_000 }, () => {
         render(<DemoRaidTab />)
         await act(async () => { fireEvent.click(screen.getByRole('button', { name: /^Accept Dana sends the brokerage 1099-B/ })) })
         expect(screen.getByTestId('raid-row-raid-suggest-1099')).toBeTruthy()
-        expect(screen.getByText('suggests 2')).toBeTruthy()
+        expect(screen.getByText('suggests 1')).toBeTruthy()
 
         await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Accept Pricing in section 4.2 may be out of date' })) })
         expect(screen.queryByTestId('raid-row-raid-suggest-pricing')).toBeNull()
@@ -50,8 +52,8 @@ describe('DemoRaidTab', { timeout: 20_000 }, () => {
 
     it('dismissing a suggestion drops it', async () => {
         render(<DemoRaidTab />)
-        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Dismiss Rental depreciation is scoped separately' })) })
-        expect(screen.queryByTestId('raid-suggestion-raid-suggest-depreciation')).toBeNull()
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Dismiss Pricing in section 4.2 may be out of date' })) })
+        expect(screen.queryByTestId('raid-suggestion-raid-suggest-pricing')).toBeNull()
         expect(screen.getAllByTestId(/^raid-row-/)).toHaveLength(7)
     })
 
@@ -72,7 +74,7 @@ describe('DemoRaidOverviewCard', { timeout: 20_000 }, () => {
     it('renders the card over the same log, without asking the server', () => {
         render(<DemoRaidOverviewCard />)
         expect(screen.getByRole('heading', { name: 'RAID' })).toBeTruthy()
-        expect(screen.getByRole('link', { name: '3 suggestions to review' })).toBeTruthy()
+        expect(screen.getByRole('link', { name: '2 suggestions to review' })).toBeTruthy()
         expect(fetchSpy).not.toHaveBeenCalled()
     })
 })

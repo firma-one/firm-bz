@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { overviewSectionOf, sourceHref, type RaidSourceView } from './raid-shared'
+import { overviewSectionOf, raidLogHref, sourceHref, type RaidSourceView } from './raid-shared'
 
 /** Where a RAID source chip goes: each source to the place it came from. */
 
@@ -17,9 +17,9 @@ describe('sourceHref', () => {
         expect(sourceHref(BASE, source({ kind: 'HEALTH' }))).toBe(`${BASE}/analytics`)
     })
 
-    it('sends a thread to Discussions, a memo to Files and a status or Board entry to the Board', () => {
+    it('sends a thread to Discussions, a memo to Memos with it open, and a status or Board entry to the Board', () => {
         expect(sourceHref(BASE, source({ kind: 'THREAD', documentId: DOC }))).toBe(`${BASE}/comments#doc-comment:${DOC}`)
-        expect(sourceHref(BASE, source({ kind: 'MEMO', memoId: DOC }))).toBe(`${BASE}/files#doc-file:${DOC}`)
+        expect(sourceHref(BASE, source({ kind: 'MEMO', memoId: DOC }))).toBe(`${BASE}/comments?view=memos&memo=${DOC}`)
         expect(sourceHref(BASE, source({ kind: 'BOARD', documentId: DOC }))).toBe(`${BASE}/board#doc-file:${DOC}`)
         expect(sourceHref(BASE, source({ kind: 'MANUAL' }))).toBeNull()
     })
@@ -43,5 +43,12 @@ describe('overviewSectionOf', () => {
         expect(overviewSectionOf('planning')).toBe('planning')
         expect(overviewSectionOf(`overdue:${DOC}`)).toBeUndefined()
         expect(overviewSectionOf(null)).toBeUndefined()
+    })
+})
+
+describe('raidLogHref', () => {
+    it('is the engagement\'s RAID tab: its path in the app, ?tab= on /tour', () => {
+        expect(raidLogHref(BASE)).toBe(`${BASE}/raid`)
+        expect(raidLogHref('')).toBe('?tab=raid')
     })
 })

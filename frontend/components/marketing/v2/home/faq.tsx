@@ -25,7 +25,7 @@ const QUESTIONS: { q: ReactNode; a: ReactNode }[] = [
       </>
     ),
     a: withRaidTip(
-      `No. Brio never opens the files you deliver. It works from delivery data: deliverable and file names, statuses, due dates and who is on the engagement. It reads words only where a job needs them: a thread’s comments when you ask for a reply draft, new comments when it checks the RAID log, and a memo’s notes when the memo is added, to identify its action items and RAID entries. ${BRAND_NAME} keeps no copy of a memo’s text.`,
+      `No. Brio never opens the files you deliver. It works from delivery data: deliverable and file names, statuses, due dates and who is on the engagement. It reads words only where a job needs them: a thread’s comments when you ask for a reply draft, new comments when it checks the RAID log, and a memo’s notes when the memo is added, to identify its action items and RAID entries. A memo stays in your Drive; when you apply an action from it, the line it came from is kept with it, so you can see why.`,
     ),
   },
   {

@@ -29,7 +29,7 @@ interface DemoEngagementWorkspaceProps {
     engagement: DemoEngagement
 }
 
-const VALID_TABS = new Set(['analytics', 'files', 'board', 'comments', 'audit', 'members', 'settings'])
+const VALID_TABS = new Set(['analytics', 'files', 'board', 'comments', 'raid', 'audit', 'members', 'settings'])
 
 /** Static counterpart to engagement-workspace.tsx: the app's engagement header and tab row over the
  * selected engagement's sample data. Overview, Files, Board, Discussions, Audit and Members are static
@@ -93,7 +93,9 @@ export function DemoEngagementWorkspace({ client, engagement }: DemoEngagementWo
                             sharesCount={deliverableCount}
                             auditCount={undefined}
                             memberCount={4}
+                            raidCount={raidOpenCount(demoRaidLog().items)}
                             canViewInternalTabs={true}
+                            canViewRaid={true}
                             canManage={true}
                             canViewSettings={true}
                         />
@@ -125,9 +127,10 @@ export function DemoEngagementWorkspace({ client, engagement }: DemoEngagementWo
                     <TabsContent value="comments" className="m-0">
                         <DemoEngagementComments
                             engagement={engagement}
-                            raidCount={raidOpenCount(demoRaidLog().items)}
-                            renderRaid={() => <DemoRaidTab />}
                         />
+                    </TabsContent>
+                    <TabsContent value="raid" className="m-0">
+                        <DemoRaidTab />
                     </TabsContent>
                     <TabsContent value="audit" className="m-0 flex min-h-0 flex-1 flex-col data-[state=inactive]:hidden">
                         <DemoEngagementAudit engagement={engagement} />
