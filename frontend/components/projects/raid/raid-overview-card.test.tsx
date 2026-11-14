@@ -4,7 +4,7 @@ import { RaidOverviewCard, RaidOverviewView } from './raid-overview-card'
 import { demoRaidLog } from '@/components/demo/demo-raid'
 
 /**
- * The RAID card on the Overview: counts, the top entries raised in conversation and the latest decision,
+ * The RAID section on the Overview: counts, the top open entries from every source and the latest decision,
  * never what the Action Center already shows, and nothing at all for anyone the log isn't for.
  */
 
@@ -30,14 +30,18 @@ describe('RaidOverviewView', { timeout: 20_000 }, () => {
         expect(screen.getByRole('link', { name: /Open RAID log/ }).getAttribute('href')).toBe('/d/e/q2/raid')
     })
 
-    it('leaves out status and health entries: only what was raised in threads and memos, and the latest decision people recorded', () => {
+    it('lists every open entry, status and health ones too, issues first then newest, and the latest decision people recorded', () => {
         render(<RaidOverviewView log={demoRaidLog(NOW)} engagementBase="" />)
         const rows = screen.getAllByTestId(/^raid-card-row-/).map((r) => r.getAttribute('data-testid'))
-        expect(rows).toEqual(['raid-card-row-raid-k1', 'raid-card-row-raid-scope'])
-        expect(screen.queryByText(/overdue by/)).toBeNull()
-        expect(screen.queryByText(/Behind pace/)).toBeNull()
-        expect(screen.queryByText(/planning gaps/)).toBeNull()
-        expect(screen.queryByText(/has waited/)).toBeNull()
+        expect(rows).toEqual([
+            'raid-card-row-raid-overdue',
+            'raid-card-row-raid-waiting',
+            'raid-card-row-raid-pace',
+            'raid-card-row-raid-planning',
+            'raid-card-row-raid-scope',
+        ])
+        // The assumption is the one open entry left over.
+        expect(screen.getByText('and 1 more open, in the RAID log')).toBeTruthy()
         // The Board's approval is a decision too, but the Board already shows it.
         expect(screen.queryByText(/approved by Dana/)).toBeNull()
         expect(within(screen.getByTestId('raid-card-row-raid-scope')).getByText(/^latest decision · /)).toBeTruthy()
@@ -45,17 +49,17 @@ describe('RaidOverviewView', { timeout: 20_000 }, () => {
 
     it('shows where each was raised, who owns it and when, and opens the RAID tab', () => {
         render(<RaidOverviewView log={demoRaidLog(NOW)} engagementBase="/d/e/q2" />)
-        const row = screen.getByTestId('raid-card-row-raid-k1')
+        const row = screen.getByTestId('raid-card-row-raid-waiting')
         expect(row.getAttribute('href')).toBe('/d/e/q2/raid')
-        expect(within(row).getByText('Assumption')).toBeTruthy()
-        expect(within(row).getByText('· Memo · Call with Dana')).toBeTruthy()
-        expect(within(row).getByText(/ · Nov /)).toBeTruthy()
+        expect(within(row).getByText('Issue')).toBeTruthy()
+        expect(within(row).getByText('· Thread · QSR-14')).toBeTruthy()
+        expect(within(row).getByText(/^Sam · Nov /)).toBeTruthy()
+        expect(within(screen.getByTestId('raid-card-row-raid-planning')).getByText(/^No owner · /)).toBeTruthy()
     })
 
-    it('says so when nothing was raised in conversation', () => {
-        const log = demoRaidLog(NOW)
-        render(<RaidOverviewView log={{ items: log.items.filter((i) => i.sourceKind !== 'MEMO'), suggestions: [] }} engagementBase="" />)
-        expect(screen.getByText(/Nothing raised in threads or memos yet/)).toBeTruthy()
+    it('says so when nothing is open and no decision was recorded', () => {
+        render(<RaidOverviewView log={{ items: [], suggestions: [] }} engagementBase="" />)
+        expect(screen.getByText('Nothing open, and no decisions recorded yet.')).toBeTruthy()
         expect(screen.queryByText(/to review/)).toBeNull()
     })
 })

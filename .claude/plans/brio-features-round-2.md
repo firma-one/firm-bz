@@ -601,6 +601,10 @@ opens Discussions › Memos with the memo, not Files (`waitsOnMemo`, `memoSugges
          entries were, copying the engagement Overview, whose own Action Center shows the rest. The
          firm's Action Center doesn't show them, so a firm with only status and health entries got an
          empty list (Deepak, 2026-11-14).
+       - The engagement Overview now does the same: every open entry, up to 5 rows with the latest
+         decision. It showed counts over an empty list too, and Behind pace was never in its Action
+         Center anyway, only under Engagement Health. The Board's approvals still stay out of
+         "latest decision", since the Board shows them.
        - Shown only for engagements whose RAID log the person may open, decided as the RAID tab decides
          it (`mayReadRaid` in `lib/raid/firm-raid.ts`). With none, `GET /api/firms/[firmId]/raid`
          answers 403 and the section isn't drawn.

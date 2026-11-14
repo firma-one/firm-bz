@@ -21,11 +21,11 @@ import { InfoHint } from '@/components/projects/overview-charts'
 
 /**
  * The RAID section on the engagement Overview (.claude/plans/brio-features-round-2.md, §9): counts by type,
- * the top open entries raised in conversation (threads and memos), the latest decision people recorded,
- * how many of Brio's suggestions wait, and the way to the full log on its tab.
+ * the top open entries from every source, the latest decision people recorded, how many of Brio's
+ * suggestions wait, and the way to the full log on its tab. Leads and Contributors · Full Access only.
  *
- * It leaves out on purpose what the Action Center above it already shows: overdue work, planning gaps,
- * pace and waiting threads. Those are in the full log. Leads and Contributors · Full Access only.
+ * Status and health entries are listed too, as on the Firm Overview. They used to be left out, as the
+ * Action Center's to show, which drew counts over an empty list (Deepak, 2026-11-14).
  *
  * The same look as the Firm Overview's risks and issues (raid-list.tsx, 2026-11-14): a header like the
  * Action Center's with each type's colored letter in the count line, then a row per entry.
@@ -53,7 +53,7 @@ export function RaidOverviewView({ log, engagementBase, loadError, onRetry }: {
     const headingId = useId()
     const href = raidLogHref(engagementBase)
     const overview = log ? raidOverviewOf(log, MAX_ROWS) : null
-    const more = overview ? overview.conversationTotal - overview.conversation.length : 0
+    const more = overview ? overview.openTotal - overview.open.length : 0
 
     return (
         <section aria-labelledby={headingId} className="flex flex-col gap-3" data-no-export="">
@@ -110,10 +110,10 @@ export function RaidOverviewView({ log, engagementBase, loadError, onRetry }: {
                         </div>
                     ))}
                 </div>
-            ) : overview.conversation.length > 0 || overview.latestDecision ? (
+            ) : overview.open.length > 0 || overview.latestDecision ? (
                 <>
                     <ul>
-                        {overview.conversation.map((item) => (
+                        {overview.open.map((item) => (
                             <RaidRow
                                 key={item.id}
                                 type={item.type}
@@ -136,12 +136,12 @@ export function RaidOverviewView({ log, engagementBase, loadError, onRetry }: {
                         )}
                     </ul>
                     {more > 0 && (
-                        <p className="px-2 text-small text-fg-muted">and {more} more raised in threads and memos, in the RAID log</p>
+                        <p className="px-2 text-small text-fg-muted">and {more} more open, in the RAID log</p>
                     )}
                 </>
             ) : (
                 <p className="px-2 text-small text-fg-muted">
-                    Nothing raised in threads or memos yet. Status and health items are in the full log.
+                    Nothing open, and no decisions recorded yet.
                 </p>
             )}
         </section>

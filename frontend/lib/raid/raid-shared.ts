@@ -43,11 +43,6 @@ export function isAutoSource(kind: RaidSourceKind): boolean {
     return kind === 'STATUS' || kind === 'HEALTH' || kind === 'BOARD'
 }
 
-/** Raised in conversation: Brio read it in a thread or a memo. */
-export function isConversationSource(kind: RaidSourceKind): boolean {
-    return kind === 'THREAD' || kind === 'MEMO'
-}
-
 /** A decision is recorded rather than opened; everything else opens. */
 export function liveStatusFor(type: RaidType): 'OPEN' | 'RECORDED' {
     return type === 'DECISION' ? 'RECORDED' : 'OPEN'
@@ -239,29 +234,29 @@ const OVERVIEW_ORDER: Record<RaidType, number> = { ISSUE: 0, RISK: 1, ASSUMPTION
 
 export interface RaidOverview {
     counts: { openRisks: number; assumptions: number; openIssues: number; decisions: number }
-    /** The top open entries raised in conversation (threads and memos). */
-    conversation: RaidItemView[]
-    /** How many open entries were raised in conversation in all, shown or not: "and 2 more". */
-    conversationTotal: number
+    /** The top open entries, from every source. */
+    open: RaidItemView[]
+    /** How many open entries there are in all, shown or not: "and 2 more". */
+    openTotal: number
     /** The newest decision people recorded (not the Board's approvals, which the Board shows). */
     latestDecision: RaidItemView | null
     suggestionCount: number
 }
 
 /**
- * The Overview card: counts by type, the top open entries raised in conversation and the latest
- * decision. It leaves out what the Action Center already shows (overdue work, planning gaps, pace,
- * waiting threads), so status and health entries are never among its rows.
+ * The Overview's RAID section: counts by type, the top open entries and the latest decision. Every source
+ * is listed, status and health too (overdue work, planning gaps, pace, waiting threads), as on the Firm
+ * Overview: leaving them out showed counts over an empty list (Deepak, 2026-11-14).
  */
-export function raidOverviewOf(log: Pick<RaidLogPayload, 'items' | 'suggestions'>, maxRows = 3): RaidOverview {
+export function raidOverviewOf(log: Pick<RaidLogPayload, 'items' | 'suggestions'>, maxRows = 5): RaidOverview {
     const live = log.items.filter(isLive)
     const latestDecision = live
         .filter((i) => i.type === 'DECISION' && !isAutoSource(i.sourceKind))
         .sort((a, b) => b.raisedAt.localeCompare(a.raisedAt))[0] ?? null
     const raised = live
-        .filter((i) => i.status === 'OPEN' && isConversationSource(i.sourceKind))
+        .filter((i) => i.status === 'OPEN' && i.type !== 'DECISION')
         .sort((a, b) => (OVERVIEW_ORDER[a.type] - OVERVIEW_ORDER[b.type]) || b.raisedAt.localeCompare(a.raisedAt))
-    const conversation = raised.slice(0, Math.max(0, maxRows - (latestDecision ? 1 : 0)))
+    const open = raised.slice(0, Math.max(0, maxRows - (latestDecision ? 1 : 0)))
     return {
         counts: {
             openRisks: live.filter((i) => i.type === 'RISK' && i.status === 'OPEN').length,
@@ -269,8 +264,8 @@ export function raidOverviewOf(log: Pick<RaidLogPayload, 'items' | 'suggestions'
             openIssues: live.filter((i) => i.type === 'ISSUE' && i.status === 'OPEN').length,
             decisions: live.filter((i) => i.type === 'DECISION').length,
         },
-        conversation,
-        conversationTotal: raised.length,
+        open,
+        openTotal: raised.length,
         latestDecision,
         // A memo's suggestions wait on the memo (waitsOnMemo); its row in Memos counts them.
         suggestionCount: log.suggestions.filter((s) => !waitsOnMemo(s)).length,
