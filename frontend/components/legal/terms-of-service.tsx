@@ -1,4 +1,5 @@
 import type { ReactNode } from "react"
+import { RaidTerm } from "@/components/marketing/v2/raid-tip"
 import { AlertTriangle, Check, Copyright, CreditCard, HardDrive, Mail, Scale, ShieldCheck } from "lucide-react"
 
 import { BrandName } from "@/components/brand/BrandName"
@@ -112,7 +113,7 @@ function TermsOfServicePageView() {
             Brio can rename and move files and create folders. It proposes; you approve each change before
             anything happens, and nothing happens without that approval. A change you approve is your decision and
             your responsibility — it is recorded in your audit trail against both the assistant and your account.
-            What Brio identifies in a memo or suggests for the RAID log works the same way: nothing is applied
+            What Brio identifies in a memo or suggests for the <RaidTerm>RAID log</RaidTerm> works the same way: nothing is applied
             until a person applies or accepts it.
           </Clause>
           <Clause icon={HardDrive} title="It never deletes">
@@ -294,7 +295,7 @@ function TermsOfServiceEmbedded() {
                   <strong>You approve every change:</strong> Brio proposes renames, moves and new
                   folders; nothing happens until you approve each one. A change you approve is your
                   decision, recorded in your audit trail against both the assistant and your
-                  account. Action items and RAID entries wait for a person to apply or accept them.
+                  account. Action items and <RaidTerm>RAID entries</RaidTerm> wait for a person to apply or accept them.
                 </span>
               </li>
               <li className="flex items-start gap-3">

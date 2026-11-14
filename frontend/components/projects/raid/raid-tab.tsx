@@ -88,20 +88,22 @@ export function RaidTypeBadge({ type, decorative = false, small = false }: {
     /** The legend's size, in the filter chips. */
     small?: boolean
 }) {
+    // The full word on hover, wherever a letter shows (Deepak, 2026-11-14): not everyone reads R, A, I, D.
     return (
-        <span
-            className={cn(
-                'inline-flex shrink-0 items-center justify-center rounded-control font-bold',
-                small ? 'h-4 w-4 text-[10px] leading-none' : 'h-[22px] w-[22px] text-caption',
-                // The Board's colors for state (RAID_TYPE_STAGE): no new ones.
-                STAGE_PILL_CLASSES[RAID_TYPE_STAGE[type]],
-            )}
-            title={decorative ? undefined : RAID_TYPE_LABEL[type]}
-            aria-hidden={decorative || undefined}
-        >
-            <span aria-hidden>{RAID_TYPE_LETTER[type]}</span>
-            {!decorative && <span className="sr-only">{RAID_TYPE_LABEL[type]}</span>}
-        </span>
+        <Hint label={RAID_TYPE_LABEL[type]}>
+            <span
+                className={cn(
+                    'inline-flex shrink-0 items-center justify-center rounded-control font-bold',
+                    small ? 'h-4 w-4 text-[10px] leading-none' : 'h-[22px] w-[22px] text-caption',
+                    // The Board's colors for state (RAID_TYPE_STAGE): no new ones.
+                    STAGE_PILL_CLASSES[RAID_TYPE_STAGE[type]],
+                )}
+                aria-hidden={decorative || undefined}
+            >
+                <span aria-hidden>{RAID_TYPE_LETTER[type]}</span>
+                {!decorative && <span className="sr-only">{RAID_TYPE_LABEL[type]}</span>}
+            </span>
+        </Hint>
     )
 }
 

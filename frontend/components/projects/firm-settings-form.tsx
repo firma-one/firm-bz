@@ -16,6 +16,7 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog'
 import { AtSign, BarChart2, Bell, Building2, CalendarClock, ChevronDown, Check, DollarSign, Factory, FileText, FlaskConical, Globe, ImageIcon, ImagePlus, Linkedin, Lock, MapPin, MessagesSquare, Palette, PanelTop, RefreshCw, Repeat, RotateCcw, Shield, Sparkles, Trash2, Type, User, Users2, X } from 'lucide-react'
+import { withRaidInfo } from '@/components/projects/raid/raid-info'
 import { PropertyList, PropertyRow, PROPERTY_FIELD_CLASS, PROPERTY_HINT_CLASS, PROPERTY_TEXTAREA_CLASS, SETTINGS_SECTION_HEADING_CLASS } from '@/components/ui/property-list'
 import { NotionTable, NotionTableBody, NotionTableCell, NotionTableHead, NotionTableHeader, NotionTableRow } from '@/components/ui/notion-table'
 import { Textarea } from '@/components/ui/textarea'
@@ -897,7 +898,7 @@ export function FirmSettingsForm({
                         <SettingSwitchRow
                             icon={<Sparkles />}
                             title="Identify action items when a memo is added"
-                            description="Brio reads a new internal memo once, and its action items and RAID suggestions wait on it for someone to apply or accept. Nothing changes on its own. 1 credit per memo, from your firm's credits."
+                            description={withRaidInfo("Brio reads a new internal memo once, and its action items and RAID suggestions wait on it for someone to apply or accept. Nothing changes on its own. 1 credit per memo, from your firm's credits.")}
                             checked={brioMemoReview}
                             onChange={(v) => { setBrioMemoReview(v); setAppDirty(true) }}
                             disabled={!loaded}

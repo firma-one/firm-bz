@@ -1,12 +1,11 @@
 'use client'
 
 import { useEffect, useId, useState } from 'react'
-import { AlertCircle, ArrowRight } from 'lucide-react'
+import { AlertCircle, ArrowRight, ChevronRight } from 'lucide-react'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Tag } from '@/components/ui/tag'
 import { failureFrom, failureReason } from '@/lib/files/action-failure'
 import {
-    RAID_MEANING,
     firstNameOf,
     raidLogHref,
     raidOverviewOf,
@@ -17,7 +16,7 @@ import {
 import { RaidLink } from './raid-tab'
 import { RaidCountLine, RaidRow, RaidSectionHeader } from './raid-list'
 import { LoadingAnnouncement, ShimmerBar, ShimmerBlock } from '@/components/ui/shimmer'
-import { InfoHint } from '@/components/projects/overview-charts'
+import { RaidInfo } from './raid-info'
 
 /**
  * The RAID section on the engagement Overview (.claude/plans/brio-features-round-2.md, §9): counts by type,
@@ -62,7 +61,7 @@ export function RaidOverviewView({ log, engagementBase, loadError, onRetry }: {
                 title="RAID"
                 after={(
                     <>
-                        <InfoHint label="About the RAID log" text={`${RAID_MEANING} Internal only.`} />
+                        <RaidInfo />
                         <Tag color="gray">Internal only</Tag>
                         {overview && (
                             <RaidCountLine
@@ -119,7 +118,8 @@ export function RaidOverviewView({ log, engagementBase, loadError, onRetry }: {
                                 type={item.type}
                                 title={item.title}
                                 context={whereRaised(item)}
-                                meta={`${firstNameOf(item.ownerName) ?? 'No owner'} · ${shortDay(item.raisedAt)}`}
+                                owner={firstNameOf(item.ownerName)}
+                                day={shortDay(item.raisedAt)}
                                 href={href}
                                 testId={`raid-card-row-${item.id}`}
                             />
@@ -128,15 +128,24 @@ export function RaidOverviewView({ log, engagementBase, loadError, onRetry }: {
                             <RaidRow
                                 type="DECISION"
                                 title={overview.latestDecision.title}
-                                context={whereRaised(overview.latestDecision)}
-                                meta={`latest decision · ${shortDay(overview.latestDecision.raisedAt)}`}
+                                context={['latest decision', whereRaised(overview.latestDecision)].filter(Boolean).join(' · ')}
+                                owner={firstNameOf(overview.latestDecision.ownerName)}
+                                day={shortDay(overview.latestDecision.raisedAt)}
                                 href={href}
                                 testId={`raid-card-row-${overview.latestDecision.id}`}
                             />
                         )}
                     </ul>
                     {more > 0 && (
-                        <p className="px-2 text-small text-fg-muted">and {more} more open, in the RAID log</p>
+                        // Looks like the Firm Overview's "Show all", but opens the RAID tab: the whole log is one click
+                        // away here, so nothing expands in place (Deepak, 2026-11-14).
+                        <RaidLink
+                            href={href}
+                            className="group flex h-8 items-center gap-2 self-start rounded-control px-2 text-small text-fg-muted transition-colors duration-ui-fast hover:bg-surface-hover hover:text-fg"
+                        >
+                            Show all {overview.openTotal} in the RAID log
+                            <ChevronRight className="h-3.5 w-3.5 shrink-0 transition-transform group-hover:translate-x-0.5" aria-hidden />
+                        </RaidLink>
                     )}
                 </>
             ) : (

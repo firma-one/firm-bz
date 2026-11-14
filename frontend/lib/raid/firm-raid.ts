@@ -42,6 +42,12 @@ export async function firmRaidEngagementIds(firmId: string, permissions: UserPer
     return engagements.filter((e) => mayReadRaid(permissions, firmId, e.clientId, e.id)).map((e) => e.id)
 }
 
+/**
+ * Rows sent at most: the section shows the first few and "Show all" opens the rest in place. Beyond this, a
+ * line says how many more and where they are, so one firm far behind can't make the Overview slow.
+ */
+export const FIRM_RAID_MAX_ROWS = 100
+
 /** Issues before risks, then newest first: what a reader acts on first. */
 const ORDER: Record<'ISSUE' | 'RISK', number> = { ISSUE: 0, RISK: 1 }
 
@@ -51,7 +57,7 @@ const ORDER: Record<'ISSUE' | 'RISK', number> = { ISSUE: 0, RISK: 1 }
  * The engagement Overview leaves those out because its Action Center shows them; the firm's Action Center
  * doesn't, so here they're the point (Deepak, 2026-11-14).
  */
-export async function firmRaidOverview(engagementIds: string[], maxRows = 5): Promise<FirmRaidOverview> {
+export async function firmRaidOverview(engagementIds: string[], maxRows = FIRM_RAID_MAX_ROWS): Promise<FirmRaidOverview> {
     if (engagementIds.length === 0) return { counts: { openIssues: 0, openRisks: 0, engagements: 0 }, rows: [], more: 0 }
     const items = await prisma.engagementRaidItem.findMany({
         where: { engagementId: { in: engagementIds }, status: 'OPEN', type: { in: ['RISK', 'ISSUE'] } },

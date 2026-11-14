@@ -2,6 +2,7 @@
 
 import { useId, useRef, useState, type ReactNode } from 'react'
 import { Check, Loader2, Paperclip, Pencil, RotateCcw, X } from 'lucide-react'
+import { withRaidInfo } from '@/components/projects/raid/raid-info'
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -383,7 +384,7 @@ export function AddMemoSheet({
                                     )}
                                     {summary.stops && (
                                         <SaveLine icon={<RotateCcw className="h-3.5 w-3.5" aria-hidden />}>
-                                            The notes changed, so what Brio found in them before stops waiting: <b className="font-semibold">{summary.stops}</b>.
+                                            The notes changed, so what Brio found in them before stops waiting: <b className="font-semibold">{withRaidInfo(summary.stops)}</b>.
                                         </SaveLine>
                                     )}
                                     {summary.kept && (

@@ -392,7 +392,7 @@ export interface FirmRaidRow {
 export interface FirmRaidOverview {
     counts: { openIssues: number; openRisks: number; /** Engagements with at least one open. */ engagements: number }
     rows: FirmRaidRow[]
-    /** Open but not listed: "and 2 more". */
+    /** Open but not sent, past FIRM_RAID_MAX_ROWS: "and 2 more, in their engagements' RAID logs". */
     more: number
 }
 

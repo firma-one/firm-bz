@@ -24,6 +24,8 @@ export function demoFirmRaid(firm: DemoFirm, nowMs: number): FirmRaidOverview {
         row('tour-firm-raid-3', 'RISK', 'The signed change order may hold up the launch', null, 1, 0),
         row('tour-firm-raid-4', 'RISK', 'Pricing in section 4.2 may be out of date', 'Alex', 3, 2),
         row('tour-firm-raid-5', 'RISK', 'The board review the week after may move the timeline', 'Priya', 6, 3),
+        row('tour-firm-raid-6', 'RISK', 'Behind pace · 12% delivered against 30% of time used', 'Sam', 8, 1),
+        row('tour-firm-raid-7', 'RISK', '6 planning gaps · missing due dates or assignees', null, 12, 2),
     ]
-    return { counts: { openIssues: 3, openRisks: 4, engagements: Math.min(4, engagements.length) }, rows, more: 2 }
+    return { counts: { openIssues: 2, openRisks: 5, engagements: Math.min(4, engagements.length) }, rows, more: 0 }
 }

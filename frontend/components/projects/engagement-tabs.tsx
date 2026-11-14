@@ -1,6 +1,7 @@
 'use client'
 
 import { BarChart3, ClipboardList, Folder, LayoutGrid, MessagesSquare, PenTool, Settings, ShieldAlert, Users } from 'lucide-react'
+import { RaidInfo } from './raid/raid-info'
 import { TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Tag } from '@/components/ui/tag'
 import { AccessLock } from '@/components/ui/access-lock'
@@ -79,6 +80,7 @@ export function EngagementTabsList({ pendingTab, ...c }: EngagementTabsConfig & 
                 <TabsTrigger value="raid" data-demo-tour="engagement-raid-tab" className="relative gap-1.5">
                     <ShieldAlert className="h-4 w-4" />
                     RAID
+                    <RaidInfo nested />
                     {count(c.raidCount)}
                     <AccessLock label="Internal only · Hidden from Limited Access contributors and Reviewers" />
                     {pending('raid')}

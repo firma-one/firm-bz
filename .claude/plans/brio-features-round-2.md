@@ -605,6 +605,21 @@ opens Discussions › Memos with the memo, not Files (`waitsOnMemo`, `memoSugges
          decision. It showed counts over an empty list too, and Behind pace was never in its Action
          Center anyway, only under Engagement Health. The Board's approvals still stay out of
          "latest decision", since the Board shows them.
+       - **Show all** on the Firm Overview: it shows the first 5 and "Show all N" opens the rest in place,
+         like the Action Center's passed checks. The route sends up to 100 (`FIRM_RAID_MAX_ROWS`); past
+         that, a line says how many more and that they're in each engagement's RAID log. On the
+         engagement Overview the same "Show all N in the RAID log" opens the RAID tab instead: the
+         whole log is one click away there.
+       - **Columns:** on the Firm Overview the client and engagement have a column of their own, each
+         after its icon (the handshake, the briefcase), with the full names on hover. The owner and the
+         day are columns on both Overviews, after UserRound and CalendarDays as in the app's tables.
+         Where the list is narrower than 56rem, the place goes on a second line under the entry.
+     - **RAID explained in the app** (`components/projects/raid/raid-info.tsx`): an info icon after RAID,
+       with `RAID_MEANING`, one per block on its first mention. It's on the tab, the breadcrumb, the
+       Overview section, a memo's RAID suggestions, the memo sheet's warning, firm settings and the Firm
+       Overview's "more" line. /privacy and /terms use the website's `RaidTerm`. Each R, A, I and D letter
+       shows its full word on hover. Left without: error and toast messages, emails, the audit trail's
+       text and the System Admin AI efficacy page.
        - Shown only for engagements whose RAID log the person may open, decided as the RAID tab decides
          it (`mayReadRaid` in `lib/raid/firm-raid.ts`). With none, `GET /api/firms/[firmId]/raid`
          answers 403 and the section isn't drawn.

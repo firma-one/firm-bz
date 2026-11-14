@@ -1,4 +1,5 @@
 import type { ReactNode } from "react"
+import { RaidTerm } from "@/components/marketing/v2/raid-tip"
 import { BarChart3, Check, EyeOff, FolderOpen, Mail, Scale, Server, ShieldCheck, User } from "lucide-react"
 
 import { BrandName } from "@/components/brand/BrandName"
@@ -142,7 +143,7 @@ function PrivacyPolicyPageView() {
           <Clause icon={ShieldCheck} title="Encryption at rest">
             The sensitive fields we do hold are encrypted with AES-256-GCM before they are written to our
             database, each with its own initialization vector: your workspace, firm, client and engagement
-            names and descriptions, client contact details, the text of comments, the words a RAID entry
+            names and descriptions, client contact details, the text of comments, the words a <RaidTerm>RAID entry</RaidTerm>
             or an applied action item keeps from the message or memo it came from, and your storage
             provider&apos;s access tokens. Keys are held outside the database and are versioned, so they can be
             rotated without losing access to older data.
@@ -165,7 +166,7 @@ function PrivacyPolicyPageView() {
       <Section index={4}>
         <LegalLead>
           {BRAND_NAME} includes an AI assistant, Brio. It answers questions about your work, drafts replies and
-          updates for you to edit, identifies action items and RAID entries for you to apply or accept, and can
+          updates for you to edit, identifies action items and <RaidTerm>RAID entries</RaidTerm> for you to apply or accept, and can
           propose changes to how your files are organized.
         </LegalLead>
         <Clauses>
@@ -180,7 +181,7 @@ function PrivacyPolicyPageView() {
           <Clause icon={FolderOpen} title="Text Brio reads">
             <strong>Brio never opens the files you deliver.</strong> It reads text your team and your client
             wrote only for the features that need it. It reads an internal memo when the memo is added, to
-            identify its action items and RAID entries, and again whenever someone asks it to; a firm can turn
+            identify its action items and <RaidTerm>RAID entries</RaidTerm>, and again whenever someone asks it to; a firm can turn
             off the first in its settings. To draft a reply, it reads that one conversation&apos;s shared
             messages, never internal notes. To suggest RAID entries, it reads an engagement&apos;s new messages,
             internal notes included, with each author&apos;s first name and role.
@@ -204,7 +205,7 @@ function PrivacyPolicyPageView() {
             Brio proposes and a person decides. It can rename and move files and create folders, only ever after
             you approve each change, and it never deletes anything. Every such change is recorded in your
             engagement&apos;s audit trail, attributed both to the assistant and to the person who approved it.
-            Action items it identifies wait for someone to apply them, RAID entries it suggests wait for someone
+            Action items it identifies wait for someone to apply them, <RaidTerm>RAID entries</RaidTerm> it suggests wait for someone
             to accept them, and a draft goes nowhere until a person sends it.
           </Clause>
           <Clause icon={BarChart3} title="What we keep">
@@ -213,7 +214,7 @@ function PrivacyPolicyPageView() {
             the assistant panel at any time. Clearing your browser data removes them too. Briefs and engagement
             summaries Brio writes are stored, so they can be shown again. We do not keep a memo&apos;s text: what
             Brio identified in a memo points to its lines by position, and when you apply an action item, we keep
-            the line it came from, encrypted, as its citation. A RAID entry suggested from a discussion keeps the
+            the line it came from, encrypted, as its citation. A <RaidTerm>RAID entry</RaidTerm> suggested from a discussion keeps the
             words of the message it came from, encrypted; one suggested from a memo links to the memo instead. When you rate an
             answer, we record the rating and the category you pick, never the question you asked or the answer
             you received. We also record how many AI requests an account makes, to apply plan limits and bill
@@ -455,7 +456,7 @@ function PrivacyPolicyEmbedded() {
             <p className="mb-4 text-slate-600">
               <BrandName gradient={false} className="inline [font-size:inherit] [line-height:inherit]" />{" "}
               includes an AI assistant, Brio. It answers questions, drafts replies and updates for
-              you to edit, identifies action items and RAID entries for you to apply or accept, and
+              you to edit, identifies action items and <RaidTerm>RAID entries</RaidTerm> for you to apply or accept, and
               can propose changes to how your files are organized.
             </p>
             <ul className="ml-1 mt-2 space-y-3">
@@ -477,7 +478,7 @@ function PrivacyPolicyEmbedded() {
                   <strong>Text Brio reads:</strong> <strong>Brio never opens the files you deliver.</strong> It reads an
                   internal memo when it is added (a firm can turn this off) or when someone asks it to,
                   a conversation&apos;s shared messages to draft a reply, and an engagement&apos;s new
-                  messages, internal notes included, to suggest RAID entries.
+                  messages, internal notes included, to suggest <RaidTerm>RAID entries</RaidTerm>.
                 </span>
               </li>
               <li className="flex items-start gap-3">
@@ -510,7 +511,7 @@ function PrivacyPolicyEmbedded() {
                   <strong>Nothing without your approval:</strong> Brio can rename and move files and
                   create folders, only ever after you approve each change. It never deletes
                   anything, and every change is recorded in your audit trail against both the
-                  assistant and the person who approved it. Action items and RAID entries wait for a
+                  assistant and the person who approved it. Action items and <RaidTerm>RAID entries</RaidTerm> wait for a
                   person to apply or accept them.
                 </span>
               </li>

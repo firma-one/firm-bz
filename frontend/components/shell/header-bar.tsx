@@ -7,13 +7,14 @@ import { usePathname, useSearchParams } from "next/navigation"
 import { BarChart3, Briefcase, Building2, CalendarDays, ChevronRight, ClipboardList, CreditCard, Folder, Home, Inbox, LayoutGrid, LifeBuoy, Menu, MessagesSquare, ShieldAlert, PenTool, Search, Settings, UserCircle, Users } from "lucide-react"
 import { WindowGlyph } from '@/components/ui/window-glyph'
 import { ClientIcon } from "@/components/ui/client-icon"
+import { RaidInfo } from "@/components/projects/raid/raid-info"
 import { AiCreditsIndicator } from "@/components/app/ai-credits-indicator"
 import { clientPath, engagementPath, firmPath } from "@/lib/navigation/firm-paths"
 import { useDailyDigestToast } from "./use-daily-digest-toast"
 import { cn } from "@/lib/utils"
 import { useShellData } from "./shell-data-context"
 
-type Crumb = { label: string; href?: string; pending?: boolean; icon?: ReactNode }
+type Crumb = { label: string; href?: string; pending?: boolean; icon?: ReactNode; /** After the label on the current page: RAID's info icon. */ info?: ReactNode }
 
 // Icons are the app's existing ones: firm Building2, client ClientIcon (handshake), engagement Briefcase, and each
 // tab's own icon from the sidebar or the engagement tab row.
@@ -27,13 +28,13 @@ const FIRM_TABS: Record<string, { label: string; icon: ReactNode }> = {
     settings: { label: "Settings", icon: <Settings /> },
 }
 
-const ENGAGEMENT_TABS: Record<string, { label: string; icon: ReactNode }> = {
+const ENGAGEMENT_TABS: Record<string, { label: string; icon: ReactNode; info?: ReactNode }> = {
     analytics: { label: "Overview", icon: <BarChart3 /> },
     files: { label: "Files", icon: <Folder /> },
     shares: { label: "Board", icon: <LayoutGrid /> },
     board: { label: "Board", icon: <LayoutGrid /> },
     comments: { label: "Discussions", icon: <MessagesSquare /> },
-    raid: { label: "RAID", icon: <ShieldAlert /> },
+    raid: { label: "RAID", icon: <ShieldAlert />, info: <RaidInfo /> },
     wiki: { label: "Dossier", icon: <PenTool /> },
     audit: { label: "Audit", icon: <ClipboardList /> },
     members: { label: "Members", icon: <Users /> },
@@ -162,6 +163,7 @@ export function HeaderBar({
                                 <span className={cn("flex min-w-0 items-center gap-1.5 px-1.5 py-0.5", last ? "font-medium text-fg" : "text-fg-muted")} aria-current={last ? "page" : undefined}>
                                     <CrumbIcon icon={crumb.icon} />
                                     <span className="truncate">{crumb.label}</span>
+                                    {crumb.info}
                                 </span>
                             )}
                         </Fragment>

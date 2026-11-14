@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { AddMemoSheet, editSummary, type AddMemoOutcome, type EditMemoContext } from './add-memo-sheet'
 
 /**
@@ -74,7 +74,9 @@ describe('AddMemoSheet, editing', () => {
     it('new notes: what stops waiting, what\'s kept, and Brio reads them unless unticked', async () => {
         const onSave = renderEdit()
         fireEvent.change(screen.getByLabelText('Notes'), { target: { value: `${BODY}\nAlex Jordan: The report moves to December 4.` } })
-        expect(screen.getByText('2 action items and 1 RAID suggestion')).toBeTruthy()
+        // RAID gets its info icon, so the words span the icon's wrapper.
+        const stops = screen.getByText((_, el) => el?.tagName === 'B' && el.textContent === '2 action items and 1 RAID suggestion')
+        expect(within(stops).getByRole('button', { name: 'What RAID means' })).toBeTruthy()
         expect(screen.getByText(/Kept as it is: the reminder you applied, “Send Dana the revised launch timeline”/)).toBeTruthy()
         const box = screen.getByRole('checkbox')
         expect(box.getAttribute('data-state')).toBe('checked')

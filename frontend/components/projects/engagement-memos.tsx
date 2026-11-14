@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { AlertCircle, Plus, Search, Sparkles } from 'lucide-react'
+import { RaidInfo } from './raid/raid-info'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Tag } from '@/components/ui/tag'
@@ -75,20 +76,25 @@ export interface MemoContent {
     webUrl: string | null
 }
 
-/** "Nov" over "12": the day of the call. Spans, so it can sit inside a row's button. */
+/**
+ * "Nov" over "12": the day of the call, drawn as a desk calendar (Deepak, 2026-11-14): the month in white
+ * on the app's red, the day in black on gray. The same font and sizes as before. Spans, so it can sit
+ * inside a row's button.
+ */
 export function MemoDateBlock({ date }: { date: string }) {
     const d = new Date(`${date}T00:00:00Z`)
     const month = d.toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' })
     const label = d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
     return (
         <span
-            className="flex w-10 shrink-0 flex-col items-center rounded-control border border-line bg-surface py-1 leading-none"
+            className="flex w-10 shrink-0 flex-col items-stretch overflow-hidden rounded-control leading-none"
             title={d.getUTCFullYear() === new Date().getFullYear() ? undefined : label}
             aria-label={label}
             role="img"
         >
-            <span className="text-[11px] font-medium text-fg-subtle">{month}</span>
-            <span className="mt-0.5 text-ui font-semibold tabular-nums text-fg">{d.getUTCDate()}</span>
+            {/* The red runs to the edge; only the gray part has a border (a ring round the red read as a white rim). */}
+            <span className="bg-danger py-0.5 text-center text-[11px] font-medium text-white">{month}</span>
+            <span className="rounded-b-control border border-t-0 border-line bg-surface-muted py-1 text-center text-ui font-semibold tabular-nums text-fg">{d.getUTCDate()}</span>
         </span>
     )
 }
@@ -964,7 +970,7 @@ function MemoRaidSuggestions({ items, onAct }: { items: MemoRaidSuggestion[]; on
     }
     return (
         <section aria-label="RAID suggestions" className="border-t border-line px-4 py-3">
-            <h4 className="text-ui font-semibold text-fg">RAID suggestions</h4>
+            <h4 className="flex items-center gap-1 text-ui font-semibold text-fg">RAID suggestions <RaidInfo /></h4>
             <p className="text-caption font-normal text-fg-muted">
                 Risks, Assumptions, Issues and Decisions from this memo. What you accept goes into the RAID log.
             </p>

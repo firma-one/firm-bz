@@ -40,11 +40,11 @@ describe('RaidOverviewView', { timeout: 20_000 }, () => {
             'raid-card-row-raid-planning',
             'raid-card-row-raid-scope',
         ])
-        // The assumption is the one open entry left over.
-        expect(screen.getByText('and 1 more open, in the RAID log')).toBeTruthy()
+        // Five are open and four fit: "Show all" opens the RAID tab rather than expanding here.
+        expect(screen.getByRole('link', { name: 'Show all 5 in the RAID log' }).getAttribute('href')).toBe('?tab=raid')
         // The Board's approval is a decision too, but the Board already shows it.
         expect(screen.queryByText(/approved by Dana/)).toBeNull()
-        expect(within(screen.getByTestId('raid-card-row-raid-scope')).getByText(/^latest decision · /)).toBeTruthy()
+        expect(within(screen.getByTestId('raid-card-row-raid-scope')).getByText(/^· latest decision · Memo · Kickoff call$/)).toBeTruthy()
     })
 
     it('shows where each was raised, who owns it and when, and opens the RAID tab', () => {
@@ -53,8 +53,9 @@ describe('RaidOverviewView', { timeout: 20_000 }, () => {
         expect(row.getAttribute('href')).toBe('/d/e/q2/raid')
         expect(within(row).getByText('Issue')).toBeTruthy()
         expect(within(row).getByText('· Thread · QSR-14')).toBeTruthy()
-        expect(within(row).getByText(/^Sam · Nov /)).toBeTruthy()
-        expect(within(screen.getByTestId('raid-card-row-raid-planning')).getByText(/^No owner · /)).toBeTruthy()
+        expect(within(row).getByText('Sam')).toBeTruthy()
+        expect(within(row).getByText(/^Nov \d+$/)).toBeTruthy()
+        expect(within(screen.getByTestId('raid-card-row-raid-planning')).getByText('No owner')).toBeTruthy()
     })
 
     it('says so when nothing is open and no decision was recorded', () => {

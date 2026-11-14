@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { render, screen, waitFor, within, cleanup } from '@testing-library/react'
+import { render, screen, waitFor, within, cleanup, fireEvent } from '@testing-library/react'
 import { FirmRaidSection, FirmRaidView } from './firm-raid-section'
 import { demoFirmRaid } from '@/lib/demo/demo-firm-raid'
 import type { FirmRaidOverview } from '@/lib/raid/raid-shared'
@@ -49,9 +49,13 @@ describe('FirmRaidView', { timeout: 20_000 }, () => {
         const issue = screen.getByTestId('firm-raid-row-i1')
         expect(issue.getAttribute('href')).toBe('/g/beacon/acme/q4/raid')
         expect(within(issue).getByText('Issue')).toBeTruthy()
-        expect(within(issue).getByText('· Acme Robotics · Q4 Brand Refresh')).toBeTruthy()
-        expect(within(issue).getByText(/^Sam · Nov/)).toBeTruthy()
-        expect(within(screen.getByTestId('firm-raid-row-r1')).getByText(/^No owner · Nov/)).toBeTruthy()
+        expect(within(issue).getByRole('img', { name: 'Client' })).toBeTruthy()
+        expect(within(issue).getByText('Acme Robotics')).toBeTruthy()
+        expect(within(issue).getByRole('img', { name: 'Engagement' })).toBeTruthy()
+        expect(within(issue).getByText('Q4 Brand Refresh')).toBeTruthy()
+        expect(within(issue).getByText('Sam')).toBeTruthy()
+        expect(within(issue).getByText('Nov 8')).toBeTruthy()
+        expect(within(screen.getByTestId('firm-raid-row-r1')).getByText('No owner')).toBeTruthy()
         expect(screen.getByText(/and 2 more/)).toBeTruthy()
     })
 
@@ -71,6 +75,40 @@ describe('FirmRaidView', { timeout: 20_000 }, () => {
         const rows = screen.getAllByTestId(/^firm-raid-row-/)
         expect(rows).toHaveLength(5)
         expect(rows[0].getAttribute('href')).toBe('/tour/acme/q4?tab=raid')
+    })
+})
+
+describe('FirmRaidView · Show all', { timeout: 20_000 }, () => {
+    const firm = {
+        clients: [{ slug: 'acme', name: 'Acme', engagements: [{ slug: 'q4', name: 'Q4' }, { slug: 'q2', name: 'Q2' }] }],
+    } as unknown as DemoFirm
+    const seven = demoFirmRaid(firm, Date.UTC(2026, 10, 14))
+
+    it('shows the first five, and opens the rest in place', () => {
+        render(<FirmRaidView data={seven} />)
+        expect(screen.getAllByTestId(/^firm-raid-row-/)).toHaveLength(5)
+        const toggle = screen.getByRole('button', { name: /Show all 7/ })
+        expect(toggle.getAttribute('aria-expanded')).toBe('false')
+
+        fireEvent.click(toggle)
+        expect(screen.getAllByTestId(/^firm-raid-row-/)).toHaveLength(7)
+        expect(toggle.getAttribute('aria-expanded')).toBe('true')
+        expect(toggle.textContent).toContain('Show fewer')
+
+        fireEvent.click(toggle)
+        expect(screen.getAllByTestId(/^firm-raid-row-/)).toHaveLength(5)
+    })
+
+    it('has nothing to open when five or fewer are open', () => {
+        render(<FirmRaidView data={DATA} />)
+        expect(screen.queryByRole('button', { name: /Show/ })).toBeNull()
+    })
+
+    it('past the rows sent, says how many more and where they are once opened', () => {
+        render(<FirmRaidView data={{ ...seven, more: 3 }} />)
+        expect(screen.queryByText(/and 3 more/)).toBeNull()
+        fireEvent.click(screen.getByRole('button', { name: /Show 2 more/ }))
+        expect(screen.getByText(/and 3 more, in their engagements/)).toBeTruthy()
     })
 })
 
