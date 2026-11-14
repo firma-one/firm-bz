@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, within } from '@testing-library/react'
+import { cleanup, render, screen, fireEvent, within } from '@testing-library/react'
 import { TooltipProvider } from '@/components/ui/tooltip'
 
 // The row's quick actions, in order: Bookmark, Details, Rename, Preview, Open, Copy link. Rename and
@@ -118,21 +118,31 @@ describe('Open', () => {
 describe('the internal only mark', () => {
     const PRIVATE = { ...FILE, isPrivate: true } as EngagementFileRowProps['file']
 
-    it('shows on a folder too, since a folder hides all it holds', () => {
-        renderRow({ file: { ...PRIVATE, mimeType: 'application/vnd.google-apps.folder' } })
-        expect(screen.getByRole('button', { name: /^Internal only/, hidden: true })).toBeTruthy()
+    it('shows on a folder too, since a folder hides all it holds: as its folder-lock icon, not a second lock', () => {
+        renderRow({ file: { ...PRIVATE, mimeType: 'application/vnd.google-apps.folder' }, inDeliverableFolder: true })
+        expect(screen.getByRole('img', { name: 'Internal only folder', hidden: true })).toBeTruthy()
+        expect(screen.queryByRole('button', { name: /^Internal only/, hidden: true })).toBeNull()
     })
 
     it('comes off when clicked', () => {
-        renderRow({ file: PRIVATE })
+        renderRow({ file: PRIVATE, inDeliverableFolder: true })
         fireEvent.click(screen.getByRole('button', { name: /^Internal only/, hidden: true }))
         expect(handlers.onPrivacy).toHaveBeenCalledWith(PRIVATE, false)
     })
 
     it('only marks the file for someone who cannot change it', () => {
-        renderRow({ file: PRIVATE, canManage: false })
+        renderRow({ file: PRIVATE, canManage: false, inDeliverableFolder: true })
         expect(screen.getByRole('img', { name: 'Internal only', hidden: true })).toBeTruthy()
         expect(screen.queryByRole('button', { name: /^Internal only/, hidden: true })).toBeNull()
+    })
+
+    it('shows nothing outside a deliverable, where everything is internal already (the mark stays stored)', () => {
+        renderRow({ file: PRIVATE })
+        expect(screen.queryByRole('img', { name: 'Internal only', hidden: true })).toBeNull()
+        expect(screen.queryByRole('button', { name: /^Internal only/, hidden: true })).toBeNull()
+        cleanup()
+        renderRow({ file: { ...PRIVATE, mimeType: 'application/vnd.google-apps.folder' } })
+        expect(screen.queryByRole('img', { name: 'Internal only folder', hidden: true })).toBeNull()
     })
 
     it('only marks the file inside an approved deliverable, as the menu has it', () => {

@@ -108,7 +108,7 @@ describe('POST /api/projects/[projectId]/ai-notes-proposals: who', () => {
         h.canViewInternal = false
         const res = await post()
         expect(res.status).toBe(403)
-        expect((await res.json()).error).toBe('Only a Lead or a Contributor · Full Access can find actions in the notes.')
+        expect((await res.json()).error).toBe('Only a Lead or a Contributor · Full Access can identify action items in the notes.')
         expect(h.create).not.toHaveBeenCalled()
     })
 

@@ -55,6 +55,8 @@ const matches = (row: Row, where: Record<string, unknown>) => Object.entries(whe
 
 vi.mock('@/lib/prisma', () => ({
     prisma: {
+        // What still waits from each memo (§13): none in these tests.
+        engagementRaidItem: { groupBy: async () => [] },
         engagementDocument: {
             findMany: async ({ where, orderBy }: { where: Record<string, unknown>; orderBy?: unknown }) => {
                 const found = h.state.rows.filter((r) => matches(r, where))

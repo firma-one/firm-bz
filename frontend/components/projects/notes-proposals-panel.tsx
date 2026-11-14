@@ -4,18 +4,21 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { AlertCircle, Check, Loader2, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Input } from '@/components/ui/input'
+import { DateProperty } from '@/components/ui/property-cells'
 import { Tag } from '@/components/ui/tag'
 import { Brio } from '@/components/ui/brio'
 import { useDueDateSave } from '@/components/files/use-due-date-save'
 import { createManualReminder } from '@/lib/actions/user-reminders'
 import { failureReason } from '@/lib/files/action-failure'
+import { cn } from '@/lib/utils'
 import { AI_TIMEOUT_MS, AiAbortedError, AiTimeoutError, fetchWithTimeout } from '@/lib/ai/fetch-timeout'
 import { BRIO_GREEN } from '@/lib/ai/assistant'
 import { BRIO_PROPOSALS_FAILED, BRIO_TOO_SLOW, BRIO_UNREACHABLE_RETRY, brioFailureReason } from '@/lib/ai/brio-failure'
 import type { DeliverableProposal, NotesProposal, SkippedLine } from '@/lib/ai/notes-proposals'
 
 /**
- * "Find actions in these notes" (.claude/plans/brio-features-round-2.md, §3.5): Brio reads the
+ * "Identify action items in these notes" (was "Find actions"; .claude/plans/brio-features-round-2.md, §3.5): Brio reads the
  * internal memo and proposes reminders, due-date moves and new deliverables, each under the line of
  * the notes that asked for it.
  *
@@ -95,24 +98,128 @@ function clause(reason: string): string {
 
 const selectable = (p: NotesProposal) => p.kind !== 'deliverable'
 
-/** The change itself, in bold, then its date. */
-function ProposalChange({ proposal }: { proposal: NotesProposal }) {
-    switch (proposal.kind) {
+/** What a person changed in a proposal before applying it. Only the parts that are theirs to change. */
+interface ProposalEdit {
+    title?: string
+    date?: string
+    newDate?: string
+    name?: string
+}
+
+/** The proposal as it will be applied: Brio's, with the person's edits over it. */
+function withEdit(p: NotesProposal, e: ProposalEdit | undefined): NotesProposal {
+    if (!e) return p
+    switch (p.kind) {
         case 'reminder':
-            return <><strong className="font-semibold text-fg">{proposal.title}</strong> · {formatProposalDay(proposal.date, { weekday: true })}</>
+            return { ...p, title: e.title ?? p.title, date: e.date ?? p.date }
+        case 'dueDate':
+            return { ...p, newDate: e.newDate ?? p.newDate }
+        case 'deliverable':
+            return { ...p, name: e.name ?? p.name }
+    }
+}
+
+/** Whether the edits leave the proposal different from Brio's. */
+function isEdited(p: NotesProposal, shown: NotesProposal): boolean {
+    if (p.kind === 'reminder' && shown.kind === 'reminder') return shown.title !== p.title || shown.date !== p.date
+    if (p.kind === 'dueDate' && shown.kind === 'dueDate') return shown.newDate !== p.newDate
+    if (p.kind === 'deliverable' && shown.kind === 'deliverable') return shown.name !== p.name
+    return false
+}
+
+/** Whether it can be applied as edited: a reminder needs words, a new deliverable a name. */
+function isComplete(p: NotesProposal): boolean {
+    if (p.kind === 'reminder') return p.title.trim().length > 0 && !!p.date
+    if (p.kind === 'deliverable') return p.name.trim().length > 0
+    return !!p.newDate
+}
+
+/** A day picked in the shared date picker, as a proposal keeps it: "yyyy-MM-dd". */
+function dayOf(value: string | null): string | null {
+    return value ? value.slice(0, 10) : null
+}
+
+/** A labelled field in a proposal: the label above, small, then the control. */
+function Field({ label, htmlFor, children }: { label: string; htmlFor?: string; children: React.ReactNode }) {
+    return (
+        <div className="mt-2 flex flex-col gap-1">
+            {htmlFor
+                ? <label htmlFor={htmlFor} className="text-caption font-normal text-fg-muted">{label}</label>
+                : <span className="text-caption font-normal text-fg-muted">{label}</span>}
+            {children}
+        </div>
+    )
+}
+
+/** The parts of a proposal a person can change before applying it; read-only once it can't apply. */
+function ProposalFields({
+    proposal,
+    shown,
+    locked,
+    onEdit,
+}: {
+    proposal: NotesProposal
+    shown: NotesProposal
+    locked: boolean
+    onEdit: (edit: ProposalEdit) => void
+}) {
+    const id = useId()
+    switch (shown.kind) {
+        case 'reminder':
+            return (
+                <>
+                    <Field label="What" htmlFor={`${id}-what`}>
+                        <Input
+                            id={`${id}-what`}
+                            value={shown.title}
+                            onChange={(e) => onEdit({ title: e.target.value })}
+                            disabled={locked}
+                            className="h-8 text-small"
+                        />
+                    </Field>
+                    <Field label="When">
+                        <DateProperty
+                            value={shown.date}
+                            onChange={(v) => { const day = dayOf(v); if (day) onEdit({ date: day }) }}
+                            disabled={locked}
+                            placeholder="Pick a day"
+                            chip
+                            compact
+                        />
+                    </Field>
+                </>
+            )
         case 'dueDate':
             return (
                 <>
-                    <strong className="font-semibold text-fg">{proposal.docId ? `${proposal.docId} · ${proposal.deliverableName}` : proposal.deliverableName}</strong>
-                    {' · '}
-                    {proposal.currentDate ? formatProposalDay(proposal.currentDate) : 'No due date'} → {formatProposalDay(proposal.newDate)}
+                    <p className="mt-2 text-small text-fg">
+                        <strong className="font-semibold">{shown.docId ? `${shown.docId} · ${shown.deliverableName}` : shown.deliverableName}</strong>
+                    </p>
+                    <Field label={`New due date · now ${proposal.kind === 'dueDate' && proposal.currentDate ? formatProposalDay(proposal.currentDate) : 'none'}`}>
+                        <DateProperty
+                            value={shown.newDate}
+                            onChange={(v) => { const day = dayOf(v); if (day) onEdit({ newDate: day }) }}
+                            disabled={locked}
+                            placeholder="Pick a day"
+                            chip
+                            compact
+                        />
+                    </Field>
                 </>
             )
         case 'deliverable':
             return (
                 <>
-                    <strong className="font-semibold text-fg">{proposal.name}</strong>
-                    {proposal.dueDate ? ` · due ${formatProposalDay(proposal.dueDate)}` : ''}
+                    <Field label="Name" htmlFor={`${id}-name`}>
+                        <Input
+                            id={`${id}-name`}
+                            value={shown.name}
+                            onChange={(e) => onEdit({ name: e.target.value })}
+                            disabled={locked}
+                            className="h-8 text-small"
+                        />
+                    </Field>
+                    {shown.dueDate && <p className="mt-1 text-small text-fg-muted">Due {formatProposalDay(shown.dueDate)}, from the notes</p>}
                 </>
             )
     }
@@ -122,8 +229,12 @@ function ProposalChange({ proposal }: { proposal: NotesProposal }) {
 
 export interface NotesProposalsReviewProps {
     found: NotesProposalsFound
-    /** Applies one reminder or due date. Never called for a new deliverable. */
-    apply: (proposal: Exclude<NotesProposal, DeliverableProposal>) => Promise<ApplyOutcome>
+    /**
+     * Applies one reminder or due date: `proposal` as the person edited it, `original` as Brio found
+     * it (what an internal memo records, so identifying them again still knows it's done). Never
+     * called for a new deliverable.
+     */
+    apply: (proposal: Exclude<NotesProposal, DeliverableProposal>, original: Exclude<NotesProposal, DeliverableProposal>) => Promise<ApplyOutcome>
     /**
      * Opens creation of a new deliverable, filled in. Absent while the app has no such flow: the row
      * then offers to copy the name and says where deliverables are made.
@@ -134,12 +245,19 @@ export interface NotesProposalsReviewProps {
     readOnly?: boolean
     /** A line under the list, beside Dismiss: where the proposals came from, what applying records. */
     footnote?: React.ReactNode
+    /**
+     * `card` (the default): a bordered card under the notes. `column`: it fills a column of its own
+     * (Discussions › Memos, wide), with Dismiss and Apply kept in view at its foot.
+     */
+    layout?: 'card' | 'column'
+    /** Shown under the action items, above Dismiss and Apply: an internal memo's RAID suggestions (§13). */
+    extra?: React.ReactNode
 }
 
 /** What a proposal applied from this memo before shows instead of Apply. */
 const APPLIED_BEFORE = 'Applied earlier from this memo'
 
-export function NotesProposalsReview({ found, apply, openDeliverable, onDismiss, readOnly = false, footnote }: NotesProposalsReviewProps) {
+export function NotesProposalsReview({ found, apply, openDeliverable, onDismiss, readOnly = false, footnote, layout = 'card', extra }: NotesProposalsReviewProps) {
     const { proposals, skipped, dropped } = found
     const appliedBefore = new Set(found.alreadyApplied ?? [])
     // Reminders and due dates start selected, unless applied before; a new deliverable never is.
@@ -147,14 +265,18 @@ export function NotesProposalsReview({ found, apply, openDeliverable, onDismiss,
     const [rows, setRows] = useState<Record<string, RowState>>(() => Object.fromEntries(
         proposals.filter((p) => appliedBefore.has(p.id)).map((p) => [p.id, { status: 'applied', note: APPLIED_BEFORE } as RowState]),
     ))
+    const [edits, setEdits] = useState<Record<string, ProposalEdit>>({})
     const [applyingAll, setApplyingAll] = useState(false)
 
     const stateOf = (id: string): RowState => rows[id] ?? { status: 'idle' }
     const setRow = (id: string, state: RowState) => setRows((prev) => ({ ...prev, [id]: state }))
+    const shownOf = (p: NotesProposal) => withEdit(p, edits[p.id])
+    const edit = (id: string, change: ProposalEdit) => setEdits((prev) => ({ ...prev, [id]: { ...prev[id], ...change } }))
+    const reset = (id: string) => setEdits((prev) => { const next = { ...prev }; delete next[id]; return next })
 
-    const applyOne = useCallback(async (p: Exclude<NotesProposal, DeliverableProposal>) => {
+    const applyOne = useCallback(async (p: Exclude<NotesProposal, DeliverableProposal>, original: Exclude<NotesProposal, DeliverableProposal>) => {
         setRows((prev) => ({ ...prev, [p.id]: { status: 'applying' } }))
-        const outcome: ApplyOutcome = await apply(p).catch((e: unknown) => ({ ok: false as const, error: failureReason(e) }))
+        const outcome: ApplyOutcome = await apply(p, original).catch((e: unknown) => ({ ok: false as const, error: failureReason(e) }))
         let next: RowState
         if (outcome.ok) {
             next = { status: 'applied', note: outcome.warning ?? APPLIED_NOTE[p.kind] }
@@ -168,19 +290,20 @@ export function NotesProposalsReview({ found, apply, openDeliverable, onDismiss,
         setRows((prev) => ({ ...prev, [p.id]: next }))
     }, [apply])
 
+    const applicable = (p: NotesProposal): p is Exclude<NotesProposal, DeliverableProposal> => selectable(p)
     const pending = proposals.filter((p): p is Exclude<NotesProposal, DeliverableProposal> =>
-        selectable(p) && selected.has(p.id) && stateOf(p.id).status !== 'applied' && stateOf(p.id).status !== 'applying')
+        applicable(p) && selected.has(p.id) && isComplete(shownOf(p)) && stateOf(p.id).status !== 'applied' && stateOf(p.id).status !== 'applying')
 
     const applySelected = async () => {
         setApplyingAll(true)
         // One at a time: a due date may stop to ask (the due-date rule), and reminders share one list.
-        for (const p of pending) await applyOne(p)
+        for (const p of pending) await applyOne(shownOf(p) as Exclude<NotesProposal, DeliverableProposal>, p)
         setApplyingAll(false)
     }
 
     const copyName = async (p: DeliverableProposal) => {
         try {
-            await navigator.clipboard.writeText(p.name)
+            await navigator.clipboard.writeText(p.name.trim())
             setRow(p.id, { status: 'applied', note: 'Name copied' })
         } catch {
             setRow(p.id, { status: 'failed', error: "Couldn't copy the name. The browser didn't allow it." })
@@ -189,27 +312,34 @@ export function NotesProposalsReview({ found, apply, openDeliverable, onDismiss,
 
     const count = proposals.length
     const headingId = useId()
+    const column = layout === 'column'
+    const notProposed = skipped.length + (dropped > 0 ? dropped : 0)
 
     return (
-        <section aria-labelledby={headingId} className="w-full rounded-card border border-line bg-surface">
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 px-3.5 py-3">
+        <section
+            aria-labelledby={headingId}
+            className={cn('w-full bg-surface', column ? 'flex min-h-full flex-col' : 'rounded-card border border-line')}
+        >
+            <div className={cn('flex flex-wrap items-center gap-x-2 gap-y-1 py-3', column ? 'px-4' : 'px-3.5')}>
                 <h4 id={headingId} className="text-ui font-semibold text-fg">
                     <Brio className="text-action" />{' '}
-                    {count === 0 ? 'found no actions in these notes' : `found ${count} action${count === 1 ? '' : 's'}`}
+                    {count === 0 ? 'identified no action items in these notes' : `identified ${count} action item${count === 1 ? '' : 's'}`}
                 </h4>
                 <span className="flex-1" />
-                {count > 0 && <span className="text-caption font-normal text-fg-muted">Nothing changes until you apply it</span>}
+                {count > 0 && <span className="text-caption font-normal text-fg-muted">Edit any of them. Nothing changes until you apply it.</span>}
             </div>
 
             {proposals.map((p) => {
                 const state = stateOf(p.id)
+                const shown = shownOf(p)
                 const isDeliverable = p.kind === 'deliverable'
                 const applied = state.status === 'applied'
-                const checkboxId = `notes-proposal-${p.id}`
+                const locked = readOnly || applied || state.status === 'applying' || applyingAll
+                const changed = isEdited(p, shown)
+                const complete = isComplete(shown)
                 return (
-                    <div key={p.id} className="flex items-start gap-2.5 border-t border-line px-3.5 py-3" data-testid={`notes-proposal-${p.id}`}>
+                    <div key={p.id} className={cn('flex items-start gap-2.5 border-t border-line py-3', column ? 'px-4' : 'px-3.5')} data-testid={`notes-proposal-${p.id}`}>
                         <Checkbox
-                            id={checkboxId}
                             className="mt-0.5"
                             checked={!isDeliverable && selected.has(p.id)}
                             disabled={isDeliverable || applied || readOnly || state.status === 'applying'}
@@ -219,16 +349,23 @@ export function NotesProposalsReview({ found, apply, openDeliverable, onDismiss,
                                 else next.delete(p.id)
                                 return next
                             })}
-                            aria-label={`Select: ${KIND_LABEL[p.kind].toLowerCase()} · ${p.kind === 'reminder' ? p.title : p.kind === 'dueDate' ? p.deliverableName : p.name}`}
+                            aria-label={`Select: ${KIND_LABEL[p.kind].toLowerCase()} · ${shown.kind === 'reminder' ? shown.title : shown.kind === 'dueDate' ? shown.deliverableName : shown.name}`}
                         />
                         <div className="min-w-0 flex-1">
                             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-small text-fg">
                                 <Tag color="gray">{KIND_LABEL[p.kind]}</Tag>
-                                <label htmlFor={checkboxId} className="min-w-0">
-                                    <ProposalChange proposal={p} />
-                                </label>
+                                <span className="flex-1" />
+                                {changed && !applied && (
+                                    <span className="text-caption font-normal text-fg-muted">
+                                        Edited ·{' '}
+                                        <button type="button" onClick={() => reset(p.id)} disabled={locked} className="text-action hover:underline disabled:opacity-50">
+                                            Reset
+                                        </button>
+                                    </span>
+                                )}
                             </div>
-                            <p className="mt-1 border-l-2 border-line-strong pl-2 text-small text-fg-muted">
+                            <ProposalFields proposal={p} shown={shown} locked={locked} onEdit={(change) => edit(p.id, change)} />
+                            <p className="mt-2 border-l-2 border-line-strong pl-2 text-small text-fg-muted">
                                 “{p.quote}”
                             </p>
                             {isDeliverable && (
@@ -250,45 +387,68 @@ export function NotesProposalsReview({ found, apply, openDeliverable, onDismiss,
                                     {state.error}
                                 </p>
                             )}
+                            <div className="mt-2 flex justify-end">
+                                {isDeliverable ? (
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        disabled={readOnly || !complete}
+                                        onClick={() => {
+                                            const named = shown as DeliverableProposal
+                                            if (openDeliverable) openDeliverable(named)
+                                            else void copyName(named)
+                                        }}
+                                    >
+                                        {openDeliverable ? 'Open' : 'Copy name'}
+                                    </Button>
+                                ) : (
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        disabled={readOnly || applied || state.status === 'applying' || applyingAll || !complete}
+                                        onClick={() => applyOne(shown as Exclude<NotesProposal, DeliverableProposal>, p as Exclude<NotesProposal, DeliverableProposal>)}
+                                    >
+                                        {state.status === 'applying' ? <><Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />Applying</>
+                                            : applied ? <><Check className="h-3.5 w-3.5" aria-hidden />Applied</>
+                                            : state.status === 'failed' ? 'Try again'
+                                            : 'Apply'}
+                                    </Button>
+                                )}
+                            </div>
                         </div>
-                        {isDeliverable ? (
-                            <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                disabled={readOnly}
-                                onClick={() => (openDeliverable ? openDeliverable(p) : copyName(p))}
-                            >
-                                {openDeliverable ? 'Open' : 'Copy name'}
-                            </Button>
-                        ) : (
-                            <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                disabled={readOnly || applied || state.status === 'applying' || applyingAll}
-                                onClick={() => applyOne(p)}
-                            >
-                                {state.status === 'applying' ? <><Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />Applying</>
-                                    : applied ? <><Check className="h-3.5 w-3.5" aria-hidden />Applied</>
-                                    : state.status === 'failed' ? 'Try again'
-                                    : 'Apply'}
-                            </Button>
-                        )}
                     </div>
                 )
             })}
 
-            <div className="flex flex-wrap items-center gap-2 border-t border-line px-3.5 py-3">
-                <div className="min-w-0 flex-1 space-y-0.5 text-small text-fg-muted">
-                    {skipped.map((s, i) => (
-                        <p key={i}>“{s.quote}” {clause(s.reason)}, so it isn&apos;t proposed.</p>
-                    ))}
-                    {dropped > 0 && (
-                        <p>{dropped} more didn&apos;t match the notes or the Board, so {dropped === 1 ? 'it isn’t' : 'they aren’t'} shown.</p>
+            {extra}
+
+            {(notProposed > 0 || footnote) && (
+                <div className={cn('space-y-1 border-t border-line py-3 text-small text-fg-muted', column ? 'px-4' : 'px-3.5')}>
+                    {notProposed > 0 && (
+                        <details>
+                            <summary className="cursor-pointer select-none">
+                                {notProposed} line{notProposed === 1 ? '' : 's'} {notProposed === 1 ? 'wasn’t' : 'weren’t'} proposed
+                            </summary>
+                            <div className="mt-1 space-y-0.5">
+                                {skipped.map((s, i) => (
+                                    <p key={i}>“{s.quote}” {clause(s.reason)}, so it isn&apos;t proposed.</p>
+                                ))}
+                                {dropped > 0 && (
+                                    <p>{dropped} more didn&apos;t match the notes or the Board, so {dropped === 1 ? 'it isn’t' : 'they aren’t'} shown.</p>
+                                )}
+                            </div>
+                        </details>
                     )}
                     {footnote && <p>{footnote}</p>}
                 </div>
+            )}
+
+            <div className={cn(
+                'flex flex-wrap items-center justify-end gap-2 border-t border-line py-3',
+                column ? 'sticky bottom-0 mt-auto bg-surface px-4' : 'px-3.5',
+            )}>
                 <Button type="button" variant="ghost" size="sm" onClick={onDismiss} disabled={applyingAll}>
                     {count === 0 ? 'Dismiss' : 'Dismiss all'}
                 </Button>
@@ -304,13 +464,13 @@ export function NotesProposalsReview({ found, apply, openDeliverable, onDismiss,
 
 // ── The trigger ───────────────────────────────────────────────────────────────────────────────
 
-/** "Find actions in these notes", under the memo; "Find actions" on an internal memo's row. Shared with /tour. */
+/** "Identify action items in these notes", under the memo; "Identify action items" on an internal memo's row. Shared with /tour. */
 export function FindActionsButton({
     onClick,
     busy,
     disabled,
     title,
-    label = 'Find actions in these notes',
+    label = 'Identify action items in these notes',
     busyLabel = 'Reading the notes…',
     'aria-label': ariaLabel,
 }: {
@@ -424,7 +584,7 @@ export function useApplyNotesProposal(projectId: string) {
         note: string,
     ): Promise<ApplyOutcome> => {
         if (p.kind === 'reminder') {
-            if (!engagement) return { ok: false, error: 'The proposals are gone. Find the actions again.' }
+            if (!engagement) return { ok: false, error: 'The action items are gone. Identify them again.' }
             const result = await createManualReminder({
                 entityKey: 'platform.engagements',
                 entityValue: engagement.id,

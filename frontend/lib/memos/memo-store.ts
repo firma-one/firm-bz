@@ -22,6 +22,7 @@ import {
     parseMemoSettings,
     type MemoAppliedAction,
     type MemoListItem,
+    type MemoReview,
     type MemoSettings,
     type MemoSource,
 } from '@/lib/memos/memo-shared'
@@ -358,6 +359,7 @@ export async function saveMemo(input: SaveMemoInput): Promise<SavedMemo> {
         speakers: input.source === 'transcript' ? input.speakers : null,
         createdAt: now,
         applied: [],
+        review: null,
     }
     // Internal only on its own too, so moving it out of the folder doesn't open it.
     const settings = { memo, lock: { type: 'private' } } as object
@@ -415,12 +417,24 @@ export async function listMemos(engagementId: string): Promise<MemoListItem[]> {
         },
         select: { id: true, docId: true, fileName: true, createdAt: true, settings: true },
     })
+    const raidWaiting = await raidSuggestedByMemo(engagementId, rows.map((r) => r.id))
     return rows
         .flatMap((r) => {
             const memo = parseMemoSettings(r.settings)
-            return memo ? [memoListItem(r, memo)] : []
+            return memo ? [memoListItem(r, memo, raidWaiting.get(r.id) ?? 0)] : []
         })
         .sort(byNewestMemo)
+}
+
+/** RAID suggestions still waiting, by the memo they came from (§13). */
+async function raidSuggestedByMemo(engagementId: string, memoIds: string[]): Promise<Map<string, number>> {
+    if (memoIds.length === 0) return new Map()
+    const groups = await prisma.engagementRaidItem.groupBy({
+        by: ['sourceRef'],
+        where: { engagementId, status: 'SUGGESTED', sourceKind: 'MEMO', sourceRef: { in: memoIds } },
+        _count: { _all: true },
+    })
+    return new Map(groups.flatMap((g) => (g.sourceRef ? [[g.sourceRef, g._count._all] as [string, number]] : [])))
 }
 
 // ── A memo for Brio ───────────────────────────────────────────────────────────────────────────
@@ -464,7 +478,8 @@ export type MemoText =
  * The text of one memo, for "Find actions", and for the Memos pane to show.
  *
  * This is the ONE place Brio reads a file's contents. Only a memo file of this engagement (findMemo), and
- * only when a person has clicked Find actions on it; the text goes to the model for that one call and is
+ * when it's added (lib/memos/memo-review.ts, §13) or when a person identifies its action items with the
+ * sparkle; the text goes to the model for that one call and is
  * neither stored nor indexed. Every other Brio feature works from metadata (INDEX_DOCUMENT_TEXT stays false).
  *
  * The Memos pane reads it through the same function (memos/[documentId]/content) to show the memo to the
@@ -553,3 +568,28 @@ export async function recordMemoApplied(engagementId: string, documentId: unknow
     })
     return applied.length
 }
+
+// ── Action items waiting on a memo (§13) ──────────────────────────────────────────────────────
+
+/** Keeps what Brio identified in a memo, quotes as anchors only (memoReviewOf), in place of the last. */
+export async function writeMemoReview(engagementId: string, documentId: unknown, review: MemoReview): Promise<boolean> {
+    const found = await findMemo(engagementId, documentId)
+    if (!found) return false
+    const row = await prisma.engagementDocument.findUnique({ where: { id: found.id }, select: { settings: true } })
+    const settings = (row?.settings ?? {}) as Record<string, unknown>
+    const memo = (settings.memo ?? {}) as Record<string, unknown>
+    await prisma.engagementDocument.update({
+        where: { id: found.id },
+        data: { settings: { ...settings, memo: { ...memo, review } } as object },
+    })
+    return true
+}
+
+/** Dismiss all: nothing from the last identification waits on the memo any more. */
+export async function dismissMemoReview(engagementId: string, documentId: unknown): Promise<boolean> {
+    const found = await findMemo(engagementId, documentId)
+    if (!found) return false
+    if (!found.memo.review || found.memo.review.dismissed) return true
+    return writeMemoReview(engagementId, found.id, { ...found.memo.review, dismissed: true })
+}
+

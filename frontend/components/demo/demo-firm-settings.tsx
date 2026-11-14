@@ -203,6 +203,15 @@ export function DemoFirmSettings({ firm }: { firm: DemoFirm }) {
                         </NotionTable>
                     </section>
                     <section>
+                        <h3 className={SETTINGS_SECTION_HEADING_CLASS}><Brio /></h3>
+                        <SwitchRow
+                            icon={<Sparkles />}
+                            title="Identify action items when a memo is added"
+                            description="Brio reads a new internal memo once, and its action items and RAID suggestions wait on it for someone to apply or accept. Nothing changes on its own. 1 credit per memo, from your firm's credits."
+                            initial={true}
+                        />
+                    </section>
+                    <section>
                         <h3 className={SETTINGS_SECTION_HEADING_CLASS}>Overview for Limited Access contributors and Reviewers</h3>
                         <p className="mb-1 text-small text-fg-muted">Which sections they see on an engagement&apos;s Overview. Leads and Full Access contributors always see everything.</p>
                         <SwitchRow icon={<BarChart2 />} title="Engagement health" initial={true} />

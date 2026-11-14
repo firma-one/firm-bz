@@ -211,9 +211,9 @@ describe('Make internal only', () => {
         expect(await offers(rowOf(renderAppRow({ id: 'loose', name: 'Loose.xlsx', mimeType: 'application/vnd.ms-excel' }), 'Loose.xlsx'))).toBe(false)
     })
 
-    it('can still be removed from a file marked outside a deliverable', async () => {
+    it('offers nothing for a file marked outside a deliverable: everything there is internal already', async () => {
         const menu = await readMenu(rowOf(renderAppRow({ id: 'loose', name: 'Loose.xlsx', mimeType: 'application/vnd.ms-excel', isPrivate: true }), 'Loose.xlsx'))
-        expect(menu.some((line) => line.includes('Remove internal only'))).toBe(true)
+        expect(menu.some((line) => line.includes('internal only'))).toBe(false)
     })
 })
 
@@ -234,6 +234,12 @@ describe('the Files table', () => {
 })
 
 describe('the internal only mark', () => {
+    it('an internal only folder wears folder-lock as its icon, with no second lock beside its name', () => {
+        const row = rowOf(renderAppRow({ id: 'fold', name: 'Workings', mimeType: FOLDER_MIME, documentType: 'FOLDER', isPrivate: true }, { inDeliverableFolder: true }), 'Workings')
+        expect(within(row).getByRole('img', { name: 'Internal only folder' }).querySelector('svg')?.getAttribute('class')).toMatch(/lucide-folder-lock/)
+        expect(quickActions(row).some((a) => a.startsWith('Internal only'))).toBe(false)
+    })
+
     it('reads the same in the app and on the tour', () => {
         const inApp = quickActions(rowOf(renderAppRow({ id: 'f2', name: 'Secret.xlsx', mimeType: 'application/vnd.ms-excel', isPrivate: true }, { inDeliverableFolder: true }), 'Secret.xlsx'))
         cleanup()

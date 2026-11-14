@@ -90,6 +90,7 @@ const REFUSES: Record<string, number> = {
     'files-agent/scaffold': 1,
     'memos': 1, // Saving an internal memo writes a file to the engagement's storage.
     'memos/[documentId]/applied': 1, // Notes an applied action on a memo, and applying is refused too.
+    'memos/[documentId]/review': 1, // Dismiss all on a memo's waiting action items (§13); reading them is a GET.
     'raid': 1, // Adding to the RAID log; a completed engagement's log is read only.
     'raid/[itemId]': 1, // Accept, dismiss, edit, close or reopen an entry.
     'raid/check': 1, // Check now: nothing found could enter a read-only log.

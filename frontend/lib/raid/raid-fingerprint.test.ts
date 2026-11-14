@@ -79,21 +79,17 @@ describe('loadConversationStamps', () => {
         h.docs = [{ id: 'memo-1', metadata: { modifiedTime: '2026-11-11T12:00:00.000Z' } }]
     })
 
-    it('reads each threaded document and each memo, a memo by when it last changed', async () => {
+    it('reads each threaded document, and no memo: a memo is read when added, not by the check (§13)', async () => {
         expect(await loadConversationStamps('p1')).toEqual({
             threads: [{ documentId: 'doc-9', count: 2, latestAt: '2026-11-11T16:00:00.000Z' }],
-            memos: [
-                { id: 'memo-1', changedAt: '2026-11-11T12:00:00.000Z' },
-                { id: 'memo-2', changedAt: '2026-11-12T09:00:00.000Z' },
-            ],
+            memos: [],
         })
         expect(h.groupBy).toHaveBeenCalledWith(expect.objectContaining({ where: { engagementId: 'p1' } }))
     })
 
     it('up to a check, leaves out what came after it', async () => {
         const until = new Date('2026-11-12T08:02:00Z')
-        const stamps = await loadConversationStamps('p1', until)
+        await loadConversationStamps('p1', until)
         expect(h.groupBy).toHaveBeenCalledWith(expect.objectContaining({ where: { engagementId: 'p1', createdAt: { lte: until } } }))
-        expect(stamps.memos.map((m) => m.id)).toEqual(['memo-1'])
     })
 })

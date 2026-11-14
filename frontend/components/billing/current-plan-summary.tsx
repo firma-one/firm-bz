@@ -157,7 +157,7 @@ export function AiCreditsRow({ usage }: { usage: BillingPlanUsage | null | undef
     const featureRows: Array<{ key: string; keys: readonly (keyof typeof ai.byFeature)[]; label: string; fill: string }> = [
         { key: 'brief', keys: ['brief', 'firmChat', 'dayBriefRewrite'], label: 'Briefs and assistant', fill: chart('slate') },
         { key: 'searchInterpret', keys: ['searchInterpret'], label: 'Firm Doc Search', fill: chart('teal') },
-        { key: 'summary', keys: ['summary', 'statusUpdate', 'replyDraft', 'nudgeDraft', 'notesProposals', 'raidCheck'], label: 'Engagement summaries and drafts', fill: chart('purple') },
+        { key: 'summary', keys: ['summary', 'statusUpdate', 'replyDraft', 'nudgeDraft', 'notesProposals', 'raidCheck', 'memoRaid'], label: 'Engagement summaries and drafts', fill: chart('purple') },
         { key: 'chat', keys: ['chat', 'reviewerChat'], label: 'Engagement assistant chat', fill: chart('pink') },
         { key: 'filesAgent', keys: ['filesAgent'], label: 'Files agent', fill: chart('brown') },
     ]

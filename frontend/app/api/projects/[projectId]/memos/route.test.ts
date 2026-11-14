@@ -14,7 +14,16 @@ const h = vi.hoisted(() => ({
     listMemos: vi.fn(),
     saveMemo: vi.fn(),
     recordMemoApplied: vi.fn(),
+    // Work queued with Next's after(): run by the test, as Next runs it once the answer has gone.
+    afterTasks: [] as Array<() => unknown>,
+    reviewMemoOnAdd: vi.fn(async () => ({ status: 'reviewed', actionItems: 2, raidSuggested: 1 })),
 }))
+
+vi.mock('next/server', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('next/server')>()),
+    after: (task: () => unknown) => { h.afterTasks.push(task) },
+}))
+vi.mock('@/lib/memos/memo-review', () => ({ reviewMemoOnAdd: h.reviewMemoOnAdd }))
 
 vi.mock('@/utils/supabase/server', () => ({
     createClient: async () => ({ auth: { getUser: async () => ({ data: { user: h.user } }) } }),
@@ -119,6 +128,18 @@ describe('GET', () => {
 })
 
 describe('POST', () => {
+    it('reviews the memo once the answer has gone: its action items and RAID suggestions wait on it (§13)', async () => {
+        h.afterTasks.length = 0
+        h.reviewMemoOnAdd.mockClear()
+        const res = await post(BODY)
+        expect(res.status).toBe(201)
+        // Not before the answer: the save stays quick.
+        expect(h.reviewMemoOnAdd).not.toHaveBeenCalled()
+        expect(h.afterTasks).toHaveLength(1)
+        await h.afterTasks[0]()
+        expect(h.reviewMemoOnAdd).toHaveBeenCalledWith({ engagementId: 'p1', firmId: 'f1', memoId: MEMO_ID })
+    })
+
     it('saves the memo with the caller as its author', async () => {
         const res = await post({ ...BODY, source: 'transcript', durationMinutes: 42, speakers: 3 })
         expect(res.status).toBe(201)

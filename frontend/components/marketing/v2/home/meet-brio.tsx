@@ -41,7 +41,7 @@ const LANE: { icon: ReactNode; text: string }[] = [
         <circle cx="12" cy="12" r="3" />
       </>
     ),
-    text: 'Never opens the files you deliver. Reads comments and internal memos only to draft a reply, log a risk or find actions.',
+    text: 'Never opens the files you deliver. Reads comments and internal memos only to draft a reply, log a risk or identify action items.',
   },
   {
     icon: (
@@ -113,7 +113,7 @@ export function MeetBrioSection() {
               reads the delivery data in your workspace (deliverables, due dates, statuses, who’s involved) and turns
               it into the brief you’d write yourself if you had the time. It tells you each morning what needs you, drafts the
               client update, the reply and the nudge, keeps the <RaidTerm tone="dark">RAID log</RaidTerm>
-              {FILES_AGENT_PUBLIC ? ', turns call notes into actions and keeps your files tidy' : ' and turns call notes into actions'},
+              {FILES_AGENT_PUBLIC ? ', turns call notes into action items and keeps your files tidy' : ' and turns call notes into action items'},
               and it always waits for you before anything changes.
             </p>
             <p className="mk-brio-lede mk-brio-narrow">

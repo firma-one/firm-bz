@@ -1,4 +1,4 @@
-import type { NotesProposal } from '@/lib/ai/notes-proposals'
+import type { DeliverableProposal, DueDateProposal, NotesProposal, ReminderProposal, SkippedLine } from '@/lib/ai/notes-proposals'
 
 /**
  * Internal memos (.claude/plans/brio-features-round-2.md, §8): call and meeting notes kept as one
@@ -55,6 +55,8 @@ export interface MemoSettings {
     speakers: number | null
     createdAt: string
     applied: MemoAppliedAction[]
+    /** Brio's action items waiting on the memo (§13), identified when it was added or by hand; null when none. */
+    review: MemoReview | null
 }
 
 /** One row of the card, as the memos route answers it. */
@@ -69,6 +71,10 @@ export interface MemoListItem {
     source: MemoSource
     durationMinutes: number | null
     appliedCount: number
+    /** Action items and RAID suggestions from this memo still waiting for someone (§13). */
+    toReview: number
+    /** ISO, when Brio last identified its action items; null before it has. */
+    reviewedAt: string | null
     createdAt: string
 }
 
@@ -193,6 +199,44 @@ function appliedOf(raw: unknown): MemoAppliedAction[] {
     })
 }
 
+/** A stored review, read leniently: anything malformed is left out rather than shown wrong. */
+function reviewOf(raw: unknown): MemoReview | null {
+    const r = recordOf(raw)
+    if (typeof r.at !== 'string' || !Array.isArray(r.proposals)) return null
+    const proposals = r.proposals.flatMap((item): StoredProposal[] => {
+        const p = recordOf(item)
+        const quoteAt = anchorOf(p.quoteAt)
+        if (typeof p.id !== 'string') return []
+        if (p.kind === 'reminder' && typeof p.title === 'string' && isMemoDay(p.date)) {
+            return [{ kind: 'reminder', id: p.id, title: p.title, date: p.date, quoteAt }]
+        }
+        if (p.kind === 'dueDate' && typeof p.deliverableId === 'string' && typeof p.deliverableName === 'string' && isMemoDay(p.newDate)) {
+            return [{
+                kind: 'dueDate', id: p.id, deliverableId: p.deliverableId, docId: typeof p.docId === 'string' ? p.docId : null,
+                deliverableName: p.deliverableName, currentDate: isMemoDay(p.currentDate) ? p.currentDate : null, newDate: p.newDate, quoteAt,
+            }]
+        }
+        if (p.kind === 'deliverable' && typeof p.name === 'string') {
+            return [{ kind: 'deliverable', id: p.id, name: p.name, dueDate: isMemoDay(p.dueDate) ? p.dueDate : null, quoteAt }]
+        }
+        return []
+    })
+    const skipped = Array.isArray(r.skipped)
+        ? r.skipped.flatMap((item): StoredSkipped[] => {
+            const k = recordOf(item)
+            return typeof k.reason === 'string' ? [{ reason: k.reason, quoteAt: anchorOf(k.quoteAt) }] : []
+        })
+        : []
+    return {
+        at: r.at,
+        by: r.by === 'person' ? 'person' : 'auto',
+        proposals,
+        skipped,
+        dropped: countOf(r.dropped) ?? 0,
+        dismissed: r.dismissed === true,
+    }
+}
+
 /** A memo file's `settings.memo`, or null when the row isn't a memo. */
 export function parseMemoSettings(settings: unknown): MemoSettings | null {
     const m = recordOf(recordOf(settings).memo)
@@ -208,11 +252,16 @@ export function parseMemoSettings(settings: unknown): MemoSettings | null {
         speakers: countOf(m.speakers),
         createdAt: stringOf(m.createdAt),
         applied: appliedOf(m.applied),
+        review: reviewOf(m.review),
     }
 }
 
-/** The card's row for a memo file. */
-export function memoListItem(row: { id: string; docId: string | null; fileName: string; createdAt: Date | string }, memo: MemoSettings): MemoListItem {
+/** The card's row for a memo file. `raidSuggested`: RAID suggestions from it still waiting (§13). */
+export function memoListItem(
+    row: { id: string; docId: string | null; fileName: string; createdAt: Date | string },
+    memo: MemoSettings,
+    raidSuggested = 0,
+): MemoListItem {
     return {
         id: row.id,
         docId: row.docId,
@@ -223,6 +272,8 @@ export function memoListItem(row: { id: string; docId: string | null; fileName: 
         source: memo.source,
         durationMinutes: memo.durationMinutes,
         appliedCount: memo.applied.length,
+        toReview: waitingActionItems(memo) + raidSuggested,
+        reviewedAt: memo.review?.at ?? null,
         createdAt: memo.createdAt || new Date(row.createdAt).toISOString(),
     }
 }
@@ -298,3 +349,162 @@ export function withoutMemoTree<T extends { externalId: string | null; parentId:
     }
     return rows.filter((r) => !(r.externalId && hidden.has(r.externalId)) && !parseMemoSettings(r.settings))
 }
+
+// ── Action items waiting on a memo (§13) ──────────────────────────────────────────────────────
+
+/*
+ * When a memo is added, Brio identifies its action items and they wait on the memo until someone applies
+ * or dismisses them. No memo text is stored for that: not a quote, not a skipped line. Each quote is kept
+ * as where it sits in the memo (QuoteAnchor) and filled in from the memo itself, which the pane reads from
+ * storage anyway, whenever the review is shown. A memo edited since then says so instead.
+ */
+
+/** Where a quote sits in a memo: offset and length in its match text (memoMatchText), and a short hash. */
+export interface QuoteAnchor {
+    at: number
+    length: number
+    hash: string
+}
+
+type WithoutQuote<T> = Omit<T, 'quote'> & { quoteAt: QuoteAnchor | null }
+export type StoredProposal = WithoutQuote<ReminderProposal> | WithoutQuote<DueDateProposal> | WithoutQuote<DeliverableProposal>
+export interface StoredSkipped {
+    reason: string
+    quoteAt: QuoteAnchor | null
+}
+
+/** `settings.memo.review`: the last identification of a memo's action items, quotes as anchors only. */
+export interface MemoReview {
+    /** ISO time it was identified. */
+    at: string
+    /** On its own when the memo was added, or by a person with the sparkle. */
+    by: 'auto' | 'person'
+    proposals: StoredProposal[]
+    skipped: StoredSkipped[]
+    dropped: number
+    /** Someone dismissed them all: nothing waits. */
+    dismissed: boolean
+}
+
+function anchorOf(raw: unknown): QuoteAnchor | null {
+    const a = recordOf(raw)
+    return typeof a.at === 'number' && typeof a.length === 'number' && typeof a.hash === 'string' && a.at >= 0 && a.length > 0
+        ? { at: a.at, length: a.length, hash: a.hash }
+        : null
+}
+
+/**
+ * A memo's text as quotes are matched in it, the same rule as lib/ai/notes-proposals.ts: curly quotes,
+ * dashes and runs of whitespace are not differences. Case is kept, so a quote reads as written.
+ */
+export function memoMatchText(s: string): string {
+    return s
+        .replace(/[\u2018\u2019\u201B\u2032]/g, "'")
+        .replace(/[\u201C\u201D\u201E\u2033]/g, '"')
+        .replace(/[\u2013\u2014\u2212]/g, '-')
+        .replace(/\s+/g, ' ')
+        .trim()
+}
+
+/** FNV-1a, 32 bits: tells a quote from whatever now sits at its place, without keeping the quote. */
+export function quoteHash(s: string): string {
+    let h = 0x811c9dc5
+    for (let i = 0; i < s.length; i++) {
+        h ^= s.charCodeAt(i)
+        h = Math.imul(h, 0x01000193) >>> 0
+    }
+    return h.toString(16).padStart(8, '0')
+}
+
+/** Where `quote` sits in a memo's match text; null when it isn't there. */
+export function anchorQuote(matchText: string, quote: string): QuoteAnchor | null {
+    const q = memoMatchText(quote)
+    if (!q) return null
+    const at = matchText.indexOf(q)
+    return at < 0 ? null : { at, length: q.length, hash: quoteHash(q) }
+}
+
+/** The quote back from the memo, or null when the memo no longer has it there. */
+export function quoteFromAnchor(matchText: string, anchor: QuoteAnchor | null): string | null {
+    if (!anchor) return null
+    const q = matchText.slice(anchor.at, anchor.at + anchor.length)
+    return q.length === anchor.length && quoteHash(q) === anchor.hash ? q : null
+}
+
+/** A proposal as it's stored: everything but its quote, which becomes an anchor. */
+export function storedProposalOf(p: NotesProposal, matchText: string): StoredProposal {
+    const { quote, ...rest } = p
+    return { ...rest, quoteAt: anchorQuote(matchText, quote) } as StoredProposal
+}
+
+/** A review to store from what Brio found in a memo. */
+export function memoReviewOf(
+    found: { proposals: NotesProposal[]; skipped: SkippedLine[]; dropped: number },
+    memoText: string,
+    by: MemoReview['by'],
+    at: Date = new Date(),
+): MemoReview {
+    const matchText = memoMatchText(memoText)
+    return {
+        at: at.toISOString(),
+        by,
+        proposals: found.proposals.map((p) => storedProposalOf(p, matchText)),
+        skipped: found.skipped.map((k) => ({ reason: k.reason, quoteAt: anchorQuote(matchText, k.quote) })),
+        dropped: found.dropped,
+        dismissed: false,
+    }
+}
+
+/** What the memo now says where each quote was. */
+export const MEMO_CHANGED_QUOTE = 'The memo has changed since, so this line isn’t shown.'
+
+/** The review with its quotes filled in from the memo's text, as the panel shows proposals. */
+export function resolveMemoReview(review: MemoReview, memoText: string): { proposals: NotesProposal[]; skipped: SkippedLine[]; dropped: number } {
+    const matchText = memoMatchText(memoText)
+    return {
+        proposals: review.proposals.map(({ quoteAt, ...rest }) => ({ ...rest, quote: quoteFromAnchor(matchText, quoteAt) ?? MEMO_CHANGED_QUOTE }) as NotesProposal),
+        skipped: review.skipped.flatMap((k) => {
+            const quote = quoteFromAnchor(matchText, k.quoteAt)
+            return quote ? [{ quote, reason: k.reason }] : []
+        }),
+        dropped: review.dropped,
+    }
+}
+
+/** Whether a stored proposal was applied: the same kind, target and day as an applied action. */
+function isStoredApplied(p: StoredProposal, applied: MemoAppliedAction[]): boolean {
+    if (p.kind === 'deliverable') return false
+    const target = p.kind === 'reminder' ? normalize(p.title) : p.deliverableId
+    const date = p.kind === 'reminder' ? p.date : p.newDate
+    return applied.some((a) => a.kind === p.kind && a.date === date && a.target === target)
+}
+
+/** The stored proposals already applied from the memo, by id. */
+export function appliedStoredIds(review: MemoReview, applied: MemoAppliedAction[]): string[] {
+    return review.proposals.filter((p) => isStoredApplied(p, applied)).map((p) => p.id)
+}
+
+/** Action items still waiting on the memo: identified, not dismissed, not applied. A new deliverable counts until dismissed. */
+export function waitingActionItems(memo: Pick<MemoSettings, 'review' | 'applied'>): number {
+    const review = memo.review
+    if (!review || review.dismissed) return 0
+    return review.proposals.filter((p) => !isStoredApplied(p, memo.applied)).length
+}
+
+/** A RAID suggestion from a memo, as its Action items column shows it. */
+export interface MemoRaidSuggestion {
+    id: string
+    type: 'RISK' | 'ASSUMPTION' | 'ISSUE' | 'DECISION'
+    title: string
+}
+
+/** What GET …/memos/[documentId]/review answers: what waits on the memo, quotes still anchors. */
+export interface MemoReviewPayload {
+    /** Null when nothing waits: never identified, or dismissed. */
+    review: MemoReview | null
+    alreadyApplied: string[]
+    /** What a reminder needs to point back to its engagement. */
+    engagement: { id: string; name: string; firmId: string; ctaUrl: string | null }
+    raid: MemoRaidSuggestion[]
+}
+

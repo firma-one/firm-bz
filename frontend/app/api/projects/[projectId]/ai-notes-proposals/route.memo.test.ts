@@ -22,6 +22,7 @@ const h = vi.hoisted(() => ({
     create: vi.fn(),
     getRenderableContent: vi.fn(),
     recordAiUsage: vi.fn(async () => {}),
+    update: vi.fn<(args: { where: { id: string }; data: { settings: Record<string, unknown> } }) => Promise<object>>(async () => ({})),
 }))
 
 vi.mock('@/utils/supabase/server', () => ({
@@ -62,6 +63,8 @@ vi.mock('@/lib/prisma', () => ({
         engagementDocument: {
             findMany: async () => [],
             findFirst: async ({ where }: { where: Record<string, unknown> }) => h.docs.find((d) => matches(d, where)) ?? null,
+            findUnique: async ({ where }: { where: { id: string } }) => h.docs.find((d) => d.id === where.id) ?? null,
+            update: h.update,
         },
         engagement: {
             findUnique: async () => ({
@@ -133,6 +136,12 @@ describe('Find actions on an internal memo', () => {
         // Titled differently this time, but the same line on the same day: shown as done.
         expect(data.alreadyApplied).toEqual(['reminder-1'])
         expect(h.recordAiUsage).toHaveBeenCalledWith(expect.objectContaining({ feature: 'notesProposals' }))
+
+        // They wait on the memo (§13), with no word of it kept: the quote is a place in the memo, not text.
+        const stored = h.update.mock.calls.at(-1)![0].data.settings as { memo: { review: { by: string; proposals: Array<Record<string, unknown>> } } }
+        expect(stored.memo.review.by).toBe('person')
+        expect(stored.memo.review.proposals[0]).toMatchObject({ kind: 'reminder', title: 'Chase the 1099-B', quoteAt: { at: expect.any(Number) } })
+        expect(JSON.stringify(stored.memo.review)).not.toContain('brokerage 1099-B, still missing')
     })
 
     it('404 for another engagement\'s memo, without reading it', async () => {

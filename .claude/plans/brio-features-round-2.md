@@ -379,3 +379,64 @@ someone who hadn't seen the app. Labels only: the feature keys stay `dayBrief`, 
 `brief`. Renamed across the app, its limit and failure messages, the /tour (the Firm Overview step's
 narration was re-recorded), the website and the campaign email. Website copy that explains it to
 newcomers says "tells you each morning what needs you" / "morning rundown".
+
+## 13. A memo reviewed in one place (Deepak, 2026-11-14; building)
+
+Brio identifies a memo's action items, and its RAID suggestions, automatically when the memo is added,
+and both wait on the memo. Nothing applies itself: action items wait for Apply, RAID suggestions for
+Accept, as before. The daily RAID check and Check now read threads only, so a memo is never read twice.
+
+- **When.** In the memos POST route, after the response (Next `after()`, no Inngest): read the memo
+  (readMemoText), identify its action items, then suggest its RAID entries. A failure or timeout leaves
+  the memo as it was: the sparkle runs it by hand.
+- **Credits.** One per memo, charged to the firm (no person, so no per-person limit): the action items
+  call is `notesProposals` (1); the memo's RAID pass is its own feature at 0, metered for usage. A firm
+  with no credits left is skipped quietly. Firm setting, on by default: "Identify action items when a
+  memo is added".
+- **What's stored, and what isn't.** Action items wait in the memo row's `settings.memo.review`: kind,
+  title/date/deliverable/name, never the quote. Each quote (and each skipped line) is kept as where it
+  sits in the memo (offset and length in the memo's match text, normalizeForMatch) and a short hash; the
+  memo view fills it in from the memo it already reads from storage, and says when the memo has changed.
+  RAID suggestions are SUGGESTED rows as today, sourced to the memo, no memo text.
+  (Found while building: an applied action already stores a lowercase copy of its quote in
+  `settings.memo.applied`, so "firmä keeps no copy of a memo's text" isn't strictly true today.)
+- **The memo view.** Waiting action items show without a click, editable, Apply as now; the memo's RAID
+  suggestions show under them with Accept and Dismiss (the RAID log's own routes). Dismiss all clears what
+  waits. The memo row says "N to review". The sparkle runs action items again by hand (per person, 1 credit).
+- **Never applies.** The job writes proposals and SUGGESTED rows only: no reminder, no due date, no
+  accepted RAID entry. A test pins it.
+
+## 14. Next, from Deepak (2026-11-14, for the next session)
+
+0. **First: commit and push** the uncommitted round on `dev` (about 50 files: memos in three fixed-height
+   columns with editable action items, "Identify action items", folder-lock on internal-only folders shown
+   only inside deliverables, and §13's memo review on add). All 3,826 tests passed on 2026-11-14; checked
+   on the tour, not yet with a live memo in the app. Then try adding a memo in the app (after() on Vercel).
+
+1. **RAID as its own engagement tab.** Move the RAID log out of Discussions into a tab of its own
+   (Overview · Files · Board · RAID · Discussions · Audit…, internal only with the lock, like Audit); the
+   Overview's RAID card and every `raidLogHref` link point at it; /tour too. Later, optional: a firm-level
+   card on Firm Overview listing open risks and issues across engagements, each linking to its tab.
+   (The zero-credit `memoRaid` feature from §13 is already in the AI feature list.)
+2. **Native comment threads from inside documents.** Read Google Docs/Sheets/Slides comments (Drive API
+   `comments.list`, also works for Office files kept in Drive) and Microsoft Office comments on OneDrive
+   (Graph has no comments API for Word/Excel/PowerPoint: the file would have to be downloaded and its
+   comments read from the OOXML parts), show them as a sub-tab under Discussions, and let Brio identify
+   action items in them as it does for internal memos. **Decide first:** reading them, above all
+   downloading an Office file to do it, conflicts with the published promise that Brio "never opens the
+   files you deliver" (website, FAQ, Trust Center, email). The copy and the promise need to change with it.
+3. **Edit a memo.** Rename its title, re-upload the whole transcript or minutes, or edit the notes in
+   place. Risks to handle, given §13:
+   - *Waiting action items* keep their quotes as positions in the memo (anchors); after an edit a moved
+     line shows "The memo has changed since" rather than the wrong words. An edit should offer to
+     identify the action items again (a new review, one credit), not do it silently on every keystroke.
+   - *Applied actions* stay applied (the reminder or due date exists). A new review marks them "Applied
+     earlier" by kind, target and date (`appliedStoredIds`); an edit that changes a date or a reminder's
+     words can make the same action look new, so guard against applying a duplicate (match on the
+     deliverable or a close title, and show what was applied from this memo).
+   - *RAID suggestions* from the old text that still wait should be withdrawn on a re-upload and the memo
+     read again; accepted entries stay in the log (they record what was decided), their source chip still
+     points at the memo.
+   - *Rename* renames the file in Drive or OneDrive (date-title.md) and the row; RAID source labels and
+     links that name the memo must follow (or be computed from the row when shown).
+   - Every edit is audited; a memo edited in storage directly is the same case as an in-app edit.

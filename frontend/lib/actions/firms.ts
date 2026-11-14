@@ -518,7 +518,7 @@ export type FirmReminderEmailConfig = {
 // settings by id and is called from crons and webhooks with no session, so it can't be a server action.
 
 
-export type FirmUpdate = { name?: string; branding?: FirmBranding; currency?: FirmCurrency; betaFeatures?: Record<string, boolean>; internalMemo?: string | null; industry?: string | null; companySizeBracket?: string | null; companyWebsite?: string | null; linkedInUrl?: string | null; billingAddress?: string | null; notes?: string | null; allowDomainAccess?: boolean; allowedEmailDomain?: string | null; reminderEmailConfig?: FirmReminderEmailConfig; externalSections?: { engagementHealth: boolean; fileOrganization: boolean; documentActivity: boolean; brioForReviewers?: boolean } }
+export type FirmUpdate = { name?: string; branding?: FirmBranding; currency?: FirmCurrency; betaFeatures?: Record<string, boolean>; internalMemo?: string | null; industry?: string | null; companySizeBracket?: string | null; companyWebsite?: string | null; linkedInUrl?: string | null; billingAddress?: string | null; notes?: string | null; allowDomainAccess?: boolean; allowedEmailDomain?: string | null; reminderEmailConfig?: FirmReminderEmailConfig; externalSections?: { engagementHealth: boolean; fileOrganization: boolean; documentActivity: boolean; brioForReviewers?: boolean }; brio?: { memoReview: boolean } }
 
 export async function updateFirm(firmSlug: string, data: FirmUpdate): Promise<ActionResult> {
     return asResult('updateFirm', () => updateFirmOrThrow(firmSlug, data))
@@ -540,7 +540,7 @@ async function updateFirmOrThrow(firmSlug: string, data: FirmUpdate): Promise<vo
     let payload: any = {}
     if (data.name !== undefined) payload.name = data.name
 
-    if (data.branding !== undefined || data.currency !== undefined || data.betaFeatures !== undefined || data.reminderEmailConfig !== undefined || data.internalMemo !== undefined || data.industry !== undefined || data.companySizeBracket !== undefined || data.companyWebsite !== undefined || data.linkedInUrl !== undefined || data.billingAddress !== undefined || data.notes !== undefined || data.externalSections !== undefined) {
+    if (data.branding !== undefined || data.currency !== undefined || data.betaFeatures !== undefined || data.reminderEmailConfig !== undefined || data.internalMemo !== undefined || data.industry !== undefined || data.companySizeBracket !== undefined || data.companyWebsite !== undefined || data.linkedInUrl !== undefined || data.billingAddress !== undefined || data.notes !== undefined || data.externalSections !== undefined || data.brio !== undefined) {
         const current = (firm.settings as Record<string, unknown>) || {}
         if (data.branding !== undefined) {
             const existing = (current.branding as Record<string, unknown>) ?? {}
@@ -594,6 +594,11 @@ async function updateFirmOrThrow(firmSlug: string, data: FirmUpdate): Promise<vo
         }
         if (data.externalSections !== undefined) {
             payload.settings = { ...(payload.settings ?? current), externalSections: data.externalSections }
+        }
+        // Brio's firm-wide switches (lib/memos/memo-review.ts: identify a new memo's action items).
+        if (data.brio !== undefined) {
+            const brio = ((payload.settings ?? current) as { brio?: Record<string, unknown> }).brio ?? {}
+            payload.settings = { ...(payload.settings ?? current), brio: { ...brio, memoReview: data.brio.memoReview } }
         }
     }
 

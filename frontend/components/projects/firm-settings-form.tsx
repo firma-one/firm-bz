@@ -197,6 +197,8 @@ export function FirmSettingsForm({
     const [extFileOrganization, setExtFileOrganization] = useState(false)
     const [extDocumentActivity, setExtDocumentActivity] = useState(false)
     const [extBrioForReviewers, setExtBrioForReviewers] = useState(false)
+    // On unless a firm admin turned it off (lib/memos/memo-review.ts).
+    const [brioMemoReview, setBrioMemoReview] = useState(true)
     const [saving, setSaving] = useState(false)
     const [mainDirty, setMainDirty] = useState(false)
     const [appDirty, setAppDirty] = useState(false)
@@ -309,6 +311,7 @@ export function FirmSettingsForm({
                     setExtFileOrganization(es.fileOrganization ?? false)
                     setExtDocumentActivity(es.documentActivity ?? false)
                     setExtBrioForReviewers(es.brioForReviewers ?? false)
+                    setBrioMemoReview(((settings.brio as Record<string, unknown> | undefined)?.memoReview) !== false)
                     const savedDomainAccess = firm.allowDomainAccess === true
                     const savedDomain = firm.allowedEmailDomain ?? ''
                     if (!savedDomainAccess && !savedDomain) {
@@ -488,6 +491,7 @@ export function FirmSettingsForm({
                     documentActivity: extDocumentActivity,
                     brioForReviewers: extBrioForReviewers,
                 },
+                brio: { memoReview: brioMemoReview },
             })
             if (!result.ok) {
                 addToast({ type: 'error', title: "Couldn't save firm settings", message: result.error })
@@ -883,6 +887,18 @@ export function FirmSettingsForm({
                                 ))}
                             </NotionTableBody>
                         </NotionTable>
+                    </section>
+
+                    <section>
+                        <h3 className={SETTINGS_SECTION_HEADING_CLASS}><Brio /></h3>
+                        <SettingSwitchRow
+                            icon={<Sparkles />}
+                            title="Identify action items when a memo is added"
+                            description="Brio reads a new internal memo once, and its action items and RAID suggestions wait on it for someone to apply or accept. Nothing changes on its own. 1 credit per memo, from your firm's credits."
+                            checked={brioMemoReview}
+                            onChange={(v) => { setBrioMemoReview(v); setAppDirty(true) }}
+                            disabled={!loaded}
+                        />
                     </section>
 
                     <section>

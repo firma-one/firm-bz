@@ -28,6 +28,8 @@ const MEMO: MemoListItem = {
     source: 'notes',
     durationMinutes: null,
     appliedCount: 0,
+    toReview: 0,
+    reviewedAt: null,
     createdAt: '2026-11-10T17:00:00.000Z',
 }
 const TRANSCRIPT: MemoListItem = {
@@ -102,7 +104,7 @@ describe('the rows', () => {
         expect(within(first).getByText('Alex · notes')).toBeTruthy()
         const second = screen.getByTestId(`memo-${TRANSCRIPT.id}`)
         expect(within(second).getByText('Sam · transcript, 38 min')).toBeTruthy()
-        expect(within(second).getByText('2 actions applied')).toBeTruthy()
+        expect(within(second).getByText('2 action items applied')).toBeTruthy()
     })
 
     it('Open opens the file in Files', async () => {
@@ -122,7 +124,7 @@ describe('the rows', () => {
         renderCard()
         await screen.findByText('Weekly check-in')
         expect(screen.queryByRole('button', { name: /Add internal memo/ })).toBeNull()
-        expect(screen.queryByRole('button', { name: /Find actions/ })).toBeNull()
+        expect(screen.queryByRole('button', { name: /Identify action items/ })).toBeNull()
         expect(screen.getByRole('link', { name: 'Open Weekly check-in' })).toBeTruthy()
     })
 })
@@ -130,9 +132,9 @@ describe('the rows', () => {
 describe('Find actions', () => {
     it('asks for the memo by id and shows the proposals under its row, applied ones as done', async () => {
         renderCard()
-        fireEvent.click(await screen.findByRole('button', { name: 'Find actions in Weekly check-in' }))
+        fireEvent.click(await screen.findByRole('button', { name: 'Identify action items in Weekly check-in' }))
         const row = screen.getByTestId(`memo-${MEMO.id}`)
-        expect(await within(row).findByText('Applied actions note this memo, so running it again shows them as done.')).toBeTruthy()
+        expect(await within(row).findByText('Applied action items note this memo, so identifying them again shows them as done.')).toBeTruthy()
         expect(calls.find((c) => c.url.endsWith('/ai-notes-proposals'))?.body).toEqual(expect.objectContaining({ memoDocumentId: MEMO.id }))
         expect(calls.find((c) => c.url.endsWith('/ai-notes-proposals'))?.body).not.toHaveProperty('notes')
         expect(within(row).getByText('Applied earlier from this memo')).toBeTruthy()
@@ -141,10 +143,10 @@ describe('Find actions', () => {
 
     it('applies a reminder as a person would, then notes it on the memo', async () => {
         renderCard()
-        fireEvent.click(await screen.findByRole('button', { name: 'Find actions in Weekly check-in' }))
+        fireEvent.click(await screen.findByRole('button', { name: 'Identify action items in Weekly check-in' }))
         const row = screen.getByTestId(`memo-${MEMO.id}`)
         fireEvent.click(await within(row).findByRole('button', { name: 'Apply 1 selected' }))
-        await waitFor(() => expect(within(row).getByText('1 action applied')).toBeTruthy())
+        await waitFor(() => expect(within(row).getByText('1 action item applied')).toBeTruthy())
         expect(h.createManualReminder).toHaveBeenCalledWith(expect.objectContaining({
             action: 'Chase the 1099-B', dateValue: '2026-11-16', entityValue: 'p1',
             note: 'From the memo “Weekly check-in”: “I need to chase the brokerage 1099-B, still missing”',

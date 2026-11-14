@@ -1,7 +1,6 @@
 import 'server-only'
 import { createHash } from 'crypto'
 import { prisma } from '@/lib/prisma'
-import { listMemos } from '@/lib/memos/memo-store'
 import type { RaidConversationState } from './raid-shared'
 import { lastCheckedAtOf } from './raid-store'
 
@@ -12,8 +11,8 @@ import { lastCheckedAtOf } from './raid-store'
  * conversation now.
  *
  * The fingerprint hashes what a PERSON changed, never what the CLOCK changed: per document with thread
- * messages, how many and when the newest was written; per memo, when it was made or last changed. A new
- * message, a new or edited memo, and a deleted message all move it; a day passing never does.
+ * messages, how many and when the newest was written. A new message and a deleted message move it; a
+ * day passing never does. Memos don't: each is read once, when it's added (§13).
  */
 
 /** What the fingerprint is made of, as read from the database. */
@@ -32,31 +31,19 @@ const iso = (v: unknown): string | null =>
  * anything written while it ran shows as new afterwards.
  */
 export async function loadConversationStamps(engagementId: string, until?: Date): Promise<ConversationStamps> {
-    const [groups, memoList] = await Promise.all([
-        prisma.docCommentMessage.groupBy({
-            by: ['projectDocumentId'],
-            where: { engagementId, ...(until ? { createdAt: { lte: until } } : {}) },
-            _count: { _all: true },
-            _max: { createdAt: true },
-        }),
-        listMemos(engagementId),
-    ])
-    const memoRows = memoList.length > 0
-        ? await prisma.engagementDocument.findMany({ where: { engagementId, id: { in: memoList.map((m) => m.id) } }, select: { id: true, metadata: true } })
-        : []
-    const modified = new Map(memoRows.map((r) => [r.id, iso((r.metadata as { modifiedTime?: unknown } | null)?.modifiedTime)]))
-
+    const groups = await prisma.docCommentMessage.groupBy({
+        by: ['projectDocumentId'],
+        where: { engagementId, ...(until ? { createdAt: { lte: until } } : {}) },
+        _count: { _all: true },
+        _max: { createdAt: true },
+    })
     return {
         threads: groups.flatMap((g) => {
             const latestAt = iso(g._max.createdAt)
             return latestAt ? [{ documentId: g.projectDocumentId, count: g._count._all, latestAt }] : []
         }),
-        memos: memoList.flatMap((m) => {
-            const createdAt = iso(m.createdAt)
-            if (!createdAt || (until && new Date(createdAt) > until)) return []
-            const changed = modified.get(m.id)
-            return [{ id: m.id, changedAt: changed && changed > createdAt ? changed : createdAt }]
-        }),
+        // Memos are read when they're added, on the memo (§13), not by the check, so they don't move it.
+        memos: [],
     }
 }
 

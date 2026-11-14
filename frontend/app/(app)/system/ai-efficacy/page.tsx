@@ -27,10 +27,11 @@ const FEATURE_LABELS: Record<string, string> = {
     statusUpdate: 'Client status updates',
     replyDraft: 'Reply drafts',
     nudgeDraft: 'Nudge drafts',
-    notesProposals: 'Notes into actions',
+    notesProposals: 'Action items from notes',
     reviewerChat: 'Reviewer questions',
     dayBrief: 'Your brief',
     raidCheck: 'RAID check',
+    memoRaid: 'RAID from a memo',
 }
 
 /**

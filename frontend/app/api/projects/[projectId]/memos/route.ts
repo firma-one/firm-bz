@@ -1,12 +1,15 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { blockIfEngagementCompleted, getEngagementStatus } from '@/lib/engagement-access'
 import { providerOf } from '@/lib/connectors/content-failure'
 import { memoAuthor, memoFailureResponse, memoRouteAccess } from '@/lib/memos/memo-access'
 import { listMemos, saveMemo } from '@/lib/memos/memo-store'
+import { reviewMemoOnAdd } from '@/lib/memos/memo-review'
 import { MEMO_MAX_CHARS, cleanMemoTitle, isMemoDay } from '@/lib/memos/memo-shared'
 
 export const dynamic = 'force-dynamic'
+// Room for the review that runs after a save answers: two model calls and a read from storage.
+export const maxDuration = 120
 
 /**
  * GET /api/projects/[projectId]/memos
@@ -23,6 +26,9 @@ export const dynamic = 'force-dynamic'
  *
  * Both: a Lead or a Contributor · Full Access (lib/memos/memo-access.ts). A completed engagement is read
  * only, so saving is refused.
+ *
+ * After a save has answered, Brio identifies the memo's action items and suggests its RAID entries, which
+ * wait on the memo (lib/memos/memo-review.ts, §13). Nothing is applied; a failure leaves the memo as saved.
  */
 export async function GET(
     _request: NextRequest,
@@ -94,6 +100,12 @@ export async function POST(
             speakers: count(body?.speakers, 500),
             author: memoAuthor(access.user),
         })
+
+        // Once the answer has gone: the memo's action items and RAID suggestions, waiting on it (§13).
+        const firmId = access.ctx.firmId
+        after(() => reviewMemoOnAdd({ engagementId: projectId, firmId, memoId: saved.memo.id }).then((outcome) => {
+            if (outcome.status !== 'reviewed' && outcome.status !== 'off') console.info('[memos] new memo not reviewed:', outcome.status)
+        }))
 
         return NextResponse.json(
             { data: { memo: saved.memo, fileName: saved.fileName }, ...(saved.warning ? { warning: saved.warning } : {}) },

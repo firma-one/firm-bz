@@ -3,7 +3,6 @@ import type Anthropic from '@anthropic-ai/sdk'
 import { prisma } from '@/lib/prisma'
 import { AI_EFFORT, AI_MODEL, isAiConfigured } from '@/lib/ai/client'
 import { AiCreditLimitError, getGuardedAnthropic, meterAiCall, type AiScope } from '@/lib/ai/guarded-client'
-import { listMemos, readMemoText } from '@/lib/memos/memo-store'
 import { loadPeople } from '@/lib/files/file-creator'
 import { formatDisplayName } from '@/lib/comments/mentions'
 import { ROLE_NAME, isPersonaUiSlug } from '@/lib/persona-ui-groups'
@@ -408,19 +407,6 @@ async function loadNewMessages(engagementId: string, since: Date, until: Date): 
     }
 }
 
-/** Memos made, or changed in storage, since the last check: only memo files, never any other file. */
-async function loadChangedMemos(engagementId: string, since: Date): Promise<Array<{ id: string; title: string; date: string }>> {
-    const memos = await listMemos(engagementId)
-    if (memos.length === 0) return []
-    const rows = await prisma.engagementDocument.findMany({ where: { engagementId, id: { in: memos.map((m) => m.id) } }, select: { id: true, metadata: true } })
-    const modified = new Map(rows.map((r) => [r.id, (r.metadata as { modifiedTime?: unknown } | null)?.modifiedTime]))
-    const after = (iso: unknown) => typeof iso === 'string' && !Number.isNaN(new Date(iso).getTime()) && new Date(iso) > since
-    return memos
-        .filter((m) => after(m.createdAt) || after(modified.get(m.id)))
-        .slice(0, MAX_MEMOS)
-        .map((m) => ({ id: m.id, title: m.title, date: m.date }))
-}
-
 /** The open log, newest first, for dedupe. */
 async function loadOpenLog(engagementId: string): Promise<RaidCheckLogItem[]> {
     const rows = await prisma.engagementRaidItem.findMany({
@@ -481,58 +467,20 @@ export type RaidCheckOutcome =
     | { ok: true; status: 'checked'; suggested: number; dropped: number; unreadMemos: string[]; lastCheckedAt: string }
     | { ok: false; reason: 'gone' | 'completed' | 'unconfigured' | 'declined' | 'no_answer' }
 
-/**
- * Checks one engagement. Reads its last check fresh, so a Check now and the daily run never both start
- * from a stale point. Nothing new: no model call and no credit, and the check is still noted. Otherwise
- * one call, metered whatever it returns; a refusal or a turn without the tool call leaves the last check
- * where it was, so the next one reads the same messages again.
- *
- * Throws `AiCreditLimitError` before any tokens are spent when the group is over its allowance.
- */
-export async function runRaidCheck(params: { engagementId: string; firmId: string; userId: string | null; now?: Date }): Promise<RaidCheckOutcome> {
-    const now = params.now ?? new Date()
-    const engagement = await prisma.engagement.findUnique({
-        where: { id: params.engagementId },
-        select: { name: true, status: true, isDeleted: true, settings: true },
-    })
-    if (!engagement || engagement.isDeleted) return { ok: false, reason: 'gone' }
-    if (engagement.status === 'COMPLETED') return { ok: false, reason: 'completed' }
-
-    const since = checkSince(engagement.settings, now)
-    const [{ messages, omitted }, changedMemos, stamps] = await Promise.all([
-        loadNewMessages(params.engagementId, since, now),
-        loadChangedMemos(params.engagementId, since),
-        loadConversationStamps(params.engagementId, now),
-    ])
-    // What this check covers, so the log can tell when the conversation moves on from it.
-    const fingerprint = fingerprintConversation(stamps)
-    if (messages.length === 0 && changedMemos.length === 0) {
-        await writeLastCheckedAt(params.engagementId, now, fingerprint)
-        return { ok: true, status: 'nothing_new', lastCheckedAt: now.toISOString() }
-    }
-
-    const scope: AiScope = { firmId: params.firmId, userId: params.userId, feature: 'raidCheck' }
-    const client = await getGuardedAnthropic(scope)
+/** One model call over what Brio is shown, its suggestions checked and saved as SUGGESTED rows. */
+async function suggestFrom(params: {
+    engagementId: string
+    firmId: string
+    userId: string | null
+    scope: AiScope
+    engagementName: string
+    now: Date
+    messages: RaidCheckMessage[]
+    memos: RaidCheckMemo[]
+    omittedMessages: number
+}): Promise<{ ok: true; suggested: number; dropped: number } | { ok: false; reason: 'unconfigured' | 'declined' | 'no_answer' }> {
+    const client = await getGuardedAnthropic(params.scope)
     if (!client) return { ok: false, reason: 'unconfigured' }
-
-    // The memos' words, read for this call only.
-    const memos: RaidCheckMemo[] = []
-    const unreadMemos: string[] = []
-    for (const m of changedMemos) {
-        const read = await readMemoText(params.engagementId, m.id)
-        if (!read.ok) {
-            unreadMemos.push(m.title)
-            logger.warn('[raid] a memo could not be read for the check', { engagementId: params.engagementId, memoId: m.id, status: read.status })
-            continue
-        }
-        const text = read.text.trim()
-        if (!text) continue
-        memos.push({ ref: `N${memos.length + 1}`, id: m.id, title: m.title, date: m.date, text: text.length > MAX_MEMO_CHARS ? `${text.slice(0, MAX_MEMO_CHARS)}…` : text })
-    }
-    if (messages.length === 0 && memos.length === 0) {
-        await writeLastCheckedAt(params.engagementId, now, fingerprint)
-        return { ok: true, status: 'checked', suggested: 0, dropped: 0, unreadMemos, lastCheckedAt: now.toISOString() }
-    }
 
     const log = await loadOpenLog(params.engagementId)
     const message = await client.messages.create({
@@ -542,10 +490,20 @@ export async function runRaidCheck(params: { engagementId: string; firmId: strin
         system: RAID_SYSTEM_PROMPT,
         tools: [RAID_TOOL],
         tool_choice: { type: 'auto', disable_parallel_tool_use: true },
-        messages: [{ role: 'user', content: buildRaidContext({ engagementName: engagement.name, today: now, log, messages, memos, omittedMessages: omitted }) }],
+        messages: [{
+            role: 'user',
+            content: buildRaidContext({
+                engagementName: params.engagementName,
+                today: params.now,
+                log,
+                messages: params.messages,
+                memos: params.memos,
+                omittedMessages: params.omittedMessages,
+            }),
+        }],
     }, { timeout: MODEL_TIMEOUT_MS, maxRetries: 0 })
 
-    await meterAiCall(scope, {
+    await meterAiCall(params.scope, {
         inputTokens: (message.usage?.input_tokens ?? 0)
             + (message.usage?.cache_creation_input_tokens ?? 0)
             + (message.usage?.cache_read_input_tokens ?? 0),
@@ -562,22 +520,104 @@ export async function runRaidCheck(params: { engagementId: string; firmId: strin
         return { ok: false, reason: 'no_answer' }
     }
 
-    const validated = validateRaidSuggestions(call.input, { messages, memos, log })
+    const validated = validateRaidSuggestions(call.input, { messages: params.messages, memos: params.memos, log })
     const fresh = await withoutKnown(params.engagementId, validated.suggestions)
     if (fresh.length > 0) {
         await prisma.engagementRaidItem.createMany({
             data: suggestionRows({ engagementId: params.engagementId, firmId: params.firmId, userId: params.userId, suggestions: fresh }),
         })
     }
-    await writeLastCheckedAt(params.engagementId, now, fingerprint)
-    return {
-        ok: true,
-        status: 'checked',
-        suggested: fresh.length,
-        dropped: validated.dropped + (validated.suggestions.length - fresh.length),
-        unreadMemos,
-        lastCheckedAt: now.toISOString(),
+    return { ok: true, suggested: fresh.length, dropped: validated.dropped + (validated.suggestions.length - fresh.length) }
+}
+
+/**
+ * Checks one engagement's threads. Reads its last check fresh, so a Check now and the daily run never both
+ * start from a stale point. Nothing new: no model call and no credit, and the check is still noted.
+ * Otherwise one call, metered whatever it returns; a refusal or a turn without the tool call leaves the
+ * last check where it was, so the next one reads the same messages again.
+ *
+ * Memos aren't read here (§13): each memo is read once, when it's added (runMemoRaidCheck), and its
+ * suggestions wait on the memo, so nothing in a memo is suggested twice.
+ *
+ * Throws `AiCreditLimitError` before any tokens are spent when the group is over its allowance.
+ */
+export async function runRaidCheck(params: { engagementId: string; firmId: string; userId: string | null; now?: Date }): Promise<RaidCheckOutcome> {
+    const now = params.now ?? new Date()
+    const engagement = await prisma.engagement.findUnique({
+        where: { id: params.engagementId },
+        select: { name: true, status: true, isDeleted: true, settings: true },
+    })
+    if (!engagement || engagement.isDeleted) return { ok: false, reason: 'gone' }
+    if (engagement.status === 'COMPLETED') return { ok: false, reason: 'completed' }
+
+    const since = checkSince(engagement.settings, now)
+    const [{ messages, omitted }, stamps] = await Promise.all([
+        loadNewMessages(params.engagementId, since, now),
+        loadConversationStamps(params.engagementId, now),
+    ])
+    // What this check covers, so the log can tell when the conversation moves on from it.
+    const fingerprint = fingerprintConversation(stamps)
+    if (messages.length === 0) {
+        await writeLastCheckedAt(params.engagementId, now, fingerprint)
+        return { ok: true, status: 'nothing_new', lastCheckedAt: now.toISOString() }
     }
+
+    const result = await suggestFrom({
+        engagementId: params.engagementId,
+        firmId: params.firmId,
+        userId: params.userId,
+        scope: { firmId: params.firmId, userId: params.userId, feature: 'raidCheck' },
+        engagementName: engagement.name,
+        now,
+        messages,
+        memos: [],
+        omittedMessages: omitted,
+    })
+    if (!result.ok) return { ok: false, reason: result.reason }
+    await writeLastCheckedAt(params.engagementId, now, fingerprint)
+    return { ok: true, status: 'checked', suggested: result.suggested, dropped: result.dropped, unreadMemos: [], lastCheckedAt: now.toISOString() }
+}
+
+/**
+ * One memo's RAID suggestions, read when it's added (§13), beside its action items: the memo alone, no
+ * threads, and the RAID log's last check is left where it was. Its suggestions are SUGGESTED rows sourced
+ * to the memo, which wait on the memo and in the log; nothing of the memo's text is kept.
+ *
+ * Charged as `memoRaid` (0 credits: the memo's one credit is its action items), metered for usage.
+ */
+export async function runMemoRaidCheck(params: {
+    engagementId: string
+    firmId: string
+    memo: { id: string; title: string; date: string; text: string }
+    now?: Date
+}): Promise<{ ok: true; suggested: number; dropped: number } | { ok: false; reason: 'gone' | 'completed' | 'empty' | 'unconfigured' | 'declined' | 'no_answer' }> {
+    const now = params.now ?? new Date()
+    const engagement = await prisma.engagement.findUnique({
+        where: { id: params.engagementId },
+        select: { name: true, status: true, isDeleted: true },
+    })
+    if (!engagement || engagement.isDeleted) return { ok: false, reason: 'gone' }
+    if (engagement.status === 'COMPLETED') return { ok: false, reason: 'completed' }
+    const text = params.memo.text.trim()
+    if (!text) return { ok: false, reason: 'empty' }
+
+    return suggestFrom({
+        engagementId: params.engagementId,
+        firmId: params.firmId,
+        userId: null,
+        scope: { firmId: params.firmId, userId: null, feature: 'memoRaid' },
+        engagementName: engagement.name,
+        now,
+        messages: [],
+        memos: [{
+            ref: 'N1',
+            id: params.memo.id,
+            title: params.memo.title,
+            date: params.memo.date,
+            text: text.length > MAX_MEMO_CHARS ? `${text.slice(0, MAX_MEMO_CHARS)}…` : text,
+        }],
+        omittedMessages: 0,
+    })
 }
 
 // ── Once a day ────────────────────────────────────────────────────────────────────────────────
@@ -588,8 +628,8 @@ export interface RaidCheckCandidate {
 }
 
 /**
- * Engagements worth a daily check: not deleted, not completed, and with a comment message or a memo
- * made since their last check (or in the first-check window when there has been none). Everything else
+ * Engagements worth a daily check: not deleted, not completed, and with a comment message made since
+ * their last check (or in the first-check window when there has been none). Memos are read when added (§13). Everything else
  * is skipped without a model call or a credit.
  */
 export async function raidCheckCandidates(limit = MAX_DAILY_ENGAGEMENTS): Promise<RaidCheckCandidate[]> {
@@ -604,9 +644,6 @@ export async function raidCheckCandidates(limit = MAX_DAILY_ENGAGEMENTS): Promis
             AND (
               EXISTS (SELECT 1 FROM platform.doc_comment_messages m
                        WHERE m."engagementId" = e.id AND m."createdAt" > ${since})
-              OR EXISTS (SELECT 1 FROM platform.engagement_documents d
-                          WHERE d."engagementId" = e.id AND d."isFolder" = false AND d.status <> 'ARCHIVED'
-                            AND (d.settings -> 'memo') IS NOT NULL AND d."createdAt" > ${since})
             )
           ORDER BY e.id
           LIMIT $1`,

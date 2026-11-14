@@ -72,7 +72,7 @@ export function trustMapNodes(brand: string): TrustMapNode[] {
       title: 'Brio',
       subtitle: 'Never opens your deliverables',
       detail:
-        'Brio, the assistant for client delivery, works from names, statuses, dates and who is involved, and never opens the files you deliver. It reads comment text and internal memos only to draft a reply, suggest RAID entries or find actions in call notes. It never changes anything without your consent, and nothing reaches a client until a person on your team sends or publishes it.',
+        'Brio, the assistant for client delivery, works from names, statuses, dates and who is involved, and never opens the files you deliver. It reads comment text and internal memos only to draft a reply, suggest RAID entries or identify action items in call notes. It never changes anything without your consent, and nothing reaches a client until a person on your team sends or publishes it.',
       points: ['Never opens the files you deliver', 'Never changes anything without your consent', 'Nothing reaches a client until your team sends it'],
     },
   ];

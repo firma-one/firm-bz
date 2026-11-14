@@ -36,6 +36,7 @@ describe('privateSubtreeIds', () => {
 
 describe('internalOnlyTree', () => {
     const PRIVATE = { lock: { type: 'private' } }
+    const DELIVERABLE = { share: { createdAt: '2026-10-01T00:00:00Z' } }
     const row = (externalId: string, parentId: string | null, settings: object = {}) => ({ externalId, parentId, settings })
     const sorted = (ids: Set<string>) => Array.from(ids).sort()
 
@@ -48,7 +49,7 @@ describe('internalOnlyTree', () => {
     it('holds a marked file, and the folders that lead to it but not their other contents', () => {
         const { ids, ancestorIds } = internalOnlyTree([
             row('root', null),
-            row('deliverable', 'root'),
+            row('deliverable', 'root', DELIVERABLE),
             row('secret', 'deliverable', PRIVATE),
             row('open', 'deliverable'),
             row('elsewhere', 'root'),
@@ -59,6 +60,7 @@ describe('internalOnlyTree', () => {
 
     it('holds everything inside a marked folder', () => {
         const { ids } = internalOnlyTree([
+            row('deliverable', null, DELIVERABLE),
             row('notes', 'deliverable', PRIVATE),
             row('sub', 'notes'),
             row('deep', 'sub'),
@@ -67,8 +69,20 @@ describe('internalOnlyTree', () => {
     })
 
     it("doesn't hang on a cycle in provider data", () => {
-        const { ancestorIds } = internalOnlyTree([row('a', 'b', PRIVATE), row('b', 'a')])
+        const { ancestorIds } = internalOnlyTree([row('a', 'b', PRIVATE), row('b', 'a', DELIVERABLE)])
         expect(ancestorIds.size).toBeGreaterThan(0)
+    })
+
+    it('leaves out a mark outside every deliverable (the memos folder at the top), where all is internal already', () => {
+        const { ids, ancestorIds } = internalOnlyTree([
+            row('root', null),
+            row('memos', 'root', PRIVATE),
+            row('memo', 'memos', PRIVATE),
+            row('deliverable', 'root', DELIVERABLE),
+            row('secret', 'deliverable', PRIVATE),
+        ])
+        expect(sorted(ids)).toEqual(['secret'])
+        expect(sorted(ancestorIds)).toEqual(['deliverable', 'root'])
     })
 })
 

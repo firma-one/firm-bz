@@ -28,17 +28,17 @@ describe('DemoInternalMemos', () => {
         const titles = screen.getAllByText(/^(Weekly check-in|Kickoff call|Scoping call)$/).map((n) => n.textContent)
         expect(titles).toEqual(['Weekly check-in', 'Kickoff call', 'Scoping call'])
         expect(screen.getByText('Sam · transcript, 38 min')).toBeTruthy()
-        expect(screen.getByText('1 action applied')).toBeTruthy()
+        expect(screen.getByText('1 action item applied')).toBeTruthy()
     })
 
     it('Find actions shows canned proposals, and an applied one is remembered', async () => {
         render(<DemoInternalMemos engagement={engagement} today={new Date()} />)
-        fireEvent.click(await screen.findByRole('button', { name: 'Find actions in Kickoff call' }))
+        fireEvent.click(await screen.findByRole('button', { name: 'Identify action items in Kickoff call' }))
         const row = screen.getByTestId('memo-tour-memo-kickoff')
         fireEvent.click(await within(row).findByRole('button', { name: 'Apply 1 selected' }, { timeout: 3000 }))
-        await waitFor(() => expect(within(row).getByText('1 action applied')).toBeTruthy(), { timeout: 3000 })
+        await waitFor(() => expect(within(row).getByText('1 action item applied')).toBeTruthy(), { timeout: 3000 })
 
-        fireEvent.click(within(row).getByRole('button', { name: 'Find actions in Kickoff call' }))
+        fireEvent.click(within(row).getByRole('button', { name: 'Identify action items in Kickoff call' }))
         expect(await within(row).findByText('Applied earlier from this memo', {}, { timeout: 3000 })).toBeTruthy()
         expect(fetch).not.toHaveBeenCalled()
     })

@@ -280,10 +280,10 @@ const ICON_BUTTON = 'inline-flex h-7 w-7 items-center justify-center rounded-con
 export function checkStatusTip(state: Exclude<RaidConversationState, 'none'>, lastCheckedAt: string | null, now?: Date): string {
     const when = lastCheckedPhrase(lastCheckedAt, now)
     const name = ASSISTANT.name
-    if (state === 'current') return `${name} has read every thread message and memo.${when ? ` Last checked ${when}.` : ''}`
+    if (state === 'current') return `${name} has read every thread message.${when ? ` Last checked ${when}.` : ''}`
     return when
-        ? `Threads or memos changed since ${name} last checked, ${when}. ${name} reads them once a day, or now with the sparkle, at most 1 credit.`
-        : `${name} hasn't read this engagement's threads and memos yet. It reads them once a day, or now with the sparkle, at most 1 credit.`
+        ? `Threads changed since ${name} last checked, ${when}. ${name} reads them once a day, or now with the sparkle, at most 1 credit.`
+        : `${name} hasn't read this engagement's threads yet. It reads them once a day, or now with the sparkle, at most 1 credit.`
 }
 
 /**
@@ -697,9 +697,9 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
             </section>
 
             <p className="text-small text-fg-muted">
-                Status, health and Board items are free and keep themselves current. <Brio noIcon /> reads threads with new messages and new
-                memos once a day, or when you check with the sparkle: at most 1 credit per engagement per active day. <Brio noIcon /> records what
-                people decided; it never decides.
+                Status, health and Board items are free and keep themselves current. <Brio noIcon /> reads threads with new messages once a
+                day, or when you check with the sparkle: at most 1 credit per engagement per active day. A memo is read once, when it&apos;s
+                added, and its suggestions wait on the memo too. <Brio noIcon /> records what people decided; it never decides.
             </p>
         </div>
     )
@@ -796,7 +796,7 @@ export function RaidTab({ projectId, engagementBase, readOnly = false }: {
                 await refresh()
                 const said = body.data.status === 'nothing_new'
                     ? 'Nothing new since the last check.'
-                    : body.data.suggested === 0 ? 'Nothing to suggest from the new messages and memos.' : null
+                    : body.data.suggested === 0 ? 'Nothing to suggest from the new messages.' : null
                 return { message: [said, body.warning].filter(Boolean).join(' ') || null, error: null }
             } catch (e) {
                 return { message: null, error: brioFailureReason(e, BRIO_RAID_FAILED) }

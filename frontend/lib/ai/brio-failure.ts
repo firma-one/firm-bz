@@ -30,7 +30,7 @@ export const BRIO_DAY_FAILED = `${ASSISTANT.name} couldn't write your brief. Try
 export const BRIO_PROPOSALS_FAILED = `${ASSISTANT.name} couldn't read actions from these notes. Nothing was changed.`
 
 /** The RAID check could not read the conversation. Nothing was added to the log. */
-export const BRIO_RAID_FAILED = `${ASSISTANT.name} couldn't read the new messages and memos for the RAID log. Nothing was added.`
+export const BRIO_RAID_FAILED = `${ASSISTANT.name} couldn't read the new messages for the RAID log. Nothing was added.`
 
 /** Brio took longer than the surface allows. */
 export const BRIO_TOO_SLOW = `${ASSISTANT.name} took too long. Try again.`

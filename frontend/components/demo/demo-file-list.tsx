@@ -78,7 +78,7 @@ import { DELIVERABLE_ACTORS, demoDocumentStages, demoFilesIn, type DeliverableSt
 import { ACTIVITY_STAGES, type ActivityStatus } from '@/lib/sharing-settings'
 import { deriveDeliverableStage } from '@/lib/deliverable-derivation'
 import { BlockedTag } from '@/components/files/blocked-tag'
-import { PrivateMark } from '@/components/files/private-mark'
+import { InternalOnlyFolderIcon, PrivateMark } from '@/components/files/private-mark'
 import { FileTableHeaderCells } from '@/components/projects/file-table-header-cells'
 import { MissingDueWarning } from '@/components/files/missing-due-warning'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
@@ -435,7 +435,7 @@ function EntryRow({
                 <span className="flex h-4 w-4 flex-shrink-0 items-center justify-center">
                     {/* As in the app: deliverable folders and the folders inside one wear folder-plus; documents keep their type icons */}
                     {isFolder ? (
-                        deliverableStatus ? <DeliverableIcon hint /> : inside ? <DeliverableIcon hint inside /> : <Folder className="h-4 w-4 fill-surface-muted text-fg-muted" />
+                        deliverableStatus ? <DeliverableIcon hint /> : isPrivate ? <InternalOnlyFolderIcon /> : inside ? <DeliverableIcon hint inside /> : <Folder className="h-4 w-4 fill-surface-muted text-fg-muted" />
                     ) : (
                         <DocumentIcon mimeType={MIME_BY_TYPE[entry.file.type] ?? 'application/octet-stream'} className="h-4 w-4" />
                     )}
@@ -450,7 +450,7 @@ function EntryRow({
                 )}
                 {/* As in the app: the firm's Blocked tag, after the name */}
                 {blocked && <BlockedTag blocked={blocked} />}
-                {isPrivate && <PrivateMark onMakePublic={onMakePublic} />}
+                {isPrivate && !isFolder && <PrivateMark onMakePublic={onMakePublic} />}
                 {/* The deliverable marker steps aside once the Status column has room to say it. */}
                 {deliverableStatus && (
                     <Hint label={approved ? 'Deliverable — approved' : 'Deliverable'}>

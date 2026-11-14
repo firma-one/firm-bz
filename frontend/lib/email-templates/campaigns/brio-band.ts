@@ -62,8 +62,8 @@ function moments(ctx: CampaignContext): string {
       foot: 'You · fill the blanks, then send',
     }),
     timelineMoment({
-      label: '1:00 PM · Call notes into actions',
-      card: `${cardHead(ctx, 'Found 3 actions')}<strong style="font-weight:600;">Call with Dana</strong> ${muted('Internal only')}<br />
+      label: '1:00 PM · Call notes into action items',
+      card: `${cardHead(ctx, '3 action items')}<strong style="font-weight:600;">Call with Dana</strong> ${muted('Internal only')}<br />
         ${tick('Reminder: send Dana the revised launch timeline')}<br />
         ${tick('Due date: Post-Launch Retrospective Report moved')}<br />
         ${muted('&#9675; New deliverable: Media list refresh, skipped')}`,
@@ -104,14 +104,14 @@ export function meetBrioBand(ctx: CampaignContext, imageFolder: string): string 
     <img src="${emailAsset(ctx, `${imageFolder}/brio-lockup.png`)}" width="130" height="32" alt="Brio AI" style="display:block;width:130px;height:32px;margin:0 0 10px;font-family:${F.DISPLAY};font-size:24px;font-weight:700;color:#FFFFFF;" />
     ${para(`The executive assistant for client delivery, built into ${escHtml(BRAND_NAME)}`, { color: '#B5C9C1', size: 14, margin: '0 0 22px' })}
     ${displayH2(`<span style="color:${C.ELECTRIC};">Meet Brio.</span> It already knows where every engagement stands.`, '#FFFFFF')}
-    ${para(`Brio reads the delivery data in your workspace (deliverables, due dates, statuses, who’s involved) and turns it into the brief you’d write yourself if you had the time. It tells you each morning what needs you, drafts the client update, the reply and the nudge, keeps the RAID log (Risks, Assumptions, Issues and Decisions) and turns call notes into actions, and it always waits for you before anything changes.`, { color: '#B5C9C1', margin: '0 0 30px' })}
+    ${para(`Brio reads the delivery data in your workspace (deliverables, due dates, statuses, who’s involved) and turns it into the brief you’d write yourself if you had the time. It tells you each morning what needs you, drafts the client update, the reply and the nudge, keeps the RAID log (Risks, Assumptions, Issues and Decisions) and turns call notes into action items, and it always waits for you before anything changes.`, { color: '#B5C9C1', margin: '0 0 30px' })}
     <h3 style="margin:0 0 4px;font-family:${F.DISPLAY};font-size:22px;font-weight:700;letter-spacing:-0.015em;line-height:27px;color:#FFFFFF;">A day with Brio</h3>
     ${para('Eight moments from our demo firm. You make every call.', { color: '#B5C9C1', size: 14, margin: '0 0 18px' })}
     ${moments(ctx)}
     <div style="height:26px;line-height:26px;font-size:0;">&nbsp;</div>
     ${bandPanel(`
       ${eyebrow('How Brio is kept in its lane')}
-      ${checkLine('Never opens the files you deliver. Reads comments and internal memos only to draft a reply, log a risk or find actions.')}
+      ${checkLine('Never opens the files you deliver. Reads comments and internal memos only to draft a reply, log a risk or identify action items.')}
       ${checkLine('Never changes anything without your consent.')}
       ${checkLine('Nothing reaches a client until a person on your team sends or publishes it.')}
       ${checkLine('Your clients get answers only from what they can already see, never your internal notes.')}

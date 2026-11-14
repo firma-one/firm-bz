@@ -32,8 +32,8 @@ const checkbox = (name: RegExp) => screen.getByRole('checkbox', { name })
 describe('NotesProposalsReview', () => {
     it('reads as the mock: count, kinds, the change, its quote, the skipped line', () => {
         render(<NotesProposalsReview found={FOUND} apply={vi.fn()} onDismiss={vi.fn()} />)
-        expect(screen.getByRole('heading').textContent).toMatch(/found 3 actions$/)
-        expect(screen.getByText('Nothing changes until you apply it')).toBeTruthy()
+        expect(screen.getByRole('heading').textContent).toMatch(/identified 3 action items$/)
+        expect(screen.getByText('Edit any of them. Nothing changes until you apply it.')).toBeTruthy()
         expect(screen.getByText('Reminder for you')).toBeTruthy()
         expect(screen.getByText('NPT-6 · Estimated Payments Schedule')).toBeTruthy()
         expect(screen.getByText('“I need to chase the brokerage 1099-B, still missing”')).toBeTruthy()
@@ -59,6 +59,36 @@ describe('NotesProposalsReview', () => {
         expect(apply.mock.calls.map(([p]) => p.kind)).toEqual(['reminder', 'dueDate'])
         expect(screen.getByText('Reminder added')).toBeTruthy()
         expect(screen.getByRole('button', { name: 'Apply 0 selected' }).hasAttribute('disabled')).toBe(true)
+    })
+
+    it('an action item is edited before it is applied: the edit is applied, Brio\'s original goes with it, Reset undoes it', async () => {
+        const apply = vi.fn(async (_p: NotesProposal, _original: NotesProposal) => ({ ok: true as const }))
+        render(<NotesProposalsReview found={FOUND} apply={apply} onDismiss={vi.fn()} />)
+        const what = screen.getByLabelText('What') as HTMLInputElement
+        expect(what.value).toBe('Chase the brokerage 1099-B')
+
+        fireEvent.change(what, { target: { value: 'Chase the 1099-B and the K-1' } })
+        expect(screen.getByText(/Edited/)).toBeTruthy()
+        fireEvent.click(screen.getByRole('button', { name: 'Reset' }))
+        expect(what.value).toBe('Chase the brokerage 1099-B')
+        expect(screen.queryByText(/Edited/)).toBeNull()
+
+        fireEvent.change(what, { target: { value: 'Chase the 1099-B and the K-1' } })
+        fireEvent.click(checkbox(/due date/i))
+        fireEvent.click(screen.getByRole('button', { name: 'Apply 1 selected' }))
+        await waitFor(() => expect(screen.getByText('Reminder added')).toBeTruthy())
+        const [applied, original] = apply.mock.calls[0]
+        expect(applied).toEqual(expect.objectContaining({ kind: 'reminder', title: 'Chase the 1099-B and the K-1', date: '2026-11-16' }))
+        expect(original).toEqual(expect.objectContaining({ title: 'Chase the brokerage 1099-B' }))
+        // Applied: its fields are read only now.
+        expect(what.disabled).toBe(true)
+    })
+
+    it('a reminder with no words left can\'t be applied', () => {
+        render(<NotesProposalsReview found={FOUND} apply={vi.fn()} onDismiss={vi.fn()} />)
+        fireEvent.change(screen.getByLabelText('What'), { target: { value: '   ' } })
+        // Only the due date is left to apply.
+        expect(screen.getByRole('button', { name: 'Apply 1 selected' })).toBeTruthy()
     })
 
     it('an unchecked row is left out', async () => {

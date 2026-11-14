@@ -29,7 +29,7 @@ export { MEMO_PROPOSALS_FOOTNOTE, type ApplicableProposal, type MemoFound }
 /**
  * "Internal memos" on the engagement Overview (.claude/plans/brio-features-round-2.md, §8): call and
  * meeting notes kept as one Markdown file each in the engagement's "Internal Memos" folder, internal
- * only. Each row offers Find actions, which has Brio read that memo and propose reminders, due-date
+ * only. Each row offers Identify action items, which has Brio read that memo and propose reminders, due-date
  * moves and new deliverables (the same proposals as the Settings memo), and Open, which opens the file
  * in Files.
  *
@@ -58,7 +58,7 @@ export interface InternalMemosViewProps {
     /** Brio's proposals from one memo. Throws an error carrying the words to show (or an AiAbortedError). */
     findActions: (memo: MemoListItem, signal: AbortSignal) => Promise<MemoFound>
     /** Applies one reminder or due date found in `memo`. */
-    apply: (memo: MemoListItem, found: MemoFound, proposal: ApplicableProposal) => Promise<ApplyOutcome>
+    apply: (memo: MemoListItem, found: MemoFound, proposal: ApplicableProposal, original?: ApplicableProposal) => Promise<ApplyOutcome>
 }
 
 export function InternalMemosView({
@@ -165,19 +165,21 @@ export function InternalMemosView({
                                     <div className="min-w-0 flex-1">
                                         <div className="truncate text-ui font-semibold text-fg">{memo.title}</div>
                                         <div className="text-small text-fg-muted">{memoMetaLine(memo)}</div>
-                                        {memo.appliedCount > 0 && (
+                                        {memo.toReview > 0 ? (
+                                            <p className="mt-0.5 text-caption font-medium text-fg">{memo.toReview} to review</p>
+                                        ) : memo.appliedCount > 0 && (
                                             <p className="mt-0.5 inline-flex items-center gap-1 text-caption text-fg-muted">
                                                 <Check className="h-3 w-3" aria-hidden />
-                                                {memo.appliedCount} action{memo.appliedCount === 1 ? '' : 's'} applied
+                                                {memo.appliedCount} action item{memo.appliedCount === 1 ? '' : 's'} applied
                                             </p>
                                         )}
                                     </div>
                                     <div className="flex shrink-0 items-center gap-1.5">
                                         {!readOnly && (
                                             <FindActionsButton
-                                                label="Find actions"
+                                                label="Identify action items"
                                                 busyLabel="Reading…"
-                                                aria-label={`Find actions in ${memo.title}`}
+                                                aria-label={`Identify action items in ${memo.title}`}
                                                 busy={busyId === memo.id}
                                                 onClick={() => void find(memo)}
                                             />
@@ -207,7 +209,7 @@ export function InternalMemosView({
                                             <NotesProposalsReview
                                                 key={active.round}
                                                 found={found}
-                                                apply={(p) => apply(memo, found, p)}
+                                                apply={(p, original) => apply(memo, found, p, original)}
                                                 onDismiss={dismiss}
                                                 readOnly={readOnly}
                                                 footnote={MEMO_PROPOSALS_FOOTNOTE}

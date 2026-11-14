@@ -165,3 +165,78 @@ describe('boldSpeakers', () => {
         expect(boldSpeakers(text)).toBe(text)
     })
 })
+
+// ── A memo reviewed in one place (§13) ────────────────────────────────────────────────────────
+
+import {
+    MEMO_CHANGED_QUOTE,
+    anchorQuote,
+    appliedStoredIds,
+    memoMatchText,
+    memoReviewOf,
+    quoteFromAnchor,
+    resolveMemoReview,
+    waitingActionItems,
+} from './memo-shared'
+
+describe('a waiting review: quotes kept as places in the memo, never its words', () => {
+    const TEXT = '# Call with Dana\n\nDana: I’ll send the  figures by Friday.\n- Need the signed change order — still missing.'
+    const FOUND = {
+        proposals: [
+            { kind: 'reminder', id: 'reminder-1', title: 'Check the figures arrived', date: '2026-11-20', quote: "I'll send the figures by Friday." },
+            { kind: 'deliverable', id: 'deliverable-2', name: 'Change order', dueDate: null, quote: 'Need the signed change order - still missing.' },
+        ] as NotesProposal[],
+        skipped: [{ quote: 'still missing', reason: 'has no date' }],
+        dropped: 1,
+    }
+
+    it('finds a quote however its quotes, dashes and spaces were written, and gets it back', () => {
+        const match = memoMatchText(TEXT)
+        const anchor = anchorQuote(match, 'I’ll send the figures by Friday.')!
+        expect(anchor).toMatchObject({ at: expect.any(Number), length: 32 })
+        expect(quoteFromAnchor(match, anchor)).toBe("I'll send the figures by Friday.")
+        expect(anchorQuote(match, 'never said this')).toBeNull()
+    })
+
+    it('stores no word of the memo: each quote and skipped line becomes an anchor', () => {
+        const review = memoReviewOf(FOUND, TEXT, 'auto', new Date('2026-11-14T10:00:00Z'))
+        const stored = JSON.stringify(review)
+        expect(stored).not.toContain('figures by Friday')
+        expect(stored).not.toContain('signed change order')
+        expect(stored).not.toContain('still missing')
+        expect(review).toMatchObject({ by: 'auto', dismissed: false, dropped: 1, at: '2026-11-14T10:00:00.000Z' })
+        expect(review.proposals[0]).toMatchObject({ kind: 'reminder', title: 'Check the figures arrived', quoteAt: { length: 32 } })
+        expect(review.proposals[0]).not.toHaveProperty('quote')
+    })
+
+    it('fills the quotes back in from the memo, and says so when the memo has changed since', () => {
+        const review = memoReviewOf(FOUND, TEXT, 'auto')
+        expect(resolveMemoReview(review, TEXT).proposals.map((p) => p.quote)).toEqual([
+            "I'll send the figures by Friday.",
+            'Need the signed change order - still missing.',
+        ])
+        const edited = TEXT.replace('Dana: ', 'Dana said: ')
+        const resolved = resolveMemoReview(review, edited)
+        expect(resolved.proposals[0].quote).toBe(MEMO_CHANGED_QUOTE)
+        // A skipped line the memo no longer has is left out.
+        expect(resolved.skipped).toHaveLength(0)
+    })
+
+    it('counts what still waits: not dismissed, not applied; a new deliverable counts until dismissed', () => {
+        const review = memoReviewOf(FOUND, TEXT, 'auto')
+        expect(waitingActionItems({ review, applied: [] })).toBe(2)
+        const applied = [{ kind: 'reminder' as const, target: 'check the figures arrived', date: '2026-11-20', quote: '', label: '', at: '' }]
+        expect(appliedStoredIds(review, applied)).toEqual(['reminder-1'])
+        expect(waitingActionItems({ review, applied })).toBe(1)
+        expect(waitingActionItems({ review: { ...review, dismissed: true }, applied: [] })).toBe(0)
+        expect(waitingActionItems({ review: null, applied: [] })).toBe(0)
+    })
+
+    it('reads a stored review back, and leaves out anything malformed', () => {
+        const review = memoReviewOf(FOUND, TEXT, 'person')
+        const memo = parseMemoSettings({ memo: { date: '2026-11-14', title: 'Call', authorUserId: 'u1', review: { ...review, proposals: [...review.proposals, { kind: 'reminder', id: 'x' }] } } })!
+        expect(memo.review!.by).toBe('person')
+        expect(memo.review!.proposals.map((p) => p.id)).toEqual(['reminder-1', 'deliverable-2'])
+        expect(parseMemoSettings({ memo: { date: '2026-11-14', title: 'Call', authorUserId: 'u1' } })!.review).toBeNull()
+    })
+})
