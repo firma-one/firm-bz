@@ -55,12 +55,10 @@ describe('FirmRaidView', { timeout: 20_000 }, () => {
         expect(screen.getByText(/and 2 more/)).toBeTruthy()
     })
 
-    it('says so when nothing is open, and when the open ones are all status and health items', () => {
-        const { rerender } = render(<FirmRaidView data={{ counts: { openIssues: 0, openRisks: 0, engagements: 0 }, rows: [], more: 0 }} />)
+    it('says so when nothing is open', () => {
+        render(<FirmRaidView data={{ counts: { openIssues: 0, openRisks: 0, engagements: 0 }, rows: [], more: 0 }} />)
         expect(screen.getByText('No open risks or issues in your engagements.')).toBeTruthy()
         expect(screen.queryByText(/across/)).toBeNull()
-        rerender(<FirmRaidView data={{ counts: { openIssues: 2, openRisks: 0, engagements: 1 }, rows: [], more: 0 }} />)
-        expect(screen.getByText(/None raised in threads or memos/)).toBeTruthy()
     })
 
     it('draws the tour’s sample firm with links to the tour’s own RAID tabs', () => {

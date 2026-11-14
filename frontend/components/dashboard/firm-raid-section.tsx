@@ -45,11 +45,7 @@ export function FirmRaidView({ data, error, onRetry }: { data: FirmRaidOverview 
                     ))}
                 </div>
             ) : data.rows.length === 0 ? (
-                <p className="px-2 text-small text-fg-muted">
-                    {data.counts.openIssues + data.counts.openRisks === 0
-                        ? 'No open risks or issues in your engagements.'
-                        : 'None raised in threads or memos. Status and health items are in each engagement’s RAID log.'}
-                </p>
+                <p className="px-2 text-small text-fg-muted">No open risks or issues in your engagements.</p>
             ) : (
                 <>
                     <ul>

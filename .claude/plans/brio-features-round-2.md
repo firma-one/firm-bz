@@ -595,8 +595,12 @@ opens Discussions › Memos with the memo, not Files (`waitsOnMemo`, `memoSugges
        (`lib/ai/known-entities.ts`).
      - **Firm Overview risks and issues:** built as mock A
        (https://claude.ai/artifact/2o23j97xEMmr1ifjSUmmBJ), its own section under the Action Center.
-       - Open issues and risks across the firm's live engagements, counted in full. The rows are those
-         raised in threads and memos, issues first, up to 5, each opening its engagement's RAID tab.
+       - Open issues and risks across the firm's live engagements, from every source, issues first, up to
+         5, each opening its engagement's RAID tab.
+       - Status and health entries are listed too, as in the mock. At first only thread and memo
+         entries were, copying the engagement Overview, whose own Action Center shows the rest. The
+         firm's Action Center doesn't show them, so a firm with only status and health entries got an
+         empty list (Deepak, 2026-11-14).
        - Shown only for engagements whose RAID log the person may open, decided as the RAID tab decides
          it (`mayReadRaid` in `lib/raid/firm-raid.ts`). With none, `GET /api/firms/[firmId]/raid`
          answers 403 and the section isn't drawn.

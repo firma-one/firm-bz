@@ -4,7 +4,7 @@ import { getCapabilitiesForPersona } from '@/lib/permissions/persona-map'
 
 /**
  * The Firm Overview's open risks and issues: only engagements whose RAID log the person may open, as the
- * RAID tab decides it, and only entries raised in conversation as rows, issues first.
+ * RAID tab decides it, and every open one from any source as rows, issues first.
  */
 
 const { engagementFindMany, raidFindMany, loadPeople } = vi.hoisted(() => ({
@@ -109,7 +109,7 @@ describe('firmRaidOverview', () => {
     const entry = (id: string, type: string, sourceKind: string, day: number, engagementId = 'e1', ownerUserId: string | null = null) =>
         ({ id, type, title: `Title ${id}`, ownerUserId, sourceKind, raisedAt: at(day), engagementId })
 
-    it('counts every open one, lists those raised in conversation with issues first, and says how many more', async () => {
+    it('lists every open one, status and health ones too, issues first then newest, and says how many more', async () => {
         raidFindMany.mockResolvedValue([
             entry('r-new', 'RISK', 'MEMO', 12, 'e1', 'u-alex'),
             entry('i-old', 'ISSUE', 'THREAD', 5, 'e2'),
@@ -120,17 +120,19 @@ describe('firmRaidOverview', () => {
         engagementFindMany.mockResolvedValue([
             { id: 'e1', name: 'Q2 Launch', slug: 'q2', client: { name: 'Horizon', slug: 'horizon', firm: { slug: 'beacon', group: { slug: 'g' } } } },
             { id: 'e2', name: 'Retainer', slug: 'ret', client: { name: 'Acme', slug: 'acme', firm: { slug: 'beacon', group: { slug: 'g' } } } },
+            { id: 'e3', name: 'Brand Refresh', slug: 'q4', client: { name: 'Acme', slug: 'acme', firm: { slug: 'beacon', group: { slug: 'g' } } } },
         ])
 
-        const out = await firmRaidOverview(['e1', 'e2', 'e3'], 2)
+        const out = await firmRaidOverview(['e1', 'e2', 'e3'], 3)
 
         expect(raidFindMany).toHaveBeenCalledWith(expect.objectContaining({
             where: { engagementId: { in: ['e1', 'e2', 'e3'] }, status: 'OPEN', type: { in: ['RISK', 'ISSUE'] } },
         }))
         expect(out.counts).toEqual({ openIssues: 3, openRisks: 2, engagements: 3 })
-        expect(out.rows.map((r) => r.id)).toEqual(['i-new', 'i-old'])
-        expect(out.more).toBe(1)
-        expect(out.rows[1].engagement).toEqual({ name: 'Retainer', clientName: 'Acme', href: expect.stringContaining('/raid') })
+        // An overdue deliverable (status) and behind pace (health) are listed: the firm's Action Center doesn't show them.
+        expect(out.rows.map((r) => r.id)).toEqual(['i-health', 'i-new', 'i-old'])
+        expect(out.more).toBe(2)
+        expect(out.rows[2].engagement).toEqual({ name: 'Retainer', clientName: 'Acme', href: expect.stringContaining('/raid') })
     })
 
     it("names the owner by first name, and no one when it has none", async () => {

@@ -392,13 +392,12 @@ export interface FirmRaidRow {
 
 /**
  * What GET /api/firms/[firmId]/raid answers: the open Risks and Issues across the engagements the person
- * may see the RAID log of. Counted from every open one; listed, as on the engagement Overview, only those
- * raised in conversation (threads and memos), issues first, newest first.
+ * may see the RAID log of, from every source, issues first, newest first.
  */
 export interface FirmRaidOverview {
     counts: { openIssues: number; openRisks: number; /** Engagements with at least one open. */ engagements: number }
     rows: FirmRaidRow[]
-    /** Raised in conversation but not listed: "and 2 more". */
+    /** Open but not listed: "and 2 more". */
     more: number
 }
 

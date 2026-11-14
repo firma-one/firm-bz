@@ -19,7 +19,7 @@ export function demoFirmRaid(firm: DemoFirm, nowMs: number): FirmRaidOverview {
         engagement: { name: at(i).engagement.name, clientName: at(i).client.name, href: `/tour/${at(i).client.slug}/${at(i).engagement.slug}?tab=raid` },
     })
     const rows = [
-        row('tour-firm-raid-1', 'ISSUE', 'Analytics access for the retainer still isn\u2019t granted', 'Sam', 2, 0),
+        row('tour-firm-raid-1', 'ISSUE', 'Paid media assets are past their due date', 'Alex', 2, 0),
         row('tour-firm-raid-2', 'ISSUE', 'The client hasn\u2019t approved the creative brief', 'Alex', 4, 1),
         row('tour-firm-raid-3', 'RISK', 'The signed change order may hold up the launch', null, 1, 0),
         row('tour-firm-raid-4', 'RISK', 'Pricing in section 4.2 may be out of date', 'Alex', 3, 2),

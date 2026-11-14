@@ -4,7 +4,7 @@ import { loadPeople } from '@/lib/files/file-creator'
 import { engagementPath } from '@/lib/navigation/firm-paths'
 import { findClientInPermissions, findFirmInPermissions, findProjectInPermissions } from '@/lib/permission-helpers'
 import type { UserPermissions } from '@/lib/user-settings-plus'
-import { firstNameOf, isConversationSource, type FirmRaidOverview, type FirmRaidRow } from './raid-shared'
+import { firstNameOf, type FirmRaidOverview, type FirmRaidRow } from './raid-shared'
 
 /**
  * The Firm Overview's open risks and issues (.claude/plans/brio-features-round-2.md, §14): across the
@@ -46,18 +46,18 @@ export async function firmRaidEngagementIds(firmId: string, permissions: UserPer
 const ORDER: Record<'ISSUE' | 'RISK', number> = { ISSUE: 0, RISK: 1 }
 
 /**
- * The open Risks and Issues across `engagementIds`. All are counted; the rows are those raised in
- * conversation (threads and memos), as on the engagement Overview: status and health entries are what the
- * Action Center above already shows, and stay in each engagement's log.
+ * The open Risks and Issues across `engagementIds`, from every source, as mock A lists them: raised in
+ * threads and memos, and status and health ones (an overdue deliverable, an engagement behind pace) too.
+ * The engagement Overview leaves those out because its Action Center shows them; the firm's Action Center
+ * doesn't, so here they're the point (Deepak, 2026-11-14).
  */
 export async function firmRaidOverview(engagementIds: string[], maxRows = 5): Promise<FirmRaidOverview> {
     if (engagementIds.length === 0) return { counts: { openIssues: 0, openRisks: 0, engagements: 0 }, rows: [], more: 0 }
     const items = await prisma.engagementRaidItem.findMany({
         where: { engagementId: { in: engagementIds }, status: 'OPEN', type: { in: ['RISK', 'ISSUE'] } },
-        select: { id: true, type: true, title: true, ownerUserId: true, sourceKind: true, raisedAt: true, engagementId: true },
+        select: { id: true, type: true, title: true, ownerUserId: true, raisedAt: true, engagementId: true },
     })
-    const raised = items
-        .filter((i) => isConversationSource(i.sourceKind))
+    const raised = [...items]
         .sort((a, b) => (ORDER[a.type as 'ISSUE' | 'RISK'] - ORDER[b.type as 'ISSUE' | 'RISK']) || b.raisedAt.getTime() - a.raisedAt.getTime())
     const shown = raised.slice(0, maxRows)
 
