@@ -1,5 +1,5 @@
 import type { ReactNode } from "react"
-import { BarChart3, Check, FolderOpen, Mail, Scale, Server, ShieldCheck, User } from "lucide-react"
+import { BarChart3, Check, EyeOff, FolderOpen, Mail, Scale, Server, ShieldCheck, User } from "lucide-react"
 
 import { BrandName } from "@/components/brand/BrandName"
 import { CookieSettingsButton } from "@/components/marketing/v2/reading/cookie-settings-button"
@@ -172,7 +172,8 @@ function PrivacyPolicyPageView() {
           <Clause icon={Server} title="What is sent">
             For each request, we send Anthropic only what that request needs: your question, and details of the
             engagement it concerns, such as client, engagement and deliverable names, file and folder names and
-            the descriptions you write for them, due dates, statuses, and people&apos;s names and roles. Email
+            the descriptions you write for them, due dates, statuses, and people&apos;s names and roles, each name
+            replaced with a placeholder as described below. Email
             addresses are not sent; when someone has not set a name, the part of their email address before the
             @ stands in for one.
           </Clause>
@@ -183,6 +184,14 @@ function PrivacyPolicyPageView() {
             off the first in its settings. To draft a reply, it reads that one conversation&apos;s shared
             messages, never internal notes. To suggest RAID entries, it reads an engagement&apos;s new messages,
             internal notes included, with each author&apos;s first name and role.
+          </Clause>
+          <Clause icon={EyeOff} title="Names replaced before Brio reads">
+            Unless your firm turns it off in its settings, what we send Anthropic has names replaced with
+            placeholders such as [PERSON_7F3A91C2]: the people, clients and firms in your workspace, other names
+            Brio recognizes from how they&apos;re written (a meeting&apos;s speakers, &ldquo;spoke with&hellip;&rdquo;),
+            and email addresses, links, phone, ID and card numbers. The real words come back in what Brio writes.
+            This reduces what is sent; it isn&apos;t anonymization. A name Brio doesn&apos;t recognize is sent as
+            written, and the words around a name can still say who it is.
           </Clause>
           <Clause icon={ShieldCheck} title="Not used for training">
             We use Anthropic&apos;s commercial API. Its terms do not allow Anthropic to train its models on what
@@ -469,6 +478,17 @@ function PrivacyPolicyEmbedded() {
                   internal memo when it is added (a firm can turn this off) or when someone asks it to,
                   a conversation&apos;s shared messages to draft a reply, and an engagement&apos;s new
                   messages, internal notes included, to suggest RAID entries.
+                </span>
+              </li>
+              <li className="flex items-start gap-3">
+                <div className="mt-1">
+                  <Check className="h-4 w-4 text-purple-600" />
+                </div>
+                <span>
+                  <strong>Names replaced:</strong> unless your firm turns it off, names, email addresses,
+                  links and ID numbers Brio recognizes are replaced with placeholders before anything is
+                  sent, and put back in what Brio writes. It isn&apos;t anonymization: a name Brio
+                  doesn&apos;t recognize is sent as written.
                 </span>
               </li>
               <li className="flex items-start gap-3">

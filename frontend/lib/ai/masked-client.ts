@@ -42,8 +42,22 @@ function maskContent(content: unknown, session: MaskSession): unknown {
     return content
 }
 
+/** Every string a request sends, for finding names before any of it is masked. Thinking is left out. */
+function stringsIn(value: unknown, out: string[] = []): string[] {
+    if (typeof value === 'string') out.push(value)
+    else if (Array.isArray(value)) value.forEach((v) => stringsIn(v, out))
+    else if (value && typeof value === 'object') {
+        const block = value as Block
+        if (block.type === 'thinking' || block.type === 'redacted_thinking') return out
+        Object.keys(block).forEach((k) => { if (k !== 'type' && k !== 'id' && k !== 'tool_use_id' && k !== 'cache_control') stringsIn(block[k], out) })
+    }
+    return out
+}
+
 /** The request as the model sees it. */
 export function maskParams<P extends { system?: unknown; messages?: unknown }>(params: P, session: MaskSession): P {
+    // Names we don't know, found across the whole request first, so each is masked everywhere it appears.
+    session.learnNames(stringsIn([params.system, params.messages]))
     const messages = Array.isArray(params.messages)
         ? (params.messages as Array<Record<string, unknown>>).map((m) => ({ ...m, content: maskContent(m.content, session) }))
         : params.messages

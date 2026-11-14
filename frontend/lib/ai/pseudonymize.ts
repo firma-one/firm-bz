@@ -22,6 +22,8 @@
  * Plain JavaScript regular expressions only: the project targets ES5, so no lookbehind and no `u` flag.
  */
 
+import { detectNames, nameParts } from './name-detection'
+
 export type EntityKind = 'person' | 'client' | 'firm'
 
 /** Someone or something we know by name, from the database. */
@@ -82,7 +84,12 @@ export class Vault {
     private readonly byKey = new Map<string, string>()
     private readonly matcher: RegExp | null
 
-    constructor(surfaces: Surface[], private readonly ids: Map<string, string> = new Map()) {
+    constructor(
+        surfaces: Surface[],
+        private readonly ids: Map<string, string> = new Map(),
+        /** How many `[NAME_n]` placeholders the vault gave shared first names: a session's found names come after. */
+        readonly sharedNames = 0,
+    ) {
         // Longest first, so "Dana Whitfield" is one placeholder, not "Dana" and "Whitfield".
         this.surfaces = surfaces.slice().sort((a, b) => b.text.length - a.text.length || a.text.localeCompare(b.text))
         for (const s of this.surfaces) {
@@ -97,6 +104,11 @@ export class Vault {
     /** The words a static placeholder stands for. */
     wordsOf(token: string): string | undefined {
         return this.words.get(token)
+    }
+
+    /** True when `text` is a name the vault already replaces. */
+    knows(text: string): boolean {
+        return this.byKey.has(keyOf(text))
     }
 
     /** A record's own placeholder ("[PERSON_7F3A91C2]"), for tests and logs. */
@@ -209,7 +221,7 @@ export function buildVault(entities: readonly KnownEntity[], options: { codeLeng
         if (usable(first)) add(first, sharedToken.get(keyOf(first)) ?? token.replace(/\]$/, '_FIRST]'))
         if (usable(last) && last.length >= 3 && (lastCount.get(keyOf(last)) ?? 0) === 1) add(last, token.replace(/\]$/, '_LAST]'))
     }
-    return new Vault(surfaces, ids)
+    return new Vault(surfaces, ids, sharedFirsts.length)
 }
 
 // ── Patterns ─────────────────────────────────────────────────────────────────────────────────────
@@ -293,6 +305,48 @@ export class MaskSession {
     }
 
     /** `text` with every known name and every recognized pattern replaced. */
+    /** Names found in what's sent (lib/ai/name-detection.ts): each surface, longest first, with its placeholder. */
+    private foundNames: Surface[] = []
+    private foundMatcher: RegExp | null = null
+    private namesFound = 0
+
+    /**
+     * Reads everything a call sends for names we don't know, before any of it is masked, so a name found in
+     * one message is masked in all of them. Call once per request, with every string it sends.
+     */
+    learnNames(texts: readonly string[]): void {
+        const known = new Set(this.foundNames.map((s) => s.text))
+        for (const name of detectNames(texts.join('\n\n'))) {
+            if (known.has(name) || this.vault.knows(name)) continue
+            this.namesFound += 1
+            const token = `[NAME_${this.vault.sharedNames + this.namesFound}]`
+            const parts = nameParts(name)
+            const add = (text: string | null, t: string) => {
+                if (!text || known.has(text) || this.vault.knows(text)) return
+                known.add(text)
+                this.foundNames.push({ text, token: t })
+                this.words.set(t, text)
+            }
+            add(parts.full, token)
+            add(parts.first, token.replace(/\]$/, '_FIRST]'))
+            add(parts.last, token.replace(/\]$/, '_LAST]'))
+        }
+        this.foundNames.sort((a, b) => b.text.length - a.text.length)
+        this.foundMatcher = this.foundNames.length > 0
+            ? new RegExp(this.foundNames.map((s) => escapeRegExp(s.text)).join('|'), 'g')
+            : null
+    }
+
+    /** The found names in `text` replaced, at word boundaries, exactly as written. */
+    private maskFound(text: string): string {
+        if (!this.foundMatcher) return text
+        const byText = new Map(this.foundNames.map((s) => [s.text, s.token] as [string, string]))
+        return text.replace(this.foundMatcher, (match: string, offset: number, whole: string) => {
+            if (isWordChar(whole[offset - 1]) || isWordChar(whole[offset + match.length])) return match
+            return byText.get(match) ?? match
+        })
+    }
+
     mask(text: string): string {
         if (!text) return text
         let out = text
@@ -305,7 +359,7 @@ export class MaskSession {
                 return this.patternToken(p.kind, value) + match.slice(value.length)
             })
         }
-        return this.vault.maskNames(out, (token, exact) => this.spellingToken(token, exact))
+        return this.maskFound(this.vault.maskNames(out, (token, exact) => this.spellingToken(token, exact)))
     }
 
     /** The placeholder for a name as written: the first spelling keeps it, another gets `_V2`, `_V3`. */

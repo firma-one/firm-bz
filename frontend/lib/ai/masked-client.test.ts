@@ -86,6 +86,20 @@ describe('maskingClient', () => {
         expect(types[types.length - 1]).toBe('message_delta')
     })
 
+    it('a name we don\'t know, found in a later message, is masked in the earlier ones too, and comes back', async () => {
+        const { client, sent } = stubClient(() => ({ id: 'm', role: 'assistant', stop_reason: 'end_turn', usage: { input_tokens: 1, output_tokens: 1 }, content: [{ type: 'text', text: 'Ask [NAME_1_FIRST] first.' }] }))
+        const answer = await maskingClient(client, vault).messages.create({
+            model: 'm', max_tokens: 10,
+            messages: [
+                { role: 'user', content: 'Ask Raj about the rate card.' },
+                { role: 'assistant', content: 'Sure.' },
+                { role: 'user', content: 'Spoke with Raj Patel at the bank today.' },
+            ],
+        } as never) as Anthropic.Message
+        expect(JSON.stringify(sent[0])).not.toMatch(/Raj|Patel/)
+        expect((answer.content[0] as Anthropic.TextBlock).text).toBe('Ask Raj first.')
+    })
+
     it('every other part of the client is the client itself', () => {
         const { client } = stubClient(() => ({}))
         const masked = maskingClient(client, vault)

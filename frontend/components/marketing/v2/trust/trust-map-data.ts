@@ -72,8 +72,8 @@ export function trustMapNodes(brand: string): TrustMapNode[] {
       title: 'Brio',
       subtitle: 'Never opens your deliverables',
       detail:
-        'Brio, the assistant for client delivery, works from names, statuses, dates and who is involved, and never opens the files you deliver. It reads internal memos and discussion messages only to identify action items, suggest RAID entries or draft a reply. What it reads goes to Anthropic for that one request, under terms that do not allow training on it. It never changes anything without your consent, and nothing reaches a client until a person on your team sends or publishes it.',
-      points: ['Never opens the files you deliver', 'Not used to train AI models', 'Never changes anything without your consent'],
+        'Brio, the assistant for client delivery, works from names, statuses, dates and who is involved, and never opens the files you deliver. It reads internal memos and discussion messages only to identify action items, suggest RAID entries or draft a reply. Names, emails and links it recognizes are replaced with placeholders before the model reads anything, and put back in what it writes. What it reads goes to Anthropic for that one request, under terms that do not allow training on it. It never changes anything without your consent, and nothing reaches a client until a person on your team sends or publishes it.',
+      points: ['Never opens the files you deliver', 'Names replaced before the AI reads', 'Not used to train AI models', 'Never changes anything without your consent'],
     },
   ];
 }

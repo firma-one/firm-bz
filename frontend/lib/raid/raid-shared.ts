@@ -6,6 +6,8 @@
  * Safe to import from client components: no database, no SDK.
  */
 
+import type { StatusStage } from '@/lib/ui/status'
+
 /** What RAID stands for, in one line: the Overview card's hint and the website's RAID info tip. */
 export const RAID_MEANING =
     'Risks, Assumptions, Issues and Decisions: what could go wrong, what the plan relies on, what has gone wrong, and what people agreed.'
@@ -17,6 +19,14 @@ export type RaidSourceKind = 'STATUS' | 'HEALTH' | 'BOARD' | 'THREAD' | 'MEMO' |
 export const RAID_TYPES: readonly RaidType[] = ['RISK', 'ASSUMPTION', 'ISSUE', 'DECISION']
 
 export const RAID_TYPE_LETTER: Record<RaidType, string> = { RISK: 'R', ASSUMPTION: 'A', ISSUE: 'I', DECISION: 'D' }
+
+/**
+ * Each type's color, from the Board's own stages (lib/ui/status.ts), so the log uses the colors the app
+ * already uses for state and adds none (Deepak, 2026-11-14): a risk might happen (waiting, amber), an
+ * assumption is held for now (underway, blue), an issue is happening (problem, red), a decision is
+ * settled (done, green).
+ */
+export const RAID_TYPE_STAGE: Record<RaidType, StatusStage> = { RISK: 'waiting', ASSUMPTION: 'underway', ISSUE: 'problem', DECISION: 'done' }
 export const RAID_TYPE_LABEL: Record<RaidType, string> = { RISK: 'Risk', ASSUMPTION: 'Assumption', ISSUE: 'Issue', DECISION: 'Decision' }
 export const RAID_TYPE_PLURAL: Record<RaidType, string> = { RISK: 'Risks', ASSUMPTION: 'Assumptions', ISSUE: 'Issues', DECISION: 'Decisions' }
 
@@ -231,6 +241,8 @@ export interface RaidOverview {
     counts: { openRisks: number; assumptions: number; openIssues: number; decisions: number }
     /** The top open entries raised in conversation (threads and memos). */
     conversation: RaidItemView[]
+    /** How many open entries were raised in conversation in all, shown or not: "and 2 more". */
+    conversationTotal: number
     /** The newest decision people recorded (not the Board's approvals, which the Board shows). */
     latestDecision: RaidItemView | null
     suggestionCount: number
@@ -246,10 +258,10 @@ export function raidOverviewOf(log: Pick<RaidLogPayload, 'items' | 'suggestions'
     const latestDecision = live
         .filter((i) => i.type === 'DECISION' && !isAutoSource(i.sourceKind))
         .sort((a, b) => b.raisedAt.localeCompare(a.raisedAt))[0] ?? null
-    const conversation = live
+    const raised = live
         .filter((i) => i.status === 'OPEN' && isConversationSource(i.sourceKind))
         .sort((a, b) => (OVERVIEW_ORDER[a.type] - OVERVIEW_ORDER[b.type]) || b.raisedAt.localeCompare(a.raisedAt))
-        .slice(0, Math.max(0, maxRows - (latestDecision ? 1 : 0)))
+    const conversation = raised.slice(0, Math.max(0, maxRows - (latestDecision ? 1 : 0)))
     return {
         counts: {
             openRisks: live.filter((i) => i.type === 'RISK' && i.status === 'OPEN').length,
@@ -258,6 +270,7 @@ export function raidOverviewOf(log: Pick<RaidLogPayload, 'items' | 'suggestions'
             decisions: live.filter((i) => i.type === 'DECISION').length,
         },
         conversation,
+        conversationTotal: raised.length,
         latestDecision,
         // A memo's suggestions wait on the memo (waitsOnMemo); its row in Memos counts them.
         suggestionCount: log.suggestions.filter((s) => !waitsOnMemo(s)).length,
@@ -361,4 +374,36 @@ export const RAID_CHANGED_EVENT = 'firma:raid-changed'
 export interface RaidChangedDetail {
     projectId: string
     count: number
+}
+
+// ── The firm's open risks and issues (Firm Overview) ──────────────────────────────────────────
+
+/** One open Risk or Issue on the Firm Overview, with the engagement it's in. */
+export interface FirmRaidRow {
+    id: string
+    type: 'RISK' | 'ISSUE'
+    title: string
+    /** The owner's first name, or null when no one owns it. */
+    ownerFirstName: string | null
+    /** ISO. */
+    raisedAt: string
+    engagement: { name: string; clientName: string; /** Its RAID tab. */ href: string }
+}
+
+/**
+ * What GET /api/firms/[firmId]/raid answers: the open Risks and Issues across the engagements the person
+ * may see the RAID log of. Counted from every open one; listed, as on the engagement Overview, only those
+ * raised in conversation (threads and memos), issues first, newest first.
+ */
+export interface FirmRaidOverview {
+    counts: { openIssues: number; openRisks: number; /** Engagements with at least one open. */ engagements: number }
+    rows: FirmRaidRow[]
+    /** Raised in conversation but not listed: "and 2 more". */
+    more: number
+}
+
+/** "Dana" from "Dana Whitfield": how a row names its owner. */
+export function firstNameOf(name: string | null | undefined): string | null {
+    const first = (name ?? '').trim().split(/\s+/)[0]
+    return first || null
 }

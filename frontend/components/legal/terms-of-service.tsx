@@ -124,7 +124,8 @@ function TermsOfServicePageView() {
             Brio works from your engagements&apos; names, dates and statuses, and reads internal memos and
             discussion messages only for the features that need them. It never opens the files you deliver. What
             it reads goes to our AI provider, Anthropic, for that request, under terms that do not allow Anthropic
-            to train its models on it. You confirm you have the right to share what you add to {BRAND_NAME} for
+            to train its models on it. Unless a firm turns it off, the names, email addresses, links and ID
+            numbers Brio recognizes are replaced with placeholders before anything is sent. You confirm you have the right to share what you add to {BRAND_NAME} for
             this purpose, including anything it says about other people. A firm can turn off Brio&apos;s reading
             of new memos in its settings, and{" "}
             <a href="/privacy#ai" className="underline underline-offset-2">
@@ -313,7 +314,8 @@ function TermsOfServiceEmbedded() {
                 <span>
                   <strong>What Brio reads:</strong> names, dates and statuses, plus internal memos and discussion
                   messages for the features that need them; never the files you deliver. It goes to
-                  Anthropic for that request, under terms that rule out training on it. You confirm you
+                  Anthropic for that request, under terms that rule out training on it, with the names,
+                  emails, links and ID numbers it recognizes replaced by placeholders. You confirm you
                   may share what you add for this purpose. Details are in section 05 of our Privacy
                   Policy.
                 </span>

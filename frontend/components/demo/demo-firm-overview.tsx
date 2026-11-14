@@ -11,6 +11,8 @@ import { DemoFirmBrief } from '@/components/demo/demo-firm-brief'
 import { DemoBrioChat, type DemoChatSubject } from '@/components/demo/demo-brio-chat'
 import { firmChat } from '@/lib/demo/demo-brio'
 import { FirmActions, type FirmActionLinks } from '@/components/dashboard/firm-actions'
+import { FirmRaidView } from '@/components/dashboard/firm-raid-section'
+import { demoFirmRaid } from '@/lib/demo/demo-firm-raid'
 
 /** The tour's own pages for the Action Center's rows. */
 const TOUR_LINKS: FirmActionLinks = {
@@ -32,10 +34,12 @@ export function DemoFirmOverview({ firm }: { firm: DemoFirm }) {
     const data = useMemo(() => (nowMs === null ? null : buildDemoFirmOverview(firm, nowMs)), [firm, nowMs])
     const actions = useMemo(() => (nowMs === null ? null : buildDemoFirmActions(firm, nowMs)), [firm, nowMs])
     const chatTurns = useMemo(() => (data ? firmChat(data.engagementRows, data.nowMs) : []), [data])
+    const raid = useMemo(() => (nowMs === null ? null : demoFirmRaid(firm, nowMs)), [firm, nowMs])
 
     return (
         <div className="flex flex-col gap-10 pb-6">
             <FirmActions data={actions} links={TOUR_LINKS} />
+            <FirmRaidView data={raid} />
             <InsightCard title="Business overview" icon={LineChart} theme="blue" subtext="Engagements, clients and pipeline">
                 {!data ? (
                     <div className="grid grid-cols-1 gap-4 pt-4 md:grid-cols-3" aria-busy="true">

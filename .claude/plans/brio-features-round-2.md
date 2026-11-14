@@ -579,10 +579,33 @@ opens Discussions › Memos with the memo, not Files (`waitsOnMemo`, `memoSugges
      - **Wired:** all 15 call sites, plus an end-to-end test on reply drafts.
      - **Firm switch:** Settings › Brio › "Replace names, emails and links before Brio reads", on by
        default, also on /tour.
-     - **Left:**
-       - the privacy and trust copy, once it's live
-       - name recognition for names we don't know (Layer 3)
-       - ZDR (Deepak's step)
+     - **Left:** ZDR (Deepak's step).
+   - **Built later on 2026-11-14 (uncommitted):**
+     - **Name recognition (Layer 3), by rules:** `lib/ai/name-detection.ts` finds speakers, titles,
+       greetings and who-did-what words, plus first and last names alone. They're masked as `[NAME_n]`
+       across the whole request (`learnNames`).
+       - No model: BERT-NER through transformers.js would add a download on every cold start and seconds
+         per long memo.
+       - The npm install of compromise was blocked by the session's permissions, so no new dependency.
+     - **Copy:**
+       - Privacy section 05 has a "Names replaced before Brio reads" clause, page and embedded.
+       - The terms' "What Brio reads" gains a sentence.
+       - The trust center's Brio box gains a line and a point.
+     - **Caching:** names are kept per server for 2 minutes and the firm switch for 1
+       (`lib/ai/known-entities.ts`).
+     - **Firm Overview risks and issues:** built as mock A
+       (https://claude.ai/artifact/2o23j97xEMmr1ifjSUmmBJ), its own section under the Action Center.
+       - Open issues and risks across the firm's live engagements, counted in full. The rows are those
+         raised in threads and memos, issues first, up to 5, each opening its engagement's RAID tab.
+       - Shown only for engagements whose RAID log the person may open, decided as the RAID tab decides
+         it (`mayReadRaid` in `lib/raid/firm-raid.ts`). With none, `GET /api/firms/[firmId]/raid`
+         answers 403 and the section isn't drawn.
+       - Mirrored on /tour.
+     - **One look for the RAID log's short form** (`components/projects/raid/raid-list.tsx`):
+       - The engagement Overview's RAID card was restyled to match the firm section: a header like the
+         Action Center's, a count line, and rows.
+       - The R, A, I and D letters take the Board's stage colors everywhere: Risk waiting, Assumption
+         underway, Issue problem, Decision done.
    - **Firm switch.** Settings › Brio › "Replace names, emails and links before Brio reads", on by default.
    - **Honest copy.** "Brio replaces the names, emails, links and ID numbers it recognizes before it reads."
      Never "anonymized": names we don't know get through, context can still identify someone, and under

@@ -17,6 +17,7 @@ import {
     cleanMemoTitle,
     memoFileName,
     memoMatchText,
+    splitMemoMarkdown,
     type MemoListItem,
     type MemoSource,
 } from '@/lib/memos/memo-shared'
@@ -210,7 +211,11 @@ export function AddMemoSheet({
             setBody(parsed.text)
             setAttached({ name: file.name, source: 'transcript', durationMinutes: parsed.durationMinutes, speakers: parsed.speakers, before })
         } else {
-            setBody(raw.replace(/^﻿/, '').replace(/\r\n?/g, '\n').trim())
+            const text = raw.replace(/^﻿/, '').replace(/\r\n?/g, '\n').trim()
+            // A memo's own file (downloaded from Internal Memos): its title and day line are the memo's, written
+            // again on save, so only its notes are taken. Any other Markdown keeps its heading.
+            const parts = splitMemoMarkdown(text)
+            setBody(parts.byline ? parts.body.trim() : text)
             setAttached({ name: file.name, source: 'notes', durationMinutes: null, speakers: 0, before })
         }
     }

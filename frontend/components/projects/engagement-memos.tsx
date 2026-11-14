@@ -38,7 +38,8 @@ import {
     type MemoRaidSuggestion,
     type MemoReviewPayload,
 } from '@/lib/memos/memo-shared'
-import { RAID_TYPE_LABEL, RAID_TYPE_LETTER } from '@/lib/raid/raid-shared'
+import { RAID_TYPE_LABEL, RAID_TYPE_LETTER, RAID_TYPE_STAGE } from '@/lib/raid/raid-shared'
+import { STAGE_PILL_CLASSES } from '@/lib/ui/status'
 import type { DeliverableProposal, NotesProposal } from '@/lib/ai/notes-proposals'
 import { LoadingAnnouncement, ShimmerBar, ShimmerBlock } from '@/components/ui/shimmer'
 
@@ -974,7 +975,7 @@ function MemoRaidSuggestions({ items, onAct }: { items: MemoRaidSuggestion[]; on
                             role="img"
                             aria-label={RAID_TYPE_LABEL[item.type]}
                             title={RAID_TYPE_LABEL[item.type]}
-                            className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-control bg-surface-muted text-caption font-semibold text-fg"
+                            className={cn('mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-control text-caption font-semibold', STAGE_PILL_CLASSES[RAID_TYPE_STAGE[item.type]])}
                         >
                             {RAID_TYPE_LETTER[item.type]}
                         </span>

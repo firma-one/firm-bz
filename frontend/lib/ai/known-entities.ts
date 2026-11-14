@@ -14,13 +14,42 @@ import { buildVault, type KnownEntity, type Vault } from './pseudonymize'
  * - Home's brief spans the firms a person is in: everything in each of them.
  *
  * Brio's own account is never one of them, so "Brio" stays "Brio" in what the model reads.
+ *
+ * Kept on each server for a little while (§14 item 5): firm chat and the briefs look up every person in the
+ * firm, which shouldn't happen on every call as firms grow. Names for 2 minutes, the firm's switch for 1:
+ * someone just added is masked by their record within 2 minutes (until then, name detection may catch
+ * them), and turning masking off or on takes effect within a minute.
  */
 
+const NAMES_TTL_MS = 2 * 60 * 1000
+const SWITCH_TTL_MS = 60 * 1000
+
+/** A promise kept for `ttl`, so calls close together share one lookup; a failed lookup isn't kept. */
+function cached<T>(store: Map<string, { at: number; value: Promise<T> }>, key: string, ttl: number, load: () => Promise<T>): Promise<T> {
+    const hit = store.get(key)
+    if (hit && Date.now() - hit.at < ttl) return hit.value
+    const value = load()
+    store.set(key, { at: Date.now(), value })
+    value.catch(() => { if (store.get(key)?.value === value) store.delete(key) })
+    return value
+}
+
+const switches = new Map<string, { at: number; value: Promise<boolean> }>()
+const names = new Map<string, { at: number; value: Promise<KnownEntity[]> }>()
+
+/** Forgets everything kept: for tests. */
+export function forgetKnownNames(): void {
+    switches.clear()
+    names.clear()
+}
+
 /** The firm's switch: Settings › Brio › "Replace names, emails and links before Brio reads", on by default. */
-export async function maskingEnabled(firmId: string): Promise<boolean> {
-    const firm = await prisma.firm.findUnique({ where: { id: firmId }, select: { settings: true } })
-    const brio = (firm?.settings as { brio?: { maskNames?: unknown } } | null)?.brio
-    return brio?.maskNames !== false
+export function maskingEnabled(firmId: string): Promise<boolean> {
+    return cached(switches, firmId, SWITCH_TTL_MS, async () => {
+        const firm = await prisma.firm.findUnique({ where: { id: firmId }, select: { settings: true } })
+        const brio = (firm?.settings as { brio?: { maskNames?: unknown } } | null)?.brio
+        return brio?.maskNames !== false
+    })
 }
 
 /** People by user id, named as the app names them; Brio's agent account and anyone unnamed left out. */
@@ -46,7 +75,11 @@ async function firmAndGroup(firmId: string): Promise<KnownEntity[]> {
 }
 
 /** What an engagement's request knows by name. */
-export async function engagementEntities(engagementId: string): Promise<KnownEntity[]> {
+export function engagementEntities(engagementId: string): Promise<KnownEntity[]> {
+    return cached(names, `engagement:${engagementId}`, NAMES_TTL_MS, () => loadEngagementEntities(engagementId))
+}
+
+async function loadEngagementEntities(engagementId: string): Promise<KnownEntity[]> {
     const engagement = await prisma.engagement.findUnique({ where: { id: engagementId }, select: { firmId: true, clientId: true } })
     if (!engagement) return []
     const { firmId, clientId } = engagement
@@ -68,7 +101,11 @@ export async function engagementEntities(engagementId: string): Promise<KnownEnt
 }
 
 /** What a firm's request knows by name: all of it. */
-export async function firmEntities(firmId: string): Promise<KnownEntity[]> {
+export function firmEntities(firmId: string): Promise<KnownEntity[]> {
+    return cached(names, `firm:${firmId}`, NAMES_TTL_MS, () => loadFirmEntities(firmId))
+}
+
+async function loadFirmEntities(firmId: string): Promise<KnownEntity[]> {
     const [firm, clients, contacts, firmMembers, clientMembers, engagementMembers] = await Promise.all([
         firmAndGroup(firmId),
         prisma.client.findMany({ where: { firmId }, select: { id: true, name: true } }),

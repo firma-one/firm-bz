@@ -8,6 +8,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const h = vi.hoisted(() => ({
     firmSettings: {} as Record<string, unknown>,
     offFirms: new Set<string>(),
+    /** How many times an engagement's names were looked up. */
+    lookups: 0,
 }))
 
 vi.mock('server-only', () => ({}))
@@ -22,7 +24,7 @@ vi.mock('@/lib/prisma', () => ({
             }),
         },
         group: { findUnique: async () => ({ id: 'g1', name: 'Beacon Growth' }) },
-        engagement: { findUnique: async () => ({ firmId: 'f1', clientId: 'c1' }) },
+        engagement: { findUnique: async () => { h.lookups += 1; return { firmId: 'f1', clientId: 'c1' } } },
         client: {
             findUnique: async () => ({ id: 'c1', name: 'Acme Robotics, Inc.' }),
             findMany: async () => [{ id: 'c1', name: 'Acme Robotics, Inc.' }, { id: 'c2', name: 'Horizon FinTech' }],
@@ -45,11 +47,13 @@ vi.mock('@/lib/files/file-creator', () => ({
 }))
 vi.mock('./agent-email', () => ({ isAgentEmail: (e: string | null | undefined) => !!e && e.endsWith('@agents.firma.bz') }))
 
-import { engagementEntities, vaultForEngagement, vaultForFirms } from './known-entities'
+import { engagementEntities, forgetKnownNames, vaultForEngagement, vaultForFirms } from './known-entities'
 
 beforeEach(() => {
     h.firmSettings = {}
     h.offFirms = new Set()
+    h.lookups = 0
+    forgetKnownNames()
 })
 
 describe('what an engagement\'s request knows', () => {
@@ -77,9 +81,43 @@ describe('a request across firms', () => {
     it('masks every firm\'s clients; off only when every firm turned it off', async () => {
         const vault = (await vaultForFirms(['f1', 'f2']))!
         expect(vault.session().mask('Horizon FinTech and Northpoint Advisors')).toMatch(/^\[CLIENT_[0-9A-F]+\] and \[FIRM_[0-9A-F]+\]$/)
+        // The rule, not the caching (tested below): each switch read afresh.
         h.offFirms = new Set(['f1'])
+        forgetKnownNames()
         expect(await vaultForFirms(['f1', 'f2'])).not.toBeNull()
         h.offFirms = new Set(['f1', 'f2'])
+        forgetKnownNames()
         expect(await vaultForFirms(['f1', 'f2'])).toBeNull()
+    })
+})
+
+describe('kept for a little while', () => {
+    it('calls close together share one lookup; after 2 minutes, it looks again', async () => {
+        vi.useFakeTimers({ now: new Date('2026-11-14T10:00:00Z') })
+        try {
+            await Promise.all([engagementEntities('p1'), engagementEntities('p1'), vaultForEngagement('p1', 'f1')])
+            expect(h.lookups).toBe(1)
+            vi.setSystemTime(new Date('2026-11-14T10:01:59Z'))
+            await engagementEntities('p1')
+            expect(h.lookups).toBe(1)
+            vi.setSystemTime(new Date('2026-11-14T10:02:01Z'))
+            await engagementEntities('p1')
+            expect(h.lookups).toBe(2)
+        } finally {
+            vi.useRealTimers()
+        }
+    })
+
+    it('turning masking off takes effect within a minute', async () => {
+        vi.useFakeTimers({ now: new Date('2026-11-14T10:00:00Z') })
+        try {
+            expect(await vaultForEngagement('p1', 'f1')).not.toBeNull()
+            h.firmSettings = { brio: { maskNames: false } }
+            expect(await vaultForEngagement('p1', 'f1')).not.toBeNull()
+            vi.setSystemTime(new Date('2026-11-14T10:01:01Z'))
+            expect(await vaultForEngagement('p1', 'f1')).toBeNull()
+        } finally {
+            vi.useRealTimers()
+        }
     })
 })

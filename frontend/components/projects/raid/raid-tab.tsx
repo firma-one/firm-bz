@@ -31,7 +31,8 @@ import { ASSISTANT, BRIO_GREEN } from '@/lib/ai/assistant'
 import { BRIO_RAID_FAILED, brioFailureReason } from '@/lib/ai/brio-failure'
 import { fetchWithTimeout } from '@/lib/ai/fetch-timeout'
 import { failureFrom, failureReason } from '@/lib/files/action-failure'
-import { TAG_CLASSES, type TagColor } from '@/lib/ui/status-colors'
+import type { TagColor } from '@/lib/ui/status-colors'
+import { STAGE_PILL_CLASSES } from '@/lib/ui/status'
 import {
     RAID_CHANGED_EVENT,
     RAID_NOTES_MAX,
@@ -40,6 +41,7 @@ import {
     RAID_TYPES,
     RAID_TYPE_LABEL,
     RAID_TYPE_LETTER,
+    RAID_TYPE_STAGE,
     RAID_TYPE_PLURAL,
     attachPhrase,
     filterRaidItems,
@@ -79,10 +81,21 @@ import {
 // ── Pieces ────────────────────────────────────────────────────────────────────────────────────
 
 /** The type's letter in a gray square: R, A, I or D. */
-export function RaidTypeBadge({ type, decorative = false }: { type: RaidType; /** Beside the type's own name: hidden from screen readers. */ decorative?: boolean }) {
+export function RaidTypeBadge({ type, decorative = false, small = false }: {
+    type: RaidType
+    /** Beside the type's own name: hidden from screen readers. */
+    decorative?: boolean
+    /** The legend's size, in the filter chips. */
+    small?: boolean
+}) {
     return (
         <span
-            className={cn('inline-flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-control text-caption font-bold', TAG_CLASSES.gray)}
+            className={cn(
+                'inline-flex shrink-0 items-center justify-center rounded-control font-bold',
+                small ? 'h-4 w-4 text-[10px] leading-none' : 'h-[22px] w-[22px] text-caption',
+                // The Board's colors for state (RAID_TYPE_STAGE): no new ones.
+                STAGE_PILL_CLASSES[RAID_TYPE_STAGE[type]],
+            )}
             title={decorative ? undefined : RAID_TYPE_LABEL[type]}
             aria-hidden={decorative || undefined}
         >
@@ -591,6 +604,7 @@ export function RaidTabView({ log, loadError, onRetry, engagementBase, readOnly:
                             typeFilter === t ? 'bg-surface-selected text-fg' : 'text-fg-muted hover:bg-surface-hover',
                         )}
                     >
+                        {t !== 'ALL' && <RaidTypeBadge type={t} decorative small />}
                         {t === 'ALL' ? 'All' : RAID_TYPE_PLURAL[t]}{' '}
                         <span className="text-fg-subtle">{counts[t]}</span>
                     </button>

@@ -20,10 +20,11 @@ describe('RaidOverviewView', { timeout: 20_000 }, () => {
         render(<RaidOverviewView log={demoRaidLog(NOW)} engagementBase="/d/e/q2" />)
         expect(screen.getByRole('heading', { name: 'RAID' })).toBeTruthy()
         expect(screen.getByText('Internal only')).toBeTruthy()
-        expect(screen.getByText('open risks').previousSibling?.textContent).toBe('2')
-        expect(screen.getByText('assumption').previousSibling?.textContent).toBe('1')
-        expect(screen.getByText('open issues').previousSibling?.textContent).toBe('2')
-        expect(screen.getByText('decisions').previousSibling?.textContent).toBe('2')
+        // Each count with its type's colored letter, as on the Firm Overview.
+        expect(screen.getByText('2 open issues')).toBeTruthy()
+        expect(screen.getByText('2 open risks')).toBeTruthy()
+        expect(screen.getByText('1 assumption')).toBeTruthy()
+        expect(screen.getByText('2 decisions')).toBeTruthy()
         // A memo's suggestion waits on the memo, so it isn't one to review here.
         expect(screen.getByRole('link', { name: '2 suggestions to review' }).getAttribute('href')).toBe('/d/e/q2/raid')
         expect(screen.getByRole('link', { name: /Open RAID log/ }).getAttribute('href')).toBe('/d/e/q2/raid')
@@ -39,7 +40,16 @@ describe('RaidOverviewView', { timeout: 20_000 }, () => {
         expect(screen.queryByText(/has waited/)).toBeNull()
         // The Board's approval is a decision too, but the Board already shows it.
         expect(screen.queryByText(/approved by Dana/)).toBeNull()
-        expect(within(screen.getByTestId('raid-card-row-raid-scope')).getByText('· latest decision')).toBeTruthy()
+        expect(within(screen.getByTestId('raid-card-row-raid-scope')).getByText(/^latest decision · /)).toBeTruthy()
+    })
+
+    it('shows where each was raised, who owns it and when, and opens the RAID tab', () => {
+        render(<RaidOverviewView log={demoRaidLog(NOW)} engagementBase="/d/e/q2" />)
+        const row = screen.getByTestId('raid-card-row-raid-k1')
+        expect(row.getAttribute('href')).toBe('/d/e/q2/raid')
+        expect(within(row).getByText('Assumption')).toBeTruthy()
+        expect(within(row).getByText('· Memo · Call with Dana')).toBeTruthy()
+        expect(within(row).getByText(/ · Nov /)).toBeTruthy()
     })
 
     it('says so when nothing was raised in conversation', () => {

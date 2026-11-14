@@ -377,7 +377,7 @@ export function NotesProposalsReview({ found, apply, openDeliverable, onDismiss,
                                 )}
                             </div>
                             <ProposalFields proposal={p} shown={shown} locked={locked} onEdit={(change) => edit(p.id, change)} />
-                            <p className="mt-2 border-l-2 border-line-strong pl-2 text-small text-fg-muted">
+                            <p className="mt-2 border-l-2 border-line-strong pl-2 text-small italic text-fg-muted">
                                 “{p.quote}”
                             </p>
                             {isDeliverable && (

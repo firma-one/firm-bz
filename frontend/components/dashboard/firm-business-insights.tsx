@@ -5,6 +5,7 @@ import { useAuth } from '@/lib/auth-context'
 import { RefreshCw, LineChart } from 'lucide-react'
 import type { FirmInsightsResponse } from '@/app/api/firms/[firmId]/insights/route'
 import { FirmBriefCard, useFirmBrief } from '@/components/dashboard/ai-firm-brief'
+import { FirmRaidSection } from '@/components/dashboard/firm-raid-section'
 import { FloatingAiChat } from '@/components/projects/floating-ai-chat'
 import { InsightCard } from '@/components/dashboard/insight-card'
 import { FirmEngagementsList, FirmOverviewTop, FirmPipelineSection, type FirmOverviewData } from '@/components/dashboard/firm-overview-sections'
@@ -138,6 +139,8 @@ export function FirmBusinessInsights({ firmId, firmSlug, groupSlug }: FirmBusine
     return (
         <div className="flex flex-col gap-10">
         <FirmActions data={actions} loading={loading} onRefresh={retry} links={links} error={loadError} />
+        {/* Open risks and issues across the engagements whose RAID log this person may see (mock A). */}
+        <FirmRaidSection firmId={firmId} />
         <InsightCard title="Business overview" icon={LineChart} theme="blue" subtext="Engagements, clients and pipeline" headerExtra={refreshButton}>
             {!overview && loadError && !loading ? (
                 <LoadFailed compact className="pt-4" what="this overview" reason={loadError} onRetry={retry} />

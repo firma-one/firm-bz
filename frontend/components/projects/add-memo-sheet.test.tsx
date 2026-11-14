@@ -84,6 +84,20 @@ describe('AddMemoSheet, editing', () => {
         expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ body: `${BODY}\nAlex Jordan: The report moves to December 4.`, identify: false }))
     })
 
+    it('replacing the notes with a memo\'s own file takes its notes, not its title and day line again', async () => {
+        renderEdit()
+        const file = new File(['# Call with Dana\n\nThursday, November 12, 2026 · Alex Jordan\n\nDana: The K-1s come Friday.\n'], '2026-11-12-Call-with-Dana.md', { type: 'text/markdown' })
+        fireEvent.change(screen.getByLabelText('Attach a .txt, .md or .vtt file'), { target: { files: [file] } })
+        await waitFor(() => expect((screen.getByLabelText('Notes') as HTMLTextAreaElement).value).toBe('Dana: The K-1s come Friday.'))
+    })
+
+    it('a Markdown file of your own keeps its heading', async () => {
+        renderEdit()
+        const file = new File(['# Pricing\n\n- Finance confirmed the rate card'], 'pricing.md', { type: 'text/markdown' })
+        fireEvent.change(screen.getByLabelText('Attach a .txt, .md or .vtt file'), { target: { files: [file] } })
+        await waitFor(() => expect((screen.getByLabelText('Notes') as HTMLTextAreaElement).value).toBe('# Pricing\n\n- Finance confirmed the rate card'))
+    })
+
     it('a refusal is shown on the sheet, which stays open', async () => {
         renderEdit(vi.fn(async (): Promise<AddMemoOutcome> => ({ ok: false, error: "Google Drive didn't save the memo and didn't say why. Try again in a moment." })))
         fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Call with Dana, pricing' } })
